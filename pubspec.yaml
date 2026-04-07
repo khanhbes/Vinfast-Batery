@@ -1,0 +1,65 @@
+name: vinfast_battery
+description: "VinFast Battery - Quản lý pin xe máy điện VinFast"
+publish_to: 'none'
+version: 1.0.8+9
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Firebase
+  firebase_core: ^3.13.0
+  cloud_firestore: ^5.6.9
+
+  # State Management
+  flutter_riverpod: ^2.6.1
+
+  # Charts
+  fl_chart: ^0.70.2
+
+  # UI
+  google_fonts: ^6.2.1
+  shimmer: ^3.0.0
+  flutter_animate: ^4.5.2
+
+  # Utilities
+  intl: ^0.20.2
+  uuid: ^4.5.1
+  http: ^1.2.0
+
+  # Background Services
+  flutter_background_service: ^5.0.5
+  flutter_background_service_android: ^6.2.3
+
+  # Location / GPS
+  geolocator: ^13.0.2
+  permission_handler: ^11.3.1
+
+  # Local Notifications
+  flutter_local_notifications: ^18.0.1
+
+  # Shared Preferences (background service communication)
+  shared_preferences: ^2.3.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.1
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/icons/
+    - assets/vinfast_specs_fallback.json
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/icons/app_icon.png"
+  min_sdk_android: 23
+  adaptive_icon_background: "#0F0F1A"
+  adaptive_icon_foreground: "assets/icons/app_icon.png"
