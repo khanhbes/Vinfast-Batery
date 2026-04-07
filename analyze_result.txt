@@ -1,0 +1,43 @@
+Analyzing Vinfast Batery...                                     
+
+   info - The parameter name 'sum' matches a visible type name - lib\data\repositories\charge_log_repository.dart:190:42 - avoid_types_as_parameter_names
+   info - The parameter name 'sum' matches a visible type name - lib\data\repositories\charge_log_repository.dart:193:8 - avoid_types_as_parameter_names
+   info - The parameter name 'sum' matches a visible type name - lib\data\repositories\charge_log_repository.dart:196:28 - avoid_types_as_parameter_names
+   info - The parameter name 'sum' matches a visible type name - lib\data\repositories\charge_log_repository.dart:199:28 - avoid_types_as_parameter_names
+warning - Unused import: '../models/vehicle_model.dart' - lib\data\services\battery_logic_service.dart:5:8 - unused_import
+   info - Unnecessary braces in a string interpolation - lib\data\services\charge_tracking_service.dart:84:38 - unnecessary_brace_in_string_interps
+   info - Unnecessary braces in a string interpolation - lib\data\services\charge_tracking_service.dart:162:36 - unnecessary_brace_in_string_interps
+   info - Unnecessary braces in a string interpolation - lib\data\services\trip_tracking_service.dart:192:74 - unnecessary_brace_in_string_interps
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\charge_log\add_charge_log_modal.dart:385:50 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\charge_log\add_charge_log_modal.dart:444:46 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\charge_log\add_charge_log_modal.dart:575:43 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\charge_log\add_charge_log_modal.dart:639:41 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\charge_log\add_charge_log_modal.dart:640:41 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\charge_log\add_charge_log_modal.dart:644:43 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\charge_log\add_charge_log_modal.dart:645:43 - deprecated_member_use
+   info - Unnecessary use of multiple underscores - lib\features\charge_log\charge_log_screen.dart:100:26 - unnecessary_underscores
+warning - Unused import: '../../data/models/maintenance_task_model.dart' - lib\features\dashboard\dashboard_screen.dart:8:8 - unused_import
+   info - Unnecessary use of multiple underscores - lib\features\dashboard\dashboard_screen.dart:86:32 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\dashboard\dashboard_screen.dart:280:18 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\dashboard\dashboard_screen.dart:670:26 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\dashboard\dashboard_screen.dart:764:22 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\home\home_screen.dart:159:36 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\home\home_screen.dart:506:24 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\home\home_screen.dart:596:31 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\maintenance\maintenance_screen.dart:33:18 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\settings\settings_screen.dart:95:32 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\settings\settings_screen.dart:224:24 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\settings\settings_screen.dart:224:28 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\settings\settings_screen.dart:236:36 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\statistics\statistics_screen.dart:98:28 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\statistics\statistics_screen.dart:107:28 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\statistics\statistics_screen.dart:119:28 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\statistics\statistics_screen.dart:128:28 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\statistics\statistics_screen.dart:137:28 - unnecessary_underscores
+   info - The 'child' argument should be last in widget constructor invocations - lib\features\statistics\statistics_screen.dart:208:7 - sort_child_properties_last
+   info - Unnecessary use of multiple underscores - lib\features\statistics\statistics_screen.dart:258:38 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\statistics\statistics_screen.dart:258:42 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\features\statistics\statistics_screen.dart:258:47 - unnecessary_underscores
+warning - Unused import: '../features/charge_log/charge_log_screen.dart' - lib\navigation\app_navigation.dart:6:8 - unused_import
+
+39 issues found. (ran in 123.4s)

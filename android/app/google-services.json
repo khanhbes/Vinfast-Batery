@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "450938791386",
+    "project_id": "vinfast-873db",
+    "storage_bucket": "vinfast-873db.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:450938791386:android:fde2bf0210038fa32dcce3",
+        "android_client_info": {
+          "package_name": "com.bes.vinbatery"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAKoNr2iPZi2XB0l_JaGhTkM2hsitwqyKE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
