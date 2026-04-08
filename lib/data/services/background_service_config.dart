@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// ========================================================================
@@ -36,13 +38,49 @@ class BackgroundServiceConfig {
     debugPrint('✅ BackgroundService configured');
   }
 
-  /// Bắt đầu service
-  static Future<void> startService() async {
-    final isRunning = await _service.isRunning();
-    if (!isRunning) {
+  /// Kiểm tra quyền POST_NOTIFICATIONS (Android 13+).
+  /// Trả `true` nếu đủ quyền hoặc platform không yêu cầu.
+  static Future<bool> ensureNotificationPermission() async {
+    if (!Platform.isAndroid) return true;
+    final status = await Permission.notification.status;
+    if (status.isGranted) return true;
+    // Yêu cầu quyền — nếu user từ chối thì trả false
+    final result = await Permission.notification.request();
+    debugPrint('🔔 Notification permission: $result');
+    return result.isGranted;
+  }
+
+  /// Bắt đầu service — có log chi tiết trạng thái.
+  /// Trả `true` nếu start thành công, `false` nếu thất bại.
+  static Future<bool> startService() async {
+    try {
+      final isRunning = await _service.isRunning();
+      if (isRunning) {
+        debugPrint('ℹ️ BackgroundService already running');
+        return true;
+      }
+      debugPrint('🚀 BackgroundService starting...');
       await _service.startService();
-      debugPrint('🚀 BackgroundService started');
+      debugPrint('✅ BackgroundService started successfully');
+      return true;
+    } catch (e, stack) {
+      debugPrint('❌ BackgroundService start FAILED: $e');
+      debugPrint('   Stack: $stack');
+      return false;
     }
+  }
+
+  /// Bắt đầu service an toàn cho trip — kiểm tra notification permission
+  /// trước khi start foreground service. Nếu không đủ quyền, trip GPS vẫn
+  /// chạy trong app, chỉ background service (notification) bị bỏ qua.
+  /// Trả `true` nếu service started, `false` nếu bỏ qua (không crash).
+  static Future<bool> safeStartForTrip() async {
+    final hasNotifPerm = await ensureNotificationPermission();
+    if (!hasNotifPerm) {
+      debugPrint('⚠ Notification permission denied — skip background service');
+      return false;
+    }
+    return startService();
   }
 
   /// Dừng service

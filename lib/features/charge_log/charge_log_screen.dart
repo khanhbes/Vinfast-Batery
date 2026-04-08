@@ -97,7 +97,7 @@ class ChargeLogScreen extends ConsumerWidget {
             logsAsync.when(
               data: (logs) => _buildSummaryBar(logs),
               loading: () => const SizedBox(height: 50),
-              error: (_, __) => const SizedBox.shrink(),
+              error: (_, _) => const SizedBox.shrink(),
             ),
 
             const SizedBox(height: 8),

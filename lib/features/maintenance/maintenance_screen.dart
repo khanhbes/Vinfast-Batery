@@ -34,7 +34,7 @@ class MaintenanceScreen extends ConsumerWidget {
     final currentOdo = vehicleAsync.when(
       data: (v) => v?.currentOdo ?? 0,
       loading: () => 0,
-      error: (_, __) => 0,
+      error: (_, _) => 0,
     );
 
     return Scaffold(

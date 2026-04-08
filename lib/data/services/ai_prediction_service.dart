@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/charge_log_model.dart';
 
@@ -8,9 +9,28 @@ import '../models/charge_log_model.dart';
 // AI PREDICTION SERVICE — Gọi Flask API dự đoán chai pin
 // =============================================================================
 
+/// Key lưu URL AI trong SharedPreferences
+const kAiBaseUrlKey = 'ai_base_url';
+
+/// URL mặc định (Android emulator → localhost)
+const kAiBaseUrlDefault = 'http://10.0.2.2:5001';
+
 class AiPredictionService {
-  /// URL của Flask AI API (đổi IP khi deploy)
-  static const String _baseUrl = 'http://10.0.2.2:5001'; // Android emulator → localhost
+  String _baseUrl = kAiBaseUrlDefault;
+  String get baseUrl => _baseUrl;
+
+  /// Load URL từ SharedPreferences (gọi 1 lần khi init)
+  Future<void> loadBaseUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    _baseUrl = prefs.getString(kAiBaseUrlKey) ?? kAiBaseUrlDefault;
+  }
+
+  /// Cập nhật URL mới và lưu SharedPreferences
+  Future<void> setBaseUrl(String url) async {
+    _baseUrl = url.trimRight().replaceAll(RegExp(r'/+$'), '');
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(kAiBaseUrlKey, _baseUrl);
+  }
 
   /// Dự đoán mức độ chai pin
   Future<Map<String, dynamic>?> predictDegradation({
@@ -88,7 +108,10 @@ class AiPredictionService {
   }
 }
 
-/// Riverpod provider
+/// Riverpod provider (singleton, URL loaded lazily)
 final aiPredictionServiceProvider = Provider<AiPredictionService>((ref) {
-  return AiPredictionService();
+  final service = AiPredictionService();
+  // Load URL từ SharedPreferences (fire-and-forget, non-blocking)
+  service.loadBaseUrl();
+  return service;
 });

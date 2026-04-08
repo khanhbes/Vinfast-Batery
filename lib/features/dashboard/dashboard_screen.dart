@@ -2,8 +2,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/app_popup.dart';
 import '../../core/widgets/error_state.dart';
 import '../../core/widgets/loading_skeleton.dart';
 import '../../data/models/trip_log_model.dart';
@@ -20,6 +22,7 @@ import '../home/home_screen.dart';
 import 'add_manual_trip_modal.dart';
 import 'ai_capacity_card.dart';
 import 'route_prediction_card.dart';
+import 'trip_live_map_screen.dart';
 import '../../core/widgets/quick_action_menu.dart';
 import '../settings/guide_screen.dart';
 import '../settings/ai_functions_screen.dart';
@@ -59,6 +62,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   final _chargeService = ChargeTrackingService();
   PayloadType _selectedPayload = PayloadType.onePerson;
   Timer? _uiTimer;
+  bool _isStartingTrip = false;
 
   @override
   void initState() {
@@ -90,8 +94,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           message: 'Phát hiện phiên sạc đang dở dang (${_chargeService.currentBattery}%). Bạn muốn tiếp tục hay hủy?',
           onResume: () {
             _chargeService.resumeCharging();
-            BackgroundServiceConfig.startService().then((_) {
-              BackgroundServiceConfig.sendCommand('startCharge');
+            BackgroundServiceConfig.safeStartForTrip().then((ok) {
+              if (ok) BackgroundServiceConfig.sendCommand('startCharge');
             });
             setState(() {});
           },
@@ -110,8 +114,21 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           onResume: () async {
             final started = await _tripService.resumeTrip();
             if (started) {
-              await BackgroundServiceConfig.startService();
-              BackgroundServiceConfig.sendCommand('startTrip');
+              final bgOk = await BackgroundServiceConfig.safeStartForTrip();
+              if (bgOk) BackgroundServiceConfig.sendCommand('startTrip');
+              // Navigate to map after resume
+              if (mounted) {
+                final stoppedFromMap = await Navigator.of(context).push<bool>(
+                  MaterialPageRoute(builder: (_) => const TripLiveMapScreen()),
+                );
+                if (stoppedFromMap == true) {
+                  final vehicleId = ref.read(selectedVehicleIdProvider);
+                  ref.invalidate(vehicleProvider(vehicleId));
+                  ref.invalidate(dashboardTripsProvider(vehicleId));
+                  _triggerMaintenanceCheck(vehicleId);
+                }
+                setState(() {});
+              }
             }
             if (!started && mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -121,7 +138,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 ),
               );
             }
-            setState(() {});
           },
           onDiscard: () async {
             await _tripService.discardRecovery();
@@ -236,7 +252,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   vehicleAsync.when(
                     data: (v) => v != null ? _buildSoHCard(v, vehicleId) : const SizedBox(),
                     loading: () => const LoadingSkeleton(layout: SkeletonLayout.card),
-                    error: (e, __) => ErrorState.fromError(
+                    error: (e, _) => ErrorState.fromError(
                       error: e,
                       prefix: 'Không tải được dữ liệu xe',
                       onRetry: () => ref.invalidate(vehicleProvider(vehicleId)),
@@ -253,7 +269,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           )
                         : const SizedBox(),
                     loading: () => const SizedBox.shrink(),
-                    error: (_, __) => const SizedBox.shrink(),
+                    error: (_, _) => const SizedBox.shrink(),
                   ),
 
                 const SizedBox(height: 16),
@@ -447,7 +463,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.15);
       },
       loading: () => const LoadingSkeleton(layout: SkeletonLayout.card),
-      error: (e, __) => ErrorState.fromError(
+      error: (e, _) => ErrorState.fromError(
         error: e,
         prefix: 'Không tải được dữ liệu SoH',
         onRetry: () => ref.invalidate(vehicleProvider(vehicleId)),
@@ -561,10 +577,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           children: [
             Expanded(
               child: _ActionButton(
-                icon: Icons.navigation_rounded,
-                label: 'Bắt đầu đi',
-                color: AppColors.info,
-                onTap: () => _startTrip(vehicleAsync, vehicleId),
+                icon: _isStartingTrip
+                    ? Icons.hourglass_top_rounded
+                    : Icons.navigation_rounded,
+                label: _isStartingTrip ? 'Đang khởi tạo...' : 'Bắt đầu đi',
+                color: _isStartingTrip
+                    ? AppColors.info.withValues(alpha: 0.5)
+                    : AppColors.info,
+                onTap: _isStartingTrip
+                    ? () {}
+                    : () => _startTrip(vehicleAsync, vehicleId),
               ),
             ),
             const SizedBox(width: 12),
@@ -614,7 +636,26 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   // ── Trip Active Banner ──
 
   Widget _buildTripActive() {
-    return Container(
+    return GestureDetector(
+      onTap: () async {
+        try {
+          // Tap banner → mở map
+          final stoppedFromMap = await Navigator.of(context).push<bool>(
+            MaterialPageRoute(builder: (_) => const TripLiveMapScreen()),
+          );
+          if (stoppedFromMap == true) {
+            final vehicleId = ref.read(selectedVehicleIdProvider);
+            ref.invalidate(vehicleProvider(vehicleId));
+            ref.invalidate(dashboardTripsProvider(vehicleId));
+            ref.invalidate(dashboardMaintenanceProvider(vehicleId));
+            _triggerMaintenanceCheck(vehicleId);
+          }
+          setState(() {});
+        } catch (e) {
+          AppPopup.showError('Không thể mở bản đồ chuyến đi: $e');
+        }
+      },
+      child: Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -686,22 +727,60 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _stopTrip,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.error,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
-              ),
-              icon: const Icon(Icons.stop_rounded),
-              label: const Text('Kết thúc chuyến đi',
-                  style: TextStyle(fontWeight: FontWeight.w700)),
+            child: Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      try {
+                        final stoppedFromMap = await Navigator.of(context).push<bool>(
+                          MaterialPageRoute(builder: (_) => const TripLiveMapScreen()),
+                        );
+                        if (stoppedFromMap == true) {
+                          final vehicleId = ref.read(selectedVehicleIdProvider);
+                          ref.invalidate(vehicleProvider(vehicleId));
+                          ref.invalidate(dashboardTripsProvider(vehicleId));
+                          _triggerMaintenanceCheck(vehicleId);
+                        }
+                        setState(() {});
+                      } catch (e) {
+                        AppPopup.showError('Mở bản đồ thất bại: $e');
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.info,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                    ),
+                    icon: const Icon(Icons.map_rounded),
+                    label: const Text('Mở bản đồ',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _stopTrip,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.error,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                    ),
+                    icon: const Icon(Icons.stop_rounded),
+                    label: const Text('Kết thúc',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
       ),
+    ),
     );
   }
 
@@ -870,9 +949,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             final currentOdo = vehicleAsync.when(
               data: (v) => v?.currentOdo ?? 0,
               loading: () => 0,
-              error: (_, __) => 0,
+              error: (_, _) => 0,
             );
-            final dueSoon = tasks.where((t) => t.isDueSoon(currentOdo)).toList();
+            final dueSoon = tasks
+                .where((t) => t.isDueSoon(currentOdo))
+                .toList()
+              ..sort((a, b) => a.remainingKm(currentOdo)
+                  .compareTo(b.remainingKm(currentOdo)));
 
             if (dueSoon.isEmpty) {
               return Container(
@@ -898,11 +981,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               );
             }
 
-            return Column(
-              children: dueSoon.map((task) {
-                final remaining = task.remainingKm(currentOdo);
-                final isOverdue = remaining <= 0;
-                return Container(
+            // Chỉ hiển thị 1 task ưu tiên nhất (km còn lại nhỏ nhất)
+            final task = dueSoon.first;
+            final remaining = task.remainingKm(currentOdo);
+            final isOverdue = remaining <= 0;
+            return Container(
                   margin: const EdgeInsets.only(bottom: 8),
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
@@ -960,11 +1043,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     ],
                   ),
                 );
-              }).toList(),
-            );
           },
           loading: () => _shimmer(),
-          error: (e, __) => ErrorState(
+          error: (e, _) => ErrorState(
             message: 'Không tải được lịch bảo dưỡng: $e',
             onRetry: () => ref.invalidate(dashboardMaintenanceProvider(vehicleId)),
           ),
@@ -1015,26 +1096,73 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final vehicle = vehicleAsync.value;
     if (vehicle == null) return;
 
-    final started = await _tripService.startTrip(
-      vehicleId: vehicleId,
-      payload: _selectedPayload,
-      currentBattery: vehicle.currentBattery,
-      currentOdo: vehicle.currentOdo,
-      defaultEfficiency: vehicle.defaultEfficiency,
-    );
+    try {
+      setState(() => _isStartingTrip = true);
 
-    if (started) {
-      await BackgroundServiceConfig.startService();
-      BackgroundServiceConfig.sendCommand('startTrip');
-    }
-
-    if (!started && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Không thể bật GPS. Kiểm tra quyền truy cập vị trí.'),
-          backgroundColor: AppColors.error,
-        ),
+      final result = await _tripService.startTrip(
+        vehicleId: vehicleId,
+        payload: _selectedPayload,
+        currentBattery: vehicle.currentBattery,
+        currentOdo: vehicle.currentOdo,
+        defaultEfficiency: vehicle.defaultEfficiency,
       );
+
+      if (mounted) setState(() => _isStartingTrip = false);
+
+      if (result.isSuccess) {
+        final bgOk = await BackgroundServiceConfig.safeStartForTrip();
+        if (bgOk) BackgroundServiceConfig.sendCommand('startTrip');
+        if (!bgOk && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Không bật được dịch vụ nền — GPS vẫn hoạt động trong app'),
+              backgroundColor: Colors.orange.shade800,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+
+        if (mounted) {
+          // Navigate to map screen
+          final stoppedFromMap = await Navigator.of(context).push<bool>(
+            MaterialPageRoute(builder: (_) => const TripLiveMapScreen()),
+          );
+          // Khi quay về từ map (kết thúc hoặc back), refresh data
+          if (stoppedFromMap == true) {
+            ref.invalidate(vehicleProvider(vehicleId));
+            ref.invalidate(dashboardTripsProvider(vehicleId));
+            ref.invalidate(dashboardMaintenanceProvider(vehicleId));
+            _triggerMaintenanceCheck(vehicleId);
+          }
+          setState(() {});
+        }
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result.message),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            action: result.status == TripStartStatus.permissionDeniedForever
+                ? SnackBarAction(
+                    label: 'Mở Cài đặt',
+                    textColor: Colors.white,
+                    onPressed: () => Geolocator.openAppSettings(),
+                  )
+                : result.status == TripStartStatus.gpsDisabled
+                    ? SnackBarAction(
+                        label: 'Bật GPS',
+                        textColor: Colors.white,
+                        onPressed: () => Geolocator.openLocationSettings(),
+                      )
+                    : null,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isStartingTrip = false);
+      AppPopup.showError('Bắt đầu chuyến đi thất bại: $e');
     }
   }
 
@@ -1063,8 +1191,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       targetBatteryPercent: targetPercent,
     );
 
-    await BackgroundServiceConfig.startService();
-    BackgroundServiceConfig.sendCommand('startCharge');
+    final bgOk = await BackgroundServiceConfig.safeStartForTrip();
+    if (bgOk) BackgroundServiceConfig.sendCommand('startCharge');
 
     setState(() {});
   }

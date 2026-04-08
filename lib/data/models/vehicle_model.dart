@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class VehicleModel {
   final String vehicleId;
   final String vehicleName;
+  final String? ownerUid;
   final int currentOdo;
   final int currentBattery; // % pin hiện tại (realtime)
   final double stateOfHealth; // SoH 0-100%
@@ -22,6 +23,7 @@ class VehicleModel {
   VehicleModel({
     required this.vehicleId,
     this.vehicleName = '',
+    this.ownerUid,
     required this.currentOdo,
     this.currentBattery = 100,
     this.stateOfHealth = 100.0,
@@ -45,6 +47,7 @@ class VehicleModel {
     return VehicleModel(
       vehicleId: doc.id,
       vehicleName: data['vehicleName'] ?? '',
+      ownerUid: data['ownerUid'],
       currentOdo: data['currentOdo'] ?? 0,
       currentBattery: data['currentBattery'] ?? data['lastBatteryPercent'] ?? 100,
       stateOfHealth: (data['stateOfHealth'] ?? 100.0).toDouble(),
@@ -91,6 +94,7 @@ class VehicleModel {
     return {
       'vehicleId': vehicleId,
       'vehicleName': vehicleName,
+      if (ownerUid != null) 'ownerUid': ownerUid,
       'currentOdo': currentOdo,
       'currentBattery': currentBattery,
       'stateOfHealth': stateOfHealth,
@@ -112,6 +116,7 @@ class VehicleModel {
   VehicleModel copyWith({
     String? vehicleId,
     String? vehicleName,
+    String? ownerUid,
     int? currentOdo,
     int? currentBattery,
     double? stateOfHealth,
@@ -128,6 +133,7 @@ class VehicleModel {
     return VehicleModel(
       vehicleId: vehicleId ?? this.vehicleId,
       vehicleName: vehicleName ?? this.vehicleName,
+      ownerUid: ownerUid ?? this.ownerUid,
       currentOdo: currentOdo ?? this.currentOdo,
       currentBattery: currentBattery ?? this.currentBattery,
       stateOfHealth: stateOfHealth ?? this.stateOfHealth,
