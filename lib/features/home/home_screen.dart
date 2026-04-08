@@ -177,7 +177,7 @@ class HomeScreen extends ConsumerWidget {
                               )
                             : const SizedBox.shrink(),
                         loading: () => const SizedBox.shrink(),
-                        error: (_, __) => const SizedBox.shrink(),
+                        error: (_, _) => const SizedBox.shrink(),
                       ),
                     ],
                   ),
@@ -292,7 +292,7 @@ class HomeScreen extends ConsumerWidget {
           if (total == 0) return const SizedBox.shrink();
           return LayoutBuilder(
             builder: (context, constraints) {
-              final ratio = constraints.maxWidth > 340 ? 1.45 : 1.25;
+              final ratio = constraints.maxWidth > 380 ? 1.3 : constraints.maxWidth > 300 ? 1.1 : 0.95;
               return GridView.count(
                 crossAxisCount: 2,
                 mainAxisSpacing: 10,
@@ -495,7 +495,7 @@ class _HomeHeader extends ConsumerWidget {
               );
             },
             loading: () => const SizedBox(height: 48),
-            error: (_, __) => const SizedBox.shrink(),
+            error: (_, _) => const SizedBox.shrink(),
           ),
         ],
       ),
@@ -585,7 +585,7 @@ class _VehicleSwitcherTabs extends StatelessWidget {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: vehicles.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
         itemBuilder: (context, i) {
           final v = vehicles[i];
           final isSelected = v.vehicleId == selectedId;

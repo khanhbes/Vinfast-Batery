@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
+import 'dart:ui';
 
 import 'app.dart';
 import 'data/services/notification_service.dart';
@@ -11,12 +13,26 @@ import 'data/services/background_service_config.dart';
 import 'data/services/maintenance_reminder_service.dart';
 import 'data/repositories/vehicle_spec_repository.dart';
 import 'data/services/vehicle_model_link_service.dart';
+import 'core/widgets/app_popup.dart';
 
 /// Provider toàn cục cho trạng thái recovery cần hiển thị dialog
 final pendingRecoveryProvider = StateProvider<String?>((ref) => null);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    AppPopup.showError('Đã xảy ra lỗi trong ứng dụng. Vui lòng thử lại.');
+  };
+
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('Unhandled zone error: $error');
+    AppPopup.showError('Ứng dụng gặp lỗi ngoài luồng chính.');
+    return true;
+  };
+
+  await runZonedGuarded(() async {
 
   // Khởi tạo Firebase
   try {
@@ -122,14 +138,18 @@ void main() async {
     ),
   );
 
-  runApp(
-    ProviderScope(
-      overrides: [
-        pendingRecoveryProvider.overrideWith((ref) => pendingRecovery),
-      ],
-      child: const VinFastBatteryApp(),
-    ),
-  );
+    runApp(
+      ProviderScope(
+        overrides: [
+          pendingRecoveryProvider.overrideWith((ref) => pendingRecovery),
+        ],
+        child: const VinFastBatteryApp(),
+      ),
+    );
+  }, (error, stack) {
+    debugPrint('ZonedGuarded error: $error');
+    AppPopup.showError('Đã bắt được lỗi không mong muốn.');
+  });
 }
 
 /// Helper: lấy ODO hiện tại từ Firestore (non-blocking)

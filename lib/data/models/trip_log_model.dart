@@ -57,6 +57,7 @@ enum DistanceSource {
 class TripLogModel {
   final String? tripId;
   final String vehicleId;
+  final String? ownerUid;
   final DateTime startTime;
   final DateTime endTime;
   final double distance; // km
@@ -73,6 +74,7 @@ class TripLogModel {
   TripLogModel({
     this.tripId,
     required this.vehicleId,
+    this.ownerUid,
     required this.startTime,
     required this.endTime,
     required this.distance,
@@ -109,6 +111,7 @@ class TripLogModel {
     return TripLogModel(
       tripId: doc.id,
       vehicleId: data['vehicleId'] ?? '',
+      ownerUid: data['ownerUid'],
       startTime: (data['startTime'] as Timestamp).toDate(),
       endTime: (data['endTime'] as Timestamp).toDate(),
       distance: (data['distance'] ?? 0).toDouble(),
@@ -127,6 +130,7 @@ class TripLogModel {
   Map<String, dynamic> toFirestore() {
     return {
       'vehicleId': vehicleId,
+      if (ownerUid != null) 'ownerUid': ownerUid,
       'startTime': Timestamp.fromDate(startTime),
       'endTime': Timestamp.fromDate(endTime),
       'distance': distance,

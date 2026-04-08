@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class ChargeLogModel {
   final String? logId;
   final String vehicleId;
+  final String? ownerUid;
   final DateTime startTime;
   final DateTime endTime;
   final int startBatteryPercent;
@@ -14,6 +15,7 @@ class ChargeLogModel {
   ChargeLogModel({
     this.logId,
     required this.vehicleId,
+    this.ownerUid,
     required this.startTime,
     required this.endTime,
     required this.startBatteryPercent,
@@ -46,6 +48,7 @@ class ChargeLogModel {
     return ChargeLogModel(
       logId: doc.id,
       vehicleId: data['vehicleId'] ?? '',
+      ownerUid: data['ownerUid'],
       startTime: (data['startTime'] as Timestamp).toDate(),
       endTime: (data['endTime'] as Timestamp).toDate(),
       startBatteryPercent: data['startBatteryPercent'] ?? 0,
@@ -85,6 +88,7 @@ class ChargeLogModel {
   Map<String, dynamic> toFirestore() {
     return {
       'vehicleId': vehicleId,
+      if (ownerUid != null) 'ownerUid': ownerUid,
       'startTime': Timestamp.fromDate(startTime),
       'endTime': Timestamp.fromDate(endTime),
       'startBatteryPercent': startBatteryPercent,

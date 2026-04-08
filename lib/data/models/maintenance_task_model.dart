@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class MaintenanceTaskModel {
   final String? taskId;
   final String vehicleId;
+  final String? ownerUid;
   final String title;
   final String description;
   final int targetOdo; // Mốc ODO cần bảo dưỡng
@@ -14,6 +15,7 @@ class MaintenanceTaskModel {
   MaintenanceTaskModel({
     this.taskId,
     required this.vehicleId,
+    this.ownerUid,
     required this.title,
     this.description = '',
     required this.targetOdo,
@@ -42,6 +44,7 @@ class MaintenanceTaskModel {
     return MaintenanceTaskModel(
       taskId: doc.id,
       vehicleId: data['vehicleId'] ?? '',
+      ownerUid: data['ownerUid'],
       title: data['title'] ?? '',
       description: data['description'] ?? '',
       targetOdo: data['targetOdo'] ?? 0,
@@ -58,6 +61,7 @@ class MaintenanceTaskModel {
   Map<String, dynamic> toFirestore() {
     return {
       'vehicleId': vehicleId,
+      if (ownerUid != null) 'ownerUid': ownerUid,
       'title': title,
       'description': description,
       'targetOdo': targetOdo,

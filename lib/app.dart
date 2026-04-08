@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'core/theme/app_theme.dart';
-import 'navigation/app_navigation.dart';
+import 'core/widgets/app_popup.dart';
+import 'features/auth/auth_gate.dart';
 
 class VinFastBatteryApp extends StatelessWidget {
   const VinFastBatteryApp({super.key});
@@ -12,7 +13,8 @@ class VinFastBatteryApp extends StatelessWidget {
       title: 'VinFast Battery',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
-      home: const AppNavigation(),
+      scaffoldMessengerKey: AppPopup.messengerKey,
+      home: const AuthGate(),
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/utils/firestore_safe_query.dart';
@@ -13,6 +14,8 @@ class TripLogRepository {
 
   CollectionReference get _tripLogsRef => _firestore.collection('TripLogs');
   CollectionReference get _vehiclesRef => _firestore.collection('Vehicles');
+
+  String? get _uid => FirebaseAuth.instance.currentUser?.uid;
 
   /// Lấy tất cả chuyến đi của xe, mới nhất trước (index-safe)
   Future<List<TripLogModel>> getTripLogs(String vehicleId) async {
@@ -54,7 +57,10 @@ class TripLogRepository {
 
       // Tạo trip log
       final newTripRef = _tripLogsRef.doc();
-      transaction.set(newTripRef, trip.toFirestore());
+      final tripData = trip.toFirestore();
+      if (_uid != null) tripData['ownerUid'] = _uid;
+      tripData['isDeleted'] = false;
+      transaction.set(newTripRef, tripData);
 
       // Cập nhật xe
       transaction.update(vehicleDocRef, {

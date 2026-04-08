@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+/* ── VinFast Theme Tokens ── */
+:root {
+  --color-bg: #0d111a;
+  --color-surface: #141b29;
+  --color-surface-hover: #1b2435;
+  --color-border: #2a3a57;
+  --color-accent: #00c853;
+  --color-accent-dim: #00c85330;
+  --color-text: #ecf2ff;
+  --color-text-dim: #9aa6bd;
+  --color-red: #ff5252;
+  --color-amber: #ffab40;
+  --color-blue: #37b4ff;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(1200px 700px at 90% -10%, rgba(55, 180, 255, 0.14), transparent 60%),
+    radial-gradient(1000px 600px at -10% 120%, rgba(0, 200, 83, 0.12), transparent 60%),
+    var(--color-bg);
+  color: var(--color-text);
+  font-family: 'Manrope', 'Segoe UI', sans-serif;
+}
+
+h1, h2, h3, .portal-title {
+  font-family: 'Space Grotesk', 'Manrope', sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.portal-shell::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image: linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(circle at 50% 50%, black 35%, transparent 90%);
+  opacity: 0.35;
+}
+
+.portal-content-in {
+  animation: portalFadeUp 320ms ease-out;
+}
+
+.portal-toast {
+  animation: toastIn 220ms ease-out;
+}
+
+@keyframes portalFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Recharts tooltip override */
+.recharts-default-tooltip {
+  background: var(--color-surface) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: 8px !important;
+}
+.recharts-tooltip-label {
+  color: var(--color-text-dim) !important;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-text-dim); }

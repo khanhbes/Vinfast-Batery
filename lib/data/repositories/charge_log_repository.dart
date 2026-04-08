@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/utils/firestore_safe_query.dart';
@@ -21,6 +22,8 @@ class ChargeLogRepository {
   CollectionReference get _vehiclesRef =>
       _firestore.collection('Vehicles');
 
+  String? get _uid => FirebaseAuth.instance.currentUser?.uid;
+
   // ── Vehicle CRUD ──────────────────────────────────────────────────────────
 
   /// Lấy thông tin 1 xe theo vehicleId
@@ -30,13 +33,21 @@ class ChargeLogRepository {
     return VehicleModel.fromFirestore(doc);
   }
 
-  /// Lấy tất cả xe
+  /// Lấy tất cả xe (của user hiện tại)
   Future<List<VehicleModel>> getAllVehicles() async {
-    final snapshot = await _vehiclesRef.get();
+    final uid = _uid;
+    Query query = _vehiclesRef;
+    if (uid != null) {
+      query = query.where('ownerUid', isEqualTo: uid);
+    }
+    final snapshot = await query.get();
     if (snapshot.docs.isEmpty) {
       // Nếu chưa có xe nào → tạo xe mặc định
       await _seedDefaultVehicles();
-      final retrySnapshot = await _vehiclesRef.get();
+      final retryQuery = uid != null
+          ? _vehiclesRef.where('ownerUid', isEqualTo: uid)
+          : _vehiclesRef;
+      final retrySnapshot = await retryQuery.get();
       return retrySnapshot.docs
           .map((doc) => VehicleModel.fromFirestore(doc))
           .toList();
@@ -48,6 +59,7 @@ class ChargeLogRepository {
 
   /// Tạo xe mặc định khi Firestore chưa có dữ liệu
   Future<void> _seedDefaultVehicles() async {
+    final uid = _uid;
     final batch = _firestore.batch();
 
     batch.set(_vehiclesRef.doc('VF-OPES-001'), {
@@ -57,6 +69,8 @@ class ChargeLogRepository {
       'totalCharges': 0,
       'lastBatteryPercent': 100,
       'avatarColor': '#00C853',
+      'ownerUid': uid,
+      'isDeleted': false,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
@@ -68,6 +82,8 @@ class ChargeLogRepository {
       'totalCharges': 0,
       'lastBatteryPercent': 100,
       'avatarColor': '#448AFF',
+      'ownerUid': uid,
+      'isDeleted': false,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
@@ -93,6 +109,8 @@ class ChargeLogRepository {
       'totalCharges': 0,
       'lastBatteryPercent': 100,
       'avatarColor': avatarColor,
+      'ownerUid': _uid,
+      'isDeleted': false,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
@@ -175,7 +193,10 @@ class ChargeLogRepository {
 
       // 1. Tạo document mới trong ChargeLogs
       final newChargeLogRef = _chargeLogsRef.doc();
-      transaction.set(newChargeLogRef, chargeLog.toFirestore());
+      final logData = chargeLog.toFirestore();
+      if (_uid != null) logData['ownerUid'] = _uid;
+      logData['isDeleted'] = false;
+      transaction.set(newChargeLogRef, logData);
 
       // 2. Cập nhật xe: ODO + totalCharges + lastBatteryPercent
       transaction.update(vehicleDocRef, {
@@ -209,16 +230,16 @@ class ChargeLogRepository {
     }
 
     final totalCharges = logs.length;
-    final totalGain = logs.fold<int>(0, (sum, l) => sum + l.chargeGain);
+    final totalGain = logs.fold<int>(0, (acc, l) => acc + l.chargeGain);
     final totalDurationHours = logs.fold<double>(
       0,
-      (sum, l) => sum + l.chargeDuration.inMinutes / 60.0,
+      (acc, l) => acc + l.chargeDuration.inMinutes / 60.0,
     );
     final avgStart =
-        logs.fold<int>(0, (sum, l) => sum + l.startBatteryPercent) /
+        logs.fold<int>(0, (acc, l) => acc + l.startBatteryPercent) /
             totalCharges;
     final avgEnd =
-        logs.fold<int>(0, (sum, l) => sum + l.endBatteryPercent) /
+        logs.fold<int>(0, (acc, l) => acc + l.endBatteryPercent) /
             totalCharges;
 
     return {

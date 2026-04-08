@@ -1,0 +1,72 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper functions ──
+    function isAuth() {
+      return request.auth != null;
+    }
+    function isOwner(ownerUid) {
+      return isAuth() && request.auth.uid == ownerUid;
+    }
+    function notDeleted() {
+      return resource.data.isDeleted != true;
+    }
+
+    // ── Vehicles ──
+    match /Vehicles/{vehicleId} {
+      allow read: if isAuth() && isOwner(resource.data.ownerUid) && notDeleted();
+      allow create: if isAuth() && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if isAuth() && isOwner(resource.data.ownerUid);
+      allow delete: if false; // Soft delete only via backend
+    }
+
+    // ── ChargeLogs ──
+    match /ChargeLogs/{logId} {
+      allow read: if isAuth() && isOwner(resource.data.ownerUid) && notDeleted();
+      allow create: if isAuth() && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if isAuth() && isOwner(resource.data.ownerUid);
+      allow delete: if false;
+    }
+
+    // ── TripLogs ──
+    match /TripLogs/{tripId} {
+      allow read: if isAuth() && isOwner(resource.data.ownerUid) && notDeleted();
+      allow create: if isAuth() && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if isAuth() && isOwner(resource.data.ownerUid);
+      allow delete: if false;
+    }
+
+    // ── MaintenanceTasks ──
+    match /MaintenanceTasks/{taskId} {
+      allow read: if isAuth() && isOwner(resource.data.ownerUid) && notDeleted();
+      allow create: if isAuth() && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if isAuth() && isOwner(resource.data.ownerUid);
+      allow delete: if false;
+    }
+
+    // ── TelemetryPoints ──
+    match /TelemetryPoints/{pointId} {
+      allow read: if isAuth() && isOwner(resource.data.ownerUid) && notDeleted();
+      allow create: if isAuth() && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // ── VinFastModelSpecs (public read, no client write) ──
+    match /VinFastModelSpecs/{modelId} {
+      allow read: if true;
+      allow write: if false; // Managed via backend/admin
+    }
+
+    // ── AiVehicleProfiles (backend only via Admin SDK) ──
+    match /AiVehicleProfiles/{vehicleId} {
+      allow read, write: if false;
+    }
+
+    // ── AuditLogs (backend only) ──
+    match /AuditLogs/{logId} {
+      allow read, write: if false;
+    }
+  }
+}

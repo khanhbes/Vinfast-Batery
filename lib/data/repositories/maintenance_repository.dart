@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/maintenance_task_model.dart';
@@ -11,6 +12,8 @@ class MaintenanceRepository {
       : _firestore = firestore ?? FirebaseFirestore.instance;
 
   CollectionReference get _tasksRef => _firestore.collection('MaintenanceTasks');
+
+  String? get _uid => FirebaseAuth.instance.currentUser?.uid;
 
   /// Lấy tất cả tasks của xe (chưa hoàn thành trước)
   Future<List<MaintenanceTaskModel>> getTasks(String vehicleId) async {
@@ -41,7 +44,10 @@ class MaintenanceRepository {
 
   /// Tạo task mới
   Future<void> addTask(MaintenanceTaskModel task) async {
-    await _tasksRef.add(task.toFirestore());
+    final data = task.toFirestore();
+    if (_uid != null) data['ownerUid'] = _uid;
+    data['isDeleted'] = false;
+    await _tasksRef.add(data);
   }
 
   /// Đánh dấu hoàn thành

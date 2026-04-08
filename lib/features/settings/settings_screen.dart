@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/constants/app_constants.dart';
@@ -12,6 +13,7 @@ import '../../data/models/vinfast_model_spec.dart';
 import '../../data/repositories/charge_log_repository.dart';
 import '../../data/repositories/vehicle_spec_repository.dart';
 import '../../data/services/vehicle_model_link_service.dart';
+import '../../data/services/ai_prediction_service.dart';
 import '../../core/widgets/vehicle_detail_sheet.dart';
 import '../home/home_screen.dart';
 import 'guide_screen.dart';
@@ -109,7 +111,7 @@ class SettingsScreen extends ConsumerWidget {
                   subtitle: allVehicles.when(
                     data: (v) => '${v.length} xe',
                     loading: () => '...',
-                    error: (_, __) => '',
+                    error: (_, _) => '',
                   ),
                 ),
               ).animate().fadeIn(delay: 150.ms),
@@ -205,6 +207,8 @@ class SettingsScreen extends ConsumerWidget {
                     const SizedBox(height: 8),
                     _AiApiStatusTile(),
                     const SizedBox(height: 8),
+                    _AiUrlConfigTile(),
+                    const SizedBox(height: 8),
                     GestureDetector(
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute(builder: (_) => const AiFunctionsScreen()),
@@ -238,9 +242,47 @@ class SettingsScreen extends ConsumerWidget {
             // ── About Card ──
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
                 child: _AboutCard(),
               ).animate().fadeIn(delay: 600.ms).scale(begin: const Offset(0.95, 0.95)),
+            ),
+
+            // ── Logout Button ──
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      final confirmed = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          backgroundColor: AppColors.surface,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          title: const Text('Đăng xuất', style: TextStyle(color: AppColors.textPrimary)),
+                          content: const Text('Bạn có chắc muốn đăng xuất?', style: TextStyle(color: AppColors.textSecondary)),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Hủy')),
+                            TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Đăng xuất', style: TextStyle(color: AppColors.error))),
+                          ],
+                        ),
+                      );
+                      if (confirmed == true) {
+                        await FirebaseAuth.instance.signOut();
+                      }
+                    },
+                    icon: const Icon(Icons.logout_rounded, size: 18),
+                    label: const Text('Đăng xuất'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.error,
+                      side: BorderSide(color: AppColors.error.withValues(alpha: 0.4)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+              ).animate().fadeIn(delay: 700.ms),
             ),
 
             const SliverToBoxAdapter(child: SizedBox(height: 100)),
@@ -259,7 +301,7 @@ class SettingsScreen extends ConsumerWidget {
       barrierLabel: 'Add Vehicle',
       barrierColor: Colors.black87,
       transitionDuration: const Duration(milliseconds: 300),
-      pageBuilder: (_, __, ___) => _AddVehicleDialog(
+      pageBuilder: (_, _, _) => _AddVehicleDialog(
         onAdd: (id, name, colorHex, spec) async {
           final repo = ref.read(chargeLogRepositoryProvider);
           await repo.addVehicle(
@@ -276,7 +318,7 @@ class SettingsScreen extends ConsumerWidget {
           if (context.mounted) Navigator.of(context).pop();
         },
       ),
-      transitionBuilder: (_, anim, __, child) {
+      transitionBuilder: (_, anim, _, child) {
         return SlideTransition(
           position: CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)
               .drive(Tween(begin: const Offset(0, 0.15), end: Offset.zero)),
@@ -1245,6 +1287,100 @@ class _AiApiStatusTile extends ConsumerWidget {
         valueColor: color,
       ),
     ).animate().fadeIn(delay: 520.ms);
+  }
+}
+
+class _AiUrlConfigTile extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final aiService = ref.read(aiPredictionServiceProvider);
+
+    return GestureDetector(
+      onTap: () => _showUrlDialog(context, ref, aiService),
+      child: _AppInfoTile(
+        icon: Icons.link_rounded,
+        iconColor: AppColors.info,
+        title: 'AI Server URL',
+        value: aiService.baseUrl,
+        valueColor: AppColors.textSecondary,
+      ),
+    ).animate().fadeIn(delay: 535.ms);
+  }
+
+  void _showUrlDialog(BuildContext context, WidgetRef ref, AiPredictionService aiService) {
+    final controller = TextEditingController(text: aiService.baseUrl);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Cấu hình AI Server URL',
+            style: TextStyle(color: AppColors.textPrimary, fontSize: 17, fontWeight: FontWeight.w700)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Nhập URL Flask AI (LAN/Cloud). Ví dụ:\n• Emulator: http://10.0.2.2:5001\n• LAN: http://192.168.1.x:5001',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: AppColors.card,
+                hintText: kAiBaseUrlDefault,
+                hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 13),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppColors.border),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppColors.border),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppColors.info),
+                ),
+              ),
+              keyboardType: TextInputType.url,
+              autocorrect: false,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              controller.text = kAiBaseUrlDefault;
+            },
+            child: const Text('Mặc định', style: TextStyle(color: AppColors.textTertiary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Hủy', style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final url = controller.text.trim();
+              if (url.isEmpty) return;
+              await aiService.setBaseUrl(url);
+              // Re-check AI status với URL mới
+              ref.read(aiApiStatusProvider.notifier).check();
+              if (ctx.mounted) Navigator.of(ctx).pop();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.info,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('Lưu', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
   }
 }
 

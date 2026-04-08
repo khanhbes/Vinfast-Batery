@@ -137,7 +137,7 @@ class StatisticsScreen extends ConsumerWidget {
                   padding: EdgeInsets.all(20),
                   child: LoadingSkeleton(layout: SkeletonLayout.card),
                 ),
-                error: (_, __) => const SizedBox.shrink(),
+                error: (_, _) => const SizedBox.shrink(),
               ),
             ),
 
@@ -149,7 +149,7 @@ class StatisticsScreen extends ConsumerWidget {
                   padding: EdgeInsets.all(20),
                   child: LoadingSkeleton(layout: SkeletonLayout.card),
                 ),
-                error: (_, __) => const SizedBox.shrink(),
+                error: (_, _) => const SizedBox.shrink(),
               ),
             ),
 
@@ -161,7 +161,7 @@ class StatisticsScreen extends ConsumerWidget {
                   logs: logs,
                 ),
                 loading: () => const SizedBox.shrink(),
-                error: (_, __) => const SizedBox.shrink(),
+                error: (_, _) => const SizedBox.shrink(),
               ),
             ),
 
@@ -173,7 +173,19 @@ class StatisticsScreen extends ConsumerWidget {
                   logs: logs,
                 ),
                 loading: () => const SizedBox.shrink(),
-                error: (_, __) => const SizedBox.shrink(),
+                error: (_, _) => const SizedBox.shrink(),
+              ),
+            ),
+
+            // ── AI Charging Pattern Analysis ──
+            SliverToBoxAdapter(
+              child: logsAsync.when(
+                data: (logs) => _AiPatternWidget(
+                  vehicleId: vehicleId,
+                  logs: logs,
+                ),
+                loading: () => const SizedBox.shrink(),
+                error: (_, _) => const SizedBox.shrink(),
               ),
             ),
 
@@ -185,7 +197,7 @@ class StatisticsScreen extends ConsumerWidget {
                   padding: EdgeInsets.all(20),
                   child: LoadingSkeleton(layout: SkeletonLayout.card),
                 ),
-                error: (_, __) => const SizedBox.shrink(),
+                error: (_, _) => const SizedBox.shrink(),
               ),
             ),
 
@@ -194,7 +206,7 @@ class StatisticsScreen extends ConsumerWidget {
               child: logsAsync.when(
                 data: (logs) => _buildChargingPatternCard(logs),
                 loading: () => const SizedBox.shrink(),
-                error: (_, __) => const SizedBox.shrink(),
+                error: (_, _) => const SizedBox.shrink(),
               ),
             ),
 
@@ -215,7 +227,7 @@ class StatisticsScreen extends ConsumerWidget {
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final ratio = constraints.maxWidth > 340 ? 1.5 : 1.3;
+          final ratio = constraints.maxWidth > 380 ? 1.3 : constraints.maxWidth > 300 ? 1.1 : 0.95;
           return GridView.count(
         crossAxisCount: 2,
         mainAxisSpacing: 12,
@@ -274,6 +286,10 @@ class StatisticsScreen extends ConsumerWidget {
       title: '⚡ Xu hướng sạc',
       subtitle: '${recentLogs.length} lần sạc gần nhất',
       delay: 600,
+      legend: const [
+        _LegendItem(color: AppColors.primaryGreen, label: 'Sạc được (%)'),
+        _LegendItem(color: AppColors.error, label: 'Pin bắt đầu (%)'),
+      ],
       child: SizedBox(
         height: 200,
         child: LineChart(
@@ -324,7 +340,7 @@ class StatisticsScreen extends ConsumerWidget {
                 isStrokeCapRound: true,
                 dotData: FlDotData(
                   show: true,
-                  getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
+                  getDotPainter: (_, _, _, _) => FlDotCirclePainter(
                     radius: 3,
                     color: AppColors.primaryGreen,
                     strokeWidth: 1,
@@ -374,10 +390,6 @@ class StatisticsScreen extends ConsumerWidget {
           ),
         ),
       ),
-      legend: const [
-        _LegendItem(color: AppColors.primaryGreen, label: 'Sạc được (%)'),
-        _LegendItem(color: AppColors.error, label: 'Pin bắt đầu (%)'),
-      ],
     );
   }
 
@@ -1189,6 +1201,203 @@ class _AiPredictionWidgetState extends ConsumerState<_AiPredictionWidget> {
               )),
         ],
       ],
+    );
+  }
+}
+
+// =============================================================================
+// AI Pattern Widget — Phân tích thói quen sạc (analyze-patterns endpoint)
+// =============================================================================
+
+class _AiPatternWidget extends ConsumerStatefulWidget {
+  final String vehicleId;
+  final List<ChargeLogModel> logs;
+
+  const _AiPatternWidget({required this.vehicleId, required this.logs});
+
+  @override
+  ConsumerState<_AiPatternWidget> createState() => _AiPatternWidgetState();
+}
+
+class _AiPatternWidgetState extends ConsumerState<_AiPatternWidget> {
+  Map<String, dynamic>? _patterns;
+  bool _isLoading = false;
+  bool _hasError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPatterns();
+  }
+
+  Future<void> _loadPatterns() async {
+    if (widget.logs.length < 3) return;
+    setState(() { _isLoading = true; _hasError = false; });
+
+    final service = ref.read(aiPredictionServiceProvider);
+    final result = await service.analyzePatterns(
+      vehicleId: widget.vehicleId,
+      chargeLogs: widget.logs,
+    );
+
+    if (mounted) {
+      setState(() {
+        _patterns = result;
+        _isLoading = false;
+        _hasError = result == null;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.logs.length < 3) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              AppColors.info.withValues(alpha: 0.08),
+              AppColors.card,
+            ],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.info.withValues(alpha: 0.2)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.info.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.insights_rounded,
+                      color: AppColors.info, size: 20),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text('Thói quen sạc (AI)',
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      )),
+                ),
+                GestureDetector(
+                  onTap: _loadPatterns,
+                  child: Icon(
+                    _isLoading ? Icons.sync_rounded : Icons.refresh_rounded,
+                    color: AppColors.info,
+                    size: 20,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            if (_isLoading)
+              const Center(
+                child: SizedBox(
+                  width: 24, height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.info),
+                ),
+              )
+            else if (_hasError)
+              Row(
+                children: [
+                  const Icon(Icons.cloud_off_rounded,
+                      color: AppColors.textTertiary, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'AI API chưa kết nối — chạy ai_api.py để kích hoạt',
+                      style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    ),
+                  ),
+                ],
+              )
+            else if (_patterns != null)
+              _buildPatternContent(_patterns!)
+            else
+              const Text('Nhấn refresh để phân tích',
+                  style: TextStyle(color: AppColors.textTertiary, fontSize: 12)),
+          ],
+        ),
+      ),
+    ).animate().fadeIn(delay: 800.ms).slideY(begin: 0.2);
+  }
+
+  Widget _buildPatternContent(Map<String, dynamic> data) {
+    final peakHour = data['peakChargingHour'] as String?;
+    final peakDay = data['peakChargingDay'] as String?;
+    final freq = data['chargeFrequencyPerWeek'] as num?;
+    final avgDuration = data['avgSessionDuration'] as num?;
+    final pRange = data['preferredChargeRange'] as Map<String, dynamic>?;
+    final patterns = (data['patterns'] as List?)?.cast<String>() ?? [];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Stats row
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          children: [
+            if (peakHour != null)
+              _patternChip('🕐 Giờ cao điểm', peakHour),
+            if (peakDay != null)
+              _patternChip('📅 Ngày phổ biến', peakDay),
+            if (freq != null)
+              _patternChip('🔄 Tần suất', '${freq.toStringAsFixed(1)} lần/tuần'),
+            if (avgDuration != null)
+              _patternChip('⏱ TB mỗi lần', '${avgDuration.toStringAsFixed(1)}h'),
+            if (pRange != null)
+              _patternChip('🔋 Khoảng sạc', '${pRange['avgStart']}% → ${pRange['avgEnd']}%'),
+          ],
+        ),
+        if (patterns.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          ...patterns.map((p) => Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(
+              p,
+              style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+            ),
+          )),
+        ],
+      ],
+    );
+  }
+
+  Widget _patternChip(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, style: const TextStyle(color: AppColors.textTertiary, fontSize: 10)),
+          const SizedBox(height: 2),
+          Text(value, style: const TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          )),
+        ],
+      ),
     );
   }
 }

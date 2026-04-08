@@ -104,7 +104,7 @@ class ChargeTrackingService {
       (_) => _onChargeTick(),
     );
 
-    debugPrint('🔌 Charging resumed: ${_currentBattery}% (recovered)');
+    debugPrint('🔌 Charging resumed: $_currentBattery% (recovered)');
     _updateNotification();
     onUpdate?.call();
   }
@@ -184,7 +184,7 @@ class ChargeTrackingService {
       (_) => _onChargeTick(),
     );
 
-    debugPrint('🔌 Charging started: ${_currentBattery}% → target 100%');
+    debugPrint('🔌 Charging started: $_currentBattery% → target 100%');
     _updateNotification();
     onUpdate?.call();
   }
@@ -301,7 +301,7 @@ class ChargeTrackingService {
           'updatedAt': FieldValue.serverTimestamp(),
         });
       });
-      debugPrint('✅ Charge saved: +${batteryGained}% in ${durationMin}min');
+      debugPrint('✅ Charge saved: +$batteryGained% in ${durationMin}min');
     } catch (e) {
       debugPrint('❌ Error saving charge: $e');
     }
