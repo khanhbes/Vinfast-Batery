@@ -13,7 +13,7 @@ import '../../data/models/vinfast_model_spec.dart';
 import '../../data/repositories/charge_log_repository.dart';
 import '../../data/repositories/vehicle_spec_repository.dart';
 import '../../data/services/vehicle_model_link_service.dart';
-import '../../data/services/ai_prediction_service.dart';
+import '../../data/repositories/ai_insights_repository.dart';
 import '../../core/widgets/vehicle_detail_sheet.dart';
 import '../home/home_screen.dart';
 import 'guide_screen.dart';
@@ -203,9 +203,7 @@ class SettingsScreen extends ConsumerWidget {
                     const SizedBox(height: 8),
                     _FirebaseStatusTile(),
                     const SizedBox(height: 8),
-                    _AiApiStatusTile(),
-                    const SizedBox(height: 8),
-                    _AiUrlConfigTile(),
+                    _AiInsightStatusTile(),
                     const SizedBox(height: 8),
                     GestureDetector(
                       onTap: () => Navigator.of(context).push(
@@ -1246,137 +1244,46 @@ class _FirebaseStatusTile extends ConsumerWidget {
   }
 }
 
-class _AiApiStatusTile extends ConsumerWidget {
+class _AiInsightStatusTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final status = ref.watch(aiApiStatusProvider);
+    final vehicleId = ref.watch(selectedVehicleIdProvider);
+    final insightAsync = vehicleId.isNotEmpty
+        ? ref.watch(aiInsightProvider(vehicleId))
+        : null;
 
+    final insight = insightAsync?.valueOrNull;
     final Color color;
     final IconData icon;
     final String label;
-    switch (status) {
-      case ConnectionStatus.checking:
-        color = AppColors.textTertiary;
-        icon = Icons.smart_toy_outlined;
-        label = status.label;
-      case ConnectionStatus.online:
+
+    if (insight == null) {
+      color = AppColors.textTertiary;
+      icon = Icons.smart_toy_outlined;
+      label = 'Chờ web admin Train';
+    } else if (insight.hasTrained) {
+      if (insight.isStale) {
+        color = AppColors.warning;
+        icon = Icons.update_rounded;
+        label = 'Cần refresh (SoH ${insight.healthScore.toStringAsFixed(0)}%)';
+      } else {
         color = AppColors.primaryGreen;
         icon = Icons.smart_toy_rounded;
-        label = 'Hoạt động';
-      case ConnectionStatus.offline:
-        color = AppColors.error;
-        icon = Icons.smart_toy_outlined;
-        label = 'Ngoại tuyến (On-device fallback)';
-      case ConnectionStatus.degraded:
-        color = AppColors.warning;
-        icon = Icons.smart_toy_outlined;
-        label = 'Không ổn định';
+        label = 'SoH ${insight.healthScore.toStringAsFixed(0)}% — ${insight.healthStatus}';
+      }
+    } else {
+      color = AppColors.textTertiary;
+      icon = Icons.hourglass_empty_rounded;
+      label = 'Chưa có insight AI';
     }
 
-    return GestureDetector(
-      onTap: () => ref.read(aiApiStatusProvider.notifier).check(),
-      child: _AppInfoTile(
-        icon: icon,
-        iconColor: color,
-        title: 'AI Dự đoán chai pin',
-        value: label,
-        valueColor: color,
-      ),
+    return _AppInfoTile(
+      icon: icon,
+      iconColor: color,
+      title: 'AI Insight',
+      value: label,
+      valueColor: color,
     ).animate().fadeIn(delay: 520.ms);
-  }
-}
-
-class _AiUrlConfigTile extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final aiService = ref.read(aiPredictionServiceProvider);
-
-    return GestureDetector(
-      onTap: () => _showUrlDialog(context, ref, aiService),
-      child: _AppInfoTile(
-        icon: Icons.link_rounded,
-        iconColor: AppColors.info,
-        title: 'AI Server URL',
-        value: aiService.baseUrl,
-        valueColor: AppColors.textSecondary,
-      ),
-    ).animate().fadeIn(delay: 535.ms);
-  }
-
-  void _showUrlDialog(BuildContext context, WidgetRef ref, AiPredictionService aiService) {
-    final controller = TextEditingController(text: aiService.baseUrl);
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Cấu hình AI Server URL',
-            style: TextStyle(color: AppColors.textPrimary, fontSize: 17, fontWeight: FontWeight.w700)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Nhập URL Flask AI (LAN/Cloud). Ví dụ:\n• Emulator: http://10.0.2.2:5001\n• LAN: http://192.168.1.x:5001',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
-              decoration: InputDecoration(
-                filled: true,
-                fillColor: AppColors.card,
-                hintText: kAiBaseUrlDefault,
-                hintStyle: const TextStyle(color: AppColors.textTertiary, fontSize: 13),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.border),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.border),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.info),
-                ),
-              ),
-              keyboardType: TextInputType.url,
-              autocorrect: false,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              controller.text = kAiBaseUrlDefault;
-            },
-            child: const Text('Mặc định', style: TextStyle(color: AppColors.textTertiary)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Hủy', style: TextStyle(color: AppColors.textSecondary)),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final url = controller.text.trim();
-              if (url.isEmpty) return;
-              await aiService.setBaseUrl(url);
-              // Re-check AI status với URL mới
-              ref.read(aiApiStatusProvider.notifier).check();
-              if (ctx.mounted) Navigator.of(ctx).pop();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.info,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            child: const Text('Lưu', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-          ),
-        ],
-      ),
-    );
   }
 }
 

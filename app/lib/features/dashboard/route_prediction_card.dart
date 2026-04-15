@@ -4,11 +4,12 @@ import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../data/models/trip_log_model.dart';
+import '../../data/repositories/ai_insights_repository.dart';
 import '../../data/services/route_prediction_service.dart';
 import '../../data/repositories/trip_log_repository.dart';
 import '../home/home_screen.dart';
 
-/// Card dự báo tiêu hao pin lộ trình (mock distance)
+/// Card dự báo tiêu hao pin lộ trình (dùng Firestore AI insight + on-device)
 class RoutePredictionCard extends ConsumerStatefulWidget {
   const RoutePredictionCard({super.key});
 
@@ -22,6 +23,7 @@ class _RoutePredictionCardState extends ConsumerState<RoutePredictionCard> {
   PayloadType _payload = PayloadType.onePerson;
   RoutePredictionResult? _result;
   bool _expanded = false;
+  bool _loading = false;
 
   @override
   void dispose() {
@@ -74,7 +76,7 @@ class _RoutePredictionCardState extends ConsumerState<RoutePredictionCard> {
                               fontSize: 15,
                               fontWeight: FontWeight.w700,
                             )),
-                        Text('Kiểm tra pin có đủ đi không',
+                        Text('Dựa trên insight AI + dữ liệu on-device',
                             style: TextStyle(
                               color: AppColors.textSecondary,
                               fontSize: 12,
@@ -137,39 +139,33 @@ class _RoutePredictionCardState extends ConsumerState<RoutePredictionCard> {
           const SizedBox(height: 10),
 
           // Distance
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _distanceCtrl,
-                  keyboardType: TextInputType.number,
-                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
-                  decoration: InputDecoration(
-                    hintText: 'Khoảng cách (km)',
-                    hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 13),
-                    prefixIcon: const Icon(Icons.straighten_rounded,
-                        color: AppColors.textSecondary, size: 18),
-                    suffixText: 'km',
-                    suffixStyle: const TextStyle(color: AppColors.textSecondary),
-                    filled: true,
-                    fillColor: AppColors.surface,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppColors.border),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppColors.border),
-                    ),
-                  ),
-                ),
+          TextField(
+            controller: _distanceCtrl,
+            keyboardType: TextInputType.number,
+            style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+            decoration: InputDecoration(
+              hintText: 'Khoảng cách (km)',
+              hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 13),
+              prefixIcon: const Icon(Icons.straighten_rounded,
+                  color: AppColors.textSecondary, size: 18),
+              suffixText: 'km',
+              suffixStyle: const TextStyle(color: AppColors.textSecondary),
+              filled: true,
+              fillColor: AppColors.surface,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: AppColors.border),
               ),
-            ],
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
+            ),
           ),
           const SizedBox(height: 10),
 
-          // Payload
+          // Payload + Predict Button
           Row(
             children: [
               const Icon(Icons.people_alt_rounded,
@@ -201,21 +197,28 @@ class _RoutePredictionCardState extends ConsumerState<RoutePredictionCard> {
                 );
               }),
               const Spacer(),
-              // Predict button
               GestureDetector(
-                onTap: _predict,
+                onTap: _loading ? null : _predict,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
-                    color: AppColors.info,
+                    color: _loading ? AppColors.info.withValues(alpha: 0.5) : AppColors.info,
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: const Text('Dự báo',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      )),
+                  child: _loading
+                      ? const SizedBox(
+                          width: 14, height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Dự báo',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          )),
                 ),
               ),
             ],
@@ -247,20 +250,36 @@ class _RoutePredictionCardState extends ConsumerState<RoutePredictionCard> {
     final vehicle = await ref.read(vehicleProvider(vehicleId).future);
     if (vehicle == null) return;
 
+    setState(() => _loading = true);
+
+    // Get trips
     List<TripLogModel> trips = [];
     try {
       trips = await ref.read(tripLogRepositoryProvider).getRecentTrips(vehicleId);
     } catch (_) {}
 
+    // Get AI insight from Firestore
+    AiVehicleInsight? insight;
+    try {
+      insight = await ref.read(aiInsightsRepositoryProvider).getInsight(vehicleId);
+    } catch (_) {}
+
+    // Predict using on-device + insight data
     final result = RoutePredictionService.predict(
       distanceKm: distance,
       currentBattery: vehicle.currentBattery,
       payload: _payload,
       trips: trips,
       defaultEfficiency: vehicle.defaultEfficiency,
+      insight: insight,
     );
 
-    setState(() => _result = result);
+    if (mounted) {
+      setState(() {
+        _result = result;
+        _loading = false;
+      });
+    }
   }
 
   Widget _buildResult(RoutePredictionResult result) {
@@ -301,19 +320,85 @@ class _RoutePredictionCardState extends ConsumerState<RoutePredictionCard> {
             ],
           ),
           const SizedBox(height: 12),
-          // Details
+
+          // Stats
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _statItem('Tiêu hao', '-${result.estimatedBatteryDrain}%', AppColors.warning),
               _statItem('Còn lại', '${result.remainingBattery}%',
                   result.remainingBattery >= 20 ? AppColors.primaryGreen : AppColors.error),
-              _statItem('Hiệu suất', '${result.efficiencyUsed.toStringAsFixed(2)} km/%',
-                  AppColors.info),
+              _statItem('Hiệu suất', '${result.efficiencyUsed.toStringAsFixed(2)} km/%', AppColors.info),
             ],
           ),
+
+          const SizedBox(height: 10),
+          _buildSourceBadge(result),
         ],
       ),
+    );
+  }
+
+  Widget _buildSourceBadge(RoutePredictionResult result) {
+    final isAi = result.source == PredictionSource.aiInsight;
+    final badgeColor = isAi ? const Color(0xFF7C4DFF) : AppColors.textTertiary;
+    final label = isAi ? 'AI insight' : 'On-device';
+    final icon = isAi ? Icons.cloud_done_rounded : Icons.phone_android_rounded;
+
+    // Insight status badge
+    String statusText = '';
+    Color statusColor = AppColors.textTertiary;
+    if (result.insightStatus == 'available') {
+      statusText = 'Insight mới';
+      statusColor = AppColors.primaryGreen;
+    } else if (result.insightStatus == 'stale') {
+      statusText = 'Cần refresh từ web';
+      statusColor = AppColors.warning;
+    } else {
+      statusText = 'Chờ AI web';
+      statusColor = AppColors.textTertiary;
+    }
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: badgeColor.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 13, color: badgeColor),
+              const SizedBox(width: 4),
+              Text(label,
+                  style: TextStyle(
+                    color: badgeColor,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                  )),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: statusColor.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            statusText,
+            style: TextStyle(
+              color: statusColor,
+              fontSize: 10.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
     );
   }
 

@@ -1,0 +1,7 @@
+{
+  "css": {
+    "unknownAtRules": {
+      "ignore": ["@tailwind", "@apply", "@layer", "@utilities", "@components", "@base"]
+    }
+  }
+}

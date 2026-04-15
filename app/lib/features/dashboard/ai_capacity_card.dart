@@ -5,7 +5,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/models/vehicle_model.dart';
 import '../../data/services/battery_capacity_service.dart';
-import '../../data/services/ai_prediction_service.dart';
+import '../../data/repositories/ai_insights_repository.dart';
 import '../../data/repositories/vehicle_spec_repository.dart';
 import '../../data/repositories/charge_log_repository.dart';
 import '../../data/repositories/trip_log_repository.dart';
@@ -70,14 +70,17 @@ class _AiCapacityCardState extends ConsumerState<AiCapacityCard> {
       final trips = await ref
           .read(tripLogRepositoryProvider)
           .getRecentTrips(widget.vehicle.vehicleId);
-      final aiService = ref.read(aiPredictionServiceProvider);
+      // Get AI insight from Firestore cache
+      final insight = await ref
+          .read(aiInsightsRepositoryProvider)
+          .getInsight(widget.vehicle.vehicleId);
 
       final result = await BatteryCapacityService.calculate(
         vehicle: widget.vehicle,
         spec: spec,
         chargeLogs: chargeLogs,
         trips: trips,
-        aiService: aiService,
+        insight: insight,
       );
 
       if (mounted) {
@@ -280,13 +283,13 @@ class _AiCapacityCardState extends ConsumerState<AiCapacityCard> {
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               Icon(
-                r.usedAiApi ? Icons.cloud_done_rounded : Icons.computer_rounded,
+                r.usedAiInsight ? Icons.cloud_done_rounded : Icons.computer_rounded,
                 color: AppColors.textTertiary,
                 size: 12,
               ),
               const SizedBox(width: 4),
               Text(
-                r.usedAiApi ? 'AI API' : 'On-device',
+                r.usedAiInsight ? 'AI insight' : 'On-device',
                 style: const TextStyle(
                   color: AppColors.textTertiary,
                   fontSize: 10,

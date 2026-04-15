@@ -1,30 +1,35 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/trip_log_model.dart';
+import '../repositories/ai_insights_repository.dart';
 import 'battery_logic_service.dart';
 
 /// ========================================================================
 /// Route Prediction Service — Dự báo tiêu hao pin cho lộ trình
+/// Dữ liệu AI từ Firestore insight cache, fallback on-device
 /// ========================================================================
 
 /// Abstraction cho provider khoảng cách lộ trình.
-/// Mock bản đầu, có thể thay bằng Google Maps API sau.
 abstract class RouteDistanceProvider {
-  /// Trả về khoảng cách (km) cho tuyến đường.
-  /// [destination]: mô tả điểm đến (text).
   Future<double?> getDistance(String destination);
 }
 
 /// Mock provider: trả về distance do user tự nhập.
 class MockRouteDistanceProvider implements RouteDistanceProvider {
   final double manualDistanceKm;
-
   MockRouteDistanceProvider({required this.manualDistanceKm});
 
   @override
-  Future<double?> getDistance(String destination) async {
-    return manualDistanceKm;
-  }
+  Future<double?> getDistance(String destination) async => manualDistanceKm;
+}
+
+/// Nguồn dự đoán
+enum PredictionSource {
+  aiInsight('AI insight'),
+  onDeviceFallback('On-device fallback');
+
+  final String label;
+  const PredictionSource(this.label);
 }
 
 /// Kết quả dự đoán lộ trình
@@ -36,6 +41,12 @@ class RoutePredictionResult {
   final int remainingBattery;
   final bool isEnough;
 
+  // AI metadata
+  final PredictionSource source;
+  final double? confidence;
+  final String? modelSourceDetail;
+  final String? insightStatus; // 'available' / 'stale' / 'missing'
+
   RoutePredictionResult({
     required this.distanceKm,
     required this.payload,
@@ -43,24 +54,23 @@ class RoutePredictionResult {
     required this.estimatedBatteryDrain,
     required this.remainingBattery,
     required this.isEnough,
+    this.source = PredictionSource.onDeviceFallback,
+    this.confidence,
+    this.modelSourceDetail,
+    this.insightStatus,
   });
 }
 
 /// Service tính toán dự báo tiêu hao pin lộ trình
 class RoutePredictionService {
-  /// Dự báo tiêu hao pin cho lộ trình
-  ///
-  /// [distanceKm]: khoảng cách (km)
-  /// [currentBattery]: % pin hiện tại
-  /// [payload]: tải trọng
-  /// [trips]: danh sách chuyến đi gần đây (để lấy hiệu suất thực tế)
-  /// [defaultEfficiency]: hiệu suất mặc định khi thiếu dữ liệu trip
+  /// Dự báo on-device
   static RoutePredictionResult predict({
     required double distanceKm,
     required int currentBattery,
     required PayloadType payload,
     required List<TripLogModel> trips,
     double defaultEfficiency = 1.2,
+    AiVehicleInsight? insight,
   }) {
     // Lấy hiệu suất theo payload từ dữ liệu thực
     double efficiency = defaultEfficiency;
@@ -70,12 +80,31 @@ class RoutePredictionService {
       final eff = BatteryLogicService.avgEfficiency(matchingTrips);
       if (eff > 0) efficiency = eff;
     } else if (trips.isNotEmpty) {
-      // Fallback: dùng tất cả trips + adjust theo hệ số payload
       final eff = BatteryLogicService.avgEfficiency(trips);
       if (eff > 0) {
-        // Nếu trips phần lớn 1 người, điều chỉnh cho 2 người
         efficiency = eff / payload.factor;
       }
+    }
+
+    // Nếu có insight, adjust efficiency dựa trên healthScore
+    PredictionSource source = PredictionSource.onDeviceFallback;
+    double? confidence;
+    String? modelSourceDetail;
+    String? insightStatus;
+
+    if (insight != null && insight.hasTrained) {
+      insightStatus = insight.displayStatus;
+      source = PredictionSource.aiInsight;
+      confidence = insight.confidence;
+      modelSourceDetail = 'web-managed (v${insight.profileVersion})';
+
+      // SoH < 100 → pin chai → hiệu suất giảm
+      if (insight.healthScore < 100 && insight.healthScore > 0) {
+        final sohFactor = insight.healthScore / 100;
+        efficiency = efficiency * sohFactor;
+      }
+    } else {
+      insightStatus = 'missing';
     }
 
     final drain = BatteryLogicService.batteryDrainForDistance(
@@ -92,7 +121,11 @@ class RoutePredictionService {
       efficiencyUsed: efficiency,
       estimatedBatteryDrain: drain,
       remainingBattery: remaining,
-      isEnough: remaining >= 5, // Giữ buffer 5%
+      isEnough: remaining >= 5,
+      source: source,
+      confidence: confidence,
+      modelSourceDetail: modelSourceDetail,
+      insightStatus: insightStatus,
     );
   }
 }

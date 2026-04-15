@@ -9,7 +9,7 @@ import '../../core/widgets/error_state.dart';
 import '../../core/widgets/loading_skeleton.dart';
 import '../../core/widgets/stat_card.dart';
 import '../../data/models/charge_log_model.dart';
-import '../../data/services/ai_prediction_service.dart';
+import '../../data/repositories/ai_insights_repository.dart';
 import '../../data/services/battery_capacity_service.dart';
 import '../../data/repositories/vehicle_spec_repository.dart';
 import '../../data/repositories/trip_log_repository.dart';
@@ -899,18 +899,33 @@ class _AiPredictionWidgetState extends ConsumerState<_AiPredictionWidget> {
       _hasError = false;
     });
 
-    final service = ref.read(aiPredictionServiceProvider);
-    final result = await service.predictDegradation(
-      vehicleId: widget.vehicleId,
-      chargeLogs: widget.logs,
-    );
+    // Read from Firestore insight instead of HTTP AI API
+    final insightRepo = ref.read(aiInsightsRepositoryProvider);
+    final insight = await insightRepo.getInsight(widget.vehicleId);
 
     if (mounted) {
-      setState(() {
-        _prediction = result;
-        _isLoading = false;
-        _hasError = result == null;
-      });
+      if (insight != null && insight.hasTrained) {
+        setState(() {
+          _prediction = {
+            'healthScore': insight.healthScore,
+            'healthStatus': insight.healthStatus,
+            'estimatedLifeMonths': insight.estimatedLifeMonths,
+            'confidence': insight.confidence,
+            'degradationFactors': [],
+            'recommendations': insight.recommendations,
+            'equivalentCycles': insight.equivalentCycles,
+            'remainingCycles': insight.remainingCycles,
+          };
+          _isLoading = false;
+          _hasError = false;
+        });
+      } else {
+        setState(() {
+          _prediction = null;
+          _isLoading = false;
+          _hasError = true;
+        });
+      }
     }
   }
 
@@ -1023,12 +1038,12 @@ class _AiPredictionWidgetState extends ConsumerState<_AiPredictionWidget> {
                 ),
                 child: const Row(
                   children: [
-                    Icon(Icons.cloud_off_rounded,
+                    Icon(Icons.hourglass_empty_rounded,
                         color: AppColors.textTertiary, size: 18),
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'AI API chưa kết nối — chạy ai_api.py để kích hoạt',
+                        'Chưa có AI insight — chờ web admin Train',
                         style: TextStyle(
                           color: AppColors.textSecondary,
                           fontSize: 12,
@@ -1234,18 +1249,30 @@ class _AiPatternWidgetState extends ConsumerState<_AiPatternWidget> {
     if (widget.logs.length < 3) return;
     setState(() { _isLoading = true; _hasError = false; });
 
-    final service = ref.read(aiPredictionServiceProvider);
-    final result = await service.analyzePatterns(
-      vehicleId: widget.vehicleId,
-      chargeLogs: widget.logs,
-    );
+    // Read from Firestore insight instead of HTTP AI API
+    final insightRepo = ref.read(aiInsightsRepositoryProvider);
+    final insight = await insightRepo.getInsight(widget.vehicleId);
 
     if (mounted) {
-      setState(() {
-        _patterns = result;
-        _isLoading = false;
-        _hasError = result == null;
-      });
+      if (insight != null && insight.hasTrained) {
+        setState(() {
+          _patterns = {
+            'peakChargingHour': insight.peakChargingHour,
+            'peakChargingDay': insight.peakChargingDay,
+            'chargeFrequencyPerWeek': insight.chargeFrequencyPerWeek,
+            'avgSessionDuration': insight.avgSessionDuration,
+            'patterns': insight.patterns,
+          };
+          _isLoading = false;
+          _hasError = false;
+        });
+      } else {
+        setState(() {
+          _patterns = null;
+          _isLoading = false;
+          _hasError = true;
+        });
+      }
     }
   }
 
@@ -1447,14 +1474,17 @@ class _AiCapacityDetailPanelState
       final trips = await ref
           .read(tripLogRepositoryProvider)
           .getRecentTrips(widget.vehicleId);
-      final aiService = ref.read(aiPredictionServiceProvider);
+      // Get AI insight from Firestore cache
+      final insight = await ref
+          .read(aiInsightsRepositoryProvider)
+          .getInsight(widget.vehicleId);
 
       final result = await BatteryCapacityService.calculate(
         vehicle: vehicle,
         spec: spec,
         chargeLogs: widget.logs,
         trips: trips,
-        aiService: aiService,
+        insight: insight,
       );
 
       if (mounted) setState(() { _result = result; _loading = false; });
@@ -1632,7 +1662,7 @@ class _AiCapacityDetailPanelState
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 Icon(
-                  r.usedAiApi
+                  r.usedAiInsight
                       ? Icons.cloud_done_rounded
                       : Icons.computer_rounded,
                   color: AppColors.textTertiary,
@@ -1640,7 +1670,7 @@ class _AiCapacityDetailPanelState
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  r.usedAiApi ? 'Nguồn: AI API' : 'Nguồn: On-device',
+                  r.usedAiInsight ? 'Nguồn: AI insight' : 'Nguồn: On-device',
                   style: const TextStyle(
                     color: AppColors.textTertiary,
                     fontSize: 10,

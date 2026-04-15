@@ -397,8 +397,14 @@ function AiLabTab() {
   const [trainResult, setTrainResult] = useState(null)
   const [testResult, setTestResult] = useState(null)
   const [profileStatus, setProfileStatus] = useState(null)
+  const [centerStatus, setCenterStatus] = useState(null)
   const [loading, setLoading] = useState('')
   const [error, setError] = useState('')
+
+  // Load KPI on mount
+  useEffect(() => {
+    api.aiCenterStatus().then(res => setCenterStatus(res.data)).catch(() => {})
+  }, [])
 
   const loadDataset = async () => {
     if (!vehicleId) return
@@ -442,6 +448,13 @@ function AiLabTab() {
     try {
       const res = await api.aiTrain(vehicleId, records)
       setTrainResult(res.data)
+      if (res.insightRefreshed) {
+        api.emitPortalSuccess('Train xong + Insight đã cập nhật cho app')
+      } else {
+        api.emitPortalSuccess(`Train xong. Insight: ${res.insightError || 'chưa refresh'}`)
+      }
+      // Reload KPI
+      api.aiCenterStatus().then(r => setCenterStatus(r.data)).catch(() => {})
     } catch (e) { setError(e.message) }
     finally { setLoading('') }
   }
@@ -457,8 +470,53 @@ function AiLabTab() {
     finally { setLoading('') }
   }
 
+  const refreshInsights = async () => {
+    if (!vehicleId) return
+    setLoading('refresh')
+    setError('')
+    try {
+      await api.aiRefreshInsights(vehicleId)
+      api.emitPortalSuccess(`Insight refreshed cho ${vehicleId}`)
+      api.aiCenterStatus().then(r => setCenterStatus(r.data)).catch(() => {})
+    } catch (e) { setError(e.message) }
+    finally { setLoading('') }
+  }
+
   return (
     <div className="space-y-5">
+      {/* KPI Status Panel */}
+      {centerStatus && (
+        <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-5">
+          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2"><span>📊</span> AI Center Status</h3>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs">
+            <div className="bg-[var(--color-bg)] rounded-lg p-3 text-center">
+              <div className="text-lg font-bold text-[var(--color-accent)]">{centerStatus.profileCount}</div>
+              <div className="text-[var(--color-text-dim)]">Profiles</div>
+            </div>
+            <div className="bg-[var(--color-bg)] rounded-lg p-3 text-center">
+              <div className="text-lg font-bold text-[var(--color-blue)]">{centerStatus.insightCount}</div>
+              <div className="text-[var(--color-text-dim)]">Insights</div>
+            </div>
+            <div className="bg-[var(--color-bg)] rounded-lg p-3 text-center">
+              <div className={`text-lg font-bold ${centerStatus.consumptionModel?.available ? 'text-[var(--color-accent)]' : 'text-[var(--color-red)]'}`}>
+                {centerStatus.consumptionModel?.available ? '✅' : '❌'}
+              </div>
+              <div className="text-[var(--color-text-dim)]">ML Model</div>
+            </div>
+            <div className="bg-[var(--color-bg)] rounded-lg p-3 text-center">
+              <div className={`text-lg font-bold ${centerStatus.firebase?.connected ? 'text-[var(--color-accent)]' : 'text-[var(--color-red)]'}`}>
+                {centerStatus.firebase?.connected ? '✅' : '❌'}
+              </div>
+              <div className="text-[var(--color-text-dim)]">Firebase</div>
+            </div>
+            <div className="bg-[var(--color-bg)] rounded-lg p-3 text-center">
+              <div className="text-[10px] font-mono text-[var(--color-text)]">{centerStatus.lastRefresh?.slice(0, 16) || '—'}</div>
+              <div className="text-[var(--color-text-dim)]">Last Refresh</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-5">
         <h3 className="text-sm font-semibold mb-4 flex items-center gap-2"><span>🤖</span> AI Lab — Train & Test</h3>
 
@@ -474,6 +532,7 @@ function AiLabTab() {
             { key: 'normalize', label: '🧹 Normalize', fn: normalize, disabled: dataset.length === 0 },
             { key: 'train', label: '🎯 Train', fn: train, disabled: dataset.length < 5 },
             { key: 'test', label: '🧪 Test', fn: test, disabled: dataset.length === 0 },
+            { key: 'refresh', label: '🔄 Refresh Insights', fn: refreshInsights, disabled: !vehicleId },
           ].map(b => (
             <button key={b.key} onClick={b.fn} disabled={b.disabled || loading !== ''}
               className="px-3 py-2 rounded-lg text-xs font-medium bg-[var(--color-surface-hover)] border border-[var(--color-border)] hover:border-[var(--color-accent)] disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed whitespace-nowrap">
