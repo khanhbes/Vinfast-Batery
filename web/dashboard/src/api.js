@@ -129,6 +129,11 @@ export const aiAnalyze = (vehicleId, chargeLogs) =>
   apiFetch('/api/ai/analyze-patterns', { method: 'POST', body: JSON.stringify({ vehicleId, chargeLogs }) })
 export const aiProfileStatus = (vehicleId) =>
   apiFetch(`/api/ai/profile-status/${encodeURIComponent(vehicleId)}`)
+export const aiCenterStatus = () =>
+  apiFetch('/api/admin/ai/status')
+export const aiRefreshInsights = (vehicleId) =>
+  apiFetch('/api/admin/ai/refresh-insights', { method: 'POST', body: JSON.stringify({ vehicleId }) })
+
 
 // ── Legacy ──
 export const migrateLegacy = () => apiFetch('/api/admin/migrate-legacy', { method: 'POST' })

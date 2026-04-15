@@ -1,20 +1,20 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/charge_log_model.dart';
 import '../models/trip_log_model.dart';
 import '../models/vehicle_model.dart';
 import '../models/vinfast_model_spec.dart';
-import 'ai_prediction_service.dart';
+import '../repositories/ai_insights_repository.dart';
 import 'battery_logic_service.dart';
 
 /// ========================================================================
 /// Battery Capacity Service — Tính dung lượng pin AI (hybrid)
+/// Ưu tiên SoH từ AiVehicleInsights (Firestore), fallback on-device
 /// ========================================================================
 
 /// Mức confidence cho kết quả AI capacity
 enum CapacityConfidence {
-  high('Cao', 'Đủ dữ liệu + AI API'),
+  high('Cao', 'Có insight AI từ web'),
   medium('Trung bình', 'Dữ liệu đủ, fallback local'),
   low('Thấp', 'Dữ liệu ít hoặc chưa link model');
 
@@ -54,7 +54,7 @@ class CapacityResult {
   final double maxChargePowerW;
   final CapacityConfidence confidence;
   final SoHAlertLevel alertLevel;
-  final bool usedAiApi;
+  final bool usedAiInsight;
 
   CapacityResult({
     required this.nominalCapacityWh,
@@ -67,7 +67,7 @@ class CapacityResult {
     required this.maxChargePowerW,
     required this.confidence,
     required this.alertLevel,
-    this.usedAiApi = false,
+    this.usedAiInsight = false,
   });
 }
 
@@ -75,13 +75,13 @@ class CapacityResult {
 class BatteryCapacityService {
   /// Tính toán capacity đầy đủ
   ///
-  /// Hybrid: ưu tiên AI API cho SoH, fallback local BatteryLogicService
+  /// Hybrid: ưu tiên SoH từ AiVehicleInsights (Firestore), fallback on-device
   static Future<CapacityResult?> calculate({
     required VehicleModel vehicle,
     required VinFastModelSpec spec,
     required List<ChargeLogModel> chargeLogs,
     required List<TripLogModel> trips,
-    AiPredictionService? aiService,
+    AiVehicleInsight? insight,
   }) async {
     final nomWh = spec.nominalCapacityWh;
     final nomAh = spec.nominalCapacityAh;
@@ -90,36 +90,17 @@ class BatteryCapacityService {
 
     if (nomWh <= 0 || nomV <= 0) return null;
 
-    // ── SoH: ưu tiên AI API ──
+    // ── SoH: ưu tiên Firestore insight ──
     double soh;
-    bool usedAi = false;
+    bool usedInsight = false;
     CapacityConfidence confidence;
 
-    if (aiService != null && chargeLogs.length >= 3) {
-      try {
-        final prediction = await aiService.predictDegradation(
-          vehicleId: vehicle.vehicleId,
-          chargeLogs: chargeLogs,
-        );
-        if (prediction != null && prediction['healthScore'] != null) {
-          soh = (prediction['healthScore'] as num).toDouble().clamp(0, 100);
-          usedAi = true;
-          confidence = trips.length >= 5
-              ? CapacityConfidence.high
-              : CapacityConfidence.medium;
-        } else {
-          soh = _localSoH(trips, spec);
-          confidence = trips.length >= 5
-              ? CapacityConfidence.medium
-              : CapacityConfidence.low;
-        }
-      } catch (e) {
-        debugPrint('⚠️ BatteryCapacityService AI error: $e');
-        soh = _localSoH(trips, spec);
-        confidence = trips.length >= 5
-            ? CapacityConfidence.medium
-            : CapacityConfidence.low;
-      }
+    if (insight != null && insight.hasTrained && insight.healthScore > 0) {
+      soh = insight.healthScore.clamp(0, 100);
+      usedInsight = true;
+      confidence = insight.isStale
+          ? CapacityConfidence.medium
+          : CapacityConfidence.high;
     } else {
       soh = _localSoH(trips, spec);
       confidence = trips.length >= 5
@@ -151,7 +132,7 @@ class BatteryCapacityService {
       maxChargePowerW: maxPower,
       confidence: confidence,
       alertLevel: alertLevel,
-      usedAiApi: usedAi,
+      usedAiInsight: usedInsight,
     );
   }
 

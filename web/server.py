@@ -31,6 +31,162 @@ except Exception:
     pd = None
 
 # ═══════════════════════════════════════════════════════════════
+# CONSUMPTION MODEL LOADER (ev_soc_pipeline.pkl)
+# ═══════════════════════════════════════════════════════════════
+_consumption_model = None
+_consumption_model_status = 'not_loaded'
+_consumption_model_error = None
+
+def _load_consumption_model():
+    """Load sklearn Pipeline from ev_soc_pipeline.pkl.
+    Search order: EV_SOC_MODEL_PATH env, then relative paths."""
+    global _consumption_model, _consumption_model_status, _consumption_model_error
+    if not joblib:
+        _consumption_model_status = 'dependency_missing'
+        _consumption_model_error = 'joblib not installed'
+        print('⚠ Consumption model: joblib not available')
+        return
+
+    root = os.path.dirname(os.path.abspath(__file__))
+    candidates = []
+    env_path = os.environ.get('EV_SOC_MODEL_PATH', '').strip()
+    if env_path:
+        candidates.append(env_path)
+    candidates += [
+        os.path.join(root, 'ev_soc_pipeline.pkl'),
+        os.path.join(root, '..', 'ev_soc_pipeline.pkl'),
+        os.path.join(root, 'models', 'ev_soc_pipeline.pkl'),
+    ]
+
+    for path in candidates:
+        if os.path.isfile(path):
+            try:
+                _consumption_model = joblib.load(path)
+                _consumption_model_status = 'loaded'
+                print(f'✅ Consumption model loaded: {path}')
+                return
+            except Exception as e:
+                _consumption_model_error = str(e)
+                _consumption_model_status = 'load_error'
+                print(f'⚠ Consumption model load error: {e}')
+                return
+
+    _consumption_model_status = 'file_not_found'
+    _consumption_model_error = 'ev_soc_pipeline.pkl not found'
+    print('⚠ Consumption model: file not found')
+
+_load_consumption_model()
+
+# 19 feature names expected by ev_soc_pipeline
+_CONSUMPTION_FEATURES = [
+    'distance_km', 'duration_min', 'speed_avg_kmh', 'speed_max_kmh',
+    'acceleration_avg', 'deceleration_avg', 'altitude_gain_m', 'altitude_loss_m',
+    'temperature_c', 'payload_kg', 'tire_pressure_psi', 'hvac_on',
+    'headlights_on', 'rain', 'traffic_factor', 'road_type',
+    'soc_start', 'vehicle_age_months', 'odometer_km',
+]
+
+def _build_consumption_features(body: dict) -> list:
+    """Build 19-dim feature vector from request body.
+    Supports two modes:
+    1. Full features: client sends all 19 fields.
+    2. Minimal context: client sends distance, payload, speed/efficiency
+       history — server infers the rest with fixed rules + clamp.
+    Returns (features_list, inferred_count)."""
+    features = body.get('features', {})
+    inferred = 0
+
+    # Convenience aliases
+    distance = features.get('distance_km', body.get('distance', body.get('distanceKm', 0)))
+    soc_start = features.get('soc_start', body.get('socStart', body.get('currentBattery', 80)))
+    payload_kg = features.get('payload_kg', body.get('payloadKg', 75))  # default 1 người ~75kg
+    speed_avg = features.get('speed_avg_kmh', body.get('avgSpeed', 0))
+    odometer = features.get('odometer_km', body.get('odometerKm', body.get('odometer', 5000)))
+    vehicle_age = features.get('vehicle_age_months', body.get('vehicleAgeMonths', 12))
+
+    # Auto-infer missing fields
+    if speed_avg <= 0:
+        speed_avg = max(25.0, min(60.0, distance / max(distance / 30.0, 0.1)))
+        inferred += 1
+
+    duration = features.get('duration_min')
+    if duration is None:
+        duration = (distance / max(speed_avg, 1)) * 60  # minutes
+        inferred += 1
+
+    speed_max = features.get('speed_max_kmh')
+    if speed_max is None:
+        speed_max = speed_avg * 1.6
+        inferred += 1
+
+    acc_avg = features.get('acceleration_avg')
+    if acc_avg is None:
+        acc_avg = 0.8  # m/s^2 moderate
+        inferred += 1
+
+    dec_avg = features.get('deceleration_avg')
+    if dec_avg is None:
+        dec_avg = -0.9
+        inferred += 1
+
+    alt_gain = features.get('altitude_gain_m', 0)
+    alt_loss = features.get('altitude_loss_m', 0)
+    if alt_gain == 0 and alt_loss == 0:
+        alt_gain = distance * 2.0  # mild terrain assumption
+        alt_loss = distance * 2.0
+        inferred += 2
+
+    temp = features.get('temperature_c')
+    if temp is None:
+        temp = 30.0  # Vietnam average
+        inferred += 1
+
+    tire = features.get('tire_pressure_psi')
+    if tire is None:
+        tire = 32.0
+        inferred += 1
+
+    hvac = features.get('hvac_on', 0)
+    headlights = features.get('headlights_on', 0)
+    rain = features.get('rain', 0)
+    traffic = features.get('traffic_factor', 1.0)
+    road_type = features.get('road_type', 1)  # 0=highway 1=urban 2=mixed
+
+    row = [
+        float(distance), float(duration), float(speed_avg), float(speed_max),
+        float(acc_avg), float(dec_avg), float(alt_gain), float(alt_loss),
+        float(temp), float(payload_kg), float(tire), int(hvac),
+        int(headlights), int(rain), float(traffic), int(road_type),
+        float(soc_start), float(vehicle_age), float(odometer),
+    ]
+    return row, inferred
+
+def _heuristic_consumption(distance: float, soc_start: float, payload_kg: float,
+                           speed_avg: float) -> dict:
+    """Rule-based fallback when ML model is unavailable."""
+    # Base: ~1.2 km per 1% for VinFast Feliz
+    base_efficiency = 1.2
+    # Payload adjustment: +30% drain per extra 75kg above solo rider
+    payload_factor = 1.0 + max(0, (payload_kg - 75) / 75) * 0.3
+    # Speed penalty: above 45 km/h, efficiency drops
+    speed_factor = 1.0 + max(0, (speed_avg - 45) / 45) * 0.15
+
+    drain_pct = (distance / base_efficiency) * payload_factor * speed_factor
+    drain_pct = max(0.0, min(100.0, drain_pct))
+    remaining = max(0.0, soc_start - drain_pct)
+    enough = remaining >= 5.0
+
+    return {
+        'predictedConsumptionPercent': round(drain_pct, 2),
+        'estimatedBatteryDrainPercent': round(drain_pct, 2),
+        'predictedRemainingSocPercent': round(remaining, 2),
+        'isEnoughForTrip': enough,
+        'confidence': 35.0,
+        'modelSource': 'heuristic-fallback',
+        'inferredFeatureCount': 19,
+    }
+
+# ═══════════════════════════════════════════════════════════════
 # FIREBASE ADMIN SDK
 # ═══════════════════════════════════════════════════════════════
 _firebase_available = False
@@ -271,14 +427,20 @@ def health_check():
     return jsonify({
         'status': 'ok',
         'service': 'VinFast Battery — Unified API',
-        'version': '4.0',
+        'version': '4.1',
         'firebaseConnected': _firebase_available,
+        'consumptionModel': {
+            'status': _consumption_model_status,
+            'available': _consumption_model is not None,
+            'error': _consumption_model_error,
+        },
         'endpoints': [
             'GET  /api/health',
             'POST /api/auth/set-admin',
             'GET  /api/user/vehicles',
             'CRUD /api/admin/...',
             'POST /api/ai/predict-degradation',
+            'POST /api/ai/predict-consumption',
             'POST /api/ai/analyze-patterns',
             'POST /api/ai/train-vehicle-profile',
             'GET  /api/ai/profile-status/<vehicleId>',
@@ -1437,7 +1599,16 @@ def ai_admin_train():
     _save_profile(vehicle_id, profile)
     _audit('ai_train', 'AiVehicleProfiles', vehicle_id, request._uid, request._email,
            {'dataPoints': len(records)})
-    return jsonify({'success': True, 'data': profile})
+
+    # Auto-refresh insight after train
+    insight_ok, insight_err = _refresh_vehicle_insight(vehicle_id)
+
+    return jsonify({
+        'success': True,
+        'data': profile,
+        'insightRefreshed': insight_ok,
+        'insightError': insight_err,
+    })
 
 
 @app.route('/api/admin/ai/test', methods=['POST'])
@@ -1461,10 +1632,75 @@ def ai_admin_test():
     return jsonify({'success': True, 'data': pred})
 
 
+# ═══════════════════════════════════════════════════════════════
+# AI ENDPOINT — Predict Consumption (ML model)
+# ═══════════════════════════════════════════════════════════════
+@app.route('/api/ai/predict-consumption', methods=['POST'])
+def ai_predict_consumption():
+    """Predict battery consumption for a planned trip using ev_soc_pipeline.
+    Accepts full 19-feature input or minimal context (distance, payload, etc.).
+    Falls back to heuristic when model/dependencies unavailable."""
+    body = request.get_json() or {}
+
+    # Extract convenience fields for heuristic fallback
+    features_raw = body.get('features', {})
+    distance = features_raw.get('distance_km', body.get('distance', body.get('distanceKm', 0)))
+    soc_start = features_raw.get('soc_start', body.get('socStart', body.get('currentBattery', 80)))
+    payload_kg = features_raw.get('payload_kg', body.get('payloadKg', 75))
+    speed_avg = features_raw.get('speed_avg_kmh', body.get('avgSpeed', 25))
+
+    # Validate minimum input
+    if distance <= 0:
+        return jsonify({
+            'success': False,
+            'error': 'distance (km) phải > 0',
+        }), 400
+
+    # Try ML model first
+    if _consumption_model is not None and pd is not None:
+        try:
+            row, inferred_count = _build_consumption_features(body)
+            df = pd.DataFrame([row], columns=_CONSUMPTION_FEATURES)
+            pred = _consumption_model.predict(df)
+            drain_pct = float(pred[0])
+            # Clamp to sane range
+            drain_pct = max(0.0, min(100.0, drain_pct))
+            remaining = max(0.0, float(soc_start) - drain_pct)
+            enough = remaining >= 5.0
+            confidence = max(50.0, 95.0 - inferred_count * 3.0)
+
+            return jsonify({
+                'success': True,
+                'data': {
+                    'predictedConsumptionPercent': round(drain_pct, 2),
+                    'estimatedBatteryDrainPercent': round(drain_pct, 2),
+                    'predictedRemainingSocPercent': round(remaining, 2),
+                    'isEnoughForTrip': enough,
+                    'confidence': round(confidence, 1),
+                    'modelSource': 'ev_soc_pipeline',
+                    'inferredFeatureCount': inferred_count,
+                },
+            })
+        except Exception as e:
+            print(f'⚠ ML prediction error, falling back to heuristic: {e}')
+            # Fall through to heuristic
+
+    # Heuristic fallback
+    result = _heuristic_consumption(
+        float(distance), float(soc_start), float(payload_kg), float(speed_avg)
+    )
+    return jsonify({'success': True, 'data': result})
+
+
 # Backward-compat: redirect old AI endpoints (ai_api.py used /api/ prefix)
 @app.route('/api/predict-degradation', methods=['POST'])
 def compat_predict():
     return ai_predict()
+
+
+@app.route('/api/predict-consumption', methods=['POST'])
+def compat_predict_consumption():
+    return ai_predict_consumption()
 
 
 @app.route('/api/analyze-patterns', methods=['POST'])
@@ -1480,6 +1716,182 @@ def compat_train():
 @app.route('/api/profile-status/<vehicle_id>', methods=['GET'])
 def compat_profile_status(vehicle_id):
     return ai_profile_status(vehicle_id)
+
+
+# ═══════════════════════════════════════════════════════════════
+# AI VEHICLE INSIGHTS — Web-managed cache for app
+# ═══════════════════════════════════════════════════════════════
+def _build_vehicle_insight(vehicle_id: str) -> dict:
+    """Build composite AiVehicleInsights document from profile + charge/trip data."""
+    profile = _get_profile(vehicle_id)
+    if not profile or not profile.get('trainedAt'):
+        return None
+
+    # Fetch charge logs for degradation prediction
+    charge_logs = []
+    owner_uid = None
+    if _fs():
+        docs = list(
+            _fs().collection('ChargeLogs')
+            .where('vehicleId', '==', vehicle_id)
+            .where('isDeleted', '==', False)
+            .stream()
+        )
+        for d in docs:
+            rec = d.to_dict()
+            charge_logs.append(rec)
+            if not owner_uid:
+                owner_uid = rec.get('ownerUid')
+
+    if not owner_uid and _fs():
+        vdoc = _fs().collection('Vehicles').document(vehicle_id).get()
+        if vdoc.exists:
+            owner_uid = vdoc.to_dict().get('ownerUid')
+
+    # Run models
+    pred = degradation_model.predict_degradation(charge_logs) if len(charge_logs) >= 3 else {}
+    patt = pattern_analyzer.analyze(charge_logs) if len(charge_logs) >= 3 else {}
+
+    adj = profile.get('healthAdjustment', 0)
+    raw_score = pred.get('healthScore', 100.0)
+    health = round(max(0, min(100, raw_score + adj)), 1)
+
+    if health >= 80:
+        status = 'Tốt'
+    elif health >= 60:
+        status = 'Khá'
+    elif health >= 40:
+        status = 'Trung bình'
+    else:
+        status = 'Cần thay pin'
+
+    insight = {
+        'vehicleId': vehicle_id,
+        'ownerUid': owner_uid or '',
+        'hasTrained': True,
+        'trainedAt': profile.get('trainedAt'),
+        'profileVersion': profile.get('version', '2.0'),
+        'dataPoints': profile.get('dataPoints', 0),
+        'healthAdjustment': adj,
+        'healthScore': health,
+        'healthStatus': status,
+        'estimatedLifeMonths': pred.get('estimatedLifeMonths'),
+        'confidence': round(pred.get('confidence', 0), 1),
+        'peakChargingHour': patt.get('peakChargingHour'),
+        'peakChargingDay': patt.get('peakChargingDay'),
+        'chargeFrequencyPerWeek': patt.get('chargeFrequencyPerWeek'),
+        'avgSessionDuration': patt.get('avgSessionDuration'),
+        'recommendations': pred.get('recommendations', []),
+        'equivalentCycles': pred.get('equivalentCycles'),
+        'remainingCycles': pred.get('remainingCycles'),
+        'avgDoD': pred.get('avgDoD'),
+        'avgChargeRate': pred.get('avgChargeRate'),
+        'patterns': patt.get('patterns', []),
+        'lastInferenceAt': _utcnow(),
+        'lastInferenceStatus': 'ok',
+        'lastInferenceError': None,
+        'updatedAt': _utcnow(),
+        'schemaVersion': 'insight-v1',
+    }
+    return insight
+
+
+def _write_vehicle_insight(vehicle_id: str, insight: dict):
+    """Write AiVehicleInsights doc to Firestore."""
+    if not _fs():
+        return False
+    try:
+        _fs().collection('AiVehicleInsights').document(vehicle_id).set(insight, merge=True)
+        return True
+    except Exception as e:
+        print(f'\u26a0 Failed to write insight for {vehicle_id}: {e}')
+        return False
+
+
+def _refresh_vehicle_insight(vehicle_id: str) -> tuple:
+    """Build + write insight. Returns (success: bool, error: str|None)."""
+    try:
+        insight = _build_vehicle_insight(vehicle_id)
+        if not insight:
+            return False, 'No trained profile found'
+        ok = _write_vehicle_insight(vehicle_id, insight)
+        return ok, None if ok else 'Firestore write failed'
+    except Exception as e:
+        # Write error status
+        if _fs():
+            try:
+                _fs().collection('AiVehicleInsights').document(vehicle_id).set({
+                    'vehicleId': vehicle_id,
+                    'lastInferenceAt': _utcnow(),
+                    'lastInferenceStatus': 'error',
+                    'lastInferenceError': str(e),
+                    'updatedAt': _utcnow(),
+                }, merge=True)
+            except Exception:
+                pass
+        return False, str(e)
+
+
+@app.route('/api/admin/ai/refresh-insights', methods=['POST'])
+@require_admin
+def ai_refresh_insights():
+    """Manually refresh AiVehicleInsights for a specific vehicle."""
+    data = request.get_json() or {}
+    vehicle_id = data.get('vehicleId', '')
+    if not vehicle_id:
+        return jsonify({'success': False, 'error': 'vehicleId là bắt buộc'}), 400
+
+    ok, err = _refresh_vehicle_insight(vehicle_id)
+    if ok:
+        _audit('ai_refresh_insights', 'AiVehicleInsights', vehicle_id,
+               request._uid, request._email)
+        return jsonify({'success': True, 'message': f'Insight refreshed cho {vehicle_id}'})
+    return jsonify({'success': False, 'error': err or 'Refresh failed'}), 400
+
+
+@app.route('/api/admin/ai/status', methods=['GET'])
+@require_admin
+def ai_center_status():
+    """KPI vận hành cơ bản cho AI Center."""
+    profile_count = 0
+    insight_count = 0
+    last_refresh = None
+
+    if _fs():
+        try:
+            profile_count = len(list(_fs().collection('AiVehicleProfiles').limit(100).stream()))
+        except Exception:
+            pass
+        try:
+            insight_docs = list(
+                _fs().collection('AiVehicleInsights')
+                .order_by('updatedAt', direction='DESCENDING')
+                .limit(1)
+                .stream()
+            )
+            insight_count = len(list(_fs().collection('AiVehicleInsights').limit(100).stream()))
+            if insight_docs:
+                last_doc = insight_docs[0].to_dict()
+                last_refresh = last_doc.get('updatedAt')
+        except Exception:
+            pass
+
+    return jsonify({
+        'success': True,
+        'data': {
+            'consumptionModel': {
+                'status': _consumption_model_status,
+                'available': _consumption_model is not None,
+                'error': _consumption_model_error,
+            },
+            'firebase': {
+                'connected': _firebase_available,
+            },
+            'profileCount': profile_count,
+            'insightCount': insight_count,
+            'lastRefresh': last_refresh,
+        },
+    })
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -1550,16 +1962,17 @@ def handle_unexpected_exception(err: Exception):
 # RUN
 # ═══════════════════════════════════════════════════════════════
 if __name__ == '__main__':
-    print('\n⚡ VinFast Battery — Unified API Server v4.0')
+    print('\n⚡ VinFast Battery — Unified API Server v4.1')
     print('📡 Endpoints:')
     print('   Auth:   GET /api/auth/me, POST /api/auth/set-admin')
     print('   User:   GET /api/user/vehicles|charge-logs|trip-logs|maintenance')
     print('   Admin:  CRUD /api/admin/<entity>, /api/admin/users, /api/admin/audit-logs')
     print('   Export: GET /api/admin/export?entity=&format=json|csv')
     print('   Import: POST /api/admin/import?entity=&mode=upsert')
-    print('   AI:     /api/ai/predict-degradation|analyze-patterns|train-vehicle-profile')
+    print('   AI:     /api/ai/predict-degradation|predict-consumption|analyze-patterns|train-vehicle-profile')
     print('   Admin AI: /api/admin/ai/normalize-dataset|train|test')
     print('   Legacy: POST /api/admin/migrate-legacy')
+    print(f'   Consumption model: {_consumption_model_status}')
     print(f'🌐 http://localhost:5000\n')
     debug_mode = os.environ.get('FLASK_DEBUG', '1').lower() in ('1', 'true', 'yes')
     use_reloader = os.environ.get('FLASK_USE_RELOADER', '0').lower() in ('1', 'true', 'yes')

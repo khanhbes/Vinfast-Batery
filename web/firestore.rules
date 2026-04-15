@@ -59,6 +59,12 @@ service cloud.firestore {
       allow write: if false; // Managed via backend/admin
     }
 
+    // ── AiVehicleInsights (app reads own data, backend writes via Admin SDK) ──
+    match /AiVehicleInsights/{vehicleId} {
+      allow read: if isAuth() && isOwner(resource.data.ownerUid);
+      allow write: if false; // Managed via backend Admin SDK only
+    }
+
     // ── AiVehicleProfiles (backend only via Admin SDK) ──
     match /AiVehicleProfiles/{vehicleId} {
       allow read, write: if false;

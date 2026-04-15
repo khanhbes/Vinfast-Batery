@@ -1,8 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../data/services/ai_prediction_service.dart';
-
 // =============================================================================
 // Trạng thái kết nối dùng chung toàn app
 // =============================================================================
@@ -43,30 +41,9 @@ class FirebaseStatusNotifier extends StateNotifier<ConnectionStatus> {
   }
 }
 
-/// Provider trạng thái AI API (Flask server)
-final aiApiStatusProvider =
-    StateNotifierProvider<AiApiStatusNotifier, ConnectionStatus>((ref) {
-  final aiService = ref.watch(aiPredictionServiceProvider);
-  return AiApiStatusNotifier(aiService);
-});
-
-class AiApiStatusNotifier extends StateNotifier<ConnectionStatus> {
-  final AiPredictionService _aiService;
-
-  AiApiStatusNotifier(this._aiService) : super(ConnectionStatus.checking) {
-    check();
-  }
-
-  Future<void> check() async {
-    state = ConnectionStatus.checking;
-    try {
-      final ok = await _aiService.isAvailable();
-      state = ok ? ConnectionStatus.online : ConnectionStatus.offline;
-    } catch (_) {
-      state = ConnectionStatus.offline;
-    }
-  }
-}
+// AI API status provider đã bị loại bỏ theo PLAN1.
+// App không còn gọi HTTP AI API — dữ liệu AI đọc từ Firestore AiVehicleInsights.
+// Consumer cũ dùng aiApiStatusProvider nên migrate sang aiInsightProvider.
 
 /// Extension tiện ích cho ConnectionStatus
 extension ConnectionStatusX on ConnectionStatus {
