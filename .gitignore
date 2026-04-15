@@ -27,11 +27,27 @@ migrate_working_dir/
 **/doc/api/
 **/ios/Flutter/.last_build_id
 .dart_tool/
+.flutter-plugins
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
 /build/
 /coverage/
+**/build/
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/android/.gradle/
+**/ios/Pods/
+
+# Python environments and caches
+__pycache__/
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+ENV/
 
 # Symbolication related
 app.*.symbols
