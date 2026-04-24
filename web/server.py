@@ -1692,6 +1692,330 @@ def ai_predict_consumption():
     return jsonify({'success': True, 'data': result})
 
 
+# ═══════════════════════════════════════════════════════════════
+# AI ENDPOINT — Predict Charging Time
+# ═══════════════════════════════════════════════════════════════
+def _predict_charging_time(current_battery: float, target_battery: float,
+                           battery_health: float = 100.0,
+                           temperature: float = 25.0,
+                           charger_type: str = 'standard',
+                           battery_capacity_wh: float = 1440.0) -> dict:
+    """Heuristic charging time prediction with CC-CV simulation.
+    
+    VinFast Feliz LFP battery characteristics:
+    - Nominal: 1440 Wh (48V × 30Ah)
+    - Standard charger: ~200W (48V × ~4.2A)
+    - Fast charger: ~400W (higher amperage)
+    
+    CC-CV profile: constant current to ~80%, then taper to target.
+    """
+    if current_battery >= target_battery:
+        return {
+            'estimatedMinutes': 0,
+            'estimatedHours': 0.0,
+            'formattedTime': '0 phút',
+            'chargeRatePercentPerHour': 0,
+            'chargeGainPercent': 0,
+            'energyNeededWh': 0,
+            'chargePowerW': 0,
+            'recommendations': ['Pin đã đạt mức mong muốn.'],
+            'confidence': 95.0,
+            'modelSource': 'heuristic-v1',
+            'chargingCurve': [],
+        }
+
+    # ── Charger power (watts) ──
+    charger_powers = {
+        'standard': 200.0,   # 48V × ~4.2A
+        'fast': 400.0,       # 2× standard
+        'slow': 100.0,       # trickle / weak outlet
+    }
+    base_power = charger_powers.get(charger_type, 200.0)
+
+    # ── Derating factors ──
+    # SoH: degraded battery charges slower
+    soh_factor = max(0.6, battery_health / 100.0)
+    
+    # Temperature: optimal 20-30°C, drops outside
+    if temperature < 10:
+        temp_factor = 0.7
+    elif temperature < 20:
+        temp_factor = 0.85
+    elif temperature <= 35:
+        temp_factor = 1.0
+    else:
+        temp_factor = 0.85  # heat throttle
+
+    effective_power = base_power * soh_factor * temp_factor
+
+    # ── Effective capacity ──
+    effective_capacity_wh = battery_capacity_wh * soh_factor
+
+    # ── CC-CV simulation: simulate per-percent charging time ──
+    charge_gain = target_battery - current_battery
+    energy_needed = effective_capacity_wh * (charge_gain / 100.0)
+    
+    charging_curve = []
+    total_minutes = 0.0
+    soc = current_battery
+
+    while soc < target_battery:
+        # CC phase: full power up to ~80%
+        # CV phase: power tapers linearly from 80% to 100%
+        if soc < 80:
+            phase_power = effective_power
+        else:
+            # Taper: at 80% → 100% power, at 100% → 20% power
+            taper = 1.0 - 0.8 * ((soc - 80.0) / 20.0)
+            phase_power = effective_power * max(0.2, taper)
+
+        # Energy for 1% of battery
+        energy_per_pct = effective_capacity_wh / 100.0
+        # Time for this % in hours
+        time_hours = energy_per_pct / max(phase_power, 1.0)
+        minutes_for_pct = time_hours * 60.0
+        
+        total_minutes += minutes_for_pct
+        soc += 1.0
+
+        # Record curve point every 5%
+        if int(soc) % 5 == 0 or soc >= target_battery:
+            charging_curve.append({
+                'soc': round(min(soc, target_battery), 1),
+                'minutesElapsed': round(total_minutes, 1),
+                'powerW': round(phase_power, 0),
+            })
+
+    total_minutes = round(total_minutes, 1)
+    hours = total_minutes / 60.0
+    avg_rate = charge_gain / max(hours, 0.001)  # %/hour
+
+    # Format time
+    h = int(total_minutes // 60)
+    m = int(total_minutes % 60)
+    if h > 0:
+        formatted = f'{h} giờ {m} phút'
+    else:
+        formatted = f'{m} phút'
+
+    # Recommendations
+    recs = []
+    if target_battery > 90:
+        recs.append('Sạc đến 80-90% sẽ nhanh hơn đáng kể do pha CV taper.')
+    if temperature > 35:
+        recs.append('Nhiệt độ cao — để xe nơi mát để sạc nhanh hơn.')
+    elif temperature < 10:
+        recs.append('Nhiệt độ thấp — thời gian sạc sẽ lâu hơn bình thường.')
+    if battery_health < 80:
+        recs.append('SoH thấp — cân nhắc kiểm tra pin tại trung tâm dịch vụ.')
+    if charger_type == 'standard' and charge_gain > 60:
+        recs.append('Sạc lượng lớn — cân nhắc dùng sạc nhanh nếu có.')
+    if not recs:
+        recs.append('Điều kiện sạc tốt, thời gian ước tính đáng tin cậy.')
+
+    # Confidence: affected by how many assumptions
+    confidence = 85.0
+    if battery_health < 80:
+        confidence -= 10
+    if temperature < 10 or temperature > 40:
+        confidence -= 5
+
+    return {
+        'estimatedMinutes': total_minutes,
+        'estimatedHours': round(hours, 2),
+        'formattedTime': formatted,
+        'chargeRatePercentPerHour': round(avg_rate, 1),
+        'chargeGainPercent': round(charge_gain, 1),
+        'energyNeededWh': round(energy_needed, 1),
+        'chargePowerW': round(effective_power, 0),
+        'recommendations': recs,
+        'confidence': round(confidence, 1),
+        'modelSource': 'heuristic-v1',
+        'chargingCurve': charging_curve,
+        'factors': {
+            'sohFactor': round(soh_factor, 2),
+            'tempFactor': round(temp_factor, 2),
+            'chargerType': charger_type,
+            'effectivePowerW': round(effective_power, 0),
+        },
+    }
+
+
+def _format_duration(seconds: float) -> str:
+    """Format seconds to hours/minutes string."""
+    hours = int(seconds // 3600)
+    mins = int((seconds % 3600) // 60)
+    if hours > 0:
+        return f"{hours} giờ {mins} phút"
+    return f"{mins} phút"
+
+
+def _ai_predict_charging_time(current: float, target: float, ambient_temp_c: float = 25.0) -> dict:
+    """Call AI Center charging_time model. Returns (result_dict, is_success)."""
+    if _http is None:
+        return None, False
+    
+    url = f'{AI_SERVER_URL}/v1/models/charging_time/predict'
+    payload = {
+        'start_soc': current,
+        'end_soc': target,
+        'ambient_temp_c': ambient_temp_c,
+    }
+    try:
+        resp = _http.post(
+            url,
+            json=payload,
+            headers=_ai_headers({'Content-Type': 'application/json'}),
+            timeout=AI_SERVER_TIMEOUT,
+        )
+        if resp.status_code != 200:
+            return None, False
+        data = resp.json()
+        if not data.get('success'):
+            return None, False
+        result = data.get('data', {})
+        # Extract prediction in seconds (AI model returns seconds)
+        predicted_sec = result.get('predictionSeconds') or result.get('prediction', 0)
+        if predicted_sec <= 0:
+            return None, False
+        return {
+            'predictedDurationSec': predicted_sec,
+            'predictedDurationMin': predicted_sec / 60.0,
+            'formattedDuration': _format_duration(predicted_sec),
+            'modelVersion': result.get('modelVersion', 'unknown'),
+            'rawPrediction': result.get('rawPrediction'),
+            'processedInput': result.get('processedInput'),
+            'chartData': result.get('chartData'),
+            'warnings': result.get('warnings', []),
+        }, True
+    except Exception as e:
+        print(f'[AI Charging] Error calling AI model: {e}')
+        return None, False
+
+
+def _heuristic_predict_charging_time(current: float, target: float, 
+                                     battery_health: float = 100.0,
+                                     temperature: float = 25.0,
+                                     charger_type: str = 'standard',
+                                     battery_capacity_wh: float = 1440.0) -> dict:
+    """Fallback heuristic charging time prediction."""
+    result = _predict_charging_time(current, target, battery_health, temperature, 
+                                    charger_type, battery_capacity_wh)
+    # Convert minutes to seconds for consistent output
+    estimated_sec = result['estimatedMinutes'] * 60
+    return {
+        'predictedDurationSec': estimated_sec,
+        'predictedDurationMin': estimated_sec / 60.0,
+        'formattedDuration': result['formattedTime'],
+        'chargeRatePercentPerHour': result['chargeRatePercentPerHour'],
+        'chargeGainPercent': result['chargeGainPercent'],
+        'energyNeededWh': result['energyNeededWh'],
+        'chargePowerW': result['chargePowerW'],
+        'recommendations': result['recommendations'],
+        'confidence': result['confidence'],
+        'chargingCurve': result['chargingCurve'],
+        'factors': result['factors'],
+    }
+
+
+def _guardrail_check(ai_result: dict, heuristic_result: dict, 
+                     current: float, target: float) -> tuple[dict, str]:
+    """Check AI result against guardrails. Returns (result, source)."""
+    predicted_sec = ai_result.get('predictedDurationSec', 0)
+    
+    # Guardrail conditions
+    if math.isnan(predicted_sec) or predicted_sec <= 0:
+        return heuristic_result, 'heuristic_guardrail_nan'
+    if predicted_sec < 300:  # < 5 minutes
+        return heuristic_result, 'heuristic_guardrail_too_short'
+    if predicted_sec > 43200:  # > 12 hours
+        return heuristic_result, 'heuristic_guardrail_too_long'
+    
+    # Compare with heuristic - if deviation too large (>50%), use heuristic
+    heuristic_sec = heuristic_result['predictedDurationSec']
+    if heuristic_sec > 0:
+        deviation_ratio = abs(predicted_sec - heuristic_sec) / heuristic_sec
+        if deviation_ratio > 0.5:  # > 50% deviation
+            return heuristic_result, 'heuristic_guardrail_deviation'
+    
+    return ai_result, 'ai_model'
+
+
+@app.route('/api/ai/predict-charging-time', methods=['POST'])
+def ai_predict_charging_time():
+    """Predict charging time — uses AI Center model with heuristic fallback.
+    
+    Request: { vehicleId, currentBattery, targetBattery, ambientTempC? }
+    Response: { predictedDurationSec, predictedDurationMin, formattedDuration,
+                modelSource, modelVersion, isBeta, confidence, warnings, ... }
+    """
+    body = request.get_json() or {}
+    current = float(body.get('currentBattery', 20))
+    target = float(body.get('targetBattery', 80))
+    ambient_temp_c = float(body.get('ambientTempC', 25.0))
+    
+    # For fallback heuristic
+    health = float(body.get('batteryHealth', 100))
+    charger = body.get('chargerType', 'standard')
+    capacity = float(body.get('batteryCapacityWh', 1440))
+
+    # Validation
+    if current < 0 or current > 100 or target < 0 or target > 100:
+        return jsonify({'success': False, 'error': 'Battery % phải từ 0 đến 100'}), 400
+    if current >= target:
+        return jsonify({'success': False, 'error': 'Target phải lớn hơn current battery'}), 400
+
+    try:
+        # Try AI model first
+        ai_result, ai_success = _ai_predict_charging_time(current, target, ambient_temp_c)
+        
+        # Always compute heuristic for comparison and fallback
+        heuristic_result = _heuristic_predict_charging_time(current, target, health, 
+                                                              ambient_temp_c, charger, capacity)
+        
+        if ai_success:
+            # Apply guardrails
+            final_result, source = _guardrail_check(ai_result, heuristic_result, current, target)
+            warnings = list(ai_result.get('warnings', []))
+            if source != 'ai_model':
+                warnings.append(f'AI output bị chặn bởi guardrail, dùng {source}')
+        else:
+            # AI failed, use heuristic
+            final_result = heuristic_result
+            source = 'heuristic_fallback'
+            warnings = ['AI model không khả dụng, dùng heuristic']
+        
+        # Build standardized response
+        response_data = {
+            'predictedDurationSec': round(final_result['predictedDurationSec'], 1),
+            'predictedDurationMin': round(final_result['predictedDurationMin'], 1),
+            'formattedDuration': final_result['formattedDuration'],
+            'modelSource': source,
+            'modelVersion': final_result.get('modelVersion', 'heuristic-v1'),
+            'isBeta': True,
+            'confidence': final_result.get('confidence', 70.0),
+            'warnings': warnings,
+            'analyzedAt': _utcnow(),
+            # Backward compat fields
+            'estimatedMinutes': round(final_result['predictedDurationMin'], 1),
+            'formattedTime': final_result['formattedDuration'],
+        }
+        
+        # Include heuristic details if using fallback
+        if source != 'ai_model':
+            response_data['heuristicDetails'] = {
+                'chargeRatePercentPerHour': heuristic_result['chargeRatePercentPerHour'],
+                'chargeGainPercent': heuristic_result['chargeGainPercent'],
+                'energyNeededWh': heuristic_result['energyNeededWh'],
+                'chargePowerW': heuristic_result['chargePowerW'],
+                'recommendations': heuristic_result['recommendations'],
+            }
+        
+        return jsonify({'success': True, 'data': response_data})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 # Backward-compat: redirect old AI endpoints (ai_api.py used /api/ prefix)
 @app.route('/api/predict-degradation', methods=['POST'])
 def compat_predict():
@@ -1959,6 +2283,533 @@ def handle_unexpected_exception(err: Exception):
 
 
 # ═══════════════════════════════════════════════════════════════
+# SOC PREDICTION ENDPOINTS — proxy to FastAPI AI server
+# ═══════════════════════════════════════════════════════════════
+try:
+    import requests as _http
+except Exception:
+    _http = None
+
+AI_SERVER_URL = os.environ.get('AI_SERVER_URL', 'http://127.0.0.1:8001').rstrip('/')
+AI_SERVER_TOKEN = os.environ.get('AI_SERVER_INTERNAL_TOKEN', 'dev-local-token')
+AI_SERVER_TIMEOUT = float(os.environ.get('AI_SERVER_TIMEOUT', '15'))
+
+
+def _ai_headers(extra=None):
+    h = {'X-Internal-Token': AI_SERVER_TOKEN}
+    if extra:
+        h.update(extra)
+    return h
+
+
+def _ai_proxy_json(method, path, *, json_body=None, params=None):
+    """Forward JSON request to FastAPI; surface upstream status/body."""
+    if _http is None:
+        return jsonify({'success': False, 'error': 'requests library not installed'}), 500
+    url = f'{AI_SERVER_URL}{path}'
+    try:
+        resp = _http.request(
+            method, url,
+            json=json_body, params=params,
+            headers=_ai_headers({'Content-Type': 'application/json'}) if json_body is not None else _ai_headers(),
+            timeout=AI_SERVER_TIMEOUT,
+        )
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'AI server unavailable: {e}'}), 502
+    try:
+        data = resp.json()
+    except Exception:
+        return jsonify({'success': False, 'error': f'invalid AI server response (HTTP {resp.status_code})'}), 502
+    return jsonify(data), resp.status_code
+
+
+@app.route('/api/soc/predict', methods=['POST'])
+def soc_predict():
+    """Predict SOC — delegated to FastAPI; contract unchanged for callers."""
+    body = request.get_json() or {}
+    resp, status_code = _ai_proxy_json('POST', '/v1/soc/predict', json_body=body)
+    # Mirror legacy side effect: persist to Firestore when successful.
+    if status_code == 200 and _firestore_db:
+        try:
+            payload = resp.get_json()
+            if payload and payload.get('success'):
+                _firestore_db.collection('soc_predictions').add({
+                    'input': body,
+                    'result': payload.get('data'),
+                    'createdAt': datetime.now(timezone.utc),
+                })
+        except Exception as e:
+            print(f'⚠️ Failed to save SOC prediction: {e}')
+    return resp, status_code
+
+
+@app.route('/api/soc/status', methods=['GET'])
+def soc_status():
+    """Proxy AI server status."""
+    return _ai_proxy_json('GET', '/v1/soc/status')
+
+
+# ── Admin Model Management (proxy, per-type) ─────────────────────
+@app.route('/api/admin/ai/types', methods=['GET'])
+@require_admin
+def admin_ai_types():
+    """List registered model types with status."""
+    return _ai_proxy_json('GET', '/v1/types')
+
+
+@app.route('/api/admin/ai/models/<type_key>', methods=['GET'])
+@require_admin
+def admin_list_models_for_type(type_key):
+    return _ai_proxy_json('GET', f'/v1/models/{type_key}')
+
+
+@app.route('/api/admin/ai/models/<type_key>/status', methods=['GET'])
+@require_admin
+def admin_status_for_type(type_key):
+    return _ai_proxy_json('GET', f'/v1/models/{type_key}/status')
+
+
+@app.route('/api/admin/ai/models/<type_key>/rollback', methods=['POST'])
+@require_admin
+def admin_rollback_model_for_type(type_key):
+    return _ai_proxy_json('POST', f'/v1/models/{type_key}/rollback', json_body=request.get_json() or {})
+
+
+@app.route('/api/admin/ai/models/<type_key>/load-active', methods=['POST'])
+@require_admin
+def admin_load_active_model(type_key):
+    """Ensure the active model version is loaded into memory."""
+    return _ai_proxy_json('POST', f'/v1/models/{type_key}/load-active')
+
+
+@app.route('/api/admin/ai/models/<type_key>/deactivate', methods=['POST'])
+@require_admin
+def admin_deactivate_model(type_key):
+    """Deactivate the current active model (clear active version)."""
+    return _ai_proxy_json('POST', f'/v1/models/{type_key}/deactivate')
+
+
+@app.route('/api/admin/ai/models/<type_key>/validate-version', methods=['POST'])
+@require_admin
+def admin_validate_version(type_key):
+    """Validate a version can be loaded without activating it."""
+    return _ai_proxy_json('POST', f'/v1/models/{type_key}/validate-version', json_body=request.get_json() or {})
+
+
+@app.route('/api/admin/ai/models/<type_key>/predict', methods=['POST'])
+@require_admin
+def admin_quick_predict(type_key):
+    """Admin-facing quick prediction for testing a model from the UI."""
+    return _ai_proxy_json('POST', f'/v1/models/{type_key}/predict', json_body=request.get_json() or {})
+
+
+# NOTE: This generic /<version> route MUST come after all specific routes
+# to avoid shadowing paths like /deactivate, /validate-version, etc.
+@app.route('/api/admin/ai/models/<type_key>/<version>', methods=['DELETE'])
+@require_admin
+def admin_delete_model_for_type(type_key, version):
+    return _ai_proxy_json('DELETE', f'/v1/models/{type_key}/{version}')
+
+
+@app.route('/api/admin/ai/models/<type_key>/upload', methods=['POST'])
+@require_admin
+def admin_upload_model_for_type(type_key):
+    """Forward multipart upload to FastAPI (per type)."""
+    if _http is None:
+        return jsonify({'success': False, 'error': 'requests library not installed'}), 500
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'error': 'file field is required'}), 400
+    upload = request.files['file']
+    version = (request.form.get('version') or '').strip()
+    note = request.form.get('note') or ''
+    if not version:
+        return jsonify({'success': False, 'error': 'version field is required'}), 400
+
+    files = {'file': (upload.filename or 'model.pkl', upload.stream, upload.mimetype or 'application/octet-stream')}
+    skip_smoke = request.form.get('skipSmokeTest') or 'false'
+    data = {'version': version, 'note': note, 'skipSmokeTest': skip_smoke}
+    try:
+        resp = _http.post(
+            f'{AI_SERVER_URL}/v1/models/{type_key}/upload',
+            files=files, data=data, headers=_ai_headers(),
+            timeout=max(AI_SERVER_TIMEOUT, 60),
+        )
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'AI server unavailable: {e}'}), 502
+
+    # Audit log
+    try:
+        if _firestore_db:
+            _firestore_db.collection('AuditLogs').add({
+                'action': 'ai.model.upload',
+                'type': type_key,
+                'version': version,
+                'note': note,
+                'status': resp.status_code,
+                'actor': getattr(request, 'user_email', None) or 'unknown',
+                'timestamp': datetime.now(timezone.utc),
+            })
+    except Exception:
+        pass
+
+    try:
+        return jsonify(resp.json()), resp.status_code
+    except Exception:
+        return jsonify({'success': False, 'error': f'invalid AI server response (HTTP {resp.status_code})'}), 502
+
+
+# ── Legacy (type=soc) aliases kept for backward compat ────────────
+@app.route('/api/admin/ai/models', methods=['GET'])
+@require_admin
+def admin_list_models_legacy():
+    return _ai_proxy_json('GET', '/v1/models/soc')
+
+
+@app.route('/api/admin/ai/models/rollback', methods=['POST'])
+@require_admin
+def admin_rollback_legacy():
+    return _ai_proxy_json('POST', '/v1/models/soc/rollback', json_body=request.get_json() or {})
+
+
+@app.route('/api/admin/ai/models/upload', methods=['POST'])
+@require_admin
+def admin_upload_model_legacy():
+    return admin_upload_model_for_type('soc')
+
+@app.route('/api/soc/history', methods=['GET'])
+def soc_history():
+    """Get SOC prediction history for a vehicle."""
+    try:
+        vehicle_id = request.args.get('vehicleId')
+        limit = int(request.args.get('limit', 10))
+        
+        if not vehicle_id:
+            return jsonify({
+                'success': False,
+                'error': 'vehicleId parameter required'
+            }), 400
+        
+        if not _firestore_db:
+            return jsonify({
+                'success': False,
+                'error': 'Firestore not available'
+            }), 503
+        
+        # Get predictions from Firestore
+        docs = (_firestore_db.collection('soc_predictions')
+                .order_by('createdAt', direction='DESCENDING')
+                .limit(limit)
+                .get())
+        
+        predictions = []
+        for doc in docs:
+            data = doc.to_dict()
+            if 'result' in data:
+                predictions.append(data['result'])
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'vehicleId': vehicle_id,
+                'predictions': predictions,
+                'count': len(predictions)
+            }
+        })
+        
+    except Exception as e:
+        print(f'❌ SOC history error: {e}')
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+# ═══════════════════════════════════════════════════════════════
+# TRIP PREDICTION ENDPOINTS
+# ═══════════════════════════════════════════════════════════════
+@app.route('/api/trip/predict', methods=['POST'])
+def trip_predict():
+    """Predict battery consumption for a trip using AI or heuristic."""
+    try:
+        body = request.get_json() or {}
+        
+        # Validate required fields
+        required_fields = ['vehicleId', 'from', 'to', 'distance', 'currentBattery']
+        for field in required_fields:
+            if field not in body:
+                return jsonify({
+                    'success': False,
+                    'error': f'Missing required field: {field}'
+                }), 400
+        
+        vehicle_id = body['vehicleId']
+        from_location = body['from']
+        to_location = body['to']
+        distance = float(body['distance'])
+        current_battery = float(body['currentBattery'])
+        temperature = float(body.get('temperature', 25.0))
+        rider_weight = float(body.get('riderWeight', 70.0))
+        weather = body.get('weather', 'sunny')
+        
+        # Validate ranges
+        if distance <= 0:
+            return jsonify({
+                'success': False,
+                'error': 'Distance must be greater than 0'
+            }), 400
+            
+        if not (0 <= current_battery <= 100):
+            return jsonify({
+                'success': False,
+                'error': 'Current battery must be between 0 and 100'
+            }), 400
+        
+        # Calculate prediction
+        prediction = _calculate_trip_prediction(
+            distance=distance,
+            current_battery=current_battery,
+            temperature=temperature,
+            rider_weight=rider_weight,
+            weather=weather
+        )
+        
+        # Create response
+        result = {
+            'vehicleId': vehicle_id,
+            'from': from_location,
+            'to': to_location,
+            'distance': distance,
+            'predictedConsumption': prediction['consumption'],
+            'predictedEndBattery': prediction['end_battery'],
+            'estimatedDuration': prediction['duration'],
+            'isSafe': prediction['is_safe'],
+            'reasoningText': prediction['reasoning_text'],
+            'reasoningScore': prediction['reasoning_score'],
+            'confidence': prediction['confidence'],
+            'weather': weather,
+            'temperature': temperature,
+            'riderWeight': rider_weight,
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'status': 'planned'
+        }
+        
+        # Store prediction in Firestore if available
+        if _firestore_db:
+            try:
+                doc_ref = _firestore_db.collection('trip_predictions').add({
+                    'vehicleId': vehicle_id,
+                    'from': from_location,
+                    'to': to_location,
+                    'distance': distance,
+                    'duration': prediction['duration'],
+                    'consumption': prediction['consumption'],
+                    'reasoning': prediction['reasoning_score'],
+                    'reasoningText': prediction['reasoning_text'],
+                    'confidence': prediction['confidence'],
+                    'startBattery': current_battery,
+                    'endBattery': prediction['end_battery'],
+                    'isSafe': prediction['is_safe'],
+                    'weather': weather,
+                    'temperature': temperature,
+                    'riderWeight': rider_weight,
+                    'timestamp': datetime.now(timezone.utc),
+                    'status': 'planned'
+                })
+                print(f'✅ Trip prediction saved: {doc_ref[1].id}')
+            except Exception as e:
+                print(f'⚠️ Failed to save trip prediction: {e}')
+        
+        return jsonify({
+            'success': True,
+            'data': result
+        })
+        
+    except Exception as e:
+        print(f'❌ Trip prediction error: {e}')
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/trip/history', methods=['GET'])
+def trip_history():
+    """Get trip prediction history for a vehicle."""
+    try:
+        vehicle_id = request.args.get('vehicleId')
+        limit = int(request.args.get('limit', 10))
+        
+        if not vehicle_id:
+            return jsonify({
+                'success': False,
+                'error': 'vehicleId parameter required'
+            }), 400
+        
+        if not _firestore_db:
+            return jsonify({
+                'success': False,
+                'error': 'Firestore not available'
+            }), 503
+        
+        # Get predictions from Firestore
+        docs = (_firestore_db.collection('trip_predictions')
+                .where('vehicleId', '==', vehicle_id)
+                .order_by('timestamp', direction='DESCENDING')
+                .limit(limit)
+                .get())
+        
+        predictions = []
+        for doc in docs:
+            data = doc.to_dict()
+            predictions.append({
+                'id': doc.id,
+                **data
+            })
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'vehicleId': vehicle_id,
+                'predictions': predictions,
+                'count': len(predictions)
+            }
+        })
+        
+    except Exception as e:
+        print(f'❌ Trip history error: {e}')
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+def _calculate_trip_prediction(distance, current_battery, temperature, rider_weight, weather):
+    """Calculate trip prediction using AI or heuristic."""
+    
+    # Base consumption: 0.8% per km for VinFast Feliz Neo
+    base_consumption = distance * 0.8
+    
+    # Temperature factor
+    temp_factor = 1.0
+    if temperature < 10:
+        temp_factor = 1.2  # Cold weather increases consumption
+    elif temperature > 35:
+        temp_factor = 1.1  # Hot weather increases consumption
+    
+    # Weight factor
+    weight_factor = 1.0 + ((rider_weight - 70) / 70) * 0.3  # 30% more for every 70kg above base
+    
+    # Weather factor
+    weather_factor = 1.0
+    if weather.lower() in ['rain', 'mưa']:
+        weather_factor = 1.3
+    elif weather.lower() in ['cloudy', 'nhiều mây']:
+        weather_factor = 1.1
+    
+    # Calculate final consumption
+    consumption = base_consumption * temp_factor * weight_factor * weather_factor
+    consumption = round(consumption, 2)
+    
+    # Calculate end battery
+    end_battery = max(0, current_battery - consumption)
+    
+    # Calculate duration (average speed 30 km/h)
+    duration = int((distance / 30) * 60)
+    
+    # Check if safe
+    is_safe = end_battery > 15
+    
+    # Generate reasoning text
+    temp_desc = 'thời tiết lạnh' if temperature < 10 else 'thời tiết nóng' if temperature > 35 else 'thời tiết lý tưởng'
+    weight_desc = 'nặng' if rider_weight > 80 else 'nhẹ' if rider_weight < 60 else 'trung bình'
+    weather_desc = 'mưa' if weather.lower() in ['rain', 'mưa'] else 'nhiều mây' if weather.lower() in ['cloudy', 'nhiều mây'] else 'nắng'
+    
+    reasoning_text = f'Dự đoán dựa trên quãng đường {distance}km với {temp_desc}, trọng lượng {weight_desc} và thời tiết {weather_desc}. Tiêu hao pin ước tính là {consumption}%.'
+    
+    return {
+        'consumption': consumption,
+        'end_battery': end_battery,
+        'duration': duration,
+        'is_safe': is_safe,
+        'reasoning_text': reasoning_text,
+        'reasoning_score': 0.8,
+        'confidence': 0.85
+    }
+
+# ═══════════════════════════════════════════════════════════════
+# WEB SYNC ENDPOINTS
+# ═══════════════════════════════════════════════════════════════
+@app.route('/api/web/sync/battery-state', methods=['POST'])
+def web_sync_battery_state():
+    """Sync battery state from mobile app to web dashboard."""
+    try:
+        body = request.get_json() or {}
+        
+        if not _firestore_db:
+            return jsonify({
+                'success': False,
+                'error': 'Firestore not available'
+            }), 503
+        
+        # Store battery state
+        doc_ref = _firestore_db.collection('battery_states').add({
+            **body,
+            'syncedAt': datetime.now(timezone.utc),
+            'source': 'mobile_app'
+        })
+        
+        print(f'✅ Battery state synced from mobile: {doc_ref[1].id}')
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'id': doc_ref[1].id,
+                'syncedAt': datetime.now(timezone.utc).isoformat()
+            }
+        })
+        
+    except Exception as e:
+        print(f'❌ Battery sync error: {e}')
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/web/sync/trip-prediction', methods=['POST'])
+def web_sync_trip_prediction():
+    """Sync trip prediction from mobile app to web dashboard."""
+    try:
+        body = request.get_json() or {}
+        
+        if not _firestore_db:
+            return jsonify({
+                'success': False,
+                'error': 'Firestore not available'
+            }), 503
+        
+        # Store trip prediction
+        doc_ref = _firestore_db.collection('trip_predictions').add({
+            **body,
+            'syncedAt': datetime.now(timezone.utc),
+            'source': 'mobile_app'
+        })
+        
+        print(f'✅ Trip prediction synced from mobile: {doc_ref[1].id}')
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'id': doc_ref[1].id,
+                'syncedAt': datetime.now(timezone.utc).isoformat()
+            }
+        })
+        
+    except Exception as e:
+        print(f'❌ Trip prediction sync error: {e}')
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+# ═══════════════════════════════════════════════════════════════
 # RUN
 # ═══════════════════════════════════════════════════════════════
 if __name__ == '__main__':
@@ -1971,7 +2822,12 @@ if __name__ == '__main__':
     print('   Import: POST /api/admin/import?entity=&mode=upsert')
     print('   AI:     /api/ai/predict-degradation|predict-consumption|analyze-patterns|train-vehicle-profile')
     print('   Admin AI: /api/admin/ai/normalize-dataset|train|test')
+    print('   SOC:    /api/soc/predict|status|history  (proxy → AI server)')
+    print('   Models: GET/POST /api/admin/ai/models[/upload|/rollback|/<ver>]')
+    print('   Trip:   /api/trip/predict|history')
+    print('   Sync:   /api/web/sync/battery-state|trip-prediction')
     print('   Legacy: POST /api/admin/migrate-legacy')
+    print(f'   AI server URL: {AI_SERVER_URL}')
     print(f'   Consumption model: {_consumption_model_status}')
     print(f'🌐 http://localhost:5000\n')
     debug_mode = os.environ.get('FLASK_DEBUG', '1').lower() in ('1', 'true', 'yes')

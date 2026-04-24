@@ -21,7 +21,6 @@ export default function App() {
       setIsAuthenticated(!!user);
       setLoading(false);
     });
-
     return () => unsubscribe();
   }, []);
 

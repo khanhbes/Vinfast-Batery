@@ -27,6 +27,7 @@ import '../../core/widgets/quick_action_menu.dart';
 import '../settings/guide_screen.dart';
 import '../settings/ai_functions_screen.dart';
 import '../charge_log/add_charge_log_modal.dart';
+import 'smart_charging_eta_sheet.dart';
 
 // =============================================================================
 // Stable Dashboard Providers (thay cho inline FutureProvider)
@@ -1406,11 +1407,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ElevatedButton(
               onPressed: () {
                 Navigator.of(ctx).pop();
-                _startCharge(
-                  vehicleAsync,
-                  vehicleId,
-                  targetPercent: selectedTarget,
-                );
+                switch (QuickAction.startCharge) {
+                  case QuickAction.startCharge:
+                    _showSmartChargingEtaSheet();
+                    break;
+                  default:
+                    _startCharge(
+                      vehicleAsync,
+                      vehicleId,
+                      targetPercent: selectedTarget,
+                    );
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primaryGreen,
@@ -1430,6 +1437,34 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ),
       ),
     );
+  }
+
+  /// Show Smart Charging ETA Bottom Sheet (AI prediction)
+  Future<void> _showSmartChargingEtaSheet() async {
+    final vehicleId = ref.read(selectedVehicleIdProvider);
+    final vehicleAsync = ref.read(vehicleProvider(vehicleId));
+    if (vehicleAsync is! AsyncData || vehicleAsync.value == null) return;
+
+    final vehicle = vehicleAsync.value!;
+    final currentBattery = vehicle.currentBattery ?? 0;
+    final currentOdo = vehicle.currentOdo;
+
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => SmartChargingEtaSheet(
+        vehicleId: vehicleId,
+        initialBattery: currentBattery,
+        currentOdo: currentOdo,
+        chargeService: _chargeService,
+      ),
+    );
+
+    if (result == true && mounted) {
+      // Charging started successfully with AI prediction
+      setState(() {});
+    }
   }
 
   Future<void> _stopTrip() async {

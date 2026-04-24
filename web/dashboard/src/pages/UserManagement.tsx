@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Users, Plus, Search, Filter, MoreHorizontal, Mail, Calendar, Shield, Car, Edit, Trash2, UserIcon } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Users, Plus, Search, Filter, MoreHorizontal, Shield, Car, Edit, Trash2, UserIcon } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -10,14 +10,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { User } from '@/types';
 import { firebaseService, VehicleData } from '@/services/firebaseService';
@@ -49,7 +41,7 @@ export default function UserManagement() {
       setVehicles(vehicleData);
 
       // Create user list from vehicle owners
-      const uniqueOwners = Array.from(
+      const uniqueOwners: ExtendedUser[] = Array.from(
         new Map(
           vehicleData
             .filter(v => v.ownerUid)
@@ -57,7 +49,7 @@ export default function UserManagement() {
               id: v.ownerUid!,
               email: `${v.ownerUid!.replace(/[^a-zA-Z0-9]/g, '').substring(0, 8)}@vinfast.com`,
               displayName: `User ${v.ownerUid!.replace(/[^a-zA-Z0-9]/g, '').substring(0, 6).toUpperCase()}`,
-              role: 'user',
+              role: 'user' as const,
               createdAt: new Date().toISOString(),
               lastLogin: new Date().toISOString()
             }])
@@ -78,7 +70,7 @@ export default function UserManagement() {
         // Check if current user is already in the list
         const existingUserIndex = uniqueOwners.findIndex(u => u.id === currentUser.id);
         if (existingUserIndex >= 0) {
-          uniqueOwners[existingUserIndex] = { ...uniqueOwners[existingUserIndex], role: 'admin' };
+          uniqueOwners[existingUserIndex] = { ...uniqueOwners[existingUserIndex], role: 'admin' as const };
         } else {
           uniqueOwners.unshift(currentUser);
         }
@@ -91,7 +83,7 @@ export default function UserManagement() {
           ...user,
           vehicleCount: userVehicles.length,
           vehicles: userVehicles
-        };
+        } as ExtendedUser;
       });
 
       setUsers(usersWithVehicleCount);

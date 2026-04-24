@@ -72,11 +72,12 @@ class SessionSummaryModal extends StatelessWidget {
         margin: const EdgeInsets.symmetric(horizontal: 24),
         padding: const EdgeInsets.all(32),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(40),
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(32),
+          border: Border.all(color: AppColors.glassBorder),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.15),
+              color: AppColors.vinfastBlue.withValues(alpha: 0.15),
               blurRadius: 40,
               offset: const Offset(0, 16),
             ),

@@ -29,7 +29,7 @@ export class SOCTestService {
       const testData = this.getTestData();
       console.log('📊 Test data:', testData);
 
-      const response = await fetch('http://localhost:8080/api/soc/predict', {
+      const response = await fetch('http://localhost:5000/api/soc/predict', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -80,7 +80,7 @@ export class SOCTestService {
     try {
       console.log('🧪 Testing SOC Model Status API...');
       
-      const response = await fetch('http://localhost:8080/api/soc/status');
+      const response = await fetch('http://localhost:5000/api/soc/status');
 
       if (!response.ok) {
         console.error('❌ Model Status API test failed:', response.statusText);
@@ -114,7 +114,7 @@ export class SOCTestService {
       console.log('🧪 Testing SOC Prediction History API...');
       
       const testVehicleId = 'test-vehicle-001';
-      const response = await fetch(`http://localhost:8080/api/soc/history?vehicleId=${testVehicleId}&limit=5`);
+      const response = await fetch(`http://localhost:5000/api/soc/history?vehicleId=${testVehicleId}&limit=5`);
 
       if (!response.ok) {
         console.error('❌ History API test failed:', response.statusText);

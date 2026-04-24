@@ -1,0 +1,24 @@
+{
+  "versions": [
+    {
+      "version": "21042026_v1",
+      "uploadedAt": "2026-04-21T04:46:59.360475+00:00",
+      "note": "1000 samples test",
+      "ext": ".pkl"
+    },
+    {
+      "version": "210426_v2",
+      "uploadedAt": "2026-04-23T09:00:00.000000+00:00",
+      "note": "Stable joblib version for web test",
+      "ext": ".joblib"
+    },
+    {
+      "version": "2026_v2",
+      "uploadedAt": "2026-04-23T15:12:41.756177+00:00",
+      "note": "",
+      "ext": ".keras"
+    }
+  ],
+  "active": "2026_v2",
+  "activatedAt": "2026-04-23T15:12:42.829249+00:00"
+}

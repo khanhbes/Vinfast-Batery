@@ -31,6 +31,7 @@ export interface AiVehicleInsight {
   ownerUid: string;
   hasTrained: boolean;
   trainedAt?: string;
+  updatedAt?: string;
   profileVersion?: string;
   dataPoints: number;
   healthAdjustment: number;
@@ -322,7 +323,7 @@ class FirebaseService {
   // Dự đoán SOC bằng cách gọi API từ app
   async predictSOC(input: SOCPredictionInput): Promise<SOCPredictionResult> {
     try {
-      const response = await fetch('http://localhost:8080/api/soc/predict', {
+      const response = await fetch('http://localhost:5000/api/soc/predict', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -345,7 +346,7 @@ class FirebaseService {
   // Lấy trạng thái model SOC
   async getSOCModelStatus() {
     try {
-      const response = await fetch('http://localhost:8080/api/soc/status');
+      const response = await fetch('http://localhost:5000/api/soc/status');
       
       if (!response.ok) {
         throw new Error(`Failed to get SOC model status: ${response.statusText}`);
@@ -362,7 +363,7 @@ class FirebaseService {
   // Lấy lịch sử dự đoán SOC
   async getSOCPredictionHistory(vehicleId: string, limit: number = 10): Promise<SOCPredictionResult[]> {
     try {
-      const response = await fetch(`http://localhost:8080/api/soc/history?vehicleId=${vehicleId}&limit=${limit}`);
+      const response = await fetch(`http://localhost:5000/api/soc/history?vehicleId=${vehicleId}&limit=${limit}`);
       
       if (!response.ok) {
         throw new Error(`Failed to get SOC prediction history: ${response.statusText}`);

@@ -4,8 +4,8 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/under_development_notice.dart';
 
 /// ========================================================================
-/// Quick Actions Floating V2 — Hành động nhanh dạng nổi bên phải
-/// Thiết kế lấy cảm hứng từ Battery Pro
+/// Quick Actions Floating V3 — Dark Premium Design
+/// Nổi bên phải, dark glass labels
 /// ========================================================================
 
 class QuickActionsFloating extends StatefulWidget {
@@ -71,7 +71,7 @@ class _QuickActionsFloatingState extends State<QuickActionsFloating>
                 _ActionButton(
                   icon: Icons.bolt_rounded,
                   label: 'Sạc ngay',
-                  color: Colors.orange,
+                  color: AppColors.warning,
                   onTap: widget.onCharge ?? () {
                     UnderDevelopmentNotice.showDialog(
                       context,
@@ -173,11 +173,12 @@ class _ActionButton extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: AppColors.card,
               borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.glassBorder),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.08),
+                  color: Colors.black.withValues(alpha: 0.3),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -201,7 +202,7 @@ class _ActionButton extends StatelessWidget {
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: color.withValues(alpha: 0.3),
+                  color: color.withValues(alpha: 0.4),
                   blurRadius: 12,
                   offset: const Offset(0, 4),
                 ),

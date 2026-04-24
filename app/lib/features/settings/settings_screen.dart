@@ -462,7 +462,7 @@ class _VehicleCard extends StatelessWidget {
           border: Border.all(
             color: isSelected
                 ? AppColors.primaryGreen.withValues(alpha: 0.4)
-                : AppColors.border,
+                : AppColors.glassBorder,
             width: isSelected ? 1.5 : 1,
           ),
           boxShadow: isSelected
@@ -709,7 +709,7 @@ class _AddVehicleDialogState extends ConsumerState<_AddVehicleDialog> {
           decoration: BoxDecoration(
             color: AppColors.card,
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: AppColors.border),
+            border: Border.all(color: AppColors.glassBorder),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.5),
@@ -808,7 +808,7 @@ class _AddVehicleDialogState extends ConsumerState<_AddVehicleDialog> {
                 decoration: BoxDecoration(
                   color: AppColors.surface,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.border),
+                  border: Border.all(color: AppColors.glassBorder),
                 ),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
@@ -1161,7 +1161,7 @@ class _AppInfoTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: AppColors.glassBorder),
       ),
       child: Row(
         children: [
@@ -1303,7 +1303,7 @@ class _AboutCard extends StatelessWidget {
           ],
         ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: AppColors.glassBorder),
       ),
       child: Column(
         children: [

@@ -128,13 +128,13 @@ void main() async {
     DeviceOrientation.portraitUp,
   ]);
 
-  // Set system UI style
+  // Set system UI style for dark theme
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark,
-      systemNavigationBarColor: Color(0xFFF8F9FA),
-      systemNavigationBarIconBrightness: Brightness.dark,
+      statusBarIconBrightness: Brightness.light,
+      systemNavigationBarColor: Color(0xFF050505),
+      systemNavigationBarIconBrightness: Brightness.light,
     ),
   );
 

@@ -4,8 +4,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../core/theme/app_colors.dart';
 
 /// ========================================================================
-/// QuickActionMenu — FAB "+" mở BottomSheet menu hành động
-/// Dùng chung cho Dashboard và Home
+/// QuickActionMenu — Dark Premium V3
+/// FAB "+" mở BottomSheet menu hành động
 /// ========================================================================
 
 /// Kết quả khi user chọn một action từ menu
@@ -71,7 +71,14 @@ class _QuickActionSheet extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: AppColors.glassBorder),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.vinfastBlue.withValues(alpha: 0.1),
+            blurRadius: 30,
+            offset: const Offset(0, -8),
+          ),
+        ],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -83,23 +90,23 @@ class _QuickActionSheet extends StatelessWidget {
               width: 36,
               height: 4,
               decoration: BoxDecoration(
-                color: AppColors.textTertiary,
+                color: AppColors.textHint,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
           ),
           // Title
-          const Padding(
-            padding: EdgeInsets.fromLTRB(20, 8, 20, 12),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
             child: Row(
               children: [
                 Icon(
                   Icons.flash_on_rounded,
-                  color: AppColors.primaryGreen,
+                  color: AppColors.vinfastBlue,
                   size: 20,
                 ),
-                SizedBox(width: 8),
-                Text(
+                const SizedBox(width: 8),
+                const Text(
                   'Hành động nhanh',
                   style: TextStyle(
                     color: AppColors.textPrimary,
@@ -110,7 +117,7 @@ class _QuickActionSheet extends StatelessWidget {
               ],
             ),
           ),
-          const Divider(color: AppColors.border, height: 1),
+          Divider(color: AppColors.glassBorder, height: 1),
 
           // Primary actions
           _MenuItem(
@@ -127,29 +134,29 @@ class _QuickActionSheet extends StatelessWidget {
             subtitle: 'Smart charging + ETA',
             onTap: () => onAction(QuickAction.startCharge),
           ).animate().fadeIn(delay: 100.ms),
-          const Divider(color: AppColors.border, height: 1, indent: 60),
+          Divider(color: AppColors.glassBorder, height: 1, indent: 60),
 
           // Manual input
           _MenuItem(
             icon: Icons.edit_note_rounded,
-            iconColor: AppColors.textSecondary,
+            iconColor: AppColors.textTertiary,
             label: 'Nhập chuyến đi thủ công',
             subtitle: 'Không cần GPS',
             onTap: () => onAction(QuickAction.manualTrip),
           ).animate().fadeIn(delay: 150.ms),
           _MenuItem(
             icon: Icons.add_circle_outline_rounded,
-            iconColor: AppColors.textSecondary,
+            iconColor: AppColors.textTertiary,
             label: 'Nhập sạc',
             subtitle: 'Ghi nhật ký sạc thủ công',
             onTap: () => onAction(QuickAction.addCharge),
           ).animate().fadeIn(delay: 200.ms),
-          const Divider(color: AppColors.border, height: 1, indent: 60),
+          Divider(color: AppColors.glassBorder, height: 1, indent: 60),
 
           // AI features
           _MenuItem(
             icon: Icons.route_rounded,
-            iconColor: const Color(0xFFFF9800),
+            iconColor: AppColors.warning,
             label: 'Dự báo lộ trình',
             subtitle: 'Tính pin tiêu hao theo quãng đường',
             onTap: () => onAction(QuickAction.routePrediction),
@@ -202,8 +209,8 @@ class _MenuItem extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: iconColor.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(10),
+                color: iconColor.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(icon, color: iconColor, size: 20),
             ),
@@ -224,7 +231,7 @@ class _MenuItem extends StatelessWidget {
                   Text(
                     subtitle,
                     style: const TextStyle(
-                      color: AppColors.textTertiary,
+                      color: AppColors.textHint,
                       fontSize: 12,
                     ),
                   ),
@@ -233,7 +240,7 @@ class _MenuItem extends StatelessWidget {
             ),
             const Icon(
               Icons.chevron_right_rounded,
-              color: AppColors.textTertiary,
+              color: AppColors.textHint,
               size: 20,
             ),
           ],

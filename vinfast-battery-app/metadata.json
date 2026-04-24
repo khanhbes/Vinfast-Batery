@@ -1,0 +1,6 @@
+{
+  "name": "VinFast Battery App",
+  "description": "Smart, AI-driven battery management and trip planning for VinFast electric scooters.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["AI-driven battery prediction", "Trip planning", "Maintenance tracking"]
+}

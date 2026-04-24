@@ -29,6 +29,15 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ── ChargeSamples (AI training data - implicit collection) ──
+    // App writes training samples; backend aggregates for fine-tuning
+    match /ChargeSamples/{sampleId} {
+      allow read: if isAuth() && isOwner(resource.data.ownerUid) && notDeleted();
+      allow create: if isAuth() && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if isAuth() && isOwner(resource.data.ownerUid);
+      allow delete: if false;
+    }
+
     // ── TripLogs ──
     match /TripLogs/{tripId} {
       allow read: if isAuth() && isOwner(resource.data.ownerUid) && notDeleted();
