@@ -67,7 +67,7 @@ class SOCApiService {
       final path = request.uri.path;
       final method = request.method;
 
-      print('📡 ${method} $path');
+      print('📡 $method $path');
 
       switch ('$method $path') {
         case 'POST /api/soc/predict':

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 
-/// Widget hiển thị thông báo "Đang phát triển" cho tính năng chưa hoàn thiện
+/// Widget hiển thị thông báo "Đang phát triển" — Dark Premium V3
 class UnderDevelopmentNotice extends StatelessWidget {
   final String featureName;
   final String? description;
@@ -25,7 +25,7 @@ class UnderDevelopmentNotice extends StatelessWidget {
       context: context,
       barrierDismissible: true,
       barrierLabel: 'Dismiss',
-      barrierColor: Colors.black.withValues(alpha: 0.4),
+      barrierColor: Colors.black.withValues(alpha: 0.7),
       transitionDuration: const Duration(milliseconds: 300),
       transitionBuilder: (ctx, a1, a2, child) {
         return Transform.scale(
@@ -42,9 +42,10 @@ class UnderDevelopmentNotice extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppColors.card,
               borderRadius: BorderRadius.circular(32),
+              border: Border.all(color: AppColors.glassBorder),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.15),
+                  color: AppColors.vinfastBlue.withValues(alpha: 0.15),
                   blurRadius: 40,
                   offset: const Offset(0, 16),
                 ),
@@ -56,7 +57,7 @@ class UnderDevelopmentNotice extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: AppColors.vinfastBlue.withValues(alpha: 0.08),
+                    color: AppColors.vinfastBlue.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(24),
                   ),
                   child: const Icon(
@@ -80,7 +81,7 @@ class UnderDevelopmentNotice extends StatelessWidget {
                 Text(
                   description ?? 'Tính năng này đang được phát triển và sẽ sớm ra mắt trong phiên bản tiếp theo.',
                   style: const TextStyle(
-                    color: AppColors.textSecondary,
+                    color: AppColors.textTertiary,
                     fontSize: 14,
                     height: 1.5,
                   ),
@@ -124,7 +125,7 @@ class UnderDevelopmentNotice extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppColors.warningBg,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: AppColors.warning.withValues(alpha: 0.3),
         ),
@@ -160,7 +161,7 @@ class UnderDevelopmentNotice extends StatelessWidget {
                 Text(
                   description ?? 'Đang phát triển',
                   style: const TextStyle(
-                    color: AppColors.textSecondary,
+                    color: AppColors.textTertiary,
                     fontSize: 12,
                   ),
                 ),

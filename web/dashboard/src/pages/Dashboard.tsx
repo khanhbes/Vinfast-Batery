@@ -27,9 +27,14 @@ import { cn } from '@/lib/utils';
 import { KpiCard, AlertItem } from '@/types';
 import { firebaseService } from '@/services/firebaseService';
 
+interface TrendDataPoint {
+  name: string;
+  value: number;
+}
+
 export default function Dashboard() {
   const [kpis, setKpis] = useState<KpiCard[]>([]);
-  const [trendData, setTrendData] = useState([]);
+  const [trendData, setTrendData] = useState<TrendDataPoint[]>([]);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [loading, setLoading] = useState(true);
 

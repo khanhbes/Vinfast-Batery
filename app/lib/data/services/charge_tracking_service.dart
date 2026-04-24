@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/charge_log_model.dart';
+import '../models/charge_sample_model.dart';
 import '../services/notification_service.dart';
 
 /// ========================================================================
@@ -99,6 +101,26 @@ class ChargeTrackingService {
     _notifiedTarget = _currentBattery >= _targetBattery;
     _updateEta();
 
+    // Recover AI prediction data if available
+    final aiPredictionJson = prefs.getString('charge_aiPrediction');
+    if (aiPredictionJson != null) {
+      try {
+        _aiPrediction = AiPredictionData.fromMap(jsonDecode(aiPredictionJson));
+        debugPrint('🔮 AI prediction recovered: ${_aiPrediction!.formattedDuration}');
+      } catch (e) {
+        debugPrint('⚠️ Failed to recover AI prediction: $e');
+      }
+    }
+
+    // Reschedule reminder if still charging and predicted stop time hasn't passed
+    if (_aiPrediction != null && _aiPrediction!.predictedStopAt != null) {
+      final predictedStop = _aiPrediction!.predictedStopAt!;
+      if (predictedStop.isAfter(DateTime.now()) && !_notifiedTarget) {
+        await _scheduleReminder(predictedStop);
+        debugPrint('🔔 Reminder rescheduled after recovery');
+      }
+    }
+
     return true; // Có session cần recovery
   }
 
@@ -126,7 +148,7 @@ class ChargeTrackingService {
 
   Future<void> _clearPersistedState() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('charge_active', false);
+    await prefs.remove('charge_active');
     await prefs.remove('charge_vehicleId');
     await prefs.remove('charge_startBattery');
     await prefs.remove('charge_startTime');
@@ -135,6 +157,7 @@ class ChargeTrackingService {
     await prefs.remove('charge_targetBattery');
     await prefs.remove('charge_ownerUid');
     await prefs.remove('charge_sessionId');
+    await prefs.remove('charge_aiPrediction'); // Clear AI prediction data
   }
 
   void _resetState() {
@@ -156,13 +179,19 @@ class ChargeTrackingService {
     _lastSampleSyncAt = null;
   }
 
-  /// Bắt đầu sạc
+  /// Bắt đầu sạc với AI prediction metadata
   Future<void> startCharging({
     required String vehicleId,
     required int currentBattery,
     required int currentOdo,
     double? chargeRatePerMin,
     int targetBatteryPercent = 80,
+    // AI prediction data from backend
+    double? predictedDurationSec,
+    DateTime? predictedStopAt,
+    String? modelSource,
+    String? modelVersion,
+    bool? reminderEnabled,
   }) async {
     _vehicleId = vehicleId;
     _startBattery = currentBattery;
@@ -177,8 +206,38 @@ class ChargeTrackingService {
     _notified100 = currentBattery >= 100;
     _notifiedTarget = false;
 
-    if (chargeRatePerMin != null && chargeRatePerMin > 0) {
-      _chargeRatePerMin = chargeRatePerMin;
+    // Store AI prediction data
+    if (predictedDurationSec != null && predictedDurationSec > 0) {
+      _aiPrediction = AiPredictionData(
+        requestedAt: _startTime,
+        startBatteryPercent: currentBattery,
+        targetBatteryPercent: _targetBattery,
+        predictedDurationSec: predictedDurationSec,
+        predictedStopAt: predictedStopAt ?? _startTime!.add(Duration(seconds: predictedDurationSec.toInt())),
+        modelSource: modelSource ?? 'heuristic_fallback',
+        modelVersion: modelVersion ?? 'heuristic-v1',
+        isBeta: true,
+      );
+
+      // Calculate charge rate from predicted duration
+      final gain = _targetBattery - _startBattery;
+      if (gain > 0) {
+        _chargeRatePerMin = gain / (predictedDurationSec / 60);
+      }
+
+      // Schedule reminder if enabled
+      if (reminderEnabled == true && predictedStopAt != null) {
+        await _scheduleReminder(predictedStopAt);
+      }
+
+      debugPrint('🔌 AI Charging started: ${currentBattery}% → ${_targetBattery}%, '
+          'predicted ${_aiPrediction!.formattedDuration}, source: ${modelSource}');
+    } else {
+      // Fallback to provided rate or default
+      if (chargeRatePerMin != null && chargeRatePerMin > 0) {
+        _chargeRatePerMin = chargeRatePerMin;
+      }
+      debugPrint('🔌 Charging started: $_currentBattery% → target 100% (heuristic)');
     }
 
     _updateEta();
@@ -198,14 +257,16 @@ class ChargeTrackingService {
     if (_chargeSessionId != null) {
       await prefs.setString('charge_sessionId', _chargeSessionId!);
     }
+    // Persist AI prediction data for recovery after app restart
+    if (_aiPrediction != null) {
+      await prefs.setString('charge_aiPrediction', jsonEncode(_aiPrediction!.toMap()));
+    }
 
     // Timer cập nhật mỗi 30 giây
     _chargeTimer = Timer.periodic(
       const Duration(seconds: 30),
       (_) => _onChargeTick(),
     );
-
-    debugPrint('🔌 Charging started: $_currentBattery% → target 100%');
     _syncChargeSample(event: 'start', force: true);
     _updateNotification();
     onUpdate?.call();
@@ -309,22 +370,51 @@ class ChargeTrackingService {
     await NotificationService().showChargingOngoing(_currentBattery, elapsedText);
   }
 
+  /// AI prediction data for the current session
+  AiPredictionData? _aiPrediction;
+
+  /// Schedule reminder notification using NotificationService
+  Future<void> _scheduleReminder(DateTime reminderTime) async {
+    if (_targetBattery != null) {
+      await NotificationService().scheduleChargeReminder(reminderTime, _targetBattery!);
+      debugPrint('🔔 Reminder scheduled for: $reminderTime (target: $_targetBattery%)');
+    }
+  }
+
+  /// Cancel scheduled reminder
+  Future<void> _cancelReminder() async {
+    await NotificationService().cancelChargeReminder();
+    debugPrint('🔔 Reminder cancelled');
+  }
+
   /// Kết thúc sạc và lưu log vào Firestore
-  Future<ChargeLogModel?> stopCharging() async {
+  /// [actualBatteryPercent] - % pin thực tế khi dừng (required by user confirmation)
+  Future<ChargeLogModel?> stopCharging({int? actualBatteryPercent}) async {
     if (!_isCharging) return null;
     _isCharging = false;
 
     _chargeTimer?.cancel();
     _chargeTimer = null;
 
-    // Xóa notification
+    // Hủy notification và reminder
     await NotificationService().cancel(NotificationService.idChargeOngoing);
+    await _cancelReminder();
 
-    // Xóa persisted state
-    await _clearPersistedState();
+    // Update actual battery if provided (override simulated value)
+    if (actualBatteryPercent != null && actualBatteryPercent != _currentBattery) {
+      debugPrint('🔋 Actual battery override: $_currentBattery -> $actualBatteryPercent');
+      _currentBattery = actualBatteryPercent;
+    }
 
     final endTime = DateTime.now();
     final durationMin = endTime.difference(_startTime!).inMinutes;
+    final durationSec = endTime.difference(_startTime!).inSeconds.toDouble();
+
+    // Update AI prediction with actual results
+    AiPredictionData? finalAiPrediction;
+    if (_aiPrediction != null) {
+      finalAiPrediction = _aiPrediction!.copyWithActual(_currentBattery, endTime);
+    }
 
     final chargeLog = ChargeLogModel(
       logId: _chargeSessionId,
@@ -337,6 +427,7 @@ class ChargeTrackingService {
       odoAtCharge: _currentOdo,
       targetBatteryPercent: _targetBattery,
       estimatedCompleteAt: _estimatedCompleteAt,
+      aiPrediction: finalAiPrediction,
     );
 
     // Lưu vào Firestore
@@ -356,6 +447,7 @@ class ChargeTrackingService {
             'targetBatteryPercent': _targetBattery,
             'chargeRatePerMin': _chargeRatePerMin,
             'durationMin': durationMin,
+            'durationSec': durationSec,
           },
           'createdAt': FieldValue.serverTimestamp(),
           'isDeleted': false,

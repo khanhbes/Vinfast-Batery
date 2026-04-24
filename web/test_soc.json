@@ -1,0 +1,12 @@
+{
+  "currentBattery": 75,
+  "temperature": 25,
+  "voltage": 48,
+  "current": 15,
+  "odometer": 12500,
+  "timeOfDay": 14,
+  "dayOfWeek": 2,
+  "avgSpeed": 45,
+  "elevationGain": 120,
+  "weatherCondition": "sunny"
+}

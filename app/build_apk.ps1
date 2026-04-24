@@ -53,8 +53,8 @@ flutter clean
 Write-Host "`nDang chay flutter pub get..." -ForegroundColor Cyan
 flutter pub get
 
-Write-Host "`nDang build APK (split-per-abi, release)..." -ForegroundColor Cyan
-flutter build apk --split-per-abi --release
+Write-Host "`nDang build APK (tong hop, release)..." -ForegroundColor Cyan
+flutter build apk --release
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "`nBuild THAT BAI!" -ForegroundColor Red
@@ -70,12 +70,14 @@ if (!(Test-Path $releaseDir)) {
 $apkSource = 'build\app\outputs\flutter-apk'
 $timestamp = Get-Date -Format 'yyyyMMdd_HHmm'
 
-$apkFiles = Get-ChildItem "$apkSource\*.apk" -ErrorAction SilentlyContinue
-foreach ($apk in $apkFiles) {
-    $newName = $apk.BaseName -replace 'app', "VinFastBattery_v$newSemver"
-    $dest = Join-Path $releaseDir "$newName`_$timestamp.apk"
-    Copy-Item $apk.FullName $dest
+$apkFile = "$apkSource\app-release.apk"
+if (Test-Path $apkFile) {
+    $newName = "VinFastBattery_v$newSemver" + ".apk"
+    $dest = Join-Path $releaseDir $newName
+    Copy-Item $apkFile $dest -Force
     Write-Host "  -> $dest" -ForegroundColor Green
+} else {
+    Write-Host "Khong tim thay app-release.apk" -ForegroundColor Red
 }
 
 Write-Host "`n=== BUILD THANH CONG — v$newVersion ===" -ForegroundColor Cyan

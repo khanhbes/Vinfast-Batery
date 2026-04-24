@@ -1,5 +1,113 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// AI Prediction metadata for charging sessions
+class AiPredictionData {
+  final DateTime? requestedAt;
+  final int? startBatteryPercent;
+  final int? targetBatteryPercent;
+  final double? predictedDurationSec;
+  final DateTime? predictedStopAt;
+  final String? modelSource;
+  final String? modelVersion;
+  final bool? isBeta;
+  final int? actualStopBatteryPercent;
+  final double? actualDurationSec;
+  final double? predictionErrorSec;
+  final bool? eligibleForTraining;
+
+  AiPredictionData({
+    this.requestedAt,
+    this.startBatteryPercent,
+    this.targetBatteryPercent,
+    this.predictedDurationSec,
+    this.predictedStopAt,
+    this.modelSource,
+    this.modelVersion,
+    this.isBeta,
+    this.actualStopBatteryPercent,
+    this.actualDurationSec,
+    this.predictionErrorSec,
+    this.eligibleForTraining,
+  });
+
+  factory AiPredictionData.fromMap(Map<String, dynamic>? data) {
+    if (data == null) return AiPredictionData();
+    return AiPredictionData(
+      requestedAt: data['requestedAt'] != null
+          ? (data['requestedAt'] as Timestamp).toDate()
+          : null,
+      startBatteryPercent: data['startBatteryPercent'],
+      targetBatteryPercent: data['targetBatteryPercent'],
+      predictedDurationSec: data['predictedDurationSec']?.toDouble(),
+      predictedStopAt: data['predictedStopAt'] != null
+          ? (data['predictedStopAt'] as Timestamp).toDate()
+          : null,
+      modelSource: data['modelSource'],
+      modelVersion: data['modelVersion'],
+      isBeta: data['isBeta'],
+      actualStopBatteryPercent: data['actualStopBatteryPercent'],
+      actualDurationSec: data['actualDurationSec']?.toDouble(),
+      predictionErrorSec: data['predictionErrorSec']?.toDouble(),
+      eligibleForTraining: data['eligibleForTraining'],
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      if (requestedAt != null) 'requestedAt': Timestamp.fromDate(requestedAt!),
+      if (startBatteryPercent != null) 'startBatteryPercent': startBatteryPercent,
+      if (targetBatteryPercent != null) 'targetBatteryPercent': targetBatteryPercent,
+      if (predictedDurationSec != null) 'predictedDurationSec': predictedDurationSec,
+      if (predictedStopAt != null) 'predictedStopAt': Timestamp.fromDate(predictedStopAt!),
+      if (modelSource != null) 'modelSource': modelSource,
+      if (modelVersion != null) 'modelVersion': modelVersion,
+      if (isBeta != null) 'isBeta': isBeta,
+      if (actualStopBatteryPercent != null) 'actualStopBatteryPercent': actualStopBatteryPercent,
+      if (actualDurationSec != null) 'actualDurationSec': actualDurationSec,
+      if (predictionErrorSec != null) 'predictionErrorSec': predictionErrorSec,
+      if (eligibleForTraining != null) 'eligibleForTraining': eligibleForTraining,
+    };
+  }
+
+  /// Format duration as hours/minutes string
+  String get formattedDuration {
+    final seconds = predictedDurationSec ?? 0;
+    final hours = (seconds / 3600).floor();
+    final mins = ((seconds % 3600) / 60).floor();
+    if (hours > 0) {
+      return '${hours} giờ ${mins} phút';
+    }
+    return '${mins} phút';
+  }
+
+  /// Calculate prediction error after session ends
+  AiPredictionData copyWithActual(int actualBattery, DateTime actualEndTime) {
+    final actualDuration = actualEndTime.difference(requestedAt ?? actualEndTime).inSeconds.toDouble();
+    final predictedDuration = predictedDurationSec ?? 0;
+    final error = actualDuration - predictedDuration;
+    
+    // Determine if eligible for training
+    final eligible = actualBattery > (startBatteryPercent ?? 0) && // Pin phải tăng
+                    actualDuration > 60 && // Thời gian > 1 phút
+                    (targetBatteryPercent != null && actualBattery >= targetBatteryPercent! - 5); // Gần đạt target
+
+    return AiPredictionData(
+      requestedAt: requestedAt,
+      startBatteryPercent: startBatteryPercent,
+      targetBatteryPercent: targetBatteryPercent,
+      predictedDurationSec: predictedDurationSec,
+      predictedStopAt: predictedStopAt,
+      modelSource: modelSource,
+      modelVersion: modelVersion,
+      isBeta: isBeta,
+      actualStopBatteryPercent: actualBattery,
+      actualDurationSec: actualDuration,
+      predictionErrorSec: error,
+      eligibleForTraining: eligible,
+    );
+  }
+}
+
 class ChargeLogModel {
   final String? logId;
   final String vehicleId;
@@ -11,6 +119,7 @@ class ChargeLogModel {
   final int odoAtCharge;
   final int? targetBatteryPercent;
   final DateTime? estimatedCompleteAt;
+  final AiPredictionData? aiPrediction;
 
   ChargeLogModel({
     this.logId,
@@ -23,6 +132,7 @@ class ChargeLogModel {
     required this.odoAtCharge,
     this.targetBatteryPercent,
     this.estimatedCompleteAt,
+    this.aiPrediction,
   });
 
   /// Lượng pin sạc được (%)
@@ -58,6 +168,7 @@ class ChargeLogModel {
       estimatedCompleteAt: data['estimatedCompleteAt'] != null
           ? (data['estimatedCompleteAt'] as Timestamp).toDate()
           : null,
+      aiPrediction: AiPredictionData.fromMap(data['aiPrediction']),
     );
   }
 
@@ -81,6 +192,7 @@ class ChargeLogModel {
           : data['estimatedCompleteAt'] != null
               ? DateTime.parse(data['estimatedCompleteAt'])
               : null,
+      aiPrediction: AiPredictionData.fromMap(data['aiPrediction']),
     );
   }
 
@@ -98,6 +210,7 @@ class ChargeLogModel {
       'estimatedCompleteAt': estimatedCompleteAt != null
           ? Timestamp.fromDate(estimatedCompleteAt!)
           : null,
+      'aiPrediction': aiPrediction?.toMap(),
       'updatedAt': FieldValue.serverTimestamp(),
     };
   }
@@ -113,7 +226,9 @@ class ChargeLogModel {
       'endBatteryPercent': endBatteryPercent,
       'odoAtCharge': odoAtCharge,
       'targetBatteryPercent': targetBatteryPercent,
-      'estimatedCompleteAt': estimatedCompleteAt?.toIso8601String(),
+      if (estimatedCompleteAt != null)
+        'estimatedCompleteAt': estimatedCompleteAt!.toIso8601String(),
+      if (aiPrediction != null) 'aiPrediction': aiPrediction?.toMap(),
     };
   }
 
@@ -127,6 +242,7 @@ class ChargeLogModel {
     int? odoAtCharge,
     int? targetBatteryPercent,
     DateTime? estimatedCompleteAt,
+    AiPredictionData? aiPrediction,
   }) {
     return ChargeLogModel(
       logId: logId ?? this.logId,
@@ -138,6 +254,7 @@ class ChargeLogModel {
       odoAtCharge: odoAtCharge ?? this.odoAtCharge,
       targetBatteryPercent: targetBatteryPercent ?? this.targetBatteryPercent,
       estimatedCompleteAt: estimatedCompleteAt ?? this.estimatedCompleteAt,
+      aiPrediction: aiPrediction ?? this.aiPrediction,
     );
   }
 }

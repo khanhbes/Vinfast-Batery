@@ -112,7 +112,7 @@ class HomeScreen extends ConsumerWidget {
       body: SafeArea(
         child: RefreshIndicator(
           color: AppColors.vinfastBlue,
-          backgroundColor: AppColors.card,
+          backgroundColor: AppColors.surface,
           onRefresh: () async {
             ref.invalidate(vehicleProvider(vehicleId));
             ref.invalidate(chargeLogsProvider(vehicleId));
@@ -127,7 +127,7 @@ class HomeScreen extends ConsumerWidget {
               // ── Header V2 ──
               SliverToBoxAdapter(
                 child: _HomeHeaderV2(
-                  vehicleAsync: vehicleAsync,
+                  vehicleAsync: vehicleAsync, 
                   allVehiclesAsync: allVehiclesAsync,
                   selectedId: vehicleId,
                   onVehicleChanged: (id) async {
@@ -196,9 +196,9 @@ class HomeScreen extends ConsumerWidget {
                           color: AppColors.infoBg,
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.history_rounded,
-                          color: AppColors.info,
+                          color: AppColors.vinfastBlue,
                           size: 18,
                         ),
                       ),
@@ -456,14 +456,7 @@ class _HomeHeaderV2 extends ConsumerWidget {
                 decoration: BoxDecoration(
                   color: AppColors.card,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.border),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.04),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
+                  border: Border.all(color: AppColors.glassBorder),
                 ),
                 child: Center(
                   child: Container(
@@ -475,7 +468,7 @@ class _HomeHeaderV2 extends ConsumerWidget {
                       boxShadow: [
                         BoxShadow(
                           color: AppColors.success.withValues(alpha: 0.5),
-                          blurRadius: 6,
+                          blurRadius: 8,
                         ),
                       ],
                     ),
@@ -520,10 +513,10 @@ class _SingleVehicleBannerV2 extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: AppColors.vinfastBlue.withValues(alpha: 0.06),
+        color: AppColors.vinfastBlue.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: AppColors.vinfastBlue.withValues(alpha: 0.15),
+          color: AppColors.vinfastBlue.withValues(alpha: 0.25),
         ),
       ),
       child: Row(
@@ -531,7 +524,7 @@ class _SingleVehicleBannerV2 extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: AppColors.vinfastBlue.withValues(alpha: 0.1),
+              color: AppColors.vinfastBlue.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Icon(
@@ -614,13 +607,13 @@ class _VehicleSwitcherTabsV2 extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
                 color: isSelected
-                    ? AppColors.vinfastBlue.withValues(alpha: 0.1)
+                    ? AppColors.vinfastBlue.withValues(alpha: 0.12)
                     : AppColors.card,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
                   color: isSelected
                       ? AppColors.vinfastBlue.withValues(alpha: 0.4)
-                      : AppColors.border,
+                      : AppColors.glassBorder,
                   width: isSelected ? 1.5 : 1,
                 ),
               ),
@@ -703,8 +696,8 @@ class _ChargeLogTile extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.glassBorder),
       ),
       child: Row(
         children: [
@@ -722,7 +715,7 @@ class _ChargeLogTile extends StatelessWidget {
                 ],
               ),
               borderRadius: BorderRadius.circular(13),
-              border: Border.all(color: gainColor.withValues(alpha: 0.2)),
+              border: Border.all(color: gainColor.withValues(alpha: 0.3)),
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,

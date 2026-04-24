@@ -1,5 +1,6 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/material.dart';
+import 'package:timezone/timezone.dart' as tz;
 
 /// Service quản lý Local Notifications
 /// - Thông báo sạc pin 80%, 100%
@@ -172,6 +173,40 @@ class NotificationService {
         ),
       ),
     );
+  }
+
+  // ── Scheduled Notifications ──
+
+  static const int idChargeReminder = 210;
+
+  /// Schedule charging completion reminder
+  Future<void> scheduleChargeReminder(DateTime reminderTime, int targetPercent) async {
+    final tz.TZDateTime scheduledDate = tz.TZDateTime.from(reminderTime, tz.local);
+    
+    await _plugin.zonedSchedule(
+      idChargeReminder,
+      '⏰ Đã đến lúc rút sạc!',
+      'Pin dự kiến đạt $targetPercent%. Hãy kiểm tra và rút sạc để bảo vệ pin.',
+      scheduledDate,
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          channelCharge,
+          'Sạc pin',
+          importance: Importance.high,
+          priority: Priority.high,
+          icon: '@mipmap/ic_launcher',
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+      payload: 'charge_reminder_$targetPercent',
+    );
+  }
+
+  /// Cancel scheduled charging reminder
+  Future<void> cancelChargeReminder() async {
+    await _plugin.cancel(idChargeReminder);
   }
 
   // ── Maintenance Notifications ──

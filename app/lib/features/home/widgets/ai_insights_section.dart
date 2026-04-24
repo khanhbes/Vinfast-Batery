@@ -5,8 +5,8 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/under_development_notice.dart';
 
 /// ========================================================================
-/// AI Insights Section — Hiển thị AI dự đoán với "Kết luận trước, chi tiết sau"
-/// 3 tính năng: Dự đoán chai pin, Dự đoán hao hụt theo quãng đường, Thói quen
+/// AI Insights Section — Dark Premium V3
+/// Cards tối với glass border, neon accents
 /// ========================================================================
 
 class AiInsightsSection extends StatelessWidget {
@@ -25,7 +25,7 @@ class AiInsightsSection extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AppColors.vinfastBlue.withValues(alpha: 0.08),
+                  color: AppColors.vinfastBlue.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: const Icon(
@@ -36,14 +36,29 @@ class AiInsightsSection extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               const Expanded(
-                child: Text(
-                  'AI Insights',
-                  style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.3,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'AI Insights',
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'AI ENGINE',
+                      style: TextStyle(
+                        color: AppColors.vinfastBlue,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -54,7 +69,6 @@ class AiInsightsSection extends StatelessWidget {
         _AiFeatureCard(
           index: 0,
           icon: Icons.battery_alert_rounded,
-          iconBgColor: AppColors.errorBg,
           iconColor: AppColors.error,
           title: 'Dự đoán độ chai pin',
           subtitle: 'AI DEGRADATION',
@@ -75,7 +89,6 @@ class AiInsightsSection extends StatelessWidget {
         _AiFeatureCard(
           index: 1,
           icon: Icons.route_rounded,
-          iconBgColor: AppColors.infoBg,
           iconColor: AppColors.info,
           title: 'Dự đoán hao hụt theo quãng đường',
           subtitle: 'AI RANGE PREDICTION',
@@ -96,7 +109,6 @@ class AiInsightsSection extends StatelessWidget {
         _AiFeatureCard(
           index: 2,
           icon: Icons.psychology_rounded,
-          iconBgColor: AppColors.successBg,
           iconColor: AppColors.success,
           title: 'Phân tích thói quen sử dụng',
           subtitle: 'AI USAGE HABITS',
@@ -115,11 +127,10 @@ class AiInsightsSection extends StatelessWidget {
   }
 }
 
-// ── AI Feature Card ──
+// ── AI Feature Card — Dark Glass Design ──
 class _AiFeatureCard extends StatelessWidget {
   final int index;
   final IconData icon;
-  final Color iconBgColor;
   final Color iconColor;
   final String title;
   final String subtitle;
@@ -132,7 +143,6 @@ class _AiFeatureCard extends StatelessWidget {
   const _AiFeatureCard({
     required this.index,
     required this.icon,
-    required this.iconBgColor,
     required this.iconColor,
     required this.title,
     required this.subtitle,
@@ -151,15 +161,8 @@ class _AiFeatureCard extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: AppColors.card,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: AppColors.border),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.03),
-              blurRadius: 12,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.glassBorder),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -169,7 +172,7 @@ class _AiFeatureCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: iconBgColor,
+                    color: iconColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Icon(icon, color: iconColor, size: 22),
@@ -206,7 +209,7 @@ class _AiFeatureCard extends StatelessWidget {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: trendColor.withValues(alpha: 0.1),
+                    color: trendColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(
@@ -231,9 +234,9 @@ class _AiFeatureCard extends StatelessWidget {
             Text(
               '"$conclusion"',
               style: const TextStyle(
-                color: AppColors.textPrimary,
+                color: AppColors.textSecondary,
                 fontSize: 14,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w500,
                 fontStyle: FontStyle.italic,
                 height: 1.5,
               ),
@@ -245,14 +248,14 @@ class _AiFeatureCard extends StatelessWidget {
                 vertical: 8,
               ),
               decoration: BoxDecoration(
-                color: AppColors.vinfastBlue.withValues(alpha: 0.05),
+                color: AppColors.glass,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Row(
                 children: [
                   Icon(
                     Icons.info_outline_rounded,
-                    color: AppColors.textTertiary,
+                    color: AppColors.textHint,
                     size: 14,
                   ),
                   SizedBox(width: 8),
@@ -260,7 +263,7 @@ class _AiFeatureCard extends StatelessWidget {
                     child: Text(
                       'Nhấn để xem chi tiết tính năng',
                       style: TextStyle(
-                        color: AppColors.textTertiary,
+                        color: AppColors.textHint,
                         fontSize: 11,
                         fontStyle: FontStyle.italic,
                       ),
@@ -268,7 +271,7 @@ class _AiFeatureCard extends StatelessWidget {
                   ),
                   Icon(
                     Icons.chevron_right_rounded,
-                    color: AppColors.textTertiary,
+                    color: AppColors.textHint,
                     size: 16,
                   ),
                 ],

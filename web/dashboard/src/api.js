@@ -134,6 +134,91 @@ export const aiCenterStatus = () =>
 export const aiRefreshInsights = (vehicleId) =>
   apiFetch('/api/admin/ai/refresh-insights', { method: 'POST', body: JSON.stringify({ vehicleId }) })
 
+// ── AI Charging Time Prediction ──
+export const aiPredictChargingTime = (payload) =>
+  apiFetch('/api/ai/predict-charging-time', { method: 'POST', body: JSON.stringify(payload) })
+
+
+// ── AI Model Management (per-type; FastAPI via Flask proxy) ──
+export const aiListTypes = () => apiFetch('/api/admin/ai/types')
+
+export const aiListModels = (typeKey = 'soc') =>
+  apiFetch(`/api/admin/ai/models/${encodeURIComponent(typeKey)}`)
+
+export const aiModelStatus = (typeKey = 'soc') =>
+  apiFetch(`/api/admin/ai/models/${encodeURIComponent(typeKey)}/status`)
+
+export const aiRollbackModel = (typeKey, version) =>
+  apiFetch(`/api/admin/ai/models/${encodeURIComponent(typeKey)}/rollback`, {
+    method: 'POST',
+    body: JSON.stringify({ version }),
+  })
+
+export const aiDeleteModel = (typeKey, version) =>
+  apiFetch(`/api/admin/ai/models/${encodeURIComponent(typeKey)}/${encodeURIComponent(version)}`, { method: 'DELETE' })
+
+export const aiQuickPredict = (typeKey, payload) =>
+  apiFetch(`/api/admin/ai/models/${encodeURIComponent(typeKey)}/predict`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+
+export const aiLoadActiveModel = (typeKey) =>
+  apiFetch(`/api/admin/ai/models/${encodeURIComponent(typeKey)}/load-active`, {
+    method: 'POST',
+  })
+
+export const aiDeactivateModel = (typeKey) =>
+  apiFetch(`/api/admin/ai/models/${encodeURIComponent(typeKey)}/deactivate`, {
+    method: 'POST',
+  })
+
+export const aiValidateVersion = (typeKey, version) =>
+  apiFetch(`/api/admin/ai/models/${encodeURIComponent(typeKey)}/validate-version`, {
+    method: 'POST',
+    body: JSON.stringify({ version }),
+  })
+
+/**
+ * Upload a model file for a given model type.
+ * @param {string} typeKey
+ * @param {File} file
+ * @param {string} version
+ * @param {string} note
+ */
+export async function aiUploadModel(typeKey, file, version, note = '', skipSmokeTest = false) {
+  const token = await getToken()
+  const form = new FormData()
+  form.append('file', file)
+  form.append('version', version)
+  form.append('note', note)
+  if (skipSmokeTest) form.append('skipSmokeTest', 'true')
+
+  try {
+    const res = await fetch(`${BASE}/api/admin/ai/models/${encodeURIComponent(typeKey)}/upload`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    })
+    const contentType = res.headers.get('content-type') || ''
+    const isJson = contentType.includes('application/json')
+    const body = isJson ? await res.json() : await res.text()
+    if (!res.ok || (isJson && body?.success === false)) {
+      let msg = (isJson && (body?.error || body?.message)) || `HTTP ${res.status}`
+      // Handle case where error/message is an object
+      if (typeof msg === 'object') {
+        msg = JSON.stringify(msg)
+      }
+      throw new Error(msg)
+    }
+    return body
+  } catch (err) {
+    emitPortalError(err?.message || 'Upload model that bai')
+    throw err
+  }
+}
+
+export const aiSocStatus = () => apiFetch('/api/soc/status')
 
 // ── Legacy ──
 export const migrateLegacy = () => apiFetch('/api/admin/migrate-legacy', { method: 'POST' })

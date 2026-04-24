@@ -1,7 +1,8 @@
-# ═══════════════════════════════════════════════════════════════
+﻿# ═══════════════════════════════════════════════════════════════
 # VinFast Battery — Start All Services
 # Admin Portal (React) → http://localhost:3000
-# Unified API          → http://localhost:5000
+# Unified API  (Flask)  → http://localhost:5000
+# AI Server    (FastAPI)→ http://localhost:8001 (internal)
 # ═══════════════════════════════════════════════════════════════
 
 $root = $PSScriptRoot
@@ -16,24 +17,26 @@ if (-not (Test-Path $pythonExe)) {
 
 function Test-PortListening {
     param([int]$Port)
-    return [bool](Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
+    $out = netstat -ano 2>$null | Select-String "LISTENING" | Select-String ":$Port "
+    return [bool]$out
 }
 
 function Stop-PortProcess {
     param([int]$Port)
-    $conns = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
-    if (-not $conns) { return }
-    $pids = $conns | Select-Object -ExpandProperty OwningProcess -Unique
-    foreach ($ownerPid in $pids) {
-        if ($ownerPid -and $ownerPid -ne $PID) {
-            try {
-                Stop-Process -Id $ownerPid -Force -ErrorAction Stop
-                Write-Host "🧹 Freed port $Port (killed PID $ownerPid)" -ForegroundColor DarkYellow
-            } catch {
-                Write-Host "⚠ Không thể dừng PID $ownerPid trên cổng $Port" -ForegroundColor Yellow
+    try {
+        $lines = netstat -ano 2>$null | Select-String "LISTENING" | Select-String ":$Port "
+        if (-not $lines) { return }
+        foreach ($line in $lines) {
+            $parts = ($line -replace '\s+', ' ').ToString().Trim().Split(' ')
+            $ownerPid = [int]$parts[-1]
+            if ($ownerPid -and $ownerPid -ne 0 -and $ownerPid -ne $PID) {
+                try {
+                    Stop-Process -Id $ownerPid -Force -ErrorAction SilentlyContinue
+                    Write-Host "`n  Freed port $Port (killed PID $ownerPid)" -ForegroundColor DarkYellow
+                } catch {}
             }
         }
-    }
+    } catch {}
 }
 
 function Wait-ForPort {
@@ -54,8 +57,15 @@ Write-Host "⚡ VinFast Battery — Starting all services..." -ForegroundColor G
 Write-Host ""
 
 # Auto cleanup ports để tránh lỗi web/api không chạy do cổng bận
-Stop-PortProcess -Port 5000
-Stop-PortProcess -Port 3000
+Write-Host "🧹 Checking ports..." -ForegroundColor DarkGray -NoNewline
+try {
+    Stop-PortProcess -Port 5000
+    Stop-PortProcess -Port 3000
+    Stop-PortProcess -Port 8001
+    Write-Host " done." -ForegroundColor DarkGray
+} catch {
+    Write-Host " skipped (permission issue)." -ForegroundColor Yellow
+}
 
 # Detect Firebase service account key (optional but recommended)
 $serviceAccountCandidates = @(
@@ -89,8 +99,16 @@ if (-not $serviceAccountPath) {
     }
 }
 
+# 0) AI Server FastAPI (port 8001) — hot-swappable SOC pipeline
+$aiToken = $env:AI_SERVER_INTERNAL_TOKEN
+if ([string]::IsNullOrWhiteSpace($aiToken)) { $aiToken = "dev-local-token" }
+
+$aiCmd = "cd /d `"$root`" && set `"AI_SERVER_INTERNAL_TOKEN=$aiToken`" && `"$pythonExe`" -m uvicorn ai_server.main:app --host 127.0.0.1 --port 8001"
+$aiProc = Start-Process cmd -ArgumentList "/k", $aiCmd -PassThru
+Write-Host "🧠 AI Server        → http://127.0.0.1:8001  (PID $($aiProc.Id))" -ForegroundColor Cyan
+
 # 1) Unified API (port 5000) — replaces app.py + ai_api.py
-$apiCmd = "cd /d `"$root`" && "
+$apiCmd = "cd /d `"$root`" && set `"AI_SERVER_URL=http://127.0.0.1:8001`" && set `"AI_SERVER_INTERNAL_TOKEN=$aiToken`" && "
 
 # Admin bootstrap for local dev:
 # - Nếu chưa set ADMIN_EMAILS thì mặc định "*" (mọi user đăng nhập đều là admin)
@@ -130,9 +148,14 @@ if (-not (Test-Path (Join-Path $dashDir "node_modules"))) {
 $dash = Start-Process -FilePath $npmCmd -WorkingDirectory $dashDir -ArgumentList "run","dev","--","--host","127.0.0.1","--port","3000","--strictPort" -PassThru
 Write-Host "📊 Admin Portal     → http://localhost:3000  (PID $($dash.Id))" -ForegroundColor Cyan
 
-# Wait for services to be ready
-$apiReady = Wait-ForPort -Port 5000 -TimeoutSec 25
+# Wait for services to be ready (Firebase init can take 30-60s)
+$aiReady = Wait-ForPort -Port 8001 -TimeoutSec 90
+$apiReady = Wait-ForPort -Port 5000 -TimeoutSec 90
 $dashReady = Wait-ForPort -Port 3000 -TimeoutSec 120
+
+if (-not $aiReady) {
+    Write-Host "⚠ AI server chưa mở cổng 8001 — Flask sẽ trả lỗi 502 khi gọi /api/soc/*" -ForegroundColor Yellow
+}
 
 Write-Host ""
 if ($apiReady -and $dashReady) {
@@ -147,6 +170,6 @@ if ($apiReady -and $dashReady) {
     Write-Host "⚠ Cả API và Dashboard chưa sẵn sàng trong thời gian chờ." -ForegroundColor Yellow
     Write-Host "   Kiểm tra 2 cửa sổ process để xem lỗi chi tiết." -ForegroundColor Yellow
 }
-Write-Host "   Or run: Stop-Process -Id $($api.Id),$($dash.Id)" -ForegroundColor DarkGray
-Write-Host "   Lưu ý: Không cần chạy python server.py thêm lần nữa sau khi start_all.ps1." -ForegroundColor DarkGray
+Write-Host "   Or run: Stop-Process -Id $($aiProc.Id),$($api.Id),$($dash.Id)" -ForegroundColor DarkGray
+Write-Host "   Note: No need to run python server.py again after start_all.ps1." -ForegroundColor DarkGray
 Write-Host ""

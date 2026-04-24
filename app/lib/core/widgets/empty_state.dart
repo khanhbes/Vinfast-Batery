@@ -2,18 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 
-/// Widget hiển thị trạng thái rỗng với icon, thông báo, và CTA button.
-///
-/// Sử dụng:
-/// ```dart
-/// EmptyState(
-///   icon: Icons.battery_charging_full_rounded,
-///   title: 'Chưa có nhật ký sạc',
-///   message: 'Bắt đầu theo dõi phiên sạc đầu tiên.',
-///   actionLabel: 'Thêm nhật ký',
-///   onAction: () => ...,
-/// )
-/// ```
+/// Widget hiển thị trạng thái rỗng — Dark Premium V3
 class EmptyState extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -42,10 +31,10 @@ class EmptyState extends StatelessWidget {
               width: 72,
               height: 72,
               decoration: BoxDecoration(
-                color: AppColors.primaryGreen.withValues(alpha: 0.10),
+                color: AppColors.vinfastBlue.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Icon(icon, size: 36, color: AppColors.primaryGreen),
+              child: Icon(icon, size: 36, color: AppColors.vinfastBlue),
             ),
             const SizedBox(height: 16),
             Text(
@@ -64,7 +53,7 @@ class EmptyState extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 14,
-                  color: AppColors.textSecondary,
+                  color: AppColors.textTertiary,
                   height: 1.4,
                 ),
               ),
@@ -78,10 +67,10 @@ class EmptyState extends StatelessWidget {
                   icon: const Icon(Icons.add_rounded, size: 18),
                   label: Text(actionLabel!),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.primaryGreen,
-                    side: const BorderSide(color: AppColors.primaryGreen),
+                    foregroundColor: AppColors.vinfastBlue,
+                    side: const BorderSide(color: AppColors.vinfastBlue),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(14),
                     ),
                     textStyle: const TextStyle(
                       fontSize: 14,

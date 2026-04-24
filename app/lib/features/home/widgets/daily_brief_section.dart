@@ -4,7 +4,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/theme/app_colors.dart';
 
 /// ========================================================================
-/// Daily Brief — Thẻ tóm tắt "Việc cần làm ngay" mỗi ngày
+/// Daily Brief — Dark Premium V3
+/// Thẻ tóm tắt "Việc cần làm ngay" — nền tối, glass borders
 /// ========================================================================
 
 class DailyBriefModel {
@@ -86,15 +87,8 @@ class _BriefCard extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppColors.card,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 12,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.glassBorder),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -102,7 +96,7 @@ class _BriefCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: _bgColor,
+              color: _iconColor.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Icon(_icon, color: _iconColor, size: 22),
@@ -124,7 +118,7 @@ class _BriefCard extends StatelessWidget {
                 Text(
                   brief.content,
                   style: const TextStyle(
-                    color: AppColors.textSecondary,
+                    color: AppColors.textTertiary,
                     fontSize: 13,
                     height: 1.5,
                   ),
@@ -182,19 +176,6 @@ class _BriefCard extends StatelessWidget {
         return AppColors.success;
       case DailyBriefType.info:
         return AppColors.info;
-    }
-  }
-
-  Color get _bgColor {
-    switch (brief.type) {
-      case DailyBriefType.alert:
-        return AppColors.errorBg;
-      case DailyBriefType.warning:
-        return AppColors.warningBg;
-      case DailyBriefType.success:
-        return AppColors.successBg;
-      case DailyBriefType.info:
-        return AppColors.infoBg;
     }
   }
 }

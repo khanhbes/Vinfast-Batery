@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../core/theme/app_colors.dart';
 import '../features/dashboard/dashboard_screen.dart';
@@ -6,7 +7,7 @@ import '../features/home/home_screen.dart';
 import '../features/maintenance/maintenance_screen.dart';
 import '../features/settings/settings_screen.dart';
 
-/// Bottom Navigation chính — 4 tabs (thiết kế V2 workspace-first)
+/// Bottom Navigation chính — 4 tabs (Dark Premium Design V3)
 class AppNavigation extends StatefulWidget {
   const AppNavigation({super.key});
 
@@ -26,6 +27,14 @@ class _AppNavigationState extends State<AppNavigation> {
 
   @override
   Widget build(BuildContext context) {
+    // Set system UI to dark theme
+    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      systemNavigationBarColor: AppColors.background,
+      systemNavigationBarIconBrightness: Brightness.light,
+    ));
+
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
@@ -33,57 +42,49 @@ class _AppNavigationState extends State<AppNavigation> {
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.9),
+          color: AppColors.background.withValues(alpha: 0.95),
           border: const Border(
-            top: BorderSide(color: AppColors.border, width: 1),
+            top: BorderSide(color: AppColors.glassBorder, width: 0.5),
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
+              color: AppColors.vinfastBlue.withValues(alpha: 0.05),
               blurRadius: 20,
               offset: const Offset(0, -4),
             ),
           ],
         ),
-        child: ClipRRect(
-          child: BackdropFilter(
-            filter: ColorFilter.mode(
-              Colors.white.withValues(alpha: 0.8),
-              BlendMode.srcOver,
-            ),
-            child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _NavItem(
-                      icon: Icons.home_rounded,
-                      label: 'Trang chủ',
-                      isSelected: _currentIndex == 0,
-                      onTap: () => setState(() => _currentIndex = 0),
-                    ),
-                    _NavItem(
-                      icon: Icons.dashboard_rounded,
-                      label: 'Dashboard',
-                      isSelected: _currentIndex == 1,
-                      onTap: () => setState(() => _currentIndex = 1),
-                    ),
-                    _NavItem(
-                      icon: Icons.build_rounded,
-                      label: 'Bảo dưỡng',
-                      isSelected: _currentIndex == 2,
-                      onTap: () => setState(() => _currentIndex = 2),
-                    ),
-                    _NavItem(
-                      icon: Icons.settings_rounded,
-                      label: 'Cài đặt',
-                      isSelected: _currentIndex == 3,
-                      onTap: () => setState(() => _currentIndex = 3),
-                    ),
-                  ],
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _NavItem(
+                  icon: Icons.home_rounded,
+                  label: 'Home',
+                  isSelected: _currentIndex == 0,
+                  onTap: () => setState(() => _currentIndex = 0),
                 ),
-              ),
+                _NavItem(
+                  icon: Icons.dashboard_rounded,
+                  label: 'Dashboard',
+                  isSelected: _currentIndex == 1,
+                  onTap: () => setState(() => _currentIndex = 1),
+                ),
+                _NavItem(
+                  icon: Icons.build_rounded,
+                  label: 'Service',
+                  isSelected: _currentIndex == 2,
+                  onTap: () => setState(() => _currentIndex = 2),
+                ),
+                _NavItem(
+                  icon: Icons.person_rounded,
+                  label: 'Settings',
+                  isSelected: _currentIndex == 3,
+                  onTap: () => setState(() => _currentIndex = 3),
+                ),
+              ],
             ),
           ),
         ),
@@ -119,7 +120,7 @@ class _NavItem extends StatelessWidget {
         ),
         decoration: BoxDecoration(
           color: isSelected
-              ? AppColors.vinfastBlue.withValues(alpha: 0.08)
+              ? AppColors.vinfastBlue.withValues(alpha: 0.15)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(16),
         ),
@@ -131,7 +132,7 @@ class _NavItem extends StatelessWidget {
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
                 color: isSelected
-                    ? AppColors.vinfastBlue.withValues(alpha: 0.1)
+                    ? AppColors.vinfastBlue.withValues(alpha: 0.2)
                     : Colors.transparent,
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -140,7 +141,7 @@ class _NavItem extends StatelessWidget {
                 color: isSelected
                     ? AppColors.vinfastBlue
                     : AppColors.textTertiary,
-                size: 24,
+                size: 22,
               ),
             ),
             const SizedBox(height: 4),
@@ -152,7 +153,7 @@ class _NavItem extends StatelessWidget {
                     : AppColors.textTertiary,
                 fontSize: 10,
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                letterSpacing: -0.2,
+                letterSpacing: 0.5,
               ),
             ),
           ],

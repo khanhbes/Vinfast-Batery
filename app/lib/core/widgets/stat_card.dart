@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 
-/// Stat card nhỏ với icon — Design System V2
+/// Stat card nhỏ với icon — Design System V3 (Dark Premium)
 class StatCard extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
@@ -26,12 +26,12 @@ class StatCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: AppColors.glassBorder),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: iconColor.withValues(alpha: 0.05),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -42,7 +42,7 @@ class StatCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.08),
+              color: iconColor.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Icon(icon, color: iconColor, size: 22),
@@ -66,7 +66,7 @@ class StatCard extends StatelessWidget {
           Text(
             title,
             style: const TextStyle(
-              color: AppColors.textSecondary,
+              color: AppColors.textTertiary,
               fontSize: 12,
               fontWeight: FontWeight.w500,
             ),
@@ -78,7 +78,7 @@ class StatCard extends StatelessWidget {
             Text(
               subtitle!,
               style: const TextStyle(
-                color: AppColors.textTertiary,
+                color: AppColors.textHint,
                 fontSize: 11,
               ),
               maxLines: 1,

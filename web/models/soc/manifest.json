@@ -1,0 +1,11 @@
+{
+  "active": "legacy-1",
+  "versions": [
+    {
+      "version": "legacy-1",
+      "uploadedAt": "2026-04-16T18:13:12.551841+00:00",
+      "note": "seeded from legacy ev_soc_pipeline.pkl"
+    }
+  ],
+  "activatedAt": "2026-04-16T18:13:12.551841+00:00"
+}

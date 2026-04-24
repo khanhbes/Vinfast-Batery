@@ -3,16 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../utils/app_error_formatter.dart';
 
-/// Widget hiển thị trạng thái lỗi với icon, thông báo, và nút thử lại.
-/// Tự động rút gọn lỗi kỹ thuật dài thành thông báo thân thiện.
-///
-/// Sử dụng:
-/// ```dart
-/// ErrorState(
-///   message: 'Không tải được dữ liệu',
-///   onRetry: () => ref.invalidate(someProvider),
-/// )
-/// ```
+/// Widget hiển thị trạng thái lỗi — Dark Premium V3
 class ErrorState extends StatelessWidget {
   final String message;
   final VoidCallback? onRetry;
@@ -70,7 +61,7 @@ class ErrorState extends StatelessWidget {
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 15,
-                color: AppColors.textSecondary,
+                color: AppColors.textTertiary,
                 height: 1.4,
               ),
             ),
@@ -84,10 +75,10 @@ class ErrorState extends StatelessWidget {
                   icon: const Icon(Icons.refresh_rounded, size: 18),
                   label: Text(retryLabel),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryGreen,
+                    backgroundColor: AppColors.vinfastBlue,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(14),
                     ),
                     textStyle: const TextStyle(
                       fontSize: 14,
