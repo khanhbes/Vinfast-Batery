@@ -96,12 +96,12 @@ class _LoginScreenState extends State<LoginScreen> {
                     width: 64,
                     height: 64,
                     decoration: BoxDecoration(
-                      color: AppColors.primaryGreen.withValues(alpha: 0.15),
+                      color: AppColors.primary.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: const Icon(
                       Icons.electric_bolt_rounded,
-                      color: AppColors.primaryGreen,
+                      color: AppColors.primary,
                       size: 32,
                     ),
                   ),
@@ -162,7 +162,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: AppColors.primaryGreen),
+                        borderSide: const BorderSide(color: AppColors.primary),
                       ),
                     ),
                     validator: (v) {
@@ -202,7 +202,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: AppColors.primaryGreen),
+                        borderSide: const BorderSide(color: AppColors.primary),
                       ),
                     ),
                     validator: (v) {
@@ -220,8 +220,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: ElevatedButton(
                       onPressed: _loading ? null : _submit,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primaryGreen,
-                        foregroundColor: Colors.white,
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: AppColors.background,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -258,7 +258,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ? 'Đã có tài khoản? Đăng nhập'
                           : 'Chưa có tài khoản? Đăng ký',
                       style: const TextStyle(
-                        color: AppColors.primaryGreen,
+                        color: AppColors.primary,
                         fontSize: 13,
                       ),
                     ),

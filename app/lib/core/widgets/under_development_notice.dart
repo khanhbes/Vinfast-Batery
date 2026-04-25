@@ -45,7 +45,7 @@ class UnderDevelopmentNotice extends StatelessWidget {
               border: Border.all(color: AppColors.glassBorder),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.vinfastBlue.withValues(alpha: 0.15),
+                  color: AppColors.primary.withValues(alpha: 0.15),
                   blurRadius: 40,
                   offset: const Offset(0, 16),
                 ),
@@ -57,12 +57,12 @@ class UnderDevelopmentNotice extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: AppColors.vinfastBlue.withValues(alpha: 0.12),
+                    color: AppColors.primary.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(24),
                   ),
                   child: const Icon(
                     Icons.construction_rounded,
-                    color: AppColors.vinfastBlue,
+                    color: AppColors.primary,
                     size: 48,
                   ),
                 ),
@@ -93,7 +93,7 @@ class UnderDevelopmentNotice extends StatelessWidget {
                   child: ElevatedButton(
                     onPressed: () => Navigator.of(ctx).pop(),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.vinfastBlue,
+                      backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(

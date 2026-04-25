@@ -3,8 +3,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/providers/app_providers.dart';
 import '../../data/repositories/ai_insights_repository.dart';
-import '../home/home_screen.dart';
 
 /// ========================================================================
 /// AiFunctionsScreen — AI Function Center
@@ -139,7 +139,7 @@ class AiFunctionsScreen extends ConsumerWidget {
     final features = [
       _AiFeature(
         icon: Icons.ev_station_rounded,
-        iconColor: AppColors.primaryGreen,
+        iconColor: AppColors.primary,
         name: 'Smart Charging ETA',
         description: 'Dự đoán thời gian sạc dựa trên tốc độ sạc lịch sử và '
             'đường cong charge-rate theo %.',
@@ -271,8 +271,8 @@ class _InsightStatusBanner extends StatelessWidget {
       icon = Icons.hourglass_empty_rounded;
       text = 'Chưa có AI insight — chờ web admin Train';
     } else if (status == 'available') {
-      bg = AppColors.primaryGreen.withValues(alpha: 0.08);
-      borderColor = AppColors.primaryGreen.withValues(alpha: 0.2);
+      bg = AppColors.primary.withValues(alpha: 0.08);
+      borderColor = AppColors.primary.withValues(alpha: 0.2);
       icon = Icons.cloud_done_rounded;
       text = 'AI insight sẵn sàng';
     } else {
@@ -295,7 +295,7 @@ class _InsightStatusBanner extends StatelessWidget {
               size: 18,
               color: hasTrained
                   ? (status == 'available'
-                      ? AppColors.primaryGreen
+                      ? AppColors.primary
                       : AppColors.warning)
                   : AppColors.warning),
           const SizedBox(width: 10),
@@ -363,7 +363,7 @@ class _DataSummaryRow extends StatelessWidget {
                 Row(
                   children: [
                     _miniStat(Icons.bolt_rounded, '$totalCharges sạc',
-                        AppColors.primaryGreen),
+                        AppColors.primary),
                     const SizedBox(width: 14),
                     _miniStat(
                         Icons.route_rounded, '$totalTrips chuyến', AppColors.info),
@@ -371,7 +371,7 @@ class _DataSummaryRow extends StatelessWidget {
                     _miniStat(
                       Icons.memory_rounded,
                       hasModel ? 'Linked' : 'No model',
-                      hasModel ? AppColors.primaryGreen : AppColors.textTertiary,
+                      hasModel ? AppColors.primary : AppColors.textTertiary,
                     ),
                   ],
                 ),
@@ -496,7 +496,7 @@ class _AiFeatureCard extends StatelessWidget {
 
   Widget _statusBadge(_FeatureStatus status) {
     final (String label, Color color) = switch (status) {
-      _FeatureStatus.active => ('Hoạt động', AppColors.primaryGreen),
+      _FeatureStatus.active => ('Hoạt động', AppColors.primary),
       _FeatureStatus.learning => ('Đang học', AppColors.info),
       _FeatureStatus.needsData => ('Cần data', AppColors.textTertiary),
       _FeatureStatus.needsModel => ('Cần link', AppColors.warning),
@@ -520,7 +520,7 @@ class _AiFeatureCard extends StatelessWidget {
 
   Color _statusColor(_FeatureStatus status) {
     return switch (status) {
-      _FeatureStatus.active => AppColors.primaryGreen,
+      _FeatureStatus.active => AppColors.primary,
       _FeatureStatus.learning => AppColors.info,
       _FeatureStatus.needsData => AppColors.textTertiary,
       _FeatureStatus.needsModel => AppColors.warning,

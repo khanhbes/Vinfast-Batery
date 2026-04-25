@@ -31,10 +31,10 @@ class EmptyState extends StatelessWidget {
               width: 72,
               height: 72,
               decoration: BoxDecoration(
-                color: AppColors.vinfastBlue.withValues(alpha: 0.12),
+                color: AppColors.primary.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Icon(icon, size: 36, color: AppColors.vinfastBlue),
+              child: Icon(icon, size: 36, color: AppColors.primary),
             ),
             const SizedBox(height: 16),
             Text(
@@ -67,8 +67,8 @@ class EmptyState extends StatelessWidget {
                   icon: const Icon(Icons.add_rounded, size: 18),
                   label: Text(actionLabel!),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.vinfastBlue,
-                    side: const BorderSide(color: AppColors.vinfastBlue),
+                    foregroundColor: AppColors.primary,
+                    side: const BorderSide(color: AppColors.primary),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),

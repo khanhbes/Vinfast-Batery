@@ -3,7 +3,7 @@ class AppConstants {
   AppConstants._();
 
   static const String appName = 'VinFast Battery';
-  static const String appVersion = '1.0.25';
+  static const String appVersion = '1.0.34';
 
   // Firestore Collection Names
   static const String vehiclesCollection = 'Vehicles';

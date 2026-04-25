@@ -124,11 +124,11 @@ class _QuickActionsFloatingState extends State<QuickActionsFloating>
             width: 60,
             height: 60,
             decoration: BoxDecoration(
-              color: AppColors.vinfastBlue,
+              color: AppColors.primary,
               borderRadius: BorderRadius.circular(22),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.vinfastBlue.withValues(alpha: 0.4),
+                  color: AppColors.primary.withValues(alpha: 0.4),
                   blurRadius: 20,
                   offset: const Offset(0, 8),
                 ),

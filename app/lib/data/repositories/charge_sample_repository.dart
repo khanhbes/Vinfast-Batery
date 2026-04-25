@@ -64,30 +64,21 @@ class ChargeSampleRepository {
       sessionId: sessionId,
       ownerUid: ownerUid,
       vehicleId: vehicleId,
-      requestedAt: requestedAt,
       startBatteryPercent: startBatteryPercent,
       targetBatteryPercent: targetBatteryPercent,
       predictedDurationSec: predictedDurationSec,
       predictedStopAt: predictedStopAt,
       modelSource: modelSource,
       modelVersion: modelVersion,
-      isBeta: isBeta,
-      actualStopBatteryPercent: actualStopBatteryPercent,
-      actualStopAt: actualStopAt,
-      predictionErrorSec: actualStopAt != null
-          ? actualStopAt.difference(predictedStopAt).inSeconds.toDouble()
+      actualEndBatteryPercent: actualStopBatteryPercent,
+      actualEndTime: actualStopAt,
+      actualDurationSec: actualStopAt != null
+          ? actualStopAt.difference(requestedAt).inSeconds.toDouble()
           : null,
-      errorPercent: _calculateErrorPercent(
-        predictedDurationSec,
-        actualStopAt,
-        requestedAt,
-      ),
       latitude: position?.latitude,
       longitude: position?.longitude,
-      source: 'app',
       eligibleForTraining: eligibleForTraining,
-      syncedToBackend: false,
-      createdAt: DateTime.now(),
+      createdAt: requestedAt,
     );
 
     // Lưu vào Firestore (local cache)
@@ -107,25 +98,13 @@ class ChargeSampleRepository {
     }
   }
 
-  /// Tính prediction error percentage
-  double? _calculateErrorPercent(
-    double predictedDurationSec,
-    DateTime? actualStopAt,
-    DateTime requestedAt,
-  ) {
-    if (actualStopAt == null) return null;
-    final actualDurationSec = actualStopAt.difference(requestedAt).inSeconds;
-    if (actualDurationSec == 0) return null;
-    return ((actualDurationSec - predictedDurationSec) / predictedDurationSec * 100).abs();
-  }
-
   /// Sync ChargeSample to backend training endpoint
   Future<void> _syncToBackend(ChargeSampleModel sample) async {
     try {
       final response = await http.post(
         Uri.parse('${_apiService.baseUrl}/api/ai/charge-sample'),
         headers: await _apiService.getHeaders(),
-        body: jsonEncode(sample.toBackendJson()),
+        body: jsonEncode(sample.toFirestore()),
       ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {

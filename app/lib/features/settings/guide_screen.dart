@@ -69,7 +69,7 @@ class GuideScreen extends StatelessWidget {
                 delegate: SliverChildListDelegate([
                   _GuideSection(
                     icon: Icons.today_rounded,
-                    iconColor: AppColors.primaryGreen,
+                    iconColor: AppColors.primary,
                     title: 'Luồng sử dụng hàng ngày',
                     content: _dailyFlow,
                     delay: 100,

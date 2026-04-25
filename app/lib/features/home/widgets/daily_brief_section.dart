@@ -51,7 +51,7 @@ class DailyBriefSection extends StatelessWidget {
             Text(
               'Xem tất cả',
               style: TextStyle(
-                color: AppColors.vinfastBlue,
+                color: AppColors.primary,
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 0.5,
@@ -130,7 +130,7 @@ class _BriefCard extends StatelessWidget {
                       Text(
                         brief.actionLabel!,
                         style: TextStyle(
-                          color: AppColors.vinfastBlue,
+                          color: AppColors.primary,
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 0.5,
@@ -139,7 +139,7 @@ class _BriefCard extends StatelessWidget {
                       const SizedBox(width: 4),
                       Icon(
                         Icons.chevron_right_rounded,
-                        color: AppColors.vinfastBlue,
+                        color: AppColors.primary,
                         size: 16,
                       ),
                     ],

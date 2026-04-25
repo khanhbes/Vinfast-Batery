@@ -25,12 +25,12 @@ class AiInsightsSection extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AppColors.vinfastBlue.withValues(alpha: 0.12),
+                  color: AppColors.primary.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: const Icon(
                   Icons.auto_awesome_rounded,
-                  color: AppColors.vinfastBlue,
+                  color: AppColors.primary,
                   size: 22,
                 ),
               ),
@@ -52,7 +52,7 @@ class AiInsightsSection extends StatelessWidget {
                     Text(
                       'AI ENGINE',
                       style: TextStyle(
-                        color: AppColors.vinfastBlue,
+                        color: AppColors.primary,
                         fontSize: 10,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 2,

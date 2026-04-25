@@ -38,7 +38,7 @@ class QuickActionFab extends StatelessWidget {
     return FloatingActionButton(
       heroTag: heroTag,
       onPressed: () => _showMenu(context),
-      backgroundColor: AppColors.vinfastBlue,
+      backgroundColor: AppColors.primary,
       elevation: 4,
       child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
     );
@@ -74,7 +74,7 @@ class _QuickActionSheet extends StatelessWidget {
         border: Border.all(color: AppColors.glassBorder),
         boxShadow: [
           BoxShadow(
-            color: AppColors.vinfastBlue.withValues(alpha: 0.1),
+            color: AppColors.primary.withValues(alpha: 0.1),
             blurRadius: 30,
             offset: const Offset(0, -8),
           ),
@@ -102,7 +102,7 @@ class _QuickActionSheet extends StatelessWidget {
               children: [
                 Icon(
                   Icons.flash_on_rounded,
-                  color: AppColors.vinfastBlue,
+                  color: AppColors.primary,
                   size: 20,
                 ),
                 const SizedBox(width: 8),
@@ -129,7 +129,7 @@ class _QuickActionSheet extends StatelessWidget {
           ).animate().fadeIn(delay: 50.ms),
           _MenuItem(
             icon: Icons.bolt_rounded,
-            iconColor: AppColors.vinfastBlue,
+            iconColor: AppColors.primary,
             label: 'Bắt đầu sạc',
             subtitle: 'Smart charging + ETA',
             onTap: () => onAction(QuickAction.startCharge),

@@ -80,7 +80,7 @@ class _AddChargeLogModalState extends ConsumerState<AddChargeLogModal> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.light(
-              primary: AppColors.vinfastBlue,
+              primary: AppColors.primary,
               onPrimary: Colors.white,
               surface: AppColors.surface,
               onSurface: AppColors.textPrimary,
@@ -104,7 +104,7 @@ class _AddChargeLogModalState extends ConsumerState<AddChargeLogModal> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.light(
-              primary: AppColors.vinfastBlue,
+              primary: AppColors.primary,
               onPrimary: Colors.white,
               surface: AppColors.surface,
               onSurface: AppColors.textPrimary,
@@ -146,7 +146,7 @@ class _AddChargeLogModalState extends ConsumerState<AddChargeLogModal> {
               Text('Đã lưu nhật ký sạc thành công!'),
             ],
           ),
-          backgroundColor: AppColors.vinfastBlue,
+          backgroundColor: AppColors.primary,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
@@ -257,7 +257,7 @@ class _AddChargeLogModalState extends ConsumerState<AddChargeLogModal> {
                               label: 'Sau sạc (%)',
                               hint: 'VD: 100',
                               icon: Icons.battery_full_rounded,
-                              iconColor: AppColors.vinfastBlue,
+                              iconColor: AppColors.primary,
                               keyboardType: TextInputType.number,
                               inputFormatters: [
                                 FilteringTextInputFormatter.digitsOnly,
@@ -303,7 +303,7 @@ class _AddChargeLogModalState extends ConsumerState<AddChargeLogModal> {
                       _buildDateTimePicker(
                         label: 'Bắt đầu sạc',
                         icon: Icons.play_circle_outline_rounded,
-                        iconColor: AppColors.vinfastBlue,
+                        iconColor: AppColors.primary,
                         value: state.startTime,
                         onTap: () async {
                           final dt = await _pickDateTime(context, state.startTime);
@@ -377,11 +377,11 @@ class _AddChargeLogModalState extends ConsumerState<AddChargeLogModal> {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: AppColors.vinfastBlue,
+              color: AppColors.primary,
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.vinfastBlue.withValues(alpha: 0.3),
+                  color: AppColors.primary.withValues(alpha: 0.3),
                   blurRadius: 12,
                   offset: const Offset(0, 4),
                 ),
@@ -440,12 +440,12 @@ class _AddChargeLogModalState extends ConsumerState<AddChargeLogModal> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppColors.vinfastBlue.withValues(alpha: 0.15),
+              color: AppColors.primary.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(
               Icons.two_wheeler_rounded,
-              color: AppColors.vinfastBlue,
+              color: AppColors.primary,
               size: 20,
             ),
           ),
@@ -536,7 +536,7 @@ class _AddChargeLogModalState extends ConsumerState<AddChargeLogModal> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.vinfastBlue, width: 1.5),
+          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
@@ -571,7 +571,7 @@ class _AddChargeLogModalState extends ConsumerState<AddChargeLogModal> {
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: value != null
-                ? AppColors.vinfastBlue.withValues(alpha: 0.5)
+                ? AppColors.primary.withValues(alpha: 0.5)
                 : AppColors.border,
           ),
         ),
@@ -635,12 +635,12 @@ class _AddChargeLogModalState extends ConsumerState<AddChargeLogModal> {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: isValid
-              ? AppColors.vinfastBlue.withValues(alpha: 0.1)
+              ? AppColors.primary.withValues(alpha: 0.1)
               : AppColors.error.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isValid
-                ? AppColors.vinfastBlue.withValues(alpha: 0.3)
+                ? AppColors.primary.withValues(alpha: 0.3)
                 : AppColors.error.withValues(alpha: 0.3),
           ),
         ),
@@ -650,7 +650,7 @@ class _AddChargeLogModalState extends ConsumerState<AddChargeLogModal> {
             Icon(
               isValid ? Icons.timer_outlined : Icons.warning_amber_rounded,
               color: isValid
-                  ? AppColors.vinfastBlue
+                  ? AppColors.primary
                   : AppColors.error,
               size: 18,
             ),
@@ -659,7 +659,7 @@ class _AddChargeLogModalState extends ConsumerState<AddChargeLogModal> {
               isValid ? 'Thời gian sạc: $durationText' : durationText,
               style: TextStyle(
                 color: isValid
-                    ? AppColors.vinfastBlue
+                    ? AppColors.primary
                     : AppColors.error,
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
@@ -677,7 +677,7 @@ class _AddChargeLogModalState extends ConsumerState<AddChargeLogModal> {
       child: ElevatedButton(
         onPressed: state.isLoading ? null : _onSave,
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.vinfastBlue,
+          backgroundColor: AppColors.primary,
           disabledBackgroundColor: AppColors.border,
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(

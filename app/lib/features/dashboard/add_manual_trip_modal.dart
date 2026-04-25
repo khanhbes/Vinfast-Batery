@@ -346,7 +346,7 @@ class _AddManualTripModalState extends ConsumerState<AddManualTripModal> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Đã lưu chuyến đi thành công!'),
-            backgroundColor: AppColors.primaryGreen,
+            backgroundColor: AppColors.primary,
           ),
         );
       }

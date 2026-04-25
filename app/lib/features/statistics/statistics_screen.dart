@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:fl_chart/fl_chart.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/providers/app_providers.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/error_state.dart';
 import '../../core/widgets/loading_skeleton.dart';
@@ -13,7 +14,6 @@ import '../../data/repositories/ai_insights_repository.dart';
 import '../../data/services/battery_capacity_service.dart';
 import '../../data/repositories/vehicle_spec_repository.dart';
 import '../../data/repositories/trip_log_repository.dart';
-import '../home/home_screen.dart';
 
 // =============================================================================
 // Statistics Screen - Biểu đồ & phân tích
@@ -32,7 +32,7 @@ class StatisticsScreen extends ConsumerWidget {
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: RefreshIndicator(
-          color: AppColors.primaryGreen,
+          color: AppColors.primary,
           backgroundColor: AppColors.surface,
           onRefresh: () async {
             ref.invalidate(chargeLogsProvider(vehicleId));
@@ -238,7 +238,7 @@ class StatisticsScreen extends ConsumerWidget {
         children: [
           StatCard(
             icon: Icons.battery_charging_full_rounded,
-            iconColor: AppColors.primaryGreen,
+            iconColor: AppColors.primary,
             title: 'Tổng lần sạc',
             value: '$totalCharges',
           ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.2),
@@ -287,7 +287,7 @@ class StatisticsScreen extends ConsumerWidget {
       subtitle: '${recentLogs.length} lần sạc gần nhất',
       delay: 600,
       legend: const [
-        _LegendItem(color: AppColors.primaryGreen, label: 'Sạc được (%)'),
+        _LegendItem(color: AppColors.primary, label: 'Sạc được (%)'),
         _LegendItem(color: AppColors.error, label: 'Pin bắt đầu (%)'),
       ],
       child: SizedBox(
@@ -335,14 +335,14 @@ class StatisticsScreen extends ConsumerWidget {
                 spots: chargeGainSpots,
                 isCurved: true,
                 curveSmoothness: 0.3,
-                color: AppColors.primaryGreen,
+                color: AppColors.primary,
                 barWidth: 3,
                 isStrokeCapRound: true,
                 dotData: FlDotData(
                   show: true,
                   getDotPainter: (_, _, _, _) => FlDotCirclePainter(
                     radius: 3,
-                    color: AppColors.primaryGreen,
+                    color: AppColors.primary,
                     strokeWidth: 1,
                     strokeColor: Colors.white,
                   ),
@@ -353,8 +353,8 @@ class StatisticsScreen extends ConsumerWidget {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      AppColors.primaryGreen.withValues(alpha: 0.3),
-                      AppColors.primaryGreen.withValues(alpha: 0.0),
+                      AppColors.primary.withValues(alpha: 0.3),
+                      AppColors.primary.withValues(alpha: 0.0),
                     ],
                   ),
                 ),
@@ -377,7 +377,7 @@ class StatisticsScreen extends ConsumerWidget {
                 tooltipRoundedRadius: 8,
                 getTooltipItems: (spots) {
                   return spots.map((s) {
-                    final color = s.barIndex == 0 ? AppColors.primaryGreen : AppColors.error;
+                    final color = s.barIndex == 0 ? AppColors.primary : AppColors.error;
                     final label = s.barIndex == 0 ? 'Sạc được' : 'Pin bắt đầu';
                     return LineTooltipItem(
                       '$label: ${s.y.toInt()}%',
@@ -426,7 +426,7 @@ class StatisticsScreen extends ConsumerWidget {
                 ? 'Trung bình'
                 : 'Cần kiểm tra';
     final healthColor = healthScore >= 80
-        ? AppColors.primaryGreen
+        ? AppColors.primary
         : healthScore >= 60
             ? AppColors.warning
             : AppColors.error;
@@ -854,7 +854,7 @@ class _PatternTile extends StatelessWidget {
             Text(
               trailing,
               style: const TextStyle(
-                color: AppColors.primaryGreen,
+                color: AppColors.primary,
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
               ),
@@ -1075,7 +1075,7 @@ class _AiPredictionWidgetState extends ConsumerState<_AiPredictionWidget> {
     final recs = pred['recommendations'] as List? ?? [];
 
     final healthColor = healthScore >= 80
-        ? AppColors.primaryGreen
+        ? AppColors.primary
         : healthScore >= 60
             ? AppColors.warning
             : AppColors.error;
@@ -1177,7 +1177,7 @@ class _AiPredictionWidgetState extends ConsumerState<_AiPredictionWidget> {
                 ? AppColors.error
                 : severity == 'medium'
                     ? AppColors.warning
-                    : AppColors.primaryGreen;
+                    : AppColors.primary;
             return Padding(
               padding: const EdgeInsets.only(bottom: 6),
               child: Row(
@@ -1499,7 +1499,7 @@ class _AiCapacityDetailPanelState
     final r = _result!;
 
     final alertColor = switch (r.alertLevel) {
-      SoHAlertLevel.none => AppColors.primaryGreen,
+      SoHAlertLevel.none => AppColors.primary,
       SoHAlertLevel.mild => AppColors.warning,
       SoHAlertLevel.moderate => const Color(0xFFFF9800),
       SoHAlertLevel.severe => AppColors.error,
@@ -1728,7 +1728,7 @@ class _AiCapacityDetailPanelState
 
   Widget _buildConfBadge(CapacityConfidence c) {
     final color = switch (c) {
-      CapacityConfidence.high => AppColors.primaryGreen,
+      CapacityConfidence.high => AppColors.primary,
       CapacityConfidence.medium => AppColors.warning,
       CapacityConfidence.low => AppColors.textSecondary,
     };

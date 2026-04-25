@@ -283,7 +283,7 @@ class _RoutePredictionCardState extends ConsumerState<RoutePredictionCard> {
   }
 
   Widget _buildResult(RoutePredictionResult result) {
-    final color = result.isEnough ? AppColors.primaryGreen : AppColors.error;
+    final color = result.isEnough ? AppColors.primary : AppColors.error;
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -327,7 +327,7 @@ class _RoutePredictionCardState extends ConsumerState<RoutePredictionCard> {
             children: [
               _statItem('Tiêu hao', '-${result.estimatedBatteryDrain}%', AppColors.warning),
               _statItem('Còn lại', '${result.remainingBattery}%',
-                  result.remainingBattery >= 20 ? AppColors.primaryGreen : AppColors.error),
+                  result.remainingBattery >= 20 ? AppColors.primary : AppColors.error),
               _statItem('Hiệu suất', '${result.efficiencyUsed.toStringAsFixed(2)} km/%', AppColors.info),
             ],
           ),
@@ -350,7 +350,7 @@ class _RoutePredictionCardState extends ConsumerState<RoutePredictionCard> {
     Color statusColor = AppColors.textTertiary;
     if (result.insightStatus == 'available') {
       statusText = 'Insight mới';
-      statusColor = AppColors.primaryGreen;
+      statusColor = AppColors.primary;
     } else if (result.insightStatus == 'stale') {
       statusText = 'Cần refresh từ web';
       statusColor = AppColors.warning;
