@@ -77,7 +77,7 @@ class SessionSummaryModal extends StatelessWidget {
           border: Border.all(color: AppColors.glassBorder),
           boxShadow: [
             BoxShadow(
-              color: AppColors.vinfastBlue.withValues(alpha: 0.15),
+              color: AppColors.primary.withValues(alpha: 0.15),
               blurRadius: 40,
               offset: const Offset(0, 16),
             ),
@@ -212,10 +212,10 @@ class SessionSummaryModal extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppColors.vinfastBlue.withValues(alpha: 0.05),
+                color: AppColors.primary.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: AppColors.vinfastBlue.withValues(alpha: 0.1),
+                  color: AppColors.primary.withValues(alpha: 0.1),
                 ),
               ),
               child: Column(
@@ -224,7 +224,7 @@ class SessionSummaryModal extends StatelessWidget {
                   Text(
                     'GỢI Ý TIẾP THEO',
                     style: TextStyle(
-                      color: AppColors.vinfastBlue,
+                      color: AppColors.primary,
                       fontSize: 10,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 1.5,
@@ -253,7 +253,7 @@ class SessionSummaryModal extends StatelessWidget {
               child: ElevatedButton(
                 onPressed: onClose,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.vinfastBlue,
+                  backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 18),
                   shape: RoundedRectangleBorder(

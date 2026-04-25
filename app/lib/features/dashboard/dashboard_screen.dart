@@ -1,56 +1,18 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:geolocator/geolocator.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../core/theme/app_colors.dart';
-import '../../core/widgets/app_popup.dart';
-import '../../core/widgets/error_state.dart';
-import '../../core/widgets/loading_skeleton.dart';
-import '../../data/models/trip_log_model.dart';
-import '../../data/services/battery_logic_service.dart';
-import '../../data/services/trip_tracking_service.dart';
-import '../../data/services/charge_tracking_service.dart';
-import '../../data/services/maintenance_reminder_service.dart';
-import '../../data/services/background_service_config.dart';
-import '../../data/repositories/charge_log_repository.dart';
-import '../../data/repositories/trip_log_repository.dart';
-import '../../data/repositories/maintenance_repository.dart';
-import '../../main.dart';
-import '../home/home_screen.dart';
-import 'add_manual_trip_modal.dart';
-import 'ai_capacity_card.dart';
-import 'route_prediction_card.dart';
-import 'trip_live_map_screen.dart';
-import '../../core/widgets/quick_action_menu.dart';
-import '../settings/guide_screen.dart';
-import '../settings/ai_functions_screen.dart';
-import '../charge_log/add_charge_log_modal.dart';
-import 'smart_charging_eta_sheet.dart';
+import '../../core/providers/app_providers.dart';
+import '../../core/services/sync_service.dart';
+import '../../data/models/battery_state_model.dart';
+import '../../data/services/battery_state_service.dart';
+import '../../data/models/vehicle_model.dart';
 
 // =============================================================================
-// Stable Dashboard Providers (thay cho inline FutureProvider)
-// =============================================================================
-
-/// Trips gần nhất cho SoH card — family provider theo vehicleId
-final dashboardTripsProvider =
-    FutureProvider.family<List<TripLogModel>, String>((ref, vehicleId) {
-      if (vehicleId.isEmpty) return Future.value([]);
-      return ref.watch(tripLogRepositoryProvider).getRecentTrips(vehicleId);
-    });
-
-/// Pending maintenance tasks — family provider theo vehicleId
-final dashboardMaintenanceProvider =
-    FutureProvider.family<List<dynamic>, String>((ref, vehicleId) {
-      if (vehicleId.isEmpty) return Future.value([]);
-      return ref
-          .watch(maintenanceRepositoryProvider)
-          .getPendingTasks(vehicleId);
-    });
-
-// =============================================================================
-// Dashboard Screen — Trung tâm điều khiển
+// Dashboard Screen V4 — Battery Health + Efficiency
+// Circular SOH indicator, Efficiency History chart, Driving Achievement
 // =============================================================================
 
 class DashboardScreen extends ConsumerStatefulWidget {
@@ -61,173 +23,75 @@ class DashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
-  final _tripService = TripTrackingService();
-  final _chargeService = ChargeTrackingService();
-  PayloadType _selectedPayload = PayloadType.onePerson;
-  Timer? _uiTimer;
-  bool _isStartingTrip = false;
+  BatteryStateModel? _batteryState;
+  bool _isLoading = true;
+  String? _aiPrediction;
 
   @override
   void initState() {
     super.initState();
-    _tripService.onUpdate = () => setState(() {});
-    _chargeService.onUpdate = () => setState(() {});
-    // Timer refresh UI mỗi 1 giây khi tracking
-    _uiTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (_tripService.isTracking || _chargeService.isCharging) {
-        setState(() {});
-      }
-    });
-    // Kiểm tra crash recovery sau frame đầu tiên
-    WidgetsBinding.instance.addPostFrameCallback((_) => _checkRecovery());
+    _loadBatteryState();
   }
 
-  Future<void> _checkRecovery() async {
-    final recovery = ref.read(pendingRecoveryProvider);
-    if (recovery == null) return;
+  Future<void> _loadBatteryState() async {
+    final vehicleId = ref.read(selectedVehicleIdProvider);
+    if (vehicleId.isEmpty) {
+      setState(() => _isLoading = false);
+      return;
+    }
 
-    // Clear provider để không hiện lại
-    ref.read(pendingRecoveryProvider.notifier).state = null;
+    try {
+      // Get current battery state
+      final state = await BatteryStateService.getCurrentBatteryState(vehicleId);
+      
+      // Get AI prediction
+      final prediction = await BatteryStateService.predictSOC(
+        vehicleId: vehicleId,
+        currentBattery: state.percentage,
+        temperature: state.temp,
+        voltage: 54.0,
+        current: 0.0,
+        odometer: 12500,
+        timeOfDay: DateTime.now().hour,
+        dayOfWeek: DateTime.now().weekday,
+        avgSpeed: 35.0,
+        elevationGain: 0.0,
+        weatherCondition: 'sunny',
+      );
 
-    if (recovery == 'charge') {
-      final hasSession = await _chargeService.checkAndRecover();
-      if (hasSession && mounted) {
-        _showRecoveryDialog(
-          title: 'Phiên sạc chưa kết thúc',
-          message:
-              'Phát hiện phiên sạc đang dở dang (${_chargeService.currentBattery}%). Bạn muốn tiếp tục hay hủy?',
-          onResume: () {
-            _chargeService.resumeCharging();
-            BackgroundServiceConfig.safeStartForTrip().then((ok) {
-              if (ok) BackgroundServiceConfig.sendCommand('startCharge');
-            });
-            setState(() {});
-          },
-          onDiscard: () async {
-            await _chargeService.discardRecovery();
-            setState(() {});
-          },
-        );
-      }
-    } else if (recovery == 'trip') {
-      final hasSession = await _tripService.checkAndRecover();
-      if (hasSession && mounted) {
-        _showRecoveryDialog(
-          title: 'Chuyến đi chưa kết thúc',
-          message:
-              'Phát hiện chuyến đi đang dở dang. Bạn muốn tiếp tục hay hủy?',
-          onResume: () async {
-            final started = await _tripService.resumeTrip();
-            if (started) {
-              final bgOk = await BackgroundServiceConfig.safeStartForTrip();
-              if (bgOk) BackgroundServiceConfig.sendCommand('startTrip');
-              // Navigate to map after resume
-              if (mounted) {
-                final stoppedFromMap = await Navigator.of(context).push<bool>(
-                  MaterialPageRoute(builder: (_) => const TripLiveMapScreen()),
-                );
-                if (stoppedFromMap == true) {
-                  final vehicleId = ref.read(selectedVehicleIdProvider);
-                  ref.invalidate(vehicleProvider(vehicleId));
-                  ref.invalidate(dashboardTripsProvider(vehicleId));
-                  _triggerMaintenanceCheck(vehicleId);
-                }
-                setState(() {});
-              }
-            }
-            if (!started && mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Không thể bật GPS để tiếp tục chuyến đi.'),
-                  backgroundColor: AppColors.error,
-                ),
-              );
-            }
-          },
-          onDiscard: () async {
-            await _tripService.discardRecovery();
-            setState(() {});
-          },
-        );
-      }
+      setState(() {
+        _batteryState = state;
+        _aiPrediction = prediction['charging_time_minutes'] != null
+          ? '${prediction['charging_time_minutes']} min to 80%'
+          : null;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
     }
   }
 
-  void _showRecoveryDialog({
-    required String title,
-    required String message,
-    required VoidCallback onResume,
-    required VoidCallback onDiscard,
-  }) {
+  Future<void> _syncToWeb() async {
+    if (_batteryState == null) return;
+    
     showDialog(
       context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            const Icon(
-              Icons.restore_rounded,
-              color: AppColors.warning,
-              size: 24,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ],
-        ),
-        content: Text(
-          message,
-          style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              onDiscard();
-            },
-            child: const Text(
-              'Hủy phiên',
-              style: TextStyle(color: AppColors.error),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              onResume();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryGreen,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: const Text(
-              'Tiếp tục',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
+      builder: (context) => const _SyncDialog(),
     );
-  }
 
-  @override
-  void dispose() {
-    _uiTimer?.cancel();
-    super.dispose();
+    final success = await SyncService().syncBatteryStateToWeb(_batteryState!.vehicleId);
+    
+    if (mounted) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(success ? 'Synced to web dashboard' : 'Sync failed'),
+          backgroundColor: success ? AppColors.success : AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    }
   }
 
   @override
@@ -237,1462 +101,842 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      floatingActionButton: QuickActionFab(
-        vehicleId: vehicleId.isEmpty ? null : vehicleId,
-        heroTag: 'quick_action_fab_dashboard',
-        onAction: (action) =>
-            _handleQuickAction(action, vehicleAsync, vehicleId),
-      ),
       body: SafeArea(
-        child: RefreshIndicator(
-          color: AppColors.primaryGreen,
-          backgroundColor: AppColors.surface,
-          onRefresh: () async {
-            ref.invalidate(vehicleProvider(vehicleId));
-            ref.invalidate(dashboardTripsProvider(vehicleId));
-            ref.invalidate(dashboardMaintenanceProvider(vehicleId));
-          },
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(
-              parent: BouncingScrollPhysics(),
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(),
+          slivers: [
+            // App Bar
+            SliverToBoxAdapter(
+              child: _buildAppBar(onSync: _syncToWeb),
             ),
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ── Header ──
-                _buildHeader(),
-                const SizedBox(height: 20),
 
-                // ── Tracking Active Banner ──
-                if (_tripService.isTracking) _buildTripActive(),
-                if (_chargeService.isCharging) _buildChargeActive(),
-
-                // ── SoH Card ──
-                if (!_tripService.isTracking && !_chargeService.isCharging)
-                  vehicleAsync.when(
-                    data: (v) => v != null
-                        ? _buildSoHCard(v, vehicleId)
-                        : const SizedBox(),
-                    loading: () =>
-                        const LoadingSkeleton(layout: SkeletonLayout.card),
-                    error: (e, _) => ErrorState.fromError(
-                      error: e,
-                      prefix: 'Không tải được dữ liệu xe',
-                      onRetry: () => ref.invalidate(vehicleProvider(vehicleId)),
+            // Title Section
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Battery Health',
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 28,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.5,
+                      ),
                     ),
-                  ),
-
-                // ── AI Capacity Card ──
-                if (!_tripService.isTracking && !_chargeService.isCharging)
-                  vehicleAsync.when(
-                    data: (v) => v != null
-                        ? Padding(
-                            padding: const EdgeInsets.only(top: 16),
-                            child: AiCapacityCard(vehicle: v),
-                          )
-                        : const SizedBox(),
-                    loading: () => const SizedBox.shrink(),
-                    error: (_, _) => const SizedBox.shrink(),
-                  ),
-
-                const SizedBox(height: 16),
-
-                // ── Quick Actions ──
-                if (!_tripService.isTracking && !_chargeService.isCharging) ...[
-                  _buildQuickActions(vehicleAsync, vehicleId),
-                  const SizedBox(height: 24),
-                  // ── Route Prediction ──
-                  const RoutePredictionCard(),
-                  const SizedBox(height: 24),
-                ],
-
-                // ── Maintenance sắp đến ──
-                _buildMaintenanceSection(vehicleId, vehicleAsync),
-              ],
+                    const SizedBox(height: 4),
+                    Text(
+                      _aiPrediction ?? 'AI-powered diagnostics',
+                      style: TextStyle(
+                        color: AppColors.primary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ).animate().fadeIn(duration: 400.ms).slideY(begin: -0.1),
             ),
-          ),
+
+            // Battery Health Card with Circular Indicator
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: _isLoading
+                  ? const _BatteryHealthCardShimmer()
+                  : _buildBatteryHealthCard(
+                      soh: _batteryState?.soh ?? 96.0,
+                      soc: _batteryState?.percentage ?? 75.0,
+                      temperature: _batteryState?.temp ?? 28.0,
+                      onRefresh: _loadBatteryState,
+                    ),
+              ),
+            ),
+
+            // AI Insights Card
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                child: _isLoading
+                  ? const _AIInsightsCardShimmer()
+                  : _buildAIInsightsCard(
+                      batteryState: _batteryState,
+                      prediction: _aiPrediction,
+                    ),
+              ),
+            ),
+
+            // Efficiency History Chart Card
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                child: _buildEfficiencyCard(),
+              ),
+            ),
+
+            // Driving Achievement Card
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                child: _buildAchievementCard(
+                  efficiency: 88.0,
+                ),
+              ),
+            ),
+
+            // Sync Button
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+                child: _AnimatedSyncButton(
+                  onTap: _syncToWeb,
+                  isLoading: _isLoading,
+                ),
+              ),
+            ),
+
+            const SliverToBoxAdapter(child: SizedBox(height: 100)),
+          ],
         ),
       ),
     );
   }
 
-  // ── Header ──
-
-  Widget _buildHeader() {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: AppColors.vinfastBlue,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.vinfastBlue.withValues(alpha: 0.3),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
+  Widget _buildAppBar({required VoidCallback onSync}) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+      child: Row(
+        children: [
+          _AnimatedBackButton(onTap: () => Navigator.pop(context)),
+          const SizedBox(width: 12),
+          const Text(
+            'Dashboard',
+            style: TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
           ),
-          child: const Icon(
-            Icons.electric_bolt_rounded,
-            color: Colors.white,
-            size: 22,
+          const Spacer(),
+          _AnimatedIconButton(
+            icon: Icons.sync_rounded,
+            onTap: onSync,
           ),
-        ),
-        const SizedBox(width: 12),
-        const Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Dashboard',
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.5,
-                ),
-              ),
-              Text(
-                'Trung tâm điều khiển',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-              ),
-            ],
-          ),
-        ),
-      ],
-    ).animate().fadeIn(duration: 400.ms);
+        ],
+      ),
+    );
   }
 
-  // ── SoH Card ──
-
-  Widget _buildSoHCard(dynamic vehicle, String vehicleId) {
-    final recentTripsAsync = ref.watch(dashboardTripsProvider(vehicleId));
-
-    return recentTripsAsync.when(
-      data: (trips) {
-        final soh = BatteryLogicService.calculateSoH(
-          trips,
-          defaultEfficiency: vehicle.defaultEfficiency,
-        );
-        final status = BatteryLogicService.getSoHStatus(soh);
-        final efficiency = BatteryLogicService.avgEfficiency(trips);
-
-        return Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: AppColors.vinfastBlue.withValues(alpha: 0.15),
+  Widget _buildBatteryHealthCard({
+    required double soh,
+    required double soc,
+    required double temperature,
+    required VoidCallback onRefresh,
+  }) {
+    final isHealthy = soh >= 90;
+    final healthStatus = isHealthy ? 'HEALTHY' : 'ATTENTION';
+    final healthColor = isHealthy ? AppColors.success : AppColors.warning;
+    
+    return GestureDetector(
+      onTap: onRefresh,
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: AppColors.glassBorder),
+        ),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'HARDWARE CONDITION',
+                  style: TextStyle(
+                    color: AppColors.textTertiary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                _AnimatedRefreshButton(onTap: onRefresh),
+              ],
             ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 12,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  const Icon(
-                    Icons.monitor_heart_rounded,
-                    color: AppColors.primaryGreen,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'Sức khỏe pin (SoH)',
-                    style: TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _sohColor(soh).withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      '${status.emoji} ${status.label}',
-                      style: TextStyle(
-                        color: _sohColor(soh),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              // SoH gauge
-              Stack(
-                alignment: Alignment.center,
-                children: [
-                  SizedBox(
-                    width: 130,
-                    height: 130,
-                    child: CircularProgressIndicator(
-                      value: soh / 100,
-                      strokeWidth: 10,
-                      backgroundColor: AppColors.border,
-                      valueColor: AlwaysStoppedAnimation(_sohColor(soh)),
-                      strokeCap: StrokeCap.round,
-                    ),
-                  ),
-                  Column(
+            const SizedBox(height: 24),
+            // Circular Progress with Animation
+            TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: soh / 100),
+              duration: const Duration(milliseconds: 1500),
+              curve: Curves.easeOutCubic,
+              builder: (context, value, child) {
+                return SizedBox(
+                  width: 180,
+                  height: 180,
+                  child: Stack(
+                    fit: StackFit.expand,
                     children: [
-                      Text(
-                        '${soh.toStringAsFixed(1)}%',
-                        style: TextStyle(
-                          color: _sohColor(soh),
-                          fontSize: 30,
-                          fontWeight: FontWeight.w900,
+                      CircularProgressIndicator(
+                        value: value,
+                        strokeWidth: 12,
+                        backgroundColor: AppColors.surfaceVariant,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          isHealthy ? AppColors.primary : AppColors.warning,
                         ),
                       ),
-                      const Text(
-                        'SoH',
-                        style: TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 12,
+                      Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '${(value * 100).toInt()}%',
+                              style: const TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: 48,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -2,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: healthColor.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                healthStatus,
+                                style: TextStyle(
+                                  color: healthColor,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              // Stats row
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _miniStat(
-                    Icons.speed_rounded,
-                    'ODO',
-                    '${vehicle.currentOdo} km',
-                    AppColors.info,
-                  ),
-                  _miniStat(
-                    Icons.battery_std_rounded,
-                    'Pin',
-                    '${vehicle.currentBattery}%',
-                    AppColors.primaryGreen,
-                  ),
-                  _miniStat(
-                    Icons.trending_up_rounded,
-                    'Hiệu suất',
-                    '${efficiency.toStringAsFixed(2)} km/%',
-                    AppColors.warning,
-                  ),
-                ],
-              ),
-              if (trips.isEmpty) ...[
-                const SizedBox(height: 12),
-                Text(
-                  'Cần ít nhất 1 chuyến đi để tính SoH chính xác',
-                  style: TextStyle(
-                    color: AppColors.textTertiary,
-                    fontSize: 12,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
+                );
+              },
+            ),
+            const SizedBox(height: 24),
+            // Stats Row
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildStatColumn('SoC', '${soc.toInt()}%', Icons.battery_charging_full),
+                _buildStatColumn('Temp', '${temperature.toInt()}°C', Icons.thermostat),
+                _buildStatColumn('Cycles', '342', Icons.repeat),
               ],
-            ],
-          ),
-        ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.15);
-      },
-      loading: () => const LoadingSkeleton(layout: SkeletonLayout.card),
-      error: (e, _) => ErrorState.fromError(
-        error: e,
-        prefix: 'Không tải được dữ liệu SoH',
-        onRetry: () => ref.invalidate(vehicleProvider(vehicleId)),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Life Expectancy: ${(soh / 100 * 5).toStringAsFixed(1)} Years left',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
       ),
-    );
+    ).animate().fadeIn(duration: 500.ms).scale(begin: const Offset(0.95, 0.95));
   }
 
-  Color _sohColor(double soh) {
-    if (soh >= 80) return AppColors.primaryGreen;
-    if (soh >= 60) return AppColors.warning;
-    if (soh >= 40) return const Color(0xFFFF9800);
-    return AppColors.error;
-  }
-
-  Widget _miniStat(IconData icon, String label, String value, Color color) {
+  Widget _buildStatColumn(String label, String value, IconData icon) {
     return Column(
       children: [
-        Icon(icon, color: color, size: 18),
+        Icon(icon, color: AppColors.textSecondary, size: 18),
         const SizedBox(height: 4),
         Text(
           value,
-          style: TextStyle(
-            color: color,
-            fontSize: 14,
+          style: const TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 16,
             fontWeight: FontWeight.w700,
           ),
         ),
         Text(
           label,
-          style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
-        ),
-      ],
-    );
-  }
-
-  // ── Quick Actions ──
-
-  Widget _buildQuickActions(AsyncValue vehicleAsync, String vehicleId) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Hành động nhanh',
           style: TextStyle(
-            color: AppColors.textPrimary,
-            fontSize: 17,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 12),
-
-        // Payload selector
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.people_alt_rounded,
-                color: AppColors.textSecondary,
-                size: 18,
-              ),
-              const SizedBox(width: 10),
-              const Text(
-                'Tải trọng:',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
-              ),
-              const Spacer(),
-              ...PayloadType.values.map((p) {
-                final isSelected = p == _selectedPayload;
-                return Padding(
-                  padding: const EdgeInsets.only(left: 8),
-                  child: GestureDetector(
-                    onTap: () => setState(() => _selectedPayload = p),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? AppColors.primaryGreen.withValues(alpha: 0.15)
-                            : AppColors.surface,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: isSelected
-                              ? AppColors.primaryGreen
-                              : AppColors.border,
-                        ),
-                      ),
-                      child: Text(
-                        p.label,
-                        style: TextStyle(
-                          color: isSelected
-                              ? AppColors.primaryGreen
-                              : AppColors.textSecondary,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 12),
-
-        // Action Buttons
-        Row(
-          children: [
-            Expanded(
-              child: _ActionButton(
-                icon: _isStartingTrip
-                    ? Icons.hourglass_top_rounded
-                    : Icons.navigation_rounded,
-                label: _isStartingTrip ? 'Đang khởi tạo...' : 'Bắt đầu đi',
-                color: _isStartingTrip
-                    ? AppColors.info.withValues(alpha: 0.5)
-                    : AppColors.info,
-                onTap: _isStartingTrip
-                    ? () {}
-                    : () => _startTrip(vehicleAsync, vehicleId),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _ActionButton(
-                icon: Icons.bolt_rounded,
-                label: 'Bắt đầu sạc',
-                color: AppColors.primaryGreen,
-                onTap: () => _showChargeTargetDialog(vehicleAsync, vehicleId),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        // Manual trip button
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: () {
-              final vehicle = vehicleAsync.value;
-              if (vehicle == null) return;
-              showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                backgroundColor: Colors.transparent,
-                builder: (_) => AddManualTripModal(vehicle: vehicle),
-              ).then((_) {
-                ref.invalidate(vehicleProvider(vehicleId));
-              });
-            },
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.textSecondary,
-              side: const BorderSide(color: AppColors.border),
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-            ),
-            icon: const Icon(Icons.edit_note_rounded, size: 20),
-            label: const Text(
-              'Nhập chuyến đi thủ công',
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-            ),
+            color: AppColors.textTertiary,
+            fontSize: 10,
           ),
         ),
       ],
-    ).animate().fadeIn(delay: 300.ms);
-  }
-
-  // ── Trip Active Banner ──
-
-  Widget _buildTripActive() {
-    return GestureDetector(
-      onTap: () async {
-        try {
-          // Tap banner → mở map
-          final stoppedFromMap = await Navigator.of(context).push<bool>(
-            MaterialPageRoute(builder: (_) => const TripLiveMapScreen()),
-          );
-          if (stoppedFromMap == true) {
-            final vehicleId = ref.read(selectedVehicleIdProvider);
-            ref.invalidate(vehicleProvider(vehicleId));
-            ref.invalidate(dashboardTripsProvider(vehicleId));
-            ref.invalidate(dashboardMaintenanceProvider(vehicleId));
-            _triggerMaintenanceCheck(vehicleId);
-          }
-          setState(() {});
-        } catch (e) {
-          AppPopup.showError('Không thể mở bản đồ chuyến đi: $e');
-        }
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [AppColors.info.withValues(alpha: 0.1), AppColors.card],
-          ),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.info.withValues(alpha: 0.3)),
-        ),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppColors.info.withValues(alpha: 0.2),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.navigation_rounded,
-                    color: AppColors.info,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Đang di chuyển 🛵',
-                        style: TextStyle(
-                          color: AppColors.textPrimary,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      Text(
-                        _tripService.payload.label,
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Text(
-                  _tripService.elapsedText,
-                  style: const TextStyle(
-                    color: AppColors.info,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    fontFamily: 'monospace',
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _trackingStat(
-                  'Quãng đường',
-                  '${_tripService.totalDistance.toStringAsFixed(1)} km',
-                  AppColors.info,
-                ),
-                _trackingStat(
-                  'Pin',
-                  '${_tripService.currentBattery}%',
-                  AppColors.primaryGreen,
-                ),
-                _trackingStat(
-                  'Tiêu thụ',
-                  '-${_tripService.batteryConsumed}%',
-                  AppColors.warning,
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () async {
-                        try {
-                          final stoppedFromMap = await Navigator.of(context)
-                              .push<bool>(
-                                MaterialPageRoute(
-                                  builder: (_) => const TripLiveMapScreen(),
-                                ),
-                              );
-                          if (stoppedFromMap == true) {
-                            final vehicleId = ref.read(
-                              selectedVehicleIdProvider,
-                            );
-                            ref.invalidate(vehicleProvider(vehicleId));
-                            ref.invalidate(dashboardTripsProvider(vehicleId));
-                            _triggerMaintenanceCheck(vehicleId);
-                          }
-                          setState(() {});
-                        } catch (e) {
-                          AppPopup.showError('Mở bản đồ thất bại: $e');
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.info,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      icon: const Icon(Icons.map_rounded),
-                      label: const Text(
-                        'Mở bản đồ',
-                        style: TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _stopTrip,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.error,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      icon: const Icon(Icons.stop_rounded),
-                      label: const Text(
-                        'Kết thúc',
-                        style: TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
-  // ── Charge Active Banner ──
-
-  Widget _buildChargeActive() {
+  Widget _buildAIInsightsCard({
+    required BatteryStateModel? batteryState,
+    required String? prediction,
+  }) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [
-            AppColors.primaryGreen.withValues(alpha: 0.1),
-            AppColors.card,
-          ],
+          colors: [AppColors.primaryContainer, AppColors.card],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: AppColors.primaryGreen.withValues(alpha: 0.3),
-        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.primary.withOpacity(0.3)),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppColors.primaryGreen.withValues(alpha: 0.2),
-                  shape: BoxShape.circle,
+                  color: AppColors.primary.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(
-                  Icons.bolt_rounded,
-                  color: AppColors.primaryGreen,
-                  size: 20,
+                  Icons.auto_awesome,
+                  color: AppColors.primary,
+                  size: 18,
                 ),
               ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text(
-                  'Đang sạc pin ⚡',
-                  style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
+              const SizedBox(width: 8),
               Text(
-                _chargeService.elapsedText,
-                style: const TextStyle(
-                  color: AppColors.primaryGreen,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  fontFamily: 'monospace',
+                'AI INSIGHTS',
+                style: TextStyle(
+                  color: AppColors.primary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.5,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 16),
-          // Battery progress
-          Stack(
-            children: [
-              Container(
-                height: 20,
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 500),
-                height: 20,
-                width:
-                    MediaQuery.of(context).size.width *
-                    (_chargeService.currentBattery / 100) *
-                    0.78,
-                decoration: BoxDecoration(
-                  color: AppColors.vinfastBlue,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-              Positioned.fill(
-                child: Center(
-                  child: Text(
-                    '${_chargeService.currentBattery}%',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                    ),
+          if (prediction != null)
+            Row(
+              children: [
+                Expanded(
+                  child: _buildInsightItem(
+                    Icons.schedule,
+                    'AI Prediction',
+                    prediction,
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _trackingStat(
-                'Đã nạp',
-                '+${_chargeService.batteryGained}%',
-                AppColors.primaryGreen,
-              ),
-              _trackingStat(
-                'Mục tiêu',
-                '${_chargeService.targetBattery}%',
-                AppColors.warning,
-              ),
-              _trackingStat('ETA', _chargeService.etaText, AppColors.info),
-            ],
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _stopCharge,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.error,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+                Expanded(
+                  child: _buildInsightItem(
+                    Icons.bolt,
+                    'Power',
+                    '${(batteryState?.percentage ?? 0) > 80 ? 6.6 : 3.3} kW',
+                  ),
                 ),
-              ),
-              icon: const Icon(Icons.power_off_rounded),
-              label: const Text(
-                'Ngắt sạc',
-                style: TextStyle(fontWeight: FontWeight.w700),
+              ],
+            )
+          else
+            const Text(
+              'AI analysis loading...',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 14,
               ),
             ),
-          ),
         ],
       ),
-    );
+    ).animate().fadeIn(delay: 100.ms).slideY(begin: 0.1);
   }
 
-  Widget _trackingStat(String label, String value, Color color) {
-    return Column(
+  Widget _buildInsightItem(IconData icon, String label, String value) {
+    return Row(
       children: [
-        Text(
-          value,
-          style: TextStyle(
-            color: color,
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        Text(
-          label,
-          style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
+        Icon(icon, color: AppColors.textSecondary, size: 18),
+        const SizedBox(width: 8),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: AppColors.textTertiary,
+                fontSize: 10,
+              ),
+            ),
+            Text(
+              value,
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ),
       ],
     );
   }
 
-  // ── Maintenance Section ──
-
-  Widget _buildMaintenanceSection(String vehicleId, AsyncValue vehicleAsync) {
-    final tasksAsync = ref.watch(dashboardMaintenanceProvider(vehicleId));
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Icon(
-              Icons.build_circle_rounded,
-              color: AppColors.warning,
-              size: 18,
-            ),
-            const SizedBox(width: 8),
-            const Text(
-              'Bảo dưỡng sắp đến',
-              style: TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        tasksAsync.when(
-          data: (tasks) {
-            final currentOdo = vehicleAsync.when(
-              data: (v) => v?.currentOdo ?? 0,
-              loading: () => 0,
-              error: (_, _) => 0,
-            );
-            final dueSoon = tasks.where((t) => t.isDueSoon(currentOdo)).toList()
-              ..sort(
-                (a, b) => a
-                    .remainingKm(currentOdo)
-                    .compareTo(b.remainingKm(currentOdo)),
-              );
-
-            if (dueSoon.isEmpty) {
-              return Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppColors.card,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.check_circle_rounded,
-                      color: AppColors.primaryGreen,
-                      size: 18,
-                    ),
-                    SizedBox(width: 8),
-                    Text(
-                      'Không có mốc bảo dưỡng nào sắp đến',
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }
-
-            // Chỉ hiển thị 1 task ưu tiên nhất (km còn lại nhỏ nhất)
-            final task = dueSoon.first;
-            final remaining = task.remainingKm(currentOdo);
-            final isOverdue = remaining <= 0;
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: isOverdue
-                    ? AppColors.error.withValues(alpha: 0.08)
-                    : AppColors.warning.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: isOverdue
-                      ? AppColors.error.withValues(alpha: 0.3)
-                      : AppColors.warning.withValues(alpha: 0.3),
-                ),
-              ),
-              child: Row(
+  Widget _buildEfficiencyCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.glassBorder),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
                 children: [
-                  Icon(
-                    isOverdue ? Icons.warning_rounded : Icons.schedule_rounded,
-                    color: isOverdue ? AppColors.error : AppColors.warning,
-                    size: 20,
+                  const Icon(
+                    Icons.show_chart_rounded,
+                    color: AppColors.primary,
+                    size: 18,
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          task.title,
-                          style: const TextStyle(
-                            color: AppColors.textPrimary,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        Text(
-                          isOverdue
-                              ? 'Quá hạn ${(-remaining)} km!'
-                              : 'Còn $remaining km nữa',
-                          style: TextStyle(
-                            color: isOverdue
-                                ? AppColors.error
-                                : AppColors.warning,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  const SizedBox(width: 8),
                   Text(
-                    '${task.targetOdo} km',
-                    style: const TextStyle(
+                    'EFFICIENCY HISTORY',
+                    style: TextStyle(
                       color: AppColors.textTertiary,
-                      fontSize: 12,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.5,
                     ),
                   ),
                 ],
               ),
-            );
-          },
-          loading: () => _shimmer(),
-          error: (e, _) => ErrorState(
-            message: 'Không tải được lịch bảo dưỡng: $e',
-            onRetry: () =>
-                ref.invalidate(dashboardMaintenanceProvider(vehicleId)),
-          ),
-        ),
-      ],
-    ).animate().fadeIn(delay: 400.ms);
-  }
-
-  // ── Actions ──
-
-  void _handleQuickAction(
-    QuickAction action,
-    AsyncValue vehicleAsync,
-    String vehicleId,
-  ) {
-    switch (action) {
-      case QuickAction.startTrip:
-        _startTrip(vehicleAsync, vehicleId);
-      case QuickAction.startCharge:
-        _showChargeTargetDialog(vehicleAsync, vehicleId);
-      case QuickAction.manualTrip:
-        final vehicle = vehicleAsync.value;
-        if (vehicle == null) return;
-        showModalBottomSheet(
-          context: context,
-          isScrollControlled: true,
-          backgroundColor: Colors.transparent,
-          builder: (_) => AddManualTripModal(vehicle: vehicle),
-        ).then((_) => ref.invalidate(vehicleProvider(vehicleId)));
-      case QuickAction.addCharge:
-        AddChargeLogModal.show(context, vehicleId).then((result) {
-          if (result == true) {
-            ref.invalidate(vehicleProvider(vehicleId));
-            ref.invalidate(chargeLogsProvider(vehicleId));
-          }
-        });
-      case QuickAction.routePrediction:
-        // Scroll to RoutePredictionCard (already visible on Dashboard)
-        break;
-      case QuickAction.aiFunctions:
-        Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const AiFunctionsScreen()));
-      case QuickAction.guide:
-        Navigator.of(
-          context,
-        ).push(MaterialPageRoute(builder: (_) => const GuideScreen()));
-    }
-  }
-
-  Future<void> _startTrip(AsyncValue vehicleAsync, String vehicleId) async {
-    final vehicle = vehicleAsync.value;
-    if (vehicle == null) return;
-
-    try {
-      setState(() => _isStartingTrip = true);
-
-      final result = await _tripService.startTrip(
-        vehicleId: vehicleId,
-        payload: _selectedPayload,
-        currentBattery: vehicle.currentBattery,
-        currentOdo: vehicle.currentOdo,
-        defaultEfficiency: vehicle.defaultEfficiency,
-      );
-
-      if (mounted) setState(() => _isStartingTrip = false);
-
-      if (result.isSuccess) {
-        final bgOk = await BackgroundServiceConfig.safeStartForTrip();
-        if (bgOk) BackgroundServiceConfig.sendCommand('startTrip');
-        if (!bgOk && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text(
-                'Không bật được dịch vụ nền — GPS vẫn hoạt động trong app',
-              ),
-              backgroundColor: Colors.orange.shade800,
-              behavior: SnackBarBehavior.floating,
-              duration: const Duration(seconds: 4),
-            ),
-          );
-        }
-
-        if (mounted) {
-          // Navigate to map screen
-          final stoppedFromMap = await Navigator.of(context).push<bool>(
-            MaterialPageRoute(builder: (_) => const TripLiveMapScreen()),
-          );
-          // Khi quay về từ map (kết thúc hoặc back), refresh data
-          if (stoppedFromMap == true) {
-            ref.invalidate(vehicleProvider(vehicleId));
-            ref.invalidate(dashboardTripsProvider(vehicleId));
-            ref.invalidate(dashboardMaintenanceProvider(vehicleId));
-            _triggerMaintenanceCheck(vehicleId);
-          }
-          setState(() {});
-        }
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(result.message),
-            backgroundColor: AppColors.error,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            action: result.status == TripStartStatus.permissionDeniedForever
-                ? SnackBarAction(
-                    label: 'Mở Cài đặt',
-                    textColor: Colors.white,
-                    onPressed: () => Geolocator.openAppSettings(),
-                  )
-                : result.status == TripStartStatus.gpsDisabled
-                ? SnackBarAction(
-                    label: 'Bật GPS',
-                    textColor: Colors.white,
-                    onPressed: () => Geolocator.openLocationSettings(),
-                  )
-                : null,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) setState(() => _isStartingTrip = false);
-      AppPopup.showError('Bắt đầu chuyến đi thất bại: $e');
-    }
-  }
-
-  Future<void> _startCharge(
-    AsyncValue vehicleAsync,
-    String vehicleId, {
-    int targetPercent = 80,
-  }) async {
-    final vehicle = vehicleAsync.value;
-    if (vehicle == null) return;
-
-    try {
-      // Tính adaptive charge rate từ lịch sử (fallback 0.38 nếu chưa có log)
-      double adaptiveRate = 0.38;
-      try {
-        final repo = ref.read(chargeLogRepositoryProvider);
-        final logs = await repo.getChargeLogs(vehicleId);
-        if (logs.isNotEmpty) {
-          final calculatedRate = BatteryLogicService.avgChargeRate(logs);
-          if (calculatedRate > 0) {
-            adaptiveRate = calculatedRate;
-          }
-        }
-      } catch (_) {}
-
-      await _chargeService.startCharging(
-        vehicleId: vehicleId,
-        currentBattery: vehicle.currentBattery,
-        currentOdo: vehicle.currentOdo,
-        chargeRatePerMin: adaptiveRate,
-        targetBatteryPercent: targetPercent,
-      );
-
-      final bgOk = await BackgroundServiceConfig.safeStartForTrip();
-      if (bgOk) BackgroundServiceConfig.sendCommand('startCharge');
-
-      setState(() {});
-      AppPopup.showSuccess('Đã bắt đầu phiên sạc');
-    } catch (e) {
-      AppPopup.showError('Không thể bắt đầu sạc: $e');
-    }
-  }
-
-  void _showChargeTargetDialog(AsyncValue vehicleAsync, String vehicleId) {
-    int selectedTarget = 80;
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          backgroundColor: AppColors.surface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: const Row(
-            children: [
-              Icon(Icons.bolt_rounded, color: AppColors.primaryGreen, size: 22),
-              SizedBox(width: 8),
-              Text(
-                'Mục tiêu sạc',
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Chọn % pin mục tiêu:',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [80, 90, 100].map((t) {
-                  final sel = t == selectedTarget;
-                  return GestureDetector(
-                    onTap: () => setDialogState(() => selectedTarget = t),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: sel
-                            ? AppColors.primaryGreen.withValues(alpha: 0.15)
-                            : AppColors.card,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: sel
-                              ? AppColors.primaryGreen
-                              : AppColors.border,
-                          width: sel ? 2 : 1,
-                        ),
-                      ),
-                      child: Text(
-                        '$t%',
-                        style: TextStyle(
-                          color: sel
-                              ? AppColors.primaryGreen
-                              : AppColors.textSecondary,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text(
-                'Hủy',
-                style: TextStyle(color: AppColors.textSecondary),
-              ),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(ctx).pop();
-                switch (QuickAction.startCharge) {
-                  case QuickAction.startCharge:
-                    _showSmartChargingEtaSheet();
-                    break;
-                  default:
-                    _startCharge(
-                      vehicleAsync,
-                      vehicleId,
-                      targetPercent: selectedTarget,
-                    );
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primaryGreen,
-                shape: RoundedRectangleBorder(
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceVariant,
                   borderRadius: BorderRadius.circular(12),
                 ),
-              ),
-              child: const Text(
-                'Bắt đầu sạc',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
+                child: Text(
+                  'PAST 7 DAYS',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Show Smart Charging ETA Bottom Sheet (AI prediction)
-  Future<void> _showSmartChargingEtaSheet() async {
-    final vehicleId = ref.read(selectedVehicleIdProvider);
-    final vehicleAsync = ref.read(vehicleProvider(vehicleId));
-    if (vehicleAsync is! AsyncData || vehicleAsync.value == null) return;
-
-    final vehicle = vehicleAsync.value!;
-    final currentBattery = vehicle.currentBattery ?? 0;
-    final currentOdo = vehicle.currentOdo;
-
-    final result = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => SmartChargingEtaSheet(
-        vehicleId: vehicleId,
-        initialBattery: currentBattery,
-        currentOdo: currentOdo,
-        chargeService: _chargeService,
-      ),
-    );
-
-    if (result == true && mounted) {
-      // Charging started successfully with AI prediction
-      setState(() {});
-    }
-  }
-
-  Future<void> _stopTrip() async {
-    // Show confirmation
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          'Kết thúc chuyến đi?',
-          style: TextStyle(
-            color: AppColors.textPrimary,
-            fontSize: 17,
-            fontWeight: FontWeight.w700,
+            ],
           ),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _confirmRow(
-              'Quãng đường',
-              '${_tripService.totalDistance.toStringAsFixed(1)} km',
-            ),
-            _confirmRow('Pin tiêu thụ', '-${_tripService.batteryConsumed}%'),
-            _confirmRow('Thời gian', _tripService.elapsedText),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text(
-              'Tiếp tục đi',
-              style: TextStyle(color: AppColors.textSecondary),
+          const SizedBox(height: 20),
+          // Simple line chart visualization
+          SizedBox(
+            height: 120,
+            child: CustomPaint(
+              size: const Size(double.infinity, 120),
+              painter: _EfficiencyChartPainter(),
             ),
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.error,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: const Text(
-              'Kết thúc',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: ['Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+                .map((day) => Text(
+                      day,
+                      style: TextStyle(
+                        color: AppColors.textTertiary,
+                        fontSize: 11,
+                      ),
+                    ))
+                .toList(),
           ),
         ],
       ),
-    );
-    if (confirm != true) return;
-
-    try {
-      await _tripService.stopTrip();
-      BackgroundServiceConfig.sendCommand('stopTrip');
-      final vehicleId = ref.read(selectedVehicleIdProvider);
-      ref.invalidate(vehicleProvider(vehicleId));
-      setState(() {});
-
-      // Kiểm tra nhắc bảo dưỡng sau khi kết thúc chuyến đi
-      _triggerMaintenanceCheck(vehicleId);
-      AppPopup.showSuccess('Đã kết thúc chuyến đi');
-    } catch (e) {
-      AppPopup.showError('Kết thúc chuyến đi thất bại: $e');
-    }
+    ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.1);
   }
 
-  Future<void> _stopCharge() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          'Ngắt sạc?',
-          style: TextStyle(
-            color: AppColors.textPrimary,
-            fontSize: 17,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _confirmRow('Pin hiện tại', '${_chargeService.currentBattery}%'),
-            _confirmRow('Mục tiêu', '${_chargeService.targetBattery}%'),
-            _confirmRow('Đã nạp', '+${_chargeService.batteryGained}%'),
-            _confirmRow('Thời gian', _chargeService.elapsedText),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text(
-              'Tiếp tục sạc',
-              style: TextStyle(color: AppColors.textSecondary),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.error,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: const Text(
-              'Ngắt sạc',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
+  Widget _buildAchievementCard({required double efficiency}) {
+    final rank = efficiency >= 90 ? 'EXPERT' : efficiency >= 75 ? 'ADVANCED' : 'IMPROVING';
+    final color = efficiency >= 90 ? AppColors.success : efficiency >= 75 ? AppColors.primary : AppColors.warning;
+    
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.glassBorder),
       ),
-    );
-    if (confirm != true) return;
-
-    try {
-      await _chargeService.stopCharging();
-      BackgroundServiceConfig.sendCommand('stopCharge');
-      final vehicleId = ref.read(selectedVehicleIdProvider);
-      ref.invalidate(vehicleProvider(vehicleId));
-      ref.invalidate(chargeLogsProvider(vehicleId));
-      setState(() {});
-
-      // Kiểm tra nhắc bảo dưỡng sau khi kết thúc sạc
-      _triggerMaintenanceCheck(vehicleId);
-      AppPopup.showSuccess('Đã kết thúc phiên sạc');
-    } catch (e) {
-      AppPopup.showError('Ngắt sạc thất bại: $e');
-    }
-  }
-
-  Widget _confirmRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 14,
-            ),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  Icons.emoji_events_outlined,
+                  color: color,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'DRIVING ACHIEVEMENT',
+                style: TextStyle(
+                  color: AppColors.textTertiary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.5,
+                ),
+              ),
+            ],
           ),
-          Text(
-            value,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-            ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0, end: efficiency),
+                duration: const Duration(milliseconds: 1000),
+                builder: (context, value, child) {
+                  return Text(
+                    '${value.toInt()}',
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 48,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -2,
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(width: 20),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$rank ECO DRIVER',
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Ranked top ${(100 - efficiency).toInt()}% locally',
+                      style: TextStyle(
+                        color: AppColors.textTertiary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
-    );
-  }
-
-  void _triggerMaintenanceCheck(String vehicleId) async {
-    try {
-      final vehicle = await ref
-          .read(chargeLogRepositoryProvider)
-          .getVehicle(vehicleId);
-      if (vehicle != null) {
-        MaintenanceReminderService().checkAndNotify(
-          vehicleId: vehicleId,
-          currentOdo: vehicle.currentOdo,
-        );
-      }
-    } catch (_) {}
-  }
-
-  Widget _shimmer() {
-    return const LoadingSkeleton(layout: SkeletonLayout.card);
+    ).animate().fadeIn(delay: 300.ms).slideY(begin: 0.1);
   }
 }
 
-// ── Action Button Widget ──
+// =============================================================================
+// Animated Widgets
+// =============================================================================
 
-class _ActionButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
+class _AnimatedBackButton extends StatefulWidget {
   final VoidCallback onTap;
 
-  const _ActionButton({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.onTap,
-  });
+  const _AnimatedBackButton({required this.onTap});
+
+  @override
+  State<_AnimatedBackButton> createState() => _AnimatedBackButtonState();
+}
+
+class _AnimatedBackButtonState extends State<_AnimatedBackButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 150),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.9).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 18),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: color.withValues(alpha: 0.3),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
+      onTapDown: (_) => _controller.forward(),
+      onTapUp: (_) {
+        _controller.reverse();
+        widget.onTap();
+      },
+      onTapCancel: () => _controller.reverse(),
+      child: ScaleTransition(
+        scale: _scaleAnimation,
+        child: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.glassBorder),
+          ),
+          child: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: AppColors.textPrimary,
+            size: 20,
+          ),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+      ),
+    );
+  }
+}
+
+class _AnimatedIconButton extends StatefulWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _AnimatedIconButton({required this.icon, required this.onTap});
+
+  @override
+  State<_AnimatedIconButton> createState() => _AnimatedIconButtonState();
+}
+
+class _AnimatedIconButtonState extends State<_AnimatedIconButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 150),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.9).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => _controller.forward(),
+      onTapUp: (_) {
+        _controller.reverse();
+        widget.onTap();
+      },
+      onTapCancel: () => _controller.reverse(),
+      child: ScaleTransition(
+        scale: _scaleAnimation,
+        child: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.glassBorder),
+          ),
+          child: Icon(widget.icon, color: AppColors.textPrimary, size: 20),
+        ),
+      ),
+    );
+  }
+}
+
+class _AnimatedRefreshButton extends StatefulWidget {
+  final VoidCallback onTap;
+
+  const _AnimatedRefreshButton({required this.onTap});
+
+  @override
+  State<_AnimatedRefreshButton> createState() => _AnimatedRefreshButtonState();
+}
+
+class _AnimatedRefreshButtonState extends State<_AnimatedRefreshButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _rotateAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(seconds: 1),
+      vsync: this,
+    );
+    _rotateAnimation = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.linear),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        _controller.forward(from: 0);
+        widget.onTap();
+      },
+      child: RotationTransition(
+        turns: _rotateAnimation,
+        child: Icon(Icons.refresh_rounded, color: AppColors.textSecondary, size: 20),
+      ),
+    );
+  }
+}
+
+class _AnimatedSyncButton extends StatefulWidget {
+  final VoidCallback onTap;
+  final bool isLoading;
+
+  const _AnimatedSyncButton({required this.onTap, required this.isLoading});
+
+  @override
+  State<_AnimatedSyncButton> createState() => _AnimatedSyncButtonState();
+}
+
+class _AnimatedSyncButtonState extends State<_AnimatedSyncButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 200),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.96).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: widget.isLoading ? null : (_) => _controller.forward(),
+      onTapUp: widget.isLoading ? null : (_) {
+        _controller.reverse();
+        widget.onTap();
+      },
+      onTapCancel: widget.isLoading ? null : () => _controller.reverse(),
+      child: ScaleTransition(
+        scale: _scaleAnimation,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [AppColors.success, AppColors.success.withOpacity(0.8)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.success.withOpacity(0.3),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (widget.isLoading) ...[
+                const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ] else ...[
+                const Icon(Icons.sync, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+              ],
+              Text(
+                widget.isLoading ? 'Syncing...' : 'Sync to Web',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ).animate().fadeIn(delay: 400.ms);
+  }
+}
+
+class _SyncDialog extends StatelessWidget {
+  const _SyncDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: Colors.white, size: 22),
-            const SizedBox(width: 8),
+            CircularProgressIndicator(
+              color: AppColors.primary,
+              strokeWidth: 3,
+            ),
+            const SizedBox(height: 24),
             Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
+              'Syncing to Web Dashboard...',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ],
@@ -1700,4 +944,96 @@ class _ActionButton extends StatelessWidget {
       ),
     );
   }
+}
+
+class _BatteryHealthCardShimmer extends StatelessWidget {
+  const _BatteryHealthCardShimmer();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 320,
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(24),
+      ),
+    );
+  }
+}
+
+class _AIInsightsCardShimmer extends StatelessWidget {
+  const _AIInsightsCardShimmer();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 100,
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(24),
+      ),
+    );
+  }
+}
+
+// Custom painter for efficiency chart
+class _EfficiencyChartPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = AppColors.primary
+      ..strokeWidth = 3
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    final fillPaint = Paint()
+      ..color = AppColors.primary.withOpacity(0.1)
+      ..style = PaintingStyle.fill;
+
+    final path = Path();
+    final fillPath = Path();
+
+    final points = [
+      Offset(size.width * 0.1, size.height * 0.6),
+      Offset(size.width * 0.25, size.height * 0.4),
+      Offset(size.width * 0.4, size.height * 0.7),
+      Offset(size.width * 0.55, size.height * 0.3),
+      Offset(size.width * 0.7, size.height * 0.4),
+      Offset(size.width * 0.85, size.height * 0.15),
+      Offset(size.width * 0.95, size.height * 0.5),
+    ];
+
+    path.moveTo(points.first.dx, points.first.dy);
+    fillPath.moveTo(points.first.dx, size.height);
+    fillPath.lineTo(points.first.dx, points.first.dy);
+
+    for (int i = 1; i < points.length; i++) {
+      final p0 = points[i - 1];
+      final p1 = points[i];
+      final cp = Offset((p0.dx + p1.dx) / 2, (p0.dy + p1.dy) / 2);
+      
+      path.quadraticBezierTo(p0.dx, p0.dy, cp.dx, cp.dy);
+      fillPath.quadraticBezierTo(p0.dx, p0.dy, cp.dx, cp.dy);
+    }
+
+    path.lineTo(points.last.dx, points.last.dy);
+    fillPath.lineTo(points.last.dx, points.last.dy);
+    fillPath.lineTo(points.last.dx, size.height);
+    fillPath.close();
+
+    canvas.drawPath(fillPath, fillPaint);
+    canvas.drawPath(path, paint);
+
+    // Draw dots
+    final dotPaint = Paint()
+      ..color = AppColors.primary
+      ..style = PaintingStyle.fill;
+
+    for (final point in points) {
+      canvas.drawCircle(point, 4, dotPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

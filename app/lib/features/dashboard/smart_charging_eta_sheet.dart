@@ -198,16 +198,16 @@ class _SmartChargingEtaSheetState extends ConsumerState<SmartChargingEtaSheet> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: AppColors.primaryGreen.withOpacity(0.1),
+                  color: AppColors.primary.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: AppColors.primaryGreen.withOpacity(0.3),
+                    color: AppColors.primary.withOpacity(0.3),
                   ),
                 ),
                 child: Text(
                   'Beta',
                   style: TextStyle(
-                    color: AppColors.primaryGreen,
+                    color: AppColors.primary,
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
@@ -252,7 +252,7 @@ class _SmartChargingEtaSheetState extends ConsumerState<SmartChargingEtaSheet> {
               Checkbox(
                 value: _reminderEnabled,
                 onChanged: (v) => setState(() => _reminderEnabled = v ?? true),
-                activeColor: AppColors.primaryGreen,
+                activeColor: AppColors.primary,
               ),
               Expanded(
                 child: Text(
@@ -293,10 +293,10 @@ class _SmartChargingEtaSheetState extends ConsumerState<SmartChargingEtaSheet> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppColors.primaryGreen.withOpacity(0.05),
+                color: AppColors.primary.withOpacity(0.05),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: AppColors.primaryGreen.withOpacity(0.2),
+                  color: AppColors.primary.withOpacity(0.2),
                 ),
               ),
               child: Column(
@@ -306,7 +306,7 @@ class _SmartChargingEtaSheetState extends ConsumerState<SmartChargingEtaSheet> {
                     children: [
                       Icon(
                         Icons.access_time,
-                        color: AppColors.primaryGreen,
+                        color: AppColors.primary,
                         size: 20,
                       ),
                       const SizedBox(width: 8),
@@ -314,7 +314,7 @@ class _SmartChargingEtaSheetState extends ConsumerState<SmartChargingEtaSheet> {
                         'Kết quả dự đoán',
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
-                          color: AppColors.primaryGreen,
+                          color: AppColors.primary,
                         ),
                       ),
                     ],
@@ -330,7 +330,7 @@ class _SmartChargingEtaSheetState extends ConsumerState<SmartChargingEtaSheet> {
                               _formattedDuration ?? '--',
                               style: theme.textTheme.headlineSmall?.copyWith(
                                 fontWeight: FontWeight.bold,
-                                color: AppColors.primaryGreen,
+                                color: AppColors.primary,
                               ),
                             ),
                             const SizedBox(height: 4),
@@ -434,7 +434,7 @@ class _SmartChargingEtaSheetState extends ConsumerState<SmartChargingEtaSheet> {
                           ? _startCharging
                           : _getPrediction),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryGreen,
+                    backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
                   ),
                   child: _isLoading

@@ -209,7 +209,7 @@ class _AiCapacityCardState extends ConsumerState<AiCapacityCard> {
               Expanded(child: _buildStatCell(
                 '${r.usableCapacityWh.toStringAsFixed(0)} Wh',
                 'Khả dụng',
-                AppColors.primaryGreen,
+                AppColors.primary,
               )),
               Container(width: 1, height: 40, color: AppColors.border),
               Expanded(child: _buildStatCell(
@@ -304,7 +304,7 @@ class _AiCapacityCardState extends ConsumerState<AiCapacityCard> {
 
   Widget _buildConfidenceBadge(CapacityConfidence c) {
     final color = switch (c) {
-      CapacityConfidence.high => AppColors.primaryGreen,
+      CapacityConfidence.high => AppColors.primary,
       CapacityConfidence.medium => AppColors.warning,
       CapacityConfidence.low => AppColors.textSecondary,
     };
@@ -359,7 +359,7 @@ class _AiCapacityCardState extends ConsumerState<AiCapacityCard> {
 
   Color _alertColor(SoHAlertLevel level) {
     return switch (level) {
-      SoHAlertLevel.none => AppColors.primaryGreen,
+      SoHAlertLevel.none => AppColors.primary,
       SoHAlertLevel.mild => AppColors.warning,
       SoHAlertLevel.moderate => const Color(0xFFFF9800),
       SoHAlertLevel.severe => AppColors.error,

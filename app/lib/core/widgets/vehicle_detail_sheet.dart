@@ -85,7 +85,7 @@ class _VehicleDetailSheetState extends ConsumerState<VehicleDetailSheet> {
     try {
       return Color(int.parse(hex.replaceFirst('#', 'FF'), radix: 16));
     } catch (_) {
-      return AppColors.primaryGreen;
+      return AppColors.primary;
     }
   }
 
@@ -182,7 +182,7 @@ class _VehicleDetailSheetState extends ConsumerState<VehicleDetailSheet> {
               children: [
                 _buildStatTile(Icons.battery_std_rounded, '${v.lastBatteryPercent}%',
                     'Pin hiện tại',
-                    v.lastBatteryPercent > 50 ? AppColors.primaryGreen
+                    v.lastBatteryPercent > 50 ? AppColors.primary
                         : v.lastBatteryPercent > 20 ? AppColors.warning
                         : AppColors.error),
                 const SizedBox(width: 10),
@@ -194,7 +194,7 @@ class _VehicleDetailSheetState extends ConsumerState<VehicleDetailSheet> {
             Row(
               children: [
                 _buildStatTile(Icons.battery_charging_full_rounded,
-                    '${v.totalCharges} lần', 'Tổng sạc', AppColors.primaryGreen),
+                    '${v.totalCharges} lần', 'Tổng sạc', AppColors.primary),
                 const SizedBox(width: 10),
                 _buildStatTile(Icons.route_rounded, '${v.totalTrips} lần',
                     'Tổng chuyến', AppColors.warning),
@@ -225,7 +225,7 @@ class _VehicleDetailSheetState extends ConsumerState<VehicleDetailSheet> {
                     Navigator.of(context).pop();
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryGreen,
+                    backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
@@ -293,7 +293,7 @@ class _VehicleDetailSheetState extends ConsumerState<VehicleDetailSheet> {
 
   Widget _buildCapacitySection(CapacityResult r) {
     final alertColor = switch (r.alertLevel) {
-      SoHAlertLevel.none => AppColors.primaryGreen,
+      SoHAlertLevel.none => AppColors.primary,
       SoHAlertLevel.mild => AppColors.warning,
       SoHAlertLevel.moderate => const Color(0xFFFF9800),
       SoHAlertLevel.severe => AppColors.error,

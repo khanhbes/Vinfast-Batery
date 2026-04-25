@@ -429,7 +429,7 @@ class _BottomPanel extends StatelessWidget {
                     _StatColumn(
                       label: 'Pin',
                       value: '${snapshot.currentBattery}%',
-                      color: AppColors.primaryGreen,
+                      color: AppColors.primary,
                     ),
                     _StatColumn(
                       label: 'Tiêu thụ',

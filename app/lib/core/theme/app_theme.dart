@@ -18,14 +18,21 @@ class AppTheme {
       brightness: Brightness.dark,
       scaffoldBackgroundColor: AppColors.background,
       colorScheme: const ColorScheme.dark(
-        primary: AppColors.vinfastBlue,
-        secondary: AppColors.vinfastRed,
-        surface: AppColors.surface,
-        error: AppColors.error,
-        onPrimary: Colors.white,
+        primary: AppColors.primary,
+        onPrimary: AppColors.primaryContainer,
+        primaryContainer: AppColors.primaryContainer,
+        onPrimaryContainer: AppColors.onPrimaryContainer,
+        secondary: AppColors.primary,
         onSecondary: Colors.white,
+        secondaryContainer: Color(0xFF004A78),
+        onSecondaryContainer: AppColors.primary,
+        surface: AppColors.surface,
         onSurface: AppColors.textPrimary,
-        onError: Colors.white,
+        surfaceContainerHighest: AppColors.surfaceVariant,
+        onSurfaceVariant: AppColors.textSecondary,
+        error: AppColors.error,
+        onError: Color(0xFF690005),
+        outline: AppColors.borderLight,
       ),
       textTheme: GoogleFonts.interTextTheme(
         const TextTheme(
@@ -102,24 +109,58 @@ class AppTheme {
         color: AppColors.card,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(24),
           side: const BorderSide(color: AppColors.glassBorder, width: 1),
         ),
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: AppColors.background,
-        selectedItemColor: AppColors.vinfastBlue,
+        selectedItemColor: AppColors.primary,
         unselectedItemColor: AppColors.textTertiary,
         type: BottomNavigationBarType.fixed,
         elevation: 0,
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
-        backgroundColor: AppColors.vinfastBlue,
-        foregroundColor: Colors.white,
+        backgroundColor: AppColors.primaryContainer,
+        foregroundColor: AppColors.primary,
         elevation: 8,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(16),
         ),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primaryContainer,
+          foregroundColor: AppColors.primary,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          textStyle: const TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 14,
+            letterSpacing: 0.5,
+          ),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColors.primaryContainer,
+          foregroundColor: AppColors.primary,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: AppColors.surfaceVariant,
+        selectedColor: AppColors.primaryContainer,
+        labelStyle: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        side: const BorderSide(color: AppColors.borderLight),
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: AppColors.cardElevated,
@@ -155,7 +196,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: AppColors.vinfastBlue),
+          borderSide: const BorderSide(color: AppColors.primary),
         ),
         hintStyle: const TextStyle(color: AppColors.textHint),
       ),

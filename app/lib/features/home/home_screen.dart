@@ -1,79 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/theme/app_colors.dart';
-import '../../core/widgets/empty_state.dart';
-import '../../core/widgets/error_state.dart';
-import '../../core/widgets/loading_skeleton.dart';
-import '../../core/widgets/stat_card.dart';
-import '../../data/models/charge_log_model.dart';
+import '../../core/providers/app_providers.dart';
+import '../../core/services/sync_service.dart';
 import '../../data/models/vehicle_model.dart';
-import '../../data/repositories/charge_log_repository.dart';
-
-import 'widgets/battery_status_card.dart';
-import 'widgets/daily_brief_section.dart';
-import 'widgets/ai_insights_section.dart';
-import 'widgets/quick_actions_floating.dart';
+import '../../data/services/battery_state_service.dart';
+import '../dashboard/dashboard_screen.dart';
+import '../trip_planner/trip_planner_wrapper.dart';
+import '../maintenance/maintenance_screen.dart';
 
 // =============================================================================
-// Providers
-// =============================================================================
-
-final selectedVehicleIdProvider = StateProvider<String>((ref) => '');
-
-/// Provider khởi tạo: đọc vehicleId đã lưu từ SharedPreferences
-final _restoreVehicleIdProvider = FutureProvider<String>((ref) async {
-  final prefs = await SharedPreferences.getInstance();
-  return prefs.getString('selected_vehicle_id') ?? '';
-});
-
-final vehicleProvider = FutureProvider.family<VehicleModel?, String>((ref, id) {
-  if (id.isEmpty) return Future.value(null);
-  return ref.watch(chargeLogRepositoryProvider).getVehicle(id);
-});
-
-final chargeLogsProvider = FutureProvider.family<List<ChargeLogModel>, String>((
-  ref,
-  id,
-) {
-  if (id.isEmpty) return Future.value([]);
-  return ref.watch(chargeLogRepositoryProvider).getChargeLogs(id);
-});
-
-final vehicleStatsProvider =
-    FutureProvider.family<Map<String, dynamic>, String>((ref, id) {
-      if (id.isEmpty) {
-        return Future.value({
-          'totalCharges': 0,
-          'avgChargeGain': 0.0,
-          'totalEnergyGained': 0,
-          'avgChargeDuration': 0.0,
-          'avgStartBattery': 0.0,
-          'avgEndBattery': 0.0,
-        });
-      }
-      return ref.watch(chargeLogRepositoryProvider).getStats(id);
-    });
-
-final allVehiclesProvider = FutureProvider<List<VehicleModel>>((ref) async {
-  final vehicles = await ref
-      .watch(chargeLogRepositoryProvider)
-      .getAllVehicles();
-  // Tự động chọn xe đầu tiên nếu chưa có xe nào được chọn
-  if (vehicles.isNotEmpty) {
-    final currentId = ref.read(selectedVehicleIdProvider);
-    if (currentId.isEmpty || !vehicles.any((v) => v.vehicleId == currentId)) {
-      // sẽ được cập nhật trong widget
-    }
-  }
-  return vehicles;
-});
-
-// =============================================================================
-// Home Screen
+// Home Screen V4 — Modern Dashboard Design
 // =============================================================================
 
 class HomeScreen extends ConsumerWidget {
@@ -83,18 +23,15 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final vehicleId = ref.watch(selectedVehicleIdProvider);
     final vehicleAsync = ref.watch(vehicleProvider(vehicleId));
-    final logsAsync = ref.watch(chargeLogsProvider(vehicleId));
-    final statsAsync = ref.watch(vehicleStatsProvider(vehicleId));
     final allVehiclesAsync = ref.watch(allVehiclesProvider);
-    final restoredId = ref.watch(_restoreVehicleIdProvider);
+    final restoredId = ref.watch(restoreVehicleIdProvider);
 
-    // Auto-select: ưu tiên ID đã persist, fallback xe đầu tiên
+    // Auto-select first vehicle
     allVehiclesAsync.whenData((vehicles) {
       if (vehicles.isNotEmpty && vehicleId.isEmpty) {
         String targetId = vehicles.first.vehicleId;
         restoredId.whenData((savedId) {
-          if (savedId.isNotEmpty &&
-              vehicles.any((v) => v.vehicleId == savedId)) {
+          if (savedId.isNotEmpty && vehicles.any((v) => v.vehicleId == savedId)) {
             targetId = savedId;
           }
         });
@@ -104,468 +41,213 @@ class HomeScreen extends ConsumerWidget {
       }
     });
 
-    // Daily Brief mock data dựa trên trạng thái xe
-    final dailyBriefs = _buildDailyBriefs(vehicleAsync);
-
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: RefreshIndicator(
-          color: AppColors.vinfastBlue,
-          backgroundColor: AppColors.surface,
-          onRefresh: () async {
-            ref.invalidate(vehicleProvider(vehicleId));
-            ref.invalidate(chargeLogsProvider(vehicleId));
-            ref.invalidate(vehicleStatsProvider(vehicleId));
-            ref.invalidate(allVehiclesProvider);
-          },
-          child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(
-              parent: BouncingScrollPhysics(),
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(),
+          slivers: [
+            // App Bar
+            SliverToBoxAdapter(
+              child: _buildAppBar(context, ref),
             ),
-            slivers: [
-              // ── Header V2 ──
-              SliverToBoxAdapter(
-                child: _HomeHeaderV2(
-                  vehicleAsync: vehicleAsync, 
-                  allVehiclesAsync: allVehiclesAsync,
-                  selectedId: vehicleId,
-                  onVehicleChanged: (id) async {
-                    ref.read(selectedVehicleIdProvider.notifier).state = id;
-                    final prefs = await SharedPreferences.getInstance();
-                    await prefs.setString('selected_vehicle_id', id);
-                  },
+
+            // Vehicle Banner
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                child: vehicleAsync.when(
+                  data: (vehicle) => _VehicleBanner(vehicle: vehicle),
+                  loading: () => const _VehicleBannerShimmer(),
+                  error: (_, __) => const _VehicleBannerShimmer(),
                 ),
               ),
+            ),
 
-              // ── Battery Status Card V2 ──
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                  child: vehicleAsync.when(
-                    data: (vehicle) {
-                      if (vehicle == null) return const SizedBox.shrink();
-                      return BatteryStatusCard(vehicle: vehicle);
-                    },
-                    loading: () => const Center(
-                      child: SizedBox(
-                        width: 180,
-                        height: 180,
-                        child: LoadingSkeleton(layout: SkeletonLayout.gauge),
-                      ),
-                    ),
-                    error: (e, _) => ErrorState.fromError(
-                      error: e,
-                      prefix: 'Không tải được dữ liệu xe',
-                      onRetry: () => ref.invalidate(
-                        vehicleProvider(ref.read(selectedVehicleIdProvider)),
-                      ),
-                    ),
+            // Stat Cards Row
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                child: vehicleAsync.when(
+                  data: (vehicle) => _StatCardsRow(vehicle: vehicle),
+                  loading: () => const _StatCardsRowShimmer(),
+                  error: (_, __) => const _StatCardsRowShimmer(),
+                ),
+              ),
+            ),
+
+            // Battery Health Score
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+                child: vehicleAsync.when(
+                  data: (vehicle) => _BatteryHealthCard(
+                    soh: vehicle?.stateOfHealth ?? 96,
+                    vehicleId: vehicle?.vehicleId ?? '',
+                  ),
+                  loading: () => const _BatteryHealthShimmer(),
+                  error: (_, __) => const _BatteryHealthCard(soh: 96, vehicleId: ''),
+                ),
+              ),
+            ),
+
+            // Quick Actions
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+                child: vehicleAsync.when(
+                  data: (vehicle) => _QuickActionsRow(
+                    vehicleId: vehicle?.vehicleId ?? '',
+                    onSync: () => _showSyncDialog(context),
+                  ),
+                  loading: () => const _QuickActionsShimmer(),
+                  error: (_, __) => _QuickActionsRow(
+                    vehicleId: '',
+                    onSync: () => _showSyncDialog(context),
                   ),
                 ),
               ),
-
-              // ── Daily Brief ──
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 28, 20, 0),
-                  child: DailyBriefSection(briefs: dailyBriefs),
-                ),
-              ),
-
-              // ── AI Insights Section ──
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 28, 20, 0),
-                  child: const AiInsightsSection(),
-                ),
-              ),
-
-              // ── Quick Stats ──
-              SliverToBoxAdapter(child: _buildQuickStats(statsAsync)),
-
-              // ── Recent Charges Header ──
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 28, 20, 12),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(7),
-                        decoration: BoxDecoration(
-                          color: AppColors.infoBg,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(
-                          Icons.history_rounded,
-                          color: AppColors.vinfastBlue,
-                          size: 18,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      const Text(
-                        'Sạc gần đây',
-                        style: TextStyle(
-                          color: AppColors.textPrimary,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.3,
-                        ),
-                      ),
-                      const Spacer(),
-                      logsAsync.when(
-                        data: (logs) => logs.isNotEmpty
-                            ? Text(
-                                '${logs.length} lần',
-                                style: const TextStyle(
-                                  color: AppColors.textTertiary,
-                                  fontSize: 13,
-                                ),
-                              )
-                            : const SizedBox.shrink(),
-                        loading: () => const SizedBox.shrink(),
-                        error: (_, _) => const SizedBox.shrink(),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // ── Recent Charges List ──
-              _buildRecentCharges(logsAsync, ref),
-
-              const SliverToBoxAdapter(child: SizedBox(height: 120)),
-            ],
-          ),
-        ),
-      ),
-      floatingActionButton: QuickActionsFloating(
-        onHistory: () {
-          // Scroll to charges section
-        },
-      ),
-    );
-  }
-
-  List<DailyBriefModel> _buildDailyBriefs(AsyncValue<VehicleModel?> vehicleAsync) {
-    final vehicle = vehicleAsync.valueOrNull;
-    if (vehicle == null) return [];
-
-    final briefs = <DailyBriefModel>[];
-
-    if (vehicle.lastBatteryPercent < 30) {
-      briefs.add(DailyBriefModel(
-        id: 'low_battery',
-        title: 'Pin yếu — Cần sạc ngay',
-        content: 'Pin chỉ còn ${vehicle.lastBatteryPercent}%. Hãy sạc lên 80% trước khi di chuyển.',
-        type: DailyBriefType.warning,
-        actionLabel: 'Tìm trạm sạc',
-      ));
-    }
-
-    briefs.add(DailyBriefModel(
-      id: 'daily_reminder',
-      title: 'Nhắc nhở sạc mục tiêu',
-      content: 'Bạn có lịch trình đi làm sáng mai. Hãy sạc pin lên 90% trước 11:00 tối nay.',
-      type: DailyBriefType.info,
-      actionLabel: 'Đặt lịch sạc',
-    ));
-
-    briefs.add(DailyBriefModel(
-      id: 'maintenance',
-      title: 'Bảo dưỡng định kỳ',
-      content: 'Còn 500km nữa là đến kỳ bảo dưỡng hệ thống làm mát pin.',
-      type: DailyBriefType.alert,
-      actionLabel: 'Đặt hẹn',
-    ));
-
-    return briefs;
-  }
-
-  // ── Quick Stats Grid V2 ──
-  Widget _buildQuickStats(AsyncValue<Map<String, dynamic>> statsAsync) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-      child: statsAsync.when(
-        data: (stats) {
-          final total = stats['totalCharges'] as int? ?? 0;
-          if (total == 0) return const SizedBox.shrink();
-          return LayoutBuilder(
-            builder: (context, constraints) {
-              final ratio = constraints.maxWidth > 380
-                  ? 1.3
-                  : constraints.maxWidth > 300
-                  ? 1.1
-                  : 0.95;
-              return GridView.count(
-                crossAxisCount: 2,
-                mainAxisSpacing: 10,
-                crossAxisSpacing: 10,
-                childAspectRatio: ratio,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                children: [
-                  StatCard(
-                    icon: Icons.battery_charging_full_rounded,
-                    iconColor: AppColors.vinfastBlue,
-                    title: 'Tổng lần sạc',
-                    value: '$total',
-                    subtitle: 'lần',
-                  ).animate().fadeIn(delay: 300.ms).slideY(begin: 0.3),
-                  StatCard(
-                    icon: Icons.trending_up_rounded,
-                    iconColor: AppColors.info,
-                    title: 'Sạc trung bình',
-                    value:
-                        '${((stats['avgChargeGain'] as double?) ?? 0.0).toStringAsFixed(0)}%',
-                    subtitle: 'mỗi lần sạc',
-                  ).animate().fadeIn(delay: 380.ms).slideY(begin: 0.3),
-                  StatCard(
-                    icon: Icons.bolt_rounded,
-                    iconColor: AppColors.warning,
-                    title: 'Năng lượng nạp',
-                    value: '${stats['totalEnergyGained']}%',
-                    subtitle: 'tổng cộng',
-                  ).animate().fadeIn(delay: 460.ms).slideY(begin: 0.3),
-                  StatCard(
-                    icon: Icons.timer_outlined,
-                    iconColor: AppColors.error,
-                    title: 'Thời gian TB',
-                    value:
-                        '${((stats['avgChargeDuration'] as double?) ?? 0.0).toStringAsFixed(1)}h',
-                    subtitle: 'mỗi lần sạc',
-                  ).animate().fadeIn(delay: 540.ms).slideY(begin: 0.3),
-                ],
-              );
-            },
-          );
-        },
-        loading: () => const Padding(
-          padding: EdgeInsets.all(20),
-          child: LoadingSkeleton(layout: SkeletonLayout.stats),
-        ),
-        error: (e, _) => const SizedBox.shrink(),
-      ),
-    );
-  }
-
-  // ── Recent Charges ──
-  Widget _buildRecentCharges(
-    AsyncValue<List<ChargeLogModel>> logsAsync,
-    WidgetRef ref,
-  ) {
-    return logsAsync.when(
-      data: (logs) {
-        if (logs.isEmpty) {
-          return SliverToBoxAdapter(
-            child: EmptyState(
-              icon: Icons.battery_unknown_rounded,
-              title: 'Chưa có nhật ký sạc',
-              message: 'Nhấn "Nhập sạc" để ghi lại lần sạc đầu tiên',
             ),
-          );
-        }
 
-        final recent = logs.take(5).toList();
-        return SliverList(
-          delegate: SliverChildBuilderDelegate((context, index) {
-            final log = recent[index];
-            return _ChargeLogTile(log: log)
-                .animate()
-                .fadeIn(delay: (700 + index * 80).ms)
-                .slideX(begin: 0.15);
-          }, childCount: recent.length),
-        );
-      },
-      loading: () => const SliverToBoxAdapter(
-        child: Padding(
-          padding: EdgeInsets.all(20),
-          child: LoadingSkeleton(layout: SkeletonLayout.list, itemCount: 3),
-        ),
-      ),
-      error: (e, _) => SliverToBoxAdapter(
-        child: ErrorState.fromError(
-          error: e,
-          prefix: 'Không tải được nhật ký sạc',
-          onRetry: () => ref.invalidate(
-            chargeLogsProvider(ref.read(selectedVehicleIdProvider)),
-          ),
+            // Efficiency Section
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+                child: vehicleAsync.when(
+                  data: (vehicle) => _buildEfficiencyCard(
+                    efficiency: vehicle?.stateOfHealth ?? 88.0,
+                  ),
+                  loading: () => _buildEfficiencyCardShimmer(),
+                  error: (_, __) => _buildEfficiencyCard(efficiency: 88.0),
+                ),
+              ),
+            ),
+
+            // Achievement Section
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                child: vehicleAsync.when(
+                  data: (vehicle) => _buildAchievementCard(
+                    efficiency: vehicle?.stateOfHealth ?? 88.0,
+                  ),
+                  loading: () => _buildAchievementCardShimmer(),
+                  error: (_, __) => _buildAchievementCard(efficiency: 88.0),
+                ),
+              ),
+            ),
+
+            const SliverToBoxAdapter(child: SizedBox(height: 100)),
+          ],
         ),
       ),
     );
   }
-}
 
-// =============================================================================
-// Home Header V2 — VinFast Battery Pro style
-// =============================================================================
-
-class _HomeHeaderV2 extends ConsumerWidget {
-  final AsyncValue<VehicleModel?> vehicleAsync;
-  final AsyncValue<List<VehicleModel>> allVehiclesAsync;
-  final String selectedId;
-  final void Function(String) onVehicleChanged;
-
-  const _HomeHeaderV2({
-    required this.vehicleAsync,
-    required this.allVehiclesAsync,
-    required this.selectedId,
-    required this.onVehicleChanged,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget _buildAppBar(BuildContext context, WidgetRef ref) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+      child: Row(
         children: [
-          // App Header Row
-          Row(
+          _AnimatedIconButton(
+            icon: Icons.person_outline_rounded,
+            onTap: () {
+              // Navigate to settings/profile
+            },
+          ),
+          const SizedBox(width: 12),
+          const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // VinFast branding
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'VinFast',
-                      style: TextStyle(
-                        color: AppColors.vinfastBlue,
-                        fontSize: 26,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    Text(
-                      'BATTERY PRO',
-                      style: TextStyle(
-                        color: AppColors.textTertiary,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 3,
-                      ),
-                    ),
-                  ],
+              Text(
+                'VinFast Battery',
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-              // Status indicator
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: AppColors.card,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.glassBorder),
-                ),
-                child: Center(
-                  child: Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      color: AppColors.success,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.success.withValues(alpha: 0.5),
-                          blurRadius: 8,
-                        ),
-                      ],
-                    ),
-                  ),
+              Text(
+                'Connected to Feliz Neo',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
                 ),
               ),
             ],
           ),
-
-          const SizedBox(height: 20),
-
-          // Vehicle Switcher
-          allVehiclesAsync.when(
-            data: (vehicles) {
-              if (vehicles.isEmpty) return const SizedBox.shrink();
-              if (vehicles.length == 1) {
-                final v = vehicles.first;
-                return _SingleVehicleBannerV2(vehicle: v);
-              }
-              return _VehicleSwitcherTabsV2(
-                vehicles: vehicles,
-                selectedId: selectedId,
-                onSelect: onVehicleChanged,
-              );
+          const Spacer(),
+          _AnimatedNotificationButton(
+            onTap: () {
+              _showNotifications(context);
             },
-            loading: () => const SizedBox(height: 48),
-            error: (_, _) => const SizedBox.shrink(),
           ),
         ],
       ),
-    ).animate().fadeIn(duration: 400.ms);
+    ).animate().fadeIn(duration: 400.ms).slideY(begin: -0.1);
   }
-}
 
-// ── Single vehicle banner V2 ──
-class _SingleVehicleBannerV2 extends StatelessWidget {
-  final VehicleModel vehicle;
-  const _SingleVehicleBannerV2({required this.vehicle});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppColors.vinfastBlue.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: AppColors.vinfastBlue.withValues(alpha: 0.25),
+  void _showNotifications(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border.all(color: AppColors.glassBorder),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.textTertiary,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Notifications',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 16),
+            _buildNotificationItem('Battery Low', 'Charge your vehicle soon', Icons.battery_alert),
+            _buildNotificationItem('Maintenance Due', 'Service required in 500km', Icons.build),
+            _buildNotificationItem('Sync Complete', 'Data synced to web dashboard', Icons.sync),
+          ],
         ),
       ),
+    );
+  }
+
+  Widget _buildNotificationItem(String title, String subtitle, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: AppColors.vinfastBlue.withValues(alpha: 0.15),
+              color: AppColors.primaryContainer,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(
-              Icons.electric_moped_rounded,
-              color: AppColors.vinfastBlue,
-              size: 22,
-            ),
+            child: Icon(icon, color: AppColors.primary, size: 20),
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              vehicle.vehicleName.isNotEmpty
-                  ? vehicle.vehicleName
-                  : vehicle.vehicleId,
-              style: const TextStyle(
-                color: AppColors.vinfastBlue,
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: AppColors.vinfastBlue.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.bolt_rounded,
-                    color: AppColors.vinfastBlue, size: 14),
-                const SizedBox(width: 4),
-                Text(
-                  '${vehicle.lastBatteryPercent}%',
-                  style: const TextStyle(
-                    color: AppColors.vinfastBlue,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
+                Text(title, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
+                Text(subtitle, style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
               ],
             ),
           ),
@@ -573,96 +255,452 @@ class _SingleVehicleBannerV2 extends StatelessWidget {
       ),
     );
   }
+
+  void _showSyncDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => _SyncDialog(),
+    );
+  }
+
+  // Efficiency Card Widget
+  Widget _buildEfficiencyCard({required double efficiency}) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.glassBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withAlpha(26),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.speed_rounded,
+                  color: AppColors.primary,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Hiệu suất lái xe',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Text(
+                '${efficiency.toInt()}%',
+                style: const TextStyle(
+                  color: AppColors.success,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: efficiency / 100,
+              backgroundColor: AppColors.surfaceVariant,
+              valueColor: const AlwaysStoppedAnimation<Color>(AppColors.success),
+              minHeight: 8,
+            ),
+          ),
+        ],
+      ),
+    ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.1);
+  }
+
+  // Achievement Card Widget
+  Widget _buildAchievementCard({required double efficiency}) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.glassBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.success.withAlpha(26),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.emoji_events_rounded,
+                  color: AppColors.success,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Thành tích lái xe',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              _buildAchievementItem(
+                icon: Icons.local_florist_rounded,
+                label: 'Eco Master',
+                achieved: efficiency >= 85,
+              ),
+              const SizedBox(width: 12),
+              _buildAchievementItem(
+                icon: Icons.bolt,
+                label: 'Energy Saver',
+                achieved: efficiency >= 75,
+              ),
+              const SizedBox(width: 12),
+              _buildAchievementItem(
+                icon: Icons.star_rounded,
+                label: 'Top Driver',
+                achieved: efficiency >= 90,
+              ),
+            ],
+          ),
+        ],
+      ),
+    ).animate().fadeIn(delay: 500.ms).slideY(begin: 0.1);
+  }
+
+  Widget _buildAchievementItem({
+    required IconData icon,
+    required String label,
+    required bool achieved,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: achieved
+              ? AppColors.success.withAlpha(26)
+              : AppColors.surfaceVariant,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          children: [
+            Icon(
+              icon,
+              color: achieved ? AppColors.success : AppColors.textTertiary,
+              size: 24,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: achieved ? AppColors.success : AppColors.textTertiary,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Shimmer widgets
+  Widget _buildEfficiencyCardShimmer() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.glassBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceVariant,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Container(
+                  height: 16,
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceVariant,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Container(
+                width: 50,
+                height: 20,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceVariant,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            height: 8,
+            decoration: BoxDecoration(
+              color: AppColors.surfaceVariant,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAchievementCardShimmer() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.glassBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceVariant,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Container(
+                  height: 16,
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceVariant,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  height: 70,
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceVariant,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Container(
+                  height: 70,
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceVariant,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Container(
+                  height: 70,
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceVariant,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
 
-// ── Multi-vehicle tab switcher V2 ──
-class _VehicleSwitcherTabsV2 extends StatelessWidget {
-  final List<VehicleModel> vehicles;
-  final String selectedId;
-  final void Function(String) onSelect;
+// =============================================================================
+// Animated Button Widgets
+// =============================================================================
 
-  const _VehicleSwitcherTabsV2({
-    required this.vehicles,
-    required this.selectedId,
-    required this.onSelect,
-  });
+class _AnimatedIconButton extends StatefulWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _AnimatedIconButton({required this.icon, required this.onTap});
+
+  @override
+  State<_AnimatedIconButton> createState() => _AnimatedIconButtonState();
+}
+
+class _AnimatedIconButtonState extends State<_AnimatedIconButton> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 150),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.9).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 52,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: vehicles.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 8),
-        itemBuilder: (context, i) {
-          final v = vehicles[i];
-          final isSelected = v.vehicleId == selectedId;
+    return GestureDetector(
+      onTapDown: (_) => _controller.forward(),
+      onTapUp: (_) {
+        _controller.reverse();
+        widget.onTap();
+      },
+      onTapCancel: () => _controller.reverse(),
+      child: ScaleTransition(
+        scale: _scaleAnimation,
+        child: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.glassBorder),
+          ),
+          child: Icon(widget.icon, color: AppColors.textPrimary, size: 20),
+        ),
+      ),
+    );
+  }
+}
 
-          return GestureDetector(
-            onTap: () => onSelect(v.vehicleId),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOutCubic,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? AppColors.vinfastBlue.withValues(alpha: 0.12)
-                    : AppColors.card,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: isSelected
-                      ? AppColors.vinfastBlue.withValues(alpha: 0.4)
-                      : AppColors.glassBorder,
-                  width: isSelected ? 1.5 : 1,
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+class _AnimatedNotificationButton extends StatefulWidget {
+  final VoidCallback onTap;
+
+  const _AnimatedNotificationButton({required this.onTap});
+
+  @override
+  State<_AnimatedNotificationButton> createState() => _AnimatedNotificationButtonState();
+}
+
+class _AnimatedNotificationButtonState extends State<_AnimatedNotificationButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _shakeAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.9).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+    _shakeAnimation = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 0.0, end: -3.0), weight: 1),
+      TweenSequenceItem(tween: Tween(begin: -3.0, end: 3.0), weight: 2),
+      TweenSequenceItem(tween: Tween(begin: 3.0, end: -3.0), weight: 2),
+      TweenSequenceItem(tween: Tween(begin: -3.0, end: 3.0), weight: 2),
+      TweenSequenceItem(tween: Tween(begin: 3.0, end: 0.0), weight: 1),
+    ]).animate(_controller);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => _controller.forward(),
+      onTapUp: (_) {
+        _controller.reverse();
+        widget.onTap();
+      },
+      onTapCancel: () => _controller.reverse(),
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          return Transform.translate(
+            offset: Offset(_shakeAnimation.value, 0),
+            child: ScaleTransition(
+              scale: _scaleAnimation,
+              child: Stack(
                 children: [
-                  Icon(
-                    Icons.electric_moped_rounded,
-                    color: isSelected
-                        ? AppColors.vinfastBlue
-                        : AppColors.textTertiary,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    v.vehicleName.isNotEmpty ? v.vehicleName : v.vehicleId,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: isSelected
-                          ? AppColors.vinfastBlue
-                          : AppColors.textSecondary,
-                      fontSize: 13,
-                      fontWeight: isSelected
-                          ? FontWeight.w700
-                          : FontWeight.w500,
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppColors.card,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.glassBorder),
+                    ),
+                    child: const Icon(
+                      Icons.notifications_outlined,
+                      color: AppColors.textPrimary,
+                      size: 20,
                     ),
                   ),
-                  if (isSelected) ...[
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.vinfastBlue.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        '${v.lastBatteryPercent}%',
-                        style: const TextStyle(
-                          color: AppColors.vinfastBlue,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                        ),
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: AppColors.error,
+                        shape: BoxShape.circle,
                       ),
                     ),
-                  ],
+                  ),
                 ],
               ),
             ),
@@ -674,132 +712,901 @@ class _VehicleSwitcherTabsV2 extends StatelessWidget {
 }
 
 // =============================================================================
-// Charge Log Tile (compact, premium)
+// Widget Classes
 // =============================================================================
 
-class _ChargeLogTile extends StatelessWidget {
-  final ChargeLogModel log;
-  const _ChargeLogTile({required this.log});
+class _VehicleBanner extends StatelessWidget {
+  final VehicleModel? vehicle;
+
+  const _VehicleBanner({this.vehicle});
 
   @override
   Widget build(BuildContext context) {
-    final dateFormat = DateFormat('dd/MM HH:mm');
-    final gain = log.chargeGain;
-    final gainColor = gain >= 50
-        ? AppColors.vinfastBlue
-        : gain >= 20
-        ? AppColors.warning
-        : AppColors.info;
-
     return Container(
-      margin: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-      padding: const EdgeInsets.all(14),
+      height: 200,
       decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.glassBorder),
+        borderRadius: BorderRadius.circular(28),
+        image: const DecorationImage(
+          image: NetworkImage('https://images.unsplash.com/photo-1617788138017-80ad40651399?w=800'),
+          fit: BoxFit.cover,
+        ),
       ),
-      child: Row(
+      child: Stack(
         children: [
-          // Battery level indicator
           Container(
-            width: 46,
-            height: 46,
             decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(28),
               gradient: LinearGradient(
-                begin: Alignment.bottomCenter,
-                end: Alignment.topCenter,
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
                 colors: [
-                  gainColor.withValues(alpha: 0.2),
-                  gainColor.withValues(alpha: 0.05),
+                  Colors.black.withOpacity(0.3),
+                  Colors.black.withOpacity(0.6),
                 ],
               ),
-              borderRadius: BorderRadius.circular(13),
-              border: Border.all(color: gainColor.withValues(alpha: 0.3)),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.bolt_rounded, color: gainColor, size: 15),
-                Text(
-                  '+$gain%',
-                  style: TextStyle(
-                    color: gainColor,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
             ),
           ),
-          const SizedBox(width: 12),
-          // Info
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${log.startBatteryPercent}% → ${log.endBatteryPercent}%',
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.access_time_rounded,
-                      color: AppColors.textTertiary,
-                      size: 12,
+          Positioned(
+            top: 16,
+            left: 16,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white.withOpacity(0.2)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: AppColors.success,
+                      shape: BoxShape.circle,
                     ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${dateFormat.format(log.startTime)} · ${log.durationText}',
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          // ODO badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-            decoration: BoxDecoration(
-              color: AppColors.info.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.info.withValues(alpha: 0.15)),
-            ),
-            child: Column(
-              children: [
-                const Icon(
-                  Icons.speed_rounded,
-                  color: AppColors.info,
-                  size: 11,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${log.odoAtCharge}',
-                  style: const TextStyle(
-                    color: AppColors.info,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
                   ),
-                ),
-                const Text(
-                  'km',
-                  style: TextStyle(color: AppColors.info, fontSize: 9),
-                ),
-              ],
+                  const SizedBox(width: 6),
+                  const Text(
+                    'Active',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
+      ),
+    ).animate().fadeIn(duration: 500.ms).scale(begin: const Offset(0.95, 0.95));
+  }
+}
+
+class _VehicleBannerShimmer extends StatelessWidget {
+  const _VehicleBannerShimmer();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 200,
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(28),
+      ),
+      child: const Center(
+        child: CircularProgressIndicator(
+          color: AppColors.primary,
+          strokeWidth: 2,
+        ),
+      ),
+    );
+  }
+}
+
+class _StatCardsRow extends StatelessWidget {
+  final VehicleModel? vehicle;
+
+  const _StatCardsRow({this.vehicle});
+
+  @override
+  Widget build(BuildContext context) {
+    final percent = vehicle?.lastBatteryPercent ?? 78;
+    final range = ((percent * (vehicle?.defaultEfficiency ?? 0.8))).toInt();
+    final odo = vehicle?.currentOdo ?? 1245;
+
+    return Row(
+      children: [
+        Expanded(
+          child: _StatCard(
+            icon: Icons.bolt_outlined,
+            value: '$percent%',
+            label: 'CHARGE',
+            isHighlighted: false,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _StatCard(
+            icon: Icons.near_me_outlined,
+            value: '$range',
+            label: 'RANGE KM',
+            isHighlighted: true,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _StatCard(
+            icon: Icons.access_time_outlined,
+            value: '$odo',
+            label: 'ODO KM',
+            isHighlighted: false,
+          ),
+        ),
+      ],
+    ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.2);
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  final IconData icon;
+  final String value;
+  final String label;
+  final bool isHighlighted;
+
+  const _StatCard({
+    required this.icon,
+    required this.value,
+    required this.label,
+    required this.isHighlighted,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isHighlighted ? AppColors.primaryContainer : AppColors.card,
+        borderRadius: BorderRadius.circular(24),
+        border: isHighlighted ? null : Border.all(color: AppColors.glassBorder),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            icon,
+            color: isHighlighted ? AppColors.primary : AppColors.textSecondary,
+            size: 24,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            value,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 24,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: isHighlighted ? AppColors.primary.withOpacity(0.8) : AppColors.textTertiary,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatCardsRowShimmer extends StatelessWidget {
+  const _StatCardsRowShimmer();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: List.generate(3, (index) => Expanded(
+        child: Container(
+          margin: EdgeInsets.only(right: index < 2 ? 12 : 0),
+          height: 100,
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(24),
+          ),
+        ),
+      )),
+    );
+  }
+}
+
+class _BatteryHealthCard extends StatefulWidget {
+  final double soh;
+  final String vehicleId;
+
+  const _BatteryHealthCard({required this.soh, required this.vehicleId});
+
+  @override
+  State<_BatteryHealthCard> createState() => _BatteryHealthCardState();
+}
+
+class _BatteryHealthCardState extends State<_BatteryHealthCard> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 150),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.97).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _syncBatteryState() async {
+    if (widget.vehicleId.isEmpty) return;
+    
+    setState(() => _isLoading = true);
+    
+    try {
+      // Sync battery state to web
+      await BatteryStateService.syncWithWebDashboard(widget.vehicleId);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Battery health synced to web dashboard'),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Sync failed: $e'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isHealthy = widget.soh >= 90;
+    
+    return GestureDetector(
+      onTapDown: (_) => _controller.forward(),
+      onTapUp: (_) {
+        _controller.reverse();
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const DashboardScreen()),
+        );
+      },
+      onTapCancel: () => _controller.reverse(),
+      child: ScaleTransition(
+        scale: _scaleAnimation,
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: AppColors.glassBorder),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withAlpha(26),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.favorite_outline,
+                      color: AppColors.primary,
+                      size: 18,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Battery Health Score',
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '${widget.soh.toInt()}%',
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: widget.soh / 100,
+                  backgroundColor: AppColors.surfaceVariant,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    isHealthy ? AppColors.success : AppColors.warning,
+                  ),
+                  minHeight: 8,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                isHealthy ? 'Excellent condition' : 'Consider maintenance check',
+                style: TextStyle(
+                  color: isHealthy ? AppColors.success : AppColors.warning,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ).animate().fadeIn(delay: 300.ms).slideY(begin: 0.1);
+  }
+}
+
+class _QuickActionsRow extends StatelessWidget {
+  final String vehicleId;
+  final VoidCallback onSync;
+
+  const _QuickActionsRow({required this.vehicleId, required this.onSync});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _AnimatedActionButton(
+            icon: Icons.map_outlined,
+            label: 'Trip Planner',
+            color: AppColors.primary,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const TripPlannerWrapper()),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _AnimatedActionButton(
+            icon: Icons.build_outlined,
+            label: 'Service',
+            color: const Color(0xFFE8A87C),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const MaintenanceScreen()),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _AnimatedActionButton(
+            icon: Icons.sync_rounded,
+            label: 'Sync Now',
+            color: AppColors.success,
+            onTap: onSync,
+          ),
+        ),
+      ],
+    ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.2);
+  }
+}
+
+class _AnimatedActionButton extends StatefulWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _AnimatedActionButton({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  State<_AnimatedActionButton> createState() => _AnimatedActionButtonState();
+}
+
+class _AnimatedActionButtonState extends State<_AnimatedActionButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _rotateAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 200),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.92).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+    _rotateAnimation = Tween<double>(begin: 0, end: 0.1).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => _controller.forward(),
+      onTapUp: (_) {
+        _controller.reverse();
+        widget.onTap();
+      },
+      onTapCancel: () => _controller.reverse(),
+      child: ScaleTransition(
+        scale: _scaleAnimation,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: widget.color.withOpacity(0.3)),
+          ),
+          child: Column(
+            children: [
+              RotationTransition(
+                turns: _rotateAnimation,
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: widget.color.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(widget.icon, color: widget.color, size: 22),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                widget.label,
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _QuickActionsShimmer extends StatelessWidget {
+  const _QuickActionsShimmer();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: List.generate(3, (index) => Expanded(
+        child: Container(
+          margin: EdgeInsets.only(right: index < 2 ? 12 : 0),
+          height: 80,
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(20),
+          ),
+        ),
+      )),
+    );
+  }
+}
+
+class _SyncDialog extends StatefulWidget {
+  @override
+  State<_SyncDialog> createState() => _SyncDialogState();
+}
+
+class _SyncDialogState extends State<_SyncDialog> with SingleTickerProviderStateMixin {
+  bool _isSyncing = false;
+  String _status = 'Ready to sync';
+  late AnimationController _animationController;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _performSync() async {
+    setState(() {
+      _isSyncing = true;
+      _status = 'Syncing data...';
+    });
+
+    final syncService = SyncService();
+    final result = await syncService.performFullSync();
+
+    setState(() {
+      _isSyncing = false;
+      _status = result['success'] ? 'Sync completed!' : 'Sync failed';
+    });
+
+    await Future.delayed(const Duration(seconds: 1));
+    if (mounted) Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: AppColors.card,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            RotationTransition(
+              turns: _animationController,
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryContainer,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.sync_rounded,
+                  color: AppColors.primary,
+                  size: 32,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Sync with Web',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _status,
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 24),
+            if (_isSyncing)
+              LinearProgressIndicator(
+                backgroundColor: AppColors.surfaceVariant,
+                valueColor: AlwaysStoppedAnimation(AppColors.primary),
+                borderRadius: BorderRadius.circular(4),
+              )
+            else
+              Row(
+                children: [
+                  Expanded(
+                    child: _AnimatedButton(
+                      label: 'Cancel',
+                      isSecondary: true,
+                      onTap: () => Navigator.pop(context),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _AnimatedButton(
+                      label: 'Sync Now',
+                      onTap: _performSync,
+                    ),
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Efficiency Card Widget
+  Widget _buildEfficiencyCard({required double efficiency}) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.glassBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withAlpha(26),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.speed_rounded,
+                  color: AppColors.primary,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Hiệu suất lái xe',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Text(
+                '${efficiency.toInt()}%',
+                style: const TextStyle(
+                  color: AppColors.success,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: efficiency / 100,
+              backgroundColor: AppColors.surfaceVariant,
+              valueColor: const AlwaysStoppedAnimation<Color>(AppColors.success),
+              minHeight: 8,
+            ),
+          ),
+        ],
+      ),
+    ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.1);
+  }
+
+  // Achievement Card Widget
+  Widget _buildAchievementCard({required double efficiency}) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.glassBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.success.withAlpha(26),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.emoji_events_rounded,
+                  color: AppColors.success,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Thành tích lái xe',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              _buildAchievementItem(
+                icon: Icons.local_florist_rounded,
+                label: 'Eco Master',
+                achieved: efficiency >= 85,
+              ),
+              const SizedBox(width: 12),
+              _buildAchievementItem(
+                icon: Icons.bolt,
+                label: 'Energy Saver',
+                achieved: efficiency >= 75,
+              ),
+              const SizedBox(width: 12),
+              _buildAchievementItem(
+                icon: Icons.star_rounded,
+                label: 'Top Driver',
+                achieved: efficiency >= 90,
+              ),
+            ],
+          ),
+        ],
+      ),
+    ).animate().fadeIn(delay: 500.ms).slideY(begin: 0.1);
+  }
+
+  Widget _buildAchievementItem({
+    required IconData icon,
+    required String label,
+    required bool achieved,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: achieved
+              ? AppColors.success.withAlpha(26)
+              : AppColors.surfaceVariant,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          children: [
+            Icon(
+              icon,
+              color: achieved ? AppColors.success : AppColors.textTertiary,
+              size: 24,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: achieved ? AppColors.success : AppColors.textTertiary,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AnimatedButton extends StatefulWidget {
+  final String label;
+  final VoidCallback onTap;
+  final bool isSecondary;
+
+  const _AnimatedButton({
+    required this.label,
+    required this.onTap,
+    this.isSecondary = false,
+  });
+
+  @override
+  State<_AnimatedButton> createState() => _AnimatedButtonState();
+}
+
+class _AnimatedButtonState extends State<_AnimatedButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 150),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.95).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => _controller.forward(),
+      onTapUp: (_) {
+        _controller.reverse();
+        widget.onTap();
+      },
+      onTapCancel: () => _controller.reverse(),
+      child: ScaleTransition(
+        scale: _scaleAnimation,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: BoxDecoration(
+            color: widget.isSecondary ? AppColors.surfaceVariant : AppColors.primary,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Center(
+            child: Text(
+              widget.label,
+              style: TextStyle(
+                color: widget.isSecondary ? AppColors.textPrimary : Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BatteryHealthShimmer extends StatelessWidget {
+  const _BatteryHealthShimmer();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 120,
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(24),
       ),
     );
   }

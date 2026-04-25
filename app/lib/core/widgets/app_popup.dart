@@ -10,7 +10,7 @@ class AppPopup {
   }
 
   static void showSuccess(String message) {
-    _show(message, background: AppColors.primaryGreen);
+    _show(message, background: AppColors.primary);
   }
 
   static void _show(String message, {required Color background}) {

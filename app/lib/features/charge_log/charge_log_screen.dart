@@ -35,12 +35,12 @@ class ChargeLogScreen extends ConsumerWidget {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: AppColors.primaryGreen.withValues(alpha: 0.12),
+                      color: AppColors.primary.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Icon(
                       Icons.history_rounded,
-                      color: AppColors.primaryGreen,
+                      color: AppColors.primary,
                       size: 22,
                     ),
                   ),
@@ -81,7 +81,7 @@ class ChargeLogScreen extends ConsumerWidget {
                     icon: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: AppColors.primaryGreen,
+                        color: AppColors.primary,
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: const Icon(Icons.add_rounded, color: Colors.white, size: 18),
@@ -136,7 +136,7 @@ class ChargeLogScreen extends ConsumerWidget {
                   }
 
                   return RefreshIndicator(
-                    color: AppColors.primaryGreen,
+                    color: AppColors.primary,
                     backgroundColor: AppColors.surface,
                     onRefresh: () async {
                       ref.invalidate(chargeLogsProvider(vehicleId));
@@ -183,7 +183,7 @@ class ChargeLogScreen extends ConsumerWidget {
                 },
                 loading: () => const Center(
                   child: CircularProgressIndicator(
-                    color: AppColors.primaryGreen,
+                    color: AppColors.primary,
                     strokeWidth: 2,
                   ),
                 ),
@@ -301,7 +301,7 @@ class _SummaryItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Icon(icon, color: AppColors.primaryGreen, size: 16),
+        Icon(icon, color: AppColors.primary, size: 16),
         const SizedBox(height: 4),
         Text(
           value,
@@ -376,7 +376,7 @@ class _ChargeLogDetailCard extends StatelessWidget {
                         Text(
                           '${log.endBatteryPercent}%',
                           style: const TextStyle(
-                            color: AppColors.primaryGreen,
+                            color: AppColors.primary,
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
                           ),
@@ -385,13 +385,13 @@ class _ChargeLogDetailCard extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                            color: AppColors.primaryGreen.withValues(alpha: 0.12),
+                            color: AppColors.primary.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
                             '+$chargeGain%',
                             style: const TextStyle(
-                              color: AppColors.primaryGreen,
+                              color: AppColors.primary,
                               fontSize: 13,
                               fontWeight: FontWeight.w700,
                             ),
@@ -515,7 +515,7 @@ class _BatteryProgressBar extends StatelessWidget {
               gradient: const LinearGradient(
                 begin: Alignment.bottomCenter,
                 end: Alignment.topCenter,
-                colors: [AppColors.error, AppColors.warning, AppColors.primaryGreen],
+                colors: [AppColors.error, AppColors.warning, AppColors.primary],
               ),
               borderRadius: BorderRadius.circular(4),
             ),

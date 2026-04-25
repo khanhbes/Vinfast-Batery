@@ -30,15 +30,15 @@ class BatteryStatusCard extends StatelessWidget {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                AppColors.vinfastBlue,
-                AppColors.vinfastBlue.withValues(alpha: 0.8),
-                const Color(0xFF0066CC),
+                AppColors.primaryContainer,
+                const Color(0xFF005C99),
+                const Color(0xFF003A66),
               ],
             ),
             borderRadius: BorderRadius.circular(28),
             boxShadow: [
               BoxShadow(
-                color: AppColors.vinfastBlue.withValues(alpha: 0.35),
+                color: AppColors.primaryContainer.withValues(alpha: 0.45),
                 blurRadius: 40,
                 offset: const Offset(0, 16),
               ),
@@ -88,7 +88,7 @@ class BatteryStatusCard extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'TRẠNG THÁI PIN',
+                              'BATTERY STATUS',
                               style: TextStyle(
                                 color: Colors.white.withValues(alpha: 0.7),
                                 fontSize: 11,
@@ -98,7 +98,7 @@ class BatteryStatusCard extends StatelessWidget {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              percent >= 50 ? 'Sẵn sàng' : 'Pin yếu',
+                              percent >= 50 ? 'Ready / Sẵn sàng' : 'Low / Pin yếu',
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 24,
@@ -158,7 +158,7 @@ class BatteryStatusCard extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             Text(
-                              'QUÃNG ĐƯỜNG',
+                              'RANGE (km)',
                               style: TextStyle(
                                 color: Colors.white.withValues(alpha: 0.7),
                                 fontSize: 10,
@@ -257,7 +257,7 @@ class _QuickStat extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
       decoration: BoxDecoration(
         color: AppColors.card,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(color: AppColors.glassBorder),
       ),
       child: Column(

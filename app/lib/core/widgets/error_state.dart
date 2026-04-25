@@ -75,7 +75,7 @@ class ErrorState extends StatelessWidget {
                   icon: const Icon(Icons.refresh_rounded, size: 18),
                   label: Text(retryLabel),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.vinfastBlue,
+                    backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),

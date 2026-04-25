@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/theme/app_colors.dart';
-import '../features/dashboard/dashboard_screen.dart';
+import '../features/ai/ai_models_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/maintenance/maintenance_screen.dart';
 import '../features/settings/settings_screen.dart';
+import '../features/trip_planner/trip_planner_wrapper.dart';
 
-/// Bottom Navigation chính — 4 tabs (Dark Premium Design V3)
+/// Bottom Navigation chính — 5 tabs (Material 3 dark, PLAN1 sync)
 class AppNavigation extends StatefulWidget {
   const AppNavigation({super.key});
 
@@ -19,10 +20,11 @@ class _AppNavigationState extends State<AppNavigation> {
   int _currentIndex = 0;
 
   final _screens = const [
-    HomeScreen(),        // Tab 0: Trang chủ (Battery Status + Daily Brief + AI)
-    DashboardScreen(),   // Tab 1: Dashboard (SoH + Đi/Sạc)
-    MaintenanceScreen(), // Tab 2: Bảo dưỡng
-    SettingsScreen(),    // Tab 3: Cài đặt
+    HomeScreen(),          // Tab 0: Home / Bảng điều khiển
+    AiModelsScreen(),      // Tab 1: AI Models
+    TripPlannerWrapper(),   // Tab 2: Trip Planner / Lộ trình
+    MaintenanceScreen(),   // Tab 3: Service / Bảo dưỡng
+    SettingsScreen(),      // Tab 4: Settings / Cài đặt
   ];
 
   @override
@@ -48,7 +50,7 @@ class _AppNavigationState extends State<AppNavigation> {
           ),
           boxShadow: [
             BoxShadow(
-              color: AppColors.vinfastBlue.withValues(alpha: 0.05),
+              color: AppColors.primary.withValues(alpha: 0.05),
               blurRadius: 20,
               offset: const Offset(0, -4),
             ),
@@ -67,22 +69,28 @@ class _AppNavigationState extends State<AppNavigation> {
                   onTap: () => setState(() => _currentIndex = 0),
                 ),
                 _NavItem(
-                  icon: Icons.dashboard_rounded,
-                  label: 'Dashboard',
+                  icon: Icons.psychology_rounded,
+                  label: 'AI',
                   isSelected: _currentIndex == 1,
                   onTap: () => setState(() => _currentIndex = 1),
                 ),
                 _NavItem(
-                  icon: Icons.build_rounded,
-                  label: 'Service',
+                  icon: Icons.map_rounded,
+                  label: 'Trip',
                   isSelected: _currentIndex == 2,
                   onTap: () => setState(() => _currentIndex = 2),
                 ),
                 _NavItem(
-                  icon: Icons.person_rounded,
-                  label: 'Settings',
+                  icon: Icons.build_rounded,
+                  label: 'Service',
                   isSelected: _currentIndex == 3,
                   onTap: () => setState(() => _currentIndex = 3),
+                ),
+                _NavItem(
+                  icon: Icons.person_rounded,
+                  label: 'Settings',
+                  isSelected: _currentIndex == 4,
+                  onTap: () => setState(() => _currentIndex = 4),
                 ),
               ],
             ),
@@ -120,7 +128,7 @@ class _NavItem extends StatelessWidget {
         ),
         decoration: BoxDecoration(
           color: isSelected
-              ? AppColors.vinfastBlue.withValues(alpha: 0.15)
+              ? AppColors.primaryContainer.withValues(alpha: 0.35)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(16),
         ),
@@ -132,14 +140,14 @@ class _NavItem extends StatelessWidget {
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
                 color: isSelected
-                    ? AppColors.vinfastBlue.withValues(alpha: 0.2)
+                    ? AppColors.primary.withValues(alpha: 0.12)
                     : Colors.transparent,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
                 icon,
                 color: isSelected
-                    ? AppColors.vinfastBlue
+                    ? AppColors.primary
                     : AppColors.textTertiary,
                 size: 22,
               ),
@@ -149,7 +157,7 @@ class _NavItem extends StatelessWidget {
               label,
               style: TextStyle(
                 color: isSelected
-                    ? AppColors.vinfastBlue
+                    ? AppColors.primary
                     : AppColors.textTertiary,
                 fontSize: 10,
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,

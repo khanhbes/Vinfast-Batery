@@ -25,7 +25,7 @@ class GradientCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = gradientColors ??
         [
-          AppColors.vinfastBlue.withValues(alpha: 0.15),
+          AppColors.primary.withValues(alpha: 0.15),
           AppColors.info.withValues(alpha: 0.05),
         ];
 

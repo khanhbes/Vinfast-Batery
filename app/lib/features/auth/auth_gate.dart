@@ -20,7 +20,7 @@ class AuthGate extends StatelessWidget {
             backgroundColor: AppColors.background,
             body: Center(
               child: CircularProgressIndicator(
-                color: AppColors.vinfastBlue,
+                color: AppColors.primary,
               ),
             ),
           );
