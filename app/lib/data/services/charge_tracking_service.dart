@@ -105,7 +105,7 @@ class ChargeTrackingService {
     final aiPredictionJson = prefs.getString('charge_aiPrediction');
     if (aiPredictionJson != null) {
       try {
-        _aiPrediction = AiPredictionData.fromMap(jsonDecode(aiPredictionJson));
+        _aiPrediction = AiPredictionData.fromJson(jsonDecode(aiPredictionJson));
         debugPrint('🔮 AI prediction recovered: ${_aiPrediction!.formattedDuration}');
       } catch (e) {
         debugPrint('⚠️ Failed to recover AI prediction: $e');
@@ -259,7 +259,7 @@ class ChargeTrackingService {
     }
     // Persist AI prediction data for recovery after app restart
     if (_aiPrediction != null) {
-      await prefs.setString('charge_aiPrediction', jsonEncode(_aiPrediction!.toMap()));
+      await prefs.setString('charge_aiPrediction', jsonEncode(_aiPrediction!.toJson()));
     }
 
     // Timer cập nhật mỗi 30 giây

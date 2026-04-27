@@ -1,5 +1,18 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// Các loại dịch vụ bảo dưỡng
+enum ServiceType {
+  oilChange,
+  tireRotation,
+  brakeService,
+  airFilter,
+  batteryCheck,
+  coolantFlush,
+  transmissionService,
+  inspection,
+  other,
+}
+
 /// Model mốc bảo dưỡng xe
 class MaintenanceTaskModel {
   final String? taskId;
@@ -11,6 +24,8 @@ class MaintenanceTaskModel {
   final bool isCompleted;
   final DateTime? completedDate;
   final DateTime createdAt;
+  final DateTime? scheduledDate; // Ngày lên lịch bảo dưỡng
+  final ServiceType serviceType; // Loại dịch vụ
 
   MaintenanceTaskModel({
     this.taskId,
@@ -22,6 +37,8 @@ class MaintenanceTaskModel {
     this.isCompleted = false,
     this.completedDate,
     DateTime? createdAt,
+    this.scheduledDate,
+    this.serviceType = ServiceType.other,
   }) : createdAt = createdAt ?? DateTime.now();
 
   /// Kiểm tra sắp đến hạn (còn ≤50km)
@@ -55,6 +72,19 @@ class MaintenanceTaskModel {
       createdAt: data['createdAt'] != null
           ? (data['createdAt'] as Timestamp).toDate()
           : DateTime.now(),
+      scheduledDate: data['scheduledDate'] != null
+          ? (data['scheduledDate'] as Timestamp).toDate()
+          : null,
+      serviceType: _parseServiceType(data['serviceType']),
+    );
+  }
+
+  static ServiceType _parseServiceType(dynamic value) {
+    if (value == null) return ServiceType.other;
+    final str = value.toString().toLowerCase();
+    return ServiceType.values.firstWhere(
+      (e) => e.name.toLowerCase() == str,
+      orElse: () => ServiceType.other,
     );
   }
 
@@ -70,6 +100,9 @@ class MaintenanceTaskModel {
           completedDate != null ? Timestamp.fromDate(completedDate!) : null,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': FieldValue.serverTimestamp(),
+      'scheduledDate':
+          scheduledDate != null ? Timestamp.fromDate(scheduledDate!) : null,
+      'serviceType': serviceType.name,
     };
   }
 
@@ -82,6 +115,8 @@ class MaintenanceTaskModel {
     bool? isCompleted,
     DateTime? completedDate,
     DateTime? createdAt,
+    DateTime? scheduledDate,
+    ServiceType? serviceType,
   }) {
     return MaintenanceTaskModel(
       taskId: taskId ?? this.taskId,
@@ -92,6 +127,8 @@ class MaintenanceTaskModel {
       isCompleted: isCompleted ?? this.isCompleted,
       completedDate: completedDate ?? this.completedDate,
       createdAt: createdAt ?? this.createdAt,
+      scheduledDate: scheduledDate ?? this.scheduledDate,
+      serviceType: serviceType ?? this.serviceType,
     );
   }
 }

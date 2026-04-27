@@ -69,6 +69,12 @@ class AiPredictionData {
     };
   }
 
+  /// Convert to JSON map (for SharedPreferences storage)
+  Map<String, dynamic> toJson() => toMap();
+
+  /// Create from JSON map (from SharedPreferences)
+  factory AiPredictionData.fromJson(Map<String, dynamic> json) => AiPredictionData.fromMap(json);
+
   /// Format duration as hours/minutes string
   String get formattedDuration {
     final seconds = predictedDurationSec ?? 0;

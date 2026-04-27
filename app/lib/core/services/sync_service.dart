@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../constants/app_constants.dart';
 
 /// SyncService - Đồng bộ dữ liệu giữa App và Web Dashboard
 /// Xử lý: User sync, Vehicle sync, Battery state sync, Trip prediction sync
@@ -13,7 +14,7 @@ class SyncService {
   SyncService._internal();
 
   // API Configuration
-  static const String _baseUrl = 'http://localhost:5000';
+  static String get _baseUrl => AppConstants.apiBaseUrl;
   static const Duration _timeout = Duration(seconds: 30);
 
   // Firestore instances

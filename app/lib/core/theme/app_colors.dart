@@ -1,5 +1,8 @@
 import 'dart:ui';
 
+// Re-export Light/Dark palettes from app_theme.dart
+export 'app_theme.dart' show AppColorsLight, AppColorsDark;
+
 /// Bảng màu thiết kế VinFast Battery App — Design System V4
 /// Material 3 dark theme — VinFast Feliz Neo companion app
 /// Ref: vinfast-battery-app + PLAN1.md UI/UX Sync
@@ -67,4 +70,7 @@ class AppColors {
   // ── Glass / Overlay ───────────────────────────────────
   static const Color glass = Color(0x08FFFFFF);
   static const Color glassBorder = Color(0x1AFFFFFF);
+
+  // ── Legacy aliases ────────────────────────────────────
+  static const Color cardBackground = card;
 }

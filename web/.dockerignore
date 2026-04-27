@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+
+# Node
+dashboard/node_modules/
+dashboard/dist/
+
+# Logs
+*.log
+logs/
+
+# AI models (mount via volume, không bake vào image)
+models/
+
+# Git
+.git/
+.gitignore
+
+# Secrets (không bao giờ bake vào image)
+*.json
+!dashboard/package*.json
+secrets/
+
+# Giữ lại requirements files
+!requirements*.txt
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,28 @@
+# ── Flask Unified API (port 5000) ─────────────────────────────
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements-api.txt .
+RUN pip install --no-cache-dir -r requirements-api.txt
+
+COPY server.py .
+COPY ai_server/ ./ai_server/
+
+RUN mkdir -p /app/models
+
+EXPOSE 5000
+
+ENV FLASK_ENV=production \
+    FLASK_USE_RELOADER=0 \
+    PYTHONUNBUFFERED=1
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+    CMD curl -f http://localhost:5000/api/health || exit 1
+
+CMD ["python", "server.py"]

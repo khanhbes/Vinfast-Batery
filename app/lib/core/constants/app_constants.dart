@@ -3,7 +3,16 @@ class AppConstants {
   AppConstants._();
 
   static const String appName = 'VinFast Battery';
-  static const String appVersion = '1.0.34';
+
+  // API Base URL — truyền qua --dart-define=APP_API_BASE_URL=https://...
+  // Fallback: 10.0.2.2 cho Android emulator, localhost cho iOS simulator
+  /// API Base URL — PLAN1: production default là api.evbattery.live
+  /// Chỉ dùng localhost/emulator khi build dev với --dart-define
+  static const String apiBaseUrl = String.fromEnvironment(
+    'APP_API_BASE_URL',
+    defaultValue: 'http://api.evbattery.live',
+  );
+  static const String appVersion = '1.0.47';
 
   // Firestore Collection Names
   static const String vehiclesCollection = 'Vehicles';

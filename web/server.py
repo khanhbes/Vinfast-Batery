@@ -16,7 +16,7 @@ import functools
 import glob
 import numpy as np
 from datetime import datetime, timedelta, timezone
-from flask import Flask, request, jsonify, Response, redirect
+from flask import Flask, request, jsonify, Response, redirect, send_file
 from flask_cors import CORS
 from werkzeug.exceptions import HTTPException
 
@@ -29,6 +29,14 @@ try:
     import pandas as pd
 except Exception:
     pd = None
+
+try:
+    from ai_server.model_store import ModelStore
+    from ai_server.registry import list_groups as ai_list_groups, list_types as ai_list_types
+except Exception:
+    ModelStore = None
+    ai_list_groups = None
+    ai_list_types = None
 
 # ═══════════════════════════════════════════════════════════════
 # CONSUMPTION MODEL LOADER (ev_soc_pipeline.pkl)
@@ -231,10 +239,40 @@ def _find_service_account_path() -> str | None:
             return matches[0]
     return None
 
+def _load_firebase_cred_from_env():
+    """
+    Load Firebase credential từ env var FIREBASE_CREDENTIALS_JSON (base64 encoded).
+    Dùng cho Docker deployment — không cần mount file .json vào container.
+    Tạo bằng: base64 -w 0 serviceAccountKey.json   (Linux/Mac)
+    PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes("key.json"))
+    """
+    import base64, json as _json, tempfile
+    raw = os.environ.get('FIREBASE_CREDENTIALS_JSON', '').strip()
+    if not raw:
+        return None
+    try:
+        decoded = base64.b64decode(raw).decode('utf-8')
+        data = _json.loads(decoded)
+        tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
+        _json.dump(data, tmp)
+        tmp.close()
+        return tmp.name
+    except Exception as exc:
+        print(f'⚠ Không thể parse FIREBASE_CREDENTIALS_JSON: {exc}')
+        return None
+
 try:
     import firebase_admin
     from firebase_admin import credentials, firestore, auth as fb_auth
-    cred_path = _find_service_account_path()
+
+    # Ưu tiên 1: FIREBASE_CREDENTIALS_JSON (base64) — dùng cho Docker
+    cred_path = _load_firebase_cred_from_env()
+    if cred_path:
+        print('🔐 Firebase: dùng FIREBASE_CREDENTIALS_JSON (base64 env var)')
+    else:
+        # Ưu tiên 2: file trên đĩa (local dev)
+        cred_path = _find_service_account_path()
+
     if cred_path:
         cred = credentials.Certificate(cred_path)
         firebase_admin.initialize_app(cred)
@@ -249,8 +287,8 @@ try:
 except Exception as e:
     print(f'⚠ Firebase Admin SDK not available: {e}')
     print('  → Sử dụng in-memory fallback')
-    print('  → Để dùng Firestore thật: đặt file key (ví dụ "serviceAccountKey.json" hoặc "*firebase-adminsdk*.json") cạnh server.py')
-    print('    hoặc set biến môi trường GOOGLE_APPLICATION_CREDENTIALS trỏ tới file key')
+    print('  → Docker: set FIREBASE_CREDENTIALS_JSON=<base64 của file key.json>')
+    print('  → Local:  đặt file serviceAccountKey.json cạnh server.py')
 
 # ═══════════════════════════════════════════════════════════════
 # FLASK APP
@@ -330,10 +368,20 @@ def require_auth(f):
     return decorated
 
 
+_DEV_ADMIN_KEY = os.environ.get('DEV_ADMIN_KEY', 'dev-local-token')
+
 def require_admin(f):
     """Decorator: yêu cầu quyền admin."""
     @functools.wraps(f)
     def decorated(*args, **kwargs):
+        # Dev bypass: X-Admin-Key header (only when Firebase not available or key matches)
+        admin_key = request.headers.get('X-Admin-Key', '')
+        if admin_key and admin_key == _DEV_ADMIN_KEY:
+            request._uid = 'dev-admin'
+            request._email = 'dev@local'
+            request._role = 'admin'
+            return f(*args, **kwargs)
+
         uid, email, role = _verify_token()
         if not uid:
             return jsonify({'success': False, 'error': 'Unauthorized'}), 401
@@ -2293,6 +2341,11 @@ except Exception:
 AI_SERVER_URL = os.environ.get('AI_SERVER_URL', 'http://127.0.0.1:8001').rstrip('/')
 AI_SERVER_TOKEN = os.environ.get('AI_SERVER_INTERNAL_TOKEN', 'dev-local-token')
 AI_SERVER_TIMEOUT = float(os.environ.get('AI_SERVER_TIMEOUT', '15'))
+AI_MODELS_BASE_DIR = os.environ.get(
+    'AI_SERVER_MODELS_DIR',
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), 'models'),
+)
+APP_COMPATIBLE_MODEL_EXTS = {'.tflite', '.lite'}
 
 
 def _ai_headers(extra=None):
@@ -2323,40 +2376,469 @@ def _ai_proxy_json(method, path, *, json_body=None, params=None):
     return jsonify(data), resp.status_code
 
 
-@app.route('/api/soc/predict', methods=['POST'])
-def soc_predict():
-    """Predict SOC — delegated to FastAPI; contract unchanged for callers."""
-    body = request.get_json() or {}
-    resp, status_code = _ai_proxy_json('POST', '/v1/soc/predict', json_body=body)
-    # Mirror legacy side effect: persist to Firestore when successful.
-    if status_code == 200 and _firestore_db:
+def _ai_request_json(method, path, *, json_body=None, params=None):
+    """Internal helper for server-side composition with the FastAPI AI service."""
+    if _http is None:
+        raise RuntimeError('requests library not installed')
+
+    url = f'{AI_SERVER_URL}{path}'
+    resp = _http.request(
+        method,
+        url,
+        json=json_body,
+        params=params,
+        headers=_ai_headers({'Content-Type': 'application/json'}) if json_body is not None else _ai_headers(),
+        timeout=AI_SERVER_TIMEOUT,
+    )
+    try:
+        data = resp.json()
+    except Exception as exc:
+        raise RuntimeError(f'invalid AI server response (HTTP {resp.status_code})') from exc
+    return data, resp.status_code
+
+
+def _model_store_for(type_key: str):
+    if ModelStore is None:
+        return None
+    return ModelStore(os.path.join(AI_MODELS_BASE_DIR, type_key))
+
+
+def _active_model_artifact(type_key: str):
+    store = _model_store_for(type_key)
+    if store is None:
+        return None
+
+    active_version = store.active_version()
+    if not active_version:
+        return None
+
+    for version_meta in store.list_versions():
+        if version_meta.get('version') == active_version:
+            return version_meta
+    return None
+
+
+def _normalize_json_value(value):
+    if isinstance(value, dict):
+        return {k: _normalize_json_value(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_normalize_json_value(v) for v in value]
+    if isinstance(value, tuple):
+        return [_normalize_json_value(v) for v in value]
+    if hasattr(value, 'isoformat') and not isinstance(value, str):
+        return value.isoformat()
+    return value
+
+
+def _doc_to_json(doc, id_field: str):
+    data = _normalize_json_value(doc.to_dict() or {})
+    data[id_field] = doc.id
+    return data
+
+
+def _sync_upsert_doc(collection_name: str, doc_id: str, payload: dict, owner_uid: str,
+                     *, id_field: str | None = None):
+    data = dict(payload or {})
+    if id_field and doc_id:
+        data[id_field] = doc_id
+    data['ownerUid'] = owner_uid
+    data.setdefault('source', 'flutter_app')
+    data = _ensure_schema(data, collection_name)
+    _fs().collection(collection_name).document(doc_id).set(data, merge=True)
+    return doc_id
+
+
+# ═══════════════════════════════════════════════════════════════
+# AI DEPLOYMENT LIFECYCLE (per PLAN1)
+# ═══════════════════════════════════════════════════════════════
+
+# In-memory deployment status (backed by Firestore when available)
+# Structure: {type_key: {'deploymentStatus': 'planned'|'not_deployed'|'deployed', ...}}
+_ai_deployment_cache: dict = {}
+
+
+def _get_model_deployment_status(type_key: str) -> dict:
+    """Lấy deployment status từ cache hoặc Firestore."""
+    if type_key in _ai_deployment_cache:
+        return _ai_deployment_cache[type_key]
+    
+    # Default status based on registry status
+    if ai_list_types:
+        types = {t['key']: t for t in ai_list_types()}
+        if type_key in types:
+            registry_status = types[type_key].get('status', 'planned')
+            # Map registry status to deployment status
+            if registry_status == 'ready':
+                default_status = 'planned'
+            elif registry_status == 'in_progress':
+                default_status = 'planned'
+            else:
+                default_status = 'planned'
+        else:
+            default_status = 'planned'
+    else:
+        default_status = 'planned'
+    
+    default = {
+        'deploymentStatus': default_status,  # planned | not_deployed | deployed
+        'deploymentVersion': None,
+        'deployedAt': None,
+        'deployedBy': None,
+        'runtimeHealth': 'inactive',  # loaded | inactive | error
+        'latestUploadedVersion': None,
+    }
+    
+    # Try to load from Firestore if available
+    if _firestore_db:
         try:
-            payload = resp.get_json()
-            if payload and payload.get('success'):
-                _firestore_db.collection('soc_predictions').add({
-                    'input': body,
-                    'result': payload.get('data'),
-                    'createdAt': datetime.now(timezone.utc),
+            doc = _firestore_db.collection('AiModelDeployments').document(type_key).get()
+            if doc.exists:
+                data = doc.to_dict()
+                default.update({
+                    'deploymentStatus': data.get('deploymentStatus', default_status),
+                    'deploymentVersion': data.get('deploymentVersion'),
+                    'deployedAt': data.get('deployedAt'),
+                    'deployedBy': data.get('deployedBy'),
+                    'runtimeHealth': data.get('runtimeHealth', 'inactive'),
                 })
         except Exception as e:
-            print(f'⚠️ Failed to save SOC prediction: {e}')
-    return resp, status_code
+            print(f'⚠️ Failed to load deployment status for {type_key}: {e}')
+    
+    _ai_deployment_cache[type_key] = default
+    return default
 
 
-@app.route('/api/soc/status', methods=['GET'])
-def soc_status():
-    """Proxy AI server status."""
-    return _ai_proxy_json('GET', '/v1/soc/status')
+def _save_model_deployment_status(type_key: str, status: dict):
+    """Lưu deployment status vào cache và Firestore."""
+    _ai_deployment_cache[type_key] = status
+    if _firestore_db:
+        try:
+            _firestore_db.collection('AiModelDeployments').document(type_key).set({
+                'deploymentStatus': status.get('deploymentStatus'),
+                'deploymentVersion': status.get('deploymentVersion'),
+                'deployedAt': status.get('deployedAt'),
+                'deployedBy': status.get('deployedBy'),
+                'runtimeHealth': status.get('runtimeHealth'),
+                'updatedAt': datetime.now(timezone.utc),
+            }, merge=True)
+        except Exception as e:
+            print(f'⚠️ Failed to save deployment status for {type_key}: {e}')
 
 
-# ── Admin Model Management (proxy, per-type) ─────────────────────
+def _update_runtime_health(type_key: str):
+    """Cập nhật runtime health từ AI server status."""
+    status = _get_model_deployment_status(type_key)
+    
+    # Check AI server runtime status
+    try:
+        data, code = _ai_request_json('GET', f'/v1/models/{type_key}/status')
+        if code == 200 and isinstance(data, dict):
+            ai_status = data.get('status') or data.get('runtimeStatus')
+            active_version = data.get('activeVersion') or data.get('active_version')
+            
+            if ai_status == 'loaded' and active_version:
+                status['runtimeHealth'] = 'loaded'
+            elif ai_status == 'error':
+                status['runtimeHealth'] = 'error'
+            else:
+                status['runtimeHealth'] = 'inactive'
+                
+            # Sync deployment version if loaded
+            if active_version and status['deploymentVersion'] == active_version:
+                pass  # In sync
+            elif active_version and status['deploymentVersion'] != active_version:
+                # Runtime has different version than deployment record
+                status['runtimeHealth'] = 'error'
+        else:
+            status['runtimeHealth'] = 'inactive'
+    except Exception:
+        status['runtimeHealth'] = 'inactive'
+    
+    _save_model_deployment_status(type_key, status)
+
+
+# ── Admin Model Deployment APIs ──────────────────────────────────
+
 @app.route('/api/admin/ai/types', methods=['GET'])
 @require_admin
 def admin_ai_types():
-    """List registered model types with status."""
-    return _ai_proxy_json('GET', '/v1/types')
+    """List registered model types with deployment + runtime status."""
+    if ai_list_types is None:
+        return jsonify({'success': False, 'error': 'AI registry unavailable'}), 503
+    
+    types_meta = ai_list_types()
+    result = []
+    
+    for meta in types_meta:
+        key = meta['key']
+        # Get deployment status
+        deploy = _get_model_deployment_status(key)
+        
+        # Get AI server status
+        try:
+            data, code = _ai_request_json('GET', f'/v1/models/{key}/status')
+            ai_status = data if (code == 200 and isinstance(data, dict)) else {}
+        except Exception:
+            ai_status = {}
+        
+        # Update runtime health
+        runtime_health = ai_status.get('status') or ai_status.get('runtimeStatus') or deploy.get('runtimeHealth', 'inactive')
+        deploy['runtimeHealth'] = runtime_health
+        
+        # Get latest uploaded version from store
+        store = _model_store_for(key)
+        if store:
+            versions = store.list_versions()
+            if versions:
+                latest = max(versions, key=lambda v: v.get('uploadedAt', '') or '')
+                deploy['latestUploadedVersion'] = latest.get('version')
+        
+        # Get store info for versions count
+        versions_count = len(versions) if store and versions else 0
+        
+        # Build runtime status object (frontend expects object not string)
+        runtime_status_obj = {
+            'isLoaded': ai_status.get('isLoaded') or ai_status.get('is_loaded') or False,
+            'isPredictable': ai_status.get('isPredictable') or ai_status.get('is_predictable') or False,
+            'predictorKind': ai_status.get('predictorKind') or ai_status.get('predictor_kind'),
+            'featureCount': ai_status.get('featureCount') or ai_status.get('feature_count'),
+            'activeVersion': ai_status.get('activeVersion') or ai_status.get('active_version'),
+            'versionsCount': versions_count,
+            'lastError': ai_status.get('lastError') or ai_status.get('last_error'),
+            'validationError': ai_status.get('validationError') or ai_status.get('validation_error'),
+        }
+        
+        # Build response
+        result.append({
+            **meta,
+            'deploymentStatus': deploy['deploymentStatus'],
+            'deploymentVersion': deploy['deploymentVersion'],
+            'deployedAt': deploy['deployedAt'],
+            'deployedBy': deploy['deployedBy'],
+            'runtimeHealth': deploy['runtimeHealth'],
+            'latestUploadedVersion': deploy.get('latestUploadedVersion'),
+            'activeVersion': ai_status.get('activeVersion') or ai_status.get('active_version'),
+            'runtimeStatus': runtime_status_obj,
+        })
+    
+    # Get groups (hardcoded temporarily to ensure frontend works)
+    groups = [
+        {"key": "survival", "label": "Tính năng Sinh tồn", "subtitle": "Giải quyết nỗi lo hết pin", "phase": "v1.0", "order": 1},
+        {"key": "assistant", "label": "Trợ lý Thông minh", "subtitle": "Can thiệp thói quen người dùng", "phase": "v2.0", "order": 2},
+        {"key": "health", "label": "Sức khỏe Xe", "subtitle": "Bảo dưỡng dự đoán", "phase": "v3.0", "order": 3},
+    ]
+    
+    return jsonify({'success': True, 'data': {'types': result, 'groups': groups}})
 
 
+@app.route('/api/admin/ai/models/<type_key>/test-version', methods=['POST'])
+@require_admin
+def admin_test_version(type_key):
+    """Test một version chưa deploy (load tạm vào memory để test)."""
+    body = request.get_json() or {}
+    version = body.get('version', '').strip()
+    
+    if not version:
+        return jsonify({'success': False, 'error': 'version is required'}), 400
+    
+    # Call AI server to validate/load the version
+    try:
+        data, code = _ai_request_json('POST', f'/v1/models/{type_key}/validate-version',
+                                      json_body={'version': version})
+        if code != 200:
+            return jsonify({'success': False, 'error': data.get('error', 'Validation failed')}), code
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'typeKey': type_key,
+                'version': version,
+                'status': 'validated',
+                'message': 'Version có thể load được, chưa deploy chính thức'
+            }
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'AI server error: {e}'}), 502
+
+
+@app.route('/api/admin/ai/models/<type_key>/deploy', methods=['POST'])
+@require_admin
+def admin_deploy_model(type_key):
+    """Deploy một version — đổi deploymentStatus sang 'deployed'."""
+    body = request.get_json() or {}
+    version = body.get('version', '').strip()
+    
+    if not version:
+        return jsonify({'success': False, 'error': 'version is required'}), 400
+    
+    # Verify version exists
+    store = _model_store_for(type_key)
+    if not store:
+        return jsonify({'success': False, 'error': 'AI registry unavailable'}), 503
+    
+    versions = [v.get('version') for v in store.list_versions()]
+    if version not in versions:
+        return jsonify({'success': False, 'error': f'Version {version} không tồn tại'}), 404
+    
+    # Deploy to AI server (load-active)
+    try:
+        data, code = _ai_request_json('POST', f'/v1/models/{type_key}/load-active')
+        if code != 200:
+            return jsonify({'success': False, 'error': data.get('error', 'Deploy failed')}), code
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'AI server error: {e}'}), 502
+    
+    # Update deployment status
+    status = _get_model_deployment_status(type_key)
+    status.update({
+        'deploymentStatus': 'deployed',
+        'deploymentVersion': version,
+        'deployedAt': datetime.now(timezone.utc).isoformat(),
+        'deployedBy': getattr(request, '_email', 'unknown'),
+        'runtimeHealth': 'loaded',
+    })
+    _save_model_deployment_status(type_key, status)
+    
+    # Audit log
+    if _firestore_db:
+        try:
+            _firestore_db.collection('AuditLogs').add({
+                'action': 'ai.model.deploy',
+                'type': type_key,
+                'version': version,
+                'actor': getattr(request, '_email', 'unknown'),
+                'timestamp': datetime.now(timezone.utc),
+            })
+        except Exception as e:
+            print(f'⚠️ Failed to audit deploy: {e}')
+    
+    return jsonify({
+        'success': True,
+        'data': {
+            'typeKey': type_key,
+            'deploymentStatus': 'deployed',
+            'deploymentVersion': version,
+            'runtimeHealth': 'loaded',
+        }
+    })
+
+
+@app.route('/api/admin/ai/models/<type_key>/undeploy', methods=['POST'])
+@require_admin
+def admin_undeploy_model(type_key):
+    """Undeploy — đổi deploymentStatus sang 'not_deployed', deactivate model."""
+    # Deactivate on AI server
+    try:
+        data, code = _ai_request_json('POST', f'/v1/models/{type_key}/deactivate')
+        # 200 or 404 (already inactive) are both OK
+        if code not in (200, 404):
+            return jsonify({'success': False, 'error': data.get('error', 'Undeploy failed')}), code
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'AI server error: {e}'}), 502
+    
+    # Update deployment status
+    status = _get_model_deployment_status(type_key)
+    status.update({
+        'deploymentStatus': 'not_deployed',
+        'deploymentVersion': None,
+        'deployedAt': None,
+        'deployedBy': None,
+        'runtimeHealth': 'inactive',
+    })
+    _save_model_deployment_status(type_key, status)
+    
+    # Audit log
+    if _firestore_db:
+        try:
+            _firestore_db.collection('AuditLogs').add({
+                'action': 'ai.model.undeploy',
+                'type': type_key,
+                'actor': getattr(request, '_email', 'unknown'),
+                'timestamp': datetime.now(timezone.utc),
+            })
+        except Exception as e:
+            print(f'⚠️ Failed to audit undeploy: {e}')
+    
+    return jsonify({
+        'success': True,
+        'data': {
+            'typeKey': type_key,
+            'deploymentStatus': 'not_deployed',
+            'runtimeHealth': 'inactive',
+        }
+    })
+
+
+# ── User-facing: deployed models only ───────────────────────────
+
+@app.route('/api/user/ai/models/deployed', methods=['GET'])
+def user_ai_models_deployed():
+    """
+    Chỉ trả về models đã deploy ('deploymentStatus' == 'deployed').
+    Dùng cho app sync để biết model nào cần tải.
+    Auth: Firebase token hoặc X-Admin-Key.
+    """
+    try:
+        _require_user_or_admin()
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 401
+    
+    if ai_list_types is None:
+        return jsonify({'success': False, 'error': 'AI registry unavailable'}), 503
+    
+    types_meta = {t['key']: t for t in ai_list_types()}
+    result = []
+    
+    for key, meta in types_meta.items():
+        # Only include deployed models
+        deploy = _get_model_deployment_status(key)
+        if deploy.get('deploymentStatus') != 'deployed':
+            continue
+        
+        # Get runtime status
+        try:
+            data, code = _ai_request_json('GET', f'/v1/models/{key}/status')
+            ai_status = data if (code == 200 and isinstance(data, dict)) else {}
+        except Exception:
+            ai_status = {}
+        
+        active_version = deploy.get('deploymentVersion') or ai_status.get('activeVersion') or ai_status.get('active_version')
+        
+        # Determine mobile compatibility
+        mobile_compatible = False
+        artifact_ext = None
+        if active_version:
+            store = _model_store_for(key)
+            if store:
+                for v in store.list_versions():
+                    if v.get('version') == active_version:
+                        artifact_ext = v.get('ext', '.pkl')
+                        mobile_compatible = artifact_ext in ('.tflite', '.lite')
+                        break
+        
+        result.append({
+            'key': key,
+            'label': meta.get('label'),
+            'shortName': meta.get('shortName'),
+            'description': meta.get('description'),
+            'group': meta.get('group'),
+            'deploymentVersion': active_version,
+            'deployedAt': deploy.get('deployedAt'),
+            'runtimeHealth': deploy.get('runtimeHealth'),
+            'mobileCompatible': mobile_compatible,
+            'artifactExt': artifact_ext,
+            'downloadUrl': f'/api/user/ai/models/{key}/download' if mobile_compatible else None,
+        })
+    
+    return jsonify({'success': True, 'data': {'types': result, 'count': len(result)}})
+
+
+# ── Legacy SOC endpoints removed per PLAN1 ───────────────────────
+# NOTE: /api/soc/predict and /api/soc/status removed
+# Migration: Use heuristic/fallback for battery consumption prediction
+
+
+# ── Admin Model Management (additional proxy endpoints) ───────────
 @app.route('/api/admin/ai/models/<type_key>', methods=['GET'])
 @require_admin
 def admin_list_models_for_type(type_key):
@@ -2735,6 +3217,98 @@ def _calculate_trip_prediction(distance, current_battery, temperature, rider_wei
     }
 
 # ═══════════════════════════════════════════════════════════════
+# AI CHARGING ENDPOINTS
+# ═══════════════════════════════════════════════════════════════
+
+_charge_feedback_store = []
+_charging_model_version = 'v1.0.0'
+_charging_model_samples = 0
+
+@app.route('/api/ai/charge-feedback', methods=['POST'])
+def ai_charge_feedback():
+    """Submit charge feedback for ML training."""
+    global _charging_model_samples
+    try:
+        body = request.get_json() or {}
+        
+        # Validate required fields
+        required = ['vehicleId', 'predictionId', 'predictedDurationMinutes', 'actualSOC', 'targetSOC', 'chargingMode']
+        missing = [f for f in required if f not in body]
+        if missing:
+            return jsonify({'success': False, 'error': f'Missing fields: {missing}'}), 400
+        
+        # Calculate error
+        predicted_duration = body['predictedDurationMinutes']
+        actual_soc = body['actualSOC']
+        target_soc = body['targetSOC']
+        error_percent = abs((target_soc - actual_soc) / target_soc * 100) if target_soc > 0 else 0
+        
+        # Store feedback
+        feedback_record = {
+            **body,
+            'errorPercent': error_percent,
+            'createdAt': datetime.now(timezone.utc).isoformat(),
+            'id': f"fb_{datetime.now().timestamp()}",
+        }
+        _charge_feedback_store.append(feedback_record)
+        _charging_model_samples += 1
+        
+        # Also store to Firestore if available
+        if _firestore_db:
+            _firestore_db.collection('charge_feedback').add({
+                **feedback_record,
+                'syncedAt': datetime.now(timezone.utc),
+            })
+        
+        print(f'✅ Charge feedback received: {error_percent:.1f}% error, {len(_charge_feedback_store)} total samples')
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'feedbackId': feedback_record['id'],
+                'errorPercent': error_percent,
+                'message': 'Feedback recorded for model improvement'
+            }
+        })
+        
+    except Exception as e:
+        print(f'❌ Charge feedback error: {e}')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/ai/charging-model-status', methods=['GET'])
+def ai_charging_model_status():
+    """Get charging model status and metrics."""
+    try:
+        # Calculate average error from feedback
+        avg_error = 0
+        if _charge_feedback_store:
+            recent_feedback = _charge_feedback_store[-50:]  # Last 50 samples
+            avg_error = sum(f.get('errorPercent', 0) for f in recent_feedback) / len(recent_feedback)
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'version': _charging_model_version,
+                'samples': _charging_model_samples,
+                'averageErrorPercent': round(avg_error, 2),
+                'status': 'active' if _charging_model_samples > 10 else 'learning',
+                'lastUpdated': datetime.now(timezone.utc).isoformat(),
+            }
+        })
+        
+    except Exception as e:
+        print(f'❌ Model status error: {e}')
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'data': {
+                'version': 'unknown',
+                'samples': 0,
+                'status': 'error'
+            }
+        }), 500
+
+# ═══════════════════════════════════════════════════════════════
 # WEB SYNC ENDPOINTS
 # ═══════════════════════════════════════════════════════════════
 @app.route('/api/web/sync/battery-state', methods=['POST'])
@@ -2804,10 +3378,497 @@ def web_sync_trip_prediction():
         
     except Exception as e:
         print(f'❌ Trip prediction sync error: {e}')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ═══════════════════════════════════════════════════════════════
+# USER-FACING AI ENDPOINTS (mục 2 plan)
+# Auth: Firebase token hoặc X-Admin-Key (cho dev/testing)
+# ═══════════════════════════════════════════════════════════════
+
+def _require_user_or_admin():
+    """
+    Xác thực user-facing request: chấp nhận Firebase token HOẶC X-Admin-Key.
+    Trả (uid, email) hoặc raise ValueError nếu không xác thực được.
+    """
+    admin_key = request.headers.get('X-Admin-Key', '')
+    if admin_key and admin_key == _DEV_ADMIN_KEY:
+        return 'dev-admin', 'dev@local'
+    uid, email, _role = _verify_token()
+    if not uid:
+        raise ValueError('Unauthorized')
+    return uid, email
+
+
+def _mobile_compatible(ext: str) -> bool:
+    return ext.lower() in APP_COMPATIBLE_MODEL_EXTS
+
+
+def _build_run_mode(active_ext) -> str:
+    if not active_ext:
+        return 'none'
+    return 'on_device' if _mobile_compatible(active_ext) else 'server_only'
+
+
+@app.route('/api/user/ai/models', methods=['GET'])
+def user_ai_models():
+    """
+    Catalog model types kèm runtime status + runMode cho app.
+    Auth: Firebase token hoặc X-Admin-Key.
+    """
+    try:
+        _require_user_or_admin()
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 401
+
+    if ai_list_types is None:
+        return jsonify({'success': False, 'error': 'AI registry unavailable'}), 503
+
+    types_meta = {t['key']: t for t in ai_list_types()}
+
+    # Lấy status từ AI server (non-fatal nếu AI server down)
+    status_map: dict = {}
+    try:
+        data, code = _ai_request_json('GET', '/v1/types')
+        if code == 200 and isinstance(data, dict):
+            for item in data.get('data', data.get('types', [])):
+                k = item.get('key') or item.get('type_key')
+                if k:
+                    status_map[k] = item
+    except Exception:
+        pass
+
+    result = []
+    for key, meta in types_meta.items():
+        st = status_map.get(key, {})
+        active_version = st.get('activeVersion') or st.get('active_version')
+        active_ext = None
+        if active_version:
+            store = _model_store_for(key)
+            if store:
+                for v in store.list_versions():
+                    if v.get('version') == active_version:
+                        active_ext = v.get('ext', '.pkl')
+                        break
+
+        run_mode = _build_run_mode(active_ext)
+        download_url = None
+        if run_mode == 'on_device' and active_version:
+            download_url = f'/api/user/ai/models/{key}/download'
+
+        result.append({
+            'key': key,
+            'label': meta.get('label'),
+            'shortName': meta.get('shortName'),
+            'description': meta.get('description'),
+            'group': meta.get('group'),
+            'phase': meta.get('phase'),
+            'status': meta.get('status'),
+            'icon': meta.get('icon'),
+            'accent': meta.get('accent'),
+            'inputSchema': meta.get('inputSchema'),
+            'visibleInputFields': meta.get('visibleInputFields'),
+            'derivedFields': meta.get('derivedFields'),
+            'sampleInput': meta.get('sampleInput'),
+            'outputKind': meta.get('outputKind'),
+            'outputUnit': meta.get('outputUnit'),
+            'outputMeaning': meta.get('outputMeaning'),
+            'activeVersion': active_version,
+            'runMode': run_mode,
+            'mobileCompatible': run_mode == 'on_device',
+            'downloadUrl': download_url,
+            'runtimeStatus': st.get('status') or ('loaded' if active_version else 'not_loaded'),
+            'lastLoadAt': st.get('lastLoadAt') or st.get('last_load_at'),
+            'error': st.get('error'),
+        })
+
+    groups = []
+    try:
+        groups = ai_list_groups() if ai_list_groups else []
+    except Exception:
+        pass
+
+    return jsonify({'success': True, 'data': {'types': result, 'groups': groups}})
+
+
+@app.route('/api/user/ai/models/<type_key>/download', methods=['GET'])
+def user_ai_model_download(type_key):
+    """
+    Tải file model .tflite về app. Chỉ cho tải khi active artifact là .tflite/.lite.
+    Auth: Firebase token hoặc X-Admin-Key.
+    """
+    try:
+        _require_user_or_admin()
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 401
+
+    store = _model_store_for(type_key)
+    if not store:
+        return jsonify({'success': False, 'error': 'AI registry unavailable'}), 503
+
+    active_version = store.active_version()
+    if not active_version:
+        return jsonify({'success': False, 'error': 'Không có model active cho type này'}), 404
+
+    active_path = store.active_path()
+    if not active_path:
+        return jsonify({'success': False, 'error': 'File model không tồn tại'}), 404
+
+    ext = os.path.splitext(active_path)[1].lower()
+    if not _mobile_compatible(ext):
         return jsonify({
             'success': False,
-            'error': str(e)
-        }), 500
+            'error': f'Model active ({ext}) không phải .tflite — chỉ server_only, không hỗ trợ tải về app',
+            'runMode': 'server_only',
+        }), 403
+
+    filename = f'{type_key}_v{active_version}{ext}'
+    return send_file(
+        active_path,
+        as_attachment=True,
+        download_name=filename,
+        mimetype='application/octet-stream',
+    )
+
+
+@app.route('/api/user/ai/models/<type_key>/predict', methods=['POST'])
+def user_ai_model_predict(type_key):
+    """
+    Server-side predict cho app khi local model không khả dụng.
+    Auth: Firebase token hoặc X-Admin-Key.
+    Proxy sang FastAPI AI server.
+    """
+    try:
+        _require_user_or_admin()
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 401
+
+    body = request.get_json() or {}
+    if not body:
+        return jsonify({'success': False, 'error': 'Request body trống'}), 400
+
+    return _ai_proxy_json('POST', f'/v1/models/{type_key}/predict', json_body=body)
+
+
+# ═══════════════════════════════════════════════════════════════
+# SYNC ENDPOINTS (mục 4 plan)
+# ═══════════════════════════════════════════════════════════════
+
+_STANDARD_COLLECTIONS = {
+    'users':        'users',
+    'vehicles':     'Vehicles',
+    'chargeLogs':   'ChargeLogs',
+    'tripLogs':     'TripLogs',
+    'maintenance':  'MaintenanceTasks',
+    'chargeSamples':'ChargeSamples',
+    'telemetry':    'TelemetryPoints',
+}
+
+
+@app.route('/api/web/sync/user', methods=['POST'])
+def sync_user():
+    """Upsert user profile vào Firestore. Auth: Firebase token hoặc X-Admin-Key."""
+    try:
+        uid, email = _require_user_or_admin()
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 401
+
+    if not _fs():
+        return jsonify({'success': False, 'error': 'Firestore không khả dụng'}), 503
+
+    body = request.get_json() or {}
+    profile = dict(body.get('profile', body))
+    profile['ownerUid'] = uid
+    profile.setdefault('email', email)
+    profile.setdefault('source', 'flutter_app')
+    profile['syncedAt'] = datetime.now(timezone.utc).isoformat()
+
+    _fs().collection('users').document(uid).set(profile, merge=True)
+    return jsonify({'success': True, 'data': {'uid': uid}})
+
+
+@app.route('/api/web/sync/vehicle', methods=['POST'])
+def sync_vehicle():
+    """Upsert một vehicle vào Firestore. Auth: Firebase token hoặc X-Admin-Key."""
+    try:
+        uid, _email = _require_user_or_admin()
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 401
+
+    if not _fs():
+        return jsonify({'success': False, 'error': 'Firestore không khả dụng'}), 503
+
+    body = request.get_json() or {}
+    vehicle_id = body.get('vehicleId') or body.get('id')
+    if not vehicle_id:
+        return jsonify({'success': False, 'error': 'vehicleId bắt buộc'}), 400
+
+    payload = dict(body)
+    payload['ownerUid'] = uid
+    payload['vehicleId'] = vehicle_id
+    payload.setdefault('source', 'flutter_app')
+    payload['syncedAt'] = datetime.now(timezone.utc).isoformat()
+    payload = _ensure_schema(payload, 'Vehicles')
+
+    _fs().collection('Vehicles').document(vehicle_id).set(payload, merge=True)
+    return jsonify({'success': True, 'data': {'vehicleId': vehicle_id}})
+
+
+@app.route('/api/web/sync/full', methods=['POST'])
+def sync_full():
+    """
+    Full snapshot sync từ app lên Firestore.
+    Payload: { profile?, vehicles?, chargeLogs?, tripLogs?, maintenance?, chargeSamples? }
+    Auth: Firebase token hoặc X-Admin-Key.
+    """
+    try:
+        uid, email = _require_user_or_admin()
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 401
+
+    if not _fs():
+        return jsonify({'success': False, 'error': 'Firestore không khả dụng'}), 503
+
+    body = request.get_json() or {}
+    stats: dict = {}
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    # Upsert profile
+    if 'profile' in body:
+        profile = dict(body['profile'])
+        profile['ownerUid'] = uid
+        profile.setdefault('email', email)
+        profile['syncedAt'] = now_iso
+        _fs().collection('users').document(uid).set(profile, merge=True)
+        stats['profile'] = 'synced'
+
+    # Upsert collections
+    collection_keys = ['vehicles', 'chargeLogs', 'tripLogs', 'maintenance', 'chargeSamples', 'telemetry']
+    for key in collection_keys:
+        items = body.get(key, [])
+        if not items:
+            continue
+        col_name = _STANDARD_COLLECTIONS[key]
+        id_field = 'vehicleId' if key == 'vehicles' else 'id'
+        count = 0
+        for item in items:
+            item = dict(item)
+            item['ownerUid'] = uid
+            item['syncedAt'] = now_iso
+            item.setdefault('source', 'flutter_app')
+            item = _ensure_schema(item, col_name)
+            doc_id = item.get(id_field) or item.get('vehicleId') or item.get('id')
+            if doc_id:
+                _fs().collection(col_name).document(str(doc_id)).set(item, merge=True)
+            else:
+                _fs().collection(col_name).add(item)
+            count += 1
+        stats[key] = count
+
+    return jsonify({'success': True, 'data': {'uid': uid, 'synced': stats, 'syncedAt': now_iso}})
+
+
+@app.route('/api/user/sync/overview', methods=['GET'])
+def sync_overview():
+    """
+    Bootstrap snapshot cho app: profile + vehicles + recent logs.
+    Auth: Firebase token hoặc X-Admin-Key.
+    """
+    try:
+        uid, _email = _require_user_or_admin()
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 401
+
+    if not _fs():
+        return jsonify({'success': False, 'error': 'Firestore không khả dụng'}), 503
+
+    limit = int(request.args.get('limit', 20))
+
+    # Profile
+    profile = {}
+    try:
+        doc = _fs().collection('users').document(uid).get()
+        if doc.exists:
+            profile = _doc_to_json(doc, 'uid')
+    except Exception:
+        pass
+
+    # Vehicles
+    vehicles = []
+    try:
+        docs = _fs().collection('Vehicles').where('ownerUid', '==', uid).stream()
+        vehicles = [_doc_to_json(d, 'vehicleId') for d in docs]
+    except Exception:
+        pass
+
+    # Recent charge logs
+    charge_logs = []
+    try:
+        docs = (_fs().collection('ChargeLogs')
+                .where('ownerUid', '==', uid)
+                .order_by('createdAt', direction='DESCENDING')
+                .limit(limit).stream())
+        charge_logs = [_doc_to_json(d, 'id') for d in docs]
+    except Exception:
+        pass
+
+    # Recent trip logs
+    trip_logs = []
+    try:
+        docs = (_fs().collection('TripLogs')
+                .where('ownerUid', '==', uid)
+                .order_by('createdAt', direction='DESCENDING')
+                .limit(limit).stream())
+        trip_logs = [_doc_to_json(d, 'id') for d in docs]
+    except Exception:
+        pass
+
+    # Maintenance tasks
+    maintenance = []
+    try:
+        docs = _fs().collection('MaintenanceTasks').where('ownerUid', '==', uid).stream()
+        maintenance = [_doc_to_json(d, 'id') for d in docs]
+    except Exception:
+        pass
+
+    return jsonify({
+        'success': True,
+        'data': {
+            'uid': uid,
+            'profile': profile,
+            'vehicles': vehicles,
+            'chargeLogs': charge_logs,
+            'tripLogs': trip_logs,
+            'maintenance': maintenance,
+            'retrievedAt': datetime.now(timezone.utc).isoformat(),
+        }
+    })
+
+
+# ═══════════════════════════════════════════════════════════════
+# ADMIN MIGRATION (mục 4 plan — gọi thủ công 1 lần)
+# ═══════════════════════════════════════════════════════════════
+
+_MIGRATION_MAP = {
+    'vehicles':     'Vehicles',
+    'charge_logs':  'ChargeLogs',
+    'trip_logs':    'TripLogs',
+    'maintenance_tasks': 'MaintenanceTasks',
+    'charge_samples': 'ChargeSamples',
+    'telemetry_points': 'TelemetryPoints',
+}
+
+
+@app.route('/api/admin/migrate', methods=['POST'])
+@require_admin
+def admin_migrate_collections():
+    """
+    Migration một lần: copy dữ liệu từ collection lowercase sang collection chuẩn (PascalCase).
+    Không xóa collection cũ — an toàn, idempotent.
+    """
+    if not _fs():
+        return jsonify({'success': False, 'error': 'Firestore không khả dụng'}), 503
+
+    dry_run = request.args.get('dry_run', 'false').lower() == 'true'
+    stats: dict = {}
+
+    for old_col, new_col in _MIGRATION_MAP.items():
+        try:
+            docs = list(_fs().collection(old_col).stream())
+            count = 0
+            for doc in docs:
+                data = doc.to_dict() or {}
+                data.setdefault('source', 'migrated')
+                data.setdefault('migratedAt', datetime.now(timezone.utc).isoformat())
+                data = _ensure_schema(data, new_col)
+                if not dry_run:
+                    _fs().collection(new_col).document(doc.id).set(data, merge=True)
+                count += 1
+            stats[old_col] = {'migrated': count, 'target': new_col}
+        except Exception as exc:
+            stats[old_col] = {'error': str(exc)}
+
+    return jsonify({
+        'success': True,
+        'data': {
+            'dryRun': dry_run,
+            'stats': stats,
+            'migratedAt': datetime.now(timezone.utc).isoformat(),
+        }
+    })
+
+
+# ═══════════════════════════════════════════════════════════════
+# APP CONFIG & UPDATE ENDPOINT
+# ═══════════════════════════════════════════════════════════════
+
+_APP_DIR = os.path.dirname(os.path.abspath(__file__))
+_APP_CONFIG_FILE = os.path.join(_APP_DIR, 'app_config.json')
+_APK_DIR = os.environ.get('APK_DIR', os.path.join(_APP_DIR, 'apk'))
+os.makedirs(_APK_DIR, exist_ok=True)
+
+def _load_app_config() -> dict:
+    """Đọc app_config.json, trả default nếu không tồn tại."""
+    default = {
+        'latestVersion': '1.0.0',
+        'latestBuild': 1,
+        'forceUpdate': False,
+        'minSupportedBuild': 1,
+        'apkUrl': '',
+        'releaseNotes': '',
+        'features': {},
+    }
+    try:
+        if os.path.exists(_APP_CONFIG_FILE):
+            with open(_APP_CONFIG_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return {**default, **data}
+    except Exception:
+        pass
+    return default
+
+
+@app.route('/api/app/config', methods=['GET'])
+def app_config():
+    """
+    Trả về version mới nhất + remote config + APK download URL.
+    Public endpoint — không cần auth.
+    """
+    cfg = _load_app_config()
+    return jsonify({'success': True, 'data': cfg})
+
+
+@app.route('/api/app/config', methods=['POST'])
+@require_admin
+def update_app_config():
+    """Cập nhật app_config.json. Auth: admin only."""
+    body = request.get_json() or {}
+    cfg = _load_app_config()
+    cfg.update(body)
+    try:
+        with open(_APP_CONFIG_FILE, 'w', encoding='utf-8') as f:
+            json.dump(cfg, f, ensure_ascii=False, indent=2)
+        return jsonify({'success': True, 'data': cfg})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/app/download', methods=['GET'])
+def app_download():
+    """Redirect tải APK mới nhất."""
+    cfg = _load_app_config()
+    apk_url = cfg.get('apkUrl', '')
+    if not apk_url:
+        return jsonify({'success': False, 'error': 'APK chưa được cấu hình'}), 404
+    if apk_url.startswith('http'):
+        return redirect(apk_url)
+    apk_path = os.path.join(_APK_DIR, os.path.basename(apk_url))
+    if not os.path.exists(apk_path):
+        return jsonify({'success': False, 'error': 'File APK không tồn tại trên server'}), 404
+    return send_file(apk_path, as_attachment=True,
+                     download_name=os.path.basename(apk_path),
+                     mimetype='application/vnd.android.package-archive')
+
 
 # ═══════════════════════════════════════════════════════════════
 # RUN
@@ -2825,7 +3886,10 @@ if __name__ == '__main__':
     print('   SOC:    /api/soc/predict|status|history  (proxy → AI server)')
     print('   Models: GET/POST /api/admin/ai/models[/upload|/rollback|/<ver>]')
     print('   Trip:   /api/trip/predict|history')
-    print('   Sync:   /api/web/sync/battery-state|trip-prediction')
+    print('   Sync:   /api/web/sync/battery-state|trip-prediction|user|vehicle|full')
+    print('   SyncRd: GET /api/user/sync/overview')
+    print('   UserAI: GET /api/user/ai/models, GET .../download, POST .../predict')
+    print('   Migrate: POST /api/admin/migrate[?dry_run=true]')
     print('   Legacy: POST /api/admin/migrate-legacy')
     print(f'   AI server URL: {AI_SERVER_URL}')
     print(f'   Consumption model: {_consumption_model_status}')

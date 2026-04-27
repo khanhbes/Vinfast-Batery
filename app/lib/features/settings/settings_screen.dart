@@ -7,6 +7,9 @@ import '../../core/theme/app_colors.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/sync_service.dart';
+import '../../core/services/settings_service.dart';
+import '../notifications/notification_center_screen.dart';
+import 'appearance_settings_screen.dart';
 
 // =============================================================================
 // Settings Screen V4
@@ -435,16 +438,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ),
       child: Column(
         children: [
-          _buildSettingsRow(
-            title: 'Software Version',
-            value: 'v2.4.1',
+          // Notification Center
+          _buildSettingsRowTap(
+            title: 'Thông báo',
+            value: 'Xem tất cả thông báo',
             showArrow: true,
+            onTap: () => _openNotificationCenter(),
           ),
           Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
-          // Push Notifications with animated toggle
+          // Appearance & Language
+          _buildSettingsRowTap(
+            title: 'Giao diện & Ngôn ngữ',
+            value: _getAppearanceValue(),
+            showArrow: true,
+            onTap: () => _openAppearanceSettings(),
+          ),
+          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
+          // Push Notifications toggle
           _buildToggleRow(
-            title: 'Push Notifications',
-            subtitle: 'Receive alerts and updates',
+            title: 'Thông báo đẩy',
+            subtitle: 'Nhận thông báo cập nhật',
             value: _pushNotifications,
             onChanged: (value) {
               setState(() => _pushNotifications = value);
@@ -452,32 +465,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             },
           ),
           Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
-          // Dark Mode toggle
-          _buildToggleRow(
-            title: 'Dark Mode',
-            subtitle: 'Always on (Premium)',
-            value: _darkMode,
-            onChanged: (value) {
-              setState(() => _darkMode = value);
-              _saveSetting('darkMode', value);
-            },
-          ),
-          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
           // Biometric Auth toggle
           _buildToggleRow(
-            title: 'Biometric Authentication',
-            subtitle: 'Use fingerprint/Face ID',
+            title: 'Xác thực sinh trắc học',
+            subtitle: 'Sử dụng vân tay/Face ID',
             value: _biometricAuth,
             onChanged: (value) {
               setState(() => _biometricAuth = value);
               _saveSetting('biometricAuth', value);
             },
-          ),
-          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
-          _buildSettingsRow(
-            title: 'Language Preferences',
-            value: 'English\n(US)',
-            showArrow: true,
           ),
           Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
           _buildSettingsRowWithButton(
@@ -702,6 +698,87 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               color: AppColors.textTertiary,
               size: 20,
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Navigation helpers ─────────────────────────────────────────
+
+  void _openNotificationCenter() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const NotificationCenterScreen()),
+    );
+  }
+
+  void _openAppearanceSettings() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AppearanceSettingsScreen()),
+    );
+  }
+
+  String _getAppearanceValue() {
+    final settings = SettingsService();
+    final themeMode = settings.getThemeMode();
+    final language = settings.getLanguage();
+    
+    final themeText = switch (themeMode) {
+      AppThemeMode.system => 'Hệ thống',
+      AppThemeMode.light => 'Sáng',
+      AppThemeMode.dark => 'Tối',
+    };
+    
+    final langText = switch (language) {
+      AppLanguage.system => 'Auto',
+      AppLanguage.vietnamese => 'VN',
+      AppLanguage.english => 'EN',
+    };
+    
+    return '$themeText • $langText';
+  }
+
+  // ── Settings row with tap handler ─────────────────────────────
+
+  Widget _buildSettingsRowTap({
+    required String title,
+    required String value,
+    bool showArrow = false,
+    VoidCallback? onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            Text(
+              value,
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 13,
+              ),
+            ),
+            if (showArrow) ...[
+              const SizedBox(width: 8),
+              Icon(
+                Icons.arrow_forward_ios,
+                color: AppColors.textTertiary,
+                size: 14,
+              ),
+            ],
           ],
         ),
       ),

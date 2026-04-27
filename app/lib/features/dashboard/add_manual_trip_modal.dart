@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/providers/app_providers.dart';
 import '../../data/models/trip_log_model.dart';
 import '../../data/models/vehicle_model.dart';
 import '../../data/repositories/trip_log_repository.dart';

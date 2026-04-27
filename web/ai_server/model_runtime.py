@@ -4,11 +4,12 @@ Features:
 - `load(version)` validates a model (load + smoke inference) before swap.
 - `swap_to(version)` activates the new model atomically (predictions never see a half-loaded state).
 - `predict(features)` acquires a shared read reference; safe during concurrent swaps.
-- Predictor adapter supports: sklearn/joblib, XGBoost, Keras, ONNX, and TorchScript.
+- Predictor adapter supports: sklearn/joblib, XGBoost, Keras, TFLite, ONNX, and TorchScript.
 
 File format dispatch:
 - .pkl/.joblib: joblib.load or pickle
 - .keras/.h5/.hdf5: tensorflow.keras.models.load_model
+- .tflite/.lite: tensorflow.lite.Interpreter
 - .onnx: onnxruntime.InferenceSession
 - .pt/.pth: torch.jit.load (TorchScript only)
 """
@@ -61,6 +62,7 @@ def _load_model_file(path: str) -> Any:
     
     - .pkl/.joblib: joblib.load or pickle
     - .keras/.h5/.hdf5: tensorflow.keras.models.load_model
+    - .tflite/.lite: tensorflow.lite.Interpreter
     - .onnx: onnxruntime.InferenceSession
     - .pt/.pth: torch.jit.load (TorchScript only, not raw state_dict)
     
@@ -77,6 +79,8 @@ def _load_model_file(path: str) -> Any:
         return _load_pickle_file(path)
     elif ext in ('.keras', '.h5', '.hdf5'):
         return _load_keras_file(path)
+    elif ext in ('.tflite', '.lite'):
+        return _load_tflite_file(path)
     elif ext == '.onnx':
         return _load_onnx_file(path)
     elif ext in ('.pt', '.pth'):
@@ -141,6 +145,20 @@ def _load_keras_file(path: str) -> Any:
         raise RuntimeError(f"Failed to load Keras model: {e}")
 
 
+def _load_tflite_file(path: str) -> Any:
+    """Load TensorFlow Lite model."""
+    try:
+        import tensorflow as tf
+
+        interpreter = tf.lite.Interpreter(model_path=path)
+        interpreter.allocate_tensors()
+        return interpreter
+    except ImportError:
+        raise RuntimeError("tensorflow not installed, cannot load .tflite/.lite files")
+    except Exception as e:
+        raise RuntimeError(f"Failed to load TFLite model: {e}")
+
+
 def _load_onnx_file(path: str) -> Any:
     """Load ONNX model."""
     try:
@@ -194,39 +212,45 @@ class PredictorAdapter:
             self.kind = "keras"
             return
         
-        # Type 2: ONNX InferenceSession
+        # Type 2: TensorFlow Lite interpreter
+        if self._is_tflite_interpreter(model):
+            self._predict_fn = self._create_tflite_predictor(model)
+            self.kind = "tflite"
+            return
+
+        # Type 3: ONNX InferenceSession
         if self._is_onnx_session(model):
             self._predict_fn = self._create_onnx_predictor(model)
             self.kind = "onnx"
             return
         
-        # Type 3: TorchScript model
+        # Type 4: TorchScript model
         if self._is_torchscript_model(model):
             self._predict_fn = self._create_torchscript_predictor(model)
             self.kind = "torchscript"
             return
         
-        # Type 4: sklearn Pipeline or estimator with .predict()
+        # Type 5: sklearn Pipeline or estimator with .predict()
         if hasattr(model, "predict") and callable(model.predict):
             self._predict_fn = model.predict
             self.kind = "sklearn"
             self._extract_feature_names(model)
             return
         
-        # Type 5: Object with .model.predict() wrapper
+        # Type 6: Object with .model.predict() wrapper
         if hasattr(model, "model") and hasattr(model.model, "predict"):
             self._predict_fn = model.model.predict
             self.kind = "wrapper"
             self._extract_feature_names(model.model)
             return
         
-        # Type 6: XGBoost wrapper with booster_json
+        # Type 7: XGBoost wrapper with booster_json
         if self._is_xgboost_booster_wrapper(model):
             self._predict_fn = self._create_xgboost_predictor(model)
             self.kind = "xgboost_booster"
             return
         
-        # Type 7: Try to find any callable predict-like attribute
+        # Type 8: Try to find any callable predict-like attribute
         for attr in ["predict", "predict_proba", "forecast", "infer"]:
             if hasattr(model, attr):
                 fn = getattr(model, attr)
@@ -248,8 +272,6 @@ class PredictorAdapter:
     
     def _create_keras_predictor(self, model: Any) -> Callable:
         """Create predictor for Keras model."""
-        import tensorflow as tf
-        
         try:
             input_shape = model.input_shape
             if input_shape and len(input_shape) > 1:
@@ -266,6 +288,59 @@ class PredictorAdapter:
                 X = X.reshape(1, -1)
             return model.predict(X, verbose=0)
         
+        return predict_fn
+
+    # ----- TFLite Support -----
+    def _is_tflite_interpreter(self, model: Any) -> bool:
+        """Check if model is a TensorFlow Lite interpreter."""
+        try:
+            import tensorflow as tf
+
+            return isinstance(model, tf.lite.Interpreter)
+        except ImportError:
+            return False
+
+    def _create_tflite_predictor(self, interpreter: Any) -> Callable:
+        """Create predictor for TensorFlow Lite interpreter."""
+        if np is None:
+            raise RuntimeError("numpy not installed, cannot run TFLite inference")
+
+        input_details = interpreter.get_input_details()
+        output_details = interpreter.get_output_details()
+        if not input_details:
+            raise RuntimeError("TFLite model has no input tensors")
+        if not output_details:
+            raise RuntimeError("TFLite model has no output tensors")
+
+        input_detail = input_details[0]
+        input_index = input_detail["index"]
+        output_index = output_details[0]["index"]
+        input_shape = list(input_detail.get("shape", []))
+        if len(input_shape) > 1 and isinstance(input_shape[-1], (int, np.integer)):
+            self.feature_count = int(input_shape[-1])
+        input_dtype = input_detail.get("dtype", np.float32)
+
+        def predict_fn(X: Any):
+            if hasattr(X, "values"):
+                X = X.values
+            if isinstance(X, list):
+                X = np.array(X, dtype=np.float32)
+            elif not isinstance(X, np.ndarray):
+                X = np.array(X, dtype=np.float32)
+
+            X = X.astype(input_dtype)
+            if X.ndim == 1:
+                X = X.reshape(1, -1)
+
+            current_shape = list(input_detail.get("shape", []))
+            if current_shape and current_shape != list(X.shape):
+                interpreter.resize_tensor_input(input_index, list(X.shape), strict=False)
+                interpreter.allocate_tensors()
+
+            interpreter.set_tensor(input_index, X)
+            interpreter.invoke()
+            return interpreter.get_tensor(output_index)
+
         return predict_fn
     
     # ----- ONNX Support -----

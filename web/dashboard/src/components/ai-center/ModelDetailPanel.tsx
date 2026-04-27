@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 // @ts-ignore
-import { aiListModels, aiRollbackModel, aiDeleteModel, aiQuickPredict, aiLoadActiveModel, aiDeactivateModel, aiValidateVersion } from '@/api';
+import { aiListModels, aiRollbackModel, aiDeleteModel, aiQuickPredict, aiLoadActiveModel, aiDeactivateModel, aiValidateVersion, aiTestVersion, aiDeployModel } from '@/api';
 import { ACCENT_CLASSES, ModelTypeMeta, ModelVersion, formatBytes, formatDate, PredictionResponse } from './types';
 import UploadDialog from './UploadDialog';
 import PredictionResultChart from './PredictionResultChart';
@@ -28,6 +28,8 @@ export default function ModelDetailPanel({ meta, onAfterChange }: Props) {
   const [message, setMessage] = useState<{ type: 'ok' | 'err' | 'info'; text: string } | null>(null);
   const [loadingModel, setLoadingModel] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [testFeatures, setTestFeatures] = useState<Record<string, number> | null>(null); // PLAN1: test input features
+  const [selectedVersionForMetrics, setSelectedVersionForMetrics] = useState<string | null>(null); // PLAN1: version selected for evaluation
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -102,6 +104,36 @@ export default function ModelDetailPanel({ meta, onAfterChange }: Props) {
       onAfterChange();
     } catch (e: any) {
       setMessage({ type: 'err', text: e?.message || 'Deactivate thất bại' });
+    }
+  };
+
+  // ── PLAN1: Test version chưa deploy ────────────────────────────────
+  const onTestVersion = async (version: string) => {
+    try {
+      setMessage({ type: 'ok', text: `Đang test version ${version}...` });
+      const res = await aiTestVersion(meta.key, version, testFeatures);
+      if (res?.data?.valid === false) {
+        setMessage({ type: 'err', text: `Test thất bại: ${res?.data?.error || 'Unknown error'}` });
+      } else {
+        setMessage({ type: 'ok', text: `Version ${version} OK: ${JSON.stringify(res?.data?.testResult || res?.data)}` });
+      }
+      await reload();
+    } catch (e: any) {
+      setMessage({ type: 'err', text: `Test version thất bại: ${e?.message}` });
+    }
+  };
+
+  // ── PLAN1: Deploy version chính thức ───────────────────────────────
+  const onDeploy = async (version: string) => {
+    if (!confirm(`Triển khai model "${meta.label}" version ${version}?\n\nModel sẽ được active và sẵn sàng cho app.`)) return;
+    try {
+      setMessage({ type: 'ok', text: `Đang deploy ${version}...` });
+      const res = await aiDeployModel(meta.key, version);
+      setMessage({ type: 'ok', text: `Đã triển khai ${version}: ${res?.data?.status || 'OK'}` });
+      await reload();
+      onAfterChange();
+    } catch (e: any) {
+      setMessage({ type: 'err', text: `Deploy thất bại: ${e?.message}` });
     }
   };
 
@@ -190,7 +222,7 @@ export default function ModelDetailPanel({ meta, onAfterChange }: Props) {
               <Loader2 className="w-8 h-8 mx-auto mb-2 animate-spin opacity-40" />
               <div className="text-sm">Đang nạp model…</div>
             </div>
-          ) : !hasActiveVersion || loadError ? (
+          ) : !hasVersions || loadError ? (
             <NoModelState
               typeKey={meta.key}
               label={meta.label}
@@ -201,6 +233,8 @@ export default function ModelDetailPanel({ meta, onAfterChange }: Props) {
           ) : (
             <TestTab
               typeKey={meta.key}
+              versions={sorted}
+              activeVersion={activeVersion}
               inputFields={meta.inputFields}
               visibleInputFields={meta.visibleInputFields}
               derivedFields={meta.derivedFields}
@@ -219,9 +253,15 @@ export default function ModelDetailPanel({ meta, onAfterChange }: Props) {
             loading={loading}
             onRollback={onRollback}
             onDelete={onDelete}
+            onTest={onTestVersion}
+            onDeploy={onDeploy}
+            onEvaluate={(v) => {
+              setSelectedVersionForMetrics(v);
+              setTab('metrics');
+            }}
           />
         )}
-        {tab === 'metrics' && <MetricsTab meta={meta} />}
+        {tab === 'metrics' && <MetricsTab meta={meta} selectedVersion={selectedVersionForMetrics} />}
       </CardContent>
 
       {uploadOpen && (
@@ -257,7 +297,7 @@ function NoModelState({ typeKey, label, hasVersions, error, onUpload }: {
         {error ? (
           <span className="text-red-600">{error}</span>
         ) : hasVersions ? (
-          <>Model <span className="font-mono text-xs bg-muted rounded px-1">{typeKey}</span> có version nhưng chưa active hoặc không load được. Vào tab <strong>Versions</strong> để activate, hoặc upload lại.</>
+          <>Model <span className="font-mono text-xs bg-muted rounded px-1">{typeKey}</span> đã có version nhưng chưa được triển khai. Vào tab <strong>Versions</strong> để Test → Đánh giá → Deploy.</>
         ) : (
           <>Model <span className="font-mono text-xs bg-muted rounded px-1">{label}</span> chưa được upload. Nhấn nút bên dưới để upload file model đã train.</>
         )}
@@ -293,9 +333,12 @@ function TabButton({ active, onClick, icon, label, count }: {
 }
 
 // ── Versions tab ───────────────────────────────────────────────────
-function VersionsTab({ versions, loading, onRollback, onDelete }: {
+function VersionsTab({ versions, loading, onRollback, onDelete, onTest, onDeploy, onEvaluate }: {
   versions: ModelVersion[]; loading: boolean;
   onRollback: (v: string) => void; onDelete: (v: string) => void;
+  onTest?: (v: string) => void; // PLAN1: test version
+  onDeploy?: (v: string) => void; // PLAN1: deploy version
+  onEvaluate?: (v: string) => void; // PLAN1: evaluate version - switch to metrics tab
 }) {
   if (loading) return <div className="text-sm text-muted-foreground py-6 text-center">Đang tải...</div>;
   if (versions.length === 0) {
@@ -334,7 +377,26 @@ function VersionsTab({ versions, loading, onRollback, onDelete }: {
               </td>
               <td className="py-2 text-right">
                 <div className="inline-flex gap-1">
-                  {!v.active && (
+                  {/* PLAN1: Evaluate version - chuyển sang tab Đánh giá */}
+                  {onEvaluate && (
+                    <Button size="sm" variant="outline" onClick={() => onEvaluate(v.version)}>
+                      <BarChart3 className="w-3.5 h-3.5 mr-1" /> Đánh giá
+                    </Button>
+                  )}
+                  {/* PLAN1: Test version chưa deploy */}
+                  {!v.active && onTest && (
+                    <Button size="sm" variant="outline" onClick={() => onTest(v.version)}>
+                      <PlayCircle className="w-3.5 h-3.5 mr-1" /> Test
+                    </Button>
+                  )}
+                  {/* PLAN1: Deploy version chính thức */}
+                  {!v.active && onDeploy && (
+                    <Button size="sm" variant="default" onClick={() => onDeploy(v.version)} className="bg-blue-600 hover:bg-blue-700">
+                      <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Deploy
+                    </Button>
+                  )}
+                  {/* Activate (rollback) - legacy */}
+                  {!v.active && onRollback && (
                     <Button size="sm" variant="outline" onClick={() => onRollback(v.version)}>
                       <Rewind className="w-3.5 h-3.5 mr-1" /> Activate
                     </Button>
@@ -358,6 +420,8 @@ function VersionsTab({ versions, loading, onRollback, onDelete }: {
 // ── Test tab ───────────────────────────────────────────────────────
 function TestTab({ 
   typeKey, 
+  versions,
+  activeVersion,
   inputFields, 
   visibleInputFields,
   derivedFields: _derivedFields,
@@ -368,7 +432,9 @@ function TestTab({
   outputMeaning, 
   accent 
 }: {
-  typeKey: string; 
+  typeKey: string;
+  versions: ModelVersion[];
+  activeVersion: string | null;
   inputFields: string[]; 
   visibleInputFields?: string[];
   derivedFields?: Record<string, { from?: string[]; formula?: string; default?: number }>;
@@ -393,6 +459,7 @@ function TestTab({
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<PredictionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [selectedVersion, setSelectedVersion] = useState<string>(activeVersion || versions[0]?.version || '');
 
   // Reset form when model type changes  
   useEffect(() => {
@@ -421,7 +488,16 @@ function TestTab({
       for (const [k, v] of Object.entries(values)) {
         payload[k] = typeof v === 'string' ? normalizeValue(k, v) : v;
       }
-      const res = await aiQuickPredict(typeKey, payload);
+      
+      // If testing non-active version, use aiTestVersion
+      const isTestingActiveVersion = selectedVersion === activeVersion;
+      let res;
+      if (isTestingActiveVersion) {
+        res = await aiQuickPredict(typeKey, payload);
+      } else {
+        // Test specific version without deploying
+        res = await aiTestVersion(typeKey, selectedVersion, payload);
+      }
       setResult(res?.data ?? res);
     } catch (e: any) {
       setError(e?.message || 'Predict lỗi');
@@ -437,6 +513,21 @@ function TestTab({
   return (
     <div className="grid md:grid-cols-2 gap-4">
       <div>
+        {/* Version selector - cho phép chọn version để test */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-sm font-medium">Test version</div>
+          <select 
+            value={selectedVersion} 
+            onChange={(e) => setSelectedVersion(e.target.value)}
+            className="text-xs border rounded px-2 py-1 bg-background"
+          >
+            {versions.map((v) => (
+              <option key={v.version} value={v.version}>
+                {v.version} {v.active ? '(active)' : '(chưa deploy)'}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="flex items-center justify-between mb-2">
           <div className="text-sm font-medium">Input features</div>
           <Button size="sm" variant="ghost" onClick={reset} className="text-xs">Reset</Button>

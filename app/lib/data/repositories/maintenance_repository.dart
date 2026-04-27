@@ -6,18 +6,20 @@ import '../models/maintenance_task_model.dart';
 
 /// Repository cho MaintenanceTasks collection trên Firestore
 class MaintenanceRepository {
-  final FirebaseFirestore _firestore;
+  final FirebaseFirestore _instanceFirestore;
 
   MaintenanceRepository({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+      : _instanceFirestore = firestore ?? FirebaseFirestore.instance;
 
-  CollectionReference get _tasksRef => _firestore.collection('MaintenanceTasks');
+  CollectionReference get _tasksRef => _instanceFirestore.collection('MaintenanceTasks');
 
   String? get _uid => FirebaseAuth.instance.currentUser?.uid;
 
   /// Lấy tất cả tasks của xe (chưa hoàn thành trước)
   Future<List<MaintenanceTaskModel>> getTasks(String vehicleId) async {
+    if (_uid == null) return [];
     final snapshot = await _tasksRef
+        .where('ownerUid', isEqualTo: _uid)
         .where('vehicleId', isEqualTo: vehicleId)
         .get();
 
@@ -30,7 +32,9 @@ class MaintenanceRepository {
 
   /// Lấy tasks chưa hoàn thành
   Future<List<MaintenanceTaskModel>> getPendingTasks(String vehicleId) async {
+    if (_uid == null) return [];
     final snapshot = await _tasksRef
+        .where('ownerUid', isEqualTo: _uid)
         .where('vehicleId', isEqualTo: vehicleId)
         .where('isCompleted', isEqualTo: false)
         .get();
@@ -77,6 +81,67 @@ class MaintenanceRepository {
   ) async {
     final pending = await getPendingTasks(vehicleId);
     return pending.where((t) => t.isDueSoon(currentOdo)).toList();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // STATIC METHODS for convenience (used by UI)
+  // ═══════════════════════════════════════════════════════════════════════
+
+  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  /// Stream of maintenance tasks for real-time updates
+  static Stream<List<MaintenanceTaskModel>> watchMaintenanceTasks(String vehicleId) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return const Stream.empty();
+    return _firestore.collection('MaintenanceTasks')
+        .where('ownerUid', isEqualTo: uid)
+        .where('vehicleId', isEqualTo: vehicleId)
+        .where('isDeleted', isEqualTo: false)
+        .orderBy('targetOdo')
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => MaintenanceTaskModel.fromFirestore(doc))
+            .toList());
+  }
+
+  /// Create a new maintenance task
+  static Future<void> createMaintenanceTask({
+    required String vehicleId,
+    required String title,
+    required String description,
+    required int targetOdo,
+    ServiceType serviceType = ServiceType.other,
+    DateTime? scheduledDate,
+  }) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final data = {
+      'vehicleId': vehicleId,
+      'title': title,
+      'description': description,
+      'targetOdo': targetOdo,
+      'isCompleted': false,
+      'serviceType': serviceType.name,
+      'scheduledDate': scheduledDate != null ? Timestamp.fromDate(scheduledDate) : null,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+      'isDeleted': false,
+      if (uid != null) 'ownerUid': uid,
+    };
+    await _firestore.collection('MaintenanceTasks').add(data);
+  }
+
+  /// Update a maintenance task
+  static Future<void> updateMaintenanceTask(
+    String taskId,
+    Map<String, dynamic> data,
+  ) async {
+    data['updatedAt'] = FieldValue.serverTimestamp();
+    await _firestore.collection('MaintenanceTasks').doc(taskId).update(data);
+  }
+
+  /// Delete a maintenance task
+  static Future<void> deleteMaintenanceTask(String taskId) async {
+    await _firestore.collection('MaintenanceTasks').doc(taskId).delete();
   }
 }
 
