@@ -1,0 +1,14 @@
+# FastAPI AI Server — đầy đủ ML libs
+fastapi>=0.110.0
+uvicorn>=0.29.0
+python-multipart>=0.0.9
+numpy>=1.26.0
+joblib>=1.3.0
+pandas>=2.2.0
+scikit-learn>=1.4.0
+requests>=2.32.0
+xgboost>=2.0.0
+onnxruntime>=1.17.0
+# Cần cho model .keras/.h5 và cả runtime .tflite trên server
+tensorflow-cpu>=2.15.0
+# torch>=2.2.0

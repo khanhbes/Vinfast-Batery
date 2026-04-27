@@ -1,0 +1,47 @@
+At C:\Users\khanh\OneDrive\Desktop\Vinfast Batery\web\deploy_update.ps1:74 char:16
++ Write-Host "   (SSH cA3 thá»ƒ máº¥t 3-5 phAºt, vui lA²ng chá»?...)" - ...
++                ~
+Unexpected token '(' in expression or statement.
+At C:\Users\khanh\OneDrive\Desktop\Vinfast Batery\web\deploy_update.ps1:74 char:67
++ ... cA3 thá»ƒ máº¥t 3-5 phAºt, vui lA²ng chá»?...)" -ForegroundColor Gray
++                                                   ~~~~~~~~~~~~~~~~~~~~~~~
+Unexpected token '" -ForegroundColor Gray
+ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=10 "' in expression or statement.
+At C:\Users\khanh\OneDrive\Desktop\Vinfast Batery\web\deploy_update.ps1:75 char:58
++ ... nterval=30 -o ServerAliveCountMax=10 "${VpsUser}@${VpsIp}" $remoteCmd
++                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Unexpected token '${VpsUser}@${VpsIp}" $remoteCmd
+# â"?â"? BÆ_á»sC 4: Kiá»ƒm tra â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?
+Write-Host ""
+Write-Host "dY"? Kiá»ƒm tra API..."' in expression or statement.
+At C:\Users\khanh\OneDrive\Desktop\Vinfast Batery\web\deploy_update.ps1:75 char:68
++ ... erverAliveInterval=30 -o ServerAliveCountMax=10 "${VpsUser}@${VpsIp}" ...
++                                                                ~~
+Unexpected token '@$' in expression or statement.
+At C:\Users\khanh\OneDrive\Desktop\Vinfast Batery\web\deploy_update.ps1:75 char:70
++ ... rverAliveInterval=30 -o ServerAliveCountMax=10 "${VpsUser}@${VpsIp}"  ...
++                                                                 ~
+Unexpected token '{' in expression or statement.
+At C:\Users\khanh\OneDrive\Desktop\Vinfast Batery\web\deploy_update.ps1:75 char:77
++ ... nterval=30 -o ServerAliveCountMax=10 "${VpsUser}@${VpsIp}" $remoteCmd
++                                                              ~~~~~~~~~~~~
+Unexpected token '" $remoteCmd
+# â"' in expression or statement.
+At C:\Users\khanh\OneDrive\Desktop\Vinfast Batery\web\deploy_update.ps1:77 char:5
++ # â"?â"? BÆ_á»sC 4: Kiá»ƒm tra â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â" ...
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Unexpected token '?â"? BÆ_á»sC 4: Kiá»ƒm tra â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?â"?
+Write-Host ""
+Write-Host "dY"? Kiá»ƒm tra API..."' in expression or statement.
+At C:\Users\khanh\OneDrive\Desktop\Vinfast Batery\web\deploy_update.ps1:84 char:9
++ } catch {
++         ~
+Missing closing '}' in statement block or type definition.
+At C:\Users\khanh\OneDrive\Desktop\Vinfast Batery\web\deploy_update.ps1:75 char:68
++ ... erverAliveInterval=30 -o ServerAliveCountMax=10 "${VpsUser}@${VpsIp}" ...
++                                                                ~~
+The splatting operator '@' cannot be used to reference variables in an expression. '@$' can be used only as an argument to a command. To reference variables in an expression use 
+'$$'.
+    + CategoryInfo          : ParserError: (:) [], ParentContainsErrorRecordException
+    + FullyQualifiedErrorId : UnexpectedToken
+ 

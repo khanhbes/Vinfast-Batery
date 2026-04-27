@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/providers/app_providers.dart';
 import '../../data/models/trip_log_model.dart';
+import '../../data/models/vehicle_model.dart';
 import '../../data/repositories/ai_insights_repository.dart';
 import '../../data/services/route_prediction_service.dart';
 import '../../data/repositories/trip_log_repository.dart';
@@ -247,8 +249,9 @@ class _RoutePredictionCardState extends ConsumerState<RoutePredictionCard> {
     }
 
     final vehicleId = ref.read(selectedVehicleIdProvider);
-    final vehicle = await ref.read(vehicleProvider(vehicleId).future);
-    if (vehicle == null) return;
+    final vehicleAsync = await ref.read(vehicleProvider(vehicleId).future);
+    if (vehicleAsync == null) return;
+    final vehicle = vehicleAsync as VehicleModel;
 
     setState(() => _loading = true);
 
@@ -267,10 +270,10 @@ class _RoutePredictionCardState extends ConsumerState<RoutePredictionCard> {
     // Predict using on-device + insight data
     final result = RoutePredictionService.predict(
       distanceKm: distance,
-      currentBattery: vehicle.currentBattery,
+      currentBattery: vehicle.currentBattery ?? 0,
       payload: _payload,
       trips: trips,
-      defaultEfficiency: vehicle.defaultEfficiency,
+      defaultEfficiency: vehicle.defaultEfficiency ?? 0.15,
       insight: insight,
     );
 

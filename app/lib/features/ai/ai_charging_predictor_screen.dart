@@ -20,6 +20,9 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
   bool _isLoading = false;
   String? _prediction;
   String? _completionTime;
+  double _actualSOC = 0;
+  bool _reminderSet = false;
+  bool _feedbackSubmitted = false;
 
   @override
   void initState() {
@@ -97,6 +100,43 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
     // TODO: Call weather API to get actual temperature
     // For now return mock value
     return 28.0;
+  }
+
+  Future<void> _submitFeedback() async {
+    final vehicleId = ref.read(selectedVehicleIdProvider);
+    if (vehicleId.isEmpty) return;
+
+    try {
+      await BatteryStateService.submitChargeFeedback(
+        vehicleId: vehicleId,
+        predictionId: DateTime.now().millisecondsSinceEpoch.toString(),
+        predictedDurationMinutes: int.parse(_prediction!.split(' ')[0]),
+        actualSOC: _actualSOC,
+        targetSOC: _targetSOC,
+        chargingMode: _isFastCharging ? 'fast' : 'standard',
+      );
+
+      if (mounted) {
+        setState(() {
+          _feedbackSubmitted = true;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cảm ơn bạn! Dữ liệu đã được ghi nhận để cải thiện AI.'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Lỗi gửi feedback: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -183,6 +223,15 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                   child: _buildPredictionResult(),
+                ),
+              ),
+
+            // Feedback Section
+            if (_prediction != null && !_feedbackSubmitted)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                  child: _buildFeedbackSection(),
                 ),
               ),
 
@@ -580,8 +629,175 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
               ),
             ),
           ],
+          // Reminder toggle
+          const SizedBox(height: 16),
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                _reminderSet = !_reminderSet;
+              });
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              decoration: BoxDecoration(
+                color: _reminderSet ? AppColors.primary.withAlpha(26) : AppColors.card,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: _reminderSet ? AppColors.primary : AppColors.glassBorder,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    _reminderSet ? Icons.notifications_active : Icons.notifications_outlined,
+                    color: _reminderSet ? AppColors.primary : AppColors.textSecondary,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _reminderSet ? 'Đã đặt nhắc nhở rút sạc' : 'Đặt nhắc nhở rút sạc',
+                      style: TextStyle(
+                        color: _reminderSet ? AppColors.primary : AppColors.textSecondary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  Switch(
+                    value: _reminderSet,
+                    onChanged: (value) {
+                      setState(() {
+                        _reminderSet = value;
+                      });
+                    },
+                    activeColor: AppColors.primary,
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.1);
+  }
+
+  Widget _buildFeedbackSection() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.glassBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.feedback_outlined,
+                color: AppColors.primary,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'PHẢN HỒI DỰ ĐOÁN',
+                style: TextStyle(
+                  color: AppColors.primary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Pin thực tế đạt được:',
+            style: TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: SliderTheme(
+                  data: SliderThemeData(
+                    activeTrackColor: AppColors.primary,
+                    inactiveTrackColor: AppColors.surfaceVariant,
+                    thumbColor: AppColors.primary,
+                    overlayColor: AppColors.primary.withAlpha(26),
+                    trackHeight: 6,
+                    thumbShape: const RoundSliderThumbShape(
+                      enabledThumbRadius: 10,
+                    ),
+                  ),
+                  child: Slider(
+                    value: _actualSOC,
+                    min: 0,
+                    max: 100,
+                    onChanged: (value) {
+                      setState(() {
+                        _actualSOC = value;
+                      });
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceVariant,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '${_actualSOC.toInt()}%',
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          GestureDetector(
+            onTap: _submitFeedback,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.send,
+                    color: AppColors.background,
+                    size: 18,
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    'GỬI PHẢN HỒI',
+                    style: TextStyle(
+                      color: AppColors.background,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.1);
   }
 }

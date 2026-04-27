@@ -234,23 +234,30 @@ async def upload_model(
             pass
         return _err(400, f"lưu model thất bại: {e}")
 
+    # PLAN1: Upload chỉ lưu file, KHÔNG auto-activate
+    # Validate bằng cách load tạm (không swap)
     try:
-        validation = rt.swap_to(version, require_smoke=(not skip_smoke))
+        validation = rt._validate_and_create_predictor(rt._load_model(meta['path']))
     except Exception as e:
-        # Validation failed - do NOT activate broken model
+        # Validation failed - remove broken model
         try:
             st.remove(version)
         except Exception:
             pass
         return _err(400, f"validation failed: {e}")
-
-    # Only activate if validation passed
-    st.activate(version)
     
-    # Get actual model feature info from runtime
+    if not validation.get("ok"):
+        # Validation failed - remove broken model
+        try:
+            st.remove(version)
+        except Exception:
+            pass
+        return _err(400, f"validation failed: {validation.get('error', 'unknown')}")
+    
+    # Get actual model feature info from validation
     model_features = {
-        "count": rt.feature_count,
-        "names": rt._predictor.feature_names if rt._predictor else None,
+        "count": validation.get('featureCount'),
+        "names": None,  # Will be populated when actually loaded
     }
     
     # Compare with registry features
@@ -258,7 +265,7 @@ async def upload_model(
     
     return _ok({
         "version": version,
-        "activated": True,
+        "activated": False,  # PLAN1: Upload không auto-activate
         "note": meta.get("note"),
         "validation": validation,
         "modelFeatures": model_features,
@@ -266,7 +273,8 @@ async def upload_model(
             "count": registry_count,
             "fields": list(rt.smoke_input.keys()) if rt.smoke_input else [],
         },
-        "featureMismatch": rt.feature_count != registry_count if (rt.feature_count and registry_count) else None,
+        "featureMismatch": model_features.get('count') != registry_count if (model_features.get('count') and registry_count) else None,
+        "message": "Model đã upload thành công. Vui lòng Test rồi Deploy để kích hoạt.",
     })
 
 

@@ -14,12 +14,6 @@ class AuthService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final SyncService _syncService = SyncService();
 
-  // API configuration - used for web sync integration
-  // ignore: unused_field
-  static const String _baseUrl = 'http://localhost:5000';
-  // ignore: unused_field
-  static const Duration _timeout = Duration(seconds: 30);
-
   /// Stream auth state changes
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 

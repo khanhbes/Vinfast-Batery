@@ -3,11 +3,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
 import '../models/battery_state_model.dart';
 import '../models/vehicle_model.dart';
+import '../../core/constants/app_constants.dart';
 
 /// Service xử lý trạng thái pin đồng bộ với web dashboard
 /// Tích hợp với SOC AI model và real-time monitoring
 class BatteryStateService {
-  static const String _baseUrl = 'http://localhost:5000';
+  static String get _baseUrl => AppConstants.apiBaseUrl;
   static const Duration _timeout = Duration(seconds: 30);
 
   /// Lấy trạng thái pin hiện tại từ vehicle
@@ -402,6 +403,64 @@ class BatteryStateService {
     } catch (e) {
       print('SOC API connection test failed: $e');
       return false;
+    }
+  }
+
+  /// Submit charge feedback for ML training
+  static Future<Map<String, dynamic>> submitChargeFeedback({
+    required String vehicleId,
+    required String predictionId,
+    required int predictedDurationMinutes,
+    required double actualSOC,
+    required double targetSOC,
+    required String chargingMode,
+  }) async {
+    try {
+      final url = Uri.parse('$_baseUrl/api/ai/charge-feedback');
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'vehicleId': vehicleId,
+          'predictionId': predictionId,
+          'predictedDurationMinutes': predictedDurationMinutes,
+          'actualSOC': actualSOC,
+          'targetSOC': targetSOC,
+          'chargingMode': chargingMode,
+          'timestamp': DateTime.now().toIso8601String(),
+        }),
+      ).timeout(_timeout);
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        throw Exception('Failed to submit feedback: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error submitting charge feedback: $e');
+      rethrow;
+    }
+  }
+
+  /// Get charging model status
+  static Future<Map<String, dynamic>> getChargingModelStatus() async {
+    try {
+      final url = Uri.parse('$_baseUrl/api/ai/charging-model-status');
+      final response = await http.get(url).timeout(_timeout);
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        throw Exception('Failed to get model status: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error getting charging model status: $e');
+      return {
+        'status': 'error',
+        'message': e.toString(),
+        'version': 'unknown',
+        'samples': 0,
+      };
     }
   }
 }

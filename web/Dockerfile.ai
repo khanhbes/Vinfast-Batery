@@ -1,0 +1,26 @@
+# ── FastAPI AI Server (port 8001) ─────────────────────────────
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements-ai.txt .
+RUN pip install --no-cache-dir -r requirements-ai.txt
+
+COPY ai_server/ ./ai_server/
+
+RUN mkdir -p /app/models
+
+EXPOSE 8001
+
+ENV PYTHONUNBUFFERED=1
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+    CMD curl -f http://localhost:8001/healthz || exit 1
+
+CMD ["python", "-m", "uvicorn", "ai_server.main:app", \
+     "--host", "0.0.0.0", "--port", "8001", "--workers", "1"]

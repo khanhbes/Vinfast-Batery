@@ -12,18 +12,7 @@ import { Toaster } from '@/components/ui/sonner';
 import { auth } from '@/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 
-export default function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setIsAuthenticated(!!user);
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, []);
-
+function AppContent({ isAuthenticated, loading }: { isAuthenticated: boolean; loading: boolean }) {
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -40,26 +29,43 @@ export default function App() {
   }
 
   return (
-    <Router>
-      <div className="flex min-h-screen bg-slate-50 font-sans text-slate-900">
-        <Sidebar />
-        <div className="flex-1 flex flex-col min-w-0">
-          <Topbar />
-          <main className="flex-1 p-8 overflow-y-auto">
-            <div className="max-w-7xl mx-auto">
-              <Routes>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/users" element={<UserManagement />} />
-                <Route path="/ai" element={<AiCenter />} />
-                <Route path="/audit" element={<AuditSystem />} />
-                <Route path="/settings" element={<Settings />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            </div>
-          </main>
-        </div>
-        <Toaster position="top-right" />
+    <div className="flex min-h-screen bg-slate-50 font-sans text-slate-900">
+      <Sidebar />
+      <div className="flex-1 flex flex-col min-w-0">
+        <Topbar />
+        <main className="flex-1 p-8 overflow-y-auto">
+          <div className="max-w-7xl mx-auto">
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/users" element={<UserManagement />} />
+              <Route path="/ai" element={<AiCenter />} />
+              <Route path="/audit" element={<AuditSystem />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </div>
+        </main>
       </div>
+      <Toaster position="top-right" />
+    </div>
+  );
+}
+
+export default function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setIsAuthenticated(!!user);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  return (
+    <Router>
+      <AppContent isAuthenticated={isAuthenticated} loading={loading} />
     </Router>
   );
 }

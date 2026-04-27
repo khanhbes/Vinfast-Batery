@@ -179,6 +179,20 @@ export const aiValidateVersion = (typeKey, version) =>
     body: JSON.stringify({ version }),
   })
 
+/// Test nhanh một version đã upload (chưa deploy) — PLAN1
+export const aiTestVersion = (typeKey, version, testInput = null) =>
+  apiFetch(`/api/admin/ai/models/${encodeURIComponent(typeKey)}/test-version`, {
+    method: 'POST',
+    body: JSON.stringify({ version, testInput }),
+  })
+
+/// Deploy một version — PLAN1
+export const aiDeployModel = (typeKey, version) =>
+  apiFetch(`/api/admin/ai/models/${encodeURIComponent(typeKey)}/deploy`, {
+    method: 'POST',
+    body: JSON.stringify({ version }),
+  })
+
 /**
  * Upload a model file for a given model type.
  * @param {string} typeKey

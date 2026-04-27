@@ -13,6 +13,13 @@ service cloud.firestore {
       return resource.data.isDeleted != true;
     }
 
+    // ── Users (profile sync từ app) ──
+    match /users/{uid} {
+      allow read, update: if isAuth() && request.auth.uid == uid;
+      allow create: if isAuth() && request.auth.uid == uid;
+      allow delete: if false;
+    }
+
     // ── Vehicles ──
     match /Vehicles/{vehicleId} {
       allow read: if isAuth() && isOwner(resource.data.ownerUid) && notDeleted();
@@ -82,6 +89,13 @@ service cloud.firestore {
     // ── AuditLogs (backend only) ──
     match /AuditLogs/{logId} {
       allow read, write: if false;
+    }
+
+    // ── AiModelDeployments (PLAN1: AI deployment lifecycle) ──
+    // Backend/admin only write; authenticated users can read
+    match /AiModelDeployments/{typeKey} {
+      allow read: if isAuth();
+      allow write: if false; // Managed via backend Admin SDK only
     }
   }
 }

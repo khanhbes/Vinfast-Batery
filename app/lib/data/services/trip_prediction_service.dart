@@ -3,11 +3,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
 import '../models/trip_prediction_model.dart';
 import '../models/vehicle_model.dart';
+import '../../core/constants/app_constants.dart';
 
 /// Service xử lý dự đoán chuyến đi đồng bộ với web dashboard
 /// Sử dụng AI model từ server hoặc fallback heuristic
 class TripPredictionService {
-  static const String _baseUrl = 'http://localhost:5000';
+  static String get _baseUrl => AppConstants.apiBaseUrl;
   static const Duration _timeout = Duration(seconds: 30);
 
   /// Dự đoán tiêu hao pin cho chuyến đi

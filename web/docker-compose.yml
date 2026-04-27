@@ -1,0 +1,92 @@
+version: "3.9"
+
+services:
+  # ── FastAPI AI Server (internal only, port 8001) ──────────────
+  ai:
+    build:
+      context: .
+      dockerfile: Dockerfile.ai
+    container_name: vinfast_ai
+    restart: unless-stopped
+    environment:
+      AI_SERVER_INTERNAL_TOKEN: ${AI_SERVER_INTERNAL_TOKEN:-dev-local-token}
+      AI_SERVER_MODELS_DIR: /app/models
+    volumes:
+      - models_data:/app/models
+    networks:
+      - vinfast_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ── Flask Unified API (internal, port 5000) ───────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: vinfast_api
+    restart: unless-stopped
+    depends_on:
+      ai:
+        condition: service_healthy
+    environment:
+      AI_SERVER_URL: http://ai:8001
+      AI_SERVER_INTERNAL_TOKEN: ${AI_SERVER_INTERNAL_TOKEN:-dev-local-token}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-*}
+      DEV_ADMIN_KEY: ${DEV_ADMIN_KEY:-dev-local-token}
+      FIREBASE_CREDENTIALS_JSON: ${FIREBASE_CREDENTIALS_JSON:-}
+    volumes:
+      - models_data:/app/models
+      - apk_data:/app/apk
+    networks:
+      - vinfast_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ── React Dashboard → Nginx (public, port 80) ─────────────────
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+      args:
+        VITE_API_BASE_URL: /api
+        VITE_FIREBASE_API_KEY: ${VITE_FIREBASE_API_KEY:-}
+        VITE_FIREBASE_AUTH_DOMAIN: ${VITE_FIREBASE_AUTH_DOMAIN:-}
+        VITE_FIREBASE_PROJECT_ID: ${VITE_FIREBASE_PROJECT_ID:-}
+        VITE_FIREBASE_STORAGE_BUCKET: ${VITE_FIREBASE_STORAGE_BUCKET:-}
+        VITE_FIREBASE_MESSAGING_SENDER_ID: ${VITE_FIREBASE_MESSAGING_SENDER_ID:-}
+        VITE_FIREBASE_APP_ID: ${VITE_FIREBASE_APP_ID:-}
+    container_name: vinfast_dashboard
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    networks:
+      - vinfast_net
+
+volumes:
+  models_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./models
+  apk_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./apk
+
+networks:
+  vinfast_net:
+    driver: bridge
