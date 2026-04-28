@@ -32,8 +32,8 @@ class NotificationRepository {
               .toList();
         })
         .handleError((error) {
-          debugPrint('[NotificationRepo] Watch error: $error');
-          return <UserNotification>[];
+          debugPrint('[NotificationRepo] Watch error (index missing?): $error');
+          // Return empty list on error — common cause: composite index not created
         });
   }
 
@@ -69,8 +69,8 @@ class NotificationRepository {
         .snapshots()
         .map((snapshot) => snapshot.docs.length)
         .handleError((error) {
-          debugPrint('[NotificationRepo] Unread count error: $error');
-          return 0;
+          debugPrint('[NotificationRepo] Unread count error (index missing?): $error');
+          // Return 0 on error — common cause: composite index not created
         });
   }
 

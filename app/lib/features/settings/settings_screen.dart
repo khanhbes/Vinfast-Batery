@@ -1,19 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/sync_service.dart';
 import '../../core/services/settings_service.dart';
+import '../../core/widgets/app_popup.dart';
 import '../notifications/notification_center_screen.dart';
 import 'appearance_settings_screen.dart';
+import 'profile_screen.dart';
+import 'vehicle_garage_screen.dart';
+import 'guide_screen.dart';
 
 // =============================================================================
-// Settings Screen V4
+// Settings Screen V5 — PLAN #4, #5, #7
 // Profile, Vehicle Garage, Application Settings with toggles
+// Cleaned up codebase, dynamic version, fully developed app settings
 // =============================================================================
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -26,28 +33,96 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _pushNotifications = true;
   bool _autoSync = true;
-  bool _darkMode = true;
   bool _biometricAuth = false;
   bool _isLoading = false;
-  String _userName = 'Khanh Nhim';
-  String _userEmail = 'khanhnhim2110@gmail.com';
+  String _userName = '...';
+  String _userEmail = '...';
+  String _appVersion = '...';
 
   @override
   void initState() {
     super.initState();
     _loadSettings();
+    _loadAppVersion();
+    _loadUserProfile();
   }
 
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
     setState(() {
       _pushNotifications = prefs.getBool('pushNotifications') ?? true;
       _autoSync = prefs.getBool('autoSync') ?? true;
-      _darkMode = prefs.getBool('darkMode') ?? true;
       _biometricAuth = prefs.getBool('biometricAuth') ?? false;
-      _userName = prefs.getString('userName') ?? 'Khanh Nhim';
-      _userEmail = prefs.getString('userEmail') ?? 'khanhnhim2110@gmail.com';
     });
+  }
+
+  /// PLAN #8 — Dynamic version from package_info_plus
+  Future<void> _loadAppVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (!mounted) return;
+      setState(() {
+        _appVersion = 'V${info.version}+${info.buildNumber}';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _appVersion = 'V?.?.?');
+    }
+  }
+
+  /// PLAN #3 — Load user profile from Firestore
+  Future<void> _loadUserProfile() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      final data = await AuthService().getCurrentUserData();
+      if (!mounted) return;
+      setState(() {
+        _userName = data?['name'] ?? user?.displayName ?? 'Người dùng';
+        _userEmail = data?['email'] ?? user?.email ?? '';
+      });
+    } catch (_) {}
+  }
+
+  /// Show About dialog with app info
+  void _showAboutDialog() {
+    showAboutDialog(
+      context: context,
+      applicationName: 'VinFast Battery',
+      applicationVersion: _appVersion,
+      applicationLegalese: '© 2026 VinFast Battery. Hệ thống quản lý pin xe điện.',
+      applicationIcon: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withAlpha(40),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Icon(Icons.electric_bolt_rounded, color: AppColors.primary, size: 32),
+      ),
+      children: const [
+        SizedBox(height: 12),
+        Text('Theo dõi sức khỏe pin, dự đoán thời gian sạc và lên kế hoạch chuyến đi với AI.'),
+      ],
+    );
+  }
+
+  /// PLAN #7 — Show "Coming Soon" snackbar
+  void _showComingSoon(String featureName) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.construction_rounded, color: Colors.white, size: 18),
+            const SizedBox(width: 8),
+            Expanded(child: Text('$featureName: Đang phát triển — sẽ ra mắt sớm!')),
+          ],
+        ),
+        backgroundColor: AppColors.primaryContainer,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   Future<void> _saveSetting(String key, bool value) async {
@@ -56,60 +131,59 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _signOut() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Đăng xuất', style: TextStyle(color: AppColors.textPrimary)),
+        content: const Text(
+          'Bạn có chắc chắn muốn đăng xuất?',
+          style: TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Hủy', style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Đăng xuất'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
     setState(() => _isLoading = true);
-    
     final result = await AuthService().signOut();
-    
     setState(() => _isLoading = false);
     if (!mounted) return;
-      
-    if (result['success']) {
-      // Clear providers
-      ref.read(selectedVehicleIdProvider.notifier).state = '';
-      
-      // Show success message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Signed out successfully'),
-          backgroundColor: AppColors.success,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
-      
-      // Navigate to login (if exists) or show auth dialog
-      _showAuthDialog();
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result['message'] ?? 'Sign out failed'),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
-    }
-  }
 
-  void _showAuthDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const _AuthDialog(),
-    );
+    if (result['success'] == true) {
+      ref.read(selectedVehicleIdProvider.notifier).state = '';
+      AppPopup.showSuccess('Đã đăng xuất');
+    } else {
+      AppPopup.showError(result['error'] ?? 'Đăng xuất thất bại');
+    }
   }
 
   Future<void> _manualSync() async {
     setState(() => _isLoading = true);
-    
     final result = await SyncService().performFullSync();
     setState(() => _isLoading = false);
     if (!mounted) return;
-      
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(result['success'] ? 'Synced successfully' : 'Sync failed'),
-        backgroundColor: result['success'] ? AppColors.success : AppColors.error,
+        content: Text(result['success'] == true ? 'Đồng bộ thành công' : 'Đồng bộ thất bại'),
+        backgroundColor: result['success'] == true ? AppColors.success : AppColors.error,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
@@ -124,20 +198,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         child: CustomScrollView(
           physics: const BouncingScrollPhysics(),
           slivers: [
-            // App Bar
-            SliverToBoxAdapter(
-              child: _buildAppBar(),
-            ),
-
-            // Title Section
+            // Title
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Settings',
+                      'Cài đặt',
                       style: TextStyle(
                         color: AppColors.textPrimary,
                         fontSize: 28,
@@ -147,24 +216,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Manage your experience',
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 14,
-                      ),
+                      'Quản lý tài khoản & cài đặt ứng dụng',
+                      style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
                     ),
                   ],
                 ),
               ).animate().fadeIn(duration: 400.ms).slideY(begin: -0.1),
             ),
 
-            // Profile Section
-            SliverToBoxAdapter(
-              child: _buildSectionHeader(
-                icon: Icons.info_outline,
-                title: 'PROFILE',
-              ),
-            ),
+            // Profile Section — PLAN #3
+            _sectionHeader(Icons.person_outline_rounded, 'HỒ SƠ'),
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -172,13 +233,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
 
-            // Vehicle Garage Section
-            SliverToBoxAdapter(
-              child: _buildSectionHeader(
-                icon: Icons.directions_car_outlined,
-                title: 'VEHICLE GARAGE',
-              ),
-            ),
+            // Vehicle Garage — PLAN #5
+            _sectionHeader(Icons.directions_car_outlined, 'GARAGE XE'),
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -187,12 +243,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
 
             // Sync Section
-            SliverToBoxAdapter(
-              child: _buildSectionHeader(
-                icon: Icons.sync_outlined,
-                title: 'SYNC & DATA',
-              ),
-            ),
+            _sectionHeader(Icons.sync_outlined, 'ĐỒNG BỘ'),
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -200,13 +251,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
 
-            // Application Settings Section
-            SliverToBoxAdapter(
-              child: _buildSectionHeader(
-                icon: Icons.settings_outlined,
-                title: 'APPLICATION SETTINGS',
-              ),
-            ),
+            // Application Settings — PLAN #7
+            _sectionHeader(Icons.settings_outlined, 'CÀI ĐẶT ỨNG DỤNG'),
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -214,26 +260,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
 
-            // Sign Out Button
+            // Sign Out
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 32, 20, 0),
                 child: _isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(color: AppColors.primary),
-                    )
-                  : _AnimatedSignOutButton(onTap: _signOut),
+                    ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+                    : _AnimatedSignOutButton(onTap: _signOut),
               ),
             ),
 
-            // Version
+            // Version — PLAN #8
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.only(top: 24, bottom: 100),
                 child: Center(
                   child: Text(
-                    'STABLE CHANNEL V2.4.1',
-                    style: TextStyle(
+                    'STABLE CHANNEL $_appVersion',
+                    style: const TextStyle(
                       color: AppColors.textTertiary,
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
@@ -249,362 +293,309 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Widget _buildAppBar() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: AppColors.card,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.glassBorder),
-            ),
-            child: const Icon(
-              Icons.person_outline_rounded,
-              color: AppColors.textPrimary,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 12),
-          const Text(
-            'VinFast Battery',
-            style: TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const Spacer(),
-          Stack(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppColors.card,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.glassBorder),
-                ),
-                child: const Icon(
-                  Icons.notifications_outlined,
-                  color: AppColors.textPrimary,
-                  size: 20,
-                ),
+  Widget _sectionHeader(IconData icon, String title) {
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 28, 20, 12),
+        child: Row(
+          children: [
+            Icon(icon, color: AppColors.primary, size: 16),
+            const SizedBox(width: 8),
+            Text(
+              title,
+              style: TextStyle(
+                color: AppColors.primary,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.5,
               ),
-              Positioned(
-                top: 8,
-                right: 8,
-                child: Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: AppColors.error,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildSectionHeader({required IconData icon, required String title}) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 32, 20, 12),
-      child: Row(
-        children: [
-          Icon(
-            icon,
-            color: AppColors.primary,
-            size: 16,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            title,
-            style: TextStyle(
-              color: AppColors.primary,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.5,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  // ── Profile Card — PLAN #3 ─────────────────────────────────────
 
   Widget _buildProfileCard() {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.glassBorder),
-      ),
-      child: Column(
-        children: [
-          _buildSettingsRow(
-            title: 'Personal Information',
-            value: _userName.replaceAll(' ', '\n'),
-            showArrow: true,
-          ),
-          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
-          _buildSettingsRow(
-            title: 'Account Email',
-            value: _userEmail,
-            showArrow: true,
-          ),
-        ],
+    final initials = _userName.isNotEmpty && _userName != '...'
+        ? _userName.split(' ').map((w) => w.isNotEmpty ? w[0] : '').take(2).join().toUpperCase()
+        : '?';
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())).then((_) {
+          _loadUserProfile(); // Refresh after returning
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.glassBorder),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [AppColors.primaryContainer, AppColors.primary],
+                ),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Center(
+                child: Text(
+                  initials,
+                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800),
+                ),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _userName,
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _userEmail,
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.textTertiary, size: 22),
+          ],
+        ),
       ),
     ).animate().fadeIn(duration: 500.ms).scale(begin: const Offset(0.95, 0.95));
   }
 
+  // ── Vehicle Garage Card — PLAN #5 ─────────────────────────────
+
   Widget _buildVehicleGarageCard() {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.glassBorder),
-      ),
-      child: Column(
-        children: [
-          _buildSettingsRow(
-            title: 'Connection Status',
-            value: 'Connected',
-            valueColor: AppColors.success,
-            showArrow: true,
-          ),
-          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
-          _buildSettingsRow(
-            title: 'Model Name',
-            value: 'VinFast Feliz Neo',
-            showArrow: true,
-          ),
-          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'Linked Devices',
-                    style: TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceVariant,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Text(
-                    'Add',
-                    style: TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                const Icon(
-                  Icons.chevron_right_rounded,
-                  color: AppColors.textTertiary,
-                  size: 20,
-                ),
-              ],
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const VehicleGarageScreen()));
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.glassBorder),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.primaryContainer,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Icon(Icons.electric_moped_rounded, color: AppColors.primary, size: 24),
             ),
-          ),
-        ],
+            const SizedBox(width: 14),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Garage Xe',
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Quản lý xe, thêm xe mới, xem thông số',
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                'Mở',
+                style: TextStyle(
+                  color: AppColors.background,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     ).animate().fadeIn(delay: 100.ms).scale(begin: const Offset(0.95, 0.95));
   }
 
-  Widget _buildAppSettingsCard() {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.glassBorder),
-      ),
-      child: Column(
-        children: [
-          // Notification Center
-          _buildSettingsRowTap(
-            title: 'Thông báo',
-            value: 'Xem tất cả thông báo',
-            showArrow: true,
-            onTap: () => _openNotificationCenter(),
-          ),
-          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
-          // Appearance & Language
-          _buildSettingsRowTap(
-            title: 'Giao diện & Ngôn ngữ',
-            value: _getAppearanceValue(),
-            showArrow: true,
-            onTap: () => _openAppearanceSettings(),
-          ),
-          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
-          // Push Notifications toggle
-          _buildToggleRow(
-            title: 'Thông báo đẩy',
-            subtitle: 'Nhận thông báo cập nhật',
-            value: _pushNotifications,
-            onChanged: (value) {
-              setState(() => _pushNotifications = value);
-              _saveSetting('pushNotifications', value);
-            },
-          ),
-          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
-          // Biometric Auth toggle
-          _buildToggleRow(
-            title: 'Xác thực sinh trắc học',
-            subtitle: 'Sử dụng vân tay/Face ID',
-            value: _biometricAuth,
-            onChanged: (value) {
-              setState(() => _biometricAuth = value);
-              _saveSetting('biometricAuth', value);
-            },
-          ),
-          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
-          _buildSettingsRowWithButton(
-            title: 'User Manual',
-            buttonText: 'Open',
-          ),
-          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
-          _buildSettingsRowWithButton(
-            title: 'Technical Support',
-            buttonText: 'Contact',
-          ),
-        ],
-      ),
-    ).animate().fadeIn(delay: 200.ms).scale(begin: const Offset(0.95, 0.95));
-  }
-
-  Widget _buildSettingsRow({
-    required String title,
-    required String value,
-    Color? valueColor,
-    bool showArrow = false,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          Text(
-            value,
-            style: TextStyle(
-              color: valueColor ?? AppColors.textSecondary,
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
-            textAlign: TextAlign.right,
-          ),
-          if (showArrow) ...[
-            const SizedBox(width: 8),
-            const Icon(
-              Icons.chevron_right_rounded,
-              color: AppColors.textTertiary,
-              size: 20,
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSettingsRowWithButton({
-    required String title,
-    required String buttonText,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceVariant,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              buttonText,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          const Icon(
-            Icons.chevron_right_rounded,
-            color: AppColors.textTertiary,
-            size: 20,
-          ),
-        ],
-      ),
-    );
-  }
+  // ── Sync Card ─────────────────────────────────────────────────
 
   Widget _buildSyncCard() {
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: AppColors.card,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.glassBorder),
       ),
       child: Column(
         children: [
           _buildToggleRow(
-            title: 'Auto Sync to Web',
-            subtitle: 'Sync data automatically',
+            title: 'Tự động đồng bộ',
+            subtitle: 'Sync dữ liệu tự động lên web',
             value: _autoSync,
-            onChanged: (value) {
-              setState(() => _autoSync = value);
-              _saveSetting('autoSync', value);
+            onChanged: (v) {
+              setState(() => _autoSync = v);
+              _saveSetting('autoSync', v);
             },
           ),
           Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
           _buildActionRow(
-            title: 'Manual Sync Now',
-            subtitle: 'Sync all data to web dashboard',
+            title: 'Đồng bộ ngay',
+            subtitle: 'Sync tất cả dữ liệu lên web dashboard',
             icon: Icons.sync,
             onTap: _manualSync,
           ),
         ],
       ),
     ).animate().fadeIn(delay: 150.ms).scale(begin: const Offset(0.95, 0.95));
+  }
+
+  // ── App Settings Card — PLAN #7 ───────────────────────────────
+
+  Widget _buildAppSettingsCard() {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.glassBorder),
+      ),
+      child: Column(
+        children: [
+          // Notifications (General)
+          _buildTapRow(
+            title: 'Thông báo',
+            value: 'Xem tất cả thông báo',
+            icon: Icons.notifications_outlined,
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationCenterScreen())),
+          ),
+          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
+
+          // Theme Toggle (Light/Dark)
+          _buildTapRow(
+            title: 'Giao diện & Ngôn ngữ',
+            value: _getAppearanceValue(),
+            icon: Icons.palette_outlined,
+            onTap: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const AppearanceSettingsScreen())).then((_) {
+                setState(() {}); // Refresh appearance value
+              });
+            },
+          ),
+          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
+
+          // Push Notifications toggle
+          _buildToggleRow(
+            title: 'Thông báo đẩy',
+            subtitle: 'Nhận thông báo cập nhật và nhắc nhở',
+            value: _pushNotifications,
+            onChanged: (v) {
+              setState(() => _pushNotifications = v);
+              _saveSetting('pushNotifications', v);
+            },
+          ),
+          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
+
+          // Biometric Auth
+          _buildToggleRow(
+            title: 'Xác thực sinh trắc học',
+            subtitle: 'FaceID / Vân tay khi mở app',
+            value: _biometricAuth,
+            onChanged: (v) {
+              setState(() => _biometricAuth = v);
+              _saveSetting('biometricAuth', v);
+              _showComingSoon('Xác thực sinh trắc học');
+            },
+          ),
+          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
+
+          // Help
+          _buildTapRow(
+            title: 'Trợ giúp',
+            value: 'FAQ & Hướng dẫn sử dụng',
+            icon: Icons.help_outline_rounded,
+            onTap: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const GuideScreen()));
+            },
+          ),
+          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
+
+          // About
+          _buildTapRow(
+            title: 'Giới thiệu',
+            value: _appVersion,
+            icon: Icons.info_outline_rounded,
+            onTap: _showAboutDialog,
+          ),
+        ],
+      ),
+    ).animate().fadeIn(delay: 200.ms).scale(begin: const Offset(0.95, 0.95));
+  }
+
+  // ── Helper Builders ───────────────────────────────────────────
+
+  Widget _buildTapRow({
+    required String title,
+    required String value,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Icon(icon, color: AppColors.textSecondary, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w500),
+              ),
+            ),
+            Text(
+              value,
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            ),
+            const SizedBox(width: 8),
+            Icon(Icons.arrow_forward_ios, color: AppColors.textTertiary, size: 14),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildToggleRow({
@@ -623,27 +614,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    color: AppColors.textTertiary,
-                    fontSize: 11,
-                  ),
-                ),
+                Text(subtitle, style: TextStyle(color: AppColors.textTertiary, fontSize: 11)),
               ],
             ),
           ),
-          _AnimatedToggle(
-            value: value,
-            onChanged: onChanged,
-          ),
+          _AnimatedToggle(value: value, onChanged: onChanged),
         ],
       ),
     );
@@ -658,7 +636,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return GestureDetector(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           children: [
             Container(
@@ -674,49 +652,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
+                  Text(title, style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w500)),
                   const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      color: AppColors.textTertiary,
-                      fontSize: 11,
-                    ),
-                  ),
+                  Text(subtitle, style: TextStyle(color: AppColors.textTertiary, fontSize: 11)),
                 ],
               ),
             ),
-            const Icon(
-              Icons.chevron_right_rounded,
-              color: AppColors.textTertiary,
-              size: 20,
-            ),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.textTertiary, size: 20),
           ],
         ),
       ),
-    );
-  }
-
-  // ── Navigation helpers ─────────────────────────────────────────
-
-  void _openNotificationCenter() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const NotificationCenterScreen()),
-    );
-  }
-
-  void _openAppearanceSettings() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const AppearanceSettingsScreen()),
     );
   }
 
@@ -724,65 +669,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final settings = SettingsService();
     final themeMode = settings.getThemeMode();
     final language = settings.getLanguage();
-    
+
     final themeText = switch (themeMode) {
       AppThemeMode.system => 'Hệ thống',
       AppThemeMode.light => 'Sáng',
       AppThemeMode.dark => 'Tối',
     };
-    
+
     final langText = switch (language) {
       AppLanguage.system => 'Auto',
       AppLanguage.vietnamese => 'VN',
       AppLanguage.english => 'EN',
     };
-    
+
     return '$themeText • $langText';
-  }
-
-  // ── Settings row with tap handler ─────────────────────────────
-
-  Widget _buildSettingsRowTap({
-    required String title,
-    required String value,
-    bool showArrow = false,
-    VoidCallback? onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                title,
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            Text(
-              value,
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 13,
-              ),
-            ),
-            if (showArrow) ...[
-              const SizedBox(width: 8),
-              Icon(
-                Icons.arrow_forward_ios,
-                color: AppColors.textTertiary,
-                size: 14,
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
   }
 }
 
@@ -794,10 +694,7 @@ class _AnimatedToggle extends StatefulWidget {
   final bool value;
   final ValueChanged<bool> onChanged;
 
-  const _AnimatedToggle({
-    required this.value,
-    required this.onChanged,
-  });
+  const _AnimatedToggle({required this.value, required this.onChanged});
 
   @override
   State<_AnimatedToggle> createState() => _AnimatedToggleState();
@@ -823,21 +720,15 @@ class _AnimatedToggleState extends State<_AnimatedToggle>
       begin: AppColors.surfaceVariant,
       end: AppColors.primary,
     ).animate(_controller);
-    
-    if (widget.value) {
-      _controller.value = 1.0;
-    }
+
+    if (widget.value) _controller.value = 1.0;
   }
 
   @override
   void didUpdateWidget(_AnimatedToggle oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.value != oldWidget.value) {
-      if (widget.value) {
-        _controller.forward();
-      } else {
-        _controller.reverse();
-      }
+      widget.value ? _controller.forward() : _controller.reverse();
     }
   }
 
@@ -873,11 +764,7 @@ class _AnimatedToggleState extends State<_AnimatedToggle>
                       color: Colors.white,
                       shape: BoxShape.circle,
                       boxShadow: [
-                        BoxShadow(
-                          color: Colors.black26,
-                          blurRadius: 2,
-                          offset: Offset(0, 1),
-                        ),
+                        BoxShadow(color: Colors.black26, blurRadius: 2, offset: Offset(0, 1)),
                       ],
                     ),
                   ),
@@ -938,20 +825,16 @@ class _AnimatedSignOutButtonState extends State<_AnimatedSignOutButton>
           padding: const EdgeInsets.symmetric(vertical: 16),
           decoration: BoxDecoration(
             color: const Color(0xFF3D2828),
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(20),
             border: Border.all(color: AppColors.error.withAlpha(77)),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                Icons.logout_rounded,
-                color: AppColors.error.withAlpha(204),
-                size: 18,
-              ),
+              Icon(Icons.logout_rounded, color: AppColors.error.withAlpha(204), size: 18),
               const SizedBox(width: 8),
               Text(
-                'Sign Out',
+                'Đăng xuất',
                 style: TextStyle(
                   color: AppColors.error.withAlpha(204),
                   fontSize: 15,
@@ -963,150 +846,5 @@ class _AnimatedSignOutButtonState extends State<_AnimatedSignOutButton>
         ),
       ),
     ).animate().fadeIn(delay: 300.ms).slideY(begin: 0.2);
-  }
-}
-
-class _AuthDialog extends StatefulWidget {
-  const _AuthDialog();
-
-  @override
-  State<_AuthDialog> createState() => _AuthDialogState();
-}
-
-class _AuthDialogState extends State<_AuthDialog> {
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  bool _isLoading = false;
-  bool _isSignUp = false;
-
-  @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _authenticate() async {
-    setState(() => _isLoading = true);
-
-    final result = _isSignUp
-        ? await AuthService().registerWithEmail(
-            email: _emailController.text,
-            password: _passwordController.text,
-            name: 'User',
-          )
-        : await AuthService().signInWithEmail(
-            email: _emailController.text,
-            password: _passwordController.text,
-          );
-
-    setState(() => _isLoading = false);
-
-    if (!mounted) return;
-
-    if (result['success']) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_isSignUp ? 'Account created!' : 'Welcome back!'),
-          backgroundColor: AppColors.success,
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result['message'] ?? 'Authentication failed'),
-          backgroundColor: AppColors.error,
-        ),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: AppColors.card,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              _isSignUp ? 'Create Account' : 'Sign In',
-              style: const TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _emailController,
-              style: const TextStyle(color: AppColors.textPrimary),
-              decoration: InputDecoration(
-                hintText: 'Email',
-                hintStyle: const TextStyle(color: AppColors.textHint),
-                filled: true,
-                fillColor: AppColors.surfaceLight,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _passwordController,
-              obscureText: true,
-              style: const TextStyle(color: AppColors.textPrimary),
-              decoration: InputDecoration(
-                hintText: 'Password',
-                hintStyle: const TextStyle(color: AppColors.textHint),
-                filled: true,
-                fillColor: AppColors.surfaceLight,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            if (_isLoading)
-              const CircularProgressIndicator(color: AppColors.primary)
-            else
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _authenticate,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: Text(
-                    _isSignUp ? 'Sign Up' : 'Sign In',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-            const SizedBox(height: 12),
-            TextButton(
-              onPressed: () => setState(() => _isSignUp = !_isSignUp),
-              child: Text(
-                _isSignUp ? 'Already have an account? Sign In' : 'Don\'t have an account? Sign Up',
-                style: TextStyle(color: AppColors.primary),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }

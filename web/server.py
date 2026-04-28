@@ -2634,29 +2634,21 @@ def admin_ai_types():
 @app.route('/api/admin/ai/models/<type_key>/test-version', methods=['POST'])
 @require_admin
 def admin_test_version(type_key):
-    """Test một version chưa deploy (load tạm vào memory để test)."""
+    """Test nhanh một version chưa deploy (load tạm, chạy predict, không activate)."""
     body = request.get_json() or {}
     version = body.get('version', '').strip()
+    test_input = body.get('testInput')
     
     if not version:
         return jsonify({'success': False, 'error': 'version is required'}), 400
     
-    # Call AI server to validate/load the version
     try:
-        data, code = _ai_request_json('POST', f'/v1/models/{type_key}/validate-version',
-                                      json_body={'version': version})
-        if code != 200:
-            return jsonify({'success': False, 'error': data.get('error', 'Validation failed')}), code
-        
-        return jsonify({
-            'success': True,
-            'data': {
-                'typeKey': type_key,
-                'version': version,
-                'status': 'validated',
-                'message': 'Version có thể load được, chưa deploy chính thức'
-            }
-        })
+        data, code = _ai_request_json(
+            'POST',
+            f'/v1/models/{type_key}/test-version',
+            json_body={'version': version, 'testInput': test_input},
+        )
+        return jsonify(data), code
     except Exception as e:
         return jsonify({'success': False, 'error': f'AI server error: {e}'}), 502
 
@@ -2680,8 +2672,11 @@ def admin_deploy_model(type_key):
     if version not in versions:
         return jsonify({'success': False, 'error': f'Version {version} không tồn tại'}), 404
     
-    # Deploy to AI server (load-active)
+    # Deploy to AI server — activate specific version
     try:
+        # First activate the version in model store
+        store.activate(version)
+        # Then load-active to load it into runtime
         data, code = _ai_request_json('POST', f'/v1/models/{type_key}/load-active')
         if code != 200:
             return jsonify({'success': False, 'error': data.get('error', 'Deploy failed')}), code
@@ -2721,6 +2716,30 @@ def admin_deploy_model(type_key):
             'runtimeHealth': 'loaded',
         }
     })
+
+
+@app.route('/api/admin/ai/models/<type_key>/reset', methods=['POST'])
+@require_admin
+def admin_reset_model(type_key):
+    """Clear all versions for a model type (safety reset).
+    
+    PLAN1: Allows admin to clear old broken versions before re-uploading.
+    """
+    response, code = _ai_proxy_json('POST', f'/v1/models/{type_key}/reset')
+    if code != 200:
+        return response, code
+
+    status = _get_model_deployment_status(type_key)
+    status.update({
+        'deploymentStatus': 'not_deployed',
+        'deploymentVersion': None,
+        'deployedAt': None,
+        'deployedBy': None,
+        'runtimeHealth': 'inactive',
+        'latestUploadedVersion': None,
+    })
+    _save_model_deployment_status(type_key, status)
+    return response, code
 
 
 @app.route('/api/admin/ai/models/<type_key>/undeploy', methods=['POST'])
@@ -2862,6 +2881,19 @@ def admin_rollback_model_for_type(type_key):
 def admin_load_active_model(type_key):
     """Ensure the active model version is loaded into memory."""
     return _ai_proxy_json('POST', f'/v1/models/{type_key}/load-active')
+
+
+@app.route('/api/admin/ai/models/<type_key>/activate', methods=['POST'])
+@require_admin
+def admin_activate_model(type_key):
+    """Activate a model version (same as deploy but without confirmation)."""
+    data = request.get_json() or {}
+    version = data.get('version', '').strip()
+    if not version:
+        return jsonify({'success': False, 'error': 'version field is required'}), 400
+    
+    # Use the same logic as deploy
+    return _ai_proxy_json('POST', f'/v1/models/{type_key}/deploy', json_body={'version': version})
 
 
 @app.route('/api/admin/ai/models/<type_key>/deactivate', methods=['POST'])

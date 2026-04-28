@@ -75,7 +75,7 @@ class SyncService {
       if (user == null) return false;
 
       // Lấy thông tin vehicle
-      final vehicleDoc = await _firestore.collection('vehicles').doc(vehicleId).get();
+      final vehicleDoc = await _firestore.collection('Vehicles').doc(vehicleId).get();
       if (!vehicleDoc.exists) {
         print('Vehicle not found: $vehicleId');
         return false;
@@ -107,7 +107,7 @@ class SyncService {
         print('Vehicle synced to web: $vehicleId');
         
         // Cập nhật flag trong Firestore
-        await _firestore.collection('vehicles').doc(vehicleId).update({
+        await _firestore.collection('Vehicles').doc(vehicleId).update({
           'syncedToWeb': true,
           'lastWebSync': FieldValue.serverTimestamp(),
         });
@@ -131,7 +131,7 @@ class SyncService {
 
       // Lấy tất cả vehicles
       final snapshot = await _firestore
-          .collection('vehicles')
+          .collection('Vehicles')
           .where('ownerUid', isEqualTo: user.uid)
           .get();
 
@@ -265,7 +265,7 @@ class SyncService {
 
       // 3. Sync battery states cho mỗi vehicle
       final vehiclesSnapshot = await _firestore
-          .collection('vehicles')
+          .collection('Vehicles')
           .where('ownerUid', isEqualTo: user.uid)
           .get();
 
@@ -328,7 +328,7 @@ class SyncService {
 
     // Lắng nghe thay đổi vehicles
     _vehicleSubscription = _firestore
-        .collection('vehicles')
+        .collection('Vehicles')
         .where('ownerUid', isEqualTo: user.uid)
         .where('needsSync', isEqualTo: true)
         .snapshots()
