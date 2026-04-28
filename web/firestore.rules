@@ -22,10 +22,10 @@ service cloud.firestore {
 
     // ── Vehicles ──
     match /Vehicles/{vehicleId} {
-      allow read: if isAuth() && isOwner(resource.data.ownerUid) && notDeleted();
+      allow read: if isAuth() && isOwner(resource.data.ownerUid);
       allow create: if isAuth() && request.resource.data.ownerUid == request.auth.uid;
       allow update: if isAuth() && isOwner(resource.data.ownerUid);
-      allow delete: if false; // Soft delete only via backend
+      allow delete: if isAuth() && isOwner(resource.data.ownerUid);
     }
 
     // ── ChargeLogs ──
@@ -96,6 +96,14 @@ service cloud.firestore {
     match /AiModelDeployments/{typeKey} {
       allow read: if isAuth();
       allow write: if false; // Managed via backend Admin SDK only
+    }
+
+    // ── UserNotifications ──
+    match /UserNotifications/{notificationId} {
+      allow read: if isAuth() && resource.data.userId == request.auth.uid;
+      allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuth() && resource.data.userId == request.auth.uid;
+      allow delete: if isAuth() && resource.data.userId == request.auth.uid;
     }
   }
 }

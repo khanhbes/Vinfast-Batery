@@ -100,11 +100,13 @@ class ModelStore:
                 raise ValueError(f"Version '{version}' đã tồn tại")
             final = self.path_of(version, ext)
             shutil.move(tmp_path, final)
+            final_path = self.path_of(version, ext)
             meta = {
                 "version": version,
                 "uploadedAt": _utc_now_iso(),
                 "note": note or "",
                 "ext": ext,
+                "path": final_path,
             }
             data = self._read_manifest()
             versions = data.get("versions", [])
@@ -190,7 +192,5 @@ class ModelStore:
             "note": f"seeded from legacy {os.path.basename(legacy_pkl_path)}",
             "ext": ext,
         }]
-        data["active"] = version
-        data["activatedAt"] = _utc_now_iso()
         self._write_manifest(data)
         return version

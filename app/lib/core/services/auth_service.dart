@@ -211,7 +211,7 @@ class AuthService {
       }
 
       // 1. Tạo vehicle document
-      final vehicleRef = _firestore.collection('vehicles').doc();
+      final vehicleRef = _firestore.collection('Vehicles').doc();
       final vehicleId = vehicleRef.id;
 
       await vehicleRef.set({
@@ -261,7 +261,7 @@ class AuthService {
       }
 
       // Kiểm tra ownership
-      final vehicleDoc = await _firestore.collection('vehicles').doc(vehicleId).get();
+      final vehicleDoc = await _firestore.collection('Vehicles').doc(vehicleId).get();
       if (!vehicleDoc.exists) {
         return {'success': false, 'error': 'Vehicle not found'};
       }
@@ -272,7 +272,7 @@ class AuthService {
       }
 
       // Xóa vehicle
-      await _firestore.collection('vehicles').doc(vehicleId).delete();
+      await _firestore.collection('Vehicles').doc(vehicleId).delete();
 
       // Cập nhật user
       await _firestore.collection('users').doc(user.uid).update({
@@ -305,7 +305,7 @@ class AuthService {
         updateData.addAll(updates);
       }
 
-      await _firestore.collection('vehicles').doc(vehicleId).update(updateData);
+      await _firestore.collection('Vehicles').doc(vehicleId).update(updateData);
 
       // Đồng bộ với web
       final syncResult = await _syncService.syncVehicleToWeb(vehicleId);
@@ -327,7 +327,7 @@ class AuthService {
       if (user == null) return [];
 
       final snapshot = await _firestore
-          .collection('vehicles')
+          .collection('Vehicles')
           .where('ownerUid', isEqualTo: user.uid)
           .orderBy('createdAt', descending: true)
           .get();

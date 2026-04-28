@@ -26,6 +26,11 @@ import shutil
 import tempfile
 from typing import Optional
 
+try:
+    import pandas as pd
+except Exception:
+    pd = None
+
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
@@ -234,47 +239,57 @@ async def upload_model(
             pass
         return _err(400, f"lưu model thất bại: {e}")
 
-    # PLAN1: Upload chỉ lưu file, KHÔNG auto-activate
-    # Validate bằng cách load tạm (không swap)
-    try:
-        validation = rt._validate_and_create_predictor(rt._load_model(meta['path']))
-    except Exception as e:
-        # Validation failed - remove broken model
+    # PLAN1: Upload chỉ lưu file, KHÔNG auto-activate.
+    # Validation chỉ để cảnh báo thêm, không được chặn việc lưu version.
+    model_path = meta.get("path") or st.path_of(version, ext)
+    if skip_smoke:
+        validation = {
+            "ok": True,
+            "sample": None,
+            "predictorKind": None,
+            "featureCount": None,
+            "warnings": ["Skipped upload validation at user request."],
+        }
+    else:
         try:
-            st.remove(version)
-        except Exception:
-            pass
-        return _err(400, f"validation failed: {e}")
-    
-    if not validation.get("ok"):
-        # Validation failed - remove broken model
-        try:
-            st.remove(version)
-        except Exception:
-            pass
-        return _err(400, f"validation failed: {validation.get('error', 'unknown')}")
+            validation = rt._validate_and_create_predictor(rt._load_model(model_path))
+        except Exception as e:
+            validation = {
+                "ok": False,
+                "error": str(e),
+                "predictorKind": None,
+                "featureCount": None,
+                "warnings": [],
+            }
     
     # Get actual model feature info from validation
     model_features = {
-        "count": validation.get('featureCount'),
+        "count": validation.get("featureCount"),
         "names": None,  # Will be populated when actually loaded
     }
     
     # Compare with registry features
     registry_count = len(rt.smoke_input) if rt.smoke_input else None
+    upload_message = "Model đã upload thành công. Vui lòng Test rồi Deploy để kích hoạt."
+    if not validation.get("ok"):
+        upload_message = (
+            "Model đã được upload nhưng validation tạm thời thất bại. "
+            "Version vẫn được lưu để bạn tiếp tục Test hoặc xử lý dependency rồi Deploy sau."
+        )
     
     return _ok({
         "version": version,
         "activated": False,  # PLAN1: Upload không auto-activate
         "note": meta.get("note"),
+        "uploadStored": True,
         "validation": validation,
         "modelFeatures": model_features,
         "registryFeatures": {
             "count": registry_count,
             "fields": list(rt.smoke_input.keys()) if rt.smoke_input else [],
         },
-        "featureMismatch": model_features.get('count') != registry_count if (model_features.get('count') and registry_count) else None,
-        "message": "Model đã upload thành công. Vui lòng Test rồi Deploy để kích hoạt.",
+        "featureMismatch": model_features.get("count") != registry_count if (model_features.get("count") and registry_count) else None,
+        "message": upload_message,
     })
 
 
@@ -320,6 +335,32 @@ def delete_model(
         return _ok({"deleted": version, "wasActive": active == version})
     except Exception as e:
         return _err(400, str(e))
+
+
+@app.post("/v1/models/{type_key}/activate")
+def activate_model(
+    type_key: str,
+    payload: dict,
+    x_internal_token: Optional[str] = Header(default=None),
+):
+    """Activate a specific model version (same as deploy but without confirmation)."""
+    _check_token(x_internal_token)
+    st = _get_store(type_key)
+    rt = _get_runtime(type_key)
+    
+    version = (payload or {}).get("version", "").strip()
+    if not version:
+        return _err(400, "thiếu version")
+    if not st.has_version(version):
+        return _err(404, f"version '{version}' không tồn tại")
+    
+    try:
+        # Activate in store and load into runtime
+        smoke = rt.swap_to(version, require_smoke=False)
+        st.activate(version)
+        return _ok({"activeVersion": version, "smokeTest": smoke})
+    except Exception as e:
+        return _err(500, f"activate thất bại: {e}")
 
 
 @app.post("/v1/models/{type_key}/deactivate")
@@ -378,6 +419,113 @@ def validate_version(
             "valid": False,
             "error": str(e),
         })
+
+
+@app.post("/v1/models/{type_key}/test-version")
+async def test_version(
+    type_key: str,
+    payload: dict,
+    x_internal_token: Optional[str] = Header(default=None),
+):
+    """Load a specific version temporarily, run prediction, then unload.
+    
+    PLAN1: Per-version quick test without activating.
+    """
+    _check_token(x_internal_token)
+    
+    version = payload.get("version")
+    test_input = payload.get("testInput")
+    
+    if not version:
+        return _err(400, "version required")
+
+    st = _get_store(type_key)
+    rt = _get_runtime(type_key)
+    version = version.strip()
+
+    if not st.has_version(version):
+        return _err(404, f"version '{version}' không tồn tại")
+
+    try:
+        loaded = rt.try_load_version(version, require_smoke=False)
+        temp_predictor = loaded.get("predictor")
+        validation = loaded.get("validation") or {}
+        if not temp_predictor:
+            return _err(
+                400,
+                f"version '{version}' không thể nạp: {validation.get('error', 'unknown')}",
+            )
+    except Exception as e:
+        return _err(400, f"failed to load version {version}: {e}")
+    
+    try:
+        features_dict = test_input or rt.smoke_input or {}
+        input_features, processed_input = _normalize_input_features(type_key, features_dict)
+        prediction = _predict_with_predictor(temp_predictor, processed_input)
+    except Exception as e:
+        return _err(400, f"prediction failed: {e}")
+    finally:
+        try:
+            rt.unload_version(version)
+        except Exception:
+            pass
+    
+    return _ok(
+        _build_prediction_response(
+            type_key,
+            input_features=input_features,
+            processed_input=processed_input,
+            value=prediction,
+            model_version=version,
+            warning=temp_predictor.warning,
+            feature_count=temp_predictor.feature_count,
+        )
+    )
+
+
+@app.post("/v1/models/{type_key}/reset")
+async def reset_model(
+    type_key: str,
+    x_internal_token: Optional[str] = Header(default=None),
+):
+    """Clear all versions for a model type (safety reset).
+    
+    PLAN1: Allows admin to clear old broken versions before re-uploading.
+    """
+    _check_token(x_internal_token)
+
+    st = _get_store(type_key)
+    rt = _get_runtime(type_key)
+
+    try:
+        st.deactivate()
+    except Exception:
+        pass
+
+    try:
+        rt.unload()
+    except Exception:
+        pass
+
+    try:
+        data = st._read_manifest()
+        versions = data.get("versions", [])
+        deleted_versions = [v.get("version") for v in versions if v.get("version")]
+        for v in versions:
+            try:
+                st.remove(v["version"])
+            except Exception:
+                pass
+        st._write_manifest({"active": None, "versions": []})
+    except Exception as e:
+        return _err(500, f"reset failed: {e}")
+    
+    return _ok({
+        "typeKey": type_key,
+        "cleared": True,
+        "deletedVersions": deleted_versions,
+        "message": "All versions cleared. Ready for fresh upload.",
+    })
 
 
 @app.post("/v1/models/{type_key}/validate-file")
@@ -513,6 +661,84 @@ def _build_charging_time_features(input_features: dict) -> dict:
     }
 
 
+def _normalize_input_features(type_key: str, payload: dict | None) -> tuple[dict, dict]:
+    """Normalize raw input payload into model-ready features."""
+    input_features = payload or {}
+
+    if type_key == "charging_time":
+        return input_features, _build_charging_time_features(input_features)
+
+    processed_input: dict = {}
+    for k, v in input_features.items():
+        if isinstance(v, str):
+            try:
+                processed_input[k] = float(v)
+            except ValueError:
+                processed_input[k] = v
+        else:
+            processed_input[k] = v
+    return input_features, processed_input
+
+
+def _predict_with_predictor(predictor, processed_input: dict) -> float:
+    """Run prediction with a predictor instance loaded temporarily."""
+    feature_values = list(processed_input.values())
+
+    if pd is not None:
+        if predictor.feature_names:
+            X = pd.DataFrame([feature_values], columns=predictor.feature_names)
+        else:
+            X = pd.DataFrame([feature_values])
+    else:
+        X = [feature_values]
+
+    raw = predictor.predict(X)
+    if hasattr(raw, "flatten"):
+        raw = raw.flatten()
+    if hasattr(raw, "__len__") and len(raw) > 0:
+        return float(raw[0])
+    return float(raw)
+
+
+def _build_prediction_response(
+    type_key: str,
+    *,
+    input_features: dict,
+    processed_input: dict,
+    value: float,
+    model_version: str,
+    warning: Optional[str] = None,
+    feature_count: Optional[int] = None,
+) -> dict:
+    """Build a prediction response matching the deployed predict route."""
+    chart_data = _build_chart_data(value, processed_input)
+    warnings = []
+    if warning:
+        warnings.append(warning)
+    if feature_count and len(processed_input) != feature_count:
+        warnings.append(
+            f"Input has {len(processed_input)} features but model expects {feature_count}"
+        )
+
+    response = {
+        "prediction": value,
+        "modelVersion": model_version,
+        "input": input_features,
+        "processedInput": processed_input,
+        "chartData": chart_data,
+        "warnings": warnings,
+    }
+
+    if type_key == "charging_time":
+        minutes = value / 60.0
+        response["rawPrediction"] = value
+        response["predictionSeconds"] = value
+        response["predictionMinutes"] = minutes
+        response["formattedPrediction"] = _format_time_minutes(minutes)
+
+    return response
+
+
 @app.post("/v1/models/{type_key}/predict")
 def predict_generic(
     type_key: str,
@@ -533,58 +759,24 @@ def predict_generic(
         return _err(503, f"model '{type_key}' chưa được nạp — upload & activate trước đã")
     
     try:
-        # Build processed input (normalize numeric values)
-        input_features = payload or {}
-        
-        # Special handling for charging_time: build 6 features from 3 user inputs
-        if type_key == "charging_time":
-            try:
-                processed_input = _build_charging_time_features(input_features)
-            except ValueError as e:
-                return _err(400, str(e))
-        else:
-            processed_input = {}
-            for k, v in input_features.items():
-                if isinstance(v, str):
-                    try:
-                        num = float(v)
-                        processed_input[k] = num
-                    except ValueError:
-                        processed_input[k] = v
-                else:
-                    processed_input[k] = v
+        try:
+            input_features, processed_input = _normalize_input_features(type_key, payload)
+        except ValueError as e:
+            return _err(400, str(e))
         
         value, version, warning = rt.predict_raw(processed_input)
-        
-        # Build chart data based on output type
-        chart_data = _build_chart_data(value, processed_input)
-        
-        warnings = []
-        if warning:
-            warnings.append(warning)
-        if rt.feature_count and len(processed_input) != rt.feature_count:
-            warnings.append(f"Input has {len(processed_input)} features but model expects {rt.feature_count}")
-        
-        # Build response
-        response = {
-            "prediction": value,
-            "modelVersion": version,
-            "input": input_features,
-            "processedInput": processed_input,
-            "chartData": chart_data,
-            "warnings": warnings,
-        }
-        
-        # Add formatted time output for charging_time
-        # Model returns seconds, convert to minutes for display
-        if type_key == "charging_time":
-            minutes = value / 60.0  # Convert seconds to minutes
-            response["rawPrediction"] = value
-            response["predictionSeconds"] = value
-            response["predictionMinutes"] = minutes
-            response["formattedPrediction"] = _format_time_minutes(minutes)
-        
-        return _ok(response)
+
+        return _ok(
+            _build_prediction_response(
+                type_key,
+                input_features=input_features,
+                processed_input=processed_input,
+                value=value,
+                model_version=version,
+                warning=warning,
+                feature_count=rt.feature_count,
+            )
+        )
     except Exception as e:
         return _err(400, f"predict lỗi: {e}")
 

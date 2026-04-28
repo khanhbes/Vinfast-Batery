@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  RefreshCw, Upload, Rewind, Trash2, PlayCircle, CheckCircle2, AlertCircle,
-  History, FlaskConical, BarChart3, Loader2, Copy, PackageX, PowerOff,
+  RefreshCw, Upload, Trash2, PlayCircle, CheckCircle2, AlertCircle,
+  History, FlaskConical, BarChart3, Loader2, Copy, PackageX, PowerOff, TrendingUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 // @ts-ignore
-import { aiListModels, aiRollbackModel, aiDeleteModel, aiQuickPredict, aiLoadActiveModel, aiDeactivateModel, aiValidateVersion, aiTestVersion, aiDeployModel } from '@/api';
+import { aiListModels, aiDeleteModel, aiQuickPredict, aiLoadActiveModel, aiDeactivateModel, aiTestVersion, aiDeployModel } from '@/api';
 import { ACCENT_CLASSES, ModelTypeMeta, ModelVersion, formatBytes, formatDate, PredictionResponse } from './types';
 import UploadDialog from './UploadDialog';
 import PredictionResultChart from './PredictionResultChart';
@@ -28,8 +28,8 @@ export default function ModelDetailPanel({ meta, onAfterChange }: Props) {
   const [message, setMessage] = useState<{ type: 'ok' | 'err' | 'info'; text: string } | null>(null);
   const [loadingModel, setLoadingModel] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [testFeatures, setTestFeatures] = useState<Record<string, number> | null>(null); // PLAN1: test input features
-  const [selectedVersionForMetrics, setSelectedVersionForMetrics] = useState<string | null>(null); // PLAN1: version selected for evaluation
+  const [selectedTestVersion, setSelectedTestVersion] = useState<string | null>(null);
+  const [selectedVersionForMetrics, setSelectedVersionForMetrics] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -43,41 +43,50 @@ export default function ModelDetailPanel({ meta, onAfterChange }: Props) {
     }
   }, [meta.key]);
 
+  const sorted = useMemo(
+    () => [...versions].sort((a, b) => (b.uploadedAt || '').localeCompare(a.uploadedAt || '')),
+    [versions]
+  );
+  const activeVersion = meta.runtimeStatus.activeVersion ?? null;
+  const hasVersions = sorted.length > 0;
+
   // When switching model, default to Test tab + try to load the active model
   useEffect(() => {
     reload();
     setTab('test');
     setMessage(null);
     setLoadError(null);
+    setSelectedTestVersion(null);
+    setSelectedVersionForMetrics(null);
 
-    // Try to ensure the model is loaded
+    // Only load from runtime when there is an active version.
+    if (!activeVersion) {
+      setLoadingModel(false);
+      return;
+    }
+
     setLoadingModel(true);
     aiLoadActiveModel(meta.key)
       .then(() => setLoadError(null))
       .catch((e: any) => setLoadError(e?.message || 'Không thể nạp model'))
       .finally(() => setLoadingModel(false));
-  }, [meta.key, reload]);
+  }, [activeVersion, meta.key, reload]);
 
-  const onRollback = async (v: string) => {
-    // First validate the version
-    setMessage({ type: 'info', text: `Đang kiểm tra version "${v}"...` });
-    try {
-      const validation = await aiValidateVersion(meta.key, v);
-      if (!validation?.data?.valid) {
-        const err = validation?.data?.error || validation?.data?.validation?.error || 'Validation failed';
-        setMessage({ type: 'err', text: `Version "${v}" không hợp lệ: ${err}` });
-        return;
-      }
-      // Validation passed, proceed with rollback
-      if (!confirm(`Version "${v}" đã kiểm tra OK.\n\nKích hoạt ngay?`)) return;
-      await aiRollbackModel(meta.key, v);
-      setMessage({ type: 'ok', text: `Đã activate ${v}` });
-      await reload();
-      onAfterChange();
-    } catch (e: any) {
-      setMessage({ type: 'err', text: e?.message || 'Rollback thất bại' });
+  useEffect(() => {
+    if (!sorted.length) {
+      setSelectedTestVersion(null);
+      setSelectedVersionForMetrics(null);
+      return;
     }
-  };
+
+    const defaultVersion = activeVersion || sorted[0]?.version || null;
+    setSelectedTestVersion((prev) =>
+      prev && sorted.some((v) => v.version === prev) ? prev : defaultVersion
+    );
+    setSelectedVersionForMetrics((prev) =>
+      prev && sorted.some((v) => v.version === prev) ? prev : defaultVersion
+    );
+  }, [activeVersion, sorted]);
 
   const onDelete = async (v: string) => {
     const isActive = v === meta.runtimeStatus.activeVersion;
@@ -108,19 +117,10 @@ export default function ModelDetailPanel({ meta, onAfterChange }: Props) {
   };
 
   // ── PLAN1: Test version chưa deploy ────────────────────────────────
-  const onTestVersion = async (version: string) => {
-    try {
-      setMessage({ type: 'ok', text: `Đang test version ${version}...` });
-      const res = await aiTestVersion(meta.key, version, testFeatures);
-      if (res?.data?.valid === false) {
-        setMessage({ type: 'err', text: `Test thất bại: ${res?.data?.error || 'Unknown error'}` });
-      } else {
-        setMessage({ type: 'ok', text: `Version ${version} OK: ${JSON.stringify(res?.data?.testResult || res?.data)}` });
-      }
-      await reload();
-    } catch (e: any) {
-      setMessage({ type: 'err', text: `Test version thất bại: ${e?.message}` });
-    }
+  const onTestVersion = (version: string) => {
+    setSelectedTestVersion(version);
+    setTab('test');
+    setMessage({ type: 'info', text: `Đã chọn version ${version} để test nhanh` });
   };
 
   // ── PLAN1: Deploy version chính thức ───────────────────────────────
@@ -136,12 +136,6 @@ export default function ModelDetailPanel({ meta, onAfterChange }: Props) {
       setMessage({ type: 'err', text: `Deploy thất bại: ${e?.message}` });
     }
   };
-
-  const sorted = [...versions].sort((a, b) => (b.uploadedAt || '').localeCompare(a.uploadedAt || ''));
-
-  // Determine model availability state
-  const hasActiveVersion = !!meta.runtimeStatus.activeVersion;
-  const hasVersions = meta.runtimeStatus.versionsCount > 0;
 
   return (
     <Card>
@@ -222,7 +216,15 @@ export default function ModelDetailPanel({ meta, onAfterChange }: Props) {
               <Loader2 className="w-8 h-8 mx-auto mb-2 animate-spin opacity-40" />
               <div className="text-sm">Đang nạp model…</div>
             </div>
-          ) : !hasVersions || loadError ? (
+          ) : !hasVersions ? (
+            <NoModelState
+              typeKey={meta.key}
+              label={meta.label}
+              hasVersions={hasVersions}
+              error={loadError}
+              onUpload={() => setUploadOpen(true)}
+            />
+          ) : activeVersion && loadError ? (
             <NoModelState
               typeKey={meta.key}
               label={meta.label}
@@ -235,6 +237,8 @@ export default function ModelDetailPanel({ meta, onAfterChange }: Props) {
               typeKey={meta.key}
               versions={sorted}
               activeVersion={activeVersion}
+              selectedVersion={selectedTestVersion}
+              onSelectedVersionChange={setSelectedTestVersion}
               inputFields={meta.inputFields}
               visibleInputFields={meta.visibleInputFields}
               derivedFields={meta.derivedFields}
@@ -251,7 +255,6 @@ export default function ModelDetailPanel({ meta, onAfterChange }: Props) {
           <VersionsTab
             versions={sorted}
             loading={loading}
-            onRollback={onRollback}
             onDelete={onDelete}
             onTest={onTestVersion}
             onDeploy={onDeploy}
@@ -261,7 +264,7 @@ export default function ModelDetailPanel({ meta, onAfterChange }: Props) {
             }}
           />
         )}
-        {tab === 'metrics' && <MetricsTab meta={meta} selectedVersion={selectedVersionForMetrics} />}
+        {tab === 'metrics' && <MetricsTabEnhanced meta={meta} versions={sorted} selectedVersion={selectedVersionForMetrics} onSelectedVersionChange={setSelectedVersionForMetrics} activeVersion={activeVersion} />}
       </CardContent>
 
       {uploadOpen && (
@@ -270,7 +273,7 @@ export default function ModelDetailPanel({ meta, onAfterChange }: Props) {
           typeLabel={meta.label}
           onClose={() => setUploadOpen(false)}
           onUploaded={(switchToTest = false) => {
-            setMessage({ type: 'ok', text: 'Upload & activate thành công' });
+            setMessage({ type: 'ok', text: 'Upload thành công — Chọn version để Test và Deploy' });
             setLoadError(null);
             reload();
             onAfterChange();
@@ -333,12 +336,12 @@ function TabButton({ active, onClick, icon, label, count }: {
 }
 
 // ── Versions tab ───────────────────────────────────────────────────
-function VersionsTab({ versions, loading, onRollback, onDelete, onTest, onDeploy, onEvaluate }: {
+function VersionsTab({ versions, loading, onDelete, onTest, onDeploy, onEvaluate }: {
   versions: ModelVersion[]; loading: boolean;
-  onRollback: (v: string) => void; onDelete: (v: string) => void;
-  onTest?: (v: string) => void; // PLAN1: test version
-  onDeploy?: (v: string) => void; // PLAN1: deploy version
-  onEvaluate?: (v: string) => void; // PLAN1: evaluate version - switch to metrics tab
+  onDelete: (v: string) => void;
+  onTest?: (v: string) => void;
+  onDeploy?: (v: string) => void;
+  onEvaluate?: (v: string) => void;
 }) {
   if (loading) return <div className="text-sm text-muted-foreground py-6 text-center">Đang tải...</div>;
   if (versions.length === 0) {
@@ -389,16 +392,10 @@ function VersionsTab({ versions, loading, onRollback, onDelete, onTest, onDeploy
                       <PlayCircle className="w-3.5 h-3.5 mr-1" /> Test
                     </Button>
                   )}
-                  {/* PLAN1: Deploy version chính thức */}
+                  {/* Deploy version chính thức */}
                   {!v.active && onDeploy && (
                     <Button size="sm" variant="default" onClick={() => onDeploy(v.version)} className="bg-blue-600 hover:bg-blue-700">
                       <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Deploy
-                    </Button>
-                  )}
-                  {/* Activate (rollback) - legacy */}
-                  {!v.active && onRollback && (
-                    <Button size="sm" variant="outline" onClick={() => onRollback(v.version)}>
-                      <Rewind className="w-3.5 h-3.5 mr-1" /> Activate
                     </Button>
                   )}
                   {!v.active && (
@@ -422,6 +419,8 @@ function TestTab({
   typeKey, 
   versions,
   activeVersion,
+  selectedVersion,
+  onSelectedVersionChange,
   inputFields, 
   visibleInputFields,
   derivedFields: _derivedFields,
@@ -435,6 +434,8 @@ function TestTab({
   typeKey: string;
   versions: ModelVersion[];
   activeVersion: string | null;
+  selectedVersion: string | null;
+  onSelectedVersionChange: (version: string) => void;
   inputFields: string[]; 
   visibleInputFields?: string[];
   derivedFields?: Record<string, { from?: string[]; formula?: string; default?: number }>;
@@ -459,7 +460,7 @@ function TestTab({
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<PredictionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [selectedVersion, setSelectedVersion] = useState<string>(activeVersion || versions[0]?.version || '');
+  const effectiveSelectedVersion = selectedVersion || activeVersion || versions[0]?.version || '';
 
   // Reset form when model type changes  
   useEffect(() => {
@@ -479,6 +480,10 @@ function TestTab({
   };
 
   const run = async () => {
+    if (!effectiveSelectedVersion) {
+      setError('Chưa có version để test');
+      return;
+    }
     setRunning(true);
     setResult(null);
     setError(null);
@@ -490,13 +495,13 @@ function TestTab({
       }
       
       // If testing non-active version, use aiTestVersion
-      const isTestingActiveVersion = selectedVersion === activeVersion;
+      const isTestingActiveVersion = effectiveSelectedVersion === activeVersion;
       let res;
       if (isTestingActiveVersion) {
         res = await aiQuickPredict(typeKey, payload);
       } else {
         // Test specific version without deploying
-        res = await aiTestVersion(typeKey, selectedVersion, payload);
+        res = await aiTestVersion(typeKey, effectiveSelectedVersion, payload);
       }
       setResult(res?.data ?? res);
     } catch (e: any) {
@@ -517,8 +522,8 @@ function TestTab({
         <div className="flex items-center justify-between mb-3">
           <div className="text-sm font-medium">Test version</div>
           <select 
-            value={selectedVersion} 
-            onChange={(e) => setSelectedVersion(e.target.value)}
+            value={effectiveSelectedVersion} 
+            onChange={(e) => onSelectedVersionChange(e.target.value)}
             className="text-xs border rounded px-2 py-1 bg-background"
           >
             {versions.map((v) => (
@@ -678,60 +683,402 @@ function TestTab({
   );
 }
 
-// ── Metrics tab ────────────────────────────────────────────────────
-function MetricsTab({ meta }: { meta: ModelTypeMeta }) {
-  const s = meta.runtimeStatus;
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatBox label="Trạng thái" value={s.isLoaded ? 'Loaded' : 'Chưa nạp'} accent={s.isLoaded ? 'ok' : 'warn'} />
-        <StatBox label="Có thể predict" value={s.isPredictable ? 'Có' : 'Không'} accent={s.isPredictable ? 'ok' : 'warn'} />
-        <StatBox label="Active version" value={s.activeVersion || '—'} mono />
-        <StatBox label="Tổng versions" value={String(s.versionsCount)} />
-        <StatBox label="Loại predictor" value={s.predictorKind || '—'} mono />
-        <StatBox label="Số features" value={s.featureCount != null ? String(s.featureCount) : '—'} />
-        <StatBox label="Last load" value={formatDate(s.lastLoadAt)} small />
-        <StatBox label="Output kind" value={meta.outputKind || 'scalar'} />
-      </div>
-      {s.validationError ? (
-        <div className="text-sm rounded-md border border-red-200 bg-red-50 text-red-700 p-3 flex items-start gap-2">
-          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-          <div>
-            <div className="font-medium">Lỗi validation</div>
-            <div className="mt-1 font-mono text-xs break-words">{s.validationError}</div>
-          </div>
-        </div>
-      ) : s.lastError ? (
-        <div className="text-sm rounded-md border border-red-200 bg-red-50 text-red-700 p-3 flex items-start gap-2">
-          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-          <div>
-            <div className="font-medium">Lỗi gần nhất</div>
-            <div className="mt-1 font-mono text-xs break-words">{s.lastError}</div>
-          </div>
-        </div>
-      ) : (
-        <div className="text-sm rounded-md border border-green-200 bg-green-50 text-green-700 p-3 flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4" />
-          Không có lỗi gần đây
-        </div>
-      )}
-      <div className="text-xs text-muted-foreground pt-2 border-t">
-        💡 Dashboard metrics chi tiết (accuracy/loss/MAE) sẽ được bổ sung khi dataset chuẩn được cấu hình cho từng model type.
-      </div>
-    </div>
-  );
+// ── Helper: extract numeric prediction from API response (generic) ─────
+function extractPrediction(res: any): number | null {
+  const data = res?.data ?? res;
+  if (data == null) return null;
+  // Try common keys in priority order
+  const candidates = [
+    data.predictionMinutes, data.prediction, data.value,
+    data.result, data.output, data.score,
+  ];
+  for (const c of candidates) {
+    if (typeof c === 'number' && Number.isFinite(c)) return c;
+    if (Array.isArray(c) && typeof c[0] === 'number') return c[0];
+  }
+  return null;
 }
 
-function StatBox({ label, value, accent, mono, small }: {
-  label: string; value: string; accent?: 'ok' | 'warn'; mono?: boolean; small?: boolean;
+// ── Enhanced Metrics tab ────────────────────────────────────────────────
+function MetricsTabEnhanced({ meta, versions, selectedVersion, onSelectedVersionChange, activeVersion }: {
+  meta: ModelTypeMeta;
+  versions: ModelVersion[];
+  selectedVersion: string | null;
+  onSelectedVersionChange: (v: string) => void;
+  activeVersion: string | null;
 }) {
-  const accentClass = accent === 'ok' ? 'text-green-700' : accent === 'warn' ? 'text-amber-700' : '';
-  return (
-    <div className="rounded-md border bg-card p-3">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className={`mt-1 ${small ? 'text-xs' : 'text-sm'} ${mono ? 'font-mono' : 'font-semibold'} ${accentClass} truncate`} title={value}>
-        {value}
+  const [evaluationMode, setEvaluationMode] = useState<'select' | 'input' | 'results'>('select');
+  const [testInputs, setTestInputs] = useState<Record<string, any>>({});
+  const [evaluationResults, setEvaluationResults] = useState<any>(null);
+  const [isEvaluating, setIsEvaluating] = useState(false);
+  const [evalError, setEvalError] = useState<string | null>(null);
+
+  const inspectedVersion = selectedVersion || activeVersion || versions[0]?.version || '—';
+  const inspectedMeta = versions.find((v) => v.version === inspectedVersion);
+  const isActiveVersion = inspectedVersion === activeVersion;
+
+  // Use sampleInput from registry if available, else fall back to zeros
+  const visibleFields = (meta.visibleInputFields && meta.visibleInputFields.length > 0)
+    ? meta.visibleInputFields
+    : meta.inputFields || [];
+
+  // Initialize test inputs from sampleInput / inputSchema defaults
+  const initializeInputs = () => {
+    const defaults: Record<string, any> = {};
+    visibleFields.forEach(field => {
+      const sample = meta.sampleInput?.[field];
+      const schema = meta.inputSchema?.[field];
+      if (sample !== undefined) {
+        defaults[field] = sample;
+      } else if (schema?.min !== undefined && schema?.max !== undefined) {
+        defaults[field] = (Number(schema.min) + Number(schema.max)) / 2;
+      } else {
+        defaults[field] = 0;
+      }
+    });
+    setTestInputs(defaults);
+    setEvalError(null);
+    setEvaluationMode('input');
+  };
+
+  // Build test cases by varying each field across low/mid/high
+  const buildTestCases = (base: Record<string, any>) => {
+    const cases: { label: string; payload: Record<string, any> }[] = [
+      { label: 'Baseline (giá trị nhập)', payload: { ...base } },
+    ];
+    visibleFields.forEach(field => {
+      const schema = meta.inputSchema?.[field];
+      if (schema?.min !== undefined && schema?.max !== undefined) {
+        const min = Number(schema.min);
+        const max = Number(schema.max);
+        const desc = schema.desc || field;
+        cases.push({
+          label: `${desc} thấp (${min}${schema.unit || ''})`,
+          payload: { ...base, [field]: min },
+        });
+        cases.push({
+          label: `${desc} cao (${max}${schema.unit || ''})`,
+          payload: { ...base, [field]: max },
+        });
+      }
+    });
+    // Cap at 8 cases to keep evaluation fast
+    return cases.slice(0, 8);
+  };
+
+  const runEvaluation = async () => {
+    setIsEvaluating(true);
+    setEvalError(null);
+    try {
+      const testCases = buildTestCases(testInputs);
+      const results: any[] = [];
+
+      for (const tc of testCases) {
+        try {
+          const res = isActiveVersion
+            ? await aiQuickPredict(meta.key, tc.payload)
+            : await aiTestVersion(meta.key, inspectedVersion, tc.payload);
+          const data = res?.data ?? res;
+          const prediction = extractPrediction(res);
+          results.push({
+            label: tc.label,
+            payload: tc.payload,
+            prediction,
+            formattedPrediction: data?.formattedPrediction,
+            ok: prediction !== null,
+            error: null,
+            raw: data,
+          });
+        } catch (e: any) {
+          results.push({
+            label: tc.label,
+            payload: tc.payload,
+            prediction: null,
+            ok: false,
+            error: e?.message || 'Predict lỗi',
+          });
+        }
+      }
+
+      const okResults = results.filter(r => r.ok && typeof r.prediction === 'number');
+      const successRate = results.length ? (okResults.length / results.length) * 100 : 0;
+
+      // Compute simple stats from real predictions
+      const values = okResults.map(r => r.prediction as number);
+      const avg = values.length ? values.reduce((s, v) => s + v, 0) / values.length : 0;
+      const min = values.length ? Math.min(...values) : 0;
+      const max = values.length ? Math.max(...values) : 0;
+      const range = max - min;
+
+      setEvaluationResults({
+        testCases: results,
+        averagePrediction: avg,
+        minPrediction: min,
+        maxPrediction: max,
+        rangePrediction: range,
+        successRate,
+        totalCases: results.length,
+        successCases: okResults.length,
+        outputUnit: meta.outputUnit || '',
+        modelVersion: inspectedVersion,
+        evaluatedAt: new Date().toISOString(),
+      });
+      setEvaluationMode('results');
+    } catch (error: any) {
+      setEvalError(error?.message || 'Đánh giá thất bại');
+    } finally {
+      setIsEvaluating(false);
+    }
+  };
+
+  if (evaluationMode === 'select') {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-medium">Đánh giá model</div>
+          <select
+            value={inspectedVersion}
+            onChange={(e) => onSelectedVersionChange(e.target.value)}
+            className="text-xs border rounded px-2 py-1 bg-background"
+          >
+            {versions.map((v) => (
+              <option key={v.version} value={v.version}>
+                {v.version} {v.active ? '(active)' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="w-5 h-5" />
+              Đánh giá mô hình AI
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Chạy đánh giá tổng quan về model {meta.label} version {inspectedVersion}
+              </p>
+              
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="font-medium">Version:</span> {inspectedVersion}
+                </div>
+                <div>
+                  <span className="font-medium">Upload:</span> {formatDate(inspectedMeta?.uploadedAt)}
+                </div>
+                <div>
+                  <span className="font-medium">Size:</span> {formatBytes(inspectedMeta?.sizeBytes)}
+                </div>
+                <div>
+                  <span className="font-medium">Features:</span> {meta.inputFields?.length || 0}
+                </div>
+              </div>
+
+              <Button onClick={initializeInputs} className="w-full">
+                <PlayCircle className="w-4 h-4 mr-2" />
+                Bắt đầu đánh giá
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
-    </div>
-  );
+    );
+  }
+
+  if (evaluationMode === 'input') {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-medium">Nhập dữ liệu test</div>
+          <Button variant="outline" size="sm" onClick={() => setEvaluationMode('select')}>
+            Quay lại
+          </Button>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Nhập features cho test case baseline</CardTitle>
+            <CardDescription className="text-xs">
+              Hệ thống sẽ chạy nhiều test case dựa trên giá trị này (varying min/max của mỗi feature)
+              và gọi API thật để lấy prediction.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {visibleFields.map((field) => {
+                const schema = meta.inputSchema?.[field];
+                const desc = schema?.desc || field;
+                const unit = schema?.unit;
+                return (
+                  <div key={field} className="flex items-center gap-2">
+                    <label className="text-xs w-40 text-muted-foreground truncate" title={desc}>{desc}</label>
+                    <input
+                      type="number"
+                      value={testInputs[field] ?? 0}
+                      onChange={(e) => setTestInputs({ ...testInputs, [field]: parseFloat(e.target.value) || 0 })}
+                      className="flex-1 border rounded px-2 py-1 text-xs font-mono"
+                    />
+                    {unit && <span className="text-xs text-muted-foreground w-12">{unit}</span>}
+                  </div>
+                );
+              })}
+
+              {evalError && (
+                <div className="text-xs rounded-md border border-red-200 bg-red-50 text-red-700 p-2 flex items-start gap-2">
+                  <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                  <div>{evalError}</div>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <Button onClick={runEvaluation} disabled={isEvaluating} className="flex-1">
+                  {isEvaluating ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Đang chạy {buildTestCases(testInputs).length} test cases...</>
+                  ) : (
+                    <><TrendingUp className="w-4 h-4 mr-2" /> Chạy đánh giá</>
+                  )}
+                </Button>
+                <Button variant="outline" onClick={() => setEvaluationMode('select')} disabled={isEvaluating}>
+                  Hủy
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (evaluationMode === 'results' && evaluationResults) {
+    const er = evaluationResults;
+    const unit = er.outputUnit || '';
+    const maxPred = er.maxPrediction || 1;
+    const successColor = er.successRate >= 90 ? 'text-green-600' : er.successRate >= 70 ? 'text-amber-600' : 'text-red-600';
+
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-medium">Kết quả đánh giá (dữ liệu thật từ model)</div>
+          <Button variant="outline" size="sm" onClick={() => setEvaluationMode('select')}>
+            Đánh giá mới
+          </Button>
+        </div>
+
+        {/* Summary Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Card>
+            <CardContent className="p-3">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-blue-500" />
+                <div>
+                  <div className="text-xs text-muted-foreground">Trung bình</div>
+                  <div className="text-base font-bold">{er.averagePrediction.toFixed(2)} {unit}</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-3">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className={`w-4 h-4 ${successColor}`} />
+                <div>
+                  <div className="text-xs text-muted-foreground">Tỷ lệ predict OK</div>
+                  <div className={`text-base font-bold ${successColor}`}>{er.successRate.toFixed(0)}% ({er.successCases}/{er.totalCases})</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-3">
+              <div>
+                <div className="text-xs text-muted-foreground">Min — Max</div>
+                <div className="text-base font-bold">{er.minPrediction.toFixed(2)} — {er.maxPrediction.toFixed(2)}</div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-3">
+              <div>
+                <div className="text-xs text-muted-foreground">Biên độ (range)</div>
+                <div className="text-base font-bold">{er.rangePrediction.toFixed(2)} {unit}</div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Bar chart */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Biểu đồ dự đoán theo test case</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {er.testCases.map((tc: any, i: number) => {
+                const widthPct = tc.ok && maxPred > 0 ? Math.max(2, (tc.prediction / maxPred) * 100) : 0;
+                return (
+                  <div key={i} className="text-xs">
+                    <div className="flex justify-between mb-1">
+                      <span className="truncate max-w-[60%]" title={tc.label}>{tc.label}</span>
+                      <span className={`font-mono ${tc.ok ? '' : 'text-red-600'}`}>
+                        {tc.ok ? `${tc.formattedPrediction || `${(tc.prediction as number).toFixed(2)} ${unit}`}` : `❌ ${tc.error || 'lỗi'}`}
+                      </span>
+                    </div>
+                    <div className="h-3 bg-muted rounded overflow-hidden">
+                      {tc.ok && (
+                        <div
+                          className="h-full bg-blue-500 transition-all"
+                          style={{ width: `${widthPct}%` }}
+                        />
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Detailed Results */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Chi tiết các test case</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {er.testCases.map((result: any, index: number) => (
+                <div key={index} className={`border rounded p-2 text-xs ${result.ok ? '' : 'border-red-200 bg-red-50'}`}>
+                  <div className="flex justify-between items-start mb-1">
+                    <div className="font-medium">{result.label}</div>
+                    <div className={`font-mono ${result.ok ? 'text-foreground' : 'text-red-600'}`}>
+                      {result.ok
+                        ? (result.formattedPrediction || `${(result.prediction as number).toFixed(2)} ${unit}`)
+                        : `❌ ${result.error}`}
+                    </div>
+                  </div>
+                  <div className="text-muted-foreground font-mono break-all">
+                    Input: {JSON.stringify(result.payload)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Model Info */}
+        <Card>
+          <CardContent className="p-3">
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div><span className="font-medium">Version:</span> <span className="font-mono">{er.modelVersion}</span></div>
+              <div><span className="font-medium">Đánh giá lúc:</span> {new Date(er.evaluatedAt).toLocaleString('vi-VN')}</div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return null;
 }

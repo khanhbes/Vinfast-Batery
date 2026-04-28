@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -68,35 +70,91 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen> {
   Future<void> _fetchModels() async {
     setState(() { _loading = true; _error = null; });
     try {
+      // Try API first
       final res = await ApiService().getUserAiModels();
-      if (res['success'] != true) throw Exception(res['error'] ?? 'Unknown error');
+      if (res['success'] == true) {
+        final typesList = (res['data']?['types'] as List?) ?? [];
 
-      final typesList = (res['data']?['types'] as List?) ?? [];
+        final results = typesList.map((t) {
+          final st = t['runtimeStatus'] as String? ?? 'not_loaded';
+          return _ModelInfo(
+            key: t['key'] as String? ?? '',
+            label: t['label'] as String? ?? '',
+            shortName: t['shortName'] as String? ?? '',
+            phase: t['phase'] as String? ?? '',
+            registryStatus: t['status'] as String? ?? 'planned',
+            isLoaded: st == 'loaded',
+            isPredictable: st == 'loaded',
+            activeVersion: t['activeVersion'] as String?,
+            lastLoadAt: t['lastLoadAt'] as String?,
+            lastError: t['error'] as String?,
+            icon: t['icon'] as String? ?? 'BrainCircuit',
+            description: t['description'] as String? ?? '',
+            runMode: t['runMode'] as String? ?? 'none',
+            mobileCompatible: t['mobileCompatible'] == true,
+            downloadUrl: t['downloadUrl'] as String?,
+          );
+        }).toList();
 
-      final results = typesList.map((t) {
-        final st = t['runtimeStatus'] as String? ?? 'not_loaded';
+        if (results.isNotEmpty) {
+          setState(() { _models = results; _loading = false; });
+          return;
+        }
+      }
+
+      // Fallback: read from Firestore AiModelDeployments
+      await _fetchModelsFromFirestore();
+    } catch (e) {
+      // API failed — try Firestore fallback
+      debugPrint('[AiModels] API error: $e, falling back to Firestore');
+      try {
+        await _fetchModelsFromFirestore();
+      } catch (e2) {
+        setState(() { _error = e.toString(); _loading = false; });
+      }
+    }
+  }
+
+  /// Fallback: read deployed models from Firestore collection
+  Future<void> _fetchModelsFromFirestore() async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('AiModelDeployments')
+          .get();
+
+      final results = snapshot.docs.map((doc) {
+        final d = doc.data();
+        final activeVersion = d['activeVersion'] as Map<String, dynamic>? ?? {};
+        final versionStr = activeVersion['version'] as String? ?? d['latestVersion'] as String?;
+        final isDeployed = d['status'] == 'deployed' || activeVersion.isNotEmpty;
+
         return _ModelInfo(
-          key: t['key'] as String? ?? '',
-          label: t['label'] as String? ?? '',
-          shortName: t['shortName'] as String? ?? '',
-          phase: t['phase'] as String? ?? '',
-          registryStatus: t['status'] as String? ?? 'planned',
-          isLoaded: st == 'loaded',
-          isPredictable: st == 'loaded',
-          activeVersion: t['activeVersion'] as String?,
-          lastLoadAt: t['lastLoadAt'] as String?,
-          lastError: t['error'] as String?,
-          icon: t['icon'] as String? ?? 'BrainCircuit',
-          description: t['description'] as String? ?? '',
-          runMode: t['runMode'] as String? ?? 'none',
-          mobileCompatible: t['mobileCompatible'] == true,
-          downloadUrl: t['downloadUrl'] as String?,
+          key: doc.id,
+          label: d['label'] as String? ?? d['name'] as String? ?? doc.id,
+          shortName: d['shortName'] as String? ?? '',
+          phase: d['phase'] as String? ?? (isDeployed ? 'production' : 'planned'),
+          registryStatus: d['status'] as String? ?? 'planned',
+          isLoaded: isDeployed,
+          isPredictable: isDeployed,
+          activeVersion: versionStr,
+          lastLoadAt: activeVersion['deployedAt'] as String?,
+          lastError: d['error'] as String?,
+          icon: d['icon'] as String? ?? 'BrainCircuit',
+          description: d['description'] as String? ?? '',
+          runMode: d['runMode'] as String? ?? 'server',
+          mobileCompatible: d['mobileCompatible'] == true,
+          downloadUrl: d['downloadUrl'] as String?,
         );
       }).toList();
 
-      setState(() { _models = results; _loading = false; });
+      if (results.isEmpty) {
+        setState(() { _error = 'Chưa có model nào được deploy'; _loading = false; });
+      } else {
+        setState(() { _models = results; _loading = false; _error = null; });
+      }
     } catch (e) {
-      setState(() { _error = e.toString(); _loading = false; });
+      debugPrint('[AiModels] Firestore fallback error: $e');
+      setState(() { _error = 'Không thể tải models: $e'; _loading = false; });
     }
   }
 
@@ -108,8 +166,6 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen> {
         child: CustomScrollView(
           physics: const BouncingScrollPhysics(),
           slivers: [
-            SliverToBoxAdapter(child: _buildFixedHeader(context)),
-
             // Title
             SliverToBoxAdapter(
               child: Padding(
@@ -248,67 +304,6 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen> {
         ),
       ),
     );
-  }
-
-  Widget _buildFixedHeader(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceVariant,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.person_outline_rounded,
-              color: AppColors.textPrimary,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Text(
-              'VinFast Battery',
-              style: TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          Stack(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceVariant,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.notifications_outlined,
-                  color: AppColors.textPrimary,
-                  size: 20,
-                ),
-              ),
-              Positioned(
-                top: 6,
-                right: 6,
-                child: Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: AppColors.vinfastRed,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    ).animate().fadeIn(duration: 300.ms);
   }
 
   Widget _buildAiAssistantCard() {

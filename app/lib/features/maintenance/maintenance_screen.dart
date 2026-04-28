@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/providers/app_providers.dart';
-import '../../core/widgets/sticky_header.dart';
 import '../../data/models/maintenance_task_model.dart';
 import '../../data/repositories/maintenance_repository.dart';
 
@@ -48,19 +47,6 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
         child: CustomScrollView(
           physics: const BouncingScrollPhysics(),
           slivers: [
-            // Sticky Header
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: StickyHeaderDelegate(
-                child: SharedStickyHeader(
-                  title: 'VinFast Battery',
-                  onProfileTap: () => _showProfile(context),
-                  onNotificationTap: () => _showNotifications(context),
-                  notificationCount: 1,
-                ),
-              ),
-            ),
-
             // Title Section with Add Button
             SliverToBoxAdapter(
               child: Padding(
@@ -528,15 +514,6 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
     );
   }
 
-  void _showProfile(BuildContext context) {
-    // Navigate to profile screen
-    Navigator.pushNamed(context, '/profile');
-  }
-
-  void _showNotifications(BuildContext context) {
-    // Navigate to notifications screen
-    Navigator.pushNamed(context, '/notifications');
-  }
 }
 
 // Maintenance Task Dialog

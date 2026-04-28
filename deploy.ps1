@@ -6,7 +6,7 @@
   Chỉ dashboard: .\deploy.ps1 -Service dashboard
 #>
 param(
-    [string]$Service = "api",              # api | ai | dashboard | all
+    [string]$Service = "all",              # api | ai | dashboard | all
     [string]$VpsIp   = "167.71.207.121",
     [string]$VpsUser = "root",
     [string]$VpsPath = "/opt/vinfast",
@@ -22,6 +22,46 @@ function Info($msg)    { Write-Host $msg -ForegroundColor Cyan }
 function Ok($msg)      { Write-Host "  ✅ $msg" -ForegroundColor Green }
 function Warn($msg)    { Write-Host "  ⚠ $msg" -ForegroundColor Yellow }
 function Step($msg)    { Write-Host "`n▶ $msg" -ForegroundColor White }
+
+function Join-ServiceList([string[]]$Services) {
+    return ($Services | Where-Object { $_ } | Select-Object -Unique) -join ' '
+}
+
+function Get-DeployPlan([string]$RequestedService) {
+    switch ($RequestedService) {
+        'all' {
+            return @{
+                BuildServices = @('ai', 'api', 'dashboard')
+                UpServices    = @('ai', 'api', 'dashboard')
+                HealthTargets = @('vinfast_ai', 'vinfast_api')
+            }
+        }
+        'ai' {
+            return @{
+                BuildServices = @('ai', 'api')
+                UpServices    = @('ai', 'api', 'dashboard')
+                HealthTargets = @('vinfast_ai', 'vinfast_api')
+            }
+        }
+        'api' {
+            return @{
+                BuildServices = @('api')
+                UpServices    = @('api', 'dashboard')
+                HealthTargets = @('vinfast_api')
+            }
+        }
+        'dashboard' {
+            return @{
+                BuildServices = @('dashboard')
+                UpServices    = @('api', 'dashboard')
+                HealthTargets = @('vinfast_api')
+            }
+        }
+        default {
+            throw "Service '$RequestedService' không hợp lệ. Dùng: api | ai | dashboard | all"
+        }
+    }
+}
 
 # ── BƯỚC 0: Khởi động ssh-agent và add key (nhập passphrase 1 lần) ──
 Step "Kiểm tra ssh-agent..."
@@ -86,18 +126,10 @@ Ok "Upload xong"
 # ── BƯỚC 3: SSH vào VPS, giải nén + rebuild ──────────────────────
 Step "Rebuild service '$Service' trên VPS..."
 
-if ($Service -eq "all") {
-    $buildCmd  = "docker compose --env-file .env build 2>&1 | tail -10"
-    $upCmd     = "docker compose --env-file .env up -d"
-} else {
-    $buildCmd  = "docker compose --env-file .env build $Service 2>&1 | tail -10"
-    # PLAN1: Nếu deploy api, cũng restart dashboard để pick up file mới
-    if ($Service -eq "api") {
-        $upCmd = "docker compose --env-file .env up -d --no-deps $Service && docker compose --env-file .env restart dashboard"
-    } else {
-        $upCmd = "docker compose --env-file .env up -d --no-deps $Service"
-    }
-}
+$plan = Get-DeployPlan $Service
+$buildServices = Join-ServiceList $plan.BuildServices
+$upServices = Join-ServiceList $plan.UpServices
+$healthTargets = Join-ServiceList $plan.HealthTargets
 
 $remoteScript = @"
 set -e
@@ -110,11 +142,47 @@ cp -rf web_tmp/. web/
 rm -rf web_tmp
 cd web
 echo '--- Build ---'
-$buildCmd
+docker compose --env-file .env build $buildServices 2>&1 | tail -10
 echo '--- Restart ---'
-$upCmd
+docker compose --env-file .env up -d $upServices
 echo '--- Status ---'
 docker compose ps
+echo '--- Verify containers ---'
+for name in $healthTargets; do
+  status=""
+  for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    status=`$(docker inspect --format '{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "`$name" 2>/dev/null || true)
+    if echo "`$status" | grep -Eq '^running\|(healthy|none)$'; then
+      break
+    fi
+    sleep 3
+  done
+  echo "`$name => `$status"
+  if ! echo "`$status" | grep -Eq '^running\|(healthy|none)$'; then
+    echo "Deployment check failed for `$name"
+    exit 1
+  fi
+done
+
+dashboard_status=`$(docker inspect --format '{{.State.Status}}' vinfast_dashboard 2>/dev/null || true)
+echo "vinfast_dashboard => `$dashboard_status"
+if [ "`$dashboard_status" != "running" ]; then
+  echo "Deployment check failed for vinfast_dashboard"
+  exit 1
+fi
+
+echo '--- Verify proxy /api/health ---'
+for attempt in 1 2 3 4 5 6 7 8 9 10; do
+  if curl -fsS http://127.0.0.1/api/health > /tmp/vinfast_api_health.json; then
+    cat /tmp/vinfast_api_health.json
+    break
+  fi
+  sleep 3
+done
+if [ ! -s /tmp/vinfast_api_health.json ]; then
+  echo 'Deployment check failed: /api/health is not reachable through dashboard nginx'
+  exit 1
+fi
 "@
 
 ssh -i $KeyFile -o ServerAliveInterval=30 -o ServerAliveCountMax=20 `
@@ -128,7 +196,7 @@ if ($LASTEXITCODE -ne 0) {
 Step "Kiểm tra API..."
 Start-Sleep -Seconds 5
 try {
-    $res = Invoke-WebRequest -Uri "http://${VpsIp}:5000/api/health" -TimeoutSec 15 -UseBasicParsing
+    $res = Invoke-WebRequest -Uri "http://${VpsIp}/api/health" -TimeoutSec 15 -UseBasicParsing
     $json = $res.Content | ConvertFrom-Json
     Ok "API OK (HTTP $($res.StatusCode)) — version: $($json.version)"
 } catch {
@@ -140,5 +208,5 @@ Write-Host ""
 Info "============================================"
 Info "  ✅ Deploy '$Service' hoàn tất!"
 Info "  🌐 Dashboard: http://$VpsIp"
-Info "  🔌 API:       http://${VpsIp}:5000/api/health"
+Info "  🔌 API:       http://${VpsIp}/api/health"
 Info "============================================"

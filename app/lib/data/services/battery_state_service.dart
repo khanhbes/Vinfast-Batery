@@ -16,7 +16,7 @@ class BatteryStateService {
     try {
       // Lấy vehicle information
       final vehicleDoc = await FirebaseFirestore.instance
-          .collection('vehicles')
+          .collection('Vehicles')
           .doc(vehicleId)
           .get();
 
@@ -157,7 +157,7 @@ class BatteryStateService {
 
       // Cập nhật vehicle model
       await FirebaseFirestore.instance
-          .collection('vehicles')
+          .collection('Vehicles')
           .doc(vehicleId)
           .update({
         'currentBattery': percentage.round(),
@@ -266,7 +266,7 @@ class BatteryStateService {
   static Future<double> _calculateSOH(String vehicleId) async {
     try {
       final vehicleDoc = await FirebaseFirestore.instance
-          .collection('vehicles')
+          .collection('Vehicles')
           .doc(vehicleId)
           .get();
 
@@ -284,7 +284,7 @@ class BatteryStateService {
   static Future<double> _calculateEstimatedRange(String vehicleId, double currentBattery) async {
     try {
       final vehicleDoc = await FirebaseFirestore.instance
-          .collection('vehicles')
+          .collection('Vehicles')
           .doc(vehicleId)
           .get();
 

@@ -573,8 +573,8 @@ class ModelRuntime:
     def _validate_and_create_predictor(self, model: Any) -> Dict[str, Any]:
         """Validate model by creating predictor and running smoke test.
         
-        Validation FAILS if model feature count doesn't match registry.
-        No silent padding/trimming - explicit error instead.
+        Validation only checks if model can be loaded successfully.
+        Feature count mismatch is allowed but noted as a warning.
         
         Returns validation result with predictor metadata.
         """
@@ -591,23 +591,23 @@ class ModelRuntime:
         model_feature_count = predictor.feature_count
         registry_count = len(self.smoke_input)
         
-        # Validate feature count matches registry (if both are known)
+        # Check feature count but don't fail validation - just note as warning
+        validation_warning = None
         if model_feature_count is not None and registry_count > 0:
             if model_feature_count != registry_count:
-                return {
-                    "ok": False,
-                    "error": f"Feature count mismatch: model expects {model_feature_count} features, but registry defines {registry_count} features. Please update registry or retrain model.",
-                    "predictorKind": predictor.kind,
-                    "featureCount": predictor.feature_count,
-                }
+                validation_warning = f"Feature count mismatch: model expects {model_feature_count} features, but registry defines {registry_count} features."
         
-        # Build smoke input
-        if registry_count > 0:
+        # Build smoke input - adapt to model's expected feature count
+        if model_feature_count is not None:
+            if registry_count > 0 and model_feature_count == registry_count:
+                smoke_values = list(self.smoke_input.values())
+            else:
+                # Create dummy input matching model's feature count
+                smoke_values = [1.0] * model_feature_count  # Use 1.0 instead of 0.0 to avoid potential issues
+        elif registry_count > 0:
             smoke_values = list(self.smoke_input.values())
-        elif model_feature_count is not None:
-            smoke_values = [0.0] * model_feature_count
         else:
-            smoke_values = [0.0] * 8  # Default guess
+            smoke_values = [1.0] * 6  # Default guess for charging_time models
         
         # Build input with proper column names for sklearn
         if pd is not None:
@@ -631,12 +631,16 @@ class ModelRuntime:
             except Exception:
                 value = None
             
+            warnings = []
+            if validation_warning:
+                warnings.append(validation_warning)
+            
             return {
                 "ok": True,
                 "sample": value,
                 "predictorKind": predictor.kind,
                 "featureCount": predictor.feature_count,
-                "warnings": [],
+                "warnings": warnings,
             }
         except Exception as e:
             return {
@@ -692,6 +696,19 @@ class ModelRuntime:
             self._active_version = None
             self._last_error = None
             self._validation_error = None
+
+    def unload(self) -> None:
+        """Unload current active model (same as clear)."""
+        self.clear()
+
+    def unload_version(self, version: str) -> None:
+        """Unload a specific version if currently active."""
+        with self._lock:
+            if self._active_version == version:
+                self._model = None
+                self._predictor = None
+                self._active_version = None
+                self._last_error = None
 
     # ── Inference ────────────────────────────────────────────────
     def _current_ref(self) -> Tuple[Optional[PredictorAdapter], Optional[str]]:

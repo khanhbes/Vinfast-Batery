@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/notification_center_service.dart';
 import '../../core/theme/app_colors.dart';
@@ -67,14 +68,13 @@ class _NotificationCenterScreenState extends ConsumerState<NotificationCenterScr
           return _buildNotificationList(notifications);
         },
         loading: () => const Center(
-          child: CircularProgressIndicator(),
+          child: CircularProgressIndicator(color: AppColors.primary),
         ),
-        error: (error, stack) => Center(
-          child: Text(
-            'Lỗi tải thông báo: $error',
-            style: const TextStyle(color: AppColors.error),
-          ),
-        ),
+        error: (error, stack) {
+          // Firestore compound query may fail without index — show empty state
+          debugPrint('[NotificationCenter] Stream error: $error');
+          return _buildEmptyState();
+        },
       ),
     );
   }

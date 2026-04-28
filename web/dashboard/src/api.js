@@ -168,16 +168,22 @@ export const aiLoadActiveModel = (typeKey) =>
     method: 'POST',
   })
 
+export const aiActivateModel = (typeKey, version) =>
+  apiFetch(`/api/admin/ai/models/${encodeURIComponent(typeKey)}/activate`, {
+    method: 'POST',
+    body: JSON.stringify({ version }),
+  });
+
 export const aiDeactivateModel = (typeKey) =>
   apiFetch(`/api/admin/ai/models/${encodeURIComponent(typeKey)}/deactivate`, {
     method: 'POST',
-  })
+  });
 
 export const aiValidateVersion = (typeKey, version) =>
   apiFetch(`/api/admin/ai/models/${encodeURIComponent(typeKey)}/validate-version`, {
     method: 'POST',
     body: JSON.stringify({ version }),
-  })
+  });
 
 /// Test nhanh một version đã upload (chưa deploy) — PLAN1
 export const aiTestVersion = (typeKey, version, testInput = null) =>
@@ -191,6 +197,12 @@ export const aiDeployModel = (typeKey, version) =>
   apiFetch(`/api/admin/ai/models/${encodeURIComponent(typeKey)}/deploy`, {
     method: 'POST',
     body: JSON.stringify({ version }),
+  })
+
+/// Reset (clear all versions) — PLAN1
+export const aiResetModel = (typeKey) =>
+  apiFetch(`/api/admin/ai/models/${encodeURIComponent(typeKey)}/reset`, {
+    method: 'POST',
   })
 
 /**
