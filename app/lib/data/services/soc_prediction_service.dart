@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 /// ========================================================================
 /// SOC PREDICTION SERVICE - Tích hợp mô hình AI ev_soc_pipeline.pkl
@@ -204,10 +205,16 @@ class SOCPredictionService {
   /// Lưu kết quả dự đoán vào Firestore
   Future<void> _savePredictionResult(SOCPredictionInput input, SOCPredictionResult result) async {
     try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) {
+        print('Skip SOC prediction save: not authenticated');
+        return;
+      }
       final firestore = FirebaseFirestore.instance;
       
       // Lưu vào collection soc_predictions
       await firestore.collection('soc_predictions').add({
+        'ownerUid': uid,
         'input': input.toJson(),
         'result': result.toJson(),
         'createdAt': FieldValue.serverTimestamp(),
@@ -223,10 +230,15 @@ class SOCPredictionService {
   /// Lấy lịch sử dự đoán SOC
   Future<List<SOCPredictionResult>> getPredictionHistory(String vehicleId, {int limit = 10}) async {
     try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
       final firestore = FirebaseFirestore.instance;
-      final snapshot = await firestore
+      Query query = firestore
           .collection('soc_predictions')
-          .where('input.vehicleId', isEqualTo: vehicleId)
+          .where('input.vehicleId', isEqualTo: vehicleId);
+      if (uid != null) {
+        query = query.where('ownerUid', isEqualTo: uid);
+      }
+      final snapshot = await query
           .orderBy('createdAt', descending: true)
           .limit(limit)
           .get();

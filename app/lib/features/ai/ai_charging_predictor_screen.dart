@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/providers/app_providers.dart';
+import '../../core/services/api_service.dart';
 import '../../data/services/battery_state_service.dart';
 import '../../data/services/charging_feedback_service.dart';
 import '../../data/services/notification_service.dart';
@@ -77,41 +78,52 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
     }
 
     try {
-      final temperature = await _fetchTemperature();
-
-      await BatteryStateService.predictSOC(
+      // Gọi API predict-charging-time (AI model + heuristic fallback)
+      final response = await ApiService().predictChargingTime(
         vehicleId: vehicleId,
-        currentBattery: _currentSOC,
-        temperature: temperature,
-        voltage: _isFastCharging ? 400.0 : 220.0,
-        current: _isFastCharging ? 100.0 : 32.0,
-        odometer: 0,
-        timeOfDay: DateTime.now().hour,
-        dayOfWeek: DateTime.now().weekday,
-        avgSpeed: 0,
-        elevationGain: 0,
-        weatherCondition: 'sunny',
+        currentBattery: _currentSOC.toInt(),
+        targetBattery: _targetSOC.toInt(),
+        ambientTempC: await _fetchTemperature(),
       );
 
-      // Calculate charging time
-      final power = _isFastCharging ? 1000.0 : 400.0; // Watts
-      final energyNeeded = (_targetSOC - _currentSOC) / 100 * 72.0; // kWh
-      final hours = energyNeeded * 1000 / power;
-      final minutes = (hours * 60).round();
+      if (response['success'] == true) {
+        final data = response['data'] as Map<String, dynamic>? ?? {};
+        final durationMin = (data['predictedDurationMin'] ?? data['estimatedMinutes'] ?? 0).toDouble();
+        final minutes = durationMin.round();
+        final formatted = data['formattedDuration'] ?? data['formattedTime'] ?? '$minutes phút';
+        final completionDateTime = DateTime.now().add(Duration(minutes: minutes));
+        final formattedTime = '${completionDateTime.hour.toString().padLeft(2, '0')}:${completionDateTime.minute.toString().padLeft(2, '0')}';
 
-      final completionDateTime = DateTime.now().add(Duration(minutes: minutes));
-      final formattedTime = '${completionDateTime.hour.toString().padLeft(2, '0')}:${completionDateTime.minute.toString().padLeft(2, '0')}';
+        setState(() {
+          _prediction = formatted;
+          _predictedMinutes = minutes;
+          _completionTime = formattedTime;
+          _startTime = DateTime.now();
+          _isLoading = false;
+          _feedbackSubmitted = false;
+          _reminderSet = false;
+          _actualSOC = _targetSOC; // Default to target
+        });
+      } else {
+        // API trả lỗi → fallback tính local
+        final power = _isFastCharging ? 1000.0 : 400.0; // Watts
+        final energyNeeded = (_targetSOC - _currentSOC) / 100 * 72.0; // kWh
+        final hours = energyNeeded * 1000 / power;
+        final minutes = (hours * 60).round();
+        final completionDateTime = DateTime.now().add(Duration(minutes: minutes));
+        final formattedTime = '${completionDateTime.hour.toString().padLeft(2, '0')}:${completionDateTime.minute.toString().padLeft(2, '0')}';
 
-      setState(() {
-        _prediction = '$minutes phút';
-        _predictedMinutes = minutes;
-        _completionTime = formattedTime;
-        _startTime = DateTime.now();
-        _isLoading = false;
-        _feedbackSubmitted = false;
-        _reminderSet = false;
-        _actualSOC = _targetSOC; // Default to target
-      });
+        setState(() {
+          _prediction = '$minutes phút';
+          _predictedMinutes = minutes;
+          _completionTime = formattedTime;
+          _startTime = DateTime.now();
+          _isLoading = false;
+          _feedbackSubmitted = false;
+          _reminderSet = false;
+          _actualSOC = _targetSOC;
+        });
+      }
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
@@ -130,12 +142,38 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
   }
 
   Future<void> _setReminder() async {
-    if (_predictedMinutes <= 0 || _completionTime == null) return;
+    // Validate trước khi gọi service
+    if (_predictedMinutes <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Thời gian dự đoán không hợp lệ. Hãy chạy DỰ ĐOÁN trước.'),
+          backgroundColor: AppColors.warning,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    if (_completionTime == null) return;
+
+    final completionDateTime = DateTime.now().add(Duration(minutes: _predictedMinutes));
+    // Nếu thời điểm đã qua (edge case: dự đoán < 1 phút)
+    if (completionDateTime.isBefore(DateTime.now())) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Thời gian nhắc nhở đã qua. Hãy dự đoán lại.'),
+            backgroundColor: AppColors.warning,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return;
+    }
 
     try {
-      final completionDateTime = DateTime.now().add(Duration(minutes: _predictedMinutes));
+      // Đảm bảo notification service đã init (timezone + channels)
+      await NotificationService().initialize();
 
-      // Schedule a local notification for when charging completes
       await NotificationService().scheduleChargeReminder(
         completionDateTime,
         _targetSOC.toInt(),
@@ -159,6 +197,7 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
           SnackBar(
             content: Text('Lỗi đặt nhắc nhở: $e'),
             backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
           ),
         );
       }
@@ -169,24 +208,14 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
     final vehicleId = ref.read(selectedVehicleIdProvider);
     if (vehicleId.isEmpty) return;
 
+    int? actualMinutes;
+    if (_startTime != null) {
+      actualMinutes = DateTime.now().difference(_startTime!).inMinutes;
+    }
+
+    // ── Step 1: LUÔN lưu CSV local trước ───────────────────────────
+    bool csvSaved = false;
     try {
-      // Calculate actual minutes
-      int? actualMinutes;
-      if (_startTime != null) {
-        actualMinutes = DateTime.now().difference(_startTime!).inMinutes;
-      }
-
-      // 1. Submit to Firestore (existing)
-      await BatteryStateService.submitChargeFeedback(
-        vehicleId: vehicleId,
-        predictionId: DateTime.now().millisecondsSinceEpoch.toString(),
-        predictedDurationMinutes: _predictedMinutes,
-        actualSOC: _actualSOC,
-        targetSOC: _targetSOC,
-        chargingMode: _isFastCharging ? 'fast' : 'standard',
-      );
-
-      // 2. Log to local CSV (PLAN #2 - for fine-tuning)
       await ChargingFeedbackService().logFeedback(
         vehicleId: vehicleId,
         startSOC: _currentSOC,
@@ -198,28 +227,61 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
         temperature: 28.0,
         completionTime: _completionTime,
       );
+      csvSaved = true;
+    } catch (e) {
+      debugPrint('[AiCharging] CSV save error: $e');
+    }
 
-      if (mounted) {
-        setState(() {
-          _feedbackSubmitted = true;
-        });
-        _loadFeedbackStats(); // Refresh stats
+    // ── Step 2: Thử gửi server (non-blocking, không nuốt CSV) ────────
+    bool serverOk = false;
+    String? serverErr;
+    try {
+      await BatteryStateService.submitChargeFeedback(
+        vehicleId: vehicleId,
+        predictionId: DateTime.now().millisecondsSinceEpoch.toString(),
+        predictedDurationMinutes: _predictedMinutes,
+        actualSOC: _actualSOC,
+        targetSOC: _targetSOC,
+        chargingMode: _isFastCharging ? 'fast' : 'standard',
+      );
+      serverOk = true;
+    } catch (e) {
+      debugPrint('[AiCharging] Server feedback error: $e');
+      serverErr = e.toString();
+    }
 
+    if (mounted) {
+      setState(() {
+        _feedbackSubmitted = true;
+      });
+      _loadFeedbackStats();
+
+      // Thông báo rõ ràng: CSV luôn giữ, server có thể fail
+      if (csvSaved && serverOk) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('✅ Cảm ơn! Dữ liệu đã lưu vào CSV để cải thiện AI.'),
+            content: const Text('✅ Đã lưu CSV và gửi server thành công'),
             backgroundColor: AppColors.success,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         );
-      }
-    } catch (e) {
-      if (mounted) {
+      } else if (csvSaved && !serverOk) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Lỗi gửi feedback: $e'),
+            content: const Text('⚠️ Đã lưu CSV local. Gửi server thất bại — sẽ tự đồng bộ sau.'),
+            backgroundColor: AppColors.warning,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Không lưu được dữ liệu: ${serverErr ?? "Lỗi CSV"}'),
             backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
           ),
         );
       }
@@ -801,28 +863,74 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.success.withAlpha(51)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.check_circle_outline, color: AppColors.success, size: 24),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Phản hồi đã ghi nhận!',
-                  style: TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w700),
+          Row(
+            children: [
+              Icon(Icons.check_circle_outline, color: AppColors.success, size: 24),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Phản hồi đã ghi nhận!',
+                      style: TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Dữ liệu đã lưu vào CSV để fine-tune model.',
+                      style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  'Dữ liệu đã lưu vào CSV để fine-tune model.',
-                  style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                ),
-              ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          GestureDetector(
+            onTap: _shareCsv,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.glassBorder),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.share_rounded, color: AppColors.primary, size: 18),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Chia sẻ CSV',
+                    style: TextStyle(
+                      color: AppColors.primary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
       ),
     ).animate().fadeIn(duration: 300.ms).scale(begin: const Offset(0.95, 0.95));
+  }
+
+  Future<void> _shareCsv() async {
+    final ok = await ChargingFeedbackService().shareCsv();
+    if (mounted && !ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Không thể chia sẻ CSV. Vui lòng kiểm tra quyền.'),
+          backgroundColor: AppColors.warning,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 }

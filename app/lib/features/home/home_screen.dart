@@ -1,11 +1,13 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/providers/app_providers.dart';
+import '../../core/services/session_service.dart';
 import '../../core/services/sync_service.dart';
+import '../../core/utils/app_error_formatter.dart';
 import '../../data/models/vehicle_model.dart';
 import '../../data/services/battery_state_service.dart';
 import '../dashboard/dashboard_screen.dart';
@@ -26,7 +28,9 @@ class HomeScreen extends ConsumerWidget {
     final allVehiclesAsync = ref.watch(allVehiclesProvider);
     final restoredId = ref.watch(restoreVehicleIdProvider);
 
-    // Auto-select first vehicle
+    // ── Auto-select / auto-clear vehicle ID ────────────────────────────────
+    // 1. Khi danh sách xe load xong và chưa có xe được chọn → chọn xe đầu
+    //    (ưu tiên ID đã lưu trong session nếu vẫn còn trong list).
     allVehiclesAsync.whenData((vehicles) {
       if (vehicles.isNotEmpty && vehicleId.isEmpty) {
         String targetId = vehicles.first.vehicleId;
@@ -37,103 +41,151 @@ class HomeScreen extends ConsumerWidget {
         });
         Future.microtask(() {
           ref.read(selectedVehicleIdProvider.notifier).state = targetId;
+          SessionService().setSelectedVehicleId(targetId);
         });
       }
     });
 
+    // 2. Nếu vehicleId đang chọn KHÔNG resolve được (stale: xe đã xoá / không
+    //    thuộc user / firestore từ chối quyền) → reset về '' để build sau
+    //    tự pick lại từ allVehicles.
+    if (vehicleId.isNotEmpty && vehicleAsync.hasValue && vehicleAsync.value == null) {
+      Future.microtask(() {
+        ref.read(selectedVehicleIdProvider.notifier).state = '';
+        SessionService().setSelectedVehicleId(null);
+      });
+    }
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: CustomScrollView(
-          physics: const BouncingScrollPhysics(),
-          slivers: [
-            // Vehicle Banner
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                child: vehicleAsync.when(
-                  data: (vehicle) => _VehicleBanner(vehicle: vehicle),
-                  loading: () => const _VehicleBannerShimmer(),
-                  error: (_, __) => const _VehicleBannerShimmer(),
-                ),
-              ),
-            ),
-
-            // Stat Cards Row
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                child: vehicleAsync.when(
-                  data: (vehicle) => _StatCardsRow(vehicle: vehicle),
-                  loading: () => const _StatCardsRowShimmer(),
-                  error: (_, __) => const _StatCardsRowShimmer(),
-                ),
-              ),
-            ),
-
-            // Battery Health Score
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-                child: vehicleAsync.when(
-                  data: (vehicle) => _BatteryHealthCard(
-                    soh: vehicle?.stateOfHealth ?? 96,
-                    vehicleId: vehicle?.vehicleId ?? '',
+        child: RefreshIndicator(
+          color: AppColors.primary,
+          onRefresh: () async {
+            ref.invalidate(allVehiclesProvider);
+            if (vehicleId.isNotEmpty) {
+              ref.invalidate(vehicleProvider(vehicleId));
+            }
+            await Future<void>.delayed(const Duration(milliseconds: 300));
+          },
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+            slivers: [
+              // ── Hiển thị banner cảnh báo nếu user chưa có xe nào ──
+              if (allVehiclesAsync.hasValue &&
+                  (allVehiclesAsync.value?.isEmpty ?? true))
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                    child: _NoVehicleBanner(),
                   ),
-                  loading: () => const _BatteryHealthShimmer(),
-                  error: (_, __) => const _BatteryHealthCard(soh: 96, vehicleId: ''),
                 ),
-              ),
-            ),
 
-            // Quick Actions
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-                child: vehicleAsync.when(
-                  data: (vehicle) => _QuickActionsRow(
-                    vehicleId: vehicle?.vehicleId ?? '',
-                    onSync: () => _showSyncDialog(context),
+              // ── Hiển thị banner lỗi nếu allVehiclesProvider failed ──
+              if (allVehiclesAsync.hasError)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                    child: _InlineErrorBanner(
+                      title: 'Không tải được danh sách xe',
+                      error: allVehiclesAsync.error!,
+                      onRetry: () => ref.invalidate(allVehiclesProvider),
+                    ),
                   ),
-                  loading: () => const _QuickActionsShimmer(),
-                  error: (_, __) => _QuickActionsRow(
-                    vehicleId: '',
-                    onSync: () => _showSyncDialog(context),
+                ),
+
+              // ── Vehicle Banner ──
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                  child: vehicleAsync.when(
+                    data: (vehicle) => _VehicleBanner(vehicle: vehicle),
+                    loading: () => const _VehicleBannerShimmer(),
+                    error: (e, _) => _InlineErrorBanner(
+                      title: 'Không tải được thông tin xe',
+                      error: e,
+                      onRetry: () => ref.invalidate(vehicleProvider(vehicleId)),
+                    ),
                   ),
                 ),
               ),
-            ),
 
-            // Efficiency Section
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-                child: vehicleAsync.when(
-                  data: (vehicle) => _buildEfficiencyCard(
-                    efficiency: vehicle?.stateOfHealth ?? 88.0,
+              // ── Stat Cards Row ──
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                  child: vehicleAsync.when(
+                    data: (vehicle) => _StatCardsRow(vehicle: vehicle),
+                    loading: () => const _StatCardsRowShimmer(),
+                    error: (_, __) => const _StatCardsRow(vehicle: null),
                   ),
-                  loading: () => _buildEfficiencyCardShimmer(),
-                  error: (_, __) => _buildEfficiencyCard(efficiency: 88.0),
                 ),
               ),
-            ),
 
-            // Achievement Section
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                child: vehicleAsync.when(
-                  data: (vehicle) => _buildAchievementCard(
-                    efficiency: vehicle?.stateOfHealth ?? 88.0,
+              // ── Battery Health Score ──
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+                  child: vehicleAsync.when(
+                    data: (vehicle) => _BatteryHealthCard(
+                      soh: vehicle?.stateOfHealth ?? 96,
+                      vehicleId: vehicle?.vehicleId ?? '',
+                    ),
+                    loading: () => const _BatteryHealthShimmer(),
+                    error: (_, __) => const _BatteryHealthCard(soh: 96, vehicleId: ''),
                   ),
-                  loading: () => _buildAchievementCardShimmer(),
-                  error: (_, __) => _buildAchievementCard(efficiency: 88.0),
                 ),
               ),
-            ),
 
-            const SliverToBoxAdapter(child: SizedBox(height: 100)),
-          ],
+              // ── Quick Actions ──
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+                  child: vehicleAsync.when(
+                    data: (vehicle) => _QuickActionsRow(
+                      vehicleId: vehicle?.vehicleId ?? '',
+                      onSync: () => _showSyncDialog(context),
+                    ),
+                    loading: () => const _QuickActionsShimmer(),
+                    error: (_, __) => _QuickActionsRow(
+                      vehicleId: '',
+                      onSync: () => _showSyncDialog(context),
+                    ),
+                  ),
+                ),
+              ),
+
+              // ── Efficiency Section ──
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+                  child: vehicleAsync.when(
+                    data: (vehicle) => _buildEfficiencyCard(
+                      efficiency: vehicle?.stateOfHealth ?? 88.0,
+                    ),
+                    loading: () => _buildEfficiencyCardShimmer(),
+                    error: (_, __) => _buildEfficiencyCard(efficiency: 88.0),
+                  ),
+                ),
+              ),
+
+              // ── Achievement Section ──
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                  child: vehicleAsync.when(
+                    data: (vehicle) => _buildAchievementCard(
+                      efficiency: vehicle?.stateOfHealth ?? 88.0,
+                    ),
+                    loading: () => _buildAchievementCardShimmer(),
+                    error: (_, __) => _buildAchievementCard(efficiency: 88.0),
+                  ),
+                ),
+              ),
+
+              const SliverToBoxAdapter(child: SizedBox(height: 100)),
+            ],
+          ),
         ),
       ),
     );
@@ -1336,6 +1388,117 @@ class _BatteryHealthShimmer extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(24),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// Error & Empty banners — replace shimmer-on-error to surface lỗi rõ ràng.
+// =============================================================================
+
+class _InlineErrorBanner extends StatelessWidget {
+  final String title;
+  final Object error;
+  final VoidCallback onRetry;
+
+  const _InlineErrorBanner({
+    required this.title,
+    required this.error,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final friendly = AppErrorFormatter.format(error);
+    final raw = error.toString();
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.error.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.error.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.error_outline_rounded,
+                  color: AppColors.error, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh_rounded,
+                    color: AppColors.error, size: 20),
+                visualDensity: VisualDensity.compact,
+                tooltip: 'Thử lại',
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            friendly,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+          if (kDebugMode) ...[
+            const SizedBox(height: 6),
+            Text(
+              raw,
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: AppColors.textTertiary.withValues(alpha: 0.8),
+                fontSize: 10,
+                fontFamily: 'monospace',
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _NoVehicleBanner extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.warning.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.directions_car_outlined,
+              color: AppColors.warning, size: 20),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              'Bạn chưa có xe nào. Vào Settings → Garage để thêm xe đầu tiên.',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

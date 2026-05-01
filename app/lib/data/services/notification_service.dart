@@ -1,11 +1,17 @@
+import 'dart:io';
+
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
 /// Service quản lý Local Notifications
 /// - Thông báo sạc pin 80%, 100%
 /// - Thông báo bảo dưỡng sắp đến hạn
 /// - Foreground notification cho background service
+///
+/// Luôn gọi `initialize()` trước schedule/show để đảm bảo timezone + permissions.
 class NotificationService {
   static final NotificationService _instance = NotificationService._();
   factory NotificationService() => _instance;
@@ -13,6 +19,7 @@ class NotificationService {
 
   final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
   bool _initialized = false;
+  bool _exactAlarmGranted = false;
 
   // Notification Channel IDs
   static const String channelCharge = 'charge_channel';
@@ -30,6 +37,11 @@ class NotificationService {
   Future<void> initialize() async {
     if (_initialized) return;
 
+    // ── 1. Timezone (bắt buộc cho zonedSchedule) ────────────────────────
+    tz_data.initializeTimeZones();
+    tz.setLocalLocation(tz.getLocation('Asia/Ho_Chi_Minh'));
+
+    // ── 2. Local notification plugin init ──────────────────────────────
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     const initSettings = InitializationSettings(android: androidSettings);
 
@@ -38,41 +50,62 @@ class NotificationService {
       onDidReceiveNotificationResponse: _onNotificationTap,
     );
 
-    // Tạo notification channels
-    final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
+    // ── 3. Android: xin quyền notification (Android 13+) ───────────────
+    if (Platform.isAndroid) {
+      final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      if (androidPlugin != null) {
+        // Tạo channels
+        await androidPlugin.createNotificationChannel(
+          const AndroidNotificationChannel(
+            channelCharge,
+            'Sạc pin',
+            description: 'Thông báo trạng thái sạc pin',
+            importance: Importance.high,
+          ),
+        );
+        await androidPlugin.createNotificationChannel(
+          const AndroidNotificationChannel(
+            channelTrip,
+            'Hành trình',
+            description: 'Thông báo tracking hành trình',
+            importance: Importance.low,
+          ),
+        );
+        await androidPlugin.createNotificationChannel(
+          const AndroidNotificationChannel(
+            channelMaintenance,
+            'Bảo dưỡng',
+            description: 'Nhắc nhở bảo dưỡng xe',
+            importance: Importance.high,
+          ),
+        );
 
-    if (androidPlugin != null) {
-      await androidPlugin.createNotificationChannel(
-        const AndroidNotificationChannel(
-          channelCharge,
-          'Sạc pin',
-          description: 'Thông báo trạng thái sạc pin',
-          importance: Importance.high,
-        ),
-      );
+        // Xin quyền notification Android 13+
+        final granted = await androidPlugin.requestNotificationsPermission();
+        debugPrint('[NotificationService] Android notification permission: $granted');
 
-      await androidPlugin.createNotificationChannel(
-        const AndroidNotificationChannel(
-          channelTrip,
-          'Hành trình',
-          description: 'Thông báo tracking hành trình',
-          importance: Importance.low,
-        ),
-      );
-
-      await androidPlugin.createNotificationChannel(
-        const AndroidNotificationChannel(
-          channelMaintenance,
-          'Bảo dưỡng',
-          description: 'Nhắc nhở bảo dưỡng xe',
-          importance: Importance.high,
-        ),
-      );
+        // Xin quyền exact alarm (Android 12+)
+        try {
+          final exact = await androidPlugin.requestExactAlarmsPermission() ?? false;
+          _exactAlarmGranted = exact;
+          debugPrint('[NotificationService] Exact alarm permission: $exact');
+        } catch (e) {
+          debugPrint('[NotificationService] Exact alarm check error: $e');
+          _exactAlarmGranted = false;
+        }
+      }
     }
 
     _initialized = true;
-    debugPrint('✅ NotificationService initialized');
+    debugPrint('[NotificationService] Initialized (timezone=Asia/Ho_Chi_Minh)');
+  }
+
+  /// Kiểm tra xem notification permission đã được cấp chưa.
+  Future<bool> _hasNotificationPermission() async {
+    if (!Platform.isAndroid) return true;
+    final status = await Permission.notification.status;
+    return status.isGranted;
   }
 
   void _onNotificationTap(NotificationResponse response) {
@@ -179,10 +212,34 @@ class NotificationService {
 
   static const int idChargeReminder = 210;
 
-  /// Schedule charging completion reminder
+  /// Schedule charging completion reminder.
+  ///
+  /// - Khởi tạo timezone trước khi schedule (gọi `initialize()` trước).
+  /// - Nếu exact alarm chưa được cấp quyền → fallback sang `inexactAllowWhileIdle`
+  ///   để không crash trên Android 12+.
+  /// - Ném nếu thời điểm đã qua hoặc permission bị từ chối.
   Future<void> scheduleChargeReminder(DateTime reminderTime, int targetPercent) async {
+    if (!await _hasNotificationPermission()) {
+      throw Exception('Notification permission denied. Hãy bật quyền thông báo trong Cài đặt.');
+    }
+
+    // Chuyển sang TZDateTime với timezone Asia/Ho_Chi_Minh đã init trong initialize()
     final tz.TZDateTime scheduledDate = tz.TZDateTime.from(reminderTime, tz.local);
-    
+
+    // Validate thời điểm nhắc phải ở tương lai
+    final now = tz.TZDateTime.now(tz.local);
+    if (scheduledDate.isBefore(now) || scheduledDate == now) {
+      throw Exception('Thời điểm nhắc nhở đã qua.');
+    }
+
+    // Android 12+: exact alarm cần quyền; nếu chưa có → fallback inexact
+    final androidMode = _exactAlarmGranted
+        ? AndroidScheduleMode.exactAllowWhileIdle
+        : AndroidScheduleMode.inexactAllowWhileIdle;
+
+    debugPrint('[NotificationService] Scheduling charge reminder at '
+        '${scheduledDate.toLocal()} (mode=$androidMode)');
+
     await _plugin.zonedSchedule(
       idChargeReminder,
       '⏰ Đã đến lúc rút sạc!',
@@ -197,7 +254,7 @@ class NotificationService {
           icon: '@mipmap/ic_launcher',
         ),
       ),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      androidScheduleMode: androidMode,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
       payload: 'charge_reminder_$targetPercent',

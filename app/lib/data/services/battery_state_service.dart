@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import '../models/battery_state_model.dart';
 import '../models/vehicle_model.dart';
@@ -113,10 +114,14 @@ class BatteryStateService {
     Duration? timeRange,
   }) async {
     try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
       Query query = FirebaseFirestore.instance
           .collection('battery_states')
-          .where('vehicleId', isEqualTo: vehicleId)
-          .orderBy('timestamp', descending: true);
+          .where('vehicleId', isEqualTo: vehicleId);
+      if (uid != null) {
+        query = query.where('ownerUid', isEqualTo: uid);
+      }
+      query = query.orderBy('timestamp', descending: true);
 
       if (timeRange != null) {
         final startTime = DateTime.now().subtract(timeRange);
@@ -231,10 +236,19 @@ class BatteryStateService {
   /// Lưu battery state vào Firestore
   static Future<void> _saveBatteryStateToFirestore(BatteryStateModel batteryState) async {
     try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) {
+        print('Skip battery state save: not authenticated');
+        return;
+      }
+      final payload = <String, dynamic>{
+        ...batteryState.toFirestore(),
+        'ownerUid': uid,
+      };
       await FirebaseFirestore.instance
           .collection('battery_states')
           .doc('${batteryState.vehicleId}_${batteryState.timestamp.millisecondsSinceEpoch}')
-          .set(batteryState.toFirestore());
+          .set(payload);
     } catch (e) {
       print('Failed to save battery state to Firestore: $e');
     }

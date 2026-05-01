@@ -60,21 +60,108 @@ class _NotificationCenterScreenState extends ConsumerState<NotificationCenterScr
           ),
         ],
       ),
-      body: notificationsAsync.when(
-        data: (notifications) {
-          if (notifications.isEmpty) {
-            return _buildEmptyState();
-          }
-          return _buildNotificationList(notifications);
+      body: RefreshIndicator(
+        color: AppColors.primary,
+        onRefresh: () async {
+          // Invalidate provider để tạo lại stream → retry query
+          ref.invalidate(notificationsProvider);
+          // Đợi 1 frame để stream re-subscribe
+          await Future<void>.delayed(const Duration(milliseconds: 200));
         },
-        loading: () => const Center(
-          child: CircularProgressIndicator(color: AppColors.primary),
+        child: notificationsAsync.when(
+          data: (notifications) {
+            if (notifications.isEmpty) {
+              return _buildScrollableState(_buildEmptyState());
+            }
+            return _buildNotificationList(notifications);
+          },
+          loading: () => const Center(
+            child: CircularProgressIndicator(color: AppColors.primary),
+          ),
+          error: (error, stack) {
+            debugPrint('[NotificationCenter] Stream error: $error');
+            return _buildScrollableState(_buildErrorState(error));
+          },
         ),
-        error: (error, stack) {
-          // Firestore compound query may fail without index — show empty state
-          debugPrint('[NotificationCenter] Stream error: $error');
-          return _buildEmptyState();
-        },
+      ),
+    );
+  }
+
+  /// Bọc widget trong scroll view để pull-to-refresh hoạt động khi list rỗng/lỗi.
+  Widget _buildScrollableState(Widget child) {
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorState(Object error) {
+    final message = error.toString();
+    final isIndex = message.contains('failed-precondition') ||
+        message.toLowerCase().contains('index');
+    final isPermission = message.contains('permission-denied') ||
+        message.toLowerCase().contains('permission');
+
+    final hint = isIndex
+        ? 'Query Firestore cần composite index. Hãy deploy `firestore.indexes.json` mới nhất.'
+        : isPermission
+            ? 'Bạn không có quyền đọc thông báo. Vui lòng đăng nhập lại.'
+            : 'Đã xảy ra lỗi khi tải thông báo. Vui lòng thử lại.';
+
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.error_outline,
+            size: 56,
+            color: Colors.red.withAlpha(180),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Không tải được thông báo',
+            style: TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            hint,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (kDebugMode)
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppColors.textSecondary.withAlpha(140),
+                fontSize: 11,
+              ),
+            ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: () => ref.invalidate(notificationsProvider),
+            icon: const Icon(Icons.refresh),
+            label: const Text('Thử lại'),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
       ),
     );
   }

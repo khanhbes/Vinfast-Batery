@@ -76,33 +76,17 @@ class VehicleSpecRepository {
   // ── Firestore ──
 
   Future<List<VinFastModelSpec>> _fetchFromFirestore() async {
+    // VinFastModelSpecs is read-only from clients (managed via backend/admin).
+    // If Firestore is empty, return [] so the caller falls back to cache/asset.
     final snapshot = await _specsRef.get();
     if (snapshot.docs.isEmpty) {
-      // Seed từ local fallback lên Firestore
-      await _seedFirestoreFromAsset();
-      final retry = await _specsRef.get();
-      return retry.docs.map((doc) {
-        final data = doc.data() as Map<String, dynamic>;
-        return VinFastModelSpec.fromMap(data, id: doc.id);
-      }).toList();
+      debugPrint('ℹ️ VehicleSpecRepository: Firestore VinFastModelSpecs empty (backend-managed)');
+      return [];
     }
     return snapshot.docs.map((doc) {
       final data = doc.data() as Map<String, dynamic>;
       return VinFastModelSpec.fromMap(data, id: doc.id);
     }).toList();
-  }
-
-  Future<void> _seedFirestoreFromAsset() async {
-    final specs = await _loadFromAsset();
-    final batch = _firestore.batch();
-    for (final spec in specs) {
-      batch.set(_specsRef.doc(spec.modelId), {
-        ...spec.toMap(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    }
-    await batch.commit();
-    debugPrint('🌱 VehicleSpecRepository: Seeded ${specs.length} specs to Firestore');
   }
 
   // ── SharedPreferences Cache ──

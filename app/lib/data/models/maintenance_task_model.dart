@@ -1,7 +1,52 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// Các loại dịch vụ bảo dưỡng
+/// Các loại dịch vụ bảo dưỡng — bám theo sổ tay VinFast.
+///
+/// Nhóm:
+/// - Hệ điều khiển: brakeLever, throttleGrip, lightsHornDash
+/// - Khung & khoá: sideStand, seatLock
+/// - Pin: battery, batteryCheck (legacy)
+/// - Phanh: brakeFluid, brakeFront, brakeRear, brakeHose, brakeCable, brakeService (legacy)
+/// - Bánh xe: wheelFront, wheelRear, tireFront, tireRear, tireRotation (legacy)
+/// - Hệ treo: steeringBearing, suspensionFront, suspensionRear
+/// - Động cơ: motor, motorSeal
+/// - Khác: oilChange, airFilter, coolantFlush, transmissionService, inspection, other
 enum ServiceType {
+  // ── Hệ điều khiển ──
+  brakeLever,
+  throttleGrip,
+  lightsHornDash,
+
+  // ── Khung & khoá ──
+  sideStand,
+  seatLock,
+
+  // ── Pin ──
+  battery,
+
+  // ── Phanh ──
+  brakeFluid,
+  brakeFront,
+  brakeRear,
+  brakeHose,
+  brakeCable,
+
+  // ── Bánh xe ──
+  wheelFront,
+  wheelRear,
+  tireFront,
+  tireRear,
+
+  // ── Hệ treo ──
+  steeringBearing,
+  suspensionFront,
+  suspensionRear,
+
+  // ── Động cơ ──
+  motor,
+  motorSeal,
+
+  // ── Legacy / khác ──
   oilChange,
   tireRotation,
   brakeService,
@@ -11,6 +56,14 @@ enum ServiceType {
   transmissionService,
   inspection,
   other,
+}
+
+/// Mức độ khẩn cấp của 1 maintenance task (tính từ ODO hiện tại).
+enum MaintenanceUrgency {
+  completed,
+  overdue,
+  dueSoon,
+  upcoming,
 }
 
 /// Model mốc bảo dưỡng xe
@@ -51,9 +104,23 @@ class MaintenanceTaskModel {
     return !isCompleted && currentOdo >= targetOdo;
   }
 
-  /// Khoảng cách còn lại (km)
+  /// Khoảng cách còn lại (km). Có thể âm (đã quá hạn).
   int remainingKm(int currentOdo) {
     return targetOdo - currentOdo;
+  }
+
+  /// Phân loại độ khẩn cấp dựa trên ODO hiện tại.
+  MaintenanceUrgency urgency(int currentOdo) {
+    if (isCompleted) return MaintenanceUrgency.completed;
+    if (currentOdo >= targetOdo) return MaintenanceUrgency.overdue;
+    if (currentOdo >= targetOdo - 50) return MaintenanceUrgency.dueSoon;
+    return MaintenanceUrgency.upcoming;
+  }
+
+  /// Tỉ lệ tiến độ tới đích (0..1, clamp). Phục vụ progress bar.
+  double progress(int currentOdo) {
+    if (targetOdo <= 0) return 0;
+    return (currentOdo / targetOdo).clamp(0.0, 1.0);
   }
 
   factory MaintenanceTaskModel.fromFirestore(DocumentSnapshot doc) {

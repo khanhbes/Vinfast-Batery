@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/theme/app_colors.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/services/auth_service.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_motion.dart';
 import '../../core/widgets/app_popup.dart';
 import '../../data/models/vinfast_model_spec.dart';
 import '../../data/repositories/vehicle_spec_repository.dart';
@@ -47,7 +48,12 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => _AddVehicleSheet(
-        onVehicleAdded: () {
+        onVehicleAdded: (newVehicleId) {
+          // Auto-select xe vừa thêm (Step 2's listener sẽ tự persist vào
+          // SessionService secure storage).
+          if (newVehicleId.isNotEmpty) {
+            ref.read(selectedVehicleIdProvider.notifier).state = newVehicleId;
+          }
           _loadVehicles();
           ref.invalidate(allVehiclesProvider);
         },
@@ -402,7 +408,7 @@ class _VehicleCard extends StatelessWidget {
 // ============================================================================
 
 class _AddVehicleSheet extends StatefulWidget {
-  final VoidCallback onVehicleAdded;
+  final void Function(String vehicleId) onVehicleAdded;
 
   const _AddVehicleSheet({required this.onVehicleAdded});
 
@@ -475,12 +481,25 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
     setState(() => _isAdding = false);
 
     if (result['success'] == true) {
-      AppPopup.showSuccess('Đã thêm ${spec.modelName}');
-      widget.onVehicleAdded();
+      final newId = (result['vehicleId'] as String?) ?? '';
+      // Hiệu ứng xác nhận ngắn rồi đóng sheet
+      await _showSuccessOverlay(spec.modelName);
+      if (!mounted) return;
+      widget.onVehicleAdded(newId);
       Navigator.pop(context);
+      AppPopup.showSuccess('Đã thêm ${spec.modelName}');
     } else {
       AppPopup.showError(result['error'] ?? 'Thêm xe thất bại');
     }
+  }
+
+  Future<void> _showSuccessOverlay(String modelName) async {
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withAlpha(180),
+      builder: (_) => _SuccessOverlay(modelName: modelName),
+    );
   }
 
   @override
@@ -628,11 +647,25 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
                             spec: spec,
                             isAdding: _isAdding,
                             onAdd: () => _addVehicle(spec),
-                          );
+                            onPreview: () => _showSpecPreview(spec),
+                          ).appFadeSlideIn(index: i);
                         },
                       ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showSpecPreview(VinFastModelSpec spec) {
+    showDialog(
+      context: context,
+      builder: (_) => _SpecPreviewDialog(
+        spec: spec,
+        onAdd: () {
+          Navigator.pop(context);
+          _addVehicle(spec);
+        },
       ),
     );
   }
@@ -642,94 +675,140 @@ class _SpecCard extends StatelessWidget {
   final VinFastModelSpec spec;
   final bool isAdding;
   final VoidCallback onAdd;
+  final VoidCallback onPreview;
 
   const _SpecCard({
     required this.spec,
     required this.isAdding,
     required this.onAdd,
+    required this.onPreview,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.glassBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryContainer,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.electric_moped_rounded, color: AppColors.primary, size: 22),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      spec.modelName,
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Pin: ${spec.nominalCapacityWh.toInt()} Wh • ${spec.nominalVoltageV.toInt()}V',
-                      style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-              GestureDetector(
-                onTap: isAdding ? null : onAdd,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: isAdding ? null : onPreview,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.glassBorder),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: AppColors.primary,
-                    borderRadius: BorderRadius.circular(10),
+                    color: AppColors.primaryContainer,
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  child: isAdding
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.background),
-                        )
-                      : Text(
-                          'Thêm',
-                          style: TextStyle(
-                            color: AppColors.background,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
+                  child: const Icon(Icons.electric_moped_rounded,
+                      color: AppColors.primary, size: 22),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // Quick specs
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: [
-              _specChip('Motor: ${(spec.ratedMotorPowerW / 1000).toStringAsFixed(1)} kW'),
-              _specChip('Sạc tối đa: ${spec.maxChargePowerW.toInt()} W'),
-              _specChip('~${spec.defaultEfficiencyKmPerPercent.toStringAsFixed(1)} km/%'),
-            ],
-          ),
-        ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              spec.modelName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          if (spec.releaseYear != null) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.surfaceVariant,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                '${spec.releaseYear}',
+                                style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        spec.tagline ??
+                            'Pin: ${spec.nominalCapacityWh.toInt()} Wh • ${spec.nominalVoltageV.toInt()}V',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            color: AppColors.textSecondary, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                GestureDetector(
+                  onTap: isAdding ? null : onAdd,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: isAdding
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.background),
+                          )
+                        : Text(
+                            'Thêm',
+                            style: TextStyle(
+                              color: AppColors.background,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Quick specs
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                _specChip(
+                    'Pin: ${spec.nominalCapacityWh.toInt()} Wh • ${spec.nominalVoltageV.toInt()}V'),
+                _specChip(
+                    'Motor: ${(spec.ratedMotorPowerW / 1000).toStringAsFixed(1)} kW'),
+                if (spec.topSpeedKmh != null)
+                  _specChip('Tốc độ: ${spec.topSpeedKmh!.toInt()} km/h'),
+                if (spec.rangeKm != null)
+                  _specChip('Tầm: ${spec.rangeKm!.toInt()} km'),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -744,6 +823,201 @@ class _SpecCard extends StatelessWidget {
       child: Text(
         text,
         style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w500),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// Success overlay — hiển thị check-mark animation sau khi thêm xe
+// ============================================================================
+
+class _SuccessOverlay extends StatefulWidget {
+  final String modelName;
+  const _SuccessOverlay({required this.modelName});
+
+  @override
+  State<_SuccessOverlay> createState() => _SuccessOverlayState();
+}
+
+class _SuccessOverlayState extends State<_SuccessOverlay> {
+  @override
+  void initState() {
+    super.initState();
+    // Tự đóng sau 1.1s
+    Future.delayed(const Duration(milliseconds: 1100), () {
+      if (mounted) Navigator.of(context, rootNavigator: true).maybePop();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.success.withAlpha(80)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: AppColors.success.withAlpha(40),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.check_rounded,
+                color: AppColors.success,
+                size: 36,
+              ),
+            ).animate().scale(
+                  begin: const Offset(0.4, 0.4),
+                  end: const Offset(1, 1),
+                  duration: AppMotion.base,
+                  curve: AppMotion.emphasized,
+                ),
+            const SizedBox(height: 14),
+            const Text(
+              'Đã thêm xe',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              widget.modelName,
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+            ),
+          ],
+        ),
+      ).animate().fadeIn(duration: AppMotion.fast),
+    );
+  }
+}
+
+// ============================================================================
+// Spec preview dialog — hiển thị thông số chi tiết trước khi confirm thêm
+// ============================================================================
+
+class _SpecPreviewDialog extends StatelessWidget {
+  final VinFastModelSpec spec;
+  final VoidCallback onAdd;
+
+  const _SpecPreviewDialog({required this.spec, required this.onAdd});
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppColors.card,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.primaryContainer,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.electric_moped_rounded,
+                color: AppColors.primary, size: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  spec.modelName,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (spec.tagline != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      spec.tagline!,
+                      style: TextStyle(
+                          color: AppColors.textSecondary, fontSize: 12),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 360),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _row('Pin', '${spec.nominalCapacityWh.toInt()} Wh • ${spec.nominalCapacityAh.toInt()} Ah'),
+            _row('Điện áp', '${spec.nominalVoltageV.toInt()} V'),
+            _row('Sạc tối đa', '${spec.maxChargePowerW.toInt()} W'),
+            _row('Motor (định mức)', '${(spec.ratedMotorPowerW / 1000).toStringAsFixed(1)} kW'),
+            _row('Motor (đỉnh)', '${(spec.peakMotorPowerW / 1000).toStringAsFixed(1)} kW'),
+            if (spec.topSpeedKmh != null)
+              _row('Tốc độ tối đa', '${spec.topSpeedKmh!.toInt()} km/h'),
+            if (spec.rangeKm != null)
+              _row('Tầm hoạt động', '~${spec.rangeKm!.toInt()} km'),
+            _row('Hiệu suất', '~${spec.defaultEfficiencyKmPerPercent.toStringAsFixed(2)} km/%'),
+            if (spec.releaseYear != null) _row('Năm ra mắt', '${spec.releaseYear}'),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Đóng',
+              style: TextStyle(color: AppColors.textSecondary)),
+        ),
+        FilledButton.icon(
+          onPressed: onAdd,
+          icon: const Icon(Icons.add_rounded, size: 18),
+          label: const Text('Thêm xe này'),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: AppColors.background,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _row(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 130,
+            child: Text(
+              label,
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
 
 /// ChargingFeedbackService — PLAN #2
@@ -135,5 +136,28 @@ class ChargingFeedbackService {
     final file = await _ensureFile();
     await file.writeAsString(_csvHeader);
     debugPrint('[ChargingFeedback] Cleared all data');
+  }
+
+  /// Chia sẻ file CSV qua share sheet hệ thống.
+  /// Trả về `true` nếu share dialog mở thành công.
+  Future<bool> shareCsv() async {
+    try {
+      final path = await _filePath;
+      final file = File(path);
+      if (!await file.exists()) {
+        debugPrint('[ChargingFeedback] shareCsv: file not found');
+        return false;
+      }
+      final xFile = XFile(file.path, mimeType: 'text/csv');
+      final result = await Share.shareXFiles(
+        [xFile],
+        subject: 'VinFast Battery — Charging Feedback Data',
+        text: 'Dữ liệu phản hồi sạc pin để fine-tune AI model',
+      );
+      return result.status == ShareResultStatus.success;
+    } catch (e) {
+      debugPrint('[ChargingFeedback] shareCsv error: $e');
+      return false;
+    }
   }
 }

@@ -42,23 +42,53 @@ class VehicleModel {
   /// Whether this vehicle has been linked to a VinFast model spec
   bool get hasModelLink => vinfastModelId != null && vinfastModelId!.isNotEmpty;
 
+  /// Parse số nguyên an toàn — chấp nhận `int`, `double`, `num`, `String`,
+  /// hoặc `null`. Tránh crash `'double' is not a subtype of int` khi Firestore
+  /// trả về `0.0` cho field đang khai báo là int.
+  static int _asInt(dynamic value, [int fallback = 0]) {
+    if (value == null) return fallback;
+    if (value is int) return value;
+    if (value is double) return value.round();
+    if (value is num) return value.round();
+    if (value is String) {
+      final parsed = int.tryParse(value) ?? double.tryParse(value)?.round();
+      return parsed ?? fallback;
+    }
+    return fallback;
+  }
+
+  /// Parse số thực an toàn.
+  static double _asDouble(dynamic value, [double fallback = 0.0]) {
+    if (value == null) return fallback;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is num) return value.toDouble();
+    if (value is String) {
+      return double.tryParse(value) ?? fallback;
+    }
+    return fallback;
+  }
+
   factory VehicleModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     return VehicleModel(
       vehicleId: doc.id,
       vehicleName: data['vehicleName'] ?? '',
       ownerUid: data['ownerUid'],
-      currentOdo: data['currentOdo'] ?? 0,
-      currentBattery: data['currentBattery'] ?? data['lastBatteryPercent'] ?? 100,
-      stateOfHealth: (data['stateOfHealth'] ?? 100.0).toDouble(),
-      defaultEfficiency: (data['defaultEfficiency'] ?? 1.2).toDouble(),
-      totalCharges: data['totalCharges'] ?? 0,
-      totalTrips: data['totalTrips'] ?? 0,
-      lastBatteryPercent: data['lastBatteryPercent'] ?? 100,
+      currentOdo: _asInt(data['currentOdo']),
+      currentBattery:
+          _asInt(data['currentBattery'] ?? data['lastBatteryPercent'], 100),
+      stateOfHealth: _asDouble(data['stateOfHealth'], 100.0),
+      defaultEfficiency: _asDouble(data['defaultEfficiency'], 1.2),
+      totalCharges: _asInt(data['totalCharges']),
+      totalTrips: _asInt(data['totalTrips']),
+      lastBatteryPercent: _asInt(data['lastBatteryPercent'], 100),
       avatarColor: data['avatarColor'],
       vinfastModelId: data['vinfastModelId'],
       vinfastModelName: data['vinfastModelName'],
-      specVersion: data['specVersion'],
+      specVersion: data['specVersion'] == null
+          ? null
+          : _asInt(data['specVersion']),
       specLinkedAt: data['specLinkedAt'] != null
           ? (data['specLinkedAt'] as Timestamp).toDate()
           : null,
@@ -70,17 +100,19 @@ class VehicleModel {
     return VehicleModel(
       vehicleId: data['vehicleId'] ?? '',
       vehicleName: data['vehicleName'] ?? '',
-      currentOdo: data['currentOdo'] ?? 0,
-      currentBattery: data['currentBattery'] ?? 100,
-      stateOfHealth: (data['stateOfHealth'] ?? 100.0).toDouble(),
-      defaultEfficiency: (data['defaultEfficiency'] ?? 1.2).toDouble(),
-      totalCharges: data['totalCharges'] ?? 0,
-      totalTrips: data['totalTrips'] ?? 0,
-      lastBatteryPercent: data['lastBatteryPercent'] ?? 100,
+      currentOdo: _asInt(data['currentOdo']),
+      currentBattery: _asInt(data['currentBattery'], 100),
+      stateOfHealth: _asDouble(data['stateOfHealth'], 100.0),
+      defaultEfficiency: _asDouble(data['defaultEfficiency'], 1.2),
+      totalCharges: _asInt(data['totalCharges']),
+      totalTrips: _asInt(data['totalTrips']),
+      lastBatteryPercent: _asInt(data['lastBatteryPercent'], 100),
       avatarColor: data['avatarColor'],
       vinfastModelId: data['vinfastModelId'],
       vinfastModelName: data['vinfastModelName'],
-      specVersion: data['specVersion'],
+      specVersion: data['specVersion'] == null
+          ? null
+          : _asInt(data['specVersion']),
       specLinkedAt: data['specLinkedAt'] is DateTime
           ? data['specLinkedAt']
           : data['specLinkedAt'] != null

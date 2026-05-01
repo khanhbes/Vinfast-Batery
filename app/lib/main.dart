@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import 'dart:ui';
@@ -10,13 +9,15 @@ import 'dart:ui';
 import 'app.dart';
 import 'data/services/notification_service.dart';
 import 'data/services/background_service_config.dart';
-import 'data/services/maintenance_reminder_service.dart';
-import 'data/repositories/vehicle_spec_repository.dart';
-import 'data/services/vehicle_model_link_service.dart';
 import 'core/widgets/app_popup.dart';
 
 /// Provider toàn cục cho trạng thái recovery cần hiển thị dialog
 final pendingRecoveryProvider = StateProvider<String?>((ref) => null);
+
+/// Provider nắm lỗi `Firebase.initializeApp()` ở cold start để `AuthGate`
+/// có thể render màn hình lỗi/retry thay vì đẩy thẳng user về Login khi
+/// Firebase chưa sẵn sàng.
+final firebaseInitErrorProvider = StateProvider<Object?>((ref) => null);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,10 +36,12 @@ void main() async {
   await runZonedGuarded(() async {
 
   // Khởi tạo Firebase
+  Object? firebaseInitError;
   try {
     await Firebase.initializeApp();
   } catch (e) {
     debugPrint("Firebase init error: $e");
+    firebaseInitError = e;
   }
 
   // Khởi tạo Notification Service
@@ -70,58 +73,10 @@ void main() async {
     debugPrint("Recovery check error: $e");
   }
 
-  // Đồng bộ catalog VinFast specs (Firestore → cache → local fallback)
-  try {
-    final specRepo = VehicleSpecRepository();
-    await specRepo.getAllSpecs(); // triggers sync + seed if needed
-  } catch (e) {
-    debugPrint("VinFast spec sync error: $e");
-  }
-
-  // Auto-match vehicle → VinFast model nếu chưa link
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    final selId = prefs.getString('selected_vehicle_id') ?? '';
-    if (selId.isNotEmpty) {
-      final doc = await FirebaseFirestore.instance
-          .collection('Vehicles')
-          .doc(selId)
-          .get();
-      if (doc.exists) {
-        final data = doc.data()!;
-        // Chỉ auto-match nếu chưa link
-        if (data['vinfastModelId'] == null || (data['vinfastModelId'] as String).isEmpty) {
-          final specRepo = VehicleSpecRepository();
-          final name = data['vehicleName'] as String? ?? '';
-          final match = await specRepo.matchByVehicleName(name);
-          if (match != null) {
-            final linkService = VehicleModelLinkService();
-            await linkService.linkModel(vehicleId: selId, spec: match);
-          }
-        }
-      }
-    }
-  } catch (e) {
-    debugPrint("Auto-match error: $e");
-  }
-
-  // Kiểm tra nhắc bảo dưỡng tự động ở app launch
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    final vehicleId = prefs.getString('selected_vehicle_id') ?? '';
-    if (vehicleId.isNotEmpty) {
-      // Lấy ODO từ Firestore nếu đã có xe
-      final doc = await __tryGetVehicleOdo(vehicleId);
-      if (doc != null) {
-        MaintenanceReminderService().checkAndNotify(
-          vehicleId: vehicleId,
-          currentOdo: doc,
-        );
-      }
-    }
-  } catch (e) {
-    debugPrint("Maintenance check error: $e");
-  }
+  // ⚠️ Lưu ý: Mọi tác vụ đọc/ghi Firestore dựa trên user (vehicle spec sync,
+  // auto-match VinFast model, nhắc bảo dưỡng) đã được chuyển vào
+  // `_AuthenticatedRoot` (auth_gate.dart) để chạy SAU khi Firebase Auth
+  // khôi phục phiên đăng nhập — tránh permission errors khi cold start.
 
   // Lock to portrait mode
   SystemChrome.setPreferredOrientations([
@@ -142,6 +97,7 @@ void main() async {
       ProviderScope(
         overrides: [
           pendingRecoveryProvider.overrideWith((ref) => pendingRecovery),
+          firebaseInitErrorProvider.overrideWith((ref) => firebaseInitError),
         ],
         child: const VinFastBatteryApp(),
       ),
@@ -152,16 +108,3 @@ void main() async {
   });
 }
 
-/// Helper: lấy ODO hiện tại từ Firestore (non-blocking)
-Future<int?> __tryGetVehicleOdo(String vehicleId) async {
-  try {
-    final doc = await FirebaseFirestore.instance
-        .collection('Vehicles')
-        .doc(vehicleId)
-        .get();
-    if (doc.exists) {
-      return (doc.data()?['currentOdo'] ?? 0) as int;
-    }
-  } catch (_) {}
-  return null;
-}

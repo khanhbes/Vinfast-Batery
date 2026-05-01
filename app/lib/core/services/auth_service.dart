@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
+import 'session_service.dart';
 import 'sync_service.dart';
 
 /// AuthService - Xử lý đăng ký/đăng nhập đồng bộ với Web Dashboard
@@ -13,6 +14,22 @@ class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final SyncService _syncService = SyncService();
+  final SessionService _session = SessionService();
+
+  /// Đảm bảo document users/{uid} luôn tồn tại.
+  /// Dùng set(merge: true) để không ghi đè dữ liệu cũ nếu doc đã có.
+  Future<void> _ensureUserDoc(User user) async {
+    try {
+      await _firestore.collection('users').doc(user.uid).set({
+        'uid': user.uid,
+        'email': user.email ?? '',
+        'name': user.displayName ?? '',
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('[AuthService] _ensureUserDoc error: $e');
+    }
+  }
 
   /// Stream auth state changes
   Stream<User?> get authStateChanges => _auth.authStateChanges();
@@ -57,10 +74,10 @@ class AuthService {
       // 4. Đồng bộ với web dashboard
       final syncResult = await _syncService.syncUserToWeb();
 
-      // 5. Lưu thông tin đăng nhập locally
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('last_login_email', email);
-      await prefs.setBool('is_logged_in', true);
+      // 5. Lưu thông tin đăng nhập locally (secure)
+      await _session.setLastLoginEmail(email);
+      await _session.markUserSynced();
+      await _session.markAuthenticated();
 
       return {
         'success': true,
@@ -106,7 +123,10 @@ class AuthService {
         return {'success': false, 'error': 'Login failed'};
       }
 
-      // 2. Cập nhật last login
+      // 2. Đảm bảo user doc tồn tại trước khi update
+      await _ensureUserDoc(user);
+
+      // 3. Cập nhật last login (safe vì đã ensure doc)
       await _firestore.collection('users').doc(user.uid).update({
         'lastLogin': FieldValue.serverTimestamp(),
         'lastLoginSource': 'flutter_app',
@@ -118,10 +138,10 @@ class AuthService {
       // 4. Đồng bộ vehicles
       final vehicleResults = await _syncService.syncAllVehiclesToWeb();
 
-      // 5. Lưu thông tin đăng nhập
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('last_login_email', email);
-      await prefs.setBool('is_logged_in', true);
+      // 5. Lưu thông tin đăng nhập (secure)
+      await _session.setLastLoginEmail(email);
+      await _session.markUserSynced();
+      await _session.markAuthenticated();
 
       // 6. Bắt đầu auto sync
       _syncService.startAutoSync();
@@ -157,19 +177,20 @@ class AuthService {
     }
   }
 
-  /// Đăng xuất
+  /// Đăng xuất — chỉ method này được gọi FirebaseAuth.signOut()
   Future<Map<String, dynamic>> logout() async {
     try {
       // Dừng auto sync
       _syncService.stopAutoSync();
 
+      // Đánh dấu explicit sign out trước khi sign out Firebase
+      await _session.markExplicitSignedOut();
+
       // Đăng xuất Firebase
       await _auth.signOut();
 
-      // Xóa thông tin locally
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('is_logged_in');
-      await prefs.remove('selected_vehicle_id');
+      // Xóa session metadata (giữ lại lastLoginEmail để prefill)
+      await _session.clearSession();
 
       return {'success': true, 'message': 'Logout successful'};
     } catch (e) {
@@ -195,6 +216,8 @@ class AuthService {
   }) => login(email: email, password: password);
 
   /// Thêm xe mới + đồng bộ web
+  /// Dùng WriteBatch để tạo Vehicles/{vehicleId} và upsert users/{uid}
+  /// cùng lúc, tránh lỗi [cloud_firestore/not-found] khi user doc chưa có.
   Future<Map<String, dynamic>> addVehicle({
     required String model,
     required int year,
@@ -210,21 +233,37 @@ class AuthService {
         return {'success': false, 'error': 'Not logged in'};
       }
 
-      // 1. Tạo vehicle document
+      // Đảm bảo user doc tồn tại trước (set merge)
+      await _ensureUserDoc(user);
+
+      // Tạo vehicle ref
       final vehicleRef = _firestore.collection('Vehicles').doc();
       final vehicleId = vehicleRef.id;
 
-      await vehicleRef.set({
+      // Dùng WriteBatch: tạo xe + update user atomically
+      final batch = _firestore.batch();
+
+      // 1. Tạo vehicle document — chuẩn hóa kiểu số:
+      //    - Field hiển thị int (currentOdo, currentBattery, lastBatteryPercent,
+      //      year, totalCharges, totalTrips) → ép int qua `.round()` để
+      //      `VehicleModel.fromFirestore` không crash `double is not int`.
+      //    - Field tính toán cần độ chính xác (batteryCapacity, stateOfHealth,
+      //      defaultEfficiency) → giữ double.
+      batch.set(vehicleRef, {
         'vehicleId': vehicleId,
+        'vehicleName': '$model $year',
         'ownerUid': user.uid,
         'model': model,
         'year': year,
         'batteryCapacity': batteryCapacity,
-        'currentBattery': currentBattery,
+        'currentBattery': currentBattery.round(),
         'stateOfHealth': stateOfHealth,
-        'currentOdo': currentOdo,
+        'currentOdo': currentOdo.round(),
         'defaultEfficiency': defaultEfficiency,
-        'lastBatteryPercent': currentBattery,
+        'lastBatteryPercent': currentBattery.round(),
+        'isDeleted': false,
+        'totalCharges': 0,
+        'totalTrips': 0,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
         'source': 'flutter_app',
@@ -232,11 +271,14 @@ class AuthService {
         'needsSync': true,
       });
 
-      // 2. Cập nhật user profile
-      await _firestore.collection('users').doc(user.uid).update({
+      // 2. Upsert user profile (merge: true nên safe khi doc mới tạo)
+      final userRef = _firestore.collection('users').doc(user.uid);
+      batch.set(userRef, {
         'vehicles': FieldValue.arrayUnion([vehicleId]),
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      }, SetOptions(merge: true));
+
+      await batch.commit();
 
       // 3. Đồng bộ với web
       final syncResult = await _syncService.syncVehicleToWeb(vehicleId);
@@ -320,36 +362,59 @@ class AuthService {
     }
   }
 
-  /// Lấy danh sách xe của user
+  /// Lấy danh sách xe của user.
+  /// Nếu composite index (ownerUid + createdAt) chưa deploy thì
+  /// fallback query chỉ theo ownerUid và sort ở client.
   Future<List<Map<String, dynamic>>> getUserVehicles() async {
     try {
       final user = _auth.currentUser;
       if (user == null) return [];
 
-      final snapshot = await _firestore
-          .collection('Vehicles')
-          .where('ownerUid', isEqualTo: user.uid)
-          .orderBy('createdAt', descending: true)
-          .get();
+      List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
+      try {
+        // Ưu tiên: dùng index ownerUid + createdAt desc
+        final snapshot = await _firestore
+            .collection('Vehicles')
+            .where('ownerUid', isEqualTo: user.uid)
+            .orderBy('createdAt', descending: true)
+            .get();
+        docs = snapshot.docs;
+      } catch (indexError) {
+        // Fallback: query chỉ ownerUid, sort ở client
+        debugPrint('[AuthService] Index fallback for getUserVehicles: $indexError');
+        final snapshot = await _firestore
+            .collection('Vehicles')
+            .where('ownerUid', isEqualTo: user.uid)
+            .get();
+        docs = snapshot.docs;
+      }
 
-      return snapshot.docs.map((doc) {
+      final vehicles = docs.map((doc) {
         final data = doc.data();
         data['id'] = doc.id;
         return data;
       }).toList();
+
+      // Client-side sort (mới nhất trước)
+      vehicles.sort((a, b) {
+        final aTime = a['createdAt'];
+        final bTime = b['createdAt'];
+        if (aTime == null && bTime == null) return 0;
+        if (aTime == null) return 1;
+        if (bTime == null) return -1;
+        return (bTime as Comparable).compareTo(aTime);
+      });
+
+      return vehicles;
     } catch (e) {
-      print('Error getting user vehicles: $e');
+      debugPrint('[AuthService] Error getting user vehicles: $e');
       return [];
     }
   }
 
-  /// Kiểm tra đăng nhập status
+  /// Kiểm tra đăng nhập status — Firebase Auth là source of truth.
   Future<bool> isLoggedIn() async {
-    final user = _auth.currentUser;
-    if (user != null) return true;
-
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('is_logged_in') ?? false;
+    return _auth.currentUser != null;
   }
 
   /// Lấy thông tin user hiện tại

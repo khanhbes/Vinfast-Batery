@@ -5,6 +5,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../core/providers/app_state_providers.dart';
 import '../../core/services/api_service.dart';
 import '../../core/theme/app_colors.dart';
 import 'ai_charging_predictor_screen.dart';
@@ -56,18 +57,36 @@ class AiModelsScreen extends ConsumerStatefulWidget {
   ConsumerState<AiModelsScreen> createState() => _AiModelsScreenState();
 }
 
-class _AiModelsScreenState extends ConsumerState<AiModelsScreen> {
+class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
+    with WidgetsBindingObserver {
   List<_ModelInfo> _models = [];
   bool _loading = true;
   String? _error;
+  DateTime? _lastFetchedAt;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _fetchModels();
   }
 
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Auto-refresh khi app trở lại foreground
+    if (state == AppLifecycleState.resumed) {
+      _fetchModels();
+    }
+  }
+
   Future<void> _fetchModels() async {
+    if (!mounted) return;
     setState(() { _loading = true; _error = null; });
     try {
       // Try API first
@@ -76,28 +95,56 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen> {
         final typesList = (res['data']?['types'] as List?) ?? [];
 
         final results = typesList.map((t) {
-          final st = t['runtimeStatus'] as String? ?? 'not_loaded';
+          // Backend /api/user/ai/models trả về flat fields (PLAN):
+          // runtimeStatus: 'loaded' | 'not_loaded' | 'error'
+          // isLoaded, isPredictable: bool
+          // activeVersion, featureCount, lastLoadAt, lastError, runMode
+          final runtimeStatus = t['runtimeStatus'] as String? ?? 'not_loaded';
+          final isLoaded = t['isLoaded'] == true;
+          final isPredictable = t['isPredictable'] == true;
+          final activeVersion = t['activeVersion'] as String?;
+          final featureCount = t['featureCount'] as int?;
+          final lastLoadAt = t['lastLoadAt'] as String?;
+          final lastError = t['lastError'] as String? ?? t['validationError'] as String?;
+          final versionsCount = t['versionsCount'] as int? ?? 0;
+          final runMode = t['runMode'] as String? ?? 'none';
+          final mobileCompatible = t['mobileCompatible'] == true;
+
+          // Tính isLoaded chính xác cho cả server-only model:
+          // nếu backend báo runtimeStatus=='loaded' hoặc có activeVersion
+          // thì coi là ĐÃ LOAD (vì server-only không cần local file).
+          final effectiveLoaded = isLoaded ||
+              runtimeStatus == 'loaded' ||
+              (runMode == 'server_only' && activeVersion != null);
+
           return _ModelInfo(
             key: t['key'] as String? ?? '',
             label: t['label'] as String? ?? '',
             shortName: t['shortName'] as String? ?? '',
             phase: t['phase'] as String? ?? '',
             registryStatus: t['status'] as String? ?? 'planned',
-            isLoaded: st == 'loaded',
-            isPredictable: st == 'loaded',
-            activeVersion: t['activeVersion'] as String?,
-            lastLoadAt: t['lastLoadAt'] as String?,
-            lastError: t['error'] as String?,
+            isLoaded: effectiveLoaded,
+            isPredictable: isPredictable || effectiveLoaded,
+            activeVersion: activeVersion,
+            lastLoadAt: lastLoadAt,
+            lastError: lastError,
+            featureCount: featureCount,
+            availableVersions: versionsCount,
             icon: t['icon'] as String? ?? 'BrainCircuit',
             description: t['description'] as String? ?? '',
-            runMode: t['runMode'] as String? ?? 'none',
-            mobileCompatible: t['mobileCompatible'] == true,
+            runMode: runMode,
+            mobileCompatible: mobileCompatible,
             downloadUrl: t['downloadUrl'] as String?,
           );
         }).toList();
 
         if (results.isNotEmpty) {
-          setState(() { _models = results; _loading = false; });
+          if (!mounted) return;
+          setState(() {
+            _models = results;
+            _loading = false;
+            _lastFetchedAt = DateTime.now();
+          });
           return;
         }
       }
@@ -147,10 +194,16 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen> {
         );
       }).toList();
 
+      if (!mounted) return;
       if (results.isEmpty) {
         setState(() { _error = 'Chưa có model nào được deploy'; _loading = false; });
       } else {
-        setState(() { _models = results; _loading = false; _error = null; });
+        setState(() {
+          _models = results;
+          _loading = false;
+          _error = null;
+          _lastFetchedAt = DateTime.now();
+        });
       }
     } catch (e) {
       debugPrint('[AiModels] Firestore fallback error: $e');
@@ -160,6 +213,19 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Auto-refetch khi user chuyển sang AI tab (index 1)
+    ref.listen<int>(currentTabProvider, (prev, next) {
+      if (next == 1 && prev != 1) {
+        _fetchModels();
+      }
+    });
+    // Auto-refetch khi global pull-to-refresh được kích hoạt
+    ref.listen<DateTime?>(lastRefreshTimeProvider, (prev, next) {
+      if (next != null && next != prev) {
+        _fetchModels();
+      }
+    });
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -171,6 +237,7 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen> {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Expanded(
                       child: Column(
@@ -194,27 +261,8 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen> {
                         ],
                       ),
                     ),
-                    // Refresh button
-                    GestureDetector(
-                      onTap: _loading ? null : _fetchModels,
-                      child: Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceVariant,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: _loading
-                            ? SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: AppColors.primary,
-                                ),
-                              )
-                            : Icon(Icons.refresh_rounded, color: AppColors.primary, size: 18),
-                      ),
-                    ),
+                    // Auto-sync indicator (pull-to-refresh để reload, không còn nút manual)
+                    _buildSyncIndicator(),
                   ],
                 ),
               ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.1),
@@ -523,6 +571,57 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen> {
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  /// Indicator trạng thái sync (không còn nút refresh manual).
+  Widget _buildSyncIndicator() {
+    final last = _lastFetchedAt;
+    String label;
+    if (_loading) {
+      label = 'Đang đồng bộ...';
+    } else if (last == null) {
+      label = 'Chưa đồng bộ';
+    } else {
+      final h = last.hour.toString().padLeft(2, '0');
+      final m = last.minute.toString().padLeft(2, '0');
+      label = 'Cập nhật $h:$m';
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceVariant,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_loading)
+            const SizedBox(
+              width: 12,
+              height: 12,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColors.primary,
+              ),
+            )
+          else
+            Icon(
+              Icons.cloud_done_rounded,
+              color: AppColors.primary,
+              size: 14,
+            ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }

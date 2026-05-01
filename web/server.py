@@ -3472,8 +3472,14 @@ def user_ai_models():
 
     result = []
     for key, meta in types_meta.items():
+        # `st` là dict trả về từ AI server /v1/types (có nested runtimeStatus)
         st = status_map.get(key, {})
-        active_version = st.get('activeVersion') or st.get('active_version')
+        # Extract runtimeStatus nested object từ AI server response
+        rt = st.get('runtimeStatus', {}) if isinstance(st, dict) else {}
+        if not isinstance(rt, dict):
+            rt = {}
+
+        active_version = rt.get('activeVersion') or st.get('activeVersion') or st.get('active_version')
         active_ext = None
         if active_version:
             store = _model_store_for(key)
@@ -3487,6 +3493,19 @@ def user_ai_models():
         download_url = None
         if run_mode == 'on_device' and active_version:
             download_url = f'/api/user/ai/models/{key}/download'
+
+        # Compute runtime status string từ nested rt
+        is_loaded = bool(rt.get('isLoaded', False))
+        is_predictable = bool(rt.get('isPredictable', False))
+        validation_error = rt.get('validationError') or rt.get('lastError')
+        if is_loaded and not validation_error:
+            runtime_status = 'loaded'
+        elif validation_error:
+            runtime_status = 'error'
+        elif active_version:
+            runtime_status = 'loaded'  # server-only model có active_version coi là loaded
+        else:
+            runtime_status = 'not_loaded'
 
         result.append({
             'key': key,
@@ -3509,9 +3528,16 @@ def user_ai_models():
             'runMode': run_mode,
             'mobileCompatible': run_mode == 'on_device',
             'downloadUrl': download_url,
-            'runtimeStatus': st.get('status') or ('loaded' if active_version else 'not_loaded'),
-            'lastLoadAt': st.get('lastLoadAt') or st.get('last_load_at'),
-            'error': st.get('error'),
+            # Flat stable fields cho app (PLAN)
+            'runtimeStatus': runtime_status,
+            'isLoaded': is_loaded,
+            'isPredictable': is_predictable,
+            'featureCount': rt.get('featureCount'),
+            'lastLoadAt': rt.get('lastLoadAt') or rt.get('last_load_at'),
+            'lastError': rt.get('lastError'),
+            'validationError': validation_error,
+            'predictorKind': rt.get('predictorKind'),
+            'versionsCount': rt.get('versionsCount'),
         })
 
     groups = []

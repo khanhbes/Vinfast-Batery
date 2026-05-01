@@ -39,12 +39,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   String _userEmail = '...';
   String _appVersion = '...';
 
+  final _settingsService = SettingsService();
+
   @override
   void initState() {
     super.initState();
+    _settingsService.addListener(_onSettingsChanged);
+    _settingsService.initialize();
     _loadSettings();
     _loadAppVersion();
     _loadUserProfile();
+  }
+
+  @override
+  void dispose() {
+    _settingsService.removeListener(_onSettingsChanged);
+    super.dispose();
+  }
+
+  void _onSettingsChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadSettings() async {
@@ -527,16 +541,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
 
-          // Biometric Auth
-          _buildToggleRow(
-            title: 'Xác thực sinh trắc học',
-            subtitle: 'FaceID / Vân tay khi mở app',
-            value: _biometricAuth,
-            onChanged: (v) {
-              setState(() => _biometricAuth = v);
-              _saveSetting('biometricAuth', v);
-              _showComingSoon('Xác thực sinh trắc học');
-            },
+          // Biometric Auth — chưa phát triển: hiển thị mờ và chặn tap
+          Opacity(
+            opacity: 0.45,
+            child: IgnorePointer(
+              ignoring: true,
+              child: _buildDisabledRow(
+                title: 'Xác thực sinh trắc học',
+                subtitle: 'FaceID / Vân tay khi mở app',
+                badge: 'Sắp ra mắt',
+              ),
+            ),
           ),
           Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
 
@@ -666,9 +681,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   String _getAppearanceValue() {
-    final settings = SettingsService();
-    final themeMode = settings.getThemeMode();
-    final language = settings.getLanguage();
+    final themeMode = _settingsService.getThemeMode();
+    final language = _settingsService.getLanguage();
 
     final themeText = switch (themeMode) {
       AppThemeMode.system => 'Hệ thống',
@@ -683,6 +697,59 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     };
 
     return '$themeText • $langText';
+  }
+
+  Widget _buildDisabledRow({
+    required String title,
+    required String subtitle,
+    required String badge,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    color: AppColors.textTertiary,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceVariant,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              badge,
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

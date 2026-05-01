@@ -12,6 +12,25 @@ service cloud.firestore {
     function notDeleted() {
       return resource.data.isDeleted != true;
     }
+    // True if the authenticated user owns the Vehicles/{vehicleId} document.
+    // Used as a legacy fallback for child docs that may not yet carry ownerUid.
+    function ownsVehicleId(vehicleId) {
+      return isAuth()
+        && vehicleId is string
+        && exists(/databases/$(database)/documents/Vehicles/$(vehicleId))
+        && get(/databases/$(database)/documents/Vehicles/$(vehicleId)).data.ownerUid == request.auth.uid;
+    }
+    // Read access if the doc has ownerUid matching the user, OR (legacy)
+    // ownerUid is missing but vehicleId resolves to a Vehicle the user owns.
+    function canReadOwned() {
+      return isAuth() && (
+        (resource.data.ownerUid == request.auth.uid) ||
+        (!('ownerUid' in resource.data) && ownsVehicleId(resource.data.vehicleId))
+      );
+    }
+    function canCreateOwned() {
+      return isAuth() && request.resource.data.ownerUid == request.auth.uid;
+    }
 
     // ── Users (profile sync từ app) ──
     match /users/{uid} {
@@ -30,8 +49,8 @@ service cloud.firestore {
 
     // ── ChargeLogs ──
     match /ChargeLogs/{logId} {
-      allow read: if isAuth() && isOwner(resource.data.ownerUid) && notDeleted();
-      allow create: if isAuth() && request.resource.data.ownerUid == request.auth.uid;
+      allow read: if canReadOwned() && notDeleted();
+      allow create: if canCreateOwned();
       allow update: if isAuth() && isOwner(resource.data.ownerUid);
       allow delete: if false;
     }
@@ -39,33 +58,57 @@ service cloud.firestore {
     // ── ChargeSamples (AI training data - implicit collection) ──
     // App writes training samples; backend aggregates for fine-tuning
     match /ChargeSamples/{sampleId} {
-      allow read: if isAuth() && isOwner(resource.data.ownerUid) && notDeleted();
-      allow create: if isAuth() && request.resource.data.ownerUid == request.auth.uid;
+      allow read: if canReadOwned() && notDeleted();
+      allow create: if canCreateOwned();
       allow update: if isAuth() && isOwner(resource.data.ownerUid);
       allow delete: if false;
     }
 
     // ── TripLogs ──
     match /TripLogs/{tripId} {
-      allow read: if isAuth() && isOwner(resource.data.ownerUid) && notDeleted();
-      allow create: if isAuth() && request.resource.data.ownerUid == request.auth.uid;
+      allow read: if canReadOwned() && notDeleted();
+      allow create: if canCreateOwned();
       allow update: if isAuth() && isOwner(resource.data.ownerUid);
       allow delete: if false;
     }
 
     // ── MaintenanceTasks ──
     match /MaintenanceTasks/{taskId} {
-      allow read: if isAuth() && isOwner(resource.data.ownerUid) && notDeleted();
-      allow create: if isAuth() && request.resource.data.ownerUid == request.auth.uid;
+      allow read: if canReadOwned() && notDeleted();
+      allow create: if canCreateOwned();
       allow update: if isAuth() && isOwner(resource.data.ownerUid);
       allow delete: if false;
     }
 
     // ── TelemetryPoints ──
     match /TelemetryPoints/{pointId} {
-      allow read: if isAuth() && isOwner(resource.data.ownerUid) && notDeleted();
-      allow create: if isAuth() && request.resource.data.ownerUid == request.auth.uid;
+      allow read: if canReadOwned() && notDeleted();
+      allow create: if canCreateOwned();
       allow update: if false;
+      allow delete: if false;
+    }
+
+    // ── battery_states (real-time SOC snapshots written by app) ──
+    match /battery_states/{stateId} {
+      allow read: if canReadOwned();
+      allow create: if canCreateOwned();
+      allow update: if isAuth() && isOwner(resource.data.ownerUid);
+      allow delete: if false;
+    }
+
+    // ── trip_predictions (AI prediction history) ──
+    match /trip_predictions/{predictionId} {
+      allow read: if canReadOwned();
+      allow create: if canCreateOwned();
+      allow update: if isAuth() && isOwner(resource.data.ownerUid);
+      allow delete: if isAuth() && isOwner(resource.data.ownerUid);
+    }
+
+    // ── soc_predictions (AI SOC prediction history) ──
+    match /soc_predictions/{predictionId} {
+      allow read: if canReadOwned();
+      allow create: if canCreateOwned();
+      allow update: if isAuth() && isOwner(resource.data.ownerUid);
       allow delete: if false;
     }
 
