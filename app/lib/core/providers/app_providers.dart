@@ -1,10 +1,10 @@
 export 'app_state_providers.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/models/charge_log_model.dart';
 import '../../data/models/vehicle_model.dart';
 import '../../data/repositories/charge_log_repository.dart';
+import '../services/session_service.dart';
 
 // =============================================================================
 // Shared Providers for the app
@@ -13,10 +13,9 @@ import '../../data/repositories/charge_log_repository.dart';
 /// Selected vehicle ID
 final selectedVehicleIdProvider = StateProvider<String>((ref) => '');
 
-/// Restore vehicle ID from SharedPreferences
+/// Restore vehicle ID from secure session storage (with prefs fallback)
 final restoreVehicleIdProvider = FutureProvider<String>((ref) async {
-  final prefs = await SharedPreferences.getInstance();
-  return prefs.getString('selected_vehicle_id') ?? '';
+  return await SessionService().getSelectedVehicleId() ?? '';
 });
 
 /// Get vehicle by ID

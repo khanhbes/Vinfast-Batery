@@ -161,10 +161,15 @@ class SyncService {
   /// Đồng bộ battery state với web
   Future<bool> syncBatteryStateToWeb(String vehicleId) async {
     try {
-      // Lấy battery state gần nhất
-      final snapshot = await _firestore
+      // Lấy battery state gần nhất (lọc theo owner cho đúng rules + index)
+      final uid = _auth.currentUser?.uid;
+      Query query = _firestore
           .collection('battery_states')
-          .where('vehicleId', isEqualTo: vehicleId)
+          .where('vehicleId', isEqualTo: vehicleId);
+      if (uid != null) {
+        query = query.where('ownerUid', isEqualTo: uid);
+      }
+      final snapshot = await query
           .orderBy('timestamp', descending: true)
           .limit(1)
           .get();
@@ -174,7 +179,7 @@ class SyncService {
         return false;
       }
 
-      final batteryState = snapshot.docs.first.data();
+      final batteryState = snapshot.docs.first.data() as Map<String, dynamic>;
 
       final response = await http.post(
         Uri.parse('$_baseUrl/api/web/sync/battery-state'),

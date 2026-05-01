@@ -11,22 +11,27 @@ class AppearanceSettingsScreen extends StatefulWidget {
 
 class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
   final _settings = SettingsService();
-  AppThemeMode _themeMode = AppThemeMode.system;
-  AppLanguage _language = AppLanguage.system;
 
   @override
   void initState() {
     super.initState();
-    _loadSettings();
+    _settings.addListener(_onSettingsChanged);
+    // initialize() an toàn: guản nội bộ đã kiểm tra bằng `_initialized`.
+    _settings.initialize();
   }
 
-  Future<void> _loadSettings() async {
-    await _settings.initialize();
-    setState(() {
-      _themeMode = _settings.getThemeMode();
-      _language = _settings.getLanguage();
-    });
+  @override
+  void dispose() {
+    _settings.removeListener(_onSettingsChanged);
+    super.dispose();
   }
+
+  void _onSettingsChanged() {
+    if (mounted) setState(() {});
+  }
+
+  AppThemeMode get _themeMode => _settings.getThemeMode();
+  AppLanguage get _language => _settings.getLanguage();
 
   @override
   Widget build(BuildContext context) {
@@ -236,12 +241,12 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
 
   Future<void> _setThemeMode(AppThemeMode mode) async {
     await _settings.setThemeMode(mode);
-    setState(() => _themeMode = mode);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Đã thay đổi giao diện. Khởi động lại app để áp dụng.'),
-          duration: Duration(seconds: 2),
+          content: Text('Đã áp dụng giao diện mới'),
+          duration: Duration(milliseconds: 1200),
+          behavior: SnackBarBehavior.floating,
         ),
       );
     }
@@ -249,12 +254,12 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
 
   Future<void> _setLanguage(AppLanguage language) async {
     await _settings.setLanguage(language);
-    setState(() => _language = language);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Đã thay đổi ngôn ngữ. Khởi động lại app để áp dụng.'),
-          duration: Duration(seconds: 2),
+          content: Text('Đã áp dụng ngôn ngữ mới'),
+          duration: Duration(milliseconds: 1200),
+          behavior: SnackBarBehavior.floating,
         ),
       );
     }

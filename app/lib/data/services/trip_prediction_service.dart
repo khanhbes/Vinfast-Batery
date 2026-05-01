@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import '../models/trip_prediction_model.dart';
 import '../models/vehicle_model.dart';
@@ -129,10 +130,19 @@ class TripPredictionService {
   /// Lưu prediction vào Firestore
   static Future<void> _savePredictionToFirestore(TripPredictionModel prediction) async {
     try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) {
+        print('Skip trip prediction save: not authenticated');
+        return;
+      }
+      final payload = <String, dynamic>{
+        ...prediction.toFirestore(),
+        'ownerUid': uid,
+      };
       await FirebaseFirestore.instance
           .collection('trip_predictions')
           .doc(prediction.id)
-          .set(prediction.toFirestore());
+          .set(payload);
       
       print('Trip prediction saved to Firestore: ${prediction.id}');
     } catch (e) {
@@ -146,9 +156,14 @@ class TripPredictionService {
     int limit = 10,
   }) async {
     try {
-      final snapshot = await FirebaseFirestore.instance
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      Query query = FirebaseFirestore.instance
           .collection('trip_predictions')
-          .where('vehicleId', isEqualTo: vehicleId)
+          .where('vehicleId', isEqualTo: vehicleId);
+      if (uid != null) {
+        query = query.where('ownerUid', isEqualTo: uid);
+      }
+      final snapshot = await query
           .orderBy('timestamp', descending: true)
           .limit(limit)
           .get();
@@ -196,10 +211,14 @@ class TripPredictionService {
   /// Lấy thống kê dự đoán
   static Future<Map<String, dynamic>> getPredictionStats(String vehicleId) async {
     try {
-      final snapshot = await FirebaseFirestore.instance
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      Query query = FirebaseFirestore.instance
           .collection('trip_predictions')
-          .where('vehicleId', isEqualTo: vehicleId)
-          .get();
+          .where('vehicleId', isEqualTo: vehicleId);
+      if (uid != null) {
+        query = query.where('ownerUid', isEqualTo: uid);
+      }
+      final snapshot = await query.get();
 
       final predictions = snapshot.docs
           .map((doc) => TripPredictionModel.fromFirestore(doc))

@@ -1,10 +1,18 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/utils/firestore_safe_query.dart';
 import '../models/charge_log_model.dart';
 import '../models/vehicle_model.dart';
+
+/// Timeout chung cho mọi Firestore one-shot read trong repository này.
+/// Nếu mạng treo / cache offline rỗng → ném `TimeoutException` thay vì
+/// hang vô hạn ở UI (sẽ bị catch và biến thành `null` / list rỗng).
+const _kFirestoreReadTimeout = Duration(seconds: 8);
 
 // =============================================================================
 // REPOSITORY — Firebase Cloud Firestore
@@ -26,69 +34,61 @@ class ChargeLogRepository {
 
   // ── Vehicle CRUD ──────────────────────────────────────────────────────────
 
-  /// Lấy thông tin 1 xe theo vehicleId
+  /// Lấy thông tin 1 xe theo vehicleId.
+  ///
+  /// Robust: timeout 8s, swallow `permission-denied` / `not-found` về `null`
+  /// để UI fallback nhẹ thay vì hang spinner mãi.
   Future<VehicleModel?> getVehicle(String vehicleId) async {
-    final doc = await _vehiclesRef.doc(vehicleId).get();
-    if (!doc.exists) return null;
-    return VehicleModel.fromFirestore(doc);
+    if (vehicleId.isEmpty) return null;
+    try {
+      final doc = await _vehiclesRef
+          .doc(vehicleId)
+          .get()
+          .timeout(_kFirestoreReadTimeout);
+      if (!doc.exists) return null;
+      return VehicleModel.fromFirestore(doc);
+    } on FirebaseException catch (e) {
+      // Bad selectedVehicleId (xe đã bị xoá / không thuộc user) → null thay vì throw.
+      if (e.code == 'permission-denied' || e.code == 'not-found') {
+        debugPrint('[ChargeLogRepo] getVehicle($vehicleId) ${e.code} → null');
+        return null;
+      }
+      rethrow; // network / unavailable / unknown → cho UI hiện error.
+    } on TimeoutException {
+      debugPrint('[ChargeLogRepo] getVehicle($vehicleId) timed out after 8s');
+      throw TimeoutException(
+        'Không kết nối được Firestore (8s). Kiểm tra mạng hoặc thử lại.',
+        _kFirestoreReadTimeout,
+      );
+    }
   }
 
-  /// Lấy tất cả xe (của user hiện tại)
+  /// Lấy tất cả xe của user hiện tại.
+  ///
+  /// KHÔNG seed xe mặc định nữa (PLAN1: client không được auto-write
+  /// vào Vehicles với hardcoded ID — gây permission-denied + nuốt UI).
+  /// User phải tự thêm xe qua Garage.
   Future<List<VehicleModel>> getAllVehicles() async {
     final uid = _uid;
     Query query = _vehiclesRef;
     if (uid != null) {
       query = query.where('ownerUid', isEqualTo: uid);
     }
-    final snapshot = await query.get();
-    if (snapshot.docs.isEmpty) {
-      // Nếu chưa có xe nào → tạo xe mặc định
-      await _seedDefaultVehicles();
-      final retryQuery = uid != null
-          ? _vehiclesRef.where('ownerUid', isEqualTo: uid)
-          : _vehiclesRef;
-      final retrySnapshot = await retryQuery.get();
-      return retrySnapshot.docs
+    try {
+      final snapshot = await query.get().timeout(_kFirestoreReadTimeout);
+      return snapshot.docs
+          .where((doc) {
+            final data = doc.data() as Map<String, dynamic>?;
+            return data?['isDeleted'] != true;
+          })
           .map((doc) => VehicleModel.fromFirestore(doc))
           .toList();
+    } on TimeoutException {
+      throw TimeoutException(
+        'Không kết nối được Firestore (8s). Kiểm tra mạng hoặc thử lại.',
+        _kFirestoreReadTimeout,
+      );
     }
-    return snapshot.docs
-        .map((doc) => VehicleModel.fromFirestore(doc))
-        .toList();
-  }
-
-  /// Tạo xe mặc định khi Firestore chưa có dữ liệu
-  Future<void> _seedDefaultVehicles() async {
-    final uid = _uid;
-    final batch = _firestore.batch();
-
-    batch.set(_vehiclesRef.doc('VF-OPES-001'), {
-      'vehicleId': 'VF-OPES-001',
-      'vehicleName': 'VinFast Opes',
-      'currentOdo': 0,
-      'totalCharges': 0,
-      'lastBatteryPercent': 100,
-      'avatarColor': '#00C853',
-      'ownerUid': uid,
-      'isDeleted': false,
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-
-    batch.set(_vehiclesRef.doc('VF-KLARA-002'), {
-      'vehicleId': 'VF-KLARA-002',
-      'vehicleName': 'VinFast Klara S',
-      'currentOdo': 0,
-      'totalCharges': 0,
-      'lastBatteryPercent': 100,
-      'avatarColor': '#448AFF',
-      'ownerUid': uid,
-      'isDeleted': false,
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-
-    await batch.commit();
   }
 
   /// Thêm xe mới vào Firestore

@@ -50,20 +50,34 @@ class UserNotification {
   /// Factory từ Firestore document
   factory UserNotification.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>? ?? {};
-    
+
     return UserNotification(
       id: doc.id,
-      userId: data['userId'] ?? '',
-      type: _parseType(data['type']),
-      title: data['title'] ?? '',
-      message: data['message'] ?? '',
-      status: _parseStatus(data['status']),
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      readAt: (data['readAt'] as Timestamp?)?.toDate(),
-      payload: data['payload'] as Map<String, dynamic>?,
-      actionTarget: data['actionTarget'],
-      imageUrl: data['imageUrl'],
+      userId: (data['userId'] as String?) ?? '',
+      type: _parseType(data['type'] as String?),
+      title: (data['title'] as String?) ?? '',
+      message: (data['message'] as String?) ?? '',
+      status: _parseStatus(data['status'] as String?),
+      createdAt: _parseDateTime(data['createdAt']) ?? DateTime.now(),
+      readAt: _parseDateTime(data['readAt']),
+      payload: data['payload'] is Map
+          ? Map<String, dynamic>.from(data['payload'] as Map)
+          : null,
+      actionTarget: data['actionTarget'] as String?,
+      imageUrl: data['imageUrl'] as String?,
     );
+  }
+
+  /// Parse linh hoạt: Timestamp, int (millis), ISO string, hay null/pending.
+  static DateTime? _parseDateTime(dynamic value) {
+    if (value == null) return null;
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    if (value is int) {
+      return DateTime.fromMillisecondsSinceEpoch(value);
+    }
+    if (value is String) return DateTime.tryParse(value);
+    return null;
   }
 
   /// Convert sang Firestore data

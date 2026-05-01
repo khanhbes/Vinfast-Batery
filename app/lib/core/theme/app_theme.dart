@@ -3,6 +3,19 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'app_colors.dart';
+import 'app_motion.dart';
+
+/// Page transitions áp dụng cho mọi platform — đồng bộ với `AppMotion`.
+const PageTransitionsTheme _kAppPageTransitions = PageTransitionsTheme(
+  builders: <TargetPlatform, PageTransitionsBuilder>{
+    TargetPlatform.android: AppPageTransitionsBuilder(),
+    TargetPlatform.iOS: AppPageTransitionsBuilder(),
+    TargetPlatform.fuchsia: AppPageTransitionsBuilder(),
+    TargetPlatform.linux: AppPageTransitionsBuilder(),
+    TargetPlatform.macOS: AppPageTransitionsBuilder(),
+    TargetPlatform.windows: AppPageTransitionsBuilder(),
+  },
+);
 
 /// ThemeData chính cho ứng dụng — Design System V3
 /// Hỗ trợ cả Light và Dark mode (per PLAN1)
@@ -202,6 +215,7 @@ class AppTheme {
         ),
         hintStyle: TextStyle(color: AppColorsLight.textHint),
       ),
+      pageTransitionsTheme: _kAppPageTransitions,
     );
   }
 
@@ -398,6 +412,7 @@ class AppTheme {
         ),
         hintStyle: const TextStyle(color: AppColorsDark.textHint),
       ),
+      pageTransitionsTheme: _kAppPageTransitions,
     );
   }
 }

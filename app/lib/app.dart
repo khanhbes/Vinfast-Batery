@@ -15,42 +15,47 @@ class VinFastBatteryApp extends StatefulWidget {
 }
 
 class _VinFastBatteryAppState extends State<VinFastBatteryApp> {
-  final _settings = SettingsService();
+  final SettingsService _settings = SettingsService();
 
   @override
   void initState() {
     super.initState();
-    _settings.initialize().then((_) {
-      if (mounted) setState(() {});
-    });
+    // initialize() sẽ notifyListeners() ngay sau khi đọc xong prefs,
+    // AnimatedBuilder dưới đây tự rebuild — không cần setState ở đây.
+    _settings.initialize();
   }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'VinFast Battery',
-      debugShowCheckedModeBanner: false,
-      
-      // Theme support (Light/Dark/System per PLAN1)
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: _settings.getThemeModeValue(),
-      
-      // Localization support (Vietnamese/English per PLAN1)
-      locale: _settings.getLocale(),
-      supportedLocales: const [
-        Locale('vi'), // Vietnamese
-        Locale('en'), // English
-      ],
-      localizationsDelegates: const [
-        AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      
-      scaffoldMessengerKey: AppPopup.messengerKey,
-      home: const AuthGate(),
+    // Lắng nghe SettingsService để theme & locale áp dụng ngay lập tức
+    // mỗi khi user đổi cài đặt — không yêu cầu restart.
+    return AnimatedBuilder(
+      animation: _settings,
+      builder: (context, _) => MaterialApp(
+        title: 'VinFast Battery',
+        debugShowCheckedModeBanner: false,
+
+        // Theme support (Light/Dark/System per PLAN1)
+        theme: AppTheme.lightTheme,
+        darkTheme: AppTheme.darkTheme,
+        themeMode: _settings.getThemeModeValue(),
+
+        // Localization support (Vietnamese/English per PLAN1)
+        locale: _settings.getLocale(),
+        supportedLocales: const [
+          Locale('vi'),
+          Locale('en'),
+        ],
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+
+        scaffoldMessengerKey: AppPopup.messengerKey,
+        home: const AuthGate(),
+      ),
     );
   }
 }

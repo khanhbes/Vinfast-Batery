@@ -18,7 +18,9 @@ param(
     [string]$VpsPath   = '/opt/vinfast/web',
     [string]$KeyFile   = "$env:USERPROFILE\.ssh\id_ed25519",
     [string]$AdminKey  = 'vinfast-admin-2024',
-    [string]$ReleaseNotes = ''  # Ghi chú phiên bản, có thể truyền khi chạy
+    [string]$ReleaseNotes = '',         # Ghi chú phiên bản, có thể truyền khi chạy
+    [switch]$ForceUpdate,                # Đánh dấu bản này là bắt buộc cập nhật
+    [int]$MinSupportedBuild = 1          # Build tối thiểu vẫn được dùng (force nếu thấp hơn)
 )
 
 Set-StrictMode -Version Latest
@@ -187,12 +189,12 @@ if (-not $NoDeploy) {
             $apkRelUrl = "/apk/$remoteApkName"
             $notes = if ($ReleaseNotes) { $ReleaseNotes } else { "Build $build — $([datetime]::Now.ToString('dd/MM/yyyy HH:mm'))" }
             $configBody = @{
-                latestVersion    = $newSemver
-                latestBuild      = [int]$build
-                minSupportedBuild = 1
-                apkUrl           = $apkRelUrl
-                releaseNotes     = $notes
-                forceUpdate      = $false
+                latestVersion     = $newSemver
+                latestBuild       = [int]$build
+                minSupportedBuild = [int]$MinSupportedBuild
+                apkUrl            = $apkRelUrl
+                releaseNotes      = $notes
+                forceUpdate       = [bool]$ForceUpdate
             } | ConvertTo-Json -Compress
 
             $configResp = Invoke-RestMethod `
@@ -204,7 +206,8 @@ if (-not $NoDeploy) {
                 -ErrorAction Stop
 
             if ($configResp.success) {
-                Write-Host "  OK app_config.json → v$newSemver (build $build)" -ForegroundColor Green
+                $forceLabel = if ($ForceUpdate) { ' [FORCE]' } else { '' }
+                Write-Host "  OK app_config.json → v$newSemver (build $build, min=$MinSupportedBuild)$forceLabel" -ForegroundColor Green
                 Write-Host "  Download: $ApiUrl/api/app/download" -ForegroundColor DarkGray
             } else {
                 Write-Host "  WARN: API tra loi that bai: $($configResp.error)" -ForegroundColor Yellow

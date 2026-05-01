@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -15,8 +16,12 @@ enum AppLanguage {
   english,
 }
 
-/// Service quản lý cài đặt app (theme, language)
-class SettingsService {
+/// Reactive settings service (theme + language).
+///
+/// Là singleton + [ChangeNotifier]: mọi setter sẽ `notifyListeners()` để
+/// `MaterialApp` (và bất kỳ widget nào lắng nghe) rebuild ngay lập tức,
+/// không cần restart app.
+class SettingsService extends ChangeNotifier {
   static final SettingsService _instance = SettingsService._internal();
   factory SettingsService() => _instance;
   SettingsService._internal();
@@ -25,16 +30,93 @@ class SettingsService {
   static const _languageKey = 'app_language';
 
   SharedPreferences? _prefs;
+  bool _initialized = false;
+  AppThemeMode _themeMode = AppThemeMode.system;
+  AppLanguage _language = AppLanguage.system;
 
-  /// Khởi tạo service
+  bool get isInitialized => _initialized;
+
+  /// Khởi tạo: đọc giá trị từ SharedPreferences và cache lại.
   Future<void> initialize() async {
-    _prefs = await SharedPreferences.getInstance();
+    if (_initialized) return;
+    try {
+      _prefs = await SharedPreferences.getInstance();
+      _themeMode = _decodeThemeMode(_prefs?.getString(_themeKey));
+      _language = _decodeLanguage(_prefs?.getString(_languageKey));
+    } catch (e) {
+      debugPrint('[SettingsService] init error: $e');
+    } finally {
+      _initialized = true;
+      notifyListeners();
+    }
   }
 
-  /// Get theme mode
-  AppThemeMode getThemeMode() {
-    final value = _prefs?.getString(_themeKey) ?? 'system';
-    switch (value) {
+  // ── Theme ──────────────────────────────────────────────────────────
+
+  AppThemeMode getThemeMode() => _themeMode;
+
+  ThemeMode getThemeModeValue() {
+    switch (_themeMode) {
+      case AppThemeMode.light:
+        return ThemeMode.light;
+      case AppThemeMode.dark:
+        return ThemeMode.dark;
+      case AppThemeMode.system:
+        return ThemeMode.system;
+    }
+  }
+
+  Future<void> setThemeMode(AppThemeMode mode) async {
+    if (_themeMode == mode) return;
+    _themeMode = mode;
+    notifyListeners();
+    final value = switch (mode) {
+      AppThemeMode.light => 'light',
+      AppThemeMode.dark => 'dark',
+      AppThemeMode.system => 'system',
+    };
+    try {
+      await _prefs?.setString(_themeKey, value);
+    } catch (e) {
+      debugPrint('[SettingsService] persist theme error: $e');
+    }
+  }
+
+  // ── Language ───────────────────────────────────────────────────────
+
+  AppLanguage getLanguage() => _language;
+
+  Locale? getLocale() {
+    switch (_language) {
+      case AppLanguage.vietnamese:
+        return const Locale('vi');
+      case AppLanguage.english:
+        return const Locale('en');
+      case AppLanguage.system:
+        return null;
+    }
+  }
+
+  Future<void> setLanguage(AppLanguage language) async {
+    if (_language == language) return;
+    _language = language;
+    notifyListeners();
+    final value = switch (language) {
+      AppLanguage.vietnamese => 'vi',
+      AppLanguage.english => 'en',
+      AppLanguage.system => 'system',
+    };
+    try {
+      await _prefs?.setString(_languageKey, value);
+    } catch (e) {
+      debugPrint('[SettingsService] persist language error: $e');
+    }
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────
+
+  static AppThemeMode _decodeThemeMode(String? raw) {
+    switch (raw) {
       case 'light':
         return AppThemeMode.light;
       case 'dark':
@@ -44,20 +126,8 @@ class SettingsService {
     }
   }
 
-  /// Set theme mode
-  Future<void> setThemeMode(AppThemeMode mode) async {
-    final value = switch (mode) {
-      AppThemeMode.light => 'light',
-      AppThemeMode.dark => 'dark',
-      AppThemeMode.system => 'system',
-    };
-    await _prefs?.setString(_themeKey, value);
-  }
-
-  /// Get language
-  AppLanguage getLanguage() {
-    final value = _prefs?.getString(_languageKey) ?? 'system';
-    switch (value) {
+  static AppLanguage _decodeLanguage(String? raw) {
+    switch (raw) {
       case 'vi':
       case 'vietnamese':
         return AppLanguage.vietnamese;
@@ -68,72 +138,4 @@ class SettingsService {
         return AppLanguage.system;
     }
   }
-
-  /// Set language
-  Future<void> setLanguage(AppLanguage language) async {
-    final value = switch (language) {
-      AppLanguage.vietnamese => 'vi',
-      AppLanguage.english => 'en',
-      AppLanguage.system => 'system',
-    };
-    await _prefs?.setString(_languageKey, value);
-  }
-
-  /// Get locale từ language setting
-  Locale? getLocale() {
-    final lang = getLanguage();
-    switch (lang) {
-      case AppLanguage.vietnamese:
-        return const Locale('vi');
-      case AppLanguage.english:
-        return const Locale('en');
-      case AppLanguage.system:
-        return null; // Use system locale
-    }
-  }
-
-  /// Get ThemeMode từ theme setting
-  ThemeMode getThemeModeValue() {
-    final mode = getThemeMode();
-    switch (mode) {
-      case AppThemeMode.light:
-        return ThemeMode.light;
-      case AppThemeMode.dark:
-        return ThemeMode.dark;
-      case AppThemeMode.system:
-        return ThemeMode.system;
-    }
-  }
-
-  /// Stream để lắng nghe thay đổi (đơn giản hóa - dùng polling)
-  Stream<SettingsChange> watchChanges() async* {
-    var lastTheme = getThemeMode();
-    var lastLang = getLanguage();
-
-    while (true) {
-      await Future.delayed(const Duration(seconds: 1));
-      final currentTheme = getThemeMode();
-      final currentLang = getLanguage();
-
-      if (currentTheme != lastTheme || currentLang != lastLang) {
-        yield SettingsChange(
-          themeMode: currentTheme,
-          language: currentLang,
-        );
-        lastTheme = currentTheme;
-        lastLang = currentLang;
-      }
-    }
-  }
-}
-
-/// Class đại diện cho thay đổi settings
-class SettingsChange {
-  final AppThemeMode themeMode;
-  final AppLanguage language;
-
-  SettingsChange({
-    required this.themeMode,
-    required this.language,
-  });
 }

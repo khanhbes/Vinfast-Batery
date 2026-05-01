@@ -1,45 +1,70 @@
-Act as an expert mobile app developer. I need to implement a series of new features, UI/UX improvements, and bug fixes for my electric vehicle/battery management application. 
+# Plan Fix Đăng Nhập, Home, AI Charging, CSV Và Nhắc Rút Sạc
 
-Please review the following requirements and provide the necessary code updates, architecture suggestions, and implementation steps:
+## Summary
+Sửa 4 lỗi đang thấy trên app: giữ session đăng nhập sau khi thoát/update/mở lại, lỗi Home `type 'double' is not a subtype of type 'int'`, tab AI hiển thị sai trạng thái model `charging_time`, bổ sung lưu/gửi/chia sẻ CSV, và sửa lỗi đặt nhắc rút sạc do timezone/local notification chưa khởi tạo.
 
-### 1. UI/UX: Sticky Header
-- Implement a sticky/frozen header for the "Vinfast Battery" title and the notification bell icon so they remain fixed at the top of the screen when the user scrolls. 
-- Clean up the UI by removing any old or duplicate notification icons and legacy "Vinfast Battery" text.
+## Key Changes
+- **Giữ đăng nhập sau khi mở lại app**
+  - Dùng Firebase Auth persistence làm source of truth, không tự logout khi app cold start, kill đa nhiệm, hoặc update.
+  - Sửa `AuthGate` thành bootstrap có trạng thái rõ: chờ `Firebase.initializeApp()` và `FirebaseAuth.authStateChanges()` restore xong mới render `LoginScreen` hoặc `AppNavigation`.
+  - `SessionService` lưu marker `was_authenticated` và `explicit_signed_out`; chỉ `AuthService.signOut()` mới set explicit sign out và clear session metadata.
+  - Nếu Firebase init/auth restore lỗi, hiển thị màn lỗi/retry thay vì đưa user về Login.
+  - Khi login/register thành công, ghi lại `lastLoginEmail`, `was_authenticated=true`, `explicit_signed_out=false`.
 
-### 2. AI Battery Prediction Tab (Fine-Tuning Workflow)
-- Enhance the "AI pin" tab to allow users to interact with and provide feedback to the charging prediction model.
-- **Workflow:** The user inputs their current battery level (e.g., 20% at 2:00 PM) and their target percentage (e.g., 80%). The model predicts the charging time (e.g., 4 hours) and calculates the completion time (6:00 PM).
-- **Reminders:** Set a system reminder/alarm for the user to unplug at the predicted time.
-- **Data Collection:** After the charging session, prompt the user to input the *actual* final battery percentage. Save this real-world data log into a local CSV file so it can be used to fine-tune the model later.
+- **Fix Home hiển thị lỗi double/int**
+  - Sửa `VehicleModel.fromFirestore()` parse số an toàn bằng helper `_asInt()` và `_asDouble()`.
+  - Các field cần đổi: `currentOdo`, `currentBattery`, `lastBatteryPercent`, `totalCharges`, `totalTrips`, `stateOfHealth`, `defaultEfficiency`, `specVersion`.
+  - Chuẩn hóa `AuthService.addVehicle()` ghi field số dạng phù hợp: các giá trị phần trăm/ODO hiển thị int thì lưu `round()`, còn `batteryCapacity`, `defaultEfficiency`, `stateOfHealth` có thể giữ double.
+  - Sau khi fix, `allVehiclesProvider` và `vehicleProvider` không còn throw, Home không hiện 2 banner lỗi đỏ.
 
-### 3. Authentication & Registration
-- **Persistent Login:** Implement local storage for session management so the user stays logged in across app restarts.
-- **Registration Page:** Build a professional, polished sign-up screen capturing: Full Name, Email (to be used as the username), Phone Number, and Password.
-- Route this saved data to a new "Personal Information" section within the app for the user to view/manage.
+- **Fix AI model status và CSV**
+  - Sửa backend `/api/user/ai/models`: parse đúng response AI server `/v1/types`, lấy status từ `data.types[*].runtimeStatus`.
+  - Trả về cho app các field ổn định: `runtimeStatus`, `activeVersion`, `isLoaded`, `isPredictable`, `featureCount`, `lastLoadAt`, `runMode`.
+  - Sửa `AiModelsScreen` để model có `runtimeStatus.loaded` hoặc `isLoaded/isPredictable=true` hiển thị `ĐÃ LOAD`, không còn `CHƯA LOAD`.
+  - Với model `.keras` server-only, vẫn coi là usable nếu server predict được; app không yêu cầu tải local.
+  - Bổ sung `share_plus` để chia sẻ file CSV qua Android share sheet.
+  - `ChargingFeedbackService` thêm hàm `shareCsv()` trả/share file `charging_feedback.csv`.
+  - Nút `GỬI & LƯU CSV` sẽ lưu local trước, gọi `/api/ai/charge-feedback` sau; nếu API lỗi vẫn giữ CSV local và báo rõ “Đã lưu local, gửi server thất bại”.
+  - Thêm nút hoặc action `Chia sẻ CSV` sau khi có dữ liệu feedback.
 
-### 4. Settings Tab Refactoring
-- Fully develop and flesh out the "Settings" screen. 
-- Clean up the codebase by completely removing any redundant, unused, or legacy features from the previous version.
+- **Fix đặt nhắc nhở rút sạc**
+  - Sửa `NotificationService.initialize()` để khởi tạo timezone trước khi schedule:
+    `tz.initializeTimeZones()` và set local `Asia/Ho_Chi_Minh`.
+  - Đảm bảo `_setReminder()` luôn gọi `await NotificationService().initialize()` trước `scheduleChargeReminder()`.
+  - Xin quyền notification trước khi schedule trên Android 13+.
+  - Với Android 12+, dùng exact alarm nếu được phép; nếu không, fallback sang `inexactAllowWhileIdle` để không crash.
+  - Validate thời gian nhắc: nếu thời điểm đã qua hoặc `_predictedMinutes <= 0`, không schedule và hiện thông báo hợp lệ.
 
-### 5. Vehicle Garage (Within Settings)
-- Create a comprehensive "Add Vehicle" feature inside the "Vehicle Garage" menu.
-- **Database/Selection:** Allow users to select from a comprehensive list of electric motorcycles on the market (filtering by Brand, Model, Release Year, Manufacturer).
-- **Specs Display:** Once a vehicle is selected, display a professional, detailed spec sheet (Name, Color, Battery specs, Motor power, etc.).
-- **Editable Specs:** Add an "Edit" function so the user can manually correct or update the vehicle's specifications if the default database info is inaccurate.
+## Public API / Dependencies
+- Thêm dependency app: `share_plus`.
+- Backend `/api/user/ai/models` giữ route cũ, bổ sung/chuẩn hóa fields:
+  - `runtimeStatus`: `"loaded" | "not_loaded" | "error"`.
+  - `isLoaded`: bool.
+  - `isPredictable`: bool.
+  - `activeVersion`: string/null.
+  - `runMode`: `"server_only" | "on_device" | "none"`.
+- App tiếp tục dùng `/api/ai/predict-charging-time` và `/api/ai/charge-feedback`.
 
-### 6. Dynamic AI Model Updates
-- Implement a background or on-launch sync mechanism. When a new prediction model is deployed on the server, the app should automatically fetch and update the model used in the AI tab without requiring a full app store update.
+## Test Plan
+- **Session**
+  - Login thành công, kill app khỏi đa nhiệm, mở lại: vẫn vào Home.
+  - Login thành công, cài APK update cùng package id, mở lại: vẫn logged in.
+  - Bấm Đăng xuất, kill/mở lại: về Login.
+- **Home**
+  - Tạo xe mới có `currentOdo: 0.0`, `lastBatteryPercent: 100.0`: Home load không lỗi.
+  - Pull refresh Home: không hiện `Không tải được danh sách xe` hoặc `Không tải được thông tin xe`.
+- **AI**
+  - Backend trả `charging_time` active/loaded: app hiển thị `ĐÃ LOAD`.
+  - Tap model, bấm `DỰ ĐOÁN VỚI AI`: nhận kết quả thời gian và giờ hoàn thành.
+  - Bấm `GỬI & LƯU CSV`: file local được tạo, feedback server gửi được hoặc lỗi server không làm mất CSV.
+  - Bấm chia sẻ CSV: Android share sheet mở và file đính kèm được.
+- **Reminder**
+  - Bấm `Đặt nhắc nhở rút sạc`: không còn `LateInitializationError`.
+  - Từ chối quyền notification: app báo cần quyền, không crash.
+  - Cho quyền notification: schedule thành công và snackbar “Đã đặt nhắc nhở...” hiển thị.
+- Chạy `flutter analyze`, unit/widget tests hiện có, và build APK release.
 
-### 7. Application Settings Implementation
-- Fully develop the following toggles/menus in Application Settings:
-  - Notifications (General)
-  - Theme Toggle (Light/Dark mode)
-  - Push Notifications
-  - Biometric Authentication (FaceID/Fingerprint)
-  - Help
-  - About
-- **Fallback:** If any of these specific features cannot be fully implemented yet, ensure tapping them triggers an "Under Development" (Coming Soon) snackbar/toast rather than a dead tap.
-
-### 8. App Version Synchronization
-- Fix the versioning display. The app is currently incorrectly showing "V2.4.1". 
-- Ensure the UI dynamically fetches and displays the actual build version from the app's package information (e.g., via `package_info_plus` if using Flutter) rather than using a hardcoded string.
+## Assumptions
+- Không lưu mật khẩu người dùng local; giữ đăng nhập bằng Firebase Auth token persistence.
+- Model `charging_time` hiện chạy server-side, nên status `ĐÃ LOAD` dựa trên runtime server, không dựa trên local model file.
+- CSV cần chia sẻ qua share sheet hệ thống Android là đủ cho “gửi và chia sẻ”.

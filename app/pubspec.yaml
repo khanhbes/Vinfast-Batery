@@ -1,7 +1,7 @@
 name: vinfast_battery
 description: "VinFast Battery - Quản lý pin xe máy điện VinFast"
 publish_to: 'none'
-version: 1.0.49+50
+version: 1.0.55+56
 
 environment:
   sdk: ^3.11.0
@@ -43,6 +43,9 @@ dependencies:
 
   # Shared Preferences (background service communication)
   shared_preferences: ^2.3.4
+
+  # Secure storage for session metadata (selected vehicle, last login email)
+  flutter_secure_storage: ^9.2.2
   
   # Timezone for scheduling notifications
   timezone: ^0.9.4
@@ -52,6 +55,9 @@ dependencies:
   
   # HTTP client for API calls
   http: ^1.2.2
+
+  # Share CSV files via system share sheet
+  share_plus: ^10.1.4
 
   # App version info + update
   package_info_plus: ^8.3.0
