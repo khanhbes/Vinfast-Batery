@@ -64,6 +64,16 @@
       ]
     },
     {
+      "collectionGroup": "MaintenanceTasks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "ownerUid", "order": "ASCENDING" },
+        { "fieldPath": "vehicleId", "order": "ASCENDING" },
+        { "fieldPath": "isDeleted", "order": "ASCENDING" },
+        { "fieldPath": "targetOdo", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "TelemetryPoints",
       "queryScope": "COLLECTION",
       "fields": [

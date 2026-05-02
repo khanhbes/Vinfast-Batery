@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/maintenance_task_model.dart';
@@ -9,9 +10,10 @@ class MaintenanceRepository {
   final FirebaseFirestore _instanceFirestore;
 
   MaintenanceRepository({FirebaseFirestore? firestore})
-      : _instanceFirestore = firestore ?? FirebaseFirestore.instance;
+    : _instanceFirestore = firestore ?? FirebaseFirestore.instance;
 
-  CollectionReference get _tasksRef => _instanceFirestore.collection('MaintenanceTasks');
+  CollectionReference get _tasksRef =>
+      _instanceFirestore.collection('MaintenanceTasks');
 
   String? get _uid => FirebaseAuth.instance.currentUser?.uid;
 
@@ -89,19 +91,37 @@ class MaintenanceRepository {
 
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  /// Stream of maintenance tasks for real-time updates
-  static Stream<List<MaintenanceTaskModel>> watchMaintenanceTasks(String vehicleId) {
+  /// Stream of maintenance tasks for real-time updates.
+  ///
+  /// Query tối giản theo ownerUid rồi filter/sort phía client.
+  /// Service tab không phụ thuộc composite index nên sẽ không kẹt skeleton
+  /// khi server chưa deploy index mới.
+  static Stream<List<MaintenanceTaskModel>> watchMaintenanceTasks(
+    String vehicleId,
+  ) {
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return const Stream.empty();
-    return _firestore.collection('MaintenanceTasks')
+    if (uid == null) return Stream.value(const <MaintenanceTaskModel>[]);
+
+    return _firestore
+        .collection('MaintenanceTasks')
         .where('ownerUid', isEqualTo: uid)
-        .where('vehicleId', isEqualTo: vehicleId)
-        .where('isDeleted', isEqualTo: false)
-        .orderBy('targetOdo')
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => MaintenanceTaskModel.fromFirestore(doc))
-            .toList());
+        .map((snapshot) {
+          final tasks = snapshot.docs
+              .where((doc) {
+                final data = doc.data();
+                return data['vehicleId'] == vehicleId &&
+                    data['isDeleted'] != true;
+              })
+              .map((doc) => MaintenanceTaskModel.fromFirestore(doc))
+              .toList();
+          tasks.sort((a, b) => a.targetOdo.compareTo(b.targetOdo));
+          return tasks;
+        })
+        .handleError((Object error, StackTrace st) {
+          debugPrint('[MaintenanceRepo] Watch error: $error');
+          throw error;
+        });
   }
 
   /// Create a new maintenance task
@@ -121,12 +141,14 @@ class MaintenanceRepository {
       'targetOdo': targetOdo,
       'isCompleted': false,
       'serviceType': serviceType.name,
-      'scheduledDate': scheduledDate != null ? Timestamp.fromDate(scheduledDate) : null,
+      'scheduledDate': scheduledDate != null
+          ? Timestamp.fromDate(scheduledDate)
+          : null,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
       'isDeleted': false,
-      if (uid != null) 'ownerUid': uid,
     };
+    if (uid != null) data['ownerUid'] = uid;
     await _firestore.collection('MaintenanceTasks').add(data);
   }
 

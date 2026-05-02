@@ -87,14 +87,19 @@ class LocalModelManifest {
       version: json['version'] ?? '',
       localPath: json['localPath'] ?? '',
       artifactExt: json['artifactExt'] ?? '.tflite',
-      downloadedAt: DateTime.tryParse(json['downloadedAt'] ?? '') ?? DateTime.now(),
+      downloadedAt:
+          DateTime.tryParse(json['downloadedAt'] ?? '') ?? DateTime.now(),
       fileSize: json['fileSize'] ?? 0,
     );
   }
 }
 
 /// Callback khi có model update
-typedef OnModelUpdate = void Function(List<DeployedModelInfo> newModels, List<DeployedModelInfo> updatedModels);
+typedef OnModelUpdate =
+    void Function(
+      List<DeployedModelInfo> newModels,
+      List<DeployedModelInfo> updatedModels,
+    );
 
 /// Service đồng bộ model từ server về app
 class ModelSyncService {
@@ -104,6 +109,7 @@ class ModelSyncService {
 
   static const _manifestKey = 'model_sync_manifest';
   static const _lastSyncKey = 'model_sync_last_check';
+  static const _deployedVersionsKey = 'model_sync_deployed_versions';
 
   Map<String, LocalModelManifest> _localManifest = {};
   List<DeployedModelInfo> _lastDeployedModels = [];
@@ -113,20 +119,25 @@ class ModelSyncService {
   /// Khởi tạo service, load manifest local
   Future<void> initialize() async {
     await _loadManifest();
-    debugPrint('[ModelSync] Initialized with ${_localManifest.length} local models');
+    debugPrint(
+      '[ModelSync] Initialized with ${_localManifest.length} local models',
+    );
   }
 
   /// Đồng bộ model từ server - gọi khi app mở/resume
   Future<ModelSyncResult> sync({bool force = false}) async {
     try {
+      final prefs = await SharedPreferences.getInstance();
+
       // Check throttle (6 giờ)
       if (!force) {
-        final prefs = await SharedPreferences.getInstance();
         final lastSync = prefs.getInt(_lastSyncKey) ?? 0;
         final now = DateTime.now().millisecondsSinceEpoch;
         final hoursSince = (now - lastSync) / (1000 * 60 * 60);
         if (hoursSince < 6) {
-          return ModelSyncResult.skipped('Throttled: ${hoursSince.toStringAsFixed(1)}h since last sync');
+          return ModelSyncResult.skipped(
+            'Throttled: ${hoursSince.toStringAsFixed(1)}h since last sync',
+          );
         }
       }
 
@@ -138,35 +149,46 @@ class ModelSyncService {
 
       final data = response['data'] ?? {};
       final types = (data['types'] as List<dynamic>? ?? []);
-      
+
       final deployedModels = types
           .map((t) => DeployedModelInfo.fromJson(t as Map<String, dynamic>))
           .toList();
 
       _lastDeployedModels = deployedModels;
 
-      // So sánh với local manifest
+      // So sánh với version đã thấy từ server. Không chỉ dựa vào local manifest
+      // vì nhiều model chạy server-only (.keras/.pkl) không tải về app.
+      final seenVersions = _decodeVersionMap(
+        prefs.getString(_deployedVersionsKey),
+      );
+      final nextSeenVersions = Map<String, String>.from(seenVersions);
       final newModels = <DeployedModelInfo>[];
       final updatedModels = <DeployedModelInfo>[];
 
       for (final model in deployedModels) {
-        if (!model.mobileCompatible || model.downloadUrl == null) continue;
+        final version = model.deploymentVersion;
+        if (version == null || version.isEmpty) continue;
 
-        final local = _localManifest[model.key];
-        if (local == null) {
-          // Model mới chưa có local
+        final seenVersion = seenVersions[model.key];
+        if (seenVersion == null) {
           newModels.add(model);
-        } else if (local.version != model.deploymentVersion) {
-          // Có version mới
+        } else if (seenVersion != version) {
           updatedModels.add(model);
         }
+        nextSeenVersions[model.key] = version;
       }
 
       // Tải model mới/cập nhật
       final downloaded = <DeployedModelInfo>[];
       final failed = <String>[];
 
-      for (final model in [...newModels, ...updatedModels]) {
+      final downloadableModels = [...newModels, ...updatedModels].where((
+        model,
+      ) {
+        return model.mobileCompatible && model.downloadUrl != null;
+      });
+
+      for (final model in downloadableModels) {
         final success = await _downloadModel(model);
         if (success) {
           downloaded.add(model);
@@ -176,11 +198,12 @@ class ModelSyncService {
       }
 
       // Cập nhật timestamp
-      final prefs = await SharedPreferences.getInstance();
       await prefs.setInt(_lastSyncKey, DateTime.now().millisecondsSinceEpoch);
+      await prefs.setString(_deployedVersionsKey, jsonEncode(nextSeenVersions));
 
       // Callback
-      if (onModelUpdate != null && (newModels.isNotEmpty || updatedModels.isNotEmpty)) {
+      if (onModelUpdate != null &&
+          (newModels.isNotEmpty || updatedModels.isNotEmpty)) {
         onModelUpdate!(newModels, updatedModels);
       }
 
@@ -191,7 +214,6 @@ class ModelSyncService {
         downloaded: downloaded.length,
         failed: failed,
       );
-
     } catch (e, stack) {
       debugPrint('[ModelSync] Error: $e\n$stack');
       return ModelSyncResult.failed(e.toString());
@@ -204,10 +226,15 @@ class ModelSyncService {
 
     try {
       final url = '${AppConstants.apiBaseUrl}${model.downloadUrl}';
-      final response = await http.get(Uri.parse(url), headers: await ApiService().getHeaders());
+      final response = await http.get(
+        Uri.parse(url),
+        headers: await ApiService().getHeaders(),
+      );
 
       if (response.statusCode != 200) {
-        debugPrint('[ModelSync] Download failed for ${model.key}: ${response.statusCode}');
+        debugPrint(
+          '[ModelSync] Download failed for ${model.key}: ${response.statusCode}',
+        );
         return false;
       }
 
@@ -238,9 +265,10 @@ class ModelSyncService {
       _localManifest[model.key] = manifest;
       await _saveManifest();
 
-      debugPrint('[ModelSync] Downloaded ${model.key} v${model.deploymentVersion} (${response.bodyBytes.length} bytes)');
+      debugPrint(
+        '[ModelSync] Downloaded ${model.key} v${model.deploymentVersion} (${response.bodyBytes.length} bytes)',
+      );
       return true;
-
     } catch (e) {
       debugPrint('[ModelSync] Download error for ${model.key}: $e');
       return false;
@@ -297,10 +325,12 @@ class ModelSyncService {
       final jsonStr = prefs.getString(_manifestKey);
       if (jsonStr != null) {
         final data = jsonDecode(jsonStr) as Map<String, dynamic>;
-        _localManifest = data.map((key, value) => MapEntry(
-          key,
-          LocalModelManifest.fromJson(value as Map<String, dynamic>),
-        ));
+        _localManifest = data.map(
+          (key, value) => MapEntry(
+            key,
+            LocalModelManifest.fromJson(value as Map<String, dynamic>),
+          ),
+        );
       }
     } catch (e) {
       debugPrint('[ModelSync] Load manifest error: $e');
@@ -312,18 +342,36 @@ class ModelSyncService {
   Future<void> _saveManifest() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final data = _localManifest.map((key, value) => MapEntry(key, value.toJson()));
+      final data = _localManifest.map(
+        (key, value) => MapEntry(key, value.toJson()),
+      );
       await prefs.setString(_manifestKey, jsonEncode(data));
     } catch (e) {
       debugPrint('[ModelSync] Save manifest error: $e');
     }
   }
 
+  Map<String, String> _decodeVersionMap(String? raw) {
+    if (raw == null || raw.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return {};
+      return decoded.map(
+        (key, value) => MapEntry(key.toString(), value.toString()),
+      );
+    } catch (e) {
+      debugPrint('[ModelSync] Version cache decode error: $e');
+      return {};
+    }
+  }
+
   /// Lấy danh sách models đã deploy từ lần sync cuối
-  List<DeployedModelInfo> get lastDeployedModels => List.unmodifiable(_lastDeployedModels);
+  List<DeployedModelInfo> get lastDeployedModels =>
+      List.unmodifiable(_lastDeployedModels);
 
   /// Lấy danh sách local manifests
-  List<LocalModelManifest> get localManifests => List.unmodifiable(_localManifest.values);
+  List<LocalModelManifest> get localManifests =>
+      List.unmodifiable(_localManifest.values);
 }
 
 /// Kết quả đồng bộ model
@@ -365,16 +413,10 @@ class ModelSyncResult {
   }
 
   factory ModelSyncResult.failed(String error) {
-    return ModelSyncResult(
-      success: false,
-      message: 'Lỗi: $error',
-    );
+    return ModelSyncResult(success: false, message: 'Lỗi: $error');
   }
 
   factory ModelSyncResult.skipped(String reason) {
-    return ModelSyncResult(
-      success: true,
-      message: 'Bỏ qua: $reason',
-    );
+    return ModelSyncResult(success: true, message: 'Bỏ qua: $reason');
   }
 }

@@ -1,8 +1,9 @@
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/providers/app_state_providers.dart';
@@ -63,12 +64,17 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
   bool _loading = true;
   String? _error;
   DateTime? _lastFetchedAt;
+  bool _fromCache = false; // true khi đang hiển thị dữ liệu cache
+  int _retryCount = 0;
+  static const _cacheKey = 'ai_models_catalog_v2';
+  static const _maxRetries = 3;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _fetchModels();
+    // Load cache ngay để hiển thị nhanh, rồi fetch mới ở background
+    _loadFromCache().then((_) => _fetchModels());
   }
 
   @override
@@ -79,87 +85,268 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Auto-refresh khi app trở lại foreground
     if (state == AppLifecycleState.resumed) {
+      _retryCount = 0;
       _fetchModels();
     }
   }
 
+  // ── Cache helpers ────────────────────────────────────────────────
+
+  Future<void> _loadFromCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_cacheKey);
+      if (raw == null || raw.isEmpty) return;
+      final list = (jsonDecode(raw) as List<dynamic>)
+          .map((m) => _fromCacheMap(m as Map<String, dynamic>))
+          .toList();
+      if (list.isNotEmpty && mounted) {
+        setState(() {
+          _models = list;
+          _loading = false; // Hiển thị cache ngay, không spinner
+          _fromCache = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('[AiModels] Cache read error: $e');
+    }
+  }
+
+  Future<void> _saveToCache(List<_ModelInfo> models) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = jsonEncode(models.map(_toCacheMap).toList());
+      await prefs.setString(_cacheKey, raw);
+    } catch (e) {
+      debugPrint('[AiModels] Cache write error: $e');
+    }
+  }
+
+  Map<String, dynamic> _toCacheMap(_ModelInfo m) => {
+    'key': m.key,
+    'label': m.label,
+    'shortName': m.shortName,
+    'phase': m.phase,
+    'registryStatus': m.registryStatus,
+    'isLoaded': m.isLoaded,
+    'isPredictable': m.isPredictable,
+    'activeVersion': m.activeVersion,
+    'lastLoadAt': m.lastLoadAt,
+    'lastError': m.lastError,
+    'featureCount': m.featureCount,
+    'availableVersions': m.availableVersions,
+    'icon': m.icon,
+    'description': m.description,
+    'runMode': m.runMode,
+    'mobileCompatible': m.mobileCompatible,
+    'downloadUrl': m.downloadUrl,
+  };
+
+  _ModelInfo _fromCacheMap(Map<String, dynamic> m) => _ModelInfo(
+    key: m['key'] as String? ?? '',
+    label: m['label'] as String? ?? '',
+    shortName: m['shortName'] as String? ?? '',
+    phase: m['phase'] as String? ?? '',
+    registryStatus: m['registryStatus'] as String? ?? 'planned',
+    isLoaded: m['isLoaded'] as bool? ?? false,
+    isPredictable: m['isPredictable'] as bool? ?? false,
+    activeVersion: m['activeVersion'] as String?,
+    lastLoadAt: m['lastLoadAt'] as String?,
+    lastError: m['lastError'] as String?,
+    featureCount: m['featureCount'] as int?,
+    availableVersions: m['availableVersions'] as int? ?? 0,
+    icon: m['icon'] as String? ?? 'BrainCircuit',
+    description: m['description'] as String? ?? '',
+    runMode: m['runMode'] as String? ?? 'none',
+    mobileCompatible: m['mobileCompatible'] as bool? ?? false,
+    downloadUrl: m['downloadUrl'] as String?,
+  );
+
+  static String? _stringOrNull(dynamic value) {
+    if (value == null) return null;
+    final str = value.toString().trim();
+    return str.isEmpty ? null : str;
+  }
+
+  static int? _intOrNull(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
+  }
+
+  static bool _boolValue(dynamic value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    if (value is String) return value.toLowerCase() == 'true';
+    return false;
+  }
+
+  // ── Cập nhật cache khi predict thành công (mark model là loaded) ──
+  void markModelPredictSuccess(String modelKey) {
+    final updated = _models.map((m) {
+      if (m.key == modelKey && !m.isLoaded) {
+        return _ModelInfo(
+          key: m.key,
+          label: m.label,
+          shortName: m.shortName,
+          phase: m.phase,
+          registryStatus: m.registryStatus,
+          isLoaded: true,
+          isPredictable: true,
+          activeVersion: m.activeVersion,
+          lastLoadAt: m.lastLoadAt,
+          lastError: null,
+          featureCount: m.featureCount,
+          availableVersions: m.availableVersions,
+          icon: m.icon,
+          description: m.description,
+          runMode: m.runMode,
+          mobileCompatible: m.mobileCompatible,
+          downloadUrl: m.downloadUrl,
+        );
+      }
+      return m;
+    }).toList();
+    if (mounted) setState(() => _models = updated);
+    _saveToCache(updated);
+  }
+
   Future<void> _fetchModels() async {
     if (!mounted) return;
-    setState(() { _loading = true; _error = null; });
+    // Nếu đã có dữ liệu (cache hoặc fresh), chỉ refresh loading nhẹ
+    final hasCurrent = _models.isNotEmpty;
+    if (!hasCurrent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
+
     try {
-      // Try API first
       final res = await ApiService().getUserAiModels();
       if (res['success'] == true) {
         final typesList = (res['data']?['types'] as List?) ?? [];
 
-        final results = typesList.map((t) {
+        final results = typesList.map((raw) {
+          final t = Map<String, dynamic>.from(raw as Map);
           // Backend /api/user/ai/models trả về flat fields (PLAN):
           // runtimeStatus: 'loaded' | 'not_loaded' | 'error'
           // isLoaded, isPredictable: bool
           // activeVersion, featureCount, lastLoadAt, lastError, runMode
-          final runtimeStatus = t['runtimeStatus'] as String? ?? 'not_loaded';
-          final isLoaded = t['isLoaded'] == true;
-          final isPredictable = t['isPredictable'] == true;
-          final activeVersion = t['activeVersion'] as String?;
-          final featureCount = t['featureCount'] as int?;
-          final lastLoadAt = t['lastLoadAt'] as String?;
-          final lastError = t['lastError'] as String? ?? t['validationError'] as String?;
-          final versionsCount = t['versionsCount'] as int? ?? 0;
-          final runMode = t['runMode'] as String? ?? 'none';
-          final mobileCompatible = t['mobileCompatible'] == true;
+          final runtimeStatus =
+              _stringOrNull(t['runtimeStatus']) ??
+              _stringOrNull(t['runtimeHealth']) ??
+              'not_loaded';
+          final activeVersion =
+              _stringOrNull(t['activeVersion']) ??
+              _stringOrNull(t['deploymentVersion']) ??
+              _stringOrNull(t['latestUploadedVersion']);
+          final lastLoadAt =
+              _stringOrNull(t['lastLoadAt']) ?? _stringOrNull(t['deployedAt']);
+          final lastError =
+              _stringOrNull(t['lastError']) ??
+              _stringOrNull(t['validationError']);
+          final runMode = _stringOrNull(t['runMode']) ?? 'none';
+          final deploymentStatus =
+              _stringOrNull(t['deploymentStatus']) ??
+              _stringOrNull(t['status']) ??
+              'planned';
+          final mobileCompatible = _boolValue(t['mobileCompatible']);
+          final isLoaded = _boolValue(t['isLoaded']);
+          final isPredictable = _boolValue(t['isPredictable']);
 
-          // Tính isLoaded chính xác cho cả server-only model:
-          // nếu backend báo runtimeStatus=='loaded' hoặc có activeVersion
-          // thì coi là ĐÃ LOAD (vì server-only không cần local file).
-          final effectiveLoaded = isLoaded ||
-              runtimeStatus == 'loaded' ||
-              (runMode == 'server_only' && activeVersion != null);
+          // Server-only model (.keras/.pkl) vẫn chạy qua backend predict.
+          // Có active/deployed version và không có lỗi runtime thì coi là đã triển khai.
+          final hasDeployedVersion =
+              activeVersion != null ||
+              deploymentStatus == 'deployed' ||
+              runtimeStatus == 'loaded';
+          final effectiveLoaded =
+              lastError == null &&
+              (isLoaded ||
+                  isPredictable ||
+                  runtimeStatus == 'loaded' ||
+                  runtimeStatus == 'deployed' ||
+                  (runMode == 'server_only' && hasDeployedVersion) ||
+                  hasDeployedVersion);
 
           return _ModelInfo(
-            key: t['key'] as String? ?? '',
-            label: t['label'] as String? ?? '',
-            shortName: t['shortName'] as String? ?? '',
-            phase: t['phase'] as String? ?? '',
-            registryStatus: t['status'] as String? ?? 'planned',
+            key: _stringOrNull(t['key']) ?? '',
+            label: _stringOrNull(t['label']) ?? '',
+            shortName: _stringOrNull(t['shortName']) ?? '',
+            phase: _stringOrNull(t['phase']) ?? '',
+            registryStatus: deploymentStatus,
             isLoaded: effectiveLoaded,
             isPredictable: isPredictable || effectiveLoaded,
             activeVersion: activeVersion,
             lastLoadAt: lastLoadAt,
             lastError: lastError,
-            featureCount: featureCount,
-            availableVersions: versionsCount,
-            icon: t['icon'] as String? ?? 'BrainCircuit',
-            description: t['description'] as String? ?? '',
+            featureCount: _intOrNull(t['featureCount']),
+            availableVersions: _intOrNull(t['versionsCount']) ?? 0,
+            icon: _stringOrNull(t['icon']) ?? 'BrainCircuit',
+            description: _stringOrNull(t['description']) ?? '',
             runMode: runMode,
             mobileCompatible: mobileCompatible,
-            downloadUrl: t['downloadUrl'] as String?,
+            downloadUrl: _stringOrNull(t['downloadUrl']),
           );
         }).toList();
 
         if (results.isNotEmpty) {
           if (!mounted) return;
+          _retryCount = 0;
+          await _saveToCache(results);
           setState(() {
             _models = results;
             _loading = false;
+            _fromCache = false;
+            _error = null;
             _lastFetchedAt = DateTime.now();
           });
           return;
         }
       }
 
-      // Fallback: read from Firestore AiModelDeployments
+      // API trả success=false hoặc list rỗng → fallback Firestore
       await _fetchModelsFromFirestore();
     } catch (e) {
-      // API failed — try Firestore fallback
-      debugPrint('[AiModels] API error: $e, falling back to Firestore');
+      debugPrint('[AiModels] API error: $e');
+      // Còn cache → giữ nguyên, hiển thị error nhẹ, retry
+      if (_models.isNotEmpty) {
+        if (mounted) {
+          setState(() {
+            _loading = false;
+            _fromCache = true;
+            _error = null; // không show full-page error khi có cache
+          });
+        }
+        _scheduleRetry();
+        return;
+      }
+      // Không có cache → thử Firestore
       try {
         await _fetchModelsFromFirestore();
       } catch (e2) {
-        setState(() { _error = e.toString(); _loading = false; });
+        if (mounted) {
+          setState(() {
+            _error = e.toString();
+            _loading = false;
+          });
+        }
       }
     }
+  }
+
+  void _scheduleRetry() {
+    if (_retryCount >= _maxRetries) return;
+    _retryCount++;
+    final delay = Duration(seconds: 2 << _retryCount); // 4s, 8s, 16s
+    debugPrint('[AiModels] Retry #$_retryCount in ${delay.inSeconds}s');
+    Future.delayed(delay, () {
+      if (mounted) _fetchModels();
+    });
   }
 
   /// Fallback: read deployed models from Firestore collection
@@ -172,14 +359,18 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
       final results = snapshot.docs.map((doc) {
         final d = doc.data();
         final activeVersion = d['activeVersion'] as Map<String, dynamic>? ?? {};
-        final versionStr = activeVersion['version'] as String? ?? d['latestVersion'] as String?;
-        final isDeployed = d['status'] == 'deployed' || activeVersion.isNotEmpty;
+        final versionStr =
+            activeVersion['version'] as String? ??
+            d['latestVersion'] as String?;
+        final isDeployed =
+            d['status'] == 'deployed' || activeVersion.isNotEmpty;
 
         return _ModelInfo(
           key: doc.id,
           label: d['label'] as String? ?? d['name'] as String? ?? doc.id,
           shortName: d['shortName'] as String? ?? '',
-          phase: d['phase'] as String? ?? (isDeployed ? 'production' : 'planned'),
+          phase:
+              d['phase'] as String? ?? (isDeployed ? 'production' : 'planned'),
           registryStatus: d['status'] as String? ?? 'planned',
           isLoaded: isDeployed,
           isPredictable: isDeployed,
@@ -196,7 +387,10 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
 
       if (!mounted) return;
       if (results.isEmpty) {
-        setState(() { _error = 'Chưa có model nào được deploy'; _loading = false; });
+        setState(() {
+          _error = 'Chưa có model nào được deploy';
+          _loading = false;
+        });
       } else {
         setState(() {
           _models = results;
@@ -207,7 +401,10 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
       }
     } catch (e) {
       debugPrint('[AiModels] Firestore fallback error: $e');
-      setState(() { _error = 'Không thể tải models: $e'; _loading = false; });
+      setState(() {
+        _error = 'Không thể tải models: $e';
+        _loading = false;
+      });
     }
   }
 
@@ -290,15 +487,69 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.wifi_off_rounded, color: AppColors.error, size: 20),
+                        Icon(
+                          Icons.wifi_off_rounded,
+                          color: AppColors.error,
+                          size: 20,
+                        ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Không kết nối được server', style: TextStyle(color: AppColors.error, fontWeight: FontWeight.w700, fontSize: 13)),
-                              Text(AppConstants.apiBaseUrl, style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                              Text(
+                                'Không kết nối được server',
+                                style: TextStyle(
+                                  color: AppColors.error,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              Text(
+                                AppConstants.apiBaseUrl,
+                                style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 11,
+                                ),
+                              ),
                             ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+            // Cache indicator — hiển thị khi đang dùng dữ liệu cache
+            if (_fromCache && _error == null)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withAlpha(30),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.amber.withAlpha(80)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.history_rounded,
+                          color: Colors.amber.shade400,
+                          size: 14,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Dữ liệu cache — đang kiểm tra server...',
+                          style: TextStyle(
+                            color: Colors.amber.shade300,
+                            fontSize: 12,
                           ),
                         ),
                       ],
@@ -329,22 +580,26 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
             // Real model cards
             if (!_loading)
               SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (ctx, i) {
-                    final m = _models[i];
-                    return Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                      child: _buildModelCard(
-                        context: context,
-                        model: m,
-                        onTap: m.key == 'charging_time'
-                            ? () => _navigateToChargingPredictor(context)
-                            : null,
-                      ).animate().fadeIn(delay: Duration(milliseconds: i * 80), duration: 400.ms).slideY(begin: 0.1),
-                    );
-                  },
-                  childCount: _models.length,
-                ),
+                delegate: SliverChildBuilderDelegate((ctx, i) {
+                  final m = _models[i];
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                    child:
+                        _buildModelCard(
+                              context: context,
+                              model: m,
+                              onTap: m.key == 'charging_time'
+                                  ? () => _navigateToChargingPredictor(context)
+                                  : null,
+                            )
+                            .animate()
+                            .fadeIn(
+                              delay: Duration(milliseconds: i * 80),
+                              duration: 400.ms,
+                            )
+                            .slideY(begin: 0.1),
+                  );
+                }, childCount: _models.length),
               ),
 
             const SliverToBoxAdapter(child: SizedBox(height: 100)),
@@ -372,7 +627,11 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
               color: AppColors.surfaceVariant,
               borderRadius: BorderRadius.circular(16),
             ),
-            child: const Icon(Icons.psychology_rounded, color: AppColors.primary, size: 28),
+            child: const Icon(
+              Icons.psychology_rounded,
+              color: AppColors.primary,
+              size: 28,
+            ),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -390,8 +649,13 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  _loading ? 'Đang tải...' : '$loadedCount/${_models.length} mô hình đang hoạt động',
-                  style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                  _loading
+                      ? 'Đang tải...'
+                      : '$loadedCount/${_models.length} mô hình đang hoạt động',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                  ),
                 ),
               ],
             ),
@@ -404,7 +668,11 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
             ),
             child: Text(
               '$totalCount MÔ HÌNH',
-              style: const TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w700),
+              style: const TextStyle(
+                color: AppColors.primary,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],
@@ -420,23 +688,37 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
     // Map icon name to Flutter icon
     IconData iconData;
     switch (model.icon) {
-      case 'Timer': iconData = Icons.timer_rounded; break;
-      case 'Navigation': iconData = Icons.navigation_rounded; break;
-      case 'Cpu': iconData = Icons.memory_rounded; break;
-      case 'BatteryCharging': iconData = Icons.battery_charging_full_rounded; break;
-      default: iconData = Icons.psychology_rounded;
+      case 'Timer':
+        iconData = Icons.timer_rounded;
+        break;
+      case 'Navigation':
+        iconData = Icons.navigation_rounded;
+        break;
+      case 'Cpu':
+        iconData = Icons.memory_rounded;
+        break;
+      case 'BatteryCharging':
+        iconData = Icons.battery_charging_full_rounded;
+        break;
+      default:
+        iconData = Icons.psychology_rounded;
     }
 
-    final Color badgeColor = model.isLoaded && model.isPredictable
+    final hasUsableModel =
+        model.isLoaded ||
+        model.isPredictable ||
+        (model.activeVersion != null && model.lastError == null);
+
+    final Color badgeColor = hasUsableModel
         ? AppColors.success
-        : model.activeVersion != null
-        ? AppColors.warning
+        : model.lastError != null
+        ? AppColors.error
         : AppColors.textTertiary;
 
-    final String badgeText = model.isLoaded && model.isPredictable
-        ? 'ĐÃ LOAD'
-        : model.activeVersion != null
-        ? 'CHƯA LOAD'
+    final String badgeText = hasUsableModel
+        ? 'ĐÃ TRIỂN KHAI'
+        : model.lastError != null
+        ? 'LỖI MODEL'
         : 'CHƯA CÓ MODEL';
 
     // Format load time
@@ -444,7 +726,8 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
     if (model.lastLoadAt != null) {
       try {
         final dt = DateTime.parse(model.lastLoadAt!).toLocal();
-        loadInfo = 'Load: ${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')} ${dt.day}/${dt.month}/${dt.year}';
+        loadInfo =
+            'Load: ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')} ${dt.day}/${dt.month}/${dt.year}';
       } catch (_) {
         loadInfo = 'Load: ${model.lastLoadAt}';
       }
@@ -458,7 +741,9 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
           color: AppColors.card,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: model.isLoaded ? AppColors.primary.withAlpha(51) : AppColors.glassBorder,
+            color: model.isLoaded
+                ? AppColors.primary.withAlpha(51)
+                : AppColors.glassBorder,
           ),
         ),
         child: Column(
@@ -469,7 +754,9 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: model.isLoaded ? AppColors.primaryContainer : AppColors.surfaceVariant,
+                    color: model.isLoaded
+                        ? AppColors.primaryContainer
+                        : AppColors.surfaceVariant,
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Icon(iconData, color: AppColors.primary, size: 24),
@@ -502,27 +789,41 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
                 ),
                 if (model.activeVersion != null) ...[
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: AppColors.surfaceVariant,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
                       model.activeVersion!,
-                      style: TextStyle(color: AppColors.textSecondary, fontSize: 10, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
                 ],
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: badgeColor.withAlpha(26),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     badgeText,
-                    style: TextStyle(color: badgeColor, fontSize: 10, fontWeight: FontWeight.w700),
+                    style: TextStyle(
+                      color: badgeColor,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ],
@@ -536,17 +837,37 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
                   if (loadInfo != null) ...[
                     Icon(Icons.bolt, color: AppColors.textTertiary, size: 14),
                     const SizedBox(width: 4),
-                    Text(loadInfo, style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                    Text(
+                      loadInfo,
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 11,
+                      ),
+                    ),
                   ],
                   if (model.featureCount != null) ...[
                     const SizedBox(width: 12),
-                    Icon(Icons.settings_input_component, color: AppColors.textTertiary, size: 14),
+                    Icon(
+                      Icons.settings_input_component,
+                      color: AppColors.textTertiary,
+                      size: 14,
+                    ),
                     const SizedBox(width: 4),
-                    Text('Features: ${model.featureCount}', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                    Text(
+                      'Features: ${model.featureCount}',
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 11,
+                      ),
+                    ),
                   ],
                   const Spacer(),
                   if (onTap != null)
-                    Icon(Icons.chevron_right, color: AppColors.textTertiary, size: 20),
+                    Icon(
+                      Icons.chevron_right,
+                      color: AppColors.textTertiary,
+                      size: 20,
+                    ),
                 ],
               ),
             ],
@@ -556,7 +877,11 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
               const SizedBox(height: 8),
               Row(
                 children: [
-                  Icon(Icons.error_outline_rounded, color: AppColors.error, size: 13),
+                  Icon(
+                    Icons.error_outline_rounded,
+                    color: AppColors.error,
+                    size: 13,
+                  ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
@@ -607,11 +932,7 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
               ),
             )
           else
-            Icon(
-              Icons.cloud_done_rounded,
-              color: AppColors.primary,
-              size: 14,
-            ),
+            Icon(Icons.cloud_done_rounded, color: AppColors.primary, size: 14),
           const SizedBox(width: 6),
           Text(
             label,
