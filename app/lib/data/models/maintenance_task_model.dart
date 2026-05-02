@@ -127,23 +127,37 @@ class MaintenanceTaskModel {
     final data = doc.data() as Map<String, dynamic>;
     return MaintenanceTaskModel(
       taskId: doc.id,
-      vehicleId: data['vehicleId'] ?? '',
-      ownerUid: data['ownerUid'],
-      title: data['title'] ?? '',
-      description: data['description'] ?? '',
-      targetOdo: data['targetOdo'] ?? 0,
-      isCompleted: data['isCompleted'] ?? false,
-      completedDate: data['completedDate'] != null
-          ? (data['completedDate'] as Timestamp).toDate()
-          : null,
-      createdAt: data['createdAt'] != null
-          ? (data['createdAt'] as Timestamp).toDate()
-          : DateTime.now(),
-      scheduledDate: data['scheduledDate'] != null
-          ? (data['scheduledDate'] as Timestamp).toDate()
-          : null,
+      vehicleId: data['vehicleId'] as String? ?? '',
+      ownerUid: data['ownerUid'] as String?,
+      title: data['title'] as String? ?? '',
+      description: data['description'] as String? ?? '',
+      // targetOdo: Firestore có thể lưu int, double, num hoặc string.
+      targetOdo: _safeParseInt(data['targetOdo']),
+      isCompleted: data['isCompleted'] as bool? ?? false,
+      completedDate: _safeTimestamp(data['completedDate']),
+      createdAt: _safeTimestamp(data['createdAt']) ?? DateTime.now(),
+      scheduledDate: _safeTimestamp(data['scheduledDate']),
       serviceType: _parseServiceType(data['serviceType']),
     );
+  }
+
+  /// Parse Timestamp | String | DateTime | null an toàn
+  static DateTime? _safeTimestamp(dynamic value) {
+    if (value == null) return null;
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    if (value is String && value.isNotEmpty) return DateTime.tryParse(value);
+    return null;
+  }
+
+  /// Parse int | double | num | String an toàn về int (trả 0 nếu không parse được)
+  static int _safeParseInt(dynamic value) {
+    if (value == null) return 0;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? 0;
+    return 0;
   }
 
   static ServiceType _parseServiceType(dynamic value) {

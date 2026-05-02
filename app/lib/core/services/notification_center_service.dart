@@ -6,7 +6,8 @@ import 'model_sync_service.dart';
 /// Service tích hợp Notification Center với Model Sync
 /// Tự động tạo thông báo khi có model mới/cập nhật
 class NotificationCenterService {
-  static final NotificationCenterService _instance = NotificationCenterService._internal();
+  static final NotificationCenterService _instance =
+      NotificationCenterService._internal();
   factory NotificationCenterService() => _instance;
   NotificationCenterService._internal();
 
@@ -21,7 +22,7 @@ class NotificationCenterService {
 
     // Khởi tạo các service con
     await _modelSync.initialize();
-    
+
     // Đăng ký callback khi có model update
     _modelSync.onModelUpdate = _onModelsUpdated;
 
@@ -36,7 +37,7 @@ class NotificationCenterService {
     }
 
     final result = await _modelSync.sync(force: force);
-    
+
     // Dọn dẹp thông báo cũ sau mỗi lần sync
     if (result.success) {
       await _repository.cleanupOldNotifications();
@@ -46,7 +47,10 @@ class NotificationCenterService {
   }
 
   /// Callback khi có model mới/cập nhật
-  void _onModelsUpdated(List<DeployedModelInfo> newModels, List<DeployedModelInfo> updatedModels) {
+  void _onModelsUpdated(
+    List<DeployedModelInfo> newModels,
+    List<DeployedModelInfo> updatedModels,
+  ) {
     // Tạo thông báo cho model mới
     for (final model in newModels) {
       _createModelNotification(model, isNew: true);
@@ -59,17 +63,18 @@ class NotificationCenterService {
   }
 
   /// Tạo thông báo và local notification cho model
-  Future<void> _createModelNotification(DeployedModelInfo model, {required bool isNew}) async {
-    final title = isNew 
-        ? 'Model AI mới đã sẵn sàng' 
-        : 'Model AI đã cập nhật';
-    
+  Future<void> _createModelNotification(
+    DeployedModelInfo model, {
+    required bool isNew,
+  }) async {
+    final title = isNew ? 'Model AI đã triển khai' : 'Model AI đã cập nhật';
+
     final message = isNew
-        ? 'Model "${model.label}" đã được triển khai và sẵn sàng để sử dụng.'
+        ? 'Model "${model.label}" phiên bản ${model.deploymentVersion} đã được triển khai và sẵn sàng để sử dụng.'
         : 'Model "${model.label}" đã được cập nhật lên phiên bản ${model.deploymentVersion}.';
 
     // Tạo notification trong Firestore (cho Notification Center)
-    final notification = await _repository.createNotification(
+    await _repository.createNotification(
       type: NotificationType.modelUpdated,
       title: title,
       message: message,
@@ -91,7 +96,10 @@ class NotificationCenterService {
   }
 
   /// Tạo thông báo tải model thất bại
-  Future<void> notifyModelDownloadFailed(DeployedModelInfo model, String error) async {
+  Future<void> notifyModelDownloadFailed(
+    DeployedModelInfo model,
+    String error,
+  ) async {
     await _repository.createModelDownloadFailedNotification(
       modelKey: model.key,
       modelName: model.label,
@@ -108,10 +116,10 @@ class NotificationCenterService {
     required String taskName,
     required int daysRemaining,
   }) async {
-    final title = daysRemaining <= 0 
+    final title = daysRemaining <= 0
         ? 'Bảo dưỡng đến hạn ngay hôm nay'
         : 'Bảo dưỡng đến hạn trong $daysRemaining ngày';
-    
+
     await _repository.createNotification(
       type: NotificationType.maintenanceDue,
       title: title,
@@ -126,6 +134,83 @@ class NotificationCenterService {
 
     // TODO: Local notification - cần notification_service
     // await _localNotifications.showNotification(...);
+  }
+
+  Future<void> notifyChargeReminderScheduled({
+    required int targetPercent,
+    required DateTime scheduledAt,
+    required bool exact,
+  }) async {
+    await _repository.createNotification(
+      type: NotificationType.chargeReminder,
+      title: 'Đã đặt nhắc rút sạc',
+      message: exact
+          ? 'App sẽ nhắc bạn rút sạc lúc ${_formatDateTime(scheduledAt)} khi pin dự kiến đạt $targetPercent%.'
+          : 'App sẽ nhắc gần đúng lúc ${_formatDateTime(scheduledAt)} khi pin dự kiến đạt $targetPercent%.',
+      payload: {
+        'targetPercent': targetPercent,
+        'scheduledAt': scheduledAt.toIso8601String(),
+        'exact': exact,
+      },
+      actionTarget: '/ai/charging_time',
+    );
+  }
+
+  Future<void> notifyChargeReminderCancelled({DateTime? scheduledAt}) async {
+    await _repository.createNotification(
+      type: NotificationType.chargeReminder,
+      title: 'Đã hủy nhắc rút sạc',
+      message: scheduledAt == null
+          ? 'Nhắc hẹn rút sạc hiện tại đã được hủy.'
+          : 'Nhắc hẹn rút sạc lúc ${_formatDateTime(scheduledAt)} đã được hủy.',
+      payload: {
+        if (scheduledAt != null) 'scheduledAt': scheduledAt.toIso8601String(),
+      },
+      actionTarget: '/ai/charging_time',
+    );
+  }
+
+  Future<void> notifyAppUpdateAvailable({
+    required String latestVersion,
+    required int latestBuild,
+    required bool forceUpdate,
+  }) async {
+    await _repository.createNotification(
+      type: NotificationType.system,
+      title: forceUpdate ? 'Cập nhật bắt buộc' : 'Có phiên bản mới',
+      message: latestBuild > 0
+          ? 'VinFast Battery $latestVersion+$latestBuild đã sẵn sàng để tải về.'
+          : 'VinFast Battery $latestVersion đã sẵn sàng để tải về.',
+      payload: {
+        'latestVersion': latestVersion,
+        'latestBuild': latestBuild,
+        'forceUpdate': forceUpdate,
+      },
+      actionTarget: '/settings/update',
+    );
+  }
+
+  Future<void> notifyModelDeployed({
+    required String modelKey,
+    required String modelName,
+    required String version,
+  }) async {
+    await _repository.createNotification(
+      type: NotificationType.modelUpdated,
+      title: 'Model AI đã triển khai',
+      message: 'Model "$modelName" phiên bản $version đã sẵn sàng để sử dụng.',
+      payload: {'modelKey': modelKey, 'version': version},
+      actionTarget: '/ai/$modelKey',
+    );
+  }
+
+  static String _formatDateTime(DateTime value) {
+    final local = value.toLocal();
+    final hh = local.hour.toString().padLeft(2, '0');
+    final mm = local.minute.toString().padLeft(2, '0');
+    final dd = local.day.toString().padLeft(2, '0');
+    final mo = local.month.toString().padLeft(2, '0');
+    return '$hh:$mm $dd/$mo/${local.year}';
   }
 
   /// Stream thông báo

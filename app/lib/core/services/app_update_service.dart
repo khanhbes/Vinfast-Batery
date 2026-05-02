@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../constants/app_constants.dart';
 import 'api_service.dart';
+import 'notification_center_service.dart';
 
 /// Kiểm tra version mới + remote config từ /api/app/config và hiển thị
 /// dialog cập nhật (optional hoặc forced).
@@ -18,6 +19,7 @@ class AppUpdateService with WidgetsBindingObserver {
   AppUpdateService._internal();
 
   static const _lastCheckKey = 'app_update_last_check';
+  static const _lastNotifiedVersionKey = 'app_update_last_notified_version';
   static const _checkIntervalHours = 6;
 
   Map<String, dynamic> _remoteConfig = {};
@@ -131,6 +133,17 @@ class AppUpdateService with WidgetsBindingObserver {
     if (latestBuild <= 0 || latestVersion.isEmpty) return;
     if (latestBuild <= currentBuild) return;
 
+    final forceUpdate = isForce || currentBuild < minSupported;
+    final notificationKey = '$latestVersion+$latestBuild';
+    if (prefs.getString(_lastNotifiedVersionKey) != notificationKey) {
+      await NotificationCenterService().notifyAppUpdateAvailable(
+        latestVersion: latestVersion,
+        latestBuild: latestBuild,
+        forceUpdate: forceUpdate,
+      );
+      await prefs.setString(_lastNotifiedVersionKey, notificationKey);
+    }
+
     if (!context.mounted) return;
     _showUpdateDialog(
       context,
@@ -138,7 +151,7 @@ class AppUpdateService with WidgetsBindingObserver {
       latestVersion: latestVersion,
       latestBuild: latestBuild,
       releaseNotes: releaseNotes,
-      forceUpdate: isForce || currentBuild < minSupported,
+      forceUpdate: forceUpdate,
       apkDownloadUrl: _resolveDownloadUrl(),
     );
   }
@@ -239,7 +252,11 @@ class _UpdateDialog extends StatelessWidget {
               color: const Color(0xFF2D5BFF).withAlpha(30),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(Icons.system_update_rounded, color: Color(0xFF2D5BFF), size: 22),
+            child: const Icon(
+              Icons.system_update_rounded,
+              color: Color(0xFF2D5BFF),
+              size: 22,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -262,19 +279,27 @@ class _UpdateDialog extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Text('Hiện tại: ',
-                    style: TextStyle(color: Colors.white54, fontSize: 12)),
-                Text(currentVersion,
-                    style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                const Text(
+                  'Hiện tại: ',
+                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+                Text(
+                  currentVersion,
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
               ],
             ),
             const SizedBox(height: 4),
             Row(
               children: [
-                const Text('Mới nhất: ',
-                    style: TextStyle(color: Colors.white54, fontSize: 12)),
+                const Text(
+                  'Mới nhất: ',
+                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                ),
                 Text(
-                  latestBuild > 0 ? '$latestVersion+$latestBuild' : latestVersion,
+                  latestBuild > 0
+                      ? '$latestVersion+$latestBuild'
+                      : latestVersion,
                   style: const TextStyle(
                     color: Color(0xFF2D5BFF),
                     fontSize: 12,
@@ -308,7 +333,10 @@ class _UpdateDialog extends StatelessWidget {
             if (forceUpdate) ...[
               const SizedBox(height: 12),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFFFF6B6B).withAlpha(30),
                   borderRadius: BorderRadius.circular(8),
@@ -330,7 +358,10 @@ class _UpdateDialog extends StatelessWidget {
         if (!forceUpdate)
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Để sau', style: TextStyle(color: Colors.white38)),
+            child: const Text(
+              'Để sau',
+              style: TextStyle(color: Colors.white38),
+            ),
           ),
         FilledButton.icon(
           onPressed: () => _download(context),
@@ -338,7 +369,9 @@ class _UpdateDialog extends StatelessWidget {
           label: const Text('Tải về & Cài đặt'),
           style: FilledButton.styleFrom(
             backgroundColor: const Color(0xFF2D5BFF),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         ),
       ],
@@ -373,7 +406,11 @@ class _UpdateDialog extends StatelessWidget {
     if (lines.length <= 1) {
       return Text(
         raw,
-        style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.5),
+        style: const TextStyle(
+          color: Colors.white70,
+          fontSize: 12,
+          height: 1.5,
+        ),
       );
     }
     return Column(
@@ -385,8 +422,10 @@ class _UpdateDialog extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('• ',
-                    style: TextStyle(color: Color(0xFF2D5BFF), fontSize: 12)),
+                const Text(
+                  '• ',
+                  style: TextStyle(color: Color(0xFF2D5BFF), fontSize: 12),
+                ),
                 Expanded(
                   child: Text(
                     line.startsWith('-') || line.startsWith('•')

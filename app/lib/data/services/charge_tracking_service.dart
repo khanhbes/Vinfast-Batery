@@ -5,8 +5,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/services/notification_center_service.dart';
 import '../models/charge_log_model.dart';
-import '../models/charge_sample_model.dart';
 import '../services/notification_service.dart';
 
 /// ========================================================================
@@ -54,6 +54,7 @@ class ChargeTrackingService {
     final d = elapsed;
     return '${d.inHours.toString().padLeft(2, '0')}:${(d.inMinutes % 60).toString().padLeft(2, '0')}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
   }
+
   double get chargeRate => _chargeRatePerMin;
 
   // Callbacks
@@ -106,7 +107,9 @@ class ChargeTrackingService {
     if (aiPredictionJson != null) {
       try {
         _aiPrediction = AiPredictionData.fromJson(jsonDecode(aiPredictionJson));
-        debugPrint('🔮 AI prediction recovered: ${_aiPrediction!.formattedDuration}');
+        debugPrint(
+          '🔮 AI prediction recovered: ${_aiPrediction!.formattedDuration}',
+        );
       } catch (e) {
         debugPrint('⚠️ Failed to recover AI prediction: $e');
       }
@@ -198,7 +201,10 @@ class ChargeTrackingService {
     _currentBattery = currentBattery;
     _currentOdo = currentOdo;
     _ownerUid = FirebaseAuth.instance.currentUser?.uid;
-    _chargeSessionId ??= FirebaseFirestore.instance.collection('ChargeLogs').doc().id;
+    _chargeSessionId ??= FirebaseFirestore.instance
+        .collection('ChargeLogs')
+        .doc()
+        .id;
     _startTime = DateTime.now();
     _isCharging = true;
     _targetBattery = targetBatteryPercent.clamp(currentBattery + 1, 100);
@@ -213,7 +219,9 @@ class ChargeTrackingService {
         startBatteryPercent: currentBattery,
         targetBatteryPercent: _targetBattery,
         predictedDurationSec: predictedDurationSec,
-        predictedStopAt: predictedStopAt ?? _startTime!.add(Duration(seconds: predictedDurationSec.toInt())),
+        predictedStopAt:
+            predictedStopAt ??
+            _startTime!.add(Duration(seconds: predictedDurationSec.toInt())),
         modelSource: modelSource ?? 'heuristic_fallback',
         modelVersion: modelVersion ?? 'heuristic-v1',
         isBeta: true,
@@ -230,14 +238,18 @@ class ChargeTrackingService {
         await _scheduleReminder(predictedStopAt);
       }
 
-      debugPrint('🔌 AI Charging started: ${currentBattery}% → ${_targetBattery}%, '
-          'predicted ${_aiPrediction!.formattedDuration}, source: ${modelSource}');
+      debugPrint(
+        '🔌 AI Charging started: $currentBattery% → $_targetBattery%, '
+        'predicted ${_aiPrediction!.formattedDuration}, source: $modelSource',
+      );
     } else {
       // Fallback to provided rate or default
       if (chargeRatePerMin != null && chargeRatePerMin > 0) {
         _chargeRatePerMin = chargeRatePerMin;
       }
-      debugPrint('🔌 Charging started: $_currentBattery% → target 100% (heuristic)');
+      debugPrint(
+        '🔌 Charging started: $_currentBattery% → target 100% (heuristic)',
+      );
     }
 
     _updateEta();
@@ -259,7 +271,10 @@ class ChargeTrackingService {
     }
     // Persist AI prediction data for recovery after app restart
     if (_aiPrediction != null) {
-      await prefs.setString('charge_aiPrediction', jsonEncode(_aiPrediction!.toJson()));
+      await prefs.setString(
+        'charge_aiPrediction',
+        jsonEncode(_aiPrediction!.toJson()),
+      );
     }
 
     // Timer cập nhật mỗi 30 giây
@@ -310,9 +325,14 @@ class ChargeTrackingService {
     onUpdate?.call();
   }
 
-  Future<void> _syncChargeSample({required String event, bool force = false}) async {
+  Future<void> _syncChargeSample({
+    required String event,
+    bool force = false,
+  }) async {
     final now = DateTime.now();
-    if (!force && _lastSampleSyncAt != null && now.difference(_lastSampleSyncAt!) < const Duration(seconds: 25)) {
+    if (!force &&
+        _lastSampleSyncAt != null &&
+        now.difference(_lastSampleSyncAt!) < const Duration(seconds: 25)) {
       return;
     }
     _lastSampleSyncAt = now;
@@ -367,7 +387,10 @@ class ChargeTrackingService {
   /// Cập nhật foreground notification
   Future<void> _updateNotification() async {
     if (!_isCharging) return;
-    await NotificationService().showChargingOngoing(_currentBattery, elapsedText);
+    await NotificationService().showChargingOngoing(
+      _currentBattery,
+      elapsedText,
+    );
   }
 
   /// AI prediction data for the current session
@@ -375,15 +398,26 @@ class ChargeTrackingService {
 
   /// Schedule reminder notification using NotificationService
   Future<void> _scheduleReminder(DateTime reminderTime) async {
-    if (_targetBattery != null) {
-      await NotificationService().scheduleChargeReminder(reminderTime, _targetBattery!);
-      debugPrint('🔔 Reminder scheduled for: $reminderTime (target: $_targetBattery%)');
-    }
+    final exact = await NotificationService().scheduleChargeReminder(
+      reminderTime,
+      _targetBattery,
+    );
+    await NotificationCenterService().notifyChargeReminderScheduled(
+      targetPercent: _targetBattery,
+      scheduledAt: reminderTime,
+      exact: exact,
+    );
+    debugPrint(
+      '🔔 Reminder scheduled for: $reminderTime (target: $_targetBattery%)',
+    );
   }
 
   /// Cancel scheduled reminder
   Future<void> _cancelReminder() async {
     await NotificationService().cancelChargeReminder();
+    await NotificationCenterService().notifyChargeReminderCancelled(
+      scheduledAt: _estimatedCompleteAt,
+    );
     debugPrint('🔔 Reminder cancelled');
   }
 
@@ -401,8 +435,11 @@ class ChargeTrackingService {
     await _cancelReminder();
 
     // Update actual battery if provided (override simulated value)
-    if (actualBatteryPercent != null && actualBatteryPercent != _currentBattery) {
-      debugPrint('🔋 Actual battery override: $_currentBattery -> $actualBatteryPercent');
+    if (actualBatteryPercent != null &&
+        actualBatteryPercent != _currentBattery) {
+      debugPrint(
+        '🔋 Actual battery override: $_currentBattery -> $actualBatteryPercent',
+      );
       _currentBattery = actualBatteryPercent;
     }
 
@@ -413,7 +450,10 @@ class ChargeTrackingService {
     // Update AI prediction with actual results
     AiPredictionData? finalAiPrediction;
     if (_aiPrediction != null) {
-      finalAiPrediction = _aiPrediction!.copyWithActual(_currentBattery, endTime);
+      finalAiPrediction = _aiPrediction!.copyWithActual(
+        _currentBattery,
+        endTime,
+      );
     }
 
     final chargeLog = ChargeLogModel(
@@ -434,13 +474,19 @@ class ChargeTrackingService {
     try {
       final firestore = FirebaseFirestore.instance;
       await firestore.runTransaction((transaction) async {
-        final logRef = firestore.collection('ChargeLogs').doc(_chargeSessionId ?? firestore.collection('ChargeLogs').doc().id);
+        final logRef = firestore
+            .collection('ChargeLogs')
+            .doc(
+              _chargeSessionId ?? firestore.collection('ChargeLogs').doc().id,
+            );
         transaction.set(logRef, {
           ...chargeLog.toFirestore(),
           'sessionId': _chargeSessionId,
           'durationMin': durationMin,
           'chargeGainPercent': batteryGained,
-          'avgChargeRatePercentPerHour': durationMin > 0 ? (batteryGained * 60 / durationMin) : 0,
+          'avgChargeRatePercentPerHour': durationMin > 0
+              ? (batteryGained * 60 / durationMin)
+              : 0,
           'aiFeatures': {
             'startBatteryPercent': _startBattery,
             'endBatteryPercent': _currentBattery,

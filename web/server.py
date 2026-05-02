@@ -2811,23 +2811,32 @@ def user_ai_models_deployed():
     for key, meta in types_meta.items():
         # Only include deployed models
         deploy = _get_model_deployment_status(key)
-        if deploy.get('deploymentStatus') != 'deployed':
+        store = _model_store_for(key)
+        store_active_version = store.active_version() if store else None
+        if deploy.get('deploymentStatus') != 'deployed' and not store_active_version:
             continue
         
         # Get runtime status
         try:
             data, code = _ai_request_json('GET', f'/v1/models/{key}/status')
-            ai_status = data if (code == 200 and isinstance(data, dict)) else {}
+            if code == 200 and isinstance(data, dict):
+                ai_status = data.get('data') if isinstance(data.get('data'), dict) else data
+            else:
+                ai_status = {}
         except Exception:
             ai_status = {}
         
-        active_version = deploy.get('deploymentVersion') or ai_status.get('activeVersion') or ai_status.get('active_version')
+        active_version = (
+            deploy.get('deploymentVersion') or
+            ai_status.get('activeVersion') or
+            ai_status.get('active_version') or
+            store_active_version
+        )
         
         # Determine mobile compatibility
         mobile_compatible = False
         artifact_ext = None
         if active_version:
-            store = _model_store_for(key)
             if store:
                 for v in store.list_versions():
                     if v.get('version') == active_version:
@@ -2841,14 +2850,151 @@ def user_ai_models_deployed():
             'shortName': meta.get('shortName'),
             'description': meta.get('description'),
             'group': meta.get('group'),
+            'deploymentStatus': deploy.get('deploymentStatus') or ('deployed' if active_version else 'planned'),
             'deploymentVersion': active_version,
             'deployedAt': deploy.get('deployedAt'),
-            'runtimeHealth': deploy.get('runtimeHealth'),
+            'runtimeHealth': deploy.get('runtimeHealth') or ('loaded' if active_version else 'inactive'),
             'mobileCompatible': mobile_compatible,
             'artifactExt': artifact_ext,
             'downloadUrl': f'/api/user/ai/models/{key}/download' if mobile_compatible else None,
         })
     
+    return jsonify({'success': True, 'data': {'types': result, 'count': len(result)}})
+
+
+# ── Diagnostics: runtime status probe ────────────────────────────
+# Giữ route phụ để debug runtime, tránh trùng canonical /api/user/ai/models.
+
+@app.route('/api/user/ai/models/runtime-diagnostics', methods=['GET'])
+def user_ai_models_runtime_diagnostics():
+    """
+    Runtime diagnostics catalog for debugging.
+    Auth: Firebase token hoặc X-Admin-Key.
+    Schema (per model):
+      key, label, shortName, description, group, phase,
+      runtimeStatus: 'loaded'|'not_loaded'|'error',
+      isLoaded: bool, isPredictable: bool,
+      activeVersion: str|None, runMode: str,
+      featureCount: int|None, lastLoadAt: str|None, lastError: str|None,
+      mobileCompatible: bool, downloadUrl: str|None
+    """
+    try:
+        _require_user_or_admin()
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 401
+
+    if ai_list_types is None:
+        return jsonify({'success': False, 'error': 'AI registry unavailable'}), 503
+
+    types_meta = {t['key']: t for t in ai_list_types()}
+    result = []
+
+    for key, meta in types_meta.items():
+        deploy = _get_model_deployment_status(key)
+
+        # ── 1. Lấy AI server status ─────────────────────────────────────
+        ai_status = {}
+        try:
+            data, code = _ai_request_json('GET', f'/v1/models/{key}/status')
+            if code == 200 and isinstance(data, dict):
+                ai_status = data
+        except Exception:
+            pass
+
+        # ── 2. Self-heal: nếu có active version nhưng chưa loaded → load-active ──
+        active_version = (
+            ai_status.get('activeVersion') or ai_status.get('active_version') or
+            deploy.get('deploymentVersion')
+        )
+        runtime_is_loaded = (
+            ai_status.get('isLoaded') or ai_status.get('is_loaded') or
+            ai_status.get('status') == 'loaded'
+        )
+        if active_version and not runtime_is_loaded:
+            try:
+                la_data, la_code = _ai_request_json('POST', f'/v1/models/{key}/load-active')
+                if la_code == 200:
+                    # Re-fetch status after load
+                    data2, code2 = _ai_request_json('GET', f'/v1/models/{key}/status')
+                    if code2 == 200 and isinstance(data2, dict):
+                        ai_status = data2
+                        runtime_is_loaded = (
+                            ai_status.get('isLoaded') or
+                            ai_status.get('is_loaded') or
+                            ai_status.get('status') == 'loaded'
+                        )
+            except Exception as e:
+                print(f'⚠️ Auto load-active failed for {key}: {e}')
+
+        # ── 3. Smoke predict để xác nhận isPredictable ───────────────────
+        is_predictable = (
+            ai_status.get('isPredictable') or ai_status.get('is_predictable') or False
+        )
+        if runtime_is_loaded and not is_predictable:
+            try:
+                sp_data, sp_code = _ai_request_json(
+                    'POST', f'/v1/models/{key}/predict',
+                    json_body={'smoke': True}
+                )
+                is_predictable = sp_code == 200
+            except Exception:
+                pass
+
+        # ── 4. Xác định runtimeStatus string ────────────────────────────
+        if runtime_is_loaded and is_predictable:
+            runtime_status_str = 'loaded'
+        elif ai_status.get('status') == 'error' or ai_status.get('lastError'):
+            runtime_status_str = 'error'
+        else:
+            runtime_status_str = 'not_loaded'
+
+        # ── 5. Mobile compatibility ──────────────────────────────────────
+        mobile_compatible = False
+        artifact_ext = None
+        download_url = None
+        if active_version:
+            store = _model_store_for(key)
+            if store:
+                for v in store.list_versions():
+                    if v.get('version') == active_version:
+                        artifact_ext = v.get('ext', '.pkl')
+                        mobile_compatible = artifact_ext in APP_COMPATIBLE_MODEL_EXTS
+                        break
+        if mobile_compatible:
+            download_url = f'/api/user/ai/models/{key}/download'
+
+        # Với server-only (.keras/.pkl) model đã loaded, vẫn cho predict qua server
+        run_mode = meta.get('runMode', 'server_only')
+        if not mobile_compatible and runtime_is_loaded:
+            run_mode = 'server_only'
+
+        result.append({
+            'key': key,
+            'label': meta.get('label'),
+            'shortName': meta.get('shortName'),
+            'description': meta.get('description'),
+            'group': meta.get('group'),
+            'phase': meta.get('phase'),
+            # Flat status schema (PLAN)
+            'runtimeStatus': runtime_status_str,
+            'isLoaded': runtime_is_loaded,
+            'isPredictable': is_predictable,
+            'activeVersion': active_version,
+            'runMode': run_mode,
+            'featureCount': ai_status.get('featureCount') or ai_status.get('feature_count'),
+            'lastLoadAt': deploy.get('deployedAt'),
+            'lastError': ai_status.get('lastError') or ai_status.get('last_error'),
+            'versionsCount': len(ai_status.get('versions', [])) if ai_status.get('versions') else 0,
+            # Deployment info
+            'deploymentStatus': deploy.get('deploymentStatus', 'planned'),
+            'deploymentVersion': deploy.get('deploymentVersion'),
+            'deployedAt': deploy.get('deployedAt'),
+            # Mobile
+            'mobileCompatible': mobile_compatible,
+            'artifactExt': artifact_ext,
+            'downloadUrl': download_url,
+        })
+
     return jsonify({'success': True, 'data': {'types': result, 'count': len(result)}})
 
 
@@ -3463,7 +3609,11 @@ def user_ai_models():
     try:
         data, code = _ai_request_json('GET', '/v1/types')
         if code == 200 and isinstance(data, dict):
-            for item in data.get('data', data.get('types', [])):
+            payload = data.get('data') if isinstance(data.get('data'), dict) else data
+            items = payload.get('types', []) if isinstance(payload, dict) else []
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
                 k = item.get('key') or item.get('type_key')
                 if k:
                     status_map[k] = item
@@ -3472,6 +3622,10 @@ def user_ai_models():
 
     result = []
     for key, meta in types_meta.items():
+        deploy = _get_model_deployment_status(key)
+        store = _model_store_for(key)
+        versions = store.list_versions() if store else []
+
         # `st` là dict trả về từ AI server /v1/types (có nested runtimeStatus)
         st = status_map.get(key, {})
         # Extract runtimeStatus nested object từ AI server response
@@ -3479,15 +3633,20 @@ def user_ai_models():
         if not isinstance(rt, dict):
             rt = {}
 
-        active_version = rt.get('activeVersion') or st.get('activeVersion') or st.get('active_version')
+        store_active_version = store.active_version() if store else None
+        active_version = (
+            rt.get('activeVersion') or
+            st.get('activeVersion') or
+            st.get('active_version') or
+            deploy.get('deploymentVersion') or
+            store_active_version
+        )
         active_ext = None
-        if active_version:
-            store = _model_store_for(key)
-            if store:
-                for v in store.list_versions():
-                    if v.get('version') == active_version:
-                        active_ext = v.get('ext', '.pkl')
-                        break
+        if active_version and versions:
+            for v in versions:
+                if v.get('version') == active_version:
+                    active_ext = v.get('ext', '.pkl')
+                    break
 
         run_mode = _build_run_mode(active_ext)
         download_url = None
@@ -3498,7 +3657,18 @@ def user_ai_models():
         is_loaded = bool(rt.get('isLoaded', False))
         is_predictable = bool(rt.get('isPredictable', False))
         validation_error = rt.get('validationError') or rt.get('lastError')
-        if is_loaded and not validation_error:
+        has_active_artifact = bool(active_version and active_ext)
+        is_loaded_effective = bool(
+            not validation_error and (
+                is_loaded or
+                is_predictable or
+                has_active_artifact or
+                deploy.get('runtimeHealth') == 'loaded'
+            )
+        )
+        is_predictable_effective = bool(is_predictable or is_loaded_effective)
+
+        if is_loaded_effective and not validation_error:
             runtime_status = 'loaded'
         elif validation_error:
             runtime_status = 'error'
@@ -3530,14 +3700,19 @@ def user_ai_models():
             'downloadUrl': download_url,
             # Flat stable fields cho app (PLAN)
             'runtimeStatus': runtime_status,
-            'isLoaded': is_loaded,
-            'isPredictable': is_predictable,
+            'isLoaded': is_loaded_effective,
+            'isPredictable': is_predictable_effective,
             'featureCount': rt.get('featureCount'),
-            'lastLoadAt': rt.get('lastLoadAt') or rt.get('last_load_at'),
+            'lastLoadAt': rt.get('lastLoadAt') or rt.get('last_load_at') or deploy.get('deployedAt'),
             'lastError': rt.get('lastError'),
             'validationError': validation_error,
             'predictorKind': rt.get('predictorKind'),
-            'versionsCount': rt.get('versionsCount'),
+            'versionsCount': rt.get('versionsCount') or len(versions),
+            'deploymentStatus': deploy.get('deploymentStatus') or ('deployed' if active_version else meta.get('status')),
+            'deploymentVersion': deploy.get('deploymentVersion') or active_version,
+            'deployedAt': deploy.get('deployedAt'),
+            'runtimeHealth': 'loaded' if is_loaded_effective else deploy.get('runtimeHealth'),
+            'artifactExt': active_ext,
         })
 
     groups = []

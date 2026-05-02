@@ -126,9 +126,9 @@ class ApiService {
     return get('/api/ai/charging-model-status');
   }
 
-  /// Lấy catalog AI models cho app (user-facing, chỉ deployed)
+  /// Lấy catalog AI models cho app (canonical — tất cả models + flat status schema)
   Future<Map<String, dynamic>> getUserAiModels() async {
-    return get('/api/user/ai/models/deployed');
+    return get('/api/user/ai/models');
   }
 
   /// Predict qua server khi local model không khả dụng

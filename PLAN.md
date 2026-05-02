@@ -1,70 +1,66 @@
-# Plan Fix Đăng Nhập, Home, AI Charging, CSV Và Nhắc Rút Sạc
+# Plan Fix Triệt Để Alarms, Service Và AI Model
 
 ## Summary
-Sửa 4 lỗi đang thấy trên app: giữ session đăng nhập sau khi thoát/update/mở lại, lỗi Home `type 'double' is not a subtype of type 'int'`, tab AI hiển thị sai trạng thái model `charging_time`, bổ sung lưu/gửi/chia sẻ CSV, và sửa lỗi đặt nhắc rút sạc do timezone/local notification chưa khởi tạo.
+Sửa theo hướng “không phụ thuộc trạng thái may rủi”: reminder vẫn hoạt động dù Android không cho exact alarm, lịch bảo dưỡng không vỡ vì thiếu index, và AI model dùng một contract server duy nhất có cache + tự phục hồi khi app/server lệch trạng thái.
 
 ## Key Changes
-- **Giữ đăng nhập sau khi mở lại app**
-  - Dùng Firebase Auth persistence làm source of truth, không tự logout khi app cold start, kill đa nhiệm, hoặc update.
-  - Sửa `AuthGate` thành bootstrap có trạng thái rõ: chờ `Firebase.initializeApp()` và `FirebaseAuth.authStateChanges()` restore xong mới render `LoginScreen` hoặc `AppNavigation`.
-  - `SessionService` lưu marker `was_authenticated` và `explicit_signed_out`; chỉ `AuthService.signOut()` mới set explicit sign out và clear session metadata.
-  - Nếu Firebase init/auth restore lỗi, hiển thị màn lỗi/retry thay vì đưa user về Login.
-  - Khi login/register thành công, ghi lại `lastLoginEmail`, `was_authenticated=true`, `explicit_signed_out=false`.
+- **Alarms & Reminders**
+  - Thêm vào `AndroidManifest.xml`: `SCHEDULE_EXACT_ALARM`, các receiver của `flutter_local_notifications` cho scheduled notification và boot restore.
+  - Không dùng `USE_EXACT_ALARM` vì app không phải clock/calendar app và có thể vướng policy phát hành.
+  - Trong `NotificationService`, thêm flow:
+    - init timezone `Asia/Ho_Chi_Minh`;
+    - request `POST_NOTIFICATIONS`;
+    - check `canScheduleExactNotifications()`;
+    - nếu chưa có exact alarm thì gọi `requestExactAlarmsPermission()`;
+    - nếu Android vẫn không cho bật hoặc switch bị mờ, schedule bằng `AndroidScheduleMode.inexactAllowWhileIdle`.
+  - UI nhắc sạc/bảo dưỡng không báo lỗi nữa: hiển thị rõ “Nhắc gần đúng” khi dùng inexact fallback.
+  - Kết quả mong muốn: người dùng không bị kẹt ở màn setting bị mờ; app vẫn đặt được reminder an toàn.
 
-- **Fix Home hiển thị lỗi double/int**
-  - Sửa `VehicleModel.fromFirestore()` parse số an toàn bằng helper `_asInt()` và `_asDouble()`.
-  - Các field cần đổi: `currentOdo`, `currentBattery`, `lastBatteryPercent`, `totalCharges`, `totalTrips`, `stateOfHealth`, `defaultEfficiency`, `specVersion`.
-  - Chuẩn hóa `AuthService.addVehicle()` ghi field số dạng phù hợp: các giá trị phần trăm/ODO hiển thị int thì lưu `round()`, còn `batteryCapacity`, `defaultEfficiency`, `stateOfHealth` có thể giữ double.
-  - Sau khi fix, `allVehiclesProvider` và `vehicleProvider` không còn throw, Home không hiện 2 banner lỗi đỏ.
+- **Lịch Bảo Dưỡng / Service**
+  - Sửa `web/firebase.json` để deploy cả index:  
+    `firestore.indexes.json`.
+  - Thêm composite index cho query hiện tại:
+    `MaintenanceTasks(ownerUid ASC, vehicleId ASC, isDeleted ASC, targetOdo ASC)`.
+  - Sửa `MaintenanceRepository.watchMaintenanceTasks()`:
+    - query chính vẫn dùng `orderBy(targetOdo)`;
+    - nếu gặp `failed-precondition/requires index`, fallback query không `orderBy`, sort `targetOdo` ở client;
+    - không để màn Service rơi vào error toàn trang vì index đang build.
+  - Sửa `MaintenanceTaskModel.fromFirestore()` parse số/ngày an toàn:
+    `targetOdo` nhận được `int`, `double`, `num`, string đều không crash.
+  - Sau khi thêm/sửa/xóa/complete task, reset notification flag liên quan để nhắc bảo dưỡng không bị stale.
 
-- **Fix AI model status và CSV**
-  - Sửa backend `/api/user/ai/models`: parse đúng response AI server `/v1/types`, lấy status từ `data.types[*].runtimeStatus`.
-  - Trả về cho app các field ổn định: `runtimeStatus`, `activeVersion`, `isLoaded`, `isPredictable`, `featureCount`, `lastLoadAt`, `runMode`.
-  - Sửa `AiModelsScreen` để model có `runtimeStatus.loaded` hoặc `isLoaded/isPredictable=true` hiển thị `ĐÃ LOAD`, không còn `CHƯA LOAD`.
-  - Với model `.keras` server-only, vẫn coi là usable nếu server predict được; app không yêu cầu tải local.
-  - Bổ sung `share_plus` để chia sẻ file CSV qua Android share sheet.
-  - `ChargingFeedbackService` thêm hàm `shareCsv()` trả/share file `charging_feedback.csv`.
-  - Nút `GỬI & LƯU CSV` sẽ lưu local trước, gọi `/api/ai/charge-feedback` sau; nếu API lỗi vẫn giữ CSV local và báo rõ “Đã lưu local, gửi server thất bại”.
-  - Thêm nút hoặc action `Chia sẻ CSV` sau khi có dữ liệu feedback.
-
-- **Fix đặt nhắc nhở rút sạc**
-  - Sửa `NotificationService.initialize()` để khởi tạo timezone trước khi schedule:
-    `tz.initializeTimeZones()` và set local `Asia/Ho_Chi_Minh`.
-  - Đảm bảo `_setReminder()` luôn gọi `await NotificationService().initialize()` trước `scheduleChargeReminder()`.
-  - Xin quyền notification trước khi schedule trên Android 13+.
-  - Với Android 12+, dùng exact alarm nếu được phép; nếu không, fallback sang `inexactAllowWhileIdle` để không crash.
-  - Validate thời gian nhắc: nếu thời điểm đã qua hoặc `_predictedMinutes <= 0`, không schedule và hiện thông báo hợp lệ.
-
-## Public API / Dependencies
-- Thêm dependency app: `share_plus`.
-- Backend `/api/user/ai/models` giữ route cũ, bổ sung/chuẩn hóa fields:
-  - `runtimeStatus`: `"loaded" | "not_loaded" | "error"`.
-  - `isLoaded`: bool.
-  - `isPredictable`: bool.
-  - `activeVersion`: string/null.
-  - `runMode`: `"server_only" | "on_device" | "none"`.
-- App tiếp tục dùng `/api/ai/predict-charging-time` và `/api/ai/charge-feedback`.
+- **AI Model Deploy Trên Server Và App**
+  - Đổi `ApiService.getUserAiModels()` dùng endpoint canonical `/api/user/ai/models`, không dùng `/api/user/ai/models/deployed` cho UI status.
+  - Chuẩn hóa backend `/api/user/ai/models` trả một schema duy nhất:
+    `runtimeStatus`, `isLoaded`, `isPredictable`, `activeVersion`, `runMode`, `featureCount`, `lastLoadAt`, `lastError`.
+  - Backend tự phục hồi status:
+    - đọc active model từ manifest disk;
+    - nếu có active version nhưng runtime chưa loaded, gọi `load-active`;
+    - chạy smoke predict nhẹ trước khi báo `loaded`;
+    - chỉ báo “không có model” khi không có active artifact thật sự.
+  - Deploy từ dashboard chỉ thành công khi:
+    upload tồn tại, activate thành công, runtime load thành công, smoke predict thành công, và `AiModelDeployments` đã lưu `deploymentStatus=deployed`.
+  - App thêm cache model catalog trong `SharedPreferences`:
+    - khi refresh thất bại, giữ trạng thái loaded gần nhất thay vì nhảy về “CHƯA CÓ MODEL”;
+    - khi predict thành công, update cache model đó thành loaded;
+    - có retry/backoff khi server chập chờn.
+  - Với `.keras` server-only model, app vẫn hiển thị `ĐÃ LOAD` nếu server predict được; không yêu cầu tải model local.
 
 ## Test Plan
-- **Session**
-  - Login thành công, kill app khỏi đa nhiệm, mở lại: vẫn vào Home.
-  - Login thành công, cài APK update cùng package id, mở lại: vẫn logged in.
-  - Bấm Đăng xuất, kill/mở lại: về Login.
-- **Home**
-  - Tạo xe mới có `currentOdo: 0.0`, `lastBatteryPercent: 100.0`: Home load không lỗi.
-  - Pull refresh Home: không hiện `Không tải được danh sách xe` hoặc `Không tải được thông tin xe`.
+- **Alarms**
+  - Cài APK mới, vào đặt nhắc sạc: nếu exact permission bật được thì schedule exact; nếu switch bị mờ/từ chối thì vẫn schedule inexact và không crash.
+  - Kill app, reboot máy, kiểm tra scheduled notification còn được restore.
+- **Service**
+  - Trước khi index deploy xong: màn Service vẫn tải bằng fallback client sort.
+  - Sau deploy index: stream realtime hoạt động, thêm/sửa/complete/xóa mốc không lỗi.
 - **AI**
-  - Backend trả `charging_time` active/loaded: app hiển thị `ĐÃ LOAD`.
-  - Tap model, bấm `DỰ ĐOÁN VỚI AI`: nhận kết quả thời gian và giờ hoàn thành.
-  - Bấm `GỬI & LƯU CSV`: file local được tạo, feedback server gửi được hoặc lỗi server không làm mất CSV.
-  - Bấm chia sẻ CSV: Android share sheet mở và file đính kèm được.
-- **Reminder**
-  - Bấm `Đặt nhắc nhở rút sạc`: không còn `LateInitializationError`.
-  - Từ chối quyền notification: app báo cần quyền, không crash.
-  - Cho quyền notification: schedule thành công và snackbar “Đã đặt nhắc nhở...” hiển thị.
-- Chạy `flutter analyze`, unit/widget tests hiện có, và build APK release.
+  - Deploy `charging_time` trên dashboard: app refresh thấy `ĐÃ LOAD`.
+  - Restart server/app: model vẫn hiện loaded nếu manifest active còn tồn tại.
+  - Tắt AI server tạm thời: app giữ cache trạng thái cuối và hiển thị “đang kiểm tra”, không nhảy về “CHƯA CÓ MODEL”.
+  - Bấm dự đoán: nếu model chạy được trả AI result; nếu server lỗi thì fallback heuristic có cảnh báo rõ.
+- Chạy `flutter analyze`, `flutter test`, `npm run build` cho dashboard nếu đụng frontend, và deploy `firestore:rules,firestore:indexes`.
 
-## Assumptions
-- Không lưu mật khẩu người dùng local; giữ đăng nhập bằng Firebase Auth token persistence.
-- Model `charging_time` hiện chạy server-side, nên status `ĐÃ LOAD` dựa trên runtime server, không dựa trên local model file.
-- CSV cần chia sẻ qua share sheet hệ thống Android là đủ cho “gửi và chia sẻ”.
+## Assumptions & References
+- Không thể ép Android bật exact alarm nếu hệ điều hành/OEM không cho; app sẽ dùng inexact fallback để “fix hoàn toàn” trải nghiệm.
+- Theo Android docs, `SCHEDULE_EXACT_ALARM` cần được kiểm tra/xin quyền trước khi dùng exact alarm; Android 14 có thể từ chối mặc định: https://developer.android.com/about/versions/14/changes/schedule-exact-alarms
+- `flutter_local_notifications` yêu cầu khai báo permission/receivers cho scheduled notifications và có `requestExactAlarmsPermission()`: https://pub.dev/packages/flutter_local_notifications

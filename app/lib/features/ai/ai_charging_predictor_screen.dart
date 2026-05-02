@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/services/api_service.dart';
+import '../../core/services/notification_center_service.dart';
 import '../../data/services/battery_state_service.dart';
 import '../../data/services/charging_feedback_service.dart';
 import '../../data/services/notification_service.dart';
@@ -17,10 +18,12 @@ class AiChargingPredictorScreen extends ConsumerStatefulWidget {
   const AiChargingPredictorScreen({super.key});
 
   @override
-  ConsumerState<AiChargingPredictorScreen> createState() => _AiChargingPredictorScreenState();
+  ConsumerState<AiChargingPredictorScreen> createState() =>
+      _AiChargingPredictorScreenState();
 }
 
-class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorScreen> {
+class _AiChargingPredictorScreenState
+    extends ConsumerState<AiChargingPredictorScreen> {
   double _targetSOC = 80;
   double _currentSOC = 20;
   bool _isFastCharging = false;
@@ -30,6 +33,7 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
   int _predictedMinutes = 0;
   double _actualSOC = 0;
   bool _reminderSet = false;
+  DateTime? _reminderTime;
   bool _feedbackSubmitted = false;
   DateTime? _startTime;
   int _feedbackCount = 0;
@@ -69,6 +73,22 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
   }
 
   Future<void> _predictCharging() async {
+    if (_reminderSet) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'Hãy hủy nhắc hẹn hiện tại trước khi dự đoán lại.',
+          ),
+          backgroundColor: AppColors.warning,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     final vehicleId = ref.read(selectedVehicleIdProvider);
@@ -88,11 +108,19 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
 
       if (response['success'] == true) {
         final data = response['data'] as Map<String, dynamic>? ?? {};
-        final durationMin = (data['predictedDurationMin'] ?? data['estimatedMinutes'] ?? 0).toDouble();
+        final durationMin =
+            (data['predictedDurationMin'] ?? data['estimatedMinutes'] ?? 0)
+                .toDouble();
         final minutes = durationMin.round();
-        final formatted = data['formattedDuration'] ?? data['formattedTime'] ?? '$minutes phút';
-        final completionDateTime = DateTime.now().add(Duration(minutes: minutes));
-        final formattedTime = '${completionDateTime.hour.toString().padLeft(2, '0')}:${completionDateTime.minute.toString().padLeft(2, '0')}';
+        final formatted =
+            data['formattedDuration'] ??
+            data['formattedTime'] ??
+            '$minutes phút';
+        final completionDateTime = DateTime.now().add(
+          Duration(minutes: minutes),
+        );
+        final formattedTime =
+            '${completionDateTime.hour.toString().padLeft(2, '0')}:${completionDateTime.minute.toString().padLeft(2, '0')}';
 
         setState(() {
           _prediction = formatted;
@@ -102,6 +130,7 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
           _isLoading = false;
           _feedbackSubmitted = false;
           _reminderSet = false;
+          _reminderTime = null;
           _actualSOC = _targetSOC; // Default to target
         });
       } else {
@@ -110,8 +139,11 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
         final energyNeeded = (_targetSOC - _currentSOC) / 100 * 72.0; // kWh
         final hours = energyNeeded * 1000 / power;
         final minutes = (hours * 60).round();
-        final completionDateTime = DateTime.now().add(Duration(minutes: minutes));
-        final formattedTime = '${completionDateTime.hour.toString().padLeft(2, '0')}:${completionDateTime.minute.toString().padLeft(2, '0')}';
+        final completionDateTime = DateTime.now().add(
+          Duration(minutes: minutes),
+        );
+        final formattedTime =
+            '${completionDateTime.hour.toString().padLeft(2, '0')}:${completionDateTime.minute.toString().padLeft(2, '0')}';
 
         setState(() {
           _prediction = '$minutes phút';
@@ -121,6 +153,7 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
           _isLoading = false;
           _feedbackSubmitted = false;
           _reminderSet = false;
+          _reminderTime = null;
           _actualSOC = _targetSOC;
         });
       }
@@ -146,7 +179,9 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
     if (_predictedMinutes <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Thời gian dự đoán không hợp lệ. Hãy chạy DỰ ĐOÁN trước.'),
+          content: Text(
+            'Thời gian dự đoán không hợp lệ. Hãy chạy DỰ ĐOÁN trước.',
+          ),
           backgroundColor: AppColors.warning,
           behavior: SnackBarBehavior.floating,
         ),
@@ -155,7 +190,9 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
     }
     if (_completionTime == null) return;
 
-    final completionDateTime = DateTime.now().add(Duration(minutes: _predictedMinutes));
+    final completionDateTime = DateTime.now().add(
+      Duration(minutes: _predictedMinutes),
+    );
     // Nếu thời điểm đã qua (edge case: dự đoán < 1 phút)
     if (completionDateTime.isBefore(DateTime.now())) {
       if (mounted) {
@@ -171,23 +208,36 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
     }
 
     try {
-      // Đảm bảo notification service đã init (timezone + channels)
-      await NotificationService().initialize();
-
-      await NotificationService().scheduleChargeReminder(
+      // scheduleChargeReminder tự gọi initialize() bên trong
+      final isExact = await NotificationService().scheduleChargeReminder(
         completionDateTime,
         _targetSOC.toInt(),
       );
 
-      setState(() => _reminderSet = true);
+      setState(() {
+        _reminderSet = true;
+        _reminderTime = completionDateTime;
+      });
+
+      await NotificationCenterService().notifyChargeReminderScheduled(
+        targetPercent: _targetSOC.toInt(),
+        scheduledAt: completionDateTime,
+        exact: isExact,
+      );
 
       if (mounted) {
+        final msg = isExact
+            ? '⏰ Đã đặt nhắc nhở lúc $_completionTime'
+            : '⏰ Đã đặt nhắc nhở lúc $_completionTime (gần đúng)';
+        final color = isExact ? AppColors.success : AppColors.warning;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('⏰ Đã đặt nhắc nhở lúc $_completionTime'),
-            backgroundColor: AppColors.success,
+            content: Text(msg),
+            backgroundColor: color,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         );
       }
@@ -201,6 +251,42 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
           ),
         );
       }
+    }
+  }
+
+  Future<void> _cancelReminder() async {
+    final scheduledAt = _reminderTime;
+    try {
+      await NotificationService().cancelChargeReminder();
+      await NotificationCenterService().notifyChargeReminderCancelled(
+        scheduledAt: scheduledAt,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _reminderSet = false;
+        _reminderTime = null;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Đã hủy nhắc hẹn rút sạc.'),
+          backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Lỗi hủy nhắc hẹn: $e'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -263,23 +349,31 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
             content: const Text('✅ Đã lưu CSV và gửi server thành công'),
             backgroundColor: AppColors.success,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         );
       } else if (csvSaved && !serverOk) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('⚠️ Đã lưu CSV local. Gửi server thất bại — sẽ tự đồng bộ sau.'),
+            content: const Text(
+              '⚠️ Đã lưu CSV local. Gửi server thất bại — sẽ tự đồng bộ sau.',
+            ),
             backgroundColor: AppColors.warning,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             duration: const Duration(seconds: 4),
           ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('❌ Không lưu được dữ liệu: ${serverErr ?? "Lỗi CSV"}'),
+            content: Text(
+              '❌ Không lưu được dữ liệu: ${serverErr ?? "Lỗi CSV"}',
+            ),
             backgroundColor: AppColors.error,
             behavior: SnackBarBehavior.floating,
           ),
@@ -296,12 +390,20 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
         backgroundColor: AppColors.background,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.textPrimary, size: 20),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: AppColors.textPrimary,
+            size: 20,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
           'AI Charging Predictor',
-          style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w700),
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ),
       body: SafeArea(
@@ -377,12 +479,19 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
               children: [
                 Text(
                   'Dữ liệu fine-tuning',
-                  style: TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   '$_feedbackCount mẫu • Accuracy: ${_avgAccuracy.toStringAsFixed(1)}%',
-                  style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 11,
+                  ),
                 ),
               ],
             ),
@@ -395,7 +504,11 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
             ),
             child: Text(
               'CSV',
-              style: TextStyle(color: AppColors.info, fontSize: 11, fontWeight: FontWeight.w700),
+              style: TextStyle(
+                color: AppColors.info,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],
@@ -462,7 +575,13 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text('Nhập %', style: TextStyle(color: AppColors.textTertiary, fontSize: 10)),
+                  Text(
+                    'Nhập %',
+                    style: TextStyle(
+                      color: AppColors.textTertiary,
+                      fontSize: 10,
+                    ),
+                  ),
                   SizedBox(
                     width: 120,
                     child: SliderTheme(
@@ -471,7 +590,9 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
                         inactiveTrackColor: AppColors.surfaceVariant,
                         thumbColor: AppColors.warning,
                         trackHeight: 4,
-                        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+                        thumbShape: const RoundSliderThumbShape(
+                          enabledThumbRadius: 8,
+                        ),
                       ),
                       child: Slider(
                         value: _currentSOC,
@@ -539,14 +660,18 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     decoration: BoxDecoration(
-                      color: !_isFastCharging ? AppColors.primary : AppColors.surfaceVariant,
+                      color: !_isFastCharging
+                          ? AppColors.primary
+                          : AppColors.surfaceVariant,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
                       'Standard (400W)',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: !_isFastCharging ? AppColors.background : AppColors.textSecondary,
+                        color: !_isFastCharging
+                            ? AppColors.background
+                            : AppColors.textSecondary,
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
                       ),
@@ -561,14 +686,18 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     decoration: BoxDecoration(
-                      color: _isFastCharging ? AppColors.primary : AppColors.surfaceVariant,
+                      color: _isFastCharging
+                          ? AppColors.primary
+                          : AppColors.surfaceVariant,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
                       'Fast (1000W)',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: _isFastCharging ? AppColors.background : AppColors.textSecondary,
+                        color: _isFastCharging
+                            ? AppColors.background
+                            : AppColors.textSecondary,
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
                       ),
@@ -641,7 +770,11 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
                   color: AppColors.success.withAlpha(26),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(Icons.check_circle, color: AppColors.success, size: 24),
+                child: Icon(
+                  Icons.check_circle,
+                  color: AppColors.success,
+                  size: 24,
+                ),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -650,7 +783,10 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
                   children: [
                     Text(
                       'Thời gian sạc dự đoán',
-                      style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -695,38 +831,49 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
           // Reminder toggle — PLAN #2
           const SizedBox(height: 16),
           GestureDetector(
-            onTap: _reminderSet ? null : _setReminder,
+            onTap: _reminderSet ? _cancelReminder : _setReminder,
             child: Container(
               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
               decoration: BoxDecoration(
-                color: _reminderSet ? AppColors.primary.withAlpha(26) : AppColors.card,
+                color: _reminderSet ? AppColors.warningBg : AppColors.card,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: _reminderSet ? AppColors.primary : AppColors.glassBorder,
+                  color: _reminderSet
+                      ? AppColors.warning
+                      : AppColors.glassBorder,
                 ),
               ),
               child: Row(
                 children: [
                   Icon(
-                    _reminderSet ? Icons.notifications_active : Icons.notifications_outlined,
-                    color: _reminderSet ? AppColors.primary : AppColors.textSecondary,
+                    _reminderSet
+                        ? Icons.notifications_off_rounded
+                        : Icons.notifications_outlined,
+                    color: _reminderSet
+                        ? AppColors.warning
+                        : AppColors.textSecondary,
                     size: 20,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
                       _reminderSet
-                          ? '✅ Đã đặt nhắc nhở rút sạc lúc $_completionTime'
+                          ? 'Hủy nhắc hẹn rút sạc lúc $_completionTime'
                           : '🔔 Đặt nhắc nhở rút sạc',
                       style: TextStyle(
-                        color: _reminderSet ? AppColors.primary : AppColors.textSecondary,
+                        color: _reminderSet
+                            ? AppColors.warning
+                            : AppColors.textSecondary,
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
-                  if (!_reminderSet)
-                    Icon(Icons.chevron_right, color: AppColors.textTertiary, size: 20),
+                  Icon(
+                    _reminderSet ? Icons.close_rounded : Icons.chevron_right,
+                    color: AppColors.textTertiary,
+                    size: 20,
+                  ),
                 ],
               ),
             ),
@@ -769,7 +916,11 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
                 ),
                 child: Text(
                   'LƯU CSV',
-                  style: TextStyle(color: AppColors.warning, fontSize: 10, fontWeight: FontWeight.w700),
+                  style: TextStyle(
+                    color: AppColors.warning,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ],
@@ -795,7 +946,9 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
                     thumbColor: AppColors.primary,
                     overlayColor: AppColors.primary.withAlpha(26),
                     trackHeight: 6,
-                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
+                    thumbShape: const RoundSliderThumbShape(
+                      enabledThumbRadius: 10,
+                    ),
                   ),
                   child: Slider(
                     value: _actualSOC,
@@ -807,7 +960,10 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
               ),
               const SizedBox(width: 12),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.surfaceVariant,
                   borderRadius: BorderRadius.circular(8),
@@ -868,7 +1024,11 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
         children: [
           Row(
             children: [
-              Icon(Icons.check_circle_outline, color: AppColors.success, size: 24),
+              Icon(
+                Icons.check_circle_outline,
+                color: AppColors.success,
+                size: 24,
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -876,12 +1036,19 @@ class _AiChargingPredictorScreenState extends ConsumerState<AiChargingPredictorS
                   children: [
                     Text(
                       'Phản hồi đã ghi nhận!',
-                      style: TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w700),
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       'Dữ liệu đã lưu vào CSV để fine-tune model.',
-                      style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
                     ),
                   ],
                 ),
