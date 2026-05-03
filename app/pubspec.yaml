@@ -1,7 +1,7 @@
 name: vinfast_battery
 description: "VinFast Battery - Quản lý pin xe máy điện VinFast"
 publish_to: 'none'
-version: 1.0.57+58
+version: 1.0.60+61
 
 environment:
   sdk: ^3.11.0

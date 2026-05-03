@@ -1,0 +1,11 @@
+{
+  "latestVersion": "1.0.60",
+  "latestBuild": 61,
+  "forceUpdate": false,
+  "minSupportedBuild": 50,
+  "releaseChannel": "apk",
+  "remindLaterHours": 6,
+  "apkUrl": "https://link-tai-apk-cua-ban.com/app.apk",
+  "releaseNotes": "1. Cập nhật Pin Feliz 2.4kWh\n2. Cải thiện tốc độ sạc\n3. Sửa lỗi giao diện",
+  "features": {}
+}
