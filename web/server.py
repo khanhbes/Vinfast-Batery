@@ -1747,13 +1747,13 @@ def _predict_charging_time(current_battery: float, target_battery: float,
                            battery_health: float = 100.0,
                            temperature: float = 25.0,
                            charger_type: str = 'standard',
-                           battery_capacity_wh: float = 1440.0) -> dict:
+                           battery_capacity_wh: float = 2400.0) -> dict:
     """Heuristic charging time prediction with CC-CV simulation.
     
-    VinFast Feliz LFP battery characteristics:
-    - Nominal: 1440 Wh (48V × 30Ah)
-    - Standard charger: ~200W (48V × ~4.2A)
-    - Fast charger: ~400W (higher amperage)
+    VinFast Feliz 2025 LFP battery characteristics:
+    - Nominal: 2400 Wh (48V × 50Ah)
+    - Standard charger: ~600W
+    - Fast charger: ~1200W (higher amperage)
     
     CC-CV profile: constant current to ~80%, then taper to target.
     """
@@ -1945,7 +1945,7 @@ def _heuristic_predict_charging_time(current: float, target: float,
                                      battery_health: float = 100.0,
                                      temperature: float = 25.0,
                                      charger_type: str = 'standard',
-                                     battery_capacity_wh: float = 1440.0) -> dict:
+                                     battery_capacity_wh: float = 2400.0) -> dict:
     """Fallback heuristic charging time prediction."""
     result = _predict_charging_time(current, target, battery_health, temperature, 
                                     charger_type, battery_capacity_wh)
@@ -2005,7 +2005,7 @@ def ai_predict_charging_time():
     # For fallback heuristic
     health = float(body.get('batteryHealth', 100))
     charger = body.get('chargerType', 'standard')
-    capacity = float(body.get('batteryCapacityWh', 1440))
+    capacity = float(body.get('batteryCapacityWh', 2400))
 
     # Validation
     if current < 0 or current > 100 or target < 0 or target > 100:
@@ -2585,9 +2585,11 @@ def admin_ai_types():
         runtime_health = ai_status.get('status') or ai_status.get('runtimeStatus') or deploy.get('runtimeHealth', 'inactive')
         deploy['runtimeHealth'] = runtime_health
         
-        # Get latest uploaded version from store
+        # Get latest uploaded version + active version from store
+        store_active_version = None
         store = _model_store_for(key)
         if store:
+            store_active_version = store.active_version()
             versions = store.list_versions()
             if versions:
                 latest = max(versions, key=lambda v: v.get('uploadedAt', '') or '')
@@ -2595,6 +2597,35 @@ def admin_ai_types():
         
         # Get store info for versions count
         versions_count = len(versions) if store and versions else 0
+        runtime_active_version = ai_status.get('activeVersion') or ai_status.get('active_version')
+
+        # Reconcile older activation paths: some code paths only update the
+        # model-store active pointer, while the dashboard card reads deployment
+        # status. If a store active version exists, the model is deployed.
+        if store_active_version and deploy.get('deploymentStatus') != 'deployed':
+            deploy.update({
+                'deploymentStatus': 'deployed',
+                'deploymentVersion': store_active_version,
+                'runtimeHealth': runtime_health or deploy.get('runtimeHealth', 'inactive'),
+            })
+            _save_model_deployment_status(key, deploy)
+        elif (
+            deploy.get('deploymentStatus') == 'deployed'
+            and not deploy.get('deploymentVersion')
+            and store_active_version
+        ):
+            deploy['deploymentVersion'] = store_active_version
+            _save_model_deployment_status(key, deploy)
+
+        effective_active_version = (
+            runtime_active_version
+            or store_active_version
+            or (
+                deploy.get('deploymentVersion')
+                if deploy.get('deploymentStatus') == 'deployed'
+                else None
+            )
+        )
         
         # Build runtime status object (frontend expects object not string)
         runtime_status_obj = {
@@ -2602,10 +2633,14 @@ def admin_ai_types():
             'isPredictable': ai_status.get('isPredictable') or ai_status.get('is_predictable') or False,
             'predictorKind': ai_status.get('predictorKind') or ai_status.get('predictor_kind'),
             'featureCount': ai_status.get('featureCount') or ai_status.get('feature_count'),
-            'activeVersion': ai_status.get('activeVersion') or ai_status.get('active_version'),
+            'activeVersion': effective_active_version,
             'versionsCount': versions_count,
             'lastError': ai_status.get('lastError') or ai_status.get('last_error'),
             'validationError': ai_status.get('validationError') or ai_status.get('validation_error'),
+            'deploymentStatus': deploy['deploymentStatus'],
+            'deploymentVersion': deploy['deploymentVersion'],
+            'runtimeHealth': deploy['runtimeHealth'],
+            'lastLoadAt': ai_status.get('lastLoadAt') or ai_status.get('last_load_at') or deploy.get('deployedAt'),
         }
         
         # Build response
@@ -2617,7 +2652,7 @@ def admin_ai_types():
             'deployedBy': deploy['deployedBy'],
             'runtimeHealth': deploy['runtimeHealth'],
             'latestUploadedVersion': deploy.get('latestUploadedVersion'),
-            'activeVersion': ai_status.get('activeVersion') or ai_status.get('active_version'),
+            'activeVersion': effective_active_version,
             'runtimeStatus': runtime_status_obj,
         })
     
@@ -4047,6 +4082,8 @@ def _load_app_config() -> dict:
         'latestBuild': 1,
         'forceUpdate': False,
         'minSupportedBuild': 1,
+        'releaseChannel': 'apk',  # apk | shorebird
+        'remindLaterHours': 6,
         'apkUrl': '',
         'releaseNotes': '',
         'features': {},
