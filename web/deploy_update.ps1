@@ -71,9 +71,12 @@ if (Test-Path $ZIP) { Remove-Item $ZIP -Force }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $zipArchive = [System.IO.Compression.ZipFile]::Open($ZIP, 'Create')
 Get-ChildItem -Path $SRC -Recurse -File | Where-Object {
-    $_.FullName -notmatch '\\\.venv\\|\\node_modules\\|\\__pycache__\\|\\.git\\|\\dist\\|\.pyc$|\.log$|\.zip$'
+    $_.FullName -notmatch '\\.venv\\|\\node_modules\\|\\__pycache__\\|\\.git\\|\\dist\\|\\.pyc$|\\.log$|\\.zip$'
 } | ForEach-Object {
-    $entry = $_.FullName.Substring($SRC.Length + 1)
+    # Use forward slashes so Linux `unzip` extracts into proper subdirectories
+    # (Windows backslashes cause "appears to use backslashes as path separators"
+    # warning and files land with wrong names, breaking Docker builds)
+    $entry = $_.FullName.Substring($SRC.Length + 1).Replace('\', '/')
     [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zipArchive, $_.FullName, $entry) | Out-Null
 }
 $zipArchive.Dispose()
