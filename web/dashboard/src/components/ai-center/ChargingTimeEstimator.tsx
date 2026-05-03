@@ -40,9 +40,9 @@ export default function ChargingTimeEstimator() {
   const [error, setError] = useState<string | null>(null);
 
   const chargerOptions = [
-    { value: 'slow', label: 'Sạc chậm', icon: '🔌', desc: '~100W' },
-    { value: 'standard', label: 'Sạc chuẩn', icon: '⚡', desc: '~200W' },
-    { value: 'fast', label: 'Sạc nhanh', icon: '🚀', desc: '~400W' },
+    { value: 'slow', label: 'Sạc chậm', icon: '🔌', desc: '~150W' },
+    { value: 'standard', label: 'Sạc chuẩn', icon: '⚡', desc: '~600W' },
+    { value: 'fast', label: 'Sạc nhanh', icon: '🚀', desc: '~1200W' },
   ];
 
   const predict = async () => {
@@ -56,7 +56,7 @@ export default function ChargingTimeEstimator() {
         batteryHealth,
         temperature,
         chargerType,
-        batteryCapacityWh: 1440,
+        batteryCapacityWh: 2400,
       });
       setResult(res?.data ?? null);
     } catch (e: any) {
