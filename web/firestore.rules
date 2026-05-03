@@ -73,11 +73,17 @@ service cloud.firestore {
     }
 
     // ── MaintenanceTasks ──
+    // IMPORTANT: Client queries MUST include .where('isDeleted', isEqualTo: false)
+    // alongside .where('ownerUid', ...) so Firestore's query evaluator can confirm
+    // that canReadOwned() && notDeleted() is satisfied for every returned document.
+    // Without the isDeleted constraint the evaluator rejects the query with
+    // PERMISSION_DENIED even when all documents would individually pass.
     match /MaintenanceTasks/{taskId} {
       allow read: if canReadOwned() && notDeleted();
       allow create: if canCreateOwned();
       allow update: if isAuth() && isOwner(resource.data.ownerUid);
-      allow delete: if false;
+      // Allow owner to hard-delete their own tasks (used by deleteMaintenanceTask).
+      allow delete: if isAuth() && isOwner(resource.data.ownerUid);
     }
 
     // ── TelemetryPoints ──

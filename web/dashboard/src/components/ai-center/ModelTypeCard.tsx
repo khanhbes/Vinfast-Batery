@@ -24,8 +24,29 @@ interface Props {
   onSelect: () => void;
 }
 
-function getStatusDisplay(rt: ModelTypeMeta['runtimeStatus']) {
-  // Determine detailed model state
+function getActiveVersion(meta: ModelTypeMeta) {
+  return (
+    meta.runtimeStatus.activeVersion ||
+    meta.runtimeStatus.deploymentVersion ||
+    meta.deploymentVersion ||
+    meta.activeVersion ||
+    null
+  );
+}
+
+function isDeployed(meta: ModelTypeMeta) {
+  return (
+    meta.deploymentStatus === 'deployed' ||
+    meta.runtimeStatus.deploymentStatus === 'deployed' ||
+    Boolean(getActiveVersion(meta))
+  );
+}
+
+function getStatusDisplay(meta: ModelTypeMeta) {
+  const rt = meta.runtimeStatus;
+  const activeVersion = getActiveVersion(meta);
+
+  // 1. Fully loaded & predictable → best state
   if (rt.isLoaded && rt.isPredictable) {
     return {
       icon: CheckCircle2,
@@ -34,6 +55,7 @@ function getStatusDisplay(rt: ModelTypeMeta['runtimeStatus']) {
       bg: 'bg-green-50',
     };
   }
+  // 2. Loaded but predictor validation failed
   if (rt.isLoaded && !rt.isPredictable) {
     return {
       icon: XCircle,
@@ -42,6 +64,19 @@ function getStatusDisplay(rt: ModelTypeMeta['runtimeStatus']) {
       bg: 'bg-red-50',
     };
   }
+  // 3. Has a deployed/active version but not yet loaded into RAM
+  //    e.g. server just restarted and hasn't warmed up yet.
+  //    This MUST come before the versionsCount check so we never falsely
+  //    show "Có version chưa active" for a model that IS activated.
+  if (isDeployed(meta)) {
+    return {
+      icon: CheckCircle2,
+      text: activeVersion ? 'Đã kích hoạt' : 'Đã triển khai',
+      color: 'text-emerald-600',
+      bg: 'bg-emerald-50',
+    };
+  }
+  // 4. Has uploaded versions but none has been deployed yet
   if (rt.versionsCount > 0) {
     return {
       icon: AlertCircle,
@@ -50,6 +85,7 @@ function getStatusDisplay(rt: ModelTypeMeta['runtimeStatus']) {
       bg: 'bg-amber-50',
     };
   }
+  // 5. No versions at all
   return {
     icon: AlertCircle,
     text: 'Chưa có model',
@@ -62,10 +98,11 @@ export default function ModelTypeCard({ meta, selected, onSelect }: Props) {
   const Icon = ICONS[meta.icon] || Box;
   const c = ACCENT_CLASSES[meta.accent] || ACCENT_CLASSES.slate;
   const rt = meta.runtimeStatus;
-  const statusDisplay = getStatusDisplay(rt);
+  const statusDisplay = getStatusDisplay(meta);
   const StatusIcon = statusDisplay.icon;
   const sb = STATUS_BADGE[meta.status] || STATUS_BADGE.planned;
   const PhaseIcon = sb.icon;
+  const activeVersion = getActiveVersion(meta);
 
   return (
     <Card
@@ -103,7 +140,7 @@ export default function ModelTypeCard({ meta, selected, onSelect }: Props) {
               {statusDisplay.text}
             </div>
             <div className="font-mono font-medium truncate mt-0.5 text-muted-foreground">
-              {rt.activeVersion || (rt.versionsCount > 0 ? `${rt.versionsCount} versions` : '—')}
+              {activeVersion || (rt.versionsCount > 0 ? `${rt.versionsCount} versions` : '—')}
             </div>
           </div>
           <div>

@@ -102,17 +102,23 @@ class MaintenanceRepository {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return Stream.value(const <MaintenanceTaskModel>[]);
 
+    // NOTE: Both where-clauses must match the Firestore security rule:
+    //   allow read: if canReadOwned() && notDeleted();
+    // The rule checks ownerUid == request.auth.uid AND isDeleted != true.
+    // Firestore validates collection queries by checking that every document
+    // the query COULD return satisfies the rule.  If we only filter by
+    // ownerUid the evaluator cannot confirm notDeleted(), so it rejects the
+    // query with PERMISSION_DENIED.  Adding isDeleted == false makes the
+    // constraint explicit and satisfies the rule evaluator.
     return _firestore
         .collection('MaintenanceTasks')
         .where('ownerUid', isEqualTo: uid)
+        .where('isDeleted', isEqualTo: false)
         .snapshots()
         .map((snapshot) {
           final tasks = snapshot.docs
-              .where((doc) {
-                final data = doc.data();
-                return data['vehicleId'] == vehicleId &&
-                    data['isDeleted'] != true;
-              })
+              // Client-side filter: narrow to the selected vehicle only
+              .where((doc) => doc.data()['vehicleId'] == vehicleId)
               .map((doc) => MaintenanceTaskModel.fromFirestore(doc))
               .toList();
           tasks.sort((a, b) => a.targetOdo.compareTo(b.targetOdo));

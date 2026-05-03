@@ -363,6 +363,75 @@ def activate_model(
         return _err(500, f"activate thất bại: {e}")
 
 
+@app.post("/v1/models/{type_key}/deploy")
+def deploy_model(
+    type_key: str,
+    payload: dict,
+    x_internal_token: Optional[str] = Header(default=None),
+):
+    """Deploy (activate) a specific model version — called by the web dashboard's Deploy button.
+
+    This is the canonical deployment endpoint used by the frontend ``aiDeployModel()``.
+    It loads the version into the runtime (swap_to) AND persists the active pointer in
+    the store manifest so the state survives server restarts.
+    """
+    _check_token(x_internal_token)
+    st = _get_store(type_key)
+    rt = _get_runtime(type_key)
+
+    version = (payload or {}).get("version", "").strip()
+    if not version:
+        return _err(400, "thiếu version")
+    if not st.has_version(version):
+        return _err(404, f"version '{version}' không tồn tại")
+
+    try:
+        smoke = rt.swap_to(version, require_smoke=False)
+        st.activate(version)
+        return _ok({
+            "status": "deployed",
+            "activeVersion": version,
+            "smokeTest": smoke,
+            "message": f"Model '{type_key}' version '{version}' đã được triển khai thành công.",
+        })
+    except Exception as e:
+        return _err(500, f"deploy thất bại: {e}")
+
+
+@app.post("/v1/models/{type_key}/load-active")
+def load_active_model(
+    type_key: str,
+    x_internal_token: Optional[str] = Header(default=None),
+):
+    """Load the currently-active version (from manifest) into runtime memory.
+
+    Called by the Flask API server after it writes the active-version pointer to the
+    manifest (e.g. during the ``/deploy`` flow).  Without this endpoint the FastAPI
+    runtime never learns about the new active version and ``runtimeStatus.activeVersion``
+    stays null, causing the UI to show the amber "Có version chưa active" warning
+    indefinitely.
+    """
+    _check_token(x_internal_token)
+    st = _get_store(type_key)
+    rt = _get_runtime(type_key)
+
+    active = st.active_version()
+    if not active:
+        return _err(404, f"Không có version nào đang active cho '{type_key}'")
+
+    try:
+        smoke = rt.swap_to(active, require_smoke=False)
+        return _ok({
+            "activeVersion": active,
+            "smokeTest": smoke,
+            "message": f"Đã tải version '{active}' vào runtime.",
+        })
+    except Exception as e:
+        return _err(500, f"load-active thất bại: {e}")
+
+
+
+
 @app.post("/v1/models/{type_key}/deactivate")
 def deactivate_model(
     type_key: str,
