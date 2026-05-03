@@ -34,7 +34,7 @@ class ChargeTrackingService {
 
   /// Tốc độ sạc mặc định: 0.38% / phút
   /// (~4.4 giờ từ 0 → 100%)
-  double _chargeRatePerMin = 0.38;
+  double _chargeRatePerMin = 0.42; // Feliz 2025: 600W / 2400Wh ≈ 0.42%/min
 
   Timer? _chargeTimer;
   bool _notified80 = false;
@@ -70,7 +70,7 @@ class ChargeTrackingService {
     final startBattery = prefs.getInt('charge_startBattery');
     final startTimeStr = prefs.getString('charge_startTime');
     final currentOdo = prefs.getInt('charge_currentOdo') ?? 0;
-    final chargeRate = prefs.getDouble('charge_rate') ?? 0.38;
+    final chargeRate = prefs.getDouble('charge_rate') ?? 0.42;
     final targetBattery = prefs.getInt('charge_targetBattery') ?? 100;
     final ownerUid = prefs.getString('charge_ownerUid');
     final sessionId = prefs.getString('charge_sessionId');
