@@ -12,7 +12,7 @@ class AppConstants {
     'APP_API_BASE_URL',
     defaultValue: 'http://api.evbattery.live',
   );
-  static const String appVersion = '1.0.57';
+  static const String appVersion = '1.0.59';
 
   // Firestore Collection Names
   static const String vehiclesCollection = 'Vehicles';
@@ -28,9 +28,9 @@ class AppConstants {
   // Defaults
   static const String defaultVehicleId = 'VF-OPES-001';
 
-  // VinFast Feliz Neo specs
-  static const double defaultEfficiency = 1.2; // km per 1% battery
-  static const double defaultChargeRate = 0.38; // % per minute
+  // VinFast Feliz 2025 specs
+  static const double defaultEfficiency = 1.35; // km per 1% battery
+  static const double defaultChargeRate = 0.42; // % per minute (600W / 2400Wh)
 
   // Battery health thresholds
   static const double batteryHealthGood = 80;

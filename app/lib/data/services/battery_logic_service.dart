@@ -7,8 +7,8 @@ import '../models/charge_log_model.dart';
 /// Battery Logic Service — Tính toán SoH, hiệu suất, tốc độ sạc
 /// ==========================================================================
 class BatteryLogicService {
-  /// VinFast Feliz Neo: ~1.2 km per 1% battery khi mới
-  static const double defaultFelizEfficiency = 1.2;
+  /// VinFast Feliz 2025: ~1.35 km per 1% battery khi mới
+  static const double defaultFelizEfficiency = 1.35;
 
   // ── Tốc độ sạc (%/phút) ──────────────────────────────────────────────────
 
