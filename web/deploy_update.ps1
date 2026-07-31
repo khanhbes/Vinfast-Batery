@@ -1,5 +1,5 @@
 <#
-  deploy_update.ps1 — Cập nhật VinFast Battery lên VPS
+  deploy_update.ps1 - Cập nhật VinFast Battery lên VPS
   Chạy: .\deploy_update.ps1
   Chỉ rebuild dashboard: .\deploy_update.ps1 -Service dashboard
   Chỉ rebuild api:       .\deploy_update.ps1 -Service api
@@ -13,7 +13,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$SRC  = "$PSScriptRoot"
+$SRC  = if ($PSScriptRoot) { $PSScriptRoot } else { "." }
 $ZIP  = "$env:TEMP\vinfast_web_update.zip"
 $DEST = "${VpsUser}@${VpsIp}:${VpsPath}/"
 
@@ -59,7 +59,7 @@ function Get-DeployPlan([string]$RequestedService) {
 
 Write-Host ""
 Write-Host "============================================" -ForegroundColor Cyan
-Write-Host "  VinFast Battery — Deploy Update" -ForegroundColor Cyan
+Write-Host "  VinFast Battery - Deploy Update" -ForegroundColor Cyan
 Write-Host "  VPS: $VpsIp | Service: $Service" -ForegroundColor Cyan
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host ""
@@ -99,53 +99,11 @@ $upServices = Join-ServiceList $plan.UpServices
 $healthTargets = Join-ServiceList $plan.HealthTargets
 $buildFlags = if ($NoCache) { "--no-cache" } else { "" }
 
-$remoteCmd = @"
-set -e
-cd $VpsPath
-unzip -o vinfast_web.zip -d web/ > /dev/null
-cd web
-docker compose --env-file .env build $buildFlags $buildServices 2>&1 | tail -10
-docker compose --env-file .env up -d $upServices
-docker compose ps
-
-for name in $healthTargets; do
-  status=""
-  for attempt in 1 2 3 4 5 6 7 8 9 10; do
-    status=`$(docker inspect --format '{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "`$name" 2>/dev/null || true)
-    if echo "`$status" | grep -Eq '^running\|(healthy|none)$'; then
-      break
-    fi
-    sleep 3
-  done
-  echo "`$name => `$status"
-  if ! echo "`$status" | grep -Eq '^running\|(healthy|none)$'; then
-    echo "Deployment check failed for `$name"
-    exit 1
-  fi
-done
-
-dashboard_status=`$(docker inspect --format '{{.State.Status}}' vinfast_dashboard 2>/dev/null || true)
-echo "vinfast_dashboard => `$dashboard_status"
-if [ "`$dashboard_status" != "running" ]; then
-  echo "Deployment check failed for vinfast_dashboard"
-  exit 1
-fi
-
-for attempt in 1 2 3 4 5 6 7 8 9 10; do
-  if curl -fsS http://127.0.0.1/api/health > /tmp/vinfast_api_health.json; then
-    cat /tmp/vinfast_api_health.json
-    break
-  fi
-  sleep 3
-done
-if [ ! -s /tmp/vinfast_api_health.json ]; then
-  echo 'Deployment check failed: /api/health is not reachable through dashboard nginx'
-  exit 1
-fi
-"@
+Write-Host "📤 Đang upload bash script..." -ForegroundColor Yellow
+scp "$SRC\deploy_cmd.sh" "${VpsUser}@${VpsIp}:${VpsPath}/deploy_cmd.sh"
 
 Write-Host "   (SSH có thể mất 3-5 phút, vui lòng chờ...)" -ForegroundColor Gray
-ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=10 "${VpsUser}@${VpsIp}" $remoteCmd
+ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=10 "${VpsUser}@${VpsIp}" "dos2unix ${VpsPath}/deploy_cmd.sh 2>/dev/null || true; bash ${VpsPath}/deploy_cmd.sh '$buildFlags' '$buildServices' '$upServices' '$healthTargets'"
 
 # ── BƯỚC 4: Kiểm tra ──────────────────────────────────────────
 Write-Host ""

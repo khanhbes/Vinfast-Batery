@@ -1,6 +1,7 @@
 export type ModelAccent = 'emerald' | 'amber' | 'violet' | 'blue' | 'rose' | 'slate';
 export type ModelGroup = 'survival' | 'assistant' | 'health';
 export type ModelStatusLabel = 'ready' | 'in_progress' | 'planned';
+export type ModelDeploymentStatus = 'planned' | 'not_deployed' | 'deployed';
 
 export interface ModelTypeStatus {
   isLoaded: boolean;
@@ -12,6 +13,9 @@ export interface ModelTypeStatus {
   predictorKind?: string | null;
   featureCount?: number | null;
   versionsCount: number;
+  deploymentStatus?: ModelDeploymentStatus | string | null;
+  deploymentVersion?: string | null;
+  runtimeHealth?: string | null;
 }
 
 export interface InputSchema {
@@ -44,6 +48,13 @@ export interface ModelTypeMeta {
   group: ModelGroup;
   phase: string;          // 'v1.0' | 'v2.0' | 'v3.0'
   status: ModelStatusLabel;
+  deploymentStatus?: ModelDeploymentStatus | string | null;
+  deploymentVersion?: string | null;
+  deployedAt?: string | null;
+  deployedBy?: string | null;
+  runtimeHealth?: string | null;
+  latestUploadedVersion?: string | null;
+  activeVersion?: string | null;
   inputFields: string[];
   visibleInputFields?: string[];
   derivedFields?: Record<string, DerivedField>;

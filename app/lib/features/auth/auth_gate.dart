@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/app_providers.dart';
 import '../../core/services/app_update_service.dart';
+import '../../core/services/auth_service.dart';
 import '../../core/services/notification_center_service.dart';
 import '../../core/services/session_service.dart';
 import '../../core/theme/app_colors.dart';
@@ -44,6 +45,7 @@ class _AuthGateState extends ConsumerState<AuthGate> {
 
   /// User đã chủ động Đăng xuất (chỉ khi flag này true mới về Login ngay).
   bool _explicitSignedOut = false;
+  bool _updateCheckStarted = false;
 
   @override
   void initState() {
@@ -84,9 +86,46 @@ class _AuthGateState extends ConsumerState<AuthGate> {
         ? const Duration(seconds: 8)
         : const Duration(seconds: 3);
 
-    await completer.future.timeout(timeout, onTimeout: () => null);
+    var restoredUser = await completer.future.timeout(
+      timeout,
+      onTimeout: () => null,
+    );
 
-    if (mounted) setState(() => _initializing = false);
+    // Nếu lần trước đã đăng nhập và chưa bấm Đăng xuất, nhưng Firebase vẫn
+    // trả null ở cold start, thử khôi phục bằng credential đã mã hóa.
+    if (restoredUser == null && _wasAuthenticated && !_explicitSignedOut) {
+      restoredUser = FirebaseAuth.instance.currentUser;
+      if (restoredUser == null) {
+        try {
+          restoredUser = await AuthService().restoreRememberedLogin().timeout(
+            const Duration(seconds: 10),
+            onTimeout: () => null,
+          );
+        } catch (e) {
+          debugPrint('[AuthGate] Remembered login restore error: $e');
+        }
+      }
+      if (restoredUser != null) {
+        await SessionService().markAuthenticated();
+        _wasAuthenticated = true;
+        _explicitSignedOut = false;
+      }
+    }
+
+    if (mounted) {
+      setState(() => _initializing = false);
+      _scheduleUpdateCheck();
+    }
+  }
+
+  void _scheduleUpdateCheck() {
+    if (_updateCheckStarted) return;
+    _updateCheckStarted = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // Public endpoint: check app version even before the user signs in.
+      AppUpdateService().initialize(context: context);
+    });
   }
 
   Future<void> _retryFirebaseInit() async {
@@ -133,6 +172,14 @@ class _AuthGateState extends ConsumerState<AuthGate> {
           // ignore: discarded_futures
           SessionService().markAuthenticated();
           return _AuthenticatedRoot(key: ValueKey(snapshot.data!.uid));
+        }
+        final currentUser = FirebaseAuth.instance.currentUser;
+        if (currentUser != null) {
+          // Trường hợp StreamBuilder bắt đầu bằng snapshot null nhưng Firebase
+          // đã có currentUser sau bước restore ở _initialize().
+          // ignore: discarded_futures
+          SessionService().markAuthenticated();
+          return _AuthenticatedRoot(key: ValueKey(currentUser.uid));
         }
         // User null → về Login (không reset markers ở đây để cold-start
         // sau update vẫn được _initialize() phát hiện).
@@ -186,8 +233,11 @@ class _BootstrapErrorScreen extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.cloud_off_rounded,
-                    color: AppColors.error, size: 56),
+                const Icon(
+                  Icons.cloud_off_rounded,
+                  color: AppColors.error,
+                  size: 56,
+                ),
                 const SizedBox(height: 16),
                 const Text(
                   'Không khởi tạo được Firebase',
@@ -224,8 +274,7 @@ class _BootstrapErrorScreen extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 10,
                           fontFamily: 'monospace',
-                          color: AppColors.textTertiary
-                              .withValues(alpha: 0.85),
+                          color: AppColors.textTertiary.withValues(alpha: 0.85),
                         ),
                       ),
                     ),
@@ -240,7 +289,9 @@ class _BootstrapErrorScreen extends StatelessWidget {
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 32, vertical: 14),
+                      horizontal: 32,
+                      vertical: 14,
+                    ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),
@@ -274,9 +325,6 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // Check app updates
-      await AppUpdateService().initialize(context: context);
-
       // Initialize notification center and sync models
       await NotificationCenterService().initialize();
       await NotificationCenterService().syncModels();
@@ -325,8 +373,10 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot> {
         final name = vehicleData['vehicleName'] as String? ?? '';
         final match = await VehicleSpecRepository().matchByVehicleName(name);
         if (match != null) {
-          await VehicleModelLinkService()
-              .linkModel(vehicleId: selectedVehicleId, spec: match);
+          await VehicleModelLinkService().linkModel(
+            vehicleId: selectedVehicleId,
+            spec: match,
+          );
         }
       }
     } catch (e) {

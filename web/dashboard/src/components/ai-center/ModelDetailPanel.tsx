@@ -47,7 +47,13 @@ export default function ModelDetailPanel({ meta, onAfterChange }: Props) {
     () => [...versions].sort((a, b) => (b.uploadedAt || '').localeCompare(a.uploadedAt || '')),
     [versions]
   );
-  const activeVersion = meta.runtimeStatus.activeVersion ?? null;
+  const activeVersion = (
+    meta.runtimeStatus.activeVersion ||
+    meta.runtimeStatus.deploymentVersion ||
+    meta.deploymentVersion ||
+    meta.activeVersion ||
+    null
+  );
   const hasVersions = sorted.length > 0;
 
   // When switching model, default to Test tab + try to load the active model
@@ -89,7 +95,7 @@ export default function ModelDetailPanel({ meta, onAfterChange }: Props) {
   }, [activeVersion, sorted]);
 
   const onDelete = async (v: string) => {
-    const isActive = v === meta.runtimeStatus.activeVersion;
+    const isActive = v === activeVersion;
     const msg = isActive
       ? `Version "${v}" đang được active. Xóa sẽ deactivate model này.\n\nTiếp tục?`
       : `Xóa vĩnh viễn version "${v}"?`;
@@ -144,9 +150,9 @@ export default function ModelDetailPanel({ meta, onAfterChange }: Props) {
           <CardTitle className="flex items-center gap-2">
             <span className={`inline-block w-2 h-2 rounded-full ${c.dot}`} />
             {meta.label}
-            {meta.runtimeStatus.activeVersion && (
+            {activeVersion && (
               <Badge variant="secondary" className="font-mono text-xs ml-2">
-                {meta.runtimeStatus.activeVersion}
+                {activeVersion}
               </Badge>
             )}
             <Badge variant="outline" className="text-[10px] font-mono ml-1">{meta.phase}</Badge>
@@ -154,7 +160,7 @@ export default function ModelDetailPanel({ meta, onAfterChange }: Props) {
           <CardDescription className="mt-1">{meta.description}</CardDescription>
         </div>
         <div className="flex gap-2">
-          {meta.runtimeStatus.activeVersion && (
+          {activeVersion && (
             <Button variant="outline" size="sm" onClick={onDeactivate} className="text-amber-600 hover:text-amber-700">
               <PowerOff className="w-4 h-4 mr-1" />
               Deactivate

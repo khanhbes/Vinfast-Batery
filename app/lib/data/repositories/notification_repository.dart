@@ -6,7 +6,8 @@ import '../models/user_notification.dart';
 
 /// Repository quản lý thông báo người dùng từ Firestore
 class NotificationRepository {
-  static final NotificationRepository _instance = NotificationRepository._internal();
+  static final NotificationRepository _instance =
+      NotificationRepository._internal();
   factory NotificationRepository() => _instance;
   NotificationRepository._internal();
 
@@ -15,7 +16,8 @@ class NotificationRepository {
 
   String? get _uid => _auth.currentUser?.uid;
 
-  CollectionReference get _notificationsRef => _firestore.collection('UserNotifications');
+  CollectionReference get _notificationsRef =>
+      _firestore.collection('UserNotifications');
 
   /// Stream thông báo của user hiện tại, sắp xếp mới nhất trước.
   ///
@@ -29,10 +31,9 @@ class NotificationRepository {
     final uid = _uid;
     if (uid == null) return Stream.value(const <UserNotification>[]);
 
-    return _notificationsRef
-        .where('userId', isEqualTo: uid)
-        .snapshots()
-        .map((snapshot) {
+    return _notificationsRef.where('userId', isEqualTo: uid).snapshots().map((
+      snapshot,
+    ) {
       final list = snapshot.docs
           .map((doc) => UserNotification.fromFirestore(doc))
           .where((n) => n.status != NotificationStatus.archived)
@@ -60,7 +61,8 @@ class NotificationRepository {
           .toList();
     } catch (e) {
       final msg = e.toString();
-      final isIndexError = msg.contains('failed-precondition') ||
+      final isIndexError =
+          msg.contains('failed-precondition') ||
           msg.toLowerCase().contains('index');
       if (!isIndexError) {
         debugPrint('[NotificationRepo] Get error (non-index): $e');
@@ -223,7 +225,11 @@ class NotificationRepository {
       type: NotificationType.modelUpdated,
       title: 'Model AI đã cập nhật',
       message: 'Model "$modelName" phiên bản $version đã sẵn sàng để sử dụng.',
-      payload: {'modelKey': modelKey, 'version': version},
+      payload: {
+        'modelKey': modelKey,
+        'modelName': modelName,
+        'version': version,
+      },
       actionTarget: '/ai/$modelKey',
     );
   }
@@ -238,7 +244,7 @@ class NotificationRepository {
       type: NotificationType.modelDownloadFailed,
       title: 'Tải model thất bại',
       message: 'Không thể tải model "$modelName": $error',
-      payload: {'modelKey': modelKey, 'error': error},
+      payload: {'modelKey': modelKey, 'modelName': modelName, 'error': error},
       actionTarget: '/ai',
     );
   }
@@ -285,7 +291,9 @@ class NotificationRepository {
       }
 
       await batch.commit();
-      debugPrint('[NotificationRepo] Cleaned up ${toDelete.length} old notifications');
+      debugPrint(
+        '[NotificationRepo] Cleaned up ${toDelete.length} old notifications',
+      );
     } catch (e) {
       debugPrint('[NotificationRepo] Cleanup error: $e');
     }

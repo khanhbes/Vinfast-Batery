@@ -18,6 +18,8 @@ class SessionService {
   // Secure keys
   static const _kSelectedVehicleId = 'session.selected_vehicle_id';
   static const _kLastLoginEmail = 'session.last_login_email';
+  static const _kRememberedEmail = 'session.remembered_email';
+  static const _kRememberedPassword = 'session.remembered_password';
 
   // Mirror keys (giữ tương thích với code cũ)
   static const _kPrefSelectedVehicleId = 'selected_vehicle_id';
@@ -114,6 +116,37 @@ class SessionService {
     } catch (_) {}
   }
 
+  // ── Remembered login credentials ─────────────────────────────────
+
+  /// Lưu thông tin đăng nhập để app có thể tự khôi phục phiên sau cold start
+  /// trong trường hợp Firebase Auth chưa restore kịp hoặc bị mất cache.
+  ///
+  /// Dữ liệu được ghi vào FlutterSecureStorage với encryptedSharedPreferences.
+  Future<void> saveRememberedCredentials({
+    required String email,
+    required String password,
+  }) async {
+    await _safeWrite(_kRememberedEmail, email);
+    await _safeWrite(_kRememberedPassword, password);
+  }
+
+  Future<({String email, String password})?> getRememberedCredentials() async {
+    final email = await _safeRead(_kRememberedEmail);
+    final password = await _safeRead(_kRememberedPassword);
+    if (email == null ||
+        email.trim().isEmpty ||
+        password == null ||
+        password.isEmpty) {
+      return null;
+    }
+    return (email: email.trim(), password: password);
+  }
+
+  Future<void> clearRememberedCredentials() async {
+    await _safeDelete(_kRememberedEmail);
+    await _safeDelete(_kRememberedPassword);
+  }
+
   // ── Sync timestamps (non-sensitive) ────────────────────────────────
 
   Future<void> markUserSynced() async {
@@ -185,6 +218,7 @@ class SessionService {
   /// có thể prefill — truyền `keepLastEmail = false` để xóa luôn.
   Future<void> clearSession({bool keepLastEmail = true}) async {
     await _safeDelete(_kSelectedVehicleId);
+    await clearRememberedCredentials();
     if (!keepLastEmail) {
       await _safeDelete(_kLastLoginEmail);
     }

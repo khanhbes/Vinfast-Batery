@@ -76,6 +76,10 @@ class AuthService {
 
       // 5. Lưu thông tin đăng nhập locally (secure)
       await _session.setLastLoginEmail(email);
+      await _session.saveRememberedCredentials(
+        email: email,
+        password: password,
+      );
       await _session.markUserSynced();
       await _session.markAuthenticated();
 
@@ -123,6 +127,15 @@ class AuthService {
         return {'success': false, 'error': 'Login failed'};
       }
 
+      // Lưu phiên ngay sau khi Firebase Auth xác thực thành công. Các bước
+      // đồng bộ phía sau có thể chậm/lỗi mạng nhưng không nên làm mất login.
+      await _session.setLastLoginEmail(email);
+      await _session.saveRememberedCredentials(
+        email: email,
+        password: password,
+      );
+      await _session.markAuthenticated();
+
       // 2. Đảm bảo user doc tồn tại trước khi update
       await _ensureUserDoc(user);
 
@@ -139,9 +152,7 @@ class AuthService {
       final vehicleResults = await _syncService.syncAllVehiclesToWeb();
 
       // 5. Lưu thông tin đăng nhập (secure)
-      await _session.setLastLoginEmail(email);
       await _session.markUserSynced();
-      await _session.markAuthenticated();
 
       // 6. Bắt đầu auto sync
       _syncService.startAutoSync();
@@ -174,6 +185,53 @@ class AuthService {
       return {'success': false, 'error': errorMessage, 'code': e.code};
     } catch (e) {
       return {'success': false, 'error': 'Unexpected error: $e'};
+    }
+  }
+
+  /// Khôi phục đăng nhập không cần người dùng nhập lại mật khẩu.
+  ///
+  /// Firebase Auth thường tự persist user trên Android. Method này là lớp
+  /// dự phòng khi cold start trả về `currentUser == null` dù user đã từng
+  /// đăng nhập và chưa bấm đăng xuất.
+  Future<User?> restoreRememberedLogin() async {
+    if (_auth.currentUser != null) {
+      await _session.markAuthenticated();
+      return _auth.currentUser;
+    }
+
+    final explicitSignedOut = await _session.wasExplicitSignOut();
+    if (explicitSignedOut) return null;
+
+    final credentials = await _session.getRememberedCredentials();
+    if (credentials == null) return null;
+
+    try {
+      final userCredential = await _auth.signInWithEmailAndPassword(
+        email: credentials.email,
+        password: credentials.password,
+      );
+      final user = userCredential.user;
+      if (user == null) return null;
+
+      await _ensureUserDoc(user);
+      await _session.setLastLoginEmail(credentials.email);
+      await _session.markAuthenticated();
+      _syncService.startAutoSync();
+      return user;
+    } on FirebaseAuthException catch (e) {
+      debugPrint('[AuthService] restoreRememberedLogin auth error: ${e.code}');
+      switch (e.code) {
+        case 'invalid-credential':
+        case 'user-not-found':
+        case 'wrong-password':
+        case 'user-disabled':
+          await _session.clearRememberedCredentials();
+          break;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('[AuthService] restoreRememberedLogin error: $e');
+      return null;
     }
   }
 
@@ -303,7 +361,10 @@ class AuthService {
       }
 
       // Kiểm tra ownership
-      final vehicleDoc = await _firestore.collection('Vehicles').doc(vehicleId).get();
+      final vehicleDoc = await _firestore
+          .collection('Vehicles')
+          .doc(vehicleId)
+          .get();
       if (!vehicleDoc.exists) {
         return {'success': false, 'error': 'Vehicle not found'};
       }
@@ -381,7 +442,9 @@ class AuthService {
         docs = snapshot.docs;
       } catch (indexError) {
         // Fallback: query chỉ ownerUid, sort ở client
-        debugPrint('[AuthService] Index fallback for getUserVehicles: $indexError');
+        debugPrint(
+          '[AuthService] Index fallback for getUserVehicles: $indexError',
+        );
         final snapshot = await _firestore
             .collection('Vehicles')
             .where('ownerUid', isEqualTo: user.uid)
@@ -428,7 +491,7 @@ class AuthService {
 
       return doc.data();
     } catch (e) {
-      print('Error getting current user data: $e');
+      debugPrint('Error getting current user data: $e');
       return null;
     }
   }
@@ -439,7 +502,10 @@ class AuthService {
       await _auth.sendPasswordResetEmail(email: email);
       return {'success': true, 'message': 'Password reset email sent'};
     } on FirebaseAuthException catch (e) {
-      return {'success': false, 'error': e.message ?? 'Failed to send reset email'};
+      return {
+        'success': false,
+        'error': e.message ?? 'Failed to send reset email',
+      };
     } catch (e) {
       return {'success': false, 'error': 'Unexpected error: $e'};
     }
@@ -468,7 +534,10 @@ class AuthService {
 
       return {'success': true, 'message': 'Password changed successfully'};
     } on FirebaseAuthException catch (e) {
-      return {'success': false, 'error': e.message ?? 'Failed to change password'};
+      return {
+        'success': false,
+        'error': e.message ?? 'Failed to change password',
+      };
     } catch (e) {
       return {'success': false, 'error': 'Unexpected error: $e'};
     }

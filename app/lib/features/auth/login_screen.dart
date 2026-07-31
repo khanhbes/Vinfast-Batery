@@ -117,35 +117,42 @@ class _LoginScreenState extends State<LoginScreen> {
                 children: [
                   // Logo with gradient glow
                   Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          AppColors.primary.withAlpha(40),
-                          AppColors.primaryContainer.withAlpha(60),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(22),
-                      border: Border.all(
-                        color: AppColors.primary.withAlpha(51),
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.primary.withAlpha(20),
-                          blurRadius: 30,
-                          spreadRadius: 5,
+                        width: 80,
+                        height: 80,
+                        padding: const EdgeInsets.all(5),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              AppColors.primary.withAlpha(40),
+                              AppColors.primaryContainer.withAlpha(60),
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(22),
+                          border: Border.all(
+                            color: AppColors.primary.withAlpha(51),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.primary.withAlpha(20),
+                              blurRadius: 30,
+                              spreadRadius: 5,
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.electric_bolt_rounded,
-                      color: AppColors.primary,
-                      size: 38,
-                    ),
-                  ).animate().fadeIn(duration: 500.ms).scale(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(18),
+                          child: Image.asset(
+                            'assets/icons/app_icon.png',
+                            fit: BoxFit.cover,
+                            filterQuality: FilterQuality.high,
+                          ),
+                        ),
+                      )
+                      .animate()
+                      .fadeIn(duration: 500.ms)
+                      .scale(
                         begin: const Offset(0.7, 0.7),
                         curve: Curves.easeOutBack,
                       ),
@@ -178,21 +185,33 @@ class _LoginScreenState extends State<LoginScreen> {
                       decoration: BoxDecoration(
                         color: AppColors.errorBg,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.error.withAlpha(77)),
+                        border: Border.all(
+                          color: AppColors.error.withAlpha(77),
+                        ),
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.error_outline, color: AppColors.error, size: 18),
+                          Icon(
+                            Icons.error_outline,
+                            color: AppColors.error,
+                            size: 18,
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               _error!,
-                              style: TextStyle(color: AppColors.error, fontSize: 13),
+                              style: TextStyle(
+                                color: AppColors.error,
+                                fontSize: 13,
+                              ),
                             ),
                           ),
                         ],
                       ),
-                    ).animate().fadeIn().shake(hz: 3, offset: const Offset(4, 0)),
+                    ).animate().fadeIn().shake(
+                      hz: 3,
+                      offset: const Offset(4, 0),
+                    ),
                     const SizedBox(height: 16),
                   ],
 
@@ -200,7 +219,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   TextFormField(
                     controller: _emailCtrl,
                     keyboardType: TextInputType.emailAddress,
-                    style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 14,
+                    ),
                     decoration: _inputDecoration(
                       label: 'Email',
                       icon: Icons.email_outlined,
@@ -217,7 +239,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   TextFormField(
                     controller: _passCtrl,
                     obscureText: _obscure,
-                    style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 14,
+                    ),
                     decoration: _inputDecoration(
                       label: 'Mật khẩu',
                       icon: Icons.lock_outlined,
@@ -274,7 +299,9 @@ class _LoginScreenState extends State<LoginScreen> {
                               height: 22,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2.5,
-                                valueColor: AlwaysStoppedAnimation(AppColors.background),
+                                valueColor: AlwaysStoppedAnimation(
+                                  AppColors.background,
+                                ),
                               ),
                             )
                           : const Text(
@@ -293,13 +320,18 @@ class _LoginScreenState extends State<LoginScreen> {
                     onPressed: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                        MaterialPageRoute(
+                          builder: (_) => const RegisterScreen(),
+                        ),
                       );
                     },
                     child: RichText(
                       text: TextSpan(
                         text: 'Chưa có tài khoản? ',
-                        style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 13,
+                        ),
                         children: [
                           TextSpan(
                             text: 'Đăng ký ngay',

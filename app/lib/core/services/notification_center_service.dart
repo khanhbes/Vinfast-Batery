@@ -80,6 +80,7 @@ class NotificationCenterService {
       message: message,
       payload: {
         'modelKey': model.key,
+        'modelName': model.label,
         'version': model.deploymentVersion,
         'isNew': isNew,
         'mobileCompatible': model.mobileCompatible,
@@ -199,7 +200,11 @@ class NotificationCenterService {
       type: NotificationType.modelUpdated,
       title: 'Model AI đã triển khai',
       message: 'Model "$modelName" phiên bản $version đã sẵn sàng để sử dụng.',
-      payload: {'modelKey': modelKey, 'version': version},
+      payload: {
+        'modelKey': modelKey,
+        'modelName': modelName,
+        'version': version,
+      },
       actionTarget: '/ai/$modelKey',
     );
   }

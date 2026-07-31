@@ -3,6 +3,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../constants/app_constants.dart';
+import '../theme/app_colors.dart';
 import 'api_service.dart';
 import 'notification_center_service.dart';
 
@@ -20,7 +21,9 @@ class AppUpdateService with WidgetsBindingObserver {
 
   static const _lastCheckKey = 'app_update_last_check';
   static const _lastNotifiedVersionKey = 'app_update_last_notified_version';
-  static const _checkIntervalHours = 6;
+  static const _snoozedVersionKey = 'app_update_snoozed_version';
+  static const _snoozedUntilKey = 'app_update_snoozed_until';
+  static const _defaultRemindLaterHours = 6;
 
   Map<String, dynamic> _remoteConfig = {};
   Map<String, dynamic> get remoteConfig => _remoteConfig;
@@ -91,6 +94,7 @@ class AppUpdateService with WidgetsBindingObserver {
       final elapsedMin =
           (DateTime.now().millisecondsSinceEpoch - lastCheck) / 60000;
       if (elapsedMin < minIntervalMinutes) return;
+      await prefs.setInt(_lastCheckKey, DateTime.now().millisecondsSinceEpoch);
     }
     await _fetchConfig();
     if (!context.mounted) return;
@@ -113,21 +117,14 @@ class AppUpdateService with WidgetsBindingObserver {
     if (_dialogShowing) return;
 
     final prefs = await SharedPreferences.getInstance();
-    final lastCheck = prefs.getInt(_lastCheckKey) ?? 0;
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final elapsedH = (now - lastCheck) / 3600000;
-
-    final isForce = _asBool(_remoteConfig['forceUpdate']);
-    if (!isForce && elapsedH < _checkIntervalHours) return;
-
-    await prefs.setInt(_lastCheckKey, now);
-
     final info = await PackageInfo.fromPlatform();
     final currentBuild = int.tryParse(info.buildNumber) ?? 0;
     final latestBuild = _asInt(_remoteConfig['latestBuild']);
     final minSupported = _asInt(_remoteConfig['minSupportedBuild']);
     final latestVersion = _asString(_remoteConfig['latestVersion']);
     final releaseNotes = _asString(_remoteConfig['releaseNotes']);
+    final isForce = _asBool(_remoteConfig['forceUpdate']);
+    final delivery = _parseDeliveryMode(_remoteConfig);
 
     // Không có thông tin hợp lệ → bỏ qua
     if (latestBuild <= 0 || latestVersion.isEmpty) return;
@@ -144,57 +141,90 @@ class AppUpdateService with WidgetsBindingObserver {
       await prefs.setString(_lastNotifiedVersionKey, notificationKey);
     }
 
+    if (!forceUpdate && _isSnoozed(prefs, notificationKey)) return;
+
     if (!context.mounted) return;
-    _showUpdateDialog(
+    final action = await _showUpdateDialog(
       context,
       currentVersion: '${info.version}+${info.buildNumber}',
       latestVersion: latestVersion,
       latestBuild: latestBuild,
       releaseNotes: releaseNotes,
       forceUpdate: forceUpdate,
-      apkDownloadUrl: _resolveDownloadUrl(),
+      deliveryMode: delivery,
+      apkDownloadUrl: _resolveDownloadUrl(delivery),
     );
+    if (action == _UpdateDialogAction.later) {
+      await _snoozeVersion(prefs, notificationKey);
+    }
   }
 
   /// Xác định URL tải APK. Phù hợp với server.py:
   /// - Nếu config có `apkUrl` khởi đầu bằng `http` → dùng trực tiếp.
   /// - Ngược lại trở về `/api/app/download` (server sẽ redirect/serve).
-  String _resolveDownloadUrl() {
+  String _resolveDownloadUrl(_UpdateDeliveryMode deliveryMode) {
     final raw = _asString(_remoteConfig['apkUrl']);
     if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
+    if (raw.isEmpty && deliveryMode == _UpdateDeliveryMode.shorebird) {
+      return '';
+    }
     return '${AppConstants.apiBaseUrl}/api/app/download';
   }
 
-  void _showUpdateDialog(
+  bool _isSnoozed(SharedPreferences prefs, String versionKey) {
+    final snoozedVersion = prefs.getString(_snoozedVersionKey);
+    final snoozedUntil = prefs.getInt(_snoozedUntilKey) ?? 0;
+    if (snoozedVersion != versionKey) return false;
+    return DateTime.now().millisecondsSinceEpoch < snoozedUntil;
+  }
+
+  Future<void> _snoozeVersion(
+    SharedPreferences prefs,
+    String versionKey,
+  ) async {
+    final remoteHours = _asInt(_remoteConfig['remindLaterHours']);
+    final hours = remoteHours > 0 ? remoteHours : _defaultRemindLaterHours;
+    final until = DateTime.now().add(Duration(hours: hours));
+    await prefs.setString(_snoozedVersionKey, versionKey);
+    await prefs.setInt(_snoozedUntilKey, until.millisecondsSinceEpoch);
+  }
+
+  Future<_UpdateDialogAction?> _showUpdateDialog(
     BuildContext context, {
     required String currentVersion,
     required String latestVersion,
     required int latestBuild,
     required String releaseNotes,
     required bool forceUpdate,
+    required _UpdateDeliveryMode deliveryMode,
     required String apkDownloadUrl,
-  }) {
+  }) async {
     _dialogShowing = true;
-    showDialog(
-      context: context,
-      barrierDismissible: !forceUpdate,
-      builder: (_) => _UpdateDialog(
-        currentVersion: currentVersion,
-        latestVersion: latestVersion,
-        latestBuild: latestBuild,
-        releaseNotes: releaseNotes,
-        forceUpdate: forceUpdate,
-        apkDownloadUrl: apkDownloadUrl,
-      ),
-    ).whenComplete(() {
+    try {
+      return await showDialog<_UpdateDialogAction>(
+        context: context,
+        barrierDismissible: !forceUpdate,
+        builder: (_) => _UpdateDialog(
+          currentVersion: currentVersion,
+          latestVersion: latestVersion,
+          latestBuild: latestBuild,
+          releaseNotes: releaseNotes,
+          forceUpdate: forceUpdate,
+          deliveryMode: deliveryMode,
+          apkDownloadUrl: apkDownloadUrl,
+        ),
+      );
+    } finally {
       _dialogShowing = false;
-    });
+    }
   }
 
   /// Gọi thủ công để kiểm tra ngay (bỏ qua throttle).
   Future<void> checkNow(BuildContext context) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_lastCheckKey);
+    await prefs.remove(_snoozedVersionKey);
+    await prefs.remove(_snoozedUntilKey);
     await _fetchConfig();
     if (context.mounted) await _maybeShowUpdateDialog(context);
   }
@@ -222,12 +252,34 @@ class AppUpdateService with WidgetsBindingObserver {
   }
 }
 
+enum _UpdateDialogAction { updateNow, later }
+
+enum _UpdateDeliveryMode { apk, shorebird }
+
+_UpdateDeliveryMode _parseDeliveryMode(Map<String, dynamic> config) {
+  final raw =
+      (config['releaseChannel'] ??
+              config['updateChannel'] ??
+              config['delivery'] ??
+              config['deliveryMode'] ??
+              'apk')
+          .toString()
+          .toLowerCase();
+  if (raw.contains('shorebird') ||
+      raw.contains('ota') ||
+      raw.contains('patch')) {
+    return _UpdateDeliveryMode.shorebird;
+  }
+  return _UpdateDeliveryMode.apk;
+}
+
 class _UpdateDialog extends StatelessWidget {
   final String currentVersion;
   final String latestVersion;
   final int latestBuild;
   final String releaseNotes;
   final bool forceUpdate;
+  final _UpdateDeliveryMode deliveryMode;
   final String apkDownloadUrl;
 
   const _UpdateDialog({
@@ -236,25 +288,30 @@ class _UpdateDialog extends StatelessWidget {
     required this.latestBuild,
     required this.releaseNotes,
     required this.forceUpdate,
+    required this.deliveryMode,
     required this.apkDownloadUrl,
   });
 
   @override
   Widget build(BuildContext context) {
+    final channelLabel = deliveryMode == _UpdateDeliveryMode.shorebird
+        ? 'Shorebird OTA'
+        : 'Direct APK';
+
     return AlertDialog(
-      backgroundColor: const Color(0xFF1A1A2E),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      backgroundColor: AppColors.card,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       title: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFF2D5BFF).withAlpha(30),
-              borderRadius: BorderRadius.circular(10),
+              color: AppColors.primary.withAlpha(28),
+              borderRadius: BorderRadius.circular(12),
             ),
             child: const Icon(
               Icons.system_update_rounded,
-              color: Color(0xFF2D5BFF),
+              color: AppColors.primary,
               size: 22,
             ),
           ),
@@ -263,7 +320,7 @@ class _UpdateDialog extends StatelessWidget {
             child: Text(
               forceUpdate ? 'Cập nhật bắt buộc' : 'Có phiên bản mới',
               style: const TextStyle(
-                color: Colors.white,
+                color: AppColors.textPrimary,
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
               ),
@@ -281,11 +338,17 @@ class _UpdateDialog extends StatelessWidget {
               children: [
                 const Text(
                   'Hiện tại: ',
-                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                  ),
                 ),
                 Text(
                   currentVersion,
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 12,
+                  ),
                 ),
               ],
             ),
@@ -294,26 +357,46 @@ class _UpdateDialog extends StatelessWidget {
               children: [
                 const Text(
                   'Mới nhất: ',
-                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                  ),
                 ),
                 Text(
                   latestBuild > 0
                       ? '$latestVersion+$latestBuild'
                       : latestVersion,
                   style: const TextStyle(
-                    color: Color(0xFF2D5BFF),
+                    color: AppColors.primary,
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
               ],
             ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceLight,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: AppColors.glassBorder),
+              ),
+              child: Text(
+                channelLabel,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
             if (releaseNotes.trim().isNotEmpty) ...[
               const SizedBox(height: 12),
               const Text(
                 'Có gì mới',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppColors.textPrimary,
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.4,
@@ -324,7 +407,7 @@ class _UpdateDialog extends StatelessWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.white.withAlpha(12),
+                  color: AppColors.surfaceLight,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: _buildReleaseNotes(releaseNotes),
@@ -338,13 +421,13 @@ class _UpdateDialog extends StatelessWidget {
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFF6B6B).withAlpha(30),
+                  color: AppColors.error.withAlpha(30),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Text(
-                  '⚠ Bắt buộc cập nhật để tiếp tục sử dụng',
+                  'Bắt buộc cập nhật để tiếp tục sử dụng',
                   style: TextStyle(
-                    color: Color(0xFFFF6B6B),
+                    color: AppColors.error,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                   ),
@@ -357,20 +440,21 @@ class _UpdateDialog extends StatelessWidget {
       actions: [
         if (!forceUpdate)
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(context, _UpdateDialogAction.later),
             child: const Text(
-              'Để sau',
-              style: TextStyle(color: Colors.white38),
+              'Remind Me Later',
+              style: TextStyle(color: AppColors.textSecondary),
             ),
           ),
         FilledButton.icon(
           onPressed: () => _download(context),
           icon: const Icon(Icons.download_rounded, size: 16),
-          label: const Text('Tải về & Cài đặt'),
+          label: const Text('Update Now'),
           style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFF2D5BFF),
+            backgroundColor: AppColors.primary,
+            foregroundColor: AppColors.background,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(12),
             ),
           ),
         ),
@@ -379,6 +463,22 @@ class _UpdateDialog extends StatelessWidget {
   }
 
   Future<void> _download(BuildContext context) async {
+    if (deliveryMode == _UpdateDeliveryMode.shorebird &&
+        apkDownloadUrl.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Kênh Shorebird OTA sẽ tự áp dụng bản vá khi app khởi động lại.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      if (context.mounted) {
+        Navigator.pop(context, _UpdateDialogAction.updateNow);
+      }
+      return;
+    }
+
     final uri = Uri.parse(apkDownloadUrl);
     final ok = await canLaunchUrl(uri);
     if (ok) {
@@ -387,12 +487,14 @@ class _UpdateDialog extends StatelessWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Không mở được link tải: $apkDownloadUrl'),
-          backgroundColor: const Color(0xFFFF6B6B),
+          backgroundColor: AppColors.error,
           behavior: SnackBarBehavior.floating,
         ),
       );
     }
-    if (!forceUpdate && context.mounted) Navigator.pop(context);
+    if (!forceUpdate && context.mounted) {
+      Navigator.pop(context, _UpdateDialogAction.updateNow);
+    }
   }
 
   /// Tách release notes thành các dòng / gạch đầu dòng.
@@ -407,7 +509,7 @@ class _UpdateDialog extends StatelessWidget {
       return Text(
         raw,
         style: const TextStyle(
-          color: Colors.white70,
+          color: AppColors.textSecondary,
           fontSize: 12,
           height: 1.5,
         ),
@@ -424,7 +526,7 @@ class _UpdateDialog extends StatelessWidget {
               children: [
                 const Text(
                   '• ',
-                  style: TextStyle(color: Color(0xFF2D5BFF), fontSize: 12),
+                  style: TextStyle(color: AppColors.primary, fontSize: 12),
                 ),
                 Expanded(
                   child: Text(
@@ -432,7 +534,7 @@ class _UpdateDialog extends StatelessWidget {
                         ? line.substring(1).trim()
                         : line,
                     style: const TextStyle(
-                      color: Colors.white70,
+                      color: AppColors.textSecondary,
                       fontSize: 12,
                       height: 1.4,
                     ),
