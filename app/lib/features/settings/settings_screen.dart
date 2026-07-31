@@ -33,7 +33,6 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _pushNotifications = true;
   bool _autoSync = true;
-  bool _biometricAuth = false;
   bool _isLoading = false;
   String _userName = '...';
   String _userEmail = '...';
@@ -67,7 +66,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     setState(() {
       _pushNotifications = prefs.getBool('pushNotifications') ?? true;
       _autoSync = prefs.getBool('autoSync') ?? true;
-      _biometricAuth = prefs.getBool('biometricAuth') ?? false;
     });
   }
 
@@ -104,38 +102,31 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       context: context,
       applicationName: 'VinFast Battery',
       applicationVersion: _appVersion,
-      applicationLegalese: '© 2026 VinFast Battery. Hệ thống quản lý pin xe điện.',
+      applicationLegalese:
+          '© 2026 VinFast Battery. Hệ thống quản lý pin xe điện.',
       applicationIcon: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: AppColors.primary.withAlpha(40),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: const Icon(Icons.electric_bolt_rounded, color: AppColors.primary, size: 32),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.asset(
+            'assets/icons/app_icon.png',
+            width: 32,
+            height: 32,
+            fit: BoxFit.cover,
+            filterQuality: FilterQuality.high,
+          ),
+        ),
       ),
       children: const [
         SizedBox(height: 12),
-        Text('Theo dõi sức khỏe pin, dự đoán thời gian sạc và lên kế hoạch chuyến đi với AI.'),
-      ],
-    );
-  }
-
-  /// PLAN #7 — Show "Coming Soon" snackbar
-  void _showComingSoon(String featureName) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.construction_rounded, color: Colors.white, size: 18),
-            const SizedBox(width: 8),
-            Expanded(child: Text('$featureName: Đang phát triển — sẽ ra mắt sớm!')),
-          ],
+        Text(
+          'Theo dõi sức khỏe pin, dự đoán thời gian sạc và lên kế hoạch chuyến đi với AI.',
         ),
-        backgroundColor: AppColors.primaryContainer,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        duration: const Duration(seconds: 2),
-      ),
+      ],
     );
   }
 
@@ -150,7 +141,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Đăng xuất', style: TextStyle(color: AppColors.textPrimary)),
+        title: const Text(
+          'Đăng xuất',
+          style: TextStyle(color: AppColors.textPrimary),
+        ),
         content: const Text(
           'Bạn có chắc chắn muốn đăng xuất?',
           style: TextStyle(color: AppColors.textSecondary),
@@ -158,14 +152,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Hủy', style: TextStyle(color: AppColors.textSecondary)),
+            child: const Text(
+              'Hủy',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.error,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
             child: const Text('Đăng xuất'),
           ),
@@ -196,8 +195,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(result['success'] == true ? 'Đồng bộ thành công' : 'Đồng bộ thất bại'),
-        backgroundColor: result['success'] == true ? AppColors.success : AppColors.error,
+        content: Text(
+          result['success'] == true ? 'Đồng bộ thành công' : 'Đồng bộ thất bại',
+        ),
+        backgroundColor: result['success'] == true
+            ? AppColors.success
+            : AppColors.error,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
@@ -231,7 +234,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     const SizedBox(height: 4),
                     Text(
                       'Quản lý tài khoản & cài đặt ứng dụng',
-                      style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 14,
+                      ),
                     ),
                   ],
                 ),
@@ -279,7 +285,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 32, 20, 0),
                 child: _isLoading
-                    ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+                    ? const Center(
+                        child: CircularProgressIndicator(
+                          color: AppColors.primary,
+                        ),
+                      )
                     : _AnimatedSignOutButton(onTap: _signOut),
               ),
             ),
@@ -334,12 +344,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Widget _buildProfileCard() {
     final initials = _userName.isNotEmpty && _userName != '...'
-        ? _userName.split(' ').map((w) => w.isNotEmpty ? w[0] : '').take(2).join().toUpperCase()
+        ? _userName
+              .split(' ')
+              .map((w) => w.isNotEmpty ? w[0] : '')
+              .take(2)
+              .join()
+              .toUpperCase()
         : '?';
 
     return GestureDetector(
       onTap: () {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())).then((_) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const ProfileScreen()),
+        ).then((_) {
           _loadUserProfile(); // Refresh after returning
         });
       },
@@ -364,7 +382,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               child: Center(
                 child: Text(
                   initials,
-                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
             ),
@@ -384,12 +406,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   const SizedBox(height: 2),
                   Text(
                     _userEmail,
-                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded, color: AppColors.textTertiary, size: 22),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.textTertiary,
+              size: 22,
+            ),
           ],
         ),
       ),
@@ -401,7 +430,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget _buildVehicleGarageCard() {
     return GestureDetector(
       onTap: () {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const VehicleGarageScreen()));
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const VehicleGarageScreen()),
+        );
       },
       child: Container(
         padding: const EdgeInsets.all(16),
@@ -418,7 +450,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 color: AppColors.primaryContainer,
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: const Icon(Icons.electric_moped_rounded, color: AppColors.primary, size: 24),
+              child: const Icon(
+                Icons.electric_moped_rounded,
+                color: AppColors.primary,
+                size: 24,
+              ),
             ),
             const SizedBox(width: 14),
             const Expanded(
@@ -436,7 +472,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   SizedBox(height: 2),
                   Text(
                     'Quản lý xe, thêm xe mới, xem thông số',
-                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ),
@@ -483,7 +522,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               _saveSetting('autoSync', v);
             },
           ),
-          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
+          Divider(
+            color: AppColors.glassBorder,
+            height: 1,
+            indent: 20,
+            endIndent: 20,
+          ),
           _buildActionRow(
             title: 'Đồng bộ ngay',
             subtitle: 'Sync tất cả dữ liệu lên web dashboard',
@@ -512,9 +556,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             title: 'Thông báo',
             value: 'Xem tất cả thông báo',
             icon: Icons.notifications_outlined,
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationCenterScreen())),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const NotificationCenterScreen(),
+              ),
+            ),
           ),
-          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
+          Divider(
+            color: AppColors.glassBorder,
+            height: 1,
+            indent: 20,
+            endIndent: 20,
+          ),
 
           // Theme Toggle (Light/Dark)
           _buildTapRow(
@@ -522,12 +576,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             value: _getAppearanceValue(),
             icon: Icons.palette_outlined,
             onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const AppearanceSettingsScreen())).then((_) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const AppearanceSettingsScreen(),
+                ),
+              ).then((_) {
                 setState(() {}); // Refresh appearance value
               });
             },
           ),
-          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
+          Divider(
+            color: AppColors.glassBorder,
+            height: 1,
+            indent: 20,
+            endIndent: 20,
+          ),
 
           // Push Notifications toggle
           _buildToggleRow(
@@ -539,7 +603,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               _saveSetting('pushNotifications', v);
             },
           ),
-          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
+          Divider(
+            color: AppColors.glassBorder,
+            height: 1,
+            indent: 20,
+            endIndent: 20,
+          ),
 
           // Biometric Auth — chưa phát triển: hiển thị mờ và chặn tap
           Opacity(
@@ -553,7 +622,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
           ),
-          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
+          Divider(
+            color: AppColors.glassBorder,
+            height: 1,
+            indent: 20,
+            endIndent: 20,
+          ),
 
           // Help
           _buildTapRow(
@@ -561,10 +635,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             value: 'FAQ & Hướng dẫn sử dụng',
             icon: Icons.help_outline_rounded,
             onTap: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const GuideScreen()));
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const GuideScreen()),
+              );
             },
           ),
-          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
+          Divider(
+            color: AppColors.glassBorder,
+            height: 1,
+            indent: 20,
+            endIndent: 20,
+          ),
 
           // About
           _buildTapRow(
@@ -598,7 +680,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             Expanded(
               child: Text(
                 title,
-                style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w500),
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
             Text(
@@ -606,7 +692,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
             ),
             const SizedBox(width: 8),
-            Icon(Icons.arrow_forward_ios, color: AppColors.textTertiary, size: 14),
+            Icon(
+              Icons.arrow_forward_ios,
+              color: AppColors.textTertiary,
+              size: 14,
+            ),
           ],
         ),
       ),
@@ -629,10 +719,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w500),
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
                 const SizedBox(height: 2),
-                Text(subtitle, style: TextStyle(color: AppColors.textTertiary, fontSize: 11)),
+                Text(
+                  subtitle,
+                  style: TextStyle(color: AppColors.textTertiary, fontSize: 11),
+                ),
               ],
             ),
           ),
@@ -667,13 +764,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w500)),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                   const SizedBox(height: 2),
-                  Text(subtitle, style: TextStyle(color: AppColors.textTertiary, fontSize: 11)),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: AppColors.textTertiary,
+                      fontSize: 11,
+                    ),
+                  ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded, color: AppColors.textTertiary, size: 20),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.textTertiary,
+              size: 20,
+            ),
           ],
         ),
       ),
@@ -723,10 +837,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: TextStyle(
-                    color: AppColors.textTertiary,
-                    fontSize: 11,
-                  ),
+                  style: TextStyle(color: AppColors.textTertiary, fontSize: 11),
                 ),
               ],
             ),
@@ -780,9 +891,10 @@ class _AnimatedToggleState extends State<_AnimatedToggle>
       duration: const Duration(milliseconds: 250),
       vsync: this,
     );
-    _slideAnimation = Tween<double>(begin: 0, end: 22).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _slideAnimation = Tween<double>(
+      begin: 0,
+      end: 22,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
     _colorAnimation = ColorTween(
       begin: AppColors.surfaceVariant,
       end: AppColors.primary,
@@ -831,7 +943,11 @@ class _AnimatedToggleState extends State<_AnimatedToggle>
                       color: Colors.white,
                       shape: BoxShape.circle,
                       boxShadow: [
-                        BoxShadow(color: Colors.black26, blurRadius: 2, offset: Offset(0, 1)),
+                        BoxShadow(
+                          color: Colors.black26,
+                          blurRadius: 2,
+                          offset: Offset(0, 1),
+                        ),
                       ],
                     ),
                   ),
@@ -866,9 +982,10 @@ class _AnimatedSignOutButtonState extends State<_AnimatedSignOutButton>
       duration: const Duration(milliseconds: 150),
       vsync: this,
     );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.96).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.96,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override
@@ -898,7 +1015,11 @@ class _AnimatedSignOutButtonState extends State<_AnimatedSignOutButton>
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.logout_rounded, color: AppColors.error.withAlpha(204), size: 18),
+              Icon(
+                Icons.logout_rounded,
+                color: AppColors.error.withAlpha(204),
+                size: 18,
+              ),
               const SizedBox(width: 8),
               Text(
                 'Đăng xuất',

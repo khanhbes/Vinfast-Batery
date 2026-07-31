@@ -56,7 +56,7 @@ export default function ModelCatalog() {
   }, [types]);
 
   // Aggregate KPIs
-  const readyCount = types.filter((t) => t.status === 'ready').length;
+  const readyCount = types.filter(isModelDeployed).length;
   const loadedCount = types.filter((t) => t.runtimeStatus.isLoaded).length;
   const totalVersions = types.reduce((a, t) => a + (t.runtimeStatus.versionsCount || 0), 0);
   const plannedCount = types.filter((t) => t.status === 'planned').length;
@@ -181,5 +181,18 @@ function Legend({ color, label }: { color: string; label: string }) {
     <span className="inline-flex items-center gap-1.5">
       <span className={`w-2 h-2 rounded-full ${color}`} /> {label}
     </span>
+  );
+}
+
+function isModelDeployed(t: ModelTypeMeta) {
+  return (
+    t.deploymentStatus === 'deployed' ||
+    t.runtimeStatus.deploymentStatus === 'deployed' ||
+    Boolean(
+      t.runtimeStatus.activeVersion ||
+      t.runtimeStatus.deploymentVersion ||
+      t.deploymentVersion ||
+      t.activeVersion
+    )
   );
 }
