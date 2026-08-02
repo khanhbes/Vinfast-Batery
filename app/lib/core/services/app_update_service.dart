@@ -1,5 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../constants/app_constants.dart';
@@ -273,7 +278,7 @@ _UpdateDeliveryMode _parseDeliveryMode(Map<String, dynamic> config) {
   return _UpdateDeliveryMode.apk;
 }
 
-class _UpdateDialog extends StatelessWidget {
+class _UpdateDialog extends StatefulWidget {
   final String currentVersion;
   final String latestVersion;
   final int latestBuild;
@@ -291,6 +296,23 @@ class _UpdateDialog extends StatelessWidget {
     required this.deliveryMode,
     required this.apkDownloadUrl,
   });
+
+  @override
+  State<_UpdateDialog> createState() => _UpdateDialogState();
+}
+
+class _UpdateDialogState extends State<_UpdateDialog> {
+  bool _downloading = false;
+  double? _progress;
+  String? _downloadError;
+
+  String get currentVersion => widget.currentVersion;
+  String get latestVersion => widget.latestVersion;
+  int get latestBuild => widget.latestBuild;
+  String get releaseNotes => widget.releaseNotes;
+  bool get forceUpdate => widget.forceUpdate;
+  _UpdateDeliveryMode get deliveryMode => widget.deliveryMode;
+  String get apkDownloadUrl => widget.apkDownloadUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -434,22 +456,54 @@ class _UpdateDialog extends StatelessWidget {
                 ),
               ),
             ],
+            if (_downloading) ...[
+              const SizedBox(height: 14),
+              LinearProgressIndicator(
+                value: _progress,
+                minHeight: 7,
+                borderRadius: BorderRadius.circular(99),
+              ),
+              const SizedBox(height: 7),
+              Text(
+                _progress == null
+                    ? 'Đang chuẩn bị bản cập nhật...'
+                    : 'Đang tải ${(_progress! * 100).round()}%',
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 11,
+                ),
+              ),
+            ],
+            if (_downloadError != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _downloadError!,
+                style: const TextStyle(color: AppColors.error, fontSize: 11),
+              ),
+            ],
           ],
         ),
       ),
       actions: [
         if (!forceUpdate)
           TextButton(
-            onPressed: () => Navigator.pop(context, _UpdateDialogAction.later),
+            onPressed: _downloading
+                ? null
+                : () => Navigator.pop(context, _UpdateDialogAction.later),
             child: const Text(
               'Remind Me Later',
               style: TextStyle(color: AppColors.textSecondary),
             ),
           ),
         FilledButton.icon(
-          onPressed: () => _download(context),
-          icon: const Icon(Icons.download_rounded, size: 16),
-          label: const Text('Update Now'),
+          onPressed: _downloading ? null : () => _download(context),
+          icon: Icon(
+            _downloadError == null
+                ? Icons.download_rounded
+                : Icons.refresh_rounded,
+            size: 16,
+          ),
+          label: Text(_downloadError == null ? 'Update Now' : 'Thử lại'),
           style: FilledButton.styleFrom(
             backgroundColor: AppColors.primary,
             foregroundColor: AppColors.background,
@@ -479,21 +533,89 @@ class _UpdateDialog extends StatelessWidget {
       return;
     }
 
-    final uri = Uri.parse(apkDownloadUrl);
-    final ok = await canLaunchUrl(uri);
-    if (ok) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Không mở được link tải: $apkDownloadUrl'),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-        ),
+    if (apkDownloadUrl.isEmpty) {
+      setState(
+        () => _downloadError = 'Server chưa cấu hình file APK cập nhật.',
       );
+      return;
     }
-    if (!forceUpdate && context.mounted) {
-      Navigator.pop(context, _UpdateDialogAction.updateNow);
+
+    setState(() {
+      _downloading = true;
+      _progress = null;
+      _downloadError = null;
+    });
+
+    final client = http.Client();
+    IOSink? sink;
+    try {
+      final request = http.Request('GET', Uri.parse(apkDownloadUrl));
+      final response = await client
+          .send(request)
+          .timeout(const Duration(seconds: 30));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('HTTP ${response.statusCode}');
+      }
+
+      final directory = await getTemporaryDirectory();
+      final file = File(
+        '${directory.path}${Platform.pathSeparator}'
+        'VinFastBattery_${latestVersion}_$latestBuild.apk',
+      );
+      sink = file.openWrite();
+      final total = response.contentLength ?? 0;
+      var received = 0;
+      await for (final chunk in response.stream) {
+        sink.add(chunk);
+        received += chunk.length;
+        if (mounted && total > 0) {
+          setState(() => _progress = received / total);
+        }
+      }
+      await sink.flush();
+      await sink.close();
+      sink = null;
+
+      if (!mounted) return;
+      setState(() => _progress = 1);
+      final result = await OpenFilex.open(
+        file.path,
+        type: 'application/vnd.android.package-archive',
+      );
+      if (result.type != ResultType.done) {
+        throw Exception(result.message);
+      }
+      if (!forceUpdate && context.mounted) {
+        Navigator.pop(context, _UpdateDialogAction.updateNow);
+      }
+    } catch (e) {
+      try {
+        await sink?.close();
+      } catch (_) {}
+      if (!mounted) return;
+      setState(() {
+        _downloading = false;
+        _progress = null;
+        _downloadError = 'Tải hoặc mở APK thất bại: $e';
+      });
+      final uri = Uri.tryParse(apkDownloadUrl);
+      if (uri != null && await canLaunchUrl(uri) && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Bạn có thể thử tải bằng trình duyệt.'),
+            action: SnackBarAction(
+              label: 'Mở',
+              onPressed: () =>
+                  launchUrl(uri, mode: LaunchMode.externalApplication),
+            ),
+          ),
+        );
+      }
+    } finally {
+      client.close();
+      if (mounted && _downloadError == null) {
+        setState(() => _downloading = false);
+      }
     }
   }
 

@@ -17,7 +17,7 @@ param(
     [string]$VpsUser   = 'root',
     [string]$VpsPath   = '/opt/vinfast/web',
     [string]$KeyFile   = "$env:USERPROFILE\.ssh\id_ed25519",
-    [string]$AdminKey  = 'vinfast-admin-2024',
+    [string]$AdminKey  = $env:VINFAST_ADMIN_KEY,
     [string]$ReleaseNotes = '',         # Ghi chú phiên bản, có thể truyền khi chạy
     [switch]$ForceUpdate,                # Đánh dấu bản này là bắt buộc cập nhật
     [int]$MinSupportedBuild = 1          # Build tối thiểu vẫn được dùng (force nếu thấp hơn)
@@ -165,6 +165,10 @@ Write-Host "  adb install releases\VinFastBattery_v$newSemver`_arm64-v8a.apk" -F
 # ── 10. Upload APK lên VPS + cập nhật app_config.json ──
 if (-not $NoDeploy) {
     Write-Host "`n--- Auto-deploy APK len VPS ---" -ForegroundColor Cyan
+
+    if ([string]::IsNullOrWhiteSpace($AdminKey)) {
+        throw "Thieu VINFAST_ADMIN_KEY. Dat bien moi truong hoac truyen -AdminKey truoc khi deploy."
+    }
 
     # Tìm APK vừa build (ưu tiên arm64)
     $apkToDeploy = $null

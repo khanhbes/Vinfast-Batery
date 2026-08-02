@@ -1,6 +1,7 @@
 import { Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import ModelCatalog from '@/components/ai-center/ModelCatalog';
+import RangePredictionLab from '@/components/ai-center/RangePredictionLab';
 
 export default function AiCenter() {
   return (
@@ -18,6 +19,8 @@ export default function AiCenter() {
           </Button>
         </div>
       </div>
+
+      <RangePredictionLab />
 
       {/* Model Hub — multi-type catalog + detail panel (only when selected) */}
       <ModelCatalog />

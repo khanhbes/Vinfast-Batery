@@ -10,6 +10,9 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <!-- Cho phép mở trình cài đặt APK tải từ kênh cập nhật riêng. Android vẫn
+         yêu cầu người dùng xác nhận và bật "Install unknown apps". -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
     <!-- SCHEDULE_EXACT_ALARM: cho phép xin runtime permission trên Android 12+.
          Không dùng USE_EXACT_ALARM để tránh policy Play Store (chỉ clock/calendar).
          App sẽ fallback sang inexact nếu user từ chối hoặc OEM khoá. -->

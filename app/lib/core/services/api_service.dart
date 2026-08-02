@@ -126,6 +126,10 @@ class ApiService {
     return get('/api/ai/charging-model-status');
   }
 
+  Future<Map<String, dynamic>> predictRemainingRange({required int batteryPercent, required double stateOfHealth, required double baseEfficiencyKmPerPercent, double temperatureC = 30, double averageSpeedKmh = 35, double payloadKg = 75}) async {
+    return _post('/api/ai/predict-range', {'batteryPercent': batteryPercent, 'stateOfHealth': stateOfHealth, 'baseEfficiencyKmPerPercent': baseEfficiencyKmPerPercent, 'temperatureC': temperatureC, 'averageSpeedKmh': averageSpeedKmh, 'payloadKg': payloadKg, 'reservePercent': 5});
+  }
+
   /// Lấy catalog AI models cho app (canonical — tất cả models + flat status schema)
   Future<Map<String, dynamic>> getUserAiModels() async {
     return get('/api/user/ai/models');

@@ -1,7 +1,7 @@
 name: vinfast_battery
 description: "VinFast Battery - Quản lý pin xe máy điện VinFast"
 publish_to: 'none'
-version: 1.0.61+62
+version: 1.0.62+63
 
 environment:
   sdk: ^3.11.0
@@ -62,6 +62,7 @@ dependencies:
   # App version info + update
   package_info_plus: ^8.3.0
   url_launcher: ^6.3.1
+  open_filex: ^4.7.0
   flutter_localizations:
     sdk: flutter
   flutter_map: ^8.2.2
