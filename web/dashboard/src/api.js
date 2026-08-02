@@ -138,6 +138,9 @@ export const aiRefreshInsights = (vehicleId) =>
 export const aiPredictChargingTime = (payload) =>
   apiFetch('/api/ai/predict-charging-time', { method: 'POST', body: JSON.stringify(payload) })
 
+export const aiPredictRange = (payload) =>
+  apiFetch('/api/ai/predict-range', { method: 'POST', body: JSON.stringify(payload) })
+
 
 // ── AI Model Management (per-type; FastAPI via Flask proxy) ──
 export const aiListTypes = () => apiFetch('/api/admin/ai/types')

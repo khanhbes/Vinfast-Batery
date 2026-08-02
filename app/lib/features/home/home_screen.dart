@@ -10,6 +10,7 @@ import '../../core/services/sync_service.dart';
 import '../../core/utils/app_error_formatter.dart';
 import '../../data/models/vehicle_model.dart';
 import '../../data/services/battery_state_service.dart';
+import 'widgets/range_prediction_card.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../trip_planner/trip_planner_wrapper.dart';
 import '../maintenance/maintenance_screen.dart';
@@ -106,6 +107,17 @@ class HomeScreen extends ConsumerWidget {
                       error: e,
                       onRetry: () => ref.invalidate(vehicleProvider(vehicleId)),
                     ),
+                  ),
+                ),
+              ),
+
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                  child: vehicleAsync.when(
+                    data: (vehicle) => vehicle == null ? const SizedBox.shrink() : RangePredictionCard(vehicle: vehicle),
+                    loading: () => const SizedBox.shrink(),
+                    error: (_, __) => const SizedBox.shrink(),
                   ),
                 ),
               ),

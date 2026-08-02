@@ -1740,6 +1740,45 @@ def ai_predict_consumption():
     return jsonify({'success': True, 'data': result})
 
 
+def _predict_remaining_range(payload: dict) -> dict:
+    """Interpretable hybrid EV range estimator shared by app and admin web."""
+    soc = max(0.0, min(100.0, float(payload.get('batteryPercent', payload.get('soc', 50)))))
+    soh = max(50.0, min(100.0, float(payload.get('stateOfHealth', 100))))
+    efficiency = max(0.1, min(5.0, float(payload.get('baseEfficiencyKmPerPercent', 1.2))))
+    temperature = max(-20.0, min(60.0, float(payload.get('temperatureC', 30))))
+    speed = max(5.0, min(140.0, float(payload.get('averageSpeedKmh', 35))))
+    payload_kg = max(0.0, min(500.0, float(payload.get('payloadKg', 75))))
+    reserve = max(0.0, min(20.0, float(payload.get('reservePercent', 5))))
+    usable_soc = max(0.0, soc - reserve)
+    health_factor = soh / 100.0
+    temperature_factor = max(0.72, 1.0 - abs(temperature - 25.0) * 0.009)
+    speed_factor = max(0.70, 1.0 - max(0.0, speed - 40.0) * 0.006)
+    payload_factor = max(0.78, 1.0 - max(0.0, payload_kg - 75.0) * 0.0009)
+    adjusted_efficiency = efficiency * health_factor * temperature_factor * speed_factor * payload_factor
+    estimated_km = usable_soc * adjusted_efficiency
+    uncertainty = max(0.08, min(0.22, 0.08 + abs(temperature - 25.0) * 0.002 + max(0.0, speed - 50.0) * 0.001))
+    return {
+        'estimatedRangeKm': round(estimated_km, 1),
+        'rangeLowKm': round(max(0.0, estimated_km * (1.0 - uncertainty)), 1),
+        'rangeHighKm': round(estimated_km * (1.0 + uncertainty), 1),
+        'adjustedEfficiencyKmPerPercent': round(adjusted_efficiency, 3),
+        'usableBatteryPercent': round(usable_soc, 1),
+        'reservePercent': round(reserve, 1),
+        'confidence': round(max(0.65, min(0.92, 0.92 - uncertainty * 0.7)), 2),
+        'modelSource': 'hybrid-range-v1',
+        'factors': {'health': round(health_factor, 3), 'temperature': round(temperature_factor, 3), 'speed': round(speed_factor, 3), 'payload': round(payload_factor, 3)},
+    }
+
+
+@app.route('/api/ai/predict-range', methods=['POST'])
+def ai_predict_range():
+    try:
+        result = _predict_remaining_range(request.get_json(silent=True) or {})
+        return jsonify({'success': True, 'data': result, **result})
+    except (TypeError, ValueError) as exc:
+        return jsonify({'success': False, 'error': f'Dữ liệu đầu vào không hợp lệ: {exc}'}), 400
+
+
 # ═══════════════════════════════════════════════════════════════
 # AI ENDPOINT — Predict Charging Time
 # ═══════════════════════════════════════════════════════════════
@@ -4071,9 +4110,12 @@ def admin_migrate_collections():
 # ═══════════════════════════════════════════════════════════════
 
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
-_APP_CONFIG_FILE = os.path.join(_APP_DIR, 'app_config.json')
 _APK_DIR = os.environ.get('APK_DIR', os.path.join(_APP_DIR, 'apk'))
 os.makedirs(_APK_DIR, exist_ok=True)
+# Lưu config cùng volume APK để không mất sau mỗi lần rebuild container.
+_APP_CONFIG_FILE = os.environ.get(
+    'APP_CONFIG_FILE', os.path.join(_APK_DIR, 'app_config.json')
+)
 
 def _load_app_config() -> dict:
     """Đọc app_config.json, trả default nếu không tồn tại."""

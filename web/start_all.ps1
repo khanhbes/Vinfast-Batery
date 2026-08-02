@@ -3,6 +3,7 @@
 # Admin Portal (React) → http://localhost:3000
 # Unified API  (Flask)  → http://localhost:5000
 # AI Server    (FastAPI)→ http://localhost:8001 (internal)
+# Server -> http://api.evbattery.live/
 # ═══════════════════════════════════════════════════════════════
 
 $root = $PSScriptRoot
