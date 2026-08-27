@@ -17,10 +17,10 @@ param(
     [string]$VpsUser   = 'root',
     [string]$VpsPath   = '/opt/vinfast/web',
     [string]$KeyFile   = "$env:USERPROFILE\.ssh\id_ed25519",
-    [string]$AdminKey  = $env:VINFAST_ADMIN_KEY,
+    [string]$AdminKey  = $env:VINFAST_ADMIN_KEY, # Nếu trống, cập nhật config an toàn qua SSH
     [string]$ReleaseNotes = '',         # Ghi chú phiên bản, có thể truyền khi chạy
     [switch]$ForceUpdate,                # Đánh dấu bản này là bắt buộc cập nhật
-    [int]$MinSupportedBuild = 1          # Build tối thiểu vẫn được dùng (force nếu thấp hơn)
+    [int]$MinSupportedBuild = 0          # 0 = giữ policy hiện tại; >0 = cập nhật build tối thiểu
 )
 
 Set-StrictMode -Version Latest
@@ -166,10 +166,6 @@ Write-Host "  adb install releases\VinFastBattery_v$newSemver`_arm64-v8a.apk" -F
 if (-not $NoDeploy) {
     Write-Host "`n--- Auto-deploy APK len VPS ---" -ForegroundColor Cyan
 
-    if ([string]::IsNullOrWhiteSpace($AdminKey)) {
-        throw "Thieu VINFAST_ADMIN_KEY. Dat bien moi truong hoac truyen -AdminKey truoc khi deploy."
-    }
-
     # Tìm APK vừa build (ưu tiên arm64)
     $apkToDeploy = $null
     $arm64Apk = Join-Path $releaseDir "VinFastBattery_v$newSemver.apk"
@@ -189,39 +185,108 @@ if (-not $NoDeploy) {
             Write-Host "  Upload APK ($([math]::Round((Get-Item $apkToDeploy).Length/1MB,1)) MB)..." -ForegroundColor Gray
             scp -i $KeyFile -q $apkToDeploy "${VpsUser}@${VpsIp}:${remoteApkPath}"
 
-            # Cập nhật app_config.json qua API
+            # Cập nhật app_config.json. Ưu tiên Admin API; nếu máy build chưa
+            # cấu hình VINFAST_ADMIN_KEY thì dùng chính SSH đã upload APK.
             $apkRelUrl = "/apk/$remoteApkName"
             $notes = if ($ReleaseNotes) { $ReleaseNotes } else { "Build $build — $([datetime]::Now.ToString('dd/MM/yyyy HH:mm'))" }
-            $configBody = @{
-                latestVersion     = $newSemver
-                latestBuild       = [int]$build
-                minSupportedBuild = [int]$MinSupportedBuild
-                apkUrl            = $apkRelUrl
-                releaseNotes      = $notes
-                forceUpdate       = [bool]$ForceUpdate
-            } | ConvertTo-Json -Compress
+            $config = @{}
+            try {
+                $currentConfigResp = Invoke-RestMethod `
+                    -Uri "$ApiUrl/api/app/config" `
+                    -Method GET `
+                    -TimeoutSec 15 `
+                    -ErrorAction Stop
+                if ($currentConfigResp.success -and $currentConfigResp.data) {
+                    $currentConfigResp.data.psobject.Properties | ForEach-Object {
+                        $config[$_.Name] = $_.Value
+                    }
+                }
+            } catch {
+                $localConfigFile = Join-Path (Split-Path $projectDir -Parent) 'web\app_config.json'
+                if (Test-Path $localConfigFile) {
+                    $localConfig = Get-Content $localConfigFile -Raw | ConvertFrom-Json
+                    $localConfig.psobject.Properties | ForEach-Object {
+                        $config[$_.Name] = $_.Value
+                    }
+                }
+            }
 
-            $configResp = Invoke-RestMethod `
+            $config['latestVersion'] = $newSemver
+            $config['latestBuild'] = [int]$build
+            if ($MinSupportedBuild -gt 0) {
+                $config['minSupportedBuild'] = [int]$MinSupportedBuild
+            } elseif (-not $config.ContainsKey('minSupportedBuild')) {
+                $config['minSupportedBuild'] = 1
+            }
+            $config['apkUrl'] = $apkRelUrl
+            $config['releaseNotes'] = $notes
+            $config['forceUpdate'] = [bool]$ForceUpdate
+            if (-not $config.ContainsKey('releaseChannel')) { $config['releaseChannel'] = 'apk' }
+            if (-not $config.ContainsKey('remindLaterHours')) { $config['remindLaterHours'] = 6 }
+            if (-not $config.ContainsKey('features')) { $config['features'] = @{} }
+            $configBody = $config | ConvertTo-Json -Depth 10 -Compress
+
+            if (-not [string]::IsNullOrWhiteSpace($AdminKey)) {
+                $configResp = Invoke-RestMethod `
+                    -Uri "$ApiUrl/api/app/config" `
+                    -Method POST `
+                    -Headers @{ 'Content-Type' = 'application/json'; 'X-Admin-Key' = $AdminKey } `
+                    -Body $configBody `
+                    -TimeoutSec 15 `
+                    -ErrorAction Stop
+                if (-not $configResp.success) {
+                    throw "Admin API khong cap nhat duoc app config: $($configResp.error)"
+                }
+            } else {
+                $tempConfigFile = Join-Path $projectDir '.app_config.deploy.json'
+                $remoteTempConfig = "$remoteApkDir/app_config.json.tmp-$build"
+                try {
+                    Set-Content -LiteralPath $tempConfigFile -Value ($config | ConvertTo-Json -Depth 10) -Encoding utf8
+                    scp -i $KeyFile -q $tempConfigFile "${VpsUser}@${VpsIp}:${remoteTempConfig}"
+                    ssh -i $KeyFile -o BatchMode=yes `
+                        "${VpsUser}@${VpsIp}" "mv $remoteTempConfig $remoteApkDir/app_config.json"
+                } finally {
+                    if (Test-Path $tempConfigFile) {
+                        Remove-Item -LiteralPath $tempConfigFile -Force
+                    }
+                }
+            }
+
+            # Xác nhận public endpoint đã quảng bá đúng build vừa upload.
+            $verifyResp = Invoke-RestMethod `
                 -Uri "$ApiUrl/api/app/config" `
-                -Method POST `
-                -Headers @{ 'Content-Type' = 'application/json'; 'X-Admin-Key' = $AdminKey } `
-                -Body $configBody `
+                -Method GET `
                 -TimeoutSec 15 `
                 -ErrorAction Stop
-
-            if ($configResp.success) {
-                $forceLabel = if ($ForceUpdate) { ' [FORCE]' } else { '' }
-                Write-Host "  OK app_config.json → v$newSemver (build $build, min=$MinSupportedBuild)$forceLabel" -ForegroundColor Green
-                Write-Host "  Download: $ApiUrl/api/app/download" -ForegroundColor DarkGray
-            } else {
-                Write-Host "  WARN: API tra loi that bai: $($configResp.error)" -ForegroundColor Yellow
+            if (-not $verifyResp.success -or
+                [int]$verifyResp.data.latestBuild -ne [int]$build -or
+                [string]$verifyResp.data.latestVersion -ne $newSemver) {
+                throw "Server chua xac nhan app config v$newSemver+$build"
             }
+            $downloadProbe = Invoke-WebRequest `
+                -Uri "$ApiUrl/api/app/download" `
+                -Method HEAD `
+                -TimeoutSec 15 `
+                -ErrorAction Stop
+            if ([int]$downloadProbe.StatusCode -lt 200 -or [int]$downloadProbe.StatusCode -ge 400) {
+                throw "APK download endpoint tra HTTP $($downloadProbe.StatusCode)"
+            }
+
+            # Giữ metadata trong repo đồng bộ với bản đang phát hành.
+            $localConfigFile = Join-Path (Split-Path $projectDir -Parent) 'web\app_config.json'
+            Set-Content -LiteralPath $localConfigFile -Value ($config | ConvertTo-Json -Depth 10) -Encoding utf8
+
+            $forceLabel = if ($ForceUpdate) { ' [FORCE]' } else { '' }
+            $effectiveMinBuild = [int]$config['minSupportedBuild']
+            Write-Host "  OK app_config.json → v$newSemver (build $build, min=$effectiveMinBuild)$forceLabel" -ForegroundColor Green
+            Write-Host "  Download: $ApiUrl/api/app/download" -ForegroundColor DarkGray
         } catch {
-            Write-Host "  WARN: Khong the upload APK len VPS: $_" -ForegroundColor Yellow
-            Write-Host "  (Bo qua, APK van nam tai $releaseDir)" -ForegroundColor DarkGray
+            Write-Host "  ERROR: Auto-update deploy that bai: $_" -ForegroundColor Red
+            Write-Host "  APK local van nam tai $releaseDir" -ForegroundColor DarkGray
+            throw
         }
     } else {
-        Write-Host "  Khong tim thay APK de upload." -ForegroundColor DarkGray
+        throw "Khong tim thay APK de auto-deploy."
     }
 } else {
     Write-Host "`n[SKIP] Bo qua deploy VPS (-NoDeploy)" -ForegroundColor DarkGray

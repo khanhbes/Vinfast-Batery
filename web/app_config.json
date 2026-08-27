@@ -1,11 +1,11 @@
 {
-  "latestVersion": "1.0.62",
-  "latestBuild": 63,
+  "latestVersion": "1.0.63",
+  "latestBuild": 64,
   "forceUpdate": false,
   "minSupportedBuild": 50,
   "releaseChannel": "apk",
   "remindLaterHours": 6,
   "apkUrl": "/apk/VinFastBattery_latest.apk",
-  "releaseNotes": "1. Trip Planner mới với bản đồ và định tuyến thực tế\n2. Dự đoán phần trăm pin tiêu thụ bằng model AI 11 features\n3. Tải và cài bản cập nhật trực tiếp trong ứng dụng",
+  "releaseNotes": "Tích hợp Smart Charger Step 8: telemetry Shelly, điều khiển nguồn thủ công và đồng bộ dự đoán AI monitor-only.",
   "features": {}
 }
