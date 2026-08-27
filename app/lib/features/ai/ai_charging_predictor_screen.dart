@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/services/api_service.dart';
@@ -9,6 +12,10 @@ import '../../core/services/notification_center_service.dart';
 import '../../data/services/battery_state_service.dart';
 import '../../data/services/charging_feedback_service.dart';
 import '../../data/services/notification_service.dart';
+import '../../data/models/smart_charger_status.dart';
+import '../../data/models/smart_charging_session.dart';
+import '../../data/services/smart_charger_service.dart';
+import 'widgets/smart_charger_card.dart';
 
 /// AI Charging Predictor Screen — PLAN #2 Enhanced
 /// - Full fine-tuning workflow
@@ -38,12 +45,78 @@ class _AiChargingPredictorScreenState
   DateTime? _startTime;
   int _feedbackCount = 0;
   double _avgAccuracy = 0;
+  final SmartChargerService _smartChargerService = SmartChargerService();
+  SmartChargerStatus? _smartChargerStatus;
+  String? _smartChargerError;
+  bool _smartChargerLoading = false;
+  bool _smartChargerCommandBusy = false;
+  bool _smartChargerRefreshInFlight = false;
+  Timer? _smartChargerPollTimer;
+  DateTime? _smartChargerLastUpdated;
+  DateTime? _predictedFullAt;
+  String? _predictionSource;
+  double? _predictionConfidence;
+  String? _monitorSessionId;
+  String? _monitorSessionError;
 
   @override
   void initState() {
     super.initState();
     _loadCurrentBatteryState();
     _loadFeedbackStats();
+    _startSmartChargerPolling();
+  }
+
+  @override
+  void dispose() {
+    _smartChargerPollTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startSmartChargerPolling() {
+    _refreshSmartChargerStatus();
+    if (!_smartChargerService.isConfigured) return;
+    _smartChargerPollTimer?.cancel();
+    _smartChargerPollTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _refreshSmartChargerStatus(silent: true),
+    );
+  }
+
+  Future<void> _refreshSmartChargerStatus({bool silent = false}) async {
+    if (_smartChargerRefreshInFlight || _smartChargerCommandBusy || !mounted) {
+      return;
+    }
+    _smartChargerRefreshInFlight = true;
+    if (!silent) {
+      setState(() => _smartChargerLoading = true);
+    }
+    try {
+      final status = await _smartChargerService.getStatus();
+      if (!mounted) return;
+      setState(() {
+        _smartChargerStatus = status;
+        _smartChargerError = status.online
+            ? null
+            : 'Không thể kết nối bộ điều khiển sạc trong mạng Wi-Fi.';
+        _smartChargerLastUpdated = DateTime.now();
+      });
+    } on SmartChargerException catch (error) {
+      if (!mounted) return;
+      setState(() => _smartChargerError = error.message);
+    } catch (error) {
+      debugPrint('[SmartCharger] status error: $error');
+      if (!mounted) return;
+      setState(() {
+        _smartChargerError =
+            'Không thể kết nối bộ điều khiển sạc trong mạng Wi-Fi.';
+      });
+    } finally {
+      _smartChargerRefreshInFlight = false;
+      if (mounted && _smartChargerLoading) {
+        setState(() => _smartChargerLoading = false);
+      }
+    }
   }
 
   Future<void> _loadCurrentBatteryState() async {
@@ -52,6 +125,7 @@ class _AiChargingPredictorScreenState
 
     try {
       final state = await BatteryStateService.getCurrentBatteryState(vehicleId);
+      if (!mounted) return;
       setState(() {
         _currentSOC = state.percentage;
       });
@@ -89,13 +163,24 @@ class _AiChargingPredictorScreenState
       return;
     }
 
-    setState(() => _isLoading = true);
+    if (_targetSOC <= _currentSOC) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Mức pin mục tiêu phải lớn hơn mức pin hiện tại.'),
+          backgroundColor: AppColors.warning,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
 
     final vehicleId = ref.read(selectedVehicleIdProvider);
     if (vehicleId.isEmpty) {
-      setState(() => _isLoading = false);
       return;
     }
+
+    final predictionStartedAt = DateTime.now();
+    setState(() => _isLoading = true);
 
     try {
       // Gọi API predict-charging-time (AI model + heuristic fallback)
@@ -116,56 +201,194 @@ class _AiChargingPredictorScreenState
             data['formattedDuration'] ??
             data['formattedTime'] ??
             '$minutes phút';
-        final completionDateTime = DateTime.now().add(
+        final predictedFullAt = predictionStartedAt.add(
           Duration(minutes: minutes),
         );
         final formattedTime =
-            '${completionDateTime.hour.toString().padLeft(2, '0')}:${completionDateTime.minute.toString().padLeft(2, '0')}';
+            '${predictedFullAt.hour.toString().padLeft(2, '0')}:${predictedFullAt.minute.toString().padLeft(2, '0')}';
+        final modelSource = data['modelSource']?.toString();
+        final confidenceValue = data['confidence'];
+        final confidence = confidenceValue is num
+            ? confidenceValue.toDouble()
+            : double.tryParse(confidenceValue?.toString() ?? '');
 
+        if (!mounted) return;
         setState(() {
-          _prediction = formatted;
+          _prediction = formatted.toString();
           _predictedMinutes = minutes;
           _completionTime = formattedTime;
-          _startTime = DateTime.now();
+          _startTime = predictionStartedAt;
+          _predictedFullAt = predictedFullAt;
+          _predictionSource = modelSource;
+          _predictionConfidence = confidence;
           _isLoading = false;
           _feedbackSubmitted = false;
           _reminderSet = false;
           _reminderTime = null;
           _actualSOC = _targetSOC; // Default to target
         });
+        await _syncPredictionToSmartCharger(vehicleId: vehicleId);
       } else {
-        // API trả lỗi → fallback tính local
-        final power = _isFastCharging ? 1000.0 : 400.0; // Watts
-        final energyNeeded = (_targetSOC - _currentSOC) / 100 * 72.0; // kWh
-        final hours = energyNeeded * 1000 / power;
-        final minutes = (hours * 60).round();
-        final completionDateTime = DateTime.now().add(
-          Duration(minutes: minutes),
+        await _applyLocalFallback(
+          vehicleId: vehicleId,
+          predictionStartedAt: predictionStartedAt,
         );
-        final formattedTime =
-            '${completionDateTime.hour.toString().padLeft(2, '0')}:${completionDateTime.minute.toString().padLeft(2, '0')}';
-
-        setState(() {
-          _prediction = '$minutes phút';
-          _predictedMinutes = minutes;
-          _completionTime = formattedTime;
-          _startTime = DateTime.now();
-          _isLoading = false;
-          _feedbackSubmitted = false;
-          _reminderSet = false;
-          _reminderTime = null;
-          _actualSOC = _targetSOC;
-        });
       }
     } catch (e) {
-      setState(() => _isLoading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Lỗi dự đoán: $e'),
-            backgroundColor: AppColors.error,
+      debugPrint('[AiCharging] cloud prediction error, using fallback: $e');
+      await _applyLocalFallback(
+        vehicleId: vehicleId,
+        predictionStartedAt: predictionStartedAt,
+      );
+    }
+  }
+
+  Future<void> _applyLocalFallback({
+    required String vehicleId,
+    required DateTime predictionStartedAt,
+  }) async {
+    const batteryCapacityWh = AppConstants.defaultBatteryCapacityWh;
+    final chargerPowerW = _isFastCharging ? 1000.0 : 400.0;
+    final energyNeededWh =
+        (_targetSOC - _currentSOC) / 100.0 * batteryCapacityWh;
+    final minutes = ((energyNeededWh / chargerPowerW) * 60).round();
+    final predictedFullAt = predictionStartedAt.add(Duration(minutes: minutes));
+    final formattedTime =
+        '${predictedFullAt.hour.toString().padLeft(2, '0')}:${predictedFullAt.minute.toString().padLeft(2, '0')}';
+    if (!mounted) return;
+    setState(() {
+      _prediction = '$minutes phút';
+      _predictedMinutes = minutes;
+      _completionTime = formattedTime;
+      _startTime = predictionStartedAt;
+      _predictedFullAt = predictedFullAt;
+      _predictionSource = 'local_fallback';
+      _predictionConfidence = null;
+      _isLoading = false;
+      _feedbackSubmitted = false;
+      _reminderSet = false;
+      _reminderTime = null;
+      _actualSOC = _targetSOC;
+    });
+    await _syncPredictionToSmartCharger(vehicleId: vehicleId);
+  }
+
+  Future<void> _syncPredictionToSmartCharger({
+    required String vehicleId,
+  }) async {
+    if (!_smartChargerService.isConfigured ||
+        _predictedMinutes <= 0 ||
+        _startTime == null ||
+        _predictedFullAt == null) {
+      return;
+    }
+    try {
+      final response = await _smartChargerService.startMonitoringSession(
+        SmartChargingSessionRequest(
+          vehicleId: vehicleId,
+          startSoc: _currentSOC,
+          targetSoc: _targetSOC,
+          predictedMinutes: _predictedMinutes,
+          startedAt: _startTime!,
+          predictedFullAt: _predictedFullAt!,
+          chargingMode: _isFastCharging ? 'fast' : 'standard',
+          predictionSource: _predictionSource,
+          predictionConfidence: _predictionConfidence,
+        ),
+      );
+      if (!mounted) return;
+      setState(() {
+        _monitorSessionId = response.sessionId;
+        _monitorSessionError = null;
+      });
+    } catch (error) {
+      debugPrint('[SmartCharger] monitor session sync error: $error');
+      if (!mounted) return;
+      setState(() {
+        _monitorSessionId = null;
+        _monitorSessionError =
+            'Dự đoán vẫn hợp lệ, nhưng chưa đồng bộ được với Smart Charger.';
+      });
+    }
+  }
+
+  Future<void> _turnSmartChargerOn() async {
+    if (_smartChargerStatus == null || _smartChargerError != null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Bật nguồn sạc?'),
+        content: const Text(
+          'Hãy đảm bảo bộ sạc và xe đã được kết nối đúng cách.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('HỦY'),
           ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('BẬT NGUỒN'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await _runSmartChargerCommand(turnOn: true);
+  }
+
+  Future<void> _turnSmartChargerOff() => _runSmartChargerCommand(turnOn: false);
+
+  Future<void> _runSmartChargerCommand({required bool turnOn}) async {
+    if (_smartChargerCommandBusy || !mounted) return;
+    setState(() => _smartChargerCommandBusy = true);
+    try {
+      if (turnOn) {
+        await _smartChargerService.turnOn();
+      } else {
+        await _smartChargerService.turnOff();
+      }
+      final confirmedStatus = await _smartChargerService.getStatus();
+      if (confirmedStatus.relay != turnOn) {
+        throw SmartChargerException(
+          turnOn
+              ? 'Không thể xác nhận nguồn sạc đã bật.'
+              : 'Không thể xác nhận nguồn sạc đã ngắt.',
         );
+      }
+      if (!mounted) return;
+      setState(() {
+        _smartChargerStatus = confirmedStatus;
+        _smartChargerError = null;
+        _smartChargerLastUpdated = DateTime.now();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(turnOn ? 'Đã bật nguồn sạc.' : 'Đã ngắt nguồn sạc.'),
+          backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (error) {
+      debugPrint('[SmartCharger] command error: $error');
+      if (!mounted) return;
+      setState(() {
+        _smartChargerError = turnOn
+            ? 'Không thể bật nguồn sạc.'
+            : 'Không thể ngắt nguồn sạc.';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            turnOn ? 'Không thể bật nguồn sạc.' : 'Không thể ngắt nguồn sạc.',
+          ),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _smartChargerCommandBusy = false);
       }
     }
   }
@@ -188,11 +411,8 @@ class _AiChargingPredictorScreenState
       );
       return;
     }
-    if (_completionTime == null) return;
-
-    final completionDateTime = DateTime.now().add(
-      Duration(minutes: _predictedMinutes),
-    );
+    final completionDateTime = _predictedFullAt;
+    if (_completionTime == null || completionDateTime == null) return;
     // Nếu thời điểm đã qua (edge case: dự đoán < 1 phút)
     if (completionDateTime.isBefore(DateTime.now())) {
       if (mounted) {
@@ -424,6 +644,24 @@ class _AiChargingPredictorScreenState
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                 child: _buildChargingCard(),
+              ),
+            ),
+
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                child: SmartChargerCard(
+                  status: _smartChargerStatus,
+                  error: _smartChargerError,
+                  loading: _smartChargerLoading,
+                  commandBusy: _smartChargerCommandBusy,
+                  lastUpdated: _smartChargerLastUpdated,
+                  onRefresh: _refreshSmartChargerStatus,
+                  onTurnOn: _turnSmartChargerOn,
+                  onTurnOff: _turnSmartChargerOff,
+                  monitorSessionId: _monitorSessionId,
+                  monitorSessionError: _monitorSessionError,
+                ),
               ),
             ),
 
