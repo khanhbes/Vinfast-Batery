@@ -210,7 +210,10 @@ void main() {
     test('PayloadType round-trip', () {
       expect(PayloadType.fromString('1_person'), PayloadType.onePerson);
       expect(PayloadType.fromString('2_person'), PayloadType.twoPerson);
-      expect(PayloadType.fromString('unknown'), PayloadType.onePerson); // fallback
+      expect(
+        PayloadType.fromString('unknown'),
+        PayloadType.onePerson,
+      ); // fallback
     });
 
     test('TripEntryMode round-trip', () {
@@ -229,7 +232,9 @@ void main() {
   group('Smoke: BatteryLogicService calculations', () {
     test('batteryDrainForDistance 1 person', () {
       final drain = BatteryLogicService.batteryDrainForDistance(
-        12.0, 1.2, PayloadType.onePerson,
+        12.0,
+        1.2,
+        PayloadType.onePerson,
       );
       // base = 12/1.2 = 10, factor 1.0, ceil = 10
       expect(drain, 10);
@@ -237,7 +242,9 @@ void main() {
 
     test('batteryDrainForDistance 2 person', () {
       final drain = BatteryLogicService.batteryDrainForDistance(
-        12.0, 1.2, PayloadType.twoPerson,
+        12.0,
+        1.2,
+        PayloadType.twoPerson,
       );
       // base = 12/1.2 = 10, factor 1.3 → 13.0, ceil = 13
       expect(drain, 13);
@@ -247,7 +254,10 @@ void main() {
       final trips = [
         _makeTrip(distance: 10, startBat: 80, endBat: 70), // eff = 1.0
       ];
-      final soh = BatteryLogicService.calculateSoH(trips);
+      final soh = BatteryLogicService.calculateSoH(
+        trips,
+        defaultEfficiency: 1.2,
+      );
       // soh = (1.0 / 1.2) * 100 = 83.33
       expect(soh, closeTo(83.33, 0.1));
     });

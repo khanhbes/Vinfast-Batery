@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../../data/services/smart_charger_credentials_service.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/providers/app_providers.dart';
@@ -12,6 +13,7 @@ import '../../core/services/sync_service.dart';
 import '../../core/services/settings_service.dart';
 import '../../core/widgets/app_popup.dart';
 import '../notifications/notification_center_screen.dart';
+import '../smart_charging/shelly_setup_screen.dart';
 import 'appearance_settings_screen.dart';
 import 'profile_screen.dart';
 import 'vehicle_garage_screen.dart';
@@ -37,8 +39,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   String _userName = '...';
   String _userEmail = '...';
   String _appVersion = '...';
+  bool _shellyConfigured = false;
 
   final _settingsService = SettingsService();
+  final _smartChargerCredentials = SmartChargerCredentialsService();
 
   @override
   void initState() {
@@ -48,6 +52,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _loadSettings();
     _loadAppVersion();
     _loadUserProfile();
+    _loadShellyState();
+  }
+
+  Future<void> _loadShellyState() async {
+    final profile = await _smartChargerCredentials.readProfile();
+    if (mounted) {
+      setState(() => _shellyConfigured = profile != null);
+    }
+  }
+
+  Future<void> _openShellySetup() async {
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ShellySetupScreen()));
+    await _loadShellyState();
   }
 
   @override
@@ -602,6 +621,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               setState(() => _pushNotifications = v);
               _saveSetting('pushNotifications', v);
             },
+          ),
+          Divider(
+            color: AppColors.glassBorder,
+            height: 1,
+            indent: 20,
+            endIndent: 20,
+          ),
+
+          _buildTapRow(
+            title: 'Smart Charger',
+            value: _shellyConfigured
+                ? 'Shelly Cloud/LAN đã cấu hình'
+                : 'Shelly chưa kết nối',
+            icon: Icons.ev_station_rounded,
+            onTap: _openShellySetup,
           ),
           Divider(
             color: AppColors.glassBorder,

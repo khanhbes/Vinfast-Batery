@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/providers/app_providers.dart';
 import '../core/services/notification_center_service.dart';
 import '../core/theme/app_colors.dart';
-import '../data/repositories/notification_repository.dart';
+import '../core/theme/app_motion.dart';
 import '../features/ai/ai_models_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/maintenance/maintenance_screen.dart';
@@ -28,16 +28,15 @@ class AppNavigation extends ConsumerStatefulWidget {
   static void navigateToTab(BuildContext context, int index) {
     if (index >= 0 && index < 5) {
       // Sử dụng ProviderScope container để update state
-      ProviderScope.containerOf(context, listen: false)
-          .read(currentTabProvider.notifier)
-          .state = index;
+      ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(currentTabProvider.notifier).state = index;
     }
   }
 }
 
 class _AppNavigationState extends ConsumerState<AppNavigation> {
-  final _repository = NotificationRepository();
-
   // Tab screens — wrap với RefreshIndicator
   late final List<Widget> _screens;
 
@@ -45,11 +44,11 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
   void initState() {
     super.initState();
     _screens = [
-      _RefreshableTab(child: const HomeScreen()),           // Tab 0: Home
-      _RefreshableTab(child: const AiModelsScreen()),       // Tab 1: AI
-      _RefreshableTab(child: const TripPlannerWrapper()),   // Tab 2: Trip
-      _RefreshableTab(child: const MaintenanceScreen()),    // Tab 3: Service
-      _RefreshableTab(child: const SettingsScreen()),       // Tab 4: Settings
+      _RefreshableTab(child: const HomeScreen()), // Tab 0: Home
+      _RefreshableTab(child: const AiModelsScreen()), // Tab 1: AI
+      _RefreshableTab(child: const TripPlannerWrapper()), // Tab 2: Trip
+      _RefreshableTab(child: const MaintenanceScreen()), // Tab 3: Service
+      _RefreshableTab(child: const SettingsScreen()), // Tab 4: Settings
     ];
   }
 
@@ -58,19 +57,18 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
     final currentIndex = ref.watch(currentTabProvider);
 
     // Set system UI
-    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
-      systemNavigationBarColor: AppColors.background,
-      systemNavigationBarIconBrightness: Brightness.light,
-    ));
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        systemNavigationBarColor: AppColors.background,
+        systemNavigationBarIconBrightness: Brightness.light,
+      ),
+    );
 
     return Scaffold(
       appBar: _buildUnifiedAppBar(currentIndex),
-      body: IndexedStack(
-        index: currentIndex,
-        children: _screens,
-      ),
+      body: IndexedStack(index: currentIndex, children: _screens),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: AppColors.background.withValues(alpha: 0.95),
@@ -131,8 +129,14 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
 
   /// Unified AppBar cho tất cả tabs — PLAN1
   PreferredSizeWidget _buildUnifiedAppBar(int currentIndex) {
-    final tabTitles = ['VinFast Battery', 'AI Models', 'Trip Planner', 'Service', 'Settings'];
-    
+    final tabTitles = [
+      'VinFast Battery',
+      'AI Models',
+      'Trip Planner',
+      'Service',
+      'Settings',
+    ];
+
     return AppBar(
       backgroundColor: AppColors.background,
       elevation: 0,
@@ -172,13 +176,13 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
 /// Widget wrap tab content với pull-to-refresh — PLAN1
 class _RefreshableTab extends ConsumerWidget {
   final Widget child;
-  
+
   const _RefreshableTab({required this.child});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final refreshCoordinator = ref.watch(appRefreshCoordinatorProvider);
-    
+
     return RefreshIndicator(
       onRefresh: () => refreshCoordinator.refreshAll(),
       color: AppColors.primary,
@@ -204,55 +208,67 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-        padding: EdgeInsets.symmetric(
-          horizontal: isSelected ? 16 : 12,
-          vertical: 8,
-        ),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? AppColors.primaryContainer.withValues(alpha: 0.35)
-              : Colors.transparent,
+    final duration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : AppMotion.base;
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      label: label,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          onTap: onTap,
           borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? AppColors.primary.withValues(alpha: 0.12)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                icon,
-                color: isSelected
-                    ? AppColors.primary
-                    : AppColors.textTertiary,
-                size: 22,
-              ),
+          child: AnimatedContainer(
+            duration: duration,
+            curve: Curves.easeInOut,
+            padding: EdgeInsets.symmetric(
+              horizontal: isSelected ? 16 : 12,
+              vertical: 8,
             ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                color: isSelected
-                    ? AppColors.primary
-                    : AppColors.textTertiary,
-                fontSize: 10,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                letterSpacing: 0.5,
-              ),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? AppColors.primaryContainer.withValues(alpha: 0.35)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(16),
             ),
-          ],
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedContainer(
+                  duration: duration,
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? AppColors.primary.withValues(alpha: 0.12)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    icon,
+                    color: isSelected
+                        ? AppColors.primary
+                        : AppColors.textTertiary,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: isSelected
+                        ? AppColors.primary
+                        : AppColors.textTertiary,
+                    fontSize: 10,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -264,61 +280,65 @@ class _NotificationBell extends StatelessWidget {
   final int unreadCount;
   final VoidCallback onTap;
 
-  const _NotificationBell({
-    required this.unreadCount,
-    required this.onTap,
-  });
+  const _NotificationBell({required this.unreadCount, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: AppColors.cardBackground,
+    return Semantics(
+      button: true,
+      label: unreadCount > 0 ? 'Thông báo, $unreadCount chưa đọc' : 'Thông báo',
+      child: Material(
+        color: AppColors.cardBackground,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: onTap,
           borderRadius: BorderRadius.circular(12),
-        ),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            Icon(
-              Icons.notifications_outlined,
-              color: unreadCount > 0 ? AppColors.primary : AppColors.textSecondary,
-              size: 22,
-            ),
-            if (unreadCount > 0)
-              Positioned(
-                top: 8,
-                right: 8,
-                child: Container(
-                  padding: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                    color: AppColors.error,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: AppColors.cardBackground,
-                      width: 1.5,
-                    ),
-                  ),
-                  constraints: const BoxConstraints(
-                    minWidth: 16,
-                    minHeight: 16,
-                  ),
-                  child: Center(
-                    child: Text(
-                      unreadCount > 99 ? '99+' : unreadCount.toString(),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
+          child: SizedBox(
+            width: 48,
+            height: 48,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Icon(
+                  Icons.notifications_outlined,
+                  color: unreadCount > 0
+                      ? AppColors.primary
+                      : AppColors.textSecondary,
+                  size: 22,
+                ),
+                if (unreadCount > 0)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: AppColors.error,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: AppColors.cardBackground,
+                          width: 1.5,
+                        ),
+                      ),
+                      constraints: const BoxConstraints(
+                        minWidth: 16,
+                        minHeight: 16,
+                      ),
+                      child: Center(
+                        child: Text(
+                          unreadCount > 99 ? '99+' : unreadCount.toString(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ),
-          ],
+              ],
+            ),
+          ),
         ),
       ),
     );

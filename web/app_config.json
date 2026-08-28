@@ -1,11 +1,11 @@
 {
-  "latestVersion": "1.0.63",
-  "latestBuild": 64,
+  "features": {},
   "forceUpdate": false,
   "minSupportedBuild": 50,
+  "latestBuild": 65,
+  "latestVersion": "1.0.64",
   "releaseChannel": "apk",
+  "releaseNotes": "Build 65 — 28/08/2026 01:15",
   "remindLaterHours": 6,
-  "apkUrl": "/apk/VinFastBattery_latest.apk",
-  "releaseNotes": "Tích hợp Smart Charger Step 8: telemetry Shelly, điều khiển nguồn thủ công và đồng bộ dự đoán AI monitor-only.",
-  "features": {}
+  "apkUrl": "/apk/VinFastBattery_latest.apk"
 }

@@ -17,6 +17,7 @@ class SmartChargerCard extends StatelessWidget {
     required this.onTurnOff,
     this.monitorSessionId,
     this.monitorSessionError,
+    this.onOpenSmartCharging,
   });
 
   final SmartChargerStatus? status;
@@ -29,9 +30,12 @@ class SmartChargerCard extends StatelessWidget {
   final VoidCallback onTurnOff;
   final String? monitorSessionId;
   final String? monitorSessionError;
+  final VoidCallback? onOpenSmartCharging;
 
   bool get _notConfigured =>
-      status == null && error?.contains('chưa được cấu hình') == true;
+      status == null &&
+      (error?.contains('chưa được cấu hình') == true ||
+          error?.contains('Shelly chưa kết nối') == true);
 
   @override
   Widget build(BuildContext context) {
@@ -82,6 +86,21 @@ class SmartChargerCard extends StatelessWidget {
             _buildOffline()
           else if (status != null)
             _buildOnline(context, status!),
+          if (onOpenSmartCharging != null) ...[
+            const SizedBox(height: 14),
+            Divider(color: AppColors.glassBorder, height: 1),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: OutlinedButton.icon(
+                key: const ValueKey('open-smart-charging'),
+                onPressed: onOpenSmartCharging,
+                icon: const Icon(Icons.tune_rounded),
+                label: const Text('THIẾT LẬP SẠC THÔNG MINH'),
+              ),
+            ),
+          ],
           if (!_notConfigured &&
               (monitorSessionId != null || monitorSessionError != null)) ...[
             const SizedBox(height: 14),
@@ -98,7 +117,7 @@ class SmartChargerCard extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Text(
-        '⚪ Chưa cấu hình gateway',
+        '⚪ Shelly chưa kết nối',
         style: TextStyle(
           color: AppColors.textPrimary,
           fontWeight: FontWeight.w700,
@@ -106,7 +125,7 @@ class SmartChargerCard extends StatelessWidget {
       ),
       SizedBox(height: 8),
       Text(
-        'Thiết lập SMART_CHARGER_API_BASE_URL để kết nối.',
+        'Kết nối Shelly Plug S Gen3 để bật tự ngắt an toàn.',
         style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
       ),
     ],
@@ -128,7 +147,7 @@ class SmartChargerCard extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       const Text(
-        '🔴 Không kết nối gateway',
+        '🔴 Không kết nối được Shelly',
         style: TextStyle(color: AppColors.error, fontWeight: FontWeight.w700),
       ),
       const SizedBox(height: 6),
@@ -157,7 +176,7 @@ class SmartChargerCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          '🟢 Gateway online',
+          '🟢 Shelly online',
           style: TextStyle(
             color: AppColors.success,
             fontWeight: FontWeight.w700,
@@ -264,7 +283,7 @@ class SmartChargerCard extends StatelessWidget {
       );
     }
     return const Text(
-      'AI monitor: Chưa đồng bộ gateway',
+      'Chưa đồng bộ phiên Shelly',
       style: TextStyle(color: AppColors.warning, fontSize: 11),
     );
   }

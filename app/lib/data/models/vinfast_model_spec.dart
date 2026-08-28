@@ -78,14 +78,12 @@ class VinFastModelSpec {
       defaultEfficiencyKmPerPercent:
           (data['defaultEfficiencyKmPerPercent'] ?? 1.2).toDouble(),
       source: data['source'] ?? 'vinfast_catalog',
-      specVersion: (data['specVersion'] ?? 1) is int
-          ? data['specVersion'] as int
-          : int.tryParse(data['specVersion'].toString()) ?? 1,
+      specVersion: optInt(data['specVersion']) ?? 1,
       updatedAt: data['updatedAt'] is DateTime
           ? data['updatedAt'] as DateTime
           : data['updatedAt'] != null
-              ? DateTime.tryParse(data['updatedAt'].toString())
-              : null,
+          ? DateTime.tryParse(data['updatedAt'].toString())
+          : null,
       modelLine: data['modelLine'] as String?,
       tagline: data['tagline'] as String?,
       releaseYear: optInt(data['releaseYear']),

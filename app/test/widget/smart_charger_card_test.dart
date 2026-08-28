@@ -21,6 +21,7 @@ Widget card({
   bool commandBusy = false,
   VoidCallback? onTurnOn,
   VoidCallback? onTurnOff,
+  VoidCallback? onOpenSmartCharging,
 }) {
   return MaterialApp(
     home: Scaffold(
@@ -34,6 +35,7 @@ Widget card({
           onRefresh: () {},
           onTurnOn: onTurnOn ?? () {},
           onTurnOff: onTurnOff ?? () {},
+          onOpenSmartCharging: onOpenSmartCharging,
         ),
       ),
     ),
@@ -43,7 +45,7 @@ Widget card({
 void main() {
   testWidgets('renders not configured state', (tester) async {
     await tester.pumpWidget(card(error: 'Smart Charger chưa được cấu hình.'));
-    expect(find.text('⚪ Chưa cấu hình gateway'), findsOneWidget);
+    expect(find.text('⚪ Shelly chưa kết nối'), findsOneWidget);
   });
 
   testWidgets('renders loading state', (tester) async {
@@ -90,8 +92,8 @@ void main() {
   });
 
   testWidgets('renders offline state', (tester) async {
-    await tester.pumpWidget(card(error: 'Không thể kết nối gateway'));
-    expect(find.text('🔴 Không kết nối gateway'), findsOneWidget);
+    await tester.pumpWidget(card(error: 'Không thể kết nối Shelly'));
+    expect(find.text('🔴 Không kết nối được Shelly'), findsOneWidget);
     expect(find.text('THỬ LẠI'), findsOneWidget);
   });
 
@@ -102,5 +104,14 @@ void main() {
     );
     await tester.tap(find.byKey(const ValueKey('smart-charger-on')));
     expect(called, isFalse);
+  });
+
+  testWidgets('opens dedicated smart charging setup', (tester) async {
+    var called = false;
+    await tester.pumpWidget(
+      card(status: onlineOff, onOpenSmartCharging: () => called = true),
+    );
+    await tester.tap(find.byKey(const ValueKey('open-smart-charging')));
+    expect(called, isTrue);
   });
 }
