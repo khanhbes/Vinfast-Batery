@@ -160,7 +160,7 @@ $elapsed = [math]::Round(((Get-Date) - $buildStart).TotalMinutes, 1)
 Write-Host "`n=== BUILD THANH CONG — v$newVersion (${elapsed} phut) ===" -ForegroundColor Cyan
 Write-Host "APK nam tai: $releaseDir`n" -ForegroundColor Yellow
 Write-Host "[HUONG DAN] Cai dat len thiet bi:" -ForegroundColor DarkGray
-Write-Host "  adb install releases\VinFastBattery_v$newSemver`_arm64-v8a.apk" -ForegroundColor DarkGray
+Write-Host "  adb install releases\VinFastBattery_v$newSemver.apk" -ForegroundColor DarkGray
 
 # ── 10. Upload APK lên VPS + cập nhật app_config.json ──
 if (-not $NoDeploy) {

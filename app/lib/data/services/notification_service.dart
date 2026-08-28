@@ -273,8 +273,8 @@ class NotificationService {
 
     await _plugin.zonedSchedule(
       idChargeReminder,
-      '⏰ Đã đến lúc rút sạc!',
-      'Pin dự kiến đạt $targetPercent%. Hãy kiểm tra và rút sạc để bảo vệ pin.',
+      'Shelly dự kiến đã tự ngắt',
+      'Mốc ~$targetPercent% đã tới. Mở app để đọc lại relay và xác nhận nguồn đã OFF.',
       scheduledDate,
       NotificationDetails(
         android: AndroidNotificationDetails(

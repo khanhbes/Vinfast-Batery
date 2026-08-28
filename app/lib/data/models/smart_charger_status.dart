@@ -1,3 +1,5 @@
+import 'shelly_connection.dart';
+
 double _asDouble(dynamic value, [double fallback = 0]) {
   if (value is num) return value.toDouble();
   return double.tryParse(value?.toString() ?? '') ?? fallback;
@@ -13,6 +15,9 @@ class SmartChargerStatus {
     required this.frequencyHz,
     required this.temperatureC,
     required this.energyWh,
+    this.timerRemaining,
+    this.transport,
+    this.deviceName,
   });
 
   final bool online;
@@ -23,6 +28,9 @@ class SmartChargerStatus {
   final double frequencyHz;
   final double? temperatureC;
   final double energyWh;
+  final Duration? timerRemaining;
+  final ShellyTransport? transport;
+  final String? deviceName;
 
   factory SmartChargerStatus.fromJson(Map<String, dynamic> json) {
     final online = json['online'];
@@ -41,6 +49,9 @@ class SmartChargerStatus {
           ? null
           : _asDouble(json['temperature_c']),
       energyWh: _asDouble(json['energy_wh']),
+      timerRemaining: json['timer_remaining'] == null
+          ? null
+          : Duration(seconds: _asDouble(json['timer_remaining']).round()),
     );
   }
 }

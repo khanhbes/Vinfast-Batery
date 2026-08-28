@@ -6,10 +6,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/constants/app_constants.dart';
-import '../../core/providers/app_state_providers.dart';
+import '../../core/providers/app_providers.dart';
 import '../../core/services/api_service.dart';
 import '../../core/theme/app_colors.dart';
-import 'ai_charging_predictor_screen.dart';
+import '../../core/theme/app_motion.dart';
+import 'smart_charging_control_screen.dart';
 
 class _ModelInfo {
   final String key;
@@ -948,9 +949,18 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
   }
 
   void _navigateToChargingPredictor(BuildContext context) {
+    final vehicleId = ref.read(selectedVehicleIdProvider);
+    final vehicle = vehicleId.isEmpty
+        ? null
+        : ref.read(vehicleProvider(vehicleId)).value;
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const AiChargingPredictorScreen()),
+      AppMotion.pageRoute(
+        SmartChargingControlScreen(
+          vehicleId: vehicleId,
+          currentSoc: (vehicle?.currentBattery ?? 20).toDouble(),
+        ),
+      ),
     );
   }
 }

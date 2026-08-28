@@ -3,141 +3,333 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:vinfast_battery/data/models/smart_charging_session.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:vinfast_battery/data/models/shelly_connection.dart';
+import 'package:vinfast_battery/data/models/smart_charger_status.dart';
+import 'package:vinfast_battery/data/services/smart_charger_credentials_service.dart';
+import 'package:vinfast_battery/data/services/shelly_clients.dart';
 import 'package:vinfast_battery/data/services/smart_charger_service.dart';
 
 void main() {
-  test('GET status 200 returns typed model', () async {
-    final service = SmartChargerService(
-      baseUrl: 'http://gateway:8000/',
-      client: MockClient((request) async {
-        expect(request.url.path, '/api/charger/status');
+  const validProfile = ShellyConnectionProfile(
+    cloudHost: 'https://shelly-123-eu.shelly.cloud',
+    cloudAuthKey: 'secret-key',
+    deviceId: 'aabbccddeeff',
+    lanAddress: '192.168.1.50',
+  );
+
+  group('ShellyConnectionProfile', () {
+    test('requires HTTPS shelly.cloud host and a key/device ID', () {
+      expect(validProfile.validate(), isNull);
+      expect(
+        const ShellyConnectionProfile(
+          cloudHost: 'http://evil.example',
+          cloudAuthKey: 'x',
+          deviceId: 'x',
+        ).validate(),
+        isNotNull,
+      );
+    });
+
+    test('only accepts private/link-local IP or .local for LAN HTTP', () {
+      expect(isAllowedLanAddress('10.0.0.5'), isTrue);
+      expect(isAllowedLanAddress('172.31.8.2'), isTrue);
+      expect(isAllowedLanAddress('shellyplugsg3.local'), isTrue);
+      expect(isAllowedLanAddress('8.8.8.8'), isFalse);
+      expect(isAllowedLanAddress('example.com'), isFalse);
+    });
+
+    test('mDNS candidate only accepts Plug S generation 3', () {
+      expect(
+        const DiscoveredShellyDevice(
+          id: 'x',
+          address: '192.168.1.2',
+          model: 'PlugSG3',
+          generation: 3,
+        ).isPlugSGen3,
+        isTrue,
+      );
+      expect(
+        const DiscoveredShellyDevice(
+          id: 'x',
+          address: '192.168.1.2',
+          model: 'PlugS',
+          generation: 2,
+        ).isPlugSGen3,
+        isFalse,
+      );
+    });
+  });
+
+  test(
+    'Cloud status request uses v2 shape and parses switch timer/meter',
+    () async {
+      late http.Request captured;
+      final client = MockClient((request) async {
+        captured = request;
         return http.Response(
           jsonEncode({
-            'online': true,
-            'relay': false,
-            'power_w': 0,
-            'voltage_v': 229.1,
-            'current_a': 0,
-            'frequency_hz': 50,
-            'temperature_c': null,
-            'energy_wh': 12,
+            'data': {
+              'devices_status': {
+                'aabbccddeeff': {
+                  'switch:0': {
+                    'output': true,
+                    'timer_remaining': 120,
+                    'apower': 612.5,
+                    'voltage': 231.2,
+                    'current': 2.65,
+                    'freq': 50,
+                    'aenergy': {'total': 825},
+                    'temperature': {'tC': 39.1},
+                  },
+                },
+              },
+            },
           }),
           200,
         );
-      }),
-    );
+      });
+      final status = await ShellyCloudClient(
+        client: client,
+      ).getStatus(validProfile);
+      expect(captured.url.scheme, 'https');
+      expect(captured.url.path, '/v2/devices/api/get');
+      expect(captured.url.queryParameters['auth_key'], 'secret-key');
+      expect(jsonDecode(captured.body), {
+        'ids': ['aabbccddeeff'],
+        'select': ['status', 'settings'],
+      });
+      expect(status.relay, isTrue);
+      expect(status.timerRemaining, const Duration(seconds: 120));
+      expect(status.powerW, 612.5);
+      expect(status.energyWh, 825);
+      expect(status.transport, ShellyTransport.cloud);
+    },
+  );
 
-    final status = await service.getStatus();
-    expect(status.online, isTrue);
-    expect(status.powerW, 0.0);
+  test('Cloud switch command uses on and toggle_after', () async {
+    late http.Request captured;
+    final client = MockClient((request) async {
+      captured = request;
+      return http.Response('{}', 200);
+    });
+    await ShellyCloudClient(client: client).setSwitch(
+      validProfile,
+      on: true,
+      toggleAfter: const Duration(minutes: 42),
+    );
+    expect(captured.url.path, '/v2/devices/api/set/switch');
+    expect(jsonDecode(captured.body), {
+      'id': 'aabbccddeeff',
+      'channel': 0,
+      'on': true,
+      'toggle_after': 2520,
+    });
   });
 
-  test('GET status 503 throws typed exception', () async {
+  test('Cloud maps auth and rate-limit responses to typed errors', () async {
+    for (final entry in const [
+      (401, SmartChargerErrorCode.cloudAuthInvalid),
+      (429, SmartChargerErrorCode.cloudRateLimited),
+    ]) {
+      final client = MockClient((_) async => http.Response('{}', entry.$1));
+      expect(
+        () => ShellyCloudClient(client: client).getStatus(validProfile),
+        throwsA(
+          isA<ShellyClientException>().having(
+            (error) => error.code,
+            'code',
+            entry.$2,
+          ),
+        ),
+      );
+    }
+  });
+
+  test('Digest SHA-256 creates an auth header without exposing password', () {
+    final header = buildDigestAuthorization(
+      challenge:
+          'Digest realm="shelly", nonce="abc", algorithm=SHA-256, qop="auth"',
+      method: 'POST',
+      uri: '/rpc',
+      username: 'admin',
+      password: 'private-password',
+      cnonce: '1234',
+    );
+    expect(header, startsWith('Digest username="admin"'));
+    expect(header, contains('algorithm=SHA-256'));
+    expect(header, contains('qop=auth'));
+    expect(header, isNot(contains('private-password')));
+  });
+
+  group('power calibration', () {
+    test('requires at least six positive samples', () {
+      expect(
+        SmartChargerService.calibratedRemainingMinutes(
+          remainingBatteryWh: 1000,
+          powerSamplesW: const [600, 601, 599, 602, 598],
+        ),
+        0,
+      );
+    });
+
+    test('uses median power and 90 percent efficiency', () {
+      expect(
+        SmartChargerService.calibratedRemainingMinutes(
+          remainingBatteryWh: 900,
+          powerSamplesW: const [590, 600, 600, 600, 610, 4000],
+        ),
+        100,
+      );
+    });
+  });
+
+  test(
+    'arm falls back to LAN and only becomes active after timer readback',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final cloud = _FakeCloud(fail: true);
+      final lan = _FakeLan();
+      final service = SmartChargerService(
+        credentials: _FakeCredentials(validProfile),
+        cloudClient: cloud,
+        lanClient: lan,
+        delay: (_) async {},
+      );
+      final session = await service.armSmartCharge(
+        const SmartChargePlan(
+          vehicleId: 'VF-001',
+          currentSoc: 20,
+          targetSoc: 80,
+          duration: Duration(minutes: 90),
+          estimatedCapacityWh: 2400,
+          predictionSource: 'ai',
+        ),
+      );
+      expect(lan.lastOn, isTrue);
+      expect(lan.lastTimer, const Duration(minutes: 90));
+      expect(session.state.name, 'active');
+      expect(session.transport, 'lan');
+      expect(session.relayVerified, isTrue);
+    },
+  );
+
+  test('unverified readback sends OFF and returns timerNotArmed', () async {
+    SharedPreferences.setMockInitialValues({});
+    var now = DateTime(2026, 1, 1, 12);
+    final cloud = _FakeCloud(statusFails: true);
+    final lan = _FakeLan(statusFails: true);
     final service = SmartChargerService(
-      baseUrl: 'http://gateway:8000',
-      client: MockClient(
-        (_) async =>
-            http.Response(jsonEncode({'detail': 'Shelly offline'}), 503),
-      ),
+      credentials: _FakeCredentials(validProfile),
+      cloudClient: cloud,
+      lanClient: lan,
+      clock: () => now,
+      delay: (duration) async => now = now.add(duration),
     );
     await expectLater(
-      service.getStatus(),
+      service.armSmartCharge(
+        const SmartChargePlan(
+          vehicleId: 'VF-001',
+          currentSoc: 20,
+          targetSoc: 80,
+          duration: Duration(minutes: 30),
+          estimatedCapacityWh: 2400,
+          predictionSource: 'ai',
+        ),
+      ),
       throwsA(
         isA<SmartChargerException>().having(
-          (error) => error.statusCode,
-          'statusCode',
-          503,
+          (error) => error.code,
+          'code',
+          'timerNotArmed',
         ),
       ),
     );
-  });
-
-  test('malformed JSON throws typed exception', () async {
-    final service = SmartChargerService(
-      baseUrl: 'http://gateway:8000',
-      client: MockClient((_) async => http.Response('not-json', 200)),
-    );
-    await expectLater(
-      service.getStatus(),
-      throwsA(isA<SmartChargerException>()),
-    );
-  });
-
-  test('empty baseUrl throws configuration exception', () async {
-    final service = SmartChargerService(
-      baseUrl: '',
-      client: MockClient((_) async => http.Response('{}', 200)),
-    );
-    await expectLater(
-      service.getStatus(),
-      throwsA(
-        isA<SmartChargerException>().having(
-          (error) => error.message,
-          'message',
-          contains('chưa được cấu hình'),
-        ),
-      ),
-    );
-  });
-
-  test('POST ON and OFF return command results', () async {
-    final paths = <String>[];
-    final service = SmartChargerService(
-      baseUrl: 'http://gateway:8000',
-      client: MockClient((request) async {
-        paths.add(request.url.path);
-        final relay = request.url.path.endsWith('/on');
-        return http.Response(
-          jsonEncode({
-            'success': true,
-            'relay': relay,
-            'previous_state': !relay,
-          }),
-          200,
-        );
-      }),
-    );
-    expect((await service.turnOn()).relay, isTrue);
-    expect((await service.turnOff()).relay, isFalse);
-    expect(paths, ['/api/charger/on', '/api/charger/off']);
-  });
-
-  test('session POST serializes ISO timestamps and parses id', () async {
-    final startedAt = DateTime(2026, 8, 27, 18, 30);
-    final predictedFullAt = DateTime(2026, 8, 27, 21, 10);
-    late Map<String, dynamic> sent;
-    final service = SmartChargerService(
-      baseUrl: 'http://gateway:8000',
-      client: MockClient((request) async {
-        sent = jsonDecode(request.body) as Map<String, dynamic>;
-        return http.Response(
-          jsonEncode({
-            'success': true,
-            'session_id': 'abcd1234',
-            'mode': 'monitor_only',
-            'received_at': '2026-08-27T11:30:00Z',
-          }),
-          200,
-        );
-      }),
-    );
-
-    final response = await service.startMonitoringSession(
-      SmartChargingSessionRequest(
-        vehicleId: 'VF-001',
-        startSoc: 20,
-        targetSoc: 80,
-        predictedMinutes: 160,
-        startedAt: startedAt,
-        predictedFullAt: predictedFullAt,
-        chargingMode: 'standard',
-      ),
-    );
-
-    expect(sent['started_at'], startedAt.toIso8601String());
-    expect(sent['predicted_full_at'], predictedFullAt.toIso8601String());
-    expect(response.sessionId, 'abcd1234');
-    expect(response.mode, 'monitor_only');
+    expect(cloud.offCount, greaterThan(0));
+    expect(lan.lastOn, isFalse);
   });
 }
+
+class _FakeCredentials extends SmartChargerCredentialsService {
+  _FakeCredentials(this.profile);
+  final ShellyConnectionProfile profile;
+  @override
+  Future<ShellyConnectionProfile?> readProfile() async => profile;
+}
+
+class _FakeCloud extends ShellyCloudClient {
+  _FakeCloud({this.fail = false, this.statusFails = false});
+  final bool fail;
+  final bool statusFails;
+  int offCount = 0;
+
+  @override
+  Future<void> setSwitch(
+    ShellyConnectionProfile profile, {
+    required bool on,
+    Duration? toggleAfter,
+  }) async {
+    if (!on) offCount++;
+    if (fail && on) {
+      throw const ShellyClientException(
+        SmartChargerErrorCode.deviceOffline,
+        'cloud offline',
+        retryable: true,
+      );
+    }
+  }
+
+  @override
+  Future<SmartChargerStatus> getStatus(ShellyConnectionProfile profile) async {
+    if (fail || statusFails) {
+      throw const ShellyClientException(
+        SmartChargerErrorCode.deviceOffline,
+        'cloud offline',
+        retryable: true,
+      );
+    }
+    return _status(ShellyTransport.cloud);
+  }
+}
+
+class _FakeLan extends ShellyLanClient {
+  _FakeLan({this.statusFails = false});
+  final bool statusFails;
+  bool? lastOn;
+  Duration? lastTimer;
+
+  @override
+  Future<void> setSwitch(
+    ShellyConnectionProfile profile, {
+    required bool on,
+    Duration? toggleAfter,
+  }) async {
+    lastOn = on;
+    lastTimer = toggleAfter;
+  }
+
+  @override
+  Future<SmartChargerStatus> getStatus(ShellyConnectionProfile profile) async {
+    if (statusFails) {
+      throw const ShellyClientException(
+        SmartChargerErrorCode.lanUnavailable,
+        'lan offline',
+        retryable: true,
+      );
+    }
+    return _status(ShellyTransport.lan);
+  }
+}
+
+SmartChargerStatus _status(ShellyTransport transport) => SmartChargerStatus(
+  online: true,
+  relay: true,
+  powerW: 600,
+  voltageV: 230,
+  currentA: 2.6,
+  frequencyHz: 50,
+  temperatureC: 38,
+  energyWh: 1000,
+  timerRemaining: const Duration(minutes: 90),
+  transport: transport,
+);

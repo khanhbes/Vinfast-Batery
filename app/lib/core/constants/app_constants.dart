@@ -12,11 +12,7 @@ class AppConstants {
     'APP_API_BASE_URL',
     defaultValue: 'http://api.evbattery.live',
   );
-  static const String smartChargerApiBaseUrl = String.fromEnvironment(
-    'SMART_CHARGER_API_BASE_URL',
-    defaultValue: '',
-  );
-  static const String appVersion = '1.0.63';
+  static const String appVersion = '1.0.64';
 
   // Firestore Collection Names
   static const String vehiclesCollection = 'Vehicles';

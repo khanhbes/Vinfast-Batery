@@ -171,6 +171,42 @@ class NotificationCenterService {
     );
   }
 
+  Future<void> notifySmartChargingState({
+    required String sessionId,
+    required String state,
+    required int targetPercent,
+  }) async {
+    final (title, message) = switch (state) {
+      'active' => (
+        'Đã bắt đầu sạc thông minh',
+        'Timer tự ngắt đã được cài trên Shelly; SOC ~$targetPercent% là ước tính.',
+      ),
+      'completed' => (
+        'Phiên sạc đã hoàn tất',
+        'App đã đọc lại và xác minh relay Shelly đang OFF.',
+      ),
+      'cancelled' => (
+        'Đã ngắt sạc thủ công',
+        'App đã đọc lại và xác minh nguồn Shelly đã ngắt.',
+      ),
+      _ => (
+        'Phiên sạc cần kiểm tra',
+        'Phiên sạc thông minh kết thúc với trạng thái $state.',
+      ),
+    };
+    await _repository.createNotification(
+      type: NotificationType.system,
+      title: title,
+      message: message,
+      payload: {
+        'sessionId': sessionId,
+        'state': state,
+        'targetPercent': targetPercent,
+      },
+      actionTarget: '/ai/charging_time',
+    );
+  }
+
   Future<void> notifyAppUpdateAvailable({
     required String latestVersion,
     required int latestBuild,

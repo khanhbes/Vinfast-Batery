@@ -28,7 +28,7 @@ import '../../core/widgets/quick_action_menu.dart';
 import '../settings/guide_screen.dart';
 import '../settings/ai_functions_screen.dart';
 import '../charge_log/add_charge_log_modal.dart';
-import 'smart_charging_eta_sheet.dart';
+import '../ai/smart_charging_control_screen.dart';
 
 // =============================================================================
 // Stable Dashboard Providers (thay cho inline FutureProvider)
@@ -1449,18 +1449,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     if (vehicleAsync is! AsyncData || vehicleAsync.value == null) return;
 
     final vehicle = vehicleAsync.value!;
-    final currentBattery = vehicle.currentBattery ?? 0;
-    final currentOdo = vehicle.currentOdo ?? 0;
-
-    final result = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => SmartChargingEtaSheet(
-        vehicleId: vehicleId,
-        initialBattery: currentBattery,
-        currentOdo: currentOdo,
-        chargeService: _chargeService,
+    final currentBattery = vehicle.currentBattery;
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => SmartChargingControlScreen(
+          vehicleId: vehicleId,
+          currentSoc: currentBattery.toDouble(),
+        ),
       ),
     );
 

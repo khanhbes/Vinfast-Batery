@@ -43,7 +43,11 @@ class AppMotion {
   /// Khoảng cách stagger giữa các item trong list (ms).
   static const Duration stagger = Duration(milliseconds: 60);
 
-  static Duration staggerFor(int index, {Duration step = stagger, Duration max = const Duration(milliseconds: 600)}) {
+  static Duration staggerFor(
+    int index, {
+    Duration step = stagger,
+    Duration max = const Duration(milliseconds: 600),
+  }) {
     final ms = (step.inMilliseconds * index).clamp(0, max.inMilliseconds);
     return Duration(milliseconds: ms);
   }
@@ -64,9 +68,16 @@ class AppMotion {
       fullscreenDialog: fullscreenDialog,
       transitionDuration: duration,
       reverseTransitionDuration: reverseDuration,
-      pageBuilder: (_, __, ___) => page,
+      pageBuilder: (_, _, _) => page,
       transitionsBuilder: (context, animation, secondary, child) {
-        final eased = CurvedAnimation(parent: animation, curve: enter, reverseCurve: exit);
+        if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) {
+          return child;
+        }
+        final eased = CurvedAnimation(
+          parent: animation,
+          curve: enter,
+          reverseCurve: exit,
+        );
         return FadeTransition(
           opacity: eased,
           child: SlideTransition(
@@ -96,6 +107,9 @@ class AppPageTransitionsBuilder extends PageTransitionsBuilder {
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
+    if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) {
+      return child;
+    }
     final eased = CurvedAnimation(
       parent: animation,
       curve: AppMotion.enter,
@@ -143,7 +157,9 @@ extension AppMotionAnimate on Widget {
 
   /// Pop scale entrance — dùng cho hero badges, FABs.
   Widget appScalePop({Duration? delay, Duration? duration}) {
-    return animate().fadeIn(delay: delay, duration: duration ?? AppMotion.fast).scale(
+    return animate()
+        .fadeIn(delay: delay, duration: duration ?? AppMotion.fast)
+        .scale(
           begin: const Offset(0.92, 0.92),
           end: const Offset(1, 1),
           delay: delay,
