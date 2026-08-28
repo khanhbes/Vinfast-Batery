@@ -1,5 +1,6 @@
 import '../../core/constants/app_constants.dart';
 import '../../core/services/api_service.dart';
+import '../../core/services/app_error_reporter.dart';
 import '../models/smart_charging_session.dart';
 
 typedef ChargingPredictionCall =
@@ -8,7 +9,26 @@ typedef ChargingPredictionCall =
       required int currentBattery,
       required int targetBattery,
       double? ambientTempC,
+      bool strictAi,
     });
+
+/// Exception thrown when Smart Charge AI prediction fails
+class SmartChargePredictionException implements Exception {
+  SmartChargePredictionException({
+    required this.message,
+    this.statusCode,
+    this.debugCode,
+    this.debugDetail,
+  });
+
+  final String message;
+  final int? statusCode;
+  final String? debugCode;
+  final String? debugDetail;
+
+  @override
+  String toString() => message;
+}
 
 class ChargingPredictionAdapter {
   ChargingPredictionAdapter({
@@ -16,12 +36,16 @@ class ChargingPredictionAdapter {
     this.standardPowerW = 400,
     this.fastPowerW = 1000,
     this.efficiency = 0.9,
+    this.strictAi = true,
+    this.allowPhysicsFallback = false,
   }) : _predictionCall = predictionCall ?? ApiService().predictChargingTime;
 
   final ChargingPredictionCall _predictionCall;
   final double standardPowerW;
   final double fastPowerW;
   final double efficiency;
+  final bool strictAi;
+  final bool allowPhysicsFallback;
 
   Future<SmartChargingPlanPreview> predict(
     SmartChargingPlanDraft draft, {
@@ -30,34 +54,73 @@ class ChargingPredictionAdapter {
     final reference = now ?? DateTime.now();
     final validation = draft.validate(now: reference);
     if (validation != null) throw ArgumentError(validation);
+
     try {
       final response = await _predictionCall(
         vehicleId: draft.vehicleId,
         currentBattery: draft.currentSoc.round(),
         targetBattery: draft.targetSoc.round(),
+        strictAi: strictAi,
       );
+
       if (response['success'] != true) {
-        throw const FormatException('Prediction failed.');
+        final errorMsg = response['error']?.toString() ??
+            'Không thể tính thời gian sạc từ AI model.';
+        final debugCode = response['debugCode']?.toString();
+        final debugDetail = response['debugDetail']?.toString();
+        final statusCode = response['statusCode'] as int?;
+
+        final exc = SmartChargePredictionException(
+          message: errorMsg,
+          statusCode: statusCode,
+          debugCode: debugCode,
+          debugDetail: debugDetail,
+        );
+
+        AppErrorReporter.report(
+          exc,
+          StackTrace.current,
+          source: 'SmartChargePrediction',
+          endpoint: '/api/ai/predict-charging-time',
+          statusCode: statusCode,
+          debugCode: debugCode,
+          debugDetail: debugDetail,
+        );
+
+        if (allowPhysicsFallback) {
+          return physicsFallback(draft, now: reference);
+        }
+        throw exc;
       }
+
       final rawData = response['data'];
       if (rawData is! Map) {
-        throw const FormatException('Prediction data missing.');
+        throw SmartChargePredictionException(
+          message: 'Dữ liệu dự đoán thời gian sạc không hợp lệ.',
+          debugCode: 'INVALID_AI_RESPONSE',
+        );
       }
+
       final data = Map<String, dynamic>.from(rawData);
       final duration = data['predictedDurationMin'] ?? data['estimatedMinutes'];
       final minutes = (duration as num?)?.round() ?? 0;
       if (minutes <= 0) {
-        throw const FormatException('Prediction duration invalid.');
+        throw SmartChargePredictionException(
+          message: 'Thời gian sạc dự đoán không hợp lệ (<= 0 phút).',
+          debugCode: 'INVALID_DURATION',
+        );
       }
+
       final confidenceValue = data['confidence'];
+      final source = data['modelSource']?.toString() ?? 'ai_model';
       final base = SmartChargingPlanPreview.fromPrediction(
         draft: draft,
         predictedMinutes: minutes,
-        source: data['modelSource']?.toString() ?? 'ai_model',
+        source: source,
         confidence: confidenceValue is num ? confidenceValue.toDouble() : null,
         now: reference,
       );
-      final source = data['modelSource']?.toString() ?? 'ai_model';
+
       return SmartChargingPlanPreview(
         draft: base.draft,
         predictedMinutes: base.predictedMinutes,
@@ -81,8 +144,23 @@ class ChargingPredictionAdapter {
             reference,
         aiChargeEligible: source == 'ai_model',
       );
-    } catch (_) {
-      return physicsFallback(draft, now: reference);
+    } on SmartChargePredictionException {
+      rethrow;
+    } catch (e, stack) {
+      AppErrorReporter.report(
+        e,
+        stack,
+        source: 'SmartChargePrediction',
+        endpoint: '/api/ai/predict-charging-time',
+        debugCode: 'PREDICTION_EXCEPTION',
+      );
+      if (allowPhysicsFallback) {
+        return physicsFallback(draft, now: reference);
+      }
+      throw SmartChargePredictionException(
+        message: 'Không thể tính thời gian sạc: $e',
+        debugCode: 'PREDICTION_EXCEPTION',
+      );
     }
   }
 

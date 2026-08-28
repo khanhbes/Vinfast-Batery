@@ -2040,6 +2040,7 @@ def ai_predict_charging_time():
     current = float(body.get('currentBattery', 20))
     target = float(body.get('targetBattery', 80))
     ambient_temp_c = float(body.get('ambientTempC', 25.0))
+    strict_ai = bool(body.get('strictAi', False))
     
     # For fallback heuristic
     health = float(body.get('batteryHealth', 100))
@@ -2060,17 +2061,36 @@ def ai_predict_charging_time():
         heuristic_result = _heuristic_predict_charging_time(current, target, health, 
                                                               ambient_temp_c, charger, capacity)
         
-        if ai_success:
-            # Apply guardrails
+        if strict_ai:
+            if not ai_success or not ai_result:
+                return jsonify({
+                    'success': False,
+                    'error': 'Model AI hiện chưa khả dụng.',
+                    'debugCode': 'AI_MODEL_UNAVAILABLE'
+                }), 503
+            
             final_result, source = _guardrail_check(ai_result, heuristic_result, current, target)
-            warnings = list(ai_result.get('warnings', []))
             if source != 'ai_model':
-                warnings.append(f'AI output bị chặn bởi guardrail, dùng {source}')
+                return jsonify({
+                    'success': False,
+                    'error': 'Kết quả AI chưa đủ tin cậy.',
+                    'debugCode': 'AI_PREDICTION_REJECTED',
+                    'debugDetail': source
+                }), 422
+            
+            warnings = list(ai_result.get('warnings', []))
         else:
-            # AI failed, use heuristic
-            final_result = heuristic_result
-            source = 'heuristic_fallback'
-            warnings = ['AI model không khả dụng, dùng heuristic']
+            if ai_success:
+                # Apply guardrails
+                final_result, source = _guardrail_check(ai_result, heuristic_result, current, target)
+                warnings = list(ai_result.get('warnings', []))
+                if source != 'ai_model':
+                    warnings.append(f'AI output bị chặn bởi guardrail, dùng {source}')
+            else:
+                # AI failed, use heuristic
+                final_result = heuristic_result
+                source = 'heuristic_fallback'
+                warnings = ['AI model không khả dụng, dùng heuristic']
         
         # Build standardized response
         response_data = {

@@ -10,16 +10,21 @@ import 'package:vinfast_battery/features/ai/controllers/smart_charging_controlle
 import 'package:vinfast_battery/features/ai/smart_charging_control_screen.dart';
 
 void main() {
-  testWidgets('renders simple form with advanced controls collapsed', (
+  testWidgets('renders user-friendly terminology and target slider', (
     tester,
   ) async {
     final controller = harness();
     await tester.pumpWidget(app(controller));
-    expect(find.text('Mục tiêu'), findsOneWidget);
-    expect(find.text('SOC hiện tại · Ước tính'), findsOneWidget);
-    expect(find.text('Nâng cao'), findsOneWidget);
-    expect(find.text('80%'), findsOneWidget);
+
+    // Phase 8, 9 & 10 assertions
+    expect(find.text('Pin hiện tại'), findsOneWidget);
+    expect(find.text('Pin muốn sạc tới'), findsOneWidget);
+    expect(find.byKey(const ValueKey('target-battery-slider')), findsOneWidget);
+    expect(find.text('80%'), findsWidgets);
+    expect(find.text('90%'), findsOneWidget);
+    expect(find.text('100%'), findsWidgets);
     expect(find.byKey(const ValueKey('create-plan-button')), findsOneWidget);
+    expect(find.text('TÍNH THỜI GIAN SẠC'), findsOneWidget);
   });
 
   testWidgets('fits 320dp width without overflow', (tester) async {
@@ -43,18 +48,22 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('creates preview with source and effective stop', (tester) async {
+  testWidgets('creates clean preview with duration and stop time', (tester) async {
     final controller = harness();
     await tester.pumpWidget(app(controller));
+
     final createButton = find.byKey(const ValueKey('create-plan-button'));
     await tester.ensureVisible(createButton);
     await tester.pump();
     await tester.tap(createButton);
     await tester.pump();
     await tester.pump();
+
     expect(find.byKey(const ValueKey('plan-preview')), findsOneWidget);
-    expect(find.text('Dừng hiệu lực'), findsOneWidget);
-    expect(find.text('AI'), findsOneWidget);
+    expect(find.text('Thời gian dự kiến'), findsOneWidget);
+    expect(find.text('Dự kiến dừng lúc'), findsOneWidget);
+    expect(find.text('1 giờ 0 phút'), findsOneWidget);
+    expect(find.text('BẮT ĐẦU SẠC'), findsOneWidget);
   });
 
   testWidgets('requires estimated SOC acknowledgement before start', (
@@ -62,68 +71,123 @@ void main() {
   ) async {
     final controller = harness();
     await tester.pumpWidget(app(controller));
+
     final createButton = find.byKey(const ValueKey('create-plan-button'));
     await tester.ensureVisible(createButton);
     await tester.pump();
     await tester.tap(createButton);
     await tester.pump();
+
     final confirmButton = find.byKey(const ValueKey('confirm-plan-button'));
     await tester.ensureVisible(confirmButton);
     await tester.pump();
     await tester.tap(confirmButton);
     await tester.pumpAndSettle();
+
     expect(find.text('Xác nhận bắt đầu sạc'), findsOneWidget);
     final startButton = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Bật nguồn sạc'),
+      find.widgetWithText(FilledButton, 'Bắt đầu sạc'),
     );
     expect(startButton.onPressed, isNull);
+
     await tester.tap(find.byType(CheckboxListTile));
     await tester.pump();
+
     final enabled = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Bật nguồn sạc'),
+      find.widgetWithText(FilledButton, 'Bắt đầu sạc'),
     );
     expect(enabled.onPressed, isNotNull);
   });
 
-  testWidgets('Shelly error explains AI preview remains available', (
+  testWidgets('Shelly error displays error banner with details view', (
     tester,
   ) async {
     final controller = harness();
-    controller.seed(controller.state.copyWith(gatewayError: 'Gateway offline'));
+    controller.seed(controller.state.copyWith(gatewayError: 'Không thể kết nối ổ sạc'));
     await tester.pumpWidget(app(controller));
-    expect(find.textContaining('AI vẫn có thể dự đoán'), findsOneWidget);
-    expect(find.byKey(const ValueKey('create-plan-button')), findsOneWidget);
+
+    expect(find.text('Không kết nối được ổ sạc.'), findsOneWidget);
+    expect(find.text('Xem chi tiết'), findsOneWidget);
   });
 
-  testWidgets('active session labels estimated SOC and exposes immediate OFF', (
+  testWidgets('active session displays live countdown and stop button', (
     tester,
   ) async {
     final controller = harness();
     controller.seed(
       controller.state.copyWith(
         phase: SmartChargingViewPhase.active,
+        chargerStatus: const SmartChargerStatus(
+          online: true,
+          relay: true,
+          powerW: 402,
+          voltageV: 220,
+          currentA: 1.8,
+          frequencyHz: 50,
+          temperatureC: 32,
+          energyWh: 500,
+        ),
         session: sampleSession(),
       ),
     );
     await tester.pumpWidget(app(controller));
+
+    expect(find.text('ĐANG SẠC'), findsWidgets);
     expect(find.byKey(const ValueKey('session-countdown')), findsOneWidget);
-    expect(find.text('~25%'), findsOneWidget);
-    expect(find.textContaining('Timer đã cài trên Shelly'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('stop-smart-session-button')),
-      findsOneWidget,
-    );
+    expect(find.text('402 W'), findsOneWidget);
+    expect(find.text('DỪNG SẠC'), findsOneWidget);
   });
 
-  testWidgets('history is newest-first and visible', (tester) async {
+  testWidgets('charger display state maps correctly to UI indicators', (
+    tester,
+  ) async {
+    final controller = harness();
+    // Test offline state
+    controller.seed(
+      controller.state.copyWith(
+        chargerStatus: const SmartChargerStatus(
+          online: false,
+          relay: false,
+          powerW: 0,
+          voltageV: 0,
+          currentA: 0,
+          frequencyHz: 0,
+          temperatureC: null,
+          energyWh: 0,
+        ),
+      ),
+    );
+    await tester.pumpWidget(app(controller));
+    expect(find.text('Mất kết nối'), findsOneWidget);
+
+    // Test online relay off state
+    controller.seed(
+      controller.state.copyWith(
+        chargerStatus: const SmartChargerStatus(
+          online: true,
+          relay: false,
+          powerW: 0,
+          voltageV: 230,
+          currentA: 0,
+          frequencyHz: 50,
+          temperatureC: null,
+          energyWh: 0,
+        ),
+      ),
+    );
+    await tester.pumpWidget(app(controller));
+    expect(find.text('Đã tắt sạc'), findsOneWidget);
+  });
+
+  testWidgets('history is visible and cleanly formatted', (tester) async {
     final controller = harness();
     controller.seed(
       controller.state.copyWith(history: [sampleSession(state: 'completed')]),
     );
     await tester.pumpWidget(app(controller));
     await tester.scrollUntilVisible(find.text('Lịch sử gần đây'), 300);
-    expect(find.text('20 → 80%'), findsOneWidget);
-    expect(find.text('completed'), findsOneWidget);
+    expect(find.text('~20% → 80%'), findsOneWidget);
+    expect(find.text('Hoàn thành'), findsOneWidget);
   });
 }
 
@@ -182,6 +246,7 @@ class HarnessController extends SmartChargingController {
                 required currentBattery,
                 required targetBattery,
                 ambientTempC,
+                bool strictAi = false,
               }) async => {
                 'success': true,
                 'data': {

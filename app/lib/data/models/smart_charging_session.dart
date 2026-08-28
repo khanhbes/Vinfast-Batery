@@ -86,10 +86,10 @@ class SmartChargingPlanDraft {
     final reference = now ?? DateTime.now();
     if (vehicleId.trim().isEmpty) return 'Chưa chọn xe.';
     if (currentSoc < 0 || currentSoc > 100) {
-      return 'SOC hiện tại phải từ 0–100%.';
+      return 'Mức pin hiện tại phải từ 0–100%.';
     }
     if (targetSoc <= currentSoc || targetSoc > 100) {
-      return 'SOC mục tiêu phải lớn hơn SOC hiện tại và không quá 100%.';
+      return 'Mức pin muốn sạc phải cao hơn pin hiện tại.';
     }
     if (!hardDeadlineAt.isAfter(reference)) {
       return 'Thời điểm dừng phải ở tương lai.';
@@ -180,7 +180,7 @@ class SmartChargingPlanPreview {
       aiChargeEligible: source == 'ai_model',
       analyzedAt: reference,
       warning: impossible
-          ? 'Không đủ thời gian để đạt SOC mục tiêu trước hạn dừng.'
+          ? 'Không đủ thời gian để đạt mức pin muốn sạc trước hạn dừng.'
           : null,
     );
   }
