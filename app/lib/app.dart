@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'core/services/settings_service.dart';
+import 'core/constants/app_constants.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/app_popup.dart';
+import 'data/services/notification_service.dart';
+import 'features/ai/smart_charging_control_screen.dart';
 import 'features/auth/auth_gate.dart';
 import 'l10n/app_localizations.dart';
 
@@ -20,9 +23,24 @@ class _VinFastBatteryAppState extends State<VinFastBatteryApp> {
   @override
   void initState() {
     super.initState();
+    NotificationService().setTapHandler(_openNotification);
     // initialize() sẽ notifyListeners() ngay sau khi đọc xong prefs,
     // AnimatedBuilder dưới đây tự rebuild — không cần setState ở đây.
     _settings.initialize();
+  }
+
+  void _openNotification(String payload) {
+    if (!payload.startsWith('smart_charge/')) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      AppPopup.navigatorKey.currentState?.push(
+        MaterialPageRoute<void>(
+          builder: (_) => const SmartChargingControlScreen(
+            vehicleId: AppConstants.defaultVehicleId,
+            currentSoc: 0,
+          ),
+        ),
+      );
+    });
   }
 
   @override
@@ -54,6 +72,7 @@ class _VinFastBatteryAppState extends State<VinFastBatteryApp> {
         ],
 
         scaffoldMessengerKey: AppPopup.messengerKey,
+        navigatorKey: AppPopup.navigatorKey,
         home: const AuthGate(),
       ),
     );

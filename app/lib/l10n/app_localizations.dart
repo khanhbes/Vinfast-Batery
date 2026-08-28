@@ -437,13 +437,13 @@ abstract class AppLocalizations {
   /// No description provided for @aiChargingTime.
   ///
   /// In vi, this message translates to:
-  /// **'Thời gian sạc'**
+  /// **'Smart Charge'**
   String get aiChargingTime;
 
   /// No description provided for @aiChargingTimeDesc.
   ///
   /// In vi, this message translates to:
-  /// **'Dự đoán thời gian sạc pin'**
+  /// **'Dự đoán thời gian sạc bằng AI và tự ngắt nguồn qua Shelly'**
   String get aiChargingTimeDesc;
 
   /// No description provided for @notificationTitle.

@@ -140,9 +140,8 @@ class AiFunctionsScreen extends ConsumerWidget {
       _AiFeature(
         icon: Icons.ev_station_rounded,
         iconColor: AppColors.primary,
-        name: 'Smart Charging ETA',
-        description: 'Dự đoán thời gian sạc dựa trên tốc độ sạc lịch sử và '
-            'đường cong charge-rate theo %.',
+        name: 'Smart Charge',
+        description: 'Dự đoán thời gian sạc bằng AI và tự ngắt nguồn qua Shelly.',
         status: totalCharges >= 3
             ? _FeatureStatus.active
             : totalCharges > 0

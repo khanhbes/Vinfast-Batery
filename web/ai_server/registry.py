@@ -159,18 +159,18 @@ MODEL_TYPES: Dict[str, Dict[str, Any]] = {
 
     "charging_time": {
         "key": "charging_time",
-        "label": "Dự đoán thời gian sạc pin",
-        "shortName": "Charge Time ETA",
+        "label": "Smart Charge",
+        "shortName": "Smart Charge",
         "group": "assistant",
         "phase": "v2.0",
         "status": "ready",
         "icon": "Timer",
         "accent": "blue",
-        "description": "Dự đoán thời gian sạc từ mức pin hiện tại đến mức mong muốn dựa trên lịch sử sạc.",
+        "description": "Dự đoán thời gian sạc bằng AI và tự ngắt nguồn qua Shelly.",
         "useCase": "Pin đang 20%, muốn sạc lên 80%. AI tính toán dựa trên tốc độ sạc trung bình, nhiệt độ, SoH → trả về 'Dự kiến 2h45 phút'. Giúp người dùng lên kế hoạch thời gian.",
         "outputDescription": "Thời gian sạc dự kiến để đạt mức pin mong muốn.",
-        "outputUnit": "phút",
-        "outputMeaning": "Thời gian cần sạc (phút). Ví dụ: 120 phút = 2 giờ.",
+        "outputUnit": "giây",
+        "outputMeaning": "Thời gian cần sạc tính bằng giây; app định dạng thành giờ và phút.",
         "input_fields": [
             "start_soc", "end_soc", "delta_soc",
             "ambient_temp_c", "avg_charge_rate", "temp_deviation",

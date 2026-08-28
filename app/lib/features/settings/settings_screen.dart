@@ -5,6 +5,9 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../data/services/smart_charger_credentials_service.dart';
+import '../../data/models/smart_charger_binding.dart';
+import '../../data/repositories/smart_charger_repository.dart';
+import '../../data/services/server_smart_charger_service.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/providers/app_providers.dart';
@@ -13,7 +16,7 @@ import '../../core/services/sync_service.dart';
 import '../../core/services/settings_service.dart';
 import '../../core/widgets/app_popup.dart';
 import '../notifications/notification_center_screen.dart';
-import '../smart_charging/shelly_setup_screen.dart';
+import '../smart_charging/smart_charger_setup_hub_screen.dart';
 import 'appearance_settings_screen.dart';
 import 'profile_screen.dart';
 import 'vehicle_garage_screen.dart';
@@ -40,6 +43,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   String _userEmail = '...';
   String _appVersion = '...';
   bool _shellyConfigured = false;
+  String _shellyLabel = 'Shelly chưa kết nối';
 
   final _settingsService = SettingsService();
   final _smartChargerCredentials = SmartChargerCredentialsService();
@@ -56,16 +60,33 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _loadShellyState() async {
-    final profile = await _smartChargerCredentials.readProfile();
+    final mode = await SmartChargerRepositoryFactory.currentMode();
+    var configured = false;
+    var label = 'Shelly chưa kết nối';
+    if (mode == SmartChargerConnectionMode.advancedDirect) {
+      configured = await _smartChargerCredentials.readProfile() != null;
+      if (configured) label = 'Advanced Direct · Cloud/LAN';
+    } else {
+      try {
+        final binding = await ServerSmartChargerService().getBinding();
+        configured = binding != null;
+        if (binding != null) label = 'Server Cloud · ${binding.displayName}';
+      } on Object {
+        // Setup Hub displays the actionable server error.
+      }
+    }
     if (mounted) {
-      setState(() => _shellyConfigured = profile != null);
+      setState(() {
+        _shellyConfigured = configured;
+        _shellyLabel = label;
+      });
     }
   }
 
   Future<void> _openShellySetup() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const ShellySetupScreen()));
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const SmartChargerSetupHubScreen()),
+    );
     await _loadShellyState();
   }
 
@@ -631,9 +652,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
           _buildTapRow(
             title: 'Smart Charger',
-            value: _shellyConfigured
-                ? 'Shelly Cloud/LAN đã cấu hình'
-                : 'Shelly chưa kết nối',
+            value: _shellyConfigured ? _shellyLabel : 'Shelly chưa kết nối',
             icon: Icons.ev_station_rounded,
             onTap: _openShellySetup,
           ),

@@ -43,8 +43,11 @@ class ShellyConnectionProfile {
     if (uri == null ||
         uri.scheme.toLowerCase() != 'https' ||
         uri.host.isEmpty ||
+        (uri.path.isNotEmpty && uri.path != '/') ||
+        uri.hasQuery ||
+        uri.hasFragment ||
         !(uri.host == 'shelly.cloud' || uri.host.endsWith('.shelly.cloud'))) {
-      return 'Server URI phải dùng HTTPS và thuộc miền shelly.cloud.';
+      return 'Server URI phải là HTTPS shelly.cloud và không chứa path/query.';
     }
     if (cloudAuthKey.trim().isEmpty) {
       return 'Cloud Authorization Key còn trống.';

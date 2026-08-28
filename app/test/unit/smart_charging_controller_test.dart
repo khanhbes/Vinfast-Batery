@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vinfast_battery/data/models/smart_charger_status.dart';
+import 'package:vinfast_battery/data/models/smart_charger_capabilities.dart';
 import 'package:vinfast_battery/data/models/smart_charging_session.dart';
 import 'package:vinfast_battery/data/services/charging_prediction_adapter.dart';
 import 'package:vinfast_battery/data/services/smart_charger_service.dart';
@@ -98,6 +99,7 @@ void main() {
   test('start requires explicit confirmation', () async {
     final service = FakeSmartChargerService();
     final controller = build(service);
+    await controller.initialize();
     await controller.createPreview();
     expect(await controller.start(confirmed: false), isFalse);
     expect(service.startCalls, 0);
@@ -107,6 +109,7 @@ void main() {
   test('confirmed start sends acknowledgement and becomes active', () async {
     final service = FakeSmartChargerService();
     final controller = build(service);
+    await controller.initialize();
     await controller.createPreview();
     expect(await controller.start(confirmed: true), isTrue);
     expect(service.startCalls, 1);
@@ -119,6 +122,7 @@ void main() {
   test('typed start error returns to preview', () async {
     final service = FakeSmartChargerService()..startError = true;
     final controller = build(service);
+    await controller.initialize();
     await controller.createPreview();
     expect(await controller.start(confirmed: true), isFalse);
     expect(controller.state.phase, SmartChargingViewPhase.preview);
@@ -162,6 +166,22 @@ class FakeSmartChargerService extends SmartChargerService {
   int? stoppedVersion;
   SmartChargingSessionRequest? lastStartRequest;
   String? lastIdempotencyKey;
+
+  @override
+  Future<SmartChargerCapabilities> capabilities() async =>
+      const SmartChargerCapabilities(
+        canReadStatus: true,
+        canManualOn: true,
+        canManualOff: true,
+        supportsDeviceTimer: true,
+        canReadPower: true,
+        canConfigureSafeBoot: true,
+        cloudAvailable: true,
+        lanAvailable: true,
+        safeBootVerified: true,
+        noLoadTestVerified: true,
+        readyForControl: true,
+      );
 
   @override
   Future<SmartChargerStatus> getStatus() async {

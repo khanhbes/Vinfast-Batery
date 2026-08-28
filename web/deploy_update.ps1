@@ -1,4 +1,4 @@
-<#
+﻿<#
   deploy_update.ps1 - Cập nhật VinFast Battery lên VPS
   Chạy: .\deploy_update.ps1
   Chỉ rebuild dashboard: .\deploy_update.ps1 -Service dashboard
@@ -26,29 +26,29 @@ function Get-DeployPlan([string]$RequestedService) {
         'all' {
             return @{
                 BuildServices = @('ai', 'api', 'dashboard')
-                UpServices    = @('ai', 'api', 'dashboard')
-                HealthTargets = @('vinfast_ai', 'vinfast_api')
+                UpServices    = @('ai', 'api', 'dashboard', 'caddy')
+                HealthTargets = @('vinfast_ai', 'vinfast_api', 'vinfast_caddy')
             }
         }
         'ai' {
             return @{
                 BuildServices = @('ai', 'api')
-                UpServices    = @('ai', 'api', 'dashboard')
-                HealthTargets = @('vinfast_ai', 'vinfast_api')
+                UpServices    = @('ai', 'api', 'dashboard', 'caddy')
+                HealthTargets = @('vinfast_ai', 'vinfast_api', 'vinfast_caddy')
             }
         }
         'api' {
             return @{
                 BuildServices = @('api')
-                UpServices    = @('api', 'dashboard')
-                HealthTargets = @('vinfast_api')
+                UpServices    = @('api', 'dashboard', 'caddy')
+                HealthTargets = @('vinfast_api', 'vinfast_caddy')
             }
         }
         'dashboard' {
             return @{
                 BuildServices = @('dashboard')
-                UpServices    = @('api', 'dashboard')
-                HealthTargets = @('vinfast_api')
+                UpServices    = @('api', 'dashboard', 'caddy')
+                HealthTargets = @('vinfast_api', 'vinfast_caddy')
             }
         }
         default {
@@ -110,7 +110,7 @@ Write-Host ""
 Write-Host "🔍 Kiểm tra API..." -ForegroundColor Yellow
 Start-Sleep -Seconds 3
 try {
-    $res = Invoke-WebRequest -Uri "http://${VpsIp}/api/health" -TimeoutSec 10 -UseBasicParsing
+    $res = Invoke-WebRequest -Uri "https://api.evbattery.live/api/health" -TimeoutSec 15 -UseBasicParsing
     Write-Host "   ✅ API OK: $($res.StatusCode)" -ForegroundColor Green
 } catch {
     Write-Host "   ⚠ API chưa phản hồi (có thể đang khởi động)" -ForegroundColor Yellow
@@ -119,7 +119,7 @@ try {
 Write-Host ""
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host "  ✅ Deploy xong!" -ForegroundColor Green
-Write-Host "  🌐 Dashboard: http://$VpsIp" -ForegroundColor Green
-Write-Host "  🔌 API:       http://$VpsIp/api/health" -ForegroundColor Green
+Write-Host "  🌐 Dashboard: https://api.evbattery.live" -ForegroundColor Green
+Write-Host "  🔌 API:       https://api.evbattery.live/api/health" -ForegroundColor Green
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host ""

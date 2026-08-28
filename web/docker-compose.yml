@@ -38,6 +38,14 @@ services:
       ADMIN_EMAILS: ${ADMIN_EMAILS:-*}
       DEV_ADMIN_KEY: ${DEV_ADMIN_KEY:-dev-local-token}
       FIREBASE_CREDENTIALS_JSON: ${FIREBASE_CREDENTIALS_JSON:-}
+      SHELLY_PROVIDER: ${SHELLY_PROVIDER:-integrator}
+      SHELLY_LEGACY_HOST: ${SHELLY_LEGACY_HOST:-}
+      SHELLY_LEGACY_AUTH_KEY: ${SHELLY_LEGACY_AUTH_KEY:-}
+      SHELLY_LEGACY_DEVICE_ID: ${SHELLY_LEGACY_DEVICE_ID:-}
+      SHELLY_LEGACY_DEVICE_NAME: ${SHELLY_LEGACY_DEVICE_NAME:-Shelly sạc xe}
+      SHELLY_INTEGRATOR_TAG: ${SHELLY_INTEGRATOR_TAG:-}
+      SHELLY_CONSENT_CALLBACK_URL: ${SHELLY_CONSENT_CALLBACK_URL:-}
+      SMART_CHARGE_MAX_MINUTES: ${SMART_CHARGE_MAX_MINUTES:-360}
     volumes:
       - models_data:/app/models
       - apk_data:/app/apk
@@ -50,7 +58,7 @@ services:
       retries: 5
       start_period: 60s
 
-  # ── React Dashboard → Nginx (public, port 80) ─────────────────
+  # ── React Dashboard → Nginx (internal; Caddy terminates TLS) ──
   dashboard:
     build:
       context: .
@@ -68,8 +76,29 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    expose:
+      - "80"
+    networks:
+      - vinfast_net
+
+  # ── Public HTTPS entrypoint + automatic Let's Encrypt ─────────
+  caddy:
+    image: caddy:2.10-alpine
+    container_name: vinfast_caddy
+    restart: unless-stopped
+    depends_on:
+      dashboard:
+        condition: service_healthy
+    environment:
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:-api.evbattery.live}
     ports:
       - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
     networks:
       - vinfast_net
 
@@ -86,6 +115,8 @@ volumes:
       type: none
       o: bind
       device: ./apk
+  caddy_data:
+  caddy_config:
 
 networks:
   vinfast_net:

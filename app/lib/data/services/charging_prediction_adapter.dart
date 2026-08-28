@@ -50,12 +50,36 @@ class ChargingPredictionAdapter {
         throw const FormatException('Prediction duration invalid.');
       }
       final confidenceValue = data['confidence'];
-      return SmartChargingPlanPreview.fromPrediction(
+      final base = SmartChargingPlanPreview.fromPrediction(
         draft: draft,
         predictedMinutes: minutes,
         source: data['modelSource']?.toString() ?? 'ai_model',
         confidence: confidenceValue is num ? confidenceValue.toDouble() : null,
         now: reference,
+      );
+      final source = data['modelSource']?.toString() ?? 'ai_model';
+      return SmartChargingPlanPreview(
+        draft: base.draft,
+        predictedMinutes: base.predictedMinutes,
+        aiStopAt: base.aiStopAt,
+        effectiveStopAt: base.effectiveStopAt,
+        predictionSource: source,
+        predictionConfidence: base.predictionConfidence,
+        isPhysicsFallback: source != 'ai_model',
+        isImpossible: base.isImpossible,
+        warning: base.warning,
+        predictedDurationSeconds:
+            (data['predictedDurationSec'] as num?)?.round() ?? minutes * 60,
+        modelKey: 'charging_time',
+        modelVersion: data['modelVersion']?.toString() ?? 'unknown',
+        runtimeHealth: source == 'ai_model' ? 'loaded' : 'fallback',
+        warnings: ((data['warnings'] as List?) ?? const [])
+            .map((item) => item.toString())
+            .toList(),
+        fallbackReason: source == 'ai_model' ? null : source,
+        analyzedAt: DateTime.tryParse(data['analyzedAt']?.toString() ?? '') ??
+            reference,
+        aiChargeEligible: source == 'ai_model',
       );
     } catch (_) {
       return physicsFallback(draft, now: reference);

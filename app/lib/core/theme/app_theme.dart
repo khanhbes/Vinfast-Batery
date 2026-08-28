@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import 'app_colors.dart';
 import 'app_motion.dart';
 
 /// Page transitions áp dụng cho mọi platform — đồng bộ với `AppMotion`.
@@ -424,22 +423,22 @@ class AppColorsLight {
   AppColorsLight._();
 
   // Primary palette
-  static const Color primary = Color(0xFF1565C0);           // VinFast Blue
-  static const Color primaryContainer = Color(0xFFE3F2FD);
-  static const Color onPrimaryContainer = Color(0xFF0D47A1);
+  static const Color primary = Color(0xFF006FDB);
+  static const Color primaryContainer = Color(0xFFDCEEFF);
+  static const Color onPrimaryContainer = Color(0xFF003A75);
   static const Color secondary = Color(0xFF424242);
   static const Color accent = Color(0xFF00B0FF);
 
   // Background & Surface
-  static const Color background = Color(0xFFF5F5F5);
+  static const Color background = Color(0xFFF6F8FC);
   static const Color surface = Color(0xFFFFFFFF);
-  static const Color surfaceVariant = Color(0xFFEEEEEE);
+  static const Color surfaceVariant = Color(0xFFE9EEF6);
   static const Color card = Color(0xFFFFFFFF);
   static const Color cardElevated = Color(0xFFF5F5F5);
 
   // Text
-  static const Color textPrimary = Color(0xFF212121);
-  static const Color textSecondary = Color(0xFF757575);
+  static const Color textPrimary = Color(0xFF111827);
+  static const Color textSecondary = Color(0xFF475569);
   static const Color textTertiary = Color(0xFF9E9E9E);
   static const Color textHint = Color(0xFFBDBDBD);
   static const Color textInverse = Color(0xFFFFFFFF);
@@ -465,24 +464,24 @@ class AppColorsDark {
   AppColorsDark._();
 
   // Primary palette (VinFast-inspired)
-  static const Color primary = Color(0xFF2D5BFF);
-  static const Color primaryContainer = Color(0xFF1A1A2E);
-  static const Color onPrimaryContainer = Color(0xFF4B8BFF);
+  static const Color primary = Color(0xFF4DA3FF);
+  static const Color primaryContainer = Color(0xFF003B70);
+  static const Color onPrimaryContainer = Color(0xFFDCEEFF);
   static const Color secondary = Color(0xFF00D9C0);
   static const Color accent = Color(0xFFFF6B6B);
 
   // Background & Surface
-  static const Color background = Color(0xFF050505);
-  static const Color surface = Color(0xFF0A0A0A);
-  static const Color surfaceVariant = Color(0xFF141414);
-  static const Color card = Color(0xFF111111);
-  static const Color cardElevated = Color(0xFF1A1A1A);
+  static const Color background = Color(0xFF07111F);
+  static const Color surface = Color(0xFF101B2C);
+  static const Color surfaceVariant = Color(0xFF18263A);
+  static const Color card = Color(0xFF101B2C);
+  static const Color cardElevated = Color(0xFF18263A);
 
   // Text
-  static const Color textPrimary = Color(0xFFFFFFFF);
-  static const Color textSecondary = Color(0xFFB0B0B0);
-  static const Color textTertiary = Color(0xFF707070);
-  static const Color textHint = Color(0xFF505050);
+  static const Color textPrimary = Color(0xFFF8FAFC);
+  static const Color textSecondary = Color(0xFFC0CAD8);
+  static const Color textTertiary = Color(0xFF94A3B8);
+  static const Color textHint = Color(0xFF8290A3);
   static const Color textInverse = Color(0xFF000000);
 
   // Semantic
@@ -492,9 +491,9 @@ class AppColorsDark {
   static const Color info = Color(0xFF448AFF);
 
   // Borders & Dividers
-  static const Color border = Color(0xFF2A2A2A);
-  static const Color borderLight = Color(0xFF333333);
-  static const Color divider = Color(0xFF2A2A2A);
-  static const Color glass = Color(0xFF1A1A2E);
-  static const Color glassBorder = Color(0xFF2D5BFF);
+  static const Color border = Color(0xFF26364B);
+  static const Color borderLight = Color(0xFF33465F);
+  static const Color divider = Color(0xFF26364B);
+  static const Color glass = Color(0xFF132237);
+  static const Color glassBorder = Color(0xFF33465F);
 }

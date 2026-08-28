@@ -1,4 +1,4 @@
-<#
+﻿<#
   build_apk.ps1 — Auto tăng version + build APK arm64-v8a (tối ưu tốc độ)
   Mặc định:         .\build_apk.ps1              → arm64-v8a only (nhanh nhất)
   Có clean:         .\build_apk.ps1 -Clean        → xóa cache rồi build
@@ -12,7 +12,7 @@ param(
     [switch]$AllAbi,    # Build split cho cả 3 ABI: arm64-v8a, armeabi-v7a, x86_64
     [switch]$NoBump,    # Không tăng version (build lại cùng version)
     [switch]$NoDeploy,  # Không upload APK lên VPS sau build
-    [string]$ApiUrl    = 'http://167.71.207.121',
+    [string]$ApiUrl    = 'https://api.evbattery.live',
     [string]$VpsIp     = '167.71.207.121',
     [string]$VpsUser   = 'root',
     [string]$VpsPath   = '/opt/vinfast/web',
@@ -47,7 +47,36 @@ if ($pubspec -match 'version:\s*(\d+)\.(\d+)\.(\d+)\+(\d+)') {
 $oldVersion = "$major.$minor.$patch+$build"
 Write-Host "Version hien tai: $oldVersion" -ForegroundColor Yellow
 
-# ── 2. Tăng patch + build number (nếu không có -NoBump) ──
+# ── 2. Preflight trước khi chạm vào version ──
+# Một build lỗi không được quảng bá version mới. Analyze và tests luôn chạy
+# trước bước bump để metadata auto-update chỉ trỏ tới artifact đã kiểm chứng.
+if ($ApiUrl -notmatch '^https://') {
+    throw 'Release API bat buoc dung HTTPS. Hay truyen -ApiUrl https://...'
+}
+try {
+    # Windows PowerShell 5.1 may invoke the retired IE HTML parser and throw a
+    # misleading NullReferenceException even when the HTTPS response is 200.
+    $health = Invoke-WebRequest -UseBasicParsing -Uri "$ApiUrl/api/health" -Method GET -TimeoutSec 15 -ErrorAction Stop
+    if ([int]$health.StatusCode -lt 200 -or [int]$health.StatusCode -ge 400) {
+        throw "API health tra HTTP $($health.StatusCode)"
+    }
+} catch {
+    throw "Release API HTTPS chua san sang: $ApiUrl/api/health — $_"
+}
+
+Write-Host "`n[CHECK] Dong bo dependencies..." -ForegroundColor Cyan
+flutter pub get
+if ($LASTEXITCODE -ne 0) { throw 'flutter pub get that bai.' }
+
+Write-Host "[CHECK] Flutter analyze..." -ForegroundColor Cyan
+flutter analyze --no-pub --no-fatal-warnings --no-fatal-infos
+if ($LASTEXITCODE -ne 0) { throw 'flutter analyze that bai; version chua bi thay doi.' }
+
+Write-Host "[CHECK] Flutter tests..." -ForegroundColor Cyan
+flutter test --no-pub
+if ($LASTEXITCODE -ne 0) { throw 'flutter test that bai; version chua bi thay doi.' }
+
+# ── 3. Tăng patch + build number (nếu không có -NoBump) ──
 if (-not $NoBump) {
     $patch++
     $build++
@@ -56,11 +85,11 @@ $newVersion = "$major.$minor.$patch+$build"
 $newSemver  = "$major.$minor.$patch"
 Write-Host "Version moi:      $newVersion" -ForegroundColor Green
 
-# ── 3. Cập nhật pubspec.yaml ──
+# ── 4. Cập nhật pubspec.yaml ──
 $pubspec = $pubspec -replace "version:\s*\d+\.\d+\.\d+\+\d+", "version: $newVersion"
 Set-Content 'pubspec.yaml' -Value $pubspec -NoNewline
 
-# ── 4. Cập nhật app_constants.dart ──
+# ── 5. Cập nhật app_constants.dart ──
 $constFile = 'lib\core\constants\app_constants.dart'
 if (Test-Path $constFile) {
     $constContent = Get-Content $constFile -Raw
@@ -69,7 +98,7 @@ if (Test-Path $constFile) {
 }
 Write-Host "Da cap nhat pubspec.yaml va app_constants.dart" -ForegroundColor Green
 
-# ── 5. Flutter clean (CHỈ khi -Clean được truyền) ──
+# ── 6. Flutter clean (CHỈ khi -Clean được truyền) ──
 if ($Clean) {
     Write-Host "`n[CLEAN] Dang chay flutter clean..." -ForegroundColor Yellow
     flutter clean
@@ -78,18 +107,9 @@ if ($Clean) {
     Write-Host "`n[TIP] Bo qua flutter clean de dung cache (dung -Clean neu build loi)" -ForegroundColor DarkGray
 }
 
-# ── 6. Flutter pub get (chỉ khi pubspec.lock chưa sync) ──
-$lockFile   = 'pubspec.lock'
-$pubspecAge = (Get-Item 'pubspec.yaml').LastWriteTime
-$lockAge    = if (Test-Path $lockFile) { (Get-Item $lockFile).LastWriteTime } else { [datetime]::MinValue }
-
-if ($pubspecAge -gt $lockAge) {
-    Write-Host "`nDang chay flutter pub get..." -ForegroundColor Cyan
-    flutter pub get
-} else {
-    Write-Host "`n[SKIP] flutter pub get — pubspec.lock da moi hon pubspec.yaml" -ForegroundColor DarkGray
-    flutter pub get --no-precompile 2>$null
-}
+# Dependencies đã được resolve trong preflight. Version app không thay đổi
+# dependency graph nên không cần chạy pub get lần hai.
+Write-Host "`n[SKIP] Dependencies da duoc kiem tra trong preflight." -ForegroundColor DarkGray
 
 # ── 7. Build APK ──
 if ($Fat) {
@@ -241,7 +261,12 @@ if (-not $NoDeploy) {
                 $tempConfigFile = Join-Path $projectDir '.app_config.deploy.json'
                 $remoteTempConfig = "$remoteApkDir/app_config.json.tmp-$build"
                 try {
-                    Set-Content -LiteralPath $tempConfigFile -Value ($config | ConvertTo-Json -Depth 10) -Encoding utf8
+                    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+                    [System.IO.File]::WriteAllText(
+                        $tempConfigFile,
+                        ($config | ConvertTo-Json -Depth 10),
+                        $utf8NoBom
+                    )
                     scp -i $KeyFile -q $tempConfigFile "${VpsUser}@${VpsIp}:${remoteTempConfig}"
                     ssh -i $KeyFile -o BatchMode=yes `
                         "${VpsUser}@${VpsIp}" "mv $remoteTempConfig $remoteApkDir/app_config.json"
@@ -264,6 +289,7 @@ if (-not $NoDeploy) {
                 throw "Server chua xac nhan app config v$newSemver+$build"
             }
             $downloadProbe = Invoke-WebRequest `
+                -UseBasicParsing `
                 -Uri "$ApiUrl/api/app/download" `
                 -Method HEAD `
                 -TimeoutSec 15 `
@@ -274,7 +300,12 @@ if (-not $NoDeploy) {
 
             # Giữ metadata trong repo đồng bộ với bản đang phát hành.
             $localConfigFile = Join-Path (Split-Path $projectDir -Parent) 'web\app_config.json'
-            Set-Content -LiteralPath $localConfigFile -Value ($config | ConvertTo-Json -Depth 10) -Encoding utf8
+            $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+            [System.IO.File]::WriteAllText(
+                $localConfigFile,
+                ($config | ConvertTo-Json -Depth 10),
+                $utf8NoBom
+            )
 
             $forceLabel = if ($ForceUpdate) { ' [FORCE]' } else { '' }
             $effectiveMinBuild = [int]$config['minSupportedBuild']
