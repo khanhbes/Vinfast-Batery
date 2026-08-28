@@ -57,7 +57,7 @@ void main() {
   test('draft rejects target not greater than current', () {
     expect(
       draft(current: 80, target: 80).validate(now: now),
-      contains('lớn hơn'),
+      contains('cao hơn'),
     );
   });
 
@@ -127,6 +127,7 @@ void main() {
             required currentBattery,
             required targetBattery,
             ambientTempC,
+            bool strictAi = false,
           }) async => {
             'success': true,
             'data': {
@@ -142,16 +143,40 @@ void main() {
     expect(preview.predictionConfidence, 91);
   });
 
-  test('API failure uses Wh-dimensional physics fallback', () async {
+  test('API failure in strict AI mode throws SmartChargePredictionException', () async {
     final adapter = ChargingPredictionAdapter(
-      standardPowerW: 400,
-      efficiency: 1,
       predictionCall:
           ({
             required vehicleId,
             required currentBattery,
             required targetBattery,
             ambientTempC,
+            bool strictAi = false,
+          }) async => {
+            'success': false,
+            'statusCode': 503,
+            'error': 'Model AI hiện chưa khả dụng.',
+            'debugCode': 'AI_MODEL_UNAVAILABLE',
+          },
+    );
+    expect(
+      () => adapter.predict(draft(current: 20, target: 30), now: now),
+      throwsA(isA<SmartChargePredictionException>()),
+    );
+  });
+
+  test('API failure uses Wh-dimensional physics fallback when allowPhysicsFallback is true', () async {
+    final adapter = ChargingPredictionAdapter(
+      standardPowerW: 400,
+      efficiency: 1,
+      allowPhysicsFallback: true,
+      predictionCall:
+          ({
+            required vehicleId,
+            required currentBattery,
+            required targetBattery,
+            ambientTempC,
+            bool strictAi = false,
           }) async => throw Exception('offline'),
     );
     final preview = await adapter.predict(

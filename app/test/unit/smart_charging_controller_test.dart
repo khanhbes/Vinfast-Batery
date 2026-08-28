@@ -23,6 +23,7 @@ void main() {
             required currentBattery,
             required targetBattery,
             ambientTempC,
+            bool strictAi = false,
           }) async => successfulPrediction
           ? {
               'success': true,
@@ -68,13 +69,15 @@ void main() {
     controller.dispose();
   });
 
-  test('AI failure falls back to physics', () async {
+  test('AI failure sets error phase and does not silently fall back to physics', () async {
     final controller = build(
       FakeSmartChargerService(),
       successfulPrediction: false,
     );
     await controller.createPreview();
-    expect(controller.state.preview?.isPhysicsFallback, isTrue);
+    expect(controller.state.phase, SmartChargingViewPhase.error);
+    expect(controller.state.preview, isNull);
+    expect(controller.state.actionError, isNotNull);
     controller.dispose();
   });
 
@@ -92,7 +95,7 @@ void main() {
     controller.updateDraft(currentSoc: 90, targetSoc: 80);
     await controller.createPreview();
     expect(controller.state.preview, isNull);
-    expect(controller.state.actionError, contains('lớn hơn'));
+    expect(controller.state.actionError, contains('cao hơn'));
     controller.dispose();
   });
 
