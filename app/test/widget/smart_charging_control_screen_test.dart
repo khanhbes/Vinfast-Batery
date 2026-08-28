@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vinfast_battery/data/models/smart_charger_status.dart';
+import 'package:vinfast_battery/data/models/smart_charger_capabilities.dart';
 import 'package:vinfast_battery/data/models/smart_charging_session.dart';
 import 'package:vinfast_battery/data/services/charging_prediction_adapter.dart';
 import 'package:vinfast_battery/data/services/smart_charger_service.dart';
@@ -140,6 +141,19 @@ HarnessController harness() {
   value.seed(
     value.state.copyWith(
       phase: SmartChargingViewPhase.editing,
+      capabilities: const SmartChargerCapabilities(
+        canReadStatus: true,
+        canManualOn: true,
+        canManualOff: true,
+        supportsDeviceTimer: true,
+        canReadPower: true,
+        canConfigureSafeBoot: true,
+        cloudAvailable: true,
+        lanAvailable: true,
+        safeBootVerified: true,
+        noLoadTestVerified: true,
+        readyForControl: true,
+      ),
       chargerStatus: const SmartChargerStatus(
         online: true,
         relay: false,

@@ -123,8 +123,14 @@ class ShellyCloudClient {
         );
       }
       final decoded = jsonDecode(response.body);
+      // Cloud Control v2 /devices/api/get returns a top-level JSON array of
+      // Device State objects. Commands may return an object (or an empty one).
+      // Keep both shapes so the recursive status parser can reach
+      // devices[n].status['switch:0'].
       final result = decoded is Map
           ? Map<String, dynamic>.from(decoded)
+          : decoded is List
+          ? <String, dynamic>{'devices': decoded}
           : <String, dynamic>{};
       if (result['isok'] == false || result['error'] != null) {
         throw const ShellyClientException(
@@ -366,14 +372,22 @@ SmartChargerStatus parseShellyStatus(
   Map<String, dynamic> json,
   ShellyTransport transport, {
   String? deviceName,
+  DateTime? now,
 }) {
   Map<String, dynamic>? findSwitch(Object? value) {
     if (value is Map) {
       final map = Map<String, dynamic>.from(value);
       final direct = map['switch:0'];
       if (direct is Map) return Map<String, dynamic>.from(direct);
-      if (map.containsKey('output') &&
-          (map.containsKey('apower') || map.containsKey('timer_remaining'))) {
+      if (direct is String) {
+        try {
+          final found = findSwitch(jsonDecode(direct));
+          if (found != null) return found;
+        } on FormatException {
+          // Continue searching other fields in a partially encoded response.
+        }
+      }
+      if (map.containsKey('output')) {
         return map;
       }
       for (final child in map.values) {
@@ -385,6 +399,14 @@ SmartChargerStatus parseShellyStatus(
         final found = findSwitch(child);
         if (found != null) return found;
       }
+    } else if (value is String &&
+        (value.trimLeft().startsWith('{') ||
+            value.trimLeft().startsWith('['))) {
+      try {
+        return findSwitch(jsonDecode(value));
+      } on FormatException {
+        return null;
+      }
     }
     return null;
   }
@@ -392,8 +414,32 @@ SmartChargerStatus parseShellyStatus(
   double number(Object? value) => value is num
       ? value.toDouble()
       : double.tryParse(value?.toString() ?? '') ?? 0;
+  bool explicitlyOffline(Object? value) {
+    if (value is Map) {
+      final map = Map<String, dynamic>.from(value);
+      if (map.containsKey('id') &&
+          (map['online'] == 0 || map['online'] == false)) {
+        return true;
+      }
+      return map.values.any(explicitlyOffline);
+    }
+    return value is List && value.any(explicitlyOffline);
+  }
+
   final data = findSwitch(json);
-  if (data == null || data['output'] is! bool) {
+  final output = switch (data?['output']) {
+    true || 1 || 'true' || 'on' => true,
+    false || 0 || 'false' || 'off' => false,
+    _ => null,
+  };
+  if (data == null || output == null) {
+    if (explicitlyOffline(json)) {
+      throw const ShellyClientException(
+        SmartChargerErrorCode.deviceOffline,
+        'Shelly đang offline trên Cloud. Kiểm tra nguồn và Wi-Fi của ổ cắm.',
+        retryable: true,
+      );
+    }
     throw const ShellyClientException(
       SmartChargerErrorCode.deviceOffline,
       'Không đọc được trạng thái switch:0 của Shelly.',
@@ -402,10 +448,19 @@ SmartChargerStatus parseShellyStatus(
   final energy = data['aenergy'];
   final totalEnergy = energy is Map ? energy['total'] : data['energy_wh'];
   final temperature = data['temperature'];
-  final timerValue = data['timer_remaining'];
+  Object? timerValue = data['timer_remaining'];
+  if (timerValue == null &&
+      data['timer_started_at'] != null &&
+      data['timer_duration'] != null) {
+    final reference = now ?? DateTime.now();
+    final elapsed =
+        reference.millisecondsSinceEpoch / 1000 -
+        number(data['timer_started_at']);
+    timerValue = max(0, number(data['timer_duration']) - elapsed);
+  }
   return SmartChargerStatus(
     online: true,
-    relay: data['output'] as bool,
+    relay: output,
     powerW: number(data['apower'] ?? data['power_w']),
     voltageV: number(data['voltage'] ?? data['voltage_v']),
     currentA: number(data['current'] ?? data['current_a']),

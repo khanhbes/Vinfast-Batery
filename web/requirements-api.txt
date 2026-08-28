@@ -7,3 +7,4 @@ pandas>=2.2.0
 scikit-learn>=1.4.0
 firebase-admin>=6.4.0
 requests>=2.32.0
+PyJWT[crypto]>=2.9.0

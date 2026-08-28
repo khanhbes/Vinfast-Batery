@@ -1,7 +1,9 @@
 enum ChargingStrategy {
   targetSoc('target_soc'),
   deadline('deadline'),
-  smartCombined('smart_combined');
+  smartCombined('smart_combined'),
+  aiTarget('ai_target'),
+  manualTimed('manual_timed');
 
   const ChargingStrategy(this.wireValue);
   final String wireValue;
@@ -106,8 +108,18 @@ class SmartChargingPlanPreview {
     required this.predictionSource,
     required this.isPhysicsFallback,
     required this.isImpossible,
+    this.previewId,
+    this.expiresAt,
     this.predictionConfidence,
     this.warning,
+    this.predictedDurationSeconds,
+    this.modelKey = 'charging_time',
+    this.modelVersion = 'unknown',
+    this.runtimeHealth = 'unknown',
+    this.warnings = const [],
+    this.fallbackReason,
+    this.analyzedAt,
+    this.aiChargeEligible = true,
   });
 
   final SmartChargingPlanDraft draft;
@@ -119,6 +131,19 @@ class SmartChargingPlanPreview {
   final bool isPhysicsFallback;
   final bool isImpossible;
   final String? warning;
+  final int? predictedDurationSeconds;
+  final String modelKey;
+  final String modelVersion;
+  final String runtimeHealth;
+  final List<String> warnings;
+  final String? fallbackReason;
+  final DateTime? analyzedAt;
+  final bool aiChargeEligible;
+
+  /// Present for server-generated previews. It prevents clients from changing
+  /// the prediction between preview and Start.
+  final String? previewId;
+  final DateTime? expiresAt;
 
   factory SmartChargingPlanPreview.fromPrediction({
     required SmartChargingPlanDraft draft,
@@ -135,6 +160,8 @@ class SmartChargingPlanPreview {
       ChargingStrategy.deadline => draft.hardDeadlineAt,
       ChargingStrategy.smartCombined =>
         aiStop.isBefore(draft.hardDeadlineAt) ? aiStop : draft.hardDeadlineAt,
+      ChargingStrategy.aiTarget => aiStop,
+      ChargingStrategy.manualTimed => aiStop,
     };
     final impossible = aiStop.isAfter(draft.hardDeadlineAt);
     return SmartChargingPlanPreview(
@@ -146,6 +173,12 @@ class SmartChargingPlanPreview {
       predictionConfidence: confidence,
       isPhysicsFallback: source == 'physics_fallback',
       isImpossible: impossible,
+      predictedDurationSeconds: predictedMinutes * 60,
+      runtimeHealth: source == 'ai_model' ? 'loaded' : 'fallback',
+      modelVersion: source == 'ai_model' ? 'unknown' : 'heuristic-v1',
+      fallbackReason: source == 'ai_model' ? null : source,
+      aiChargeEligible: source == 'ai_model',
+      analyzedAt: reference,
       warning: impossible
           ? 'Không đủ thời gian để đạt SOC mục tiêu trước hạn dừng.'
           : null,
@@ -168,6 +201,13 @@ class SmartChargingSessionRequest {
     this.hardDeadlineAt,
     this.estimatedCapacityWh,
     this.acknowledgeEstimatedSoc = false,
+    this.predictedDurationSeconds,
+    this.modelKey = 'charging_time',
+    this.modelVersion = 'unknown',
+    this.runtimeHealth = 'unknown',
+    this.predictionWarnings = const [],
+    this.fallbackReason,
+    this.predictionAnalyzedAt,
   });
 
   final String vehicleId;
@@ -183,6 +223,13 @@ class SmartChargingSessionRequest {
   final DateTime? hardDeadlineAt;
   final double? estimatedCapacityWh;
   final bool acknowledgeEstimatedSoc;
+  final int? predictedDurationSeconds;
+  final String modelKey;
+  final String modelVersion;
+  final String runtimeHealth;
+  final List<String> predictionWarnings;
+  final String? fallbackReason;
+  final DateTime? predictionAnalyzedAt;
 
   Map<String, dynamic> toJson() => {
     'vehicle_id': vehicleId,
@@ -195,6 +242,15 @@ class SmartChargingSessionRequest {
     if (predictionSource != null) 'prediction_source': predictionSource,
     if (predictionConfidence != null)
       'prediction_confidence': predictionConfidence,
+    if (predictedDurationSeconds != null)
+      'predicted_duration_seconds': predictedDurationSeconds,
+    'model_key': modelKey,
+    'model_version': modelVersion,
+    'runtime_health': runtimeHealth,
+    'prediction_warnings': predictionWarnings,
+    if (fallbackReason != null) 'fallback_reason': fallbackReason,
+    if (predictionAnalyzedAt != null)
+      'prediction_analyzed_at': predictionAnalyzedAt!.toIso8601String(),
   };
 
   Map<String, dynamic> toAutomaticJson() => {
@@ -275,6 +331,15 @@ class SmartChargingSession {
     this.lastError,
     this.deviceId,
     this.transport,
+    this.predictedDurationSeconds,
+    this.modelKey = 'charging_time',
+    this.modelVersion = 'unknown',
+    this.runtimeHealth = 'unknown',
+    this.predictionWarnings = const [],
+    this.fallbackReason,
+    this.predictionAnalyzedAt,
+    this.timerVerified = false,
+    this.idempotencyKey,
   });
 
   final String sessionId;
@@ -307,6 +372,15 @@ class SmartChargingSession {
   final String? lastError;
   final String? deviceId;
   final String? transport;
+  final int? predictedDurationSeconds;
+  final String modelKey;
+  final String modelVersion;
+  final String runtimeHealth;
+  final List<String> predictionWarnings;
+  final String? fallbackReason;
+  final DateTime? predictionAnalyzedAt;
+  final bool timerVerified;
+  final String? idempotencyKey;
 
   Duration remaining([DateTime? now]) {
     final value = effectiveStopAt.difference(now ?? DateTime.now());
@@ -364,6 +438,20 @@ class SmartChargingSession {
       lastError: json['last_error']?.toString(),
       deviceId: json['device_id']?.toString(),
       transport: json['transport']?.toString(),
+      predictedDurationSeconds:
+          (json['predicted_duration_seconds'] as num?)?.round(),
+      modelKey: json['model_key']?.toString() ?? 'charging_time',
+      modelVersion: json['model_version']?.toString() ?? 'unknown',
+      runtimeHealth: json['runtime_health']?.toString() ?? 'unknown',
+      predictionWarnings: ((json['prediction_warnings'] as List?) ?? const [])
+          .map((item) => item.toString())
+          .toList(),
+      fallbackReason: json['fallback_reason']?.toString(),
+      predictionAnalyzedAt: DateTime.tryParse(
+        json['prediction_analyzed_at']?.toString() ?? '',
+      ),
+      timerVerified: json['timer_verified'] == true,
+      idempotencyKey: json['idempotency_key']?.toString(),
     );
   }
 
@@ -401,6 +489,17 @@ class SmartChargingSession {
     if (lastError != null) 'last_error': lastError,
     if (deviceId != null) 'device_id': deviceId,
     if (transport != null) 'transport': transport,
+    if (predictedDurationSeconds != null)
+      'predicted_duration_seconds': predictedDurationSeconds,
+    'model_key': modelKey,
+    'model_version': modelVersion,
+    'runtime_health': runtimeHealth,
+    'prediction_warnings': predictionWarnings,
+    if (fallbackReason != null) 'fallback_reason': fallbackReason,
+    if (predictionAnalyzedAt != null)
+      'prediction_analyzed_at': predictionAnalyzedAt!.toIso8601String(),
+    'timer_verified': timerVerified,
+    if (idempotencyKey != null) 'idempotency_key': idempotencyKey,
   };
 
   SmartChargingSession copyWith({
@@ -417,6 +516,7 @@ class SmartChargingSession {
     int? version,
     String? lastError,
     String? transport,
+    bool? timerVerified,
   }) => SmartChargingSession(
     sessionId: sessionId,
     vehicleId: vehicleId,
@@ -448,5 +548,14 @@ class SmartChargingSession {
     lastError: lastError ?? this.lastError,
     deviceId: deviceId,
     transport: transport ?? this.transport,
+    predictedDurationSeconds: predictedDurationSeconds,
+    modelKey: modelKey,
+    modelVersion: modelVersion,
+    runtimeHealth: runtimeHealth,
+    predictionWarnings: predictionWarnings,
+    fallbackReason: fallbackReason,
+    predictionAnalyzedAt: predictionAnalyzedAt,
+    timerVerified: timerVerified ?? this.timerVerified,
+    idempotencyKey: idempotencyKey,
   );
 }

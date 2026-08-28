@@ -1,11 +1,11 @@
 {
-  "features": {},
+  "latestVersion": "1.0.68",
   "forceUpdate": false,
-  "minSupportedBuild": 50,
-  "latestBuild": 65,
-  "latestVersion": "1.0.64",
-  "releaseChannel": "apk",
-  "releaseNotes": "Build 65 — 28/08/2026 01:15",
   "remindLaterHours": 6,
-  "apkUrl": "/apk/VinFastBattery_latest.apk"
+  "releaseChannel": "apk",
+  "latestBuild": 69,
+  "apkUrl": "/apk/VinFastBattery_latest.apk",
+  "releaseNotes": "Smart Charge Cloud-First, Shelly switch:0 và HTTPS production",
+  "features": {},
+  "minSupportedBuild": 50
 }

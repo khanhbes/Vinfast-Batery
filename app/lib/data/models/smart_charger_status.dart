@@ -52,6 +52,12 @@ class SmartChargerStatus {
       timerRemaining: json['timer_remaining'] == null
           ? null
           : Duration(seconds: _asDouble(json['timer_remaining']).round()),
+      transport: switch (json['transport']?.toString()) {
+        'cloud' => ShellyTransport.cloud,
+        'lan' => ShellyTransport.lan,
+        _ => null,
+      },
+      deviceName: json['device_name']?.toString(),
     );
   }
 }

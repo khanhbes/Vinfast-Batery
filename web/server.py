@@ -3529,22 +3529,73 @@ def ai_charge_feedback():
 
 @app.route('/api/ai/charging-model-status', methods=['GET'])
 def ai_charging_model_status():
-    """Get charging model status and metrics."""
+    """Return deployment/runtime truth for the canonical charging_time model."""
     try:
-        # Calculate average error from feedback
         avg_error = 0
         if _charge_feedback_store:
-            recent_feedback = _charge_feedback_store[-50:]  # Last 50 samples
+            recent_feedback = _charge_feedback_store[-50:]
             avg_error = sum(f.get('errorPercent', 0) for f in recent_feedback) / len(recent_feedback)
-        
+
+        deployment = _get_model_deployment_status('charging_time')
+        store = _model_store_for('charging_time')
+        versions = store.list_versions() if store else []
+        active_version = (
+            deployment.get('deploymentVersion') or
+            (store.active_version() if store else None)
+        )
+        active_meta = next(
+            (item for item in versions if item.get('version') == active_version),
+            {},
+        )
+        runtime = {}
+        try:
+            runtime_data, runtime_code = _ai_request_json('GET', '/v1/types')
+            payload = runtime_data.get('data', runtime_data) if isinstance(runtime_data, dict) else {}
+            for item in payload.get('types', []) if isinstance(payload, dict) else []:
+                if isinstance(item, dict) and (item.get('key') or item.get('type_key')) == 'charging_time':
+                    runtime = item.get('runtimeStatus', item)
+                    break
+            if runtime_code != 200:
+                runtime = {}
+        except Exception:
+            runtime = {}
+
+        active_version = (
+            runtime.get('activeVersion') or
+            runtime.get('active_version') or
+            active_version
+        )
+        validation_error = runtime.get('validationError') or runtime.get('lastError')
+        loaded = bool(
+            not validation_error and (
+                runtime.get('isLoaded') or
+                runtime.get('isPredictable') or
+                deployment.get('runtimeHealth') == 'loaded'
+            )
+        )
+        samples = int(
+            active_meta.get('trainingSamples') or
+            active_meta.get('samples') or
+            0
+        )
         return jsonify({
             'success': True,
             'data': {
-                'version': _charging_model_version,
-                'samples': _charging_model_samples,
+                'modelKey': 'charging_time',
+                'version': active_version or 'unknown',
+                'activeVersion': active_version,
+                'samples': samples,
                 'averageErrorPercent': round(avg_error, 2),
-                'status': 'active' if _charging_model_samples > 10 else 'learning',
-                'lastUpdated': datetime.now(timezone.utc).isoformat(),
+                'status': 'active' if loaded else ('error' if validation_error else 'not_loaded'),
+                'runtimeHealth': 'loaded' if loaded else ('error' if validation_error else 'not_loaded'),
+                'isLoaded': loaded,
+                'isPredictable': bool(runtime.get('isPredictable') or loaded),
+                'validationError': validation_error,
+                'lastUpdated': (
+                    runtime.get('lastLoadAt') or
+                    deployment.get('deployedAt') or
+                    active_meta.get('createdAt')
+                ),
             }
         })
         
@@ -4132,7 +4183,9 @@ def _load_app_config() -> dict:
     }
     try:
         if os.path.exists(_APP_CONFIG_FILE):
-            with open(_APP_CONFIG_FILE, 'r', encoding='utf-8') as f:
+            # utf-8-sig accepts both normal UTF-8 and legacy PowerShell files
+            # that were written with a BOM.
+            with open(_APP_CONFIG_FILE, 'r', encoding='utf-8-sig') as f:
                 data = json.load(f)
                 return {**default, **data}
     except Exception:
@@ -4185,6 +4238,78 @@ def app_download():
 # ═══════════════════════════════════════════════════════════════
 # RUN
 # ═══════════════════════════════════════════════════════════════
+def _register_smart_charge_cloud_first():
+    """Register modular Smart Charge API after AI/Firebase dependencies exist."""
+    from shelly.crypto import verify_shelly_trust
+    from shelly.providers import (
+        FakeShellyProvider,
+        IntegratorShellyProvider,
+        LegacyCloudControlProvider,
+        ProviderError,
+    )
+    from shelly.repositories import SmartChargeRepository
+    from shelly.routes import create_blueprint
+    from shelly.service import SmartChargeService
+
+    provider_name = os.environ.get('SHELLY_PROVIDER', 'integrator').strip().lower()
+    try:
+        if provider_name == 'fake':
+            provider = FakeShellyProvider()
+        elif provider_name == 'legacy':
+            provider = LegacyCloudControlProvider()
+        else:
+            provider = IntegratorShellyProvider()
+    except ProviderError as exc:
+        print(f'⚠ Smart Charge provider disabled: {exc.code}')
+        provider = IntegratorShellyProvider()
+
+    def predictor(payload):
+        current = float(payload.get('currentSoc', 20))
+        target = float(payload.get('targetSoc', 80))
+        ambient = float(payload.get('ambientTempC', 25))
+        capacity = float(payload.get('batteryCapacityWh', 2400))
+        ai_result, ai_success = _ai_predict_charging_time(current, target, ambient)
+        heuristic = _heuristic_predict_charging_time(
+            current,
+            target,
+            float(payload.get('batteryHealth', 100)),
+            ambient,
+            payload.get('chargingMode', 'standard'),
+            capacity,
+        )
+        if ai_success:
+            result, source = _guardrail_check(ai_result, heuristic, current, target)
+        else:
+            result, source = heuristic, 'heuristic_fallback'
+        return {
+            'predictedDurationSeconds': int(round(float(result['predictedDurationSec']))),
+            'predictedMinutes': float(result['predictedDurationMin']),
+            'modelSource': source,
+            'modelKey': 'charging_time',
+            'modelVersion': str(result.get('modelVersion') or ('heuristic-v1' if source != 'ai_model' else 'unknown')),
+            'runtimeHealth': 'loaded' if source == 'ai_model' else 'fallback',
+            'confidence': result.get('confidence', 70),
+            'warnings': list(result.get('warnings') or ([] if source == 'ai_model' else [f'Đang dùng nguồn dự phòng: {source}'])),
+            'fallbackReason': None if source == 'ai_model' else source,
+            'analyzedAt': _utcnow(),
+            'aiChargeEligible': source == 'ai_model',
+        }
+
+    repository = SmartChargeRepository(_firestore_db)
+    service = SmartChargeService(repository, provider, predictor)
+    app.register_blueprint(create_blueprint(
+        service,
+        repository,
+        _verify_token,
+        trust_verifier=verify_shelly_trust,
+    ))
+    app.extensions['smart_charge_service'] = service
+    print(f'✅ Smart Charge Cloud-First provider: {provider.name}')
+
+
+_register_smart_charge_cloud_first()
+
+
 if __name__ == '__main__':
     print('\n⚡ VinFast Battery — Unified API Server v4.1')
     print('📡 Endpoints:')

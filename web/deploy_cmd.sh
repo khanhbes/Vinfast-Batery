@@ -1,5 +1,9 @@
 set -e
 cd /opt/vinfast
+if command -v ufw >/dev/null 2>&1 && ufw status | grep -q 'Status: active'; then
+  ufw allow 443/tcp >/dev/null
+  ufw allow 443/udp >/dev/null
+fi
 unzip -o vinfast_web.zip -d web/ > /dev/null
 cd web
 docker compose --env-file .env build $1 $2 2>&1 | tail -10
@@ -29,14 +33,14 @@ if [ "$dashboard_status" != "running" ]; then
   exit 1
 fi
 
-for attempt in 1 2 3 4 5 6 7 8 9 10; do
-  if curl -fsS http://127.0.0.1/api/health > /tmp/vinfast_api_health.json; then
+for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+  if curl -fsS https://api.evbattery.live/api/health > /tmp/vinfast_api_health.json; then
     cat /tmp/vinfast_api_health.json
     break
   fi
   sleep 3
 done
 if [ ! -s /tmp/vinfast_api_health.json ]; then
-  echo "Deployment check failed: /api/health is not reachable through dashboard nginx"
+  echo "Deployment check failed: HTTPS /api/health is not reachable through Caddy"
   exit 1
 fi

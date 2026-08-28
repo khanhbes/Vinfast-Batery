@@ -177,10 +177,11 @@ class AppLocalizationsVi extends AppLocalizations {
   String get aiPredict => 'Dự đoán';
 
   @override
-  String get aiChargingTime => 'Thời gian sạc';
+  String get aiChargingTime => 'Smart Charge';
 
   @override
-  String get aiChargingTimeDesc => 'Dự đoán thời gian sạc pin';
+  String get aiChargingTimeDesc =>
+      'Dự đoán thời gian sạc bằng AI và tự ngắt nguồn qua Shelly';
 
   @override
   String get notificationTitle => 'Thông báo';

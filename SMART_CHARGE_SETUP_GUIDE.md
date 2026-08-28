@@ -1,0 +1,89 @@
+# Thiết lập và sử dụng Sạc thông minh
+
+## 1. Chuẩn bị phần cứng
+
+1. Dùng **Shelly Plug S Gen3** chính hãng, firmware mới và tải sạc không vượt **12 A / 2500 W**.
+2. Chưa cắm bộ sạc xe vào Shelly.
+3. Cài **Shelly Smart Control**, thêm Plug S Gen3 vào Wi-Fi và bật Shelly Cloud.
+4. Trong Shelly, đặt hành vi sau mất điện là **OFF** và tắt mọi auto-on/schedule cũ.
+5. Điện thoại và Shelly nên cùng Wi-Fi trong lần kiểm tra đầu để LAN fallback hoạt động.
+
+Ứng dụng VinFast Battery không provisioning SSID/password và không đọc SOC từ BMS. SOC có dấu `~` luôn là ước tính.
+
+## 2. Chọn một cách kết nối
+
+### Cách A — Direct Cloud + LAN (khuyên dùng cho tài khoản cá nhân)
+
+1. Mở **Cài đặt → Smart Charger** và chọn **Direct**.
+2. Trong Shelly Cloud lấy đúng **Server URI**, **Authorization Cloud Key** và **Device ID** của Plug S Gen3.
+3. Nhập Server URI dạng `https://...shelly.cloud`; không thêm path hoặc query.
+4. Nhập Cloud Key và Device ID. Key chỉ được lưu trong Android Secure Storage.
+5. Bấm **QUÉT** và cho phép quyền “Thiết bị Wi-Fi lân cận”. Nếu mDNS không tìm thấy, nhập IP riêng như `192.168.1.50` hoặc hostname `.local`.
+6. Bấm **LƯU & KIỂM TRA KẾT NỐI**. App kiểm tra Cloud/LAN, `switch:0`, power meter và cấu hình khởi động OFF.
+7. Khi hộp xác nhận xuất hiện, rút toàn bộ tải rồi chọn **ĐÃ RÚT TẢI · CHẠY TEST**. App sẽ ON 5 giây, OFF và đọc lại relay.
+8. Chỉ khi màn hình báo **Sẵn sàng điều khiển** mới cắm bộ sạc xe. Nếu draft lỗi, hồ sơ tốt đang dùng không bị ghi đè.
+
+Không gửi Cloud Key qua chat, log, Firestore hoặc commit Git. Nếu nghi key bị lộ, thu hồi/đổi key trong Shelly và xóa hồ sơ trong app.
+
+### Cách B — Easy Connect / server pilot (một tài khoản cá nhân)
+
+Đây là đường Cloud-first không nhập key vào APK. Quản trị viên server đặt secret trong biến môi trường:
+
+```text
+SHELLY_PROVIDER=legacy
+SHELLY_LEGACY_HOST=https://<server-của-tài-khoản>.shelly.cloud
+SHELLY_LEGACY_AUTH_KEY=<cloud-key>
+SHELLY_LEGACY_DEVICE_ID=<device-id>
+SHELLY_LEGACY_DEVICE_NAME=Shelly sạc xe
+SMART_CHARGE_MAX_MINUTES=360
+```
+
+1. Lưu các giá trị trên trong secret manager hoặc environment file chỉ tài khoản service đọc được; không lưu vào repository/Docker image.
+2. Cài dependency mới từ `web/requirements.txt`, rồi restart API/container.
+3. Build app với `APP_API_BASE_URL` trỏ tới API server.
+4. Đăng nhập app, mở **Cài đặt → Smart Charger → Easy / Server** rồi bấm **KIỂM TRA EASY**.
+5. Chỉ khi backend trả đủ capability timer/status/OFF thì app mới cho điều khiển. Nếu chưa có Integrator credential, màn hình sẽ báo Easy chưa khả dụng và hướng dẫn dùng Direct.
+
+`legacy` chỉ dành cho mô hình một Shelly Cloud account. Không dùng chung key này cho hệ thống nhiều khách hàng.
+
+### Cách C — Shelly Integrator production
+
+1. Đăng ký Shelly Integrator B2B và nhận Integrator tag/license.
+2. Cấu hình `SHELLY_PROVIDER=integrator`, `SHELLY_INTEGRATOR_TAG` và callback HTTPS công khai trong `SHELLY_CONSENT_CALLBACK_URL`.
+3. Callback phải giữ nguyên `state` và xác minh header `SCL-Trust` ES384 trước khi bind device.
+
+Hiện public Integrator API chỉ tài liệu hóa relay ON/OFF, chưa tài liệu hóa device timer tương đương `toggle_after`. Vì vậy code **cố ý chặn Start** với `providerTimerUnsupported` trên provider Integrator. Chỉ bật production sau khi Shelly cấp và xác nhận cơ chế timer chạy trên thiết bị; không thay bằng countdown app/server.
+
+## 3. Cách dùng mỗi lần sạc
+
+1. Cắm bộ sạc xe vào Shelly và cắm Shelly vào nguồn; relay phải đang **OFF**.
+2. Mở **Sạc thông minh** từ Dashboard hoặc AI Models.
+3. Kiểm tra hàng trạng thái: tên Shelly, Cloud/LAN, Relay OFF và công suất.
+4. Kiểm tra `~SOC hiện tại`. Nếu sai, bấm **Chỉnh**; đây vẫn là số ước tính.
+5. Chọn mục tiêu **80%**, **90%** hoặc **100%**.
+6. Bấm **DỰ ĐOÁN VỚI AI**. Kiểm tra thời lượng, giờ ngắt, nguồn dự đoán và confidence.
+7. Nếu cần, mở **Nâng cao** và đặt “Dừng không muộn hơn”. Không phiên nào được vượt 6 giờ.
+8. Bấm **SẠC THEO AI**, đọc cảnh báo và xác nhận SOC ước tính. Nếu model chỉ trả fallback, nút này bị khóa; hãy dùng **BẬT SẠC** và chọn timer thủ công.
+9. Chờ đến khi app hiển thị **Timer đã cài trên Shelly**. Chỉ lúc đó phiên mới là Active; có thể đóng app.
+10. Khi cần dừng sớm, bấm nút đỏ **NGẮT NGUỒN NGAY**. App chỉ báo hoàn tất sau khi đọc lại relay OFF.
+
+Nếu app báo không xác minh được timer/relay, rút tải hoặc tắt Shelly vật lý ngay. Không bấm Start lặp lại liên tục.
+
+## 4. Kiểm thử bắt buộc trước khi sạc dài
+
+1. Test không tải ON 5 giây rồi OFF.
+2. Sạc thử 5–10 phút, kill app và xác nhận Shelly vẫn tự OFF.
+3. Sau khi arm timer, tắt Internet điện thoại; Shelly vẫn phải OFF đúng hạn.
+4. Với Advanced Direct, mất Cloud nhưng cùng Wi-Fi phải đọc/điều khiển được qua LAN.
+5. Rút điện và cấp lại; relay phải trở về OFF.
+6. Nhấn nút vật lý OFF trên Shelly; app phải ghi nhận phiên bị gián đoạn.
+
+## 5. Build và auto-update APK
+
+Từ thư mục `app`:
+
+```powershell
+.\build_apk.ps1
+```
+
+Script chạy `pub get`, analyze và toàn bộ test **trước khi tăng version**; sau đó build APK arm64, upload `VinFastBattery_latest.apk`, cập nhật `app_config.json` và xác minh endpoint download. API release bắt buộc HTTPS, mặc định là `https://api.evbattery.live`. Dùng `-NoDeploy` nếu chỉ muốn build local; dùng `-NoBump` nếu không muốn tăng version. Smart Charge không còn dùng `SMART_CHARGER_API_BASE_URL`; API chung lấy từ `APP_API_BASE_URL`.

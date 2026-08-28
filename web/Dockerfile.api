@@ -13,6 +13,7 @@ RUN pip install --no-cache-dir -r requirements-api.txt
 
 COPY server.py .
 COPY ai_server/ ./ai_server/
+COPY shelly/ ./shelly/
 
 RUN mkdir -p /app/models
 

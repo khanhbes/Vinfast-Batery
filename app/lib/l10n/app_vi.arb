@@ -66,8 +66,8 @@
   "aiTitle": "Trợ lý AI",
   "aiModels": "Models AI",
   "aiPredict": "Dự đoán",
-  "aiChargingTime": "Thời gian sạc",
-  "aiChargingTimeDesc": "Dự đoán thời gian sạc pin",
+  "aiChargingTime": "Smart Charge",
+  "aiChargingTimeDesc": "Dự đoán thời gian sạc bằng AI và tự ngắt nguồn qua Shelly",
   
   "notificationTitle": "Thông báo",
   "notificationEmpty": "Chưa có thông báo",

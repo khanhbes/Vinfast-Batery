@@ -21,6 +21,11 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
   bool _initialized = false;
   bool _exactAlarmGranted = false;
+  void Function(String payload)? _tapHandler;
+
+  void setTapHandler(void Function(String payload) handler) {
+    _tapHandler = handler;
+  }
 
   /// true khi app đang dùng inexact alarm (do Android chưa cấp exact).
   /// UI dùng để hiển thị badge "Nhắc gần đúng".
@@ -28,6 +33,7 @@ class NotificationService {
 
   // Notification Channel IDs
   static const String channelCharge = 'charge_channel';
+  static const String channelSmartCharge = 'smart_charge_alerts_v2';
   static const String channelTrip = 'trip_channel';
   static const String channelMaintenance = 'maintenance_channel';
 
@@ -37,6 +43,8 @@ class NotificationService {
   static const int idChargeOngoing = 1003;
   static const int idTripOngoing = 1004;
   static const int idChargeTarget = 1005;
+  static const int idSmartChargeState = 1010;
+  static const int idSmartChargeUnsafe = 1011;
   static const int idMaintenanceBase = 2000;
 
   Future<void> initialize() async {
@@ -56,6 +64,14 @@ class NotificationService {
       initSettings,
       onDidReceiveNotificationResponse: _onNotificationTap,
     );
+    final launchDetails = await _plugin.getNotificationAppLaunchDetails();
+    final launchPayload = launchDetails?.notificationResponse?.payload;
+    if (launchDetails?.didNotificationLaunchApp == true &&
+        launchPayload != null) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _tapHandler?.call(launchPayload),
+      );
+    }
 
     // ── 3. Android: xin quyền notification (Android 13+) ───────────────
     if (Platform.isAndroid) {
@@ -71,6 +87,15 @@ class NotificationService {
             'Sạc pin',
             description: 'Thông báo trạng thái sạc pin',
             importance: Importance.high,
+          ),
+        );
+        await androidPlugin.createNotificationChannel(
+          const AndroidNotificationChannel(
+            channelSmartCharge,
+            'Cảnh báo Smart Charge',
+            description: 'Trạng thái relay, timer và cảnh báo an toàn Shelly',
+            importance: Importance.high,
+            enableVibration: true,
           ),
         );
         await androidPlugin.createNotificationChannel(
@@ -125,6 +150,49 @@ class NotificationService {
 
   void _onNotificationTap(NotificationResponse response) {
     debugPrint('Notification tapped: ${response.payload}');
+    final payload = response.payload;
+    if (payload != null) _tapHandler?.call(payload);
+  }
+
+  AndroidNotificationDetails _smartChargeDetails() =>
+      const AndroidNotificationDetails(
+        channelSmartCharge,
+        'Cảnh báo Smart Charge',
+        channelDescription:
+            'Trạng thái relay, timer và cảnh báo an toàn Shelly',
+        importance: Importance.high,
+        priority: Priority.high,
+        icon: '@mipmap/ic_launcher',
+      );
+
+  Future<void> notifySmartChargeRelayOff({
+    required String sessionId,
+    bool interrupted = false,
+  }) async {
+    await initialize();
+    await _plugin.show(
+      idSmartChargeState,
+      interrupted ? 'Phiên Smart Charge đã bị ngắt' : 'Đã xác nhận Shelly OFF',
+      interrupted
+          ? 'Relay đã tắt trước giờ dự kiến. Mở Smart Charge để kiểm tra.'
+          : 'App đã đọc lại thiết bị và xác nhận nguồn sạc đã ngắt.',
+      NotificationDetails(android: _smartChargeDetails()),
+      payload: 'smart_charge/session/$sessionId',
+    );
+  }
+
+  Future<void> notifySmartChargeUnsafe({
+    required String sessionId,
+    required String message,
+  }) async {
+    await initialize();
+    await _plugin.show(
+      idSmartChargeUnsafe,
+      'Cảnh báo an toàn Smart Charge',
+      message,
+      NotificationDetails(android: _smartChargeDetails()),
+      payload: 'smart_charge/session/$sessionId',
+    );
   }
 
   // ── Charge Notifications ──
@@ -278,8 +346,8 @@ class NotificationService {
       scheduledDate,
       NotificationDetails(
         android: AndroidNotificationDetails(
-          channelCharge,
-          'Sạc pin',
+          channelSmartCharge,
+          'Cảnh báo Smart Charge',
           importance: Importance.high,
           priority: Priority.high,
           icon: '@mipmap/ic_launcher',
@@ -288,7 +356,7 @@ class NotificationService {
       androidScheduleMode: androidMode,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
-      payload: 'charge_reminder_$targetPercent',
+      payload: 'smart_charge/current?target=$targetPercent',
     );
     // true = exact, false = inexact
     return exactGranted;

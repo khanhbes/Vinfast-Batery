@@ -3,11 +3,13 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../data/models/smart_charger_status.dart';
+import '../../../data/models/smart_charger_capabilities.dart';
 import '../../../data/models/smart_charging_session.dart';
 import '../../../data/services/charging_prediction_adapter.dart';
 import '../../../data/services/smart_charger_service.dart';
 import '../../../data/services/shelly_charge_log_service.dart';
 import '../../../data/services/notification_service.dart';
+import '../../../data/repositories/smart_charger_repository.dart';
 import '../../../core/services/notification_center_service.dart';
 
 typedef SmartChargingNotificationSink =
@@ -39,6 +41,7 @@ class SmartChargingUiState {
     this.gatewayError,
     this.actionError,
     this.refreshing = false,
+    this.capabilities = SmartChargerCapabilities.unavailable,
   });
 
   final SmartChargingViewPhase phase;
@@ -50,6 +53,7 @@ class SmartChargingUiState {
   final String? gatewayError;
   final String? actionError;
   final bool refreshing;
+  final SmartChargerCapabilities capabilities;
   final DateTime now;
 
   bool get hasActiveSession => session != null && !session!.state.isTerminal;
@@ -64,6 +68,7 @@ class SmartChargingUiState {
     Object? gatewayError = _unset,
     Object? actionError = _unset,
     bool? refreshing,
+    SmartChargerCapabilities? capabilities,
     DateTime? now,
   }) => SmartChargingUiState(
     phase: phase ?? this.phase,
@@ -85,6 +90,7 @@ class SmartChargingUiState {
         ? this.actionError
         : actionError as String?,
     refreshing: refreshing ?? this.refreshing,
+    capabilities: capabilities ?? this.capabilities,
     now: now ?? this.now,
   );
 }
@@ -96,6 +102,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     required String vehicleId,
     required double currentSoc,
     SmartChargerService? service,
+    SmartChargerRepository? repository,
     ChargingPredictionAdapter? predictionAdapter,
     DateTime Function()? clock,
     SmartChargingNotificationSink? notificationSink,
@@ -103,8 +110,14 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     SmartChargingReminderScheduler? reminderScheduler,
     Future<void> Function()? reminderCanceller,
     bool autoInitialize = true,
-  }) : _service = service ?? SmartChargerService(),
-       _prediction = predictionAdapter ?? ChargingPredictionAdapter(),
+  }) : _repository =
+           repository ??
+           (service == null && predictionAdapter == null
+               ? null
+               : DirectSmartChargerRepository(
+                   service ?? SmartChargerService(),
+                   predictionAdapter ?? ChargingPredictionAdapter(),
+                 )),
        _clock = clock ?? DateTime.now,
        _notificationSink = notificationSink,
        _logSink = logSink,
@@ -118,8 +131,9 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
              currentSoc: currentSoc,
              targetSoc: (currentSoc + 30).clamp(1, 100).toDouble(),
              hardDeadlineAt: (clock ?? DateTime.now)().add(
-               const Duration(hours: 2),
+               const Duration(hours: 6),
              ),
+             strategy: ChargingStrategy.targetSoc,
            ),
            now: (clock ?? DateTime.now)(),
          ),
@@ -127,8 +141,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     if (autoInitialize) unawaited(initialize());
   }
 
-  final SmartChargerService _service;
-  final ChargingPredictionAdapter _prediction;
+  SmartChargerRepository? _repository;
   final DateTime Function() _clock;
   final SmartChargingNotificationSink? _notificationSink;
   final SmartChargingLogSink? _logSink;
@@ -148,7 +161,13 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
   DateTime? _lastCalibrationAt;
 
   Future<void> initialize() async {
-    await Future.wait([_refreshStatus(), _refreshSession(), _refreshHistory()]);
+    _repository ??= await SmartChargerRepositoryFactory.create();
+    await Future.wait([
+      _refreshCapabilities(),
+      _refreshStatus(),
+      _refreshSession(),
+      _refreshHistory(),
+    ]);
     if (_disposed) return;
     state = state.copyWith(
       phase: state.hasActiveSession
@@ -175,7 +194,12 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
 
   Future<void> refresh() async {
     state = state.copyWith(refreshing: true);
-    await Future.wait([_refreshStatus(), _refreshSession(), _refreshHistory()]);
+    await Future.wait([
+      _refreshCapabilities(),
+      _refreshStatus(),
+      _refreshSession(),
+      _refreshHistory(),
+    ]);
     if (!_disposed) state = state.copyWith(refreshing: false);
   }
 
@@ -183,7 +207,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     if (_statusRequestRunning || _disposed) return;
     _statusRequestRunning = true;
     try {
-      final status = await _service.getStatus();
+      final status = await _repository!.status();
       if (!_disposed) {
         state = state.copyWith(chargerStatus: status, gatewayError: null);
         unawaited(_maybeCalibrate(status));
@@ -195,11 +219,24 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     }
   }
 
+  Future<void> _refreshCapabilities() async {
+    try {
+      final value = await _repository!.capabilities();
+      if (!_disposed) state = state.copyWith(capabilities: value);
+    } on SmartChargerException {
+      if (!_disposed) {
+        state = state.copyWith(
+          capabilities: SmartChargerCapabilities.unavailable,
+        );
+      }
+    }
+  }
+
   Future<void> _refreshSession() async {
     if (_sessionRequestRunning || _disposed) return;
     _sessionRequestRunning = true;
     try {
-      final current = await _service.getCurrentSession();
+      final current = await _repository!.current();
       if (_disposed) return;
       final previousSession = state.session;
       final previouslyActive = state.hasActiveSession;
@@ -227,7 +264,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
 
   Future<void> _refreshHistory({String? completedSessionId}) async {
     try {
-      final history = await _service.getSessionHistory();
+      final history = await _repository!.history();
       if (!_disposed) {
         SmartChargingSession? completed;
         if (completedSessionId != null) {
@@ -293,7 +330,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       actionError: null,
     );
     try {
-      final preview = await _prediction.predict(state.draft, now: _clock());
+      final preview = await _repository!.preview(state.draft);
       if (_disposed) return;
       if (preview.predictedMinutes > 360) {
         state = state.copyWith(
@@ -307,6 +344,9 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       state = state.copyWith(
         preview: preview,
         phase: SmartChargingViewPhase.preview,
+        actionError: preview.aiChargeEligible
+            ? null
+            : 'AI thật chưa sẵn sàng. ETA chỉ để tham khảo; hãy dùng Bật Sạc với timer thủ công.',
       );
     } catch (error) {
       if (!_disposed) {
@@ -336,6 +376,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
   }
 
   Future<void> _maybeCalibrate(SmartChargerStatus status) async {
+    if (_repository?.calibrationIsServerOwned == true) return;
     final session = state.session;
     if (session == null ||
         session.state != ChargingSessionState.active ||
@@ -373,7 +414,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         .inMinutes;
     if (safetyMinutes <= 0) return;
     try {
-      final updated = await _service.rearmTimer(
+      final updated = await _repository!.rearm(
         Duration(minutes: minutes.clamp(1, safetyMinutes)),
       );
       _lastCalibrationAt = _clock();
@@ -386,6 +427,18 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
   Future<bool> start({required bool confirmed}) async {
     final preview = state.preview;
     if (!confirmed || preview == null) return false;
+    if (!preview.aiChargeEligible) {
+      state = state.copyWith(
+        actionError: 'Không thể Sạc theo AI khi model đang dùng nguồn dự phòng.',
+      );
+      return false;
+    }
+    if (!state.capabilities.readyForControl) {
+      state = state.copyWith(
+        actionError: 'Shelly chưa vượt qua đầy đủ kiểm tra an toàn.',
+      );
+      return false;
+    }
     state = state.copyWith(
       phase: SmartChargingViewPhase.starting,
       actionError: null,
@@ -393,24 +446,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     _idempotencyKey ??=
         '${preview.draft.vehicleId}-${_clock().toUtc().microsecondsSinceEpoch}';
     try {
-      final session = await _service.startAutomaticSession(
-        SmartChargingSessionRequest(
-          vehicleId: preview.draft.vehicleId,
-          startSoc: preview.draft.currentSoc,
-          targetSoc: preview.draft.targetSoc,
-          predictedMinutes: preview.predictedMinutes,
-          startedAt: _clock(),
-          predictedFullAt: preview.aiStopAt,
-          chargingMode: preview.draft.chargingMode,
-          predictionSource: preview.predictionSource,
-          predictionConfidence: preview.predictionConfidence,
-          strategy: preview.draft.strategy,
-          hardDeadlineAt: preview.draft.hardDeadlineAt,
-          estimatedCapacityWh: preview.draft.estimatedCapacityWh,
-          acknowledgeEstimatedSoc: true,
-        ),
-        idempotencyKey: _idempotencyKey!,
-      );
+      final session = await _repository!.start(preview, _idempotencyKey!);
       if (_disposed) return false;
       state = state.copyWith(
         session: session,
@@ -448,10 +484,13 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       actionError: null,
     );
     try {
-      final stopped = await _service.stopSession(
+      final stopped = await _repository!.stop(
         session.sessionId,
         expectedVersion: session.version,
       );
+      if (stopped == null) {
+        throw const SmartChargerException('Không có phiên sạc đang hoạt động.');
+      }
       if (_disposed) return false;
       state = state.copyWith(
         session: stopped,
@@ -475,20 +514,48 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     }
   }
 
-  Future<bool> manualOn() async {
+  Future<bool> manualOn(Duration duration) async {
+    if (!state.capabilities.readyForControl) {
+      state = state.copyWith(
+        actionError: 'Shelly chưa vượt qua kiểm tra an toàn và test không tải.',
+      );
+      return false;
+    }
+    state = state.copyWith(
+      phase: SmartChargingViewPhase.starting,
+      actionError: null,
+    );
+    final key =
+        'manual-${state.draft.vehicleId}-${_clock().toUtc().microsecondsSinceEpoch}';
     try {
-      await _service.turnOn();
-      await _refreshStatus();
+      final session = await _repository!.manualOn(
+        duration,
+        key,
+        vehicleId: state.draft.vehicleId,
+        currentSoc: state.draft.currentSoc,
+      );
+      if (_disposed) return false;
+      state = state.copyWith(
+        session: session,
+        phase: SmartChargingViewPhase.active,
+        actionError: null,
+      );
+      unawaited(_refreshStatus());
       return true;
     } on SmartChargerException catch (error) {
-      if (!_disposed) state = state.copyWith(actionError: error.message);
+      if (!_disposed) {
+        state = state.copyWith(
+          phase: SmartChargingViewPhase.editing,
+          actionError: error.message,
+        );
+      }
       return false;
     }
   }
 
   Future<bool> manualOff() async {
     try {
-      await _service.turnOff();
+      await _repository!.manualOff();
       await Future.wait([_refreshStatus(), _refreshSession()]);
       return true;
     } on SmartChargerException catch (error) {
@@ -535,12 +602,25 @@ final smartChargingControllerProvider = StateNotifierProvider.autoDispose
       (ref, args) => SmartChargingController(
         vehicleId: args.vehicleId,
         currentSoc: args.currentSoc,
-        notificationSink: (session) =>
-            NotificationCenterService().notifySmartChargingState(
+        notificationSink: (session) async {
+          await NotificationCenterService().notifySmartChargingState(
+            sessionId: session.sessionId,
+            state: session.state.wireValue,
+            targetPercent: session.targetSoc.round(),
+          );
+          if (session.state == ChargingSessionState.failed) {
+            await NotificationService().notifySmartChargeUnsafe(
               sessionId: session.sessionId,
-              state: session.state.wireValue,
-              targetPercent: session.targetSoc.round(),
-            ),
+              message: session.lastError ??
+                  'Không thể xác minh relay OFF. Hãy kiểm tra Shelly trực tiếp.',
+            );
+          } else if (session.state.isTerminal && session.relayVerified) {
+            await NotificationService().notifySmartChargeRelayOff(
+              sessionId: session.sessionId,
+              interrupted: session.state != ChargingSessionState.completed,
+            );
+          }
+        },
         logSink: ShellyChargeLogService().saveTerminalSession,
         reminderScheduler: (scheduledAt, targetPercent) async {
           await NotificationService().scheduleChargeReminder(

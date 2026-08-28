@@ -177,10 +177,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiPredict => 'Predict';
 
   @override
-  String get aiChargingTime => 'Charging Time';
+  String get aiChargingTime => 'Smart Charge';
 
   @override
-  String get aiChargingTimeDesc => 'Predict charging time';
+  String get aiChargingTimeDesc =>
+      'Predict charging time with AI and automatically turn off Shelly';
 
   @override
   String get notificationTitle => 'Notifications';

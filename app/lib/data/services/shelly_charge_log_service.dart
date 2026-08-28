@@ -33,10 +33,52 @@ class ShellyChargeLogService {
       'energyWh': session.energyUsedWh,
       'predictionSource': session.predictionSource,
       'predictionConfidence': session.predictionConfidence,
+      'modelKey': session.modelKey,
+      'modelVersion': session.modelVersion,
+      'runtimeHealth': session.runtimeHealth,
+      'predictionWarnings': session.predictionWarnings,
+      'fallbackReason': session.fallbackReason,
+      'predictionAnalyzedAt': session.predictionAnalyzedAt == null
+          ? null
+          : Timestamp.fromDate(session.predictionAnalyzedAt!),
+      'strategy': session.strategy.wireValue,
+      'timerVerified': session.timerVerified,
+      'smartChargingSession': session.toJson(),
       'socEstimated': true,
       'isDeleted': false,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
+  }
+
+  Future<List<SmartChargingSession>> loadTerminalSessions({
+    int limit = 20,
+  }) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return const [];
+    final snapshot = await _firestore
+        .collection('ChargeLogs')
+        .where('ownerUid', isEqualTo: uid)
+        .limit(100)
+        .get();
+    final sessions = <SmartChargingSession>[];
+    for (final document in snapshot.docs) {
+      final data = document.data();
+      if (data['source'] != 'shelly_smart_charging' ||
+          data['smartChargingSession'] is! Map) {
+        continue;
+      }
+      try {
+        sessions.add(
+          SmartChargingSession.fromJson(
+            Map<String, dynamic>.from(data['smartChargingSession'] as Map),
+          ),
+        );
+      } on FormatException {
+        // Ignore legacy/incomplete logs; they remain visible in ChargeLogs UI.
+      }
+    }
+    sessions.sort((left, right) => right.createdAt.compareTo(left.createdAt));
+    return sessions.take(limit).toList(growable: false);
   }
 }

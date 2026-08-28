@@ -12,6 +12,12 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_motion.dart';
 import 'smart_charging_control_screen.dart';
 
+String _catalogLabel(String key, String fallback) =>
+    key == 'charging_time' ? 'Smart Charge' : fallback;
+
+String _catalogShortName(String key, String fallback) =>
+    key == 'charging_time' ? 'Smart Charge' : fallback;
+
 class _ModelInfo {
   final String key;
   final String label;
@@ -67,7 +73,7 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
   DateTime? _lastFetchedAt;
   bool _fromCache = false; // true khi đang hiển thị dữ liệu cache
   int _retryCount = 0;
-  static const _cacheKey = 'ai_models_catalog_v2';
+  static const _cacheKey = 'ai_models_catalog_v3';
   static const _maxRetries = 3;
 
   @override
@@ -276,8 +282,14 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
 
           return _ModelInfo(
             key: _stringOrNull(t['key']) ?? '',
-            label: _stringOrNull(t['label']) ?? '',
-            shortName: _stringOrNull(t['shortName']) ?? '',
+            label: _catalogLabel(
+              _stringOrNull(t['key']) ?? '',
+              _stringOrNull(t['label']) ?? '',
+            ),
+            shortName: _catalogShortName(
+              _stringOrNull(t['key']) ?? '',
+              _stringOrNull(t['shortName']) ?? '',
+            ),
             phase: _stringOrNull(t['phase']) ?? '',
             registryStatus: deploymentStatus,
             isLoaded: effectiveLoaded,
@@ -368,8 +380,14 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
 
         return _ModelInfo(
           key: doc.id,
-          label: d['label'] as String? ?? d['name'] as String? ?? doc.id,
-          shortName: d['shortName'] as String? ?? '',
+          label: _catalogLabel(
+            doc.id,
+            d['label'] as String? ?? d['name'] as String? ?? doc.id,
+          ),
+          shortName: _catalogShortName(
+            doc.id,
+            d['shortName'] as String? ?? '',
+          ),
           phase:
               d['phase'] as String? ?? (isDeployed ? 'production' : 'planned'),
           registryStatus: d['status'] as String? ?? 'planned',

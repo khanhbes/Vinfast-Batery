@@ -10,9 +10,9 @@ class AppConstants {
   /// Chỉ dùng localhost/emulator khi build dev với --dart-define
   static const String apiBaseUrl = String.fromEnvironment(
     'APP_API_BASE_URL',
-    defaultValue: 'http://api.evbattery.live',
+    defaultValue: 'https://api.evbattery.live',
   );
-  static const String appVersion = '1.0.64';
+  static const String appVersion = '1.0.68';
 
   // Firestore Collection Names
   static const String vehiclesCollection = 'Vehicles';

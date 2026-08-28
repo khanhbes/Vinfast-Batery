@@ -1,4 +1,4 @@
-<#
+﻿<#
   deploy.ps1 — Tự động deploy VinFast Battery lên VPS
   Chạy: .\deploy.ps1
   Chỉ api:       .\deploy.ps1 -Service api
@@ -32,29 +32,29 @@ function Get-DeployPlan([string]$RequestedService) {
         'all' {
             return @{
                 BuildServices = @('ai', 'api', 'dashboard')
-                UpServices    = @('ai', 'api', 'dashboard')
-                HealthTargets = @('vinfast_ai', 'vinfast_api')
+                UpServices    = @('ai', 'api', 'dashboard', 'caddy')
+                HealthTargets = @('vinfast_ai', 'vinfast_api', 'vinfast_caddy')
             }
         }
         'ai' {
             return @{
                 BuildServices = @('ai', 'api')
-                UpServices    = @('ai', 'api', 'dashboard')
-                HealthTargets = @('vinfast_ai', 'vinfast_api')
+                UpServices    = @('ai', 'api', 'dashboard', 'caddy')
+                HealthTargets = @('vinfast_ai', 'vinfast_api', 'vinfast_caddy')
             }
         }
         'api' {
             return @{
                 BuildServices = @('api')
-                UpServices    = @('api', 'dashboard')
-                HealthTargets = @('vinfast_api')
+                UpServices    = @('api', 'dashboard', 'caddy')
+                HealthTargets = @('vinfast_api', 'vinfast_caddy')
             }
         }
         'dashboard' {
             return @{
                 BuildServices = @('dashboard')
-                UpServices    = @('api', 'dashboard')
-                HealthTargets = @('vinfast_api')
+                UpServices    = @('api', 'dashboard', 'caddy')
+                HealthTargets = @('vinfast_api', 'vinfast_caddy')
             }
         }
         default {
@@ -134,6 +134,10 @@ $healthTargets = Join-ServiceList $plan.HealthTargets
 $remoteScript = @"
 set -e
 cd $VpsPath
+if command -v ufw >/dev/null 2>&1 && ufw status | grep -q 'Status: active'; then
+  ufw allow 443/tcp >/dev/null
+  ufw allow 443/udp >/dev/null
+fi
 echo '--- Giai nen ---'
 rm -rf web_tmp && mkdir -p web_tmp
 unzip -o vinfast_web.zip -d web_tmp/ 2>&1 | grep -v '^Archive\|^inflating\|^extracting' || true
@@ -171,9 +175,9 @@ if [ "`$dashboard_status" != "running" ]; then
   exit 1
 fi
 
-echo '--- Verify proxy /api/health ---'
-for attempt in 1 2 3 4 5 6 7 8 9 10; do
-  if curl -fsS http://127.0.0.1/api/health > /tmp/vinfast_api_health.json; then
+echo '--- Verify HTTPS /api/health ---'
+for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+  if curl -fsS https://api.evbattery.live/api/health > /tmp/vinfast_api_health.json; then
     cat /tmp/vinfast_api_health.json
     break
   fi
@@ -196,7 +200,7 @@ if ($LASTEXITCODE -ne 0) {
 Step "Kiểm tra API..."
 Start-Sleep -Seconds 5
 try {
-    $res = Invoke-WebRequest -Uri "http://${VpsIp}/api/health" -TimeoutSec 15 -UseBasicParsing
+    $res = Invoke-WebRequest -Uri "https://api.evbattery.live/api/health" -TimeoutSec 15 -UseBasicParsing
     $json = $res.Content | ConvertFrom-Json
     Ok "API OK (HTTP $($res.StatusCode)) — version: $($json.version)"
 } catch {
@@ -207,6 +211,6 @@ try {
 Write-Host ""
 Info "============================================"
 Info "  ✅ Deploy '$Service' hoàn tất!"
-Info "  🌐 Dashboard: http://$VpsIp"
-Info "  🔌 API:       http://${VpsIp}/api/health"
+Info "  🌐 Dashboard: https://api.evbattery.live"
+Info "  🔌 API:       https://api.evbattery.live/api/health"
 Info "============================================"

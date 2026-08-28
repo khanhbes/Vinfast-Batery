@@ -66,8 +66,8 @@
   "aiTitle": "AI Assistant",
   "aiModels": "AI Models",
   "aiPredict": "Predict",
-  "aiChargingTime": "Charging Time",
-  "aiChargingTimeDesc": "Predict charging time",
+  "aiChargingTime": "Smart Charge",
+  "aiChargingTimeDesc": "Predict charging time with AI and automatically turn off Shelly",
   
   "notificationTitle": "Notifications",
   "notificationEmpty": "No notifications",
