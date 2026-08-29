@@ -159,24 +159,17 @@ void main() {
   });
 
   test('status parser accepts Cloud status encoded as JSON text', () {
-    final status = parseShellyStatus(
-      {
-        'devices': [
-          {
-            'id': 'aabbccddeeff',
-            'online': 1,
-            'status': jsonEncode({
-              'switch:0': {
-                'output': 1,
-                'apower': 605,
-                'timer_remaining': 45,
-              },
-            }),
-          },
-        ],
-      },
-      ShellyTransport.cloud,
-    );
+    final status = parseShellyStatus({
+      'devices': [
+        {
+          'id': 'aabbccddeeff',
+          'online': 1,
+          'status': jsonEncode({
+            'switch:0': {'output': 1, 'apower': 605, 'timer_remaining': 45},
+          }),
+        },
+      ],
+    }, ShellyTransport.cloud);
     expect(status.relay, isTrue);
     expect(status.powerW, 605);
     expect(status.timerRemaining, const Duration(seconds: 45));
@@ -203,7 +196,9 @@ void main() {
     late http.Request captured;
     final client = MockClient((request) async {
       captured = request;
-      return http.Response('{}', 200);
+      // Cloud Control v2 may acknowledge a successful command with an empty
+      // body; HTTP 200 is the documented success signal.
+      return http.Response('', 200);
     });
     await ShellyCloudClient(client: client).setSwitch(
       validProfile,
@@ -217,6 +212,31 @@ void main() {
       'on': true,
       'toggle_after': 2520,
     });
+  });
+
+  test('Cloud status accepts UTF-8 BOM before the JSON payload', () async {
+    final client = MockClient(
+      (_) async => http.Response.bytes(
+        utf8.encode(
+          '\uFEFF${jsonEncode([
+            {
+              'id': 'aabbccddeeff',
+              'online': 1,
+              'status': {
+                'switch:0': {'output': false, 'apower': 0},
+              },
+            },
+          ])}',
+        ),
+        200,
+        headers: const {'content-type': 'application/json; charset=utf-8'},
+      ),
+    );
+
+    final status = await ShellyCloudClient(
+      client: client,
+    ).getStatus(validProfile);
+    expect(status.relay, isFalse);
   });
 
   test('Cloud maps auth and rate-limit responses to typed errors', () async {
@@ -341,43 +361,46 @@ void main() {
     expect(lan.lastOn, isFalse);
   });
 
-  test('direct arm is idempotent and rejects a competing active session', () async {
-    SharedPreferences.setMockInitialValues({});
-    final cloud = _FakeCloud();
-    final service = SmartChargerService(
-      credentials: _FakeCredentials(validProfile),
-      cloudClient: cloud,
-      delay: (_) async {},
-    );
-    const plan = SmartChargePlan(
-      vehicleId: 'VF-001',
-      currentSoc: 20,
-      targetSoc: 80,
-      duration: Duration(minutes: 30),
-      estimatedCapacityWh: 2400,
-      predictionSource: 'ai_model',
-    );
-    final first = await service.armSmartCharge(
-      plan,
-      idempotencyKey: 'same-command',
-    );
-    final duplicate = await service.armSmartCharge(
-      plan,
-      idempotencyKey: 'same-command',
-    );
-    expect(duplicate.sessionId, first.sessionId);
-    expect(cloud.onCount, 1);
-    await expectLater(
-      service.armSmartCharge(plan, idempotencyKey: 'different-command'),
-      throwsA(
-        isA<SmartChargerException>().having(
-          (error) => error.code,
-          'code',
-          'activeSessionConflict',
+  test(
+    'direct arm is idempotent and rejects a competing active session',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final cloud = _FakeCloud();
+      final service = SmartChargerService(
+        credentials: _FakeCredentials(validProfile),
+        cloudClient: cloud,
+        delay: (_) async {},
+      );
+      const plan = SmartChargePlan(
+        vehicleId: 'VF-001',
+        currentSoc: 20,
+        targetSoc: 80,
+        duration: Duration(minutes: 30),
+        estimatedCapacityWh: 2400,
+        predictionSource: 'ai_model',
+      );
+      final first = await service.armSmartCharge(
+        plan,
+        idempotencyKey: 'same-command',
+      );
+      final duplicate = await service.armSmartCharge(
+        plan,
+        idempotencyKey: 'same-command',
+      );
+      expect(duplicate.sessionId, first.sessionId);
+      expect(cloud.onCount, 1);
+      await expectLater(
+        service.armSmartCharge(plan, idempotencyKey: 'different-command'),
+        throwsA(
+          isA<SmartChargerException>().having(
+            (error) => error.code,
+            'code',
+            'activeSessionConflict',
+          ),
         ),
-      ),
-    );
-  });
+      );
+    },
+  );
 }
 
 class _FakeCredentials extends SmartChargerCredentialsService {

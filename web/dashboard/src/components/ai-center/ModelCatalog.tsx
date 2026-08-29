@@ -7,8 +7,9 @@ import { Button } from '@/components/ui/button';
 // @ts-ignore
 import { aiListTypes } from '@/api';
 import { ModelGroupMeta, ModelTypeMeta, ModelGroup } from './types';
+import { isModelDeployed } from './modelAvailability';
 import ModelTypeCard from './ModelTypeCard';
-import ModelDetailPanel from './ModelDetailPanel';
+import UniversalModelLab from './lab/UniversalModelLab';
 
 const GROUP_META: Record<ModelGroup, { icon: any; gradient: string; text: string }> = {
   survival: { icon: Shield, gradient: 'from-emerald-50 to-emerald-100/40', text: 'text-emerald-800' },
@@ -32,7 +33,6 @@ export default function ModelCatalog() {
       const grs = (res?.data?.groups ?? []) as ModelGroupMeta[];
       setTypes(list);
       setGroups(grs);
-      setSelectedKey((prev) => prev ?? null);
     } catch (e: any) {
       setError(e?.message || 'Không tải được danh sách model type');
     } finally {
@@ -57,12 +57,12 @@ export default function ModelCatalog() {
 
   // Aggregate KPIs
   const readyCount = types.filter(isModelDeployed).length;
-  const loadedCount = types.filter((t) => t.runtimeStatus.isLoaded).length;
-  const totalVersions = types.reduce((a, t) => a + (t.runtimeStatus.versionsCount || 0), 0);
+  const loadedCount = types.filter((t) => t.runtimeStatus?.isLoaded).length;
+  const totalVersions = types.reduce((a, t) => a + (t.runtimeStatus?.versionsCount || 0), 0);
   const plannedCount = types.filter((t) => t.status === 'planned').length;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* Header / KPIs */}
       <div className="rounded-xl border bg-gradient-to-br from-card via-card to-muted/40 p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -72,7 +72,7 @@ export default function ModelCatalog() {
             </div>
             <h2 className="text-2xl font-bold mt-1">Trung tâm quản lý mô hình AI</h2>
             <p className="text-sm text-muted-foreground max-w-2xl">
-              8 mô hình AI theo roadmap 3 giai đoạn. Upload, hot-swap và kiểm thử nhanh trực tiếp từ dashboard.
+              {types.length > 0 ? `${types.length} mô hình AI` : 'Các mô hình AI'} theo roadmap 3 giai đoạn. Upload, hot-swap và kiểm thử nhanh trực tiếp từ dashboard.
             </p>
           </div>
           <Button variant="outline" size="sm" onClick={reload} disabled={loading}>
@@ -108,10 +108,12 @@ export default function ModelCatalog() {
         groups.map((g) => {
           const groupTypes = byGroup[g.key] || [];
           if (groupTypes.length === 0) return null;
-          const gm = GROUP_META[g.key];
+          const gm = GROUP_META[g.key] || GROUP_META.survival;
           const GIcon = gm.icon;
+          const isGroupSelected = selected && selected.group === g.key;
+
           return (
-            <section key={g.key} className="space-y-3">
+            <section key={g.key} className="space-y-4">
               <div className={`rounded-lg border bg-gradient-to-r ${gm.gradient} px-4 py-3`}>
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                   <div className="flex items-center gap-3">
@@ -134,6 +136,7 @@ export default function ModelCatalog() {
                 </div>
               </div>
 
+              {/* Model Cards Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                 {groupTypes.map((t) => (
                   <ModelTypeCard
@@ -141,23 +144,25 @@ export default function ModelCatalog() {
                     meta={t}
                     selected={selectedKey === t.key}
                     onSelect={() => {
-                      setSelectedKey(t.key);
-                      // Scroll into view for mobile
-                      setTimeout(() => {
-                        document.getElementById('model-detail-anchor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                      }, 50);
+                      setSelectedKey((prev) => (prev === t.key ? null : t.key));
                     }}
                   />
                 ))}
               </div>
+
+              {/* Inline Universal Model Lab (opens directly below the selected group) */}
+              {isGroupSelected && selected && (
+                <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <UniversalModelLab
+                    meta={selected}
+                    onModelChanged={reload}
+                  />
+                </div>
+              )}
             </section>
           );
         })
       )}
-
-      {/* Detail panel */}
-      <div id="model-detail-anchor" />
-      {selected && <ModelDetailPanel meta={selected} onAfterChange={reload} />}
     </div>
   );
 }
@@ -181,18 +186,5 @@ function Legend({ color, label }: { color: string; label: string }) {
     <span className="inline-flex items-center gap-1.5">
       <span className={`w-2 h-2 rounded-full ${color}`} /> {label}
     </span>
-  );
-}
-
-function isModelDeployed(t: ModelTypeMeta) {
-  return (
-    t.deploymentStatus === 'deployed' ||
-    t.runtimeStatus.deploymentStatus === 'deployed' ||
-    Boolean(
-      t.runtimeStatus.activeVersion ||
-      t.runtimeStatus.deploymentVersion ||
-      t.deploymentVersion ||
-      t.activeVersion
-    )
   );
 }

@@ -53,6 +53,20 @@ service cloud.firestore {
       allow create: if canCreateOwned();
       allow update: if isAuth() && isOwner(resource.data.ownerUid);
       allow delete: if false;
+
+      match /smartChargeTelemetry/{chunkId} {
+        function parentLog() {
+          return get(/databases/$(database)/documents/ChargeLogs/$(logId));
+        }
+
+        allow read: if isAuth() &&
+          parentLog().data.ownerUid == request.auth.uid;
+        allow create, update: if isAuth() &&
+          parentLog().data.ownerUid == request.auth.uid &&
+          request.resource.data.ownerUid == request.auth.uid &&
+          request.resource.data.sessionId == logId;
+        allow delete: if false;
+      }
     }
 
     // ── ChargeSamples (AI training data - implicit collection) ──

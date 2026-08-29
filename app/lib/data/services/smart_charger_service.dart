@@ -65,7 +65,7 @@ class SmartChargerService {
        _delay = delay ?? Future<void>.delayed;
 
   static const _activeSessionKey = 'smart_charger.active_shelly_session.v1';
-  static const maxSessionDuration = Duration(hours: 6);
+  static const maxSessionDuration = Duration(hours: 7);
   final SmartChargerCredentialsService _credentials;
   final ShellyCloudClient _cloud;
   final ShellyLanClient _lan;
@@ -245,7 +245,7 @@ class SmartChargerService {
     final duration = plan.effectiveDuration(now);
     if (duration <= Duration.zero || duration > maxSessionDuration) {
       throw const SmartChargerException(
-        'Phiên sạc phải lớn hơn 0 và không vượt quá 6 giờ.',
+        'Phiên sạc phải lớn hơn 0 và không vượt quá 7 giờ.',
         code: 'unsafeDuration',
       );
     }
@@ -549,7 +549,7 @@ class SmartChargerService {
         seconds:
             request.predictedDurationSeconds ?? request.predictedMinutes * 60,
       ),
-      estimatedCapacityWh: request.estimatedCapacityWh ?? 2400,
+      estimatedCapacityWh: request.estimatedCapacityWh ?? 0,
       predictionSource: request.predictionSource ?? 'unknown',
       predictionConfidence: request.predictionConfidence,
       hardDeadlineAt: request.hardDeadlineAt,
@@ -568,15 +568,11 @@ class SmartChargerService {
     int limit = 20,
   }) async => const [];
 
-  Future<SmartChargingSession> stopSession(
+  Future<SmartChargingSession?> stopSession(
     String sessionId, {
     int? expectedVersion,
   }) async {
-    final result = await turnOffAndVerify();
-    if (result == null) {
-      throw const SmartChargerException('Không có phiên sạc đang hoạt động.');
-    }
-    return result;
+    return turnOffAndVerify();
   }
 
   Future<SmartChargingSessionResponse> startMonitoringSession(

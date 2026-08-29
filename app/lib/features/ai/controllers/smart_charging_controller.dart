@@ -5,13 +5,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../data/models/smart_charger_status.dart';
+import '../../../data/models/smart_charge_history.dart';
 import '../../../data/models/smart_charger_capabilities.dart';
 import '../../../data/models/smart_charging_session.dart';
+import '../../../data/repositories/charge_log_repository.dart';
 import '../../../data/services/charging_prediction_adapter.dart';
 import '../../../data/services/smart_charger_service.dart';
+import '../../../data/services/smart_charge_telemetry_foreground_service.dart';
 import '../../../data/services/shelly_charge_log_service.dart';
 import '../../../data/services/notification_service.dart';
 import '../../../data/repositories/smart_charger_repository.dart';
+import '../../../data/repositories/vehicle_spec_repository.dart';
 import '../../../core/services/notification_center_service.dart';
 import '../../../core/services/app_error_reporter.dart';
 
@@ -32,13 +36,7 @@ enum SmartChargingViewPhase {
   error,
 }
 
-enum ChargerDisplayState {
-  connecting,
-  charging,
-  off,
-  offline,
-  error,
-}
+enum ChargerDisplayState { connecting, charging, off, offline, error }
 
 class SmartChargingUiState {
   const SmartChargingUiState({
@@ -50,6 +48,11 @@ class SmartChargingUiState {
     this.chargerStatus,
     this.history = const [],
     this.gatewayError,
+    this.sessionError,
+    this.historyError,
+    this.historyStatus = SmartChargeHistoryStatus.loading,
+    this.telemetryStatus = SmartChargeTelemetryStatus.idle,
+    this.historySyncedAt,
     this.actionError,
     this.refreshing = false,
     this.capabilities = SmartChargerCapabilities.unavailable,
@@ -62,6 +65,11 @@ class SmartChargingUiState {
   final SmartChargerStatus? chargerStatus;
   final List<SmartChargingSession> history;
   final String? gatewayError;
+  final String? sessionError;
+  final String? historyError;
+  final SmartChargeHistoryStatus historyStatus;
+  final SmartChargeTelemetryStatus telemetryStatus;
+  final DateTime? historySyncedAt;
   final String? actionError;
   final bool refreshing;
   final SmartChargerCapabilities capabilities;
@@ -105,6 +113,11 @@ class SmartChargingUiState {
     Object? chargerStatus = _unset,
     List<SmartChargingSession>? history,
     Object? gatewayError = _unset,
+    Object? sessionError = _unset,
+    Object? historyError = _unset,
+    SmartChargeHistoryStatus? historyStatus,
+    SmartChargeTelemetryStatus? telemetryStatus,
+    Object? historySyncedAt = _unset,
     Object? actionError = _unset,
     bool? refreshing,
     SmartChargerCapabilities? capabilities,
@@ -125,6 +138,17 @@ class SmartChargingUiState {
     gatewayError: identical(gatewayError, _unset)
         ? this.gatewayError
         : gatewayError as String?,
+    sessionError: identical(sessionError, _unset)
+        ? this.sessionError
+        : sessionError as String?,
+    historyError: identical(historyError, _unset)
+        ? this.historyError
+        : historyError as String?,
+    historyStatus: historyStatus ?? this.historyStatus,
+    telemetryStatus: telemetryStatus ?? this.telemetryStatus,
+    historySyncedAt: identical(historySyncedAt, _unset)
+        ? this.historySyncedAt
+        : historySyncedAt as DateTime?,
     actionError: identical(actionError, _unset)
         ? this.actionError
         : actionError as String?,
@@ -142,6 +166,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
   SmartChargingController({
     required String vehicleId,
     required double currentSoc,
+    double estimatedCapacityWh = 0,
     SmartChargerService? service,
     SmartChargerRepository? repository,
     ChargingPredictionAdapter? predictionAdapter,
@@ -172,9 +197,10 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
              currentSoc: currentSoc,
              targetSoc: (currentSoc + 30).clamp(1, 100).toDouble(),
              hardDeadlineAt: (clock ?? DateTime.now)().add(
-               const Duration(hours: 6),
+               const Duration(hours: 7),
              ),
              strategy: ChargingStrategy.targetSoc,
+             estimatedCapacityWh: estimatedCapacityWh,
            ),
            now: (clock ?? DateTime.now)(),
          ),
@@ -200,24 +226,45 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
   final List<double> _stablePowerSamples = [];
   DateTime? _powerSamplingStartedAt;
   DateTime? _lastCalibrationAt;
+  StreamSubscription<SmartChargerStatus>? _foregroundStatusSubscription;
+  bool _foregroundPolling = false;
 
   Future<void> initialize() async {
-    _repository ??= await SmartChargerRepositoryFactory.create();
-    await Future.wait([
-      _loadLastTargetSoc(),
-      _refreshCapabilities(),
-      _refreshStatus(),
-      _refreshSession(),
-      _refreshHistory(),
-    ]);
-    if (_disposed) return;
-    state = state.copyWith(
-      phase: state.hasActiveSession
-          ? SmartChargingViewPhase.active
-          : SmartChargingViewPhase.editing,
-      refreshing: false,
-    );
-    _startPolling();
+    try {
+      _repository ??= await SmartChargerRepositoryFactory.create();
+      await _attachForegroundMonitor();
+      await _loadLastTargetSoc();
+      await _loadVehicleCapacity();
+      await Future.wait([
+        _refreshCapabilities(),
+        _refreshStatus(),
+        _refreshSession(),
+        _refreshHistory(),
+      ]);
+    } on SmartChargerException catch (error) {
+      if (!_disposed) state = state.copyWith(gatewayError: error.message);
+    } catch (error, stack) {
+      AppErrorReporter.report(
+        error,
+        stack,
+        source: 'SmartChargingController.initialize',
+      );
+      if (!_disposed) {
+        state = state.copyWith(
+          gatewayError: 'Không thể khởi tạo Smart Charge. Hãy thử lại.',
+        );
+      }
+    } finally {
+      if (!_disposed) {
+        state = state.copyWith(
+          phase: state.hasActiveSession
+              ? SmartChargingViewPhase.active
+              : SmartChargingViewPhase.editing,
+          refreshing: false,
+        );
+        _startPolling();
+      }
+    }
   }
 
   Future<void> _loadLastTargetSoc() async {
@@ -243,6 +290,109 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         }
       }
     } catch (_) {}
+  }
+
+  Future<void> _loadVehicleCapacity() async {
+    try {
+      final vehicle = await ChargeLogRepository().getVehicle(
+        state.draft.vehicleId,
+      );
+      var capacityWh = vehicle?.batteryCapacityWh ?? 0;
+      final modelId = vehicle?.vinfastModelId;
+      if (capacityWh <= 0 && modelId != null && modelId.isNotEmpty) {
+        final spec = await VehicleSpecRepository().getSpec(modelId);
+        capacityWh = spec?.nominalCapacityWh ?? 0;
+      }
+      if (_disposed || capacityWh <= 0) return;
+      final old = state.draft;
+      state = state.copyWith(
+        draft: SmartChargingPlanDraft(
+          vehicleId: old.vehicleId,
+          currentSoc: old.currentSoc,
+          targetSoc: old.targetSoc,
+          hardDeadlineAt: old.hardDeadlineAt,
+          strategy: old.strategy,
+          timeMode: old.timeMode,
+          chargingMode: old.chargingMode,
+          estimatedCapacityWh: capacityWh,
+        ),
+      );
+    } catch (error, stack) {
+      AppErrorReporter.report(
+        error,
+        stack,
+        source: 'SmartChargingController.vehicleCapacity',
+      );
+      // Missing/offline vehicle metadata must not look like a Shelly failure.
+    }
+  }
+
+  Future<void> _attachForegroundMonitor() async {
+    try {
+      SmartChargeTelemetryForegroundService.initialize();
+      _foregroundStatusSubscription ??= SmartChargeTelemetryForegroundService
+          .statuses
+          .listen((status) {
+            if (_disposed) return;
+            state = state.copyWith(chargerStatus: status, gatewayError: null);
+            if (!status.relay) {
+              _foregroundPolling = false;
+              state = state.copyWith(
+                telemetryStatus: SmartChargeTelemetryStatus.complete,
+              );
+            }
+            final session = state.session;
+            if (session != null && !session.state.isTerminal) {
+              unawaited(_maybeCalibrate(status));
+            }
+          });
+      _foregroundPolling =
+          await SmartChargeTelemetryForegroundService.isRunning;
+    } catch (error, stack) {
+      // Unit tests and unsupported platforms do not register the Android
+      // plugin. Shelly's timer remains the independent safety control.
+      AppErrorReporter.report(
+        error,
+        stack,
+        source: 'SmartChargingController.attachForegroundTelemetry',
+      );
+      _foregroundPolling = false;
+    }
+  }
+
+  Future<void> _startForegroundMonitor(SmartChargingSession session) async {
+    try {
+      await SmartChargeTelemetryForegroundService.start(session);
+      _foregroundPolling = true;
+      state = state.copyWith(
+        telemetryStatus: SmartChargeTelemetryStatus.recording,
+      );
+    } catch (error, stack) {
+      AppErrorReporter.report(
+        error,
+        stack,
+        source: 'SmartChargingController.foregroundTelemetry',
+      );
+      _foregroundPolling = false;
+      if (!_disposed) {
+        state = state.copyWith(
+          telemetryStatus: SmartChargeTelemetryStatus.partial,
+        );
+      }
+    }
+  }
+
+  Future<void> _stopForegroundMonitor() async {
+    _foregroundPolling = false;
+    try {
+      await SmartChargeTelemetryForegroundService.stop();
+    } catch (error, stack) {
+      AppErrorReporter.report(
+        error,
+        stack,
+        source: 'SmartChargingController.stopForegroundTelemetry',
+      );
+    }
   }
 
   void _startPolling() {
@@ -271,16 +421,32 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
   }
 
   Future<void> _refreshStatus() async {
+    if (_foregroundPolling) return;
     if (_statusRequestRunning || _disposed) return;
     _statusRequestRunning = true;
     try {
       final status = await _repository!.status();
       if (!_disposed) {
         state = state.copyWith(chargerStatus: status, gatewayError: null);
+        final session = state.session;
+        if (session != null && !session.state.isTerminal) {
+          unawaited(_recordTelemetry(session, status));
+        }
         unawaited(_maybeCalibrate(status));
       }
     } on SmartChargerException catch (error) {
       if (!_disposed) state = state.copyWith(gatewayError: error.message);
+    } catch (error, stack) {
+      AppErrorReporter.report(
+        error,
+        stack,
+        source: 'SmartChargingController.status',
+      );
+      if (!_disposed) {
+        state = state.copyWith(
+          gatewayError: 'Không thể đọc trạng thái Shelly. Hãy thử lại.',
+        );
+      }
     } finally {
       _statusRequestRunning = false;
     }
@@ -291,6 +457,17 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       final value = await _repository!.capabilities();
       if (!_disposed) state = state.copyWith(capabilities: value);
     } on SmartChargerException {
+      if (!_disposed) {
+        state = state.copyWith(
+          capabilities: SmartChargerCapabilities.unavailable,
+        );
+      }
+    } catch (error, stack) {
+      AppErrorReporter.report(
+        error,
+        stack,
+        source: 'SmartChargingController.capabilities',
+      );
       if (!_disposed) {
         state = state.copyWith(
           capabilities: SmartChargerCapabilities.unavailable,
@@ -314,24 +491,41 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
             : (state.preview == null
                   ? SmartChargingViewPhase.editing
                   : SmartChargingViewPhase.preview),
-        gatewayError: null,
+        sessionError: null,
       );
       if (current?.state.isTerminal == true) _notify(current!);
+      if (current?.state.isTerminal == true) {
+        unawaited(_stopForegroundMonitor());
+      }
       if (previouslyActive && current == null) {
         unawaited(
           _refreshHistory(completedSessionId: previousSession?.sessionId),
         );
       }
     } on SmartChargerException catch (error) {
-      if (!_disposed) state = state.copyWith(gatewayError: error.message);
+      if (!_disposed) state = state.copyWith(sessionError: error.message);
+    } catch (error, stack) {
+      AppErrorReporter.report(
+        error,
+        stack,
+        source: 'SmartChargingController.session',
+      );
+      if (!_disposed) {
+        state = state.copyWith(
+          sessionError: 'Không thể đồng bộ phiên sạc. Hãy thử lại.',
+        );
+      }
     } finally {
       _sessionRequestRunning = false;
     }
   }
 
   Future<void> _refreshHistory({String? completedSessionId}) async {
+    if (!_disposed) {
+      state = state.copyWith(historyStatus: SmartChargeHistoryStatus.loading);
+    }
     try {
-      final history = await _repository!.history();
+      final history = (await _repository!.getHistoryPage()).items;
       if (!_disposed) {
         SmartChargingSession? completed;
         if (completedSessionId != null) {
@@ -345,12 +539,61 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         state = state.copyWith(
           history: history,
           session: completed ?? state.session,
+          historyError: null,
+          historyStatus: history.isEmpty
+              ? SmartChargeHistoryStatus.empty
+              : SmartChargeHistoryStatus.ready,
+          historySyncedAt: _clock(),
         );
         if (completed != null) _notify(completed);
       }
     } on SmartChargerException catch (error) {
-      if (!_disposed && state.gatewayError == null) {
-        state = state.copyWith(gatewayError: error.message);
+      if (!_disposed) {
+        state = state.copyWith(
+          historyError: error.message,
+          historyStatus: state.history.isEmpty
+              ? SmartChargeHistoryStatus.error
+              : SmartChargeHistoryStatus.stale,
+        );
+      }
+    } catch (error, stack) {
+      AppErrorReporter.report(
+        error,
+        stack,
+        source: 'SmartChargingController.history',
+      );
+      if (!_disposed) {
+        state = state.copyWith(
+          historyError: 'Không thể đồng bộ lịch sử sạc.',
+          historyStatus: state.history.isEmpty
+              ? SmartChargeHistoryStatus.error
+              : SmartChargeHistoryStatus.stale,
+        );
+      }
+    }
+  }
+
+  Future<void> _recordTelemetry(
+    SmartChargingSession session,
+    SmartChargerStatus status,
+  ) async {
+    try {
+      if (!_disposed) {
+        state = state.copyWith(
+          telemetryStatus: SmartChargeTelemetryStatus.recording,
+        );
+      }
+      await _repository!.recordStatusSample(session, status);
+    } catch (error, stack) {
+      AppErrorReporter.report(
+        error,
+        stack,
+        source: 'SmartChargingController.telemetry',
+      );
+      if (!_disposed) {
+        state = state.copyWith(
+          telemetryStatus: SmartChargeTelemetryStatus.partial,
+        );
       }
     }
   }
@@ -377,12 +620,14 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     _idempotencyKey = null;
 
     if (targetSoc != null) {
-      unawaited(Future(() async {
-        try {
-          final p = await SharedPreferences.getInstance();
-          await p.setDouble(lastTargetSocKey, targetSoc);
-        } catch (_) {}
-      }));
+      unawaited(
+        Future(() async {
+          try {
+            final p = await SharedPreferences.getInstance();
+            await p.setDouble(lastTargetSocKey, targetSoc);
+          } catch (_) {}
+        }),
+      );
     }
 
     state = state.copyWith(
@@ -409,12 +654,12 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     try {
       final preview = await _repository!.preview(state.draft);
       if (_disposed) return;
-      if (preview.predictedMinutes > 360) {
+      if (preview.predictedMinutes > 420) {
         state = state.copyWith(
           preview: null,
           phase: SmartChargingViewPhase.error,
           actionError:
-              'Thời gian sạc vượt giới hạn an toàn 6 giờ. Vui lòng chọn mức pin thấp hơn.',
+              'Thời gian sạc vượt giới hạn an toàn 7 giờ. Vui lòng chọn mức pin thấp hơn.',
         );
         return;
       }
@@ -423,6 +668,18 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         phase: SmartChargingViewPhase.preview,
         actionError: null,
       );
+    } on SmartChargerException catch (error, stack) {
+      AppErrorReporter.report(
+        error,
+        stack,
+        source: 'SmartChargingController.previewApi',
+      );
+      if (!_disposed) {
+        state = state.copyWith(
+          phase: SmartChargingViewPhase.error,
+          actionError: error.message,
+        );
+      }
     } on SmartChargePredictionException catch (error) {
       if (!_disposed) {
         state = state.copyWith(
@@ -431,11 +688,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         );
       }
     } catch (error, stack) {
-      AppErrorReporter.report(
-        error,
-        stack,
-        source: 'SmartChargingController',
-      );
+      AppErrorReporter.report(error, stack, source: 'SmartChargingController');
       if (!_disposed) {
         state = state.copyWith(
           phase: SmartChargingViewPhase.error,
@@ -447,7 +700,6 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
 
   void _notify(SmartChargingSession session) {
     final sink = _notificationSink;
-    if (sink == null) return;
     if (session.state.isTerminal) {
       if (_lastNotifiedTerminalId == session.sessionId) return;
       _lastNotifiedTerminalId = session.sessionId;
@@ -456,10 +708,29 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       );
       if (_lastLoggedTerminalId != session.sessionId) {
         _lastLoggedTerminalId = session.sessionId;
-        unawaited(_logSink?.call(session).catchError((_) {}) ?? Future.value());
+        unawaited(_persistTerminal(session));
       }
     }
+    if (sink == null) return;
     unawaited(sink(session).catchError((_) {}));
+  }
+
+  Future<void> _persistTerminal(SmartChargingSession session) async {
+    try {
+      await _repository?.flushPendingTelemetry(session.sessionId);
+      await _logSink?.call(session);
+    } catch (error, stack) {
+      AppErrorReporter.report(
+        error,
+        stack,
+        source: 'SmartChargingController.terminalLog',
+      );
+      if (!_disposed) {
+        state = state.copyWith(
+          telemetryStatus: SmartChargeTelemetryStatus.partial,
+        );
+      }
+    }
   }
 
   Future<void> _maybeCalibrate(SmartChargerStatus status) async {
@@ -542,7 +813,9 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         currentStatus = await _repository!.status();
       } catch (_) {}
 
-      if (currentStatus != null && !currentStatus.relay && !session.relayVerified) {
+      if (currentStatus != null &&
+          !currentStatus.relay &&
+          !session.relayVerified) {
         state = state.copyWith(
           phase: SmartChargingViewPhase.preview,
           actionError: 'Không thể bật sạc: Chưa xác nhận được ổ sạc bật.',
@@ -556,6 +829,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         phase: SmartChargingViewPhase.active,
         gatewayError: null,
       );
+      unawaited(_startForegroundMonitor(session));
       _notify(session);
       final scheduler = _reminderScheduler;
       if (scheduler != null) {
@@ -604,13 +878,10 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       actionError: null,
     );
     try {
-      final stopped = await _repository!.stop(
+      final result = await _repository!.stop(
         session.sessionId,
         expectedVersion: session.version,
       );
-      if (stopped == null) {
-        throw const SmartChargerException('Không có phiên sạc đang hoạt động.');
-      }
       if (_disposed) return false;
 
       // Readback to verify relay OFF
@@ -627,16 +898,35 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         return false;
       }
 
+      final stopped = result.session;
+      if (!result.relayOffVerified) {
+        state = state.copyWith(
+          phase: SmartChargingViewPhase.active,
+          actionError: 'Chưa xác nhận được ổ sạc đã tắt. Hãy kiểm tra ổ sạc.',
+        );
+        return false;
+      }
+      if (stopped != null) {
+        await _persistTerminal(stopped);
+        _lastLoggedTerminalId = stopped.sessionId;
+      }
+      await _stopForegroundMonitor();
       state = state.copyWith(
         session: stopped,
         chargerStatus: currentStatus ?? state.chargerStatus,
         phase: SmartChargingViewPhase.editing,
-        history: [
-          stopped,
-          ...state.history.where((item) => item.sessionId != stopped.sessionId),
-        ],
+        actionError: null,
+        history: stopped == null
+            ? state.history
+            : [
+                stopped,
+                ...state.history.where(
+                  (item) => item.sessionId != stopped.sessionId,
+                ),
+              ],
       );
-      _notify(stopped);
+      if (stopped != null) _notify(stopped);
+      unawaited(_refreshHistory(completedSessionId: session.sessionId));
       return true;
     } on SmartChargerException catch (error, stack) {
       AppErrorReporter.report(
@@ -652,11 +942,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       }
       return false;
     } catch (e, stack) {
-      AppErrorReporter.report(
-        e,
-        stack,
-        source: 'SmartChargingController.stop',
-      );
+      AppErrorReporter.report(e, stack, source: 'SmartChargingController.stop');
       if (!_disposed) {
         state = state.copyWith(
           phase: SmartChargingViewPhase.active,
@@ -693,7 +979,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         phase: SmartChargingViewPhase.active,
         actionError: null,
       );
-      unawaited(_refreshStatus());
+      unawaited(_startForegroundMonitor(session));
       return true;
     } on SmartChargerException catch (error, stack) {
       AppErrorReporter.report(
@@ -714,6 +1000,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
   Future<bool> manualOff() async {
     try {
       await _repository!.manualOff();
+      await _stopForegroundMonitor();
       await Future.wait([_refreshStatus(), _refreshSession()]);
       return true;
     } on SmartChargerException catch (error, stack) {
@@ -727,12 +1014,39 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     }
   }
 
+  Future<SmartChargeHistoryPage> getHistoryPage({
+    int limit = 20,
+    String? cursor,
+    ChargingStrategy? strategy,
+  }) async {
+    _repository ??= await SmartChargerRepositoryFactory.create();
+    return _repository!.getHistoryPage(
+      limit: limit,
+      cursor: cursor,
+      strategy: strategy,
+    );
+  }
+
+  Future<List<SmartChargeTelemetryPoint>> getTelemetry(String sessionId) async {
+    _repository ??= await SmartChargerRepositoryFactory.create();
+    return _repository!.getTelemetry(sessionId);
+  }
+
+  Future<SmartChargeEnergySummary> confirmActualEndSoc(
+    SmartChargingSession session,
+    double soc,
+  ) async {
+    _repository ??= await SmartChargerRepositoryFactory.create();
+    return _repository!.confirmActualEndSoc(session, soc);
+  }
+
   @override
   void dispose() {
     _disposed = true;
     _statusTimer?.cancel();
     _sessionTimer?.cancel();
     _countdownTimer?.cancel();
+    unawaited(_foregroundStatusSubscription?.cancel());
     super.dispose();
   }
 }
@@ -774,7 +1088,8 @@ final smartChargingControllerProvider = StateNotifierProvider.autoDispose
           if (session.state == ChargingSessionState.failed) {
             await NotificationService().notifySmartChargeUnsafe(
               sessionId: session.sessionId,
-              message: session.lastError ??
+              message:
+                  session.lastError ??
                   'Không thể xác minh đã tắt sạc. Hãy kiểm tra ổ sạc trực tiếp.',
             );
           } else if (session.state.isTerminal && session.relayVerified) {

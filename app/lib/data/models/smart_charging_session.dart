@@ -70,7 +70,7 @@ class SmartChargingPlanDraft {
     this.strategy = ChargingStrategy.smartCombined,
     this.timeMode = ChargingTimeMode.duration,
     this.chargingMode = 'standard',
-    this.estimatedCapacityWh = 2400,
+    this.estimatedCapacityWh = 0,
   });
 
   final String vehicleId;
@@ -94,7 +94,9 @@ class SmartChargingPlanDraft {
     if (!hardDeadlineAt.isAfter(reference)) {
       return 'Thời điểm dừng phải ở tương lai.';
     }
-    if (estimatedCapacityWh <= 0) return 'Dung lượng pin không hợp lệ.';
+    // Capacity is optional for the deployed AI model. Missing capacity only
+    // disables Wh/SOC-derived KPIs and physics fallback; it must not block a
+    // real server-side AI prediction.
     return null;
   }
 }
@@ -438,8 +440,8 @@ class SmartChargingSession {
       lastError: json['last_error']?.toString(),
       deviceId: json['device_id']?.toString(),
       transport: json['transport']?.toString(),
-      predictedDurationSeconds:
-          (json['predicted_duration_seconds'] as num?)?.round(),
+      predictedDurationSeconds: (json['predicted_duration_seconds'] as num?)
+          ?.round(),
       modelKey: json['model_key']?.toString() ?? 'charging_time',
       modelVersion: json['model_version']?.toString() ?? 'unknown',
       runtimeHealth: json['runtime_health']?.toString() ?? 'unknown',

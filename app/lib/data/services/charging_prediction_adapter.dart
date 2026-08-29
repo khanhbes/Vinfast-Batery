@@ -1,4 +1,3 @@
-import '../../core/constants/app_constants.dart';
 import '../../core/services/api_service.dart';
 import '../../core/services/app_error_reporter.dart';
 import '../models/smart_charging_session.dart';
@@ -64,7 +63,8 @@ class ChargingPredictionAdapter {
       );
 
       if (response['success'] != true) {
-        final errorMsg = response['error']?.toString() ??
+        final errorMsg =
+            response['error']?.toString() ??
             'Không thể tính thời gian sạc từ AI model.';
         final debugCode = response['debugCode']?.toString();
         final debugDetail = response['debugDetail']?.toString();
@@ -140,7 +140,8 @@ class ChargingPredictionAdapter {
             .map((item) => item.toString())
             .toList(),
         fallbackReason: source == 'ai_model' ? null : source,
-        analyzedAt: DateTime.tryParse(data['analyzedAt']?.toString() ?? '') ??
+        analyzedAt:
+            DateTime.tryParse(data['analyzedAt']?.toString() ?? '') ??
             reference,
         aiChargeEligible: source == 'ai_model',
       );
@@ -172,9 +173,12 @@ class ChargingPredictionAdapter {
     if (powerW <= 0 || efficiency <= 0 || efficiency > 1) {
       throw StateError('Cấu hình công suất/hiệu suất bộ sạc không hợp lệ.');
     }
-    final capacityWh = draft.estimatedCapacityWh > 0
-        ? draft.estimatedCapacityWh
-        : AppConstants.defaultBatteryCapacityWh;
+    final capacityWh = draft.estimatedCapacityWh;
+    if (capacityWh <= 0) {
+      throw StateError(
+        'Chưa có dữ liệu dung lượng pin để dùng dự đoán vật lý dự phòng.',
+      );
+    }
     final requiredWh = capacityWh * (draft.targetSoc - draft.currentSoc) / 100;
     final minutes = ((requiredWh / (powerW * efficiency)) * 60).ceil().clamp(
       1,

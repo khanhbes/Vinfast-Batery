@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/smart_charger_binding.dart';
 import '../models/smart_charger_capabilities.dart';
 import '../models/smart_charger_status.dart';
+import '../models/smart_charge_history.dart';
 import '../models/smart_charging_session.dart';
 import '../services/charging_prediction_adapter.dart';
 import '../services/server_smart_charger_service.dart';
@@ -21,8 +22,22 @@ abstract interface class SmartChargerRepository {
     String idempotencyKey,
   );
   Future<SmartChargingSession?> current();
-  Future<List<SmartChargingSession>> history();
-  Future<SmartChargingSession?> stop(String? sessionId, {int? expectedVersion});
+  Future<SmartChargeHistoryPage> getHistoryPage({
+    int limit = 20,
+    String? cursor,
+    ChargingStrategy? strategy,
+  });
+  Future<List<SmartChargeTelemetryPoint>> getTelemetry(String sessionId);
+  Future<SmartChargeEnergySummary> confirmActualEndSoc(
+    SmartChargingSession session,
+    double soc,
+  );
+  Future<void> recordStatusSample(
+    SmartChargingSession session,
+    SmartChargerStatus status,
+  );
+  Future<void> flushPendingTelemetry(String sessionId);
+  Future<SmartChargeStopResult> stop(String? sessionId, {int? expectedVersion});
   Future<SmartChargingSession> rearm(Duration duration);
   Future<void> manualOff();
   Future<SmartChargingSession> manualOn(
@@ -101,15 +116,56 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
   @override
   Future<SmartChargingSession?> current() => service.getCurrentSession();
   @override
-  Future<List<SmartChargingSession>> history() =>
-      _chargeLogs?.loadTerminalSessions() ?? service.getSessionHistory();
+  Future<SmartChargeHistoryPage> getHistoryPage({
+    int limit = 20,
+    String? cursor,
+    ChargingStrategy? strategy,
+  }) async =>
+      _chargeLogs?.getHistoryPage(
+        limit: limit,
+        cursor: cursor,
+        strategy: strategy,
+      ) ??
+      SmartChargeHistoryPage(
+        items: await service.getSessionHistory(limit: limit),
+      );
+
   @override
-  Future<SmartChargingSession?> stop(
-    String? id, {
-    int? expectedVersion,
-  }) async => id == null
-      ? service.turnOffAndVerify()
-      : service.stopSession(id, expectedVersion: expectedVersion);
+  Future<List<SmartChargeTelemetryPoint>> getTelemetry(String sessionId) =>
+      _chargeLogs?.getTelemetry(sessionId) ?? Future.value(const []);
+
+  @override
+  Future<SmartChargeEnergySummary> confirmActualEndSoc(
+    SmartChargingSession session,
+    double soc,
+  ) {
+    final logs = _chargeLogs;
+    if (logs == null) throw StateError('Charge log service is unavailable.');
+    return logs.confirmActualEndSoc(session, soc);
+  }
+
+  @override
+  Future<void> recordStatusSample(
+    SmartChargingSession session,
+    SmartChargerStatus status,
+  ) => _chargeLogs?.recordStatusSample(session, status) ?? Future.value();
+
+  @override
+  Future<void> flushPendingTelemetry(String sessionId) =>
+      _chargeLogs?.flushPendingTelemetry(sessionId) ?? Future.value();
+  @override
+  Future<SmartChargeStopResult> stop(String? id, {int? expectedVersion}) async {
+    final stopped = id == null
+        ? await service.turnOffAndVerify()
+        : await service.stopSession(id, expectedVersion: expectedVersion);
+    return SmartChargeStopResult(
+      relayOffVerified: true,
+      session: stopped,
+      alreadyStopped: stopped == null,
+      historySyncPending: stopped != null && _chargeLogs == null,
+    );
+  }
+
   @override
   Future<SmartChargingSession> rearm(Duration duration) =>
       service.rearmTimer(duration);
@@ -117,6 +173,7 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
   Future<void> manualOff() async {
     await service.turnOff();
   }
+
   @override
   Future<SmartChargingSession> manualOn(
     Duration duration,
@@ -153,10 +210,56 @@ class ServerSmartChargerRepository implements SmartChargerRepository {
   @override
   Future<SmartChargingSession?> current() => service.current();
   @override
-  Future<List<SmartChargingSession>> history() => service.history();
+  Future<SmartChargeHistoryPage> getHistoryPage({
+    int limit = 20,
+    String? cursor,
+    ChargingStrategy? strategy,
+  }) async {
+    final items = await service.history(limit: limit);
+    final filtered = strategy == null
+        ? items
+        : items
+              .where(
+                (item) => strategy == ChargingStrategy.aiTarget
+                    ? item.strategy != ChargingStrategy.manualTimed
+                    : item.strategy == strategy,
+              )
+              .toList();
+    return SmartChargeHistoryPage(items: filtered);
+  }
+
   @override
-  Future<SmartChargingSession?> stop(String? id, {int? expectedVersion}) =>
-      service.off(id);
+  Future<List<SmartChargeTelemetryPoint>> getTelemetry(
+    String sessionId,
+  ) async => const [];
+
+  @override
+  Future<SmartChargeEnergySummary> confirmActualEndSoc(
+    SmartChargingSession session,
+    double soc,
+  ) => throw const SmartChargerException(
+    'Xác nhận SOC chưa khả dụng ở chế độ Easy.',
+    code: 'notSupported',
+  );
+
+  @override
+  Future<void> recordStatusSample(
+    SmartChargingSession session,
+    SmartChargerStatus status,
+  ) async {}
+
+  @override
+  Future<void> flushPendingTelemetry(String sessionId) async {}
+  @override
+  Future<SmartChargeStopResult> stop(String? id, {int? expectedVersion}) async {
+    final stopped = await service.off(id);
+    return SmartChargeStopResult(
+      relayOffVerified: true,
+      session: stopped,
+      alreadyStopped: stopped == null,
+    );
+  }
+
   @override
   Future<SmartChargingSession> rearm(Duration duration) =>
       throw const SmartChargerException(
@@ -167,6 +270,7 @@ class ServerSmartChargerRepository implements SmartChargerRepository {
   Future<void> manualOff() async {
     await service.off();
   }
+
   @override
   Future<SmartChargingSession> manualOn(
     Duration duration,

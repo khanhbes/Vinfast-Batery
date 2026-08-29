@@ -20,10 +20,12 @@ export interface ModelTypeStatus {
 
 export interface InputSchema {
   type: 'string' | 'integer' | 'number';
+  label?: string;
   desc?: string;
   unit?: string;
   min?: number;
   max?: number;
+  step?: number;
   enum?: number[] | string[];
   enumLabels?: string[];
 }
@@ -81,17 +83,26 @@ export interface ChartData {
 }
 
 export interface PredictionResponse {
-  prediction: number;
-  modelVersion: string;
-  input: Record<string, any>;
-  processedInput: Record<string, any>;
-  chartData: ChartData;
-  warnings: string[];
-  // Formatted output for charging_time
+  prediction?: any;
+  modelVersion?: string;
+  input?: Record<string, any>;
+  processedInput?: Record<string, any>;
+  chartData?: ChartData;
+  warnings?: string[];
+  // Formatted output for charging_time & range prediction
   rawPrediction?: number;
   predictionSeconds?: number;
   predictionMinutes?: number;
   formattedPrediction?: string;
+  estimatedRangeKm?: number;
+  rangeLowKm?: number;
+  rangeHighKm?: number;
+  confidence?: number;
+  adjustedEfficiencyKmPerPercent?: number;
+  score?: number;
+  label?: string;
+  recommendation?: string;
+  details?: Record<string, any>;
 }
 
 export interface ModelGroupMeta {
@@ -109,9 +120,19 @@ export interface ModelVersion {
   note?: string;
   sizeBytes?: number;
   path?: string;
+  smokeTestOk?: boolean;
 }
 
-export const ACCENT_CLASSES: Record<ModelAccent, { bg: string; text: string; ring: string; dot: string }> = {
+export const ACCENT_CLASSES: Record<ModelAccent, { bg: string; text: string; ring: string; dot: string; border: string; glow: string }> = {
+  emerald: { bg: 'bg-emerald-500/10', text: 'text-emerald-400', ring: 'ring-emerald-500/30', dot: 'bg-emerald-400', border: 'border-emerald-500/30', glow: 'shadow-emerald-500/20' },
+  amber: { bg: 'bg-amber-500/10', text: 'text-amber-400', ring: 'ring-amber-500/30', dot: 'bg-amber-400', border: 'border-amber-500/30', glow: 'shadow-amber-500/20' },
+  violet: { bg: 'bg-violet-500/10', text: 'text-violet-400', ring: 'ring-violet-500/30', dot: 'bg-violet-400', border: 'border-violet-500/30', glow: 'shadow-violet-500/20' },
+  blue: { bg: 'bg-blue-500/10', text: 'text-blue-400', ring: 'ring-blue-500/30', dot: 'bg-blue-400', border: 'border-blue-500/30', glow: 'shadow-blue-500/20' },
+  rose: { bg: 'bg-rose-500/10', text: 'text-rose-400', ring: 'ring-rose-500/30', dot: 'bg-rose-400', border: 'border-rose-500/30', glow: 'shadow-rose-500/20' },
+  slate: { bg: 'bg-slate-500/10', text: 'text-slate-400', ring: 'ring-slate-500/30', dot: 'bg-slate-400', border: 'border-slate-500/30', glow: 'shadow-slate-500/20' },
+};
+
+export const LIGHT_ACCENT_CLASSES: Record<ModelAccent, { bg: string; text: string; ring: string; dot: string }> = {
   emerald: { bg: 'bg-emerald-50', text: 'text-emerald-700', ring: 'ring-emerald-200', dot: 'bg-emerald-500' },
   amber: { bg: 'bg-amber-50', text: 'text-amber-700', ring: 'ring-amber-200', dot: 'bg-amber-500' },
   violet: { bg: 'bg-violet-50', text: 'text-violet-700', ring: 'ring-violet-200', dot: 'bg-violet-500' },
