@@ -189,8 +189,11 @@ if [ ! -s /tmp/vinfast_api_health.json ]; then
 fi
 "@
 
-ssh -i $KeyFile -o ServerAliveInterval=30 -o ServerAliveCountMax=20 `
-    "${VpsUser}@${VpsIp}" $remoteScript
+# Gửi script qua stdin để PowerShell/SSH không làm hỏng dấu nháy trong Bash.
+# Truyền cả khối script như một command argument có thể khiến VPS chạy xong
+# deploy nhưng fail ở bước verify với "unexpected EOF".
+$remoteScript | ssh -i $KeyFile -o ServerAliveInterval=30 -o ServerAliveCountMax=20 `
+    "${VpsUser}@${VpsIp}" bash -s
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "❌ Deploy thất bại trên VPS!" -ForegroundColor Red; exit 1

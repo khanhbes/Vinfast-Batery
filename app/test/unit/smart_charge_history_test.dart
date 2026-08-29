@@ -54,8 +54,8 @@ void main() {
     });
   });
 
-  test('absolute Smart Charge limit is seven hours', () {
-    expect(SmartChargerService.maxSessionDuration, const Duration(hours: 7));
+  test('absolute Smart Charge limit is ten hours', () {
+    expect(SmartChargerService.maxSessionDuration, const Duration(hours: 10));
   });
 }
 
@@ -75,9 +75,9 @@ SmartChargingSession _session({required double energyUsedWh}) {
     startedAt: start,
     stoppedAt: start.add(const Duration(minutes: 20)),
     aiStopAt: start.add(const Duration(minutes: 20)),
-    hardDeadlineAt: start.add(const Duration(hours: 7)),
+    hardDeadlineAt: start.add(const Duration(hours: 10)),
     effectiveStopAt: start.add(const Duration(minutes: 20)),
-    absoluteSafetyStopAt: start.add(const Duration(hours: 7)),
+    absoluteSafetyStopAt: start.add(const Duration(hours: 10)),
     shadowMode: false,
     version: 1,
     estimatedCapacityWh: 3000,

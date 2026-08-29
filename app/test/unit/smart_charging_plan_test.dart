@@ -69,6 +69,17 @@ void main() {
     );
   });
 
+  test('real AI preview does not require battery capacity metadata', () {
+    final value = SmartChargingPlanDraft(
+      vehicleId: 'VF-001',
+      currentSoc: 20,
+      targetSoc: 80,
+      hardDeadlineAt: now.add(const Duration(hours: 2)),
+      estimatedCapacityWh: 0,
+    );
+    expect(value.validate(now: now), isNull);
+  });
+
   test('target strategy uses AI ETA', () {
     final preview = SmartChargingPlanPreview.fromPrediction(
       draft: draft(strategy: ChargingStrategy.targetSoc),

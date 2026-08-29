@@ -12,7 +12,7 @@ class AppConstants {
     'APP_API_BASE_URL',
     defaultValue: 'https://api.evbattery.live',
   );
-  static const String appVersion = '1.0.71';
+  static const String appVersion = '1.0.75';
 
   // Firestore Collection Names
   static const String vehiclesCollection = 'Vehicles';

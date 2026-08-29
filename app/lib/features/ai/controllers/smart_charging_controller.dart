@@ -197,7 +197,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
              currentSoc: currentSoc,
              targetSoc: (currentSoc + 30).clamp(1, 100).toDouble(),
              hardDeadlineAt: (clock ?? DateTime.now)().add(
-               const Duration(hours: 7),
+               const Duration(hours: 10),
              ),
              strategy: ChargingStrategy.targetSoc,
              estimatedCapacityWh: estimatedCapacityWh,
@@ -639,7 +639,26 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
   }
 
   Future<void> createPreview() async {
-    final error = state.draft.validate(now: _clock());
+    final now = _clock();
+    var draft = state.draft;
+    // A target-SOC prediction has no user-selected wall-clock deadline. Keep
+    // its safety ceiling relative to the prediction/start time so a screen
+    // left open for hours cannot reduce the device timer unexpectedly.
+    if (draft.strategy == ChargingStrategy.targetSoc ||
+        draft.strategy == ChargingStrategy.aiTarget) {
+      draft = SmartChargingPlanDraft(
+        vehicleId: draft.vehicleId,
+        currentSoc: draft.currentSoc,
+        targetSoc: draft.targetSoc,
+        hardDeadlineAt: now.add(SmartChargerService.maxSessionDuration),
+        strategy: draft.strategy,
+        timeMode: draft.timeMode,
+        chargingMode: draft.chargingMode,
+        estimatedCapacityWh: draft.estimatedCapacityWh,
+      );
+      state = state.copyWith(draft: draft);
+    }
+    final error = draft.validate(now: now);
     if (error != null) {
       state = state.copyWith(
         phase: SmartChargingViewPhase.error,
@@ -652,14 +671,14 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       actionError: null,
     );
     try {
-      final preview = await _repository!.preview(state.draft);
+      final preview = await _repository!.preview(draft);
       if (_disposed) return;
-      if (preview.predictedMinutes > 420) {
+      if (preview.predictedMinutes > 600) {
         state = state.copyWith(
           preview: null,
           phase: SmartChargingViewPhase.error,
           actionError:
-              'Thời gian sạc vượt giới hạn an toàn 7 giờ. Vui lòng chọn mức pin thấp hơn.',
+              'Thời gian sạc vượt giới hạn an toàn 10 giờ. Vui lòng chọn mức pin thấp hơn.',
         );
         return;
       }

@@ -35,7 +35,7 @@ SHELLY_LEGACY_HOST=https://<server-của-tài-khoản>.shelly.cloud
 SHELLY_LEGACY_AUTH_KEY=<cloud-key>
 SHELLY_LEGACY_DEVICE_ID=<device-id>
 SHELLY_LEGACY_DEVICE_NAME=Shelly sạc xe
-SMART_CHARGE_MAX_MINUTES=360
+SMART_CHARGE_MAX_MINUTES=600
 ```
 
 1. Lưu các giá trị trên trong secret manager hoặc environment file chỉ tài khoản service đọc được; không lưu vào repository/Docker image.
@@ -62,7 +62,7 @@ Hiện public Integrator API chỉ tài liệu hóa relay ON/OFF, chưa tài li�
 4. Kiểm tra `~SOC hiện tại`. Nếu sai, bấm **Chỉnh**; đây vẫn là số ước tính.
 5. Chọn mục tiêu **80%**, **90%** hoặc **100%**.
 6. Bấm **DỰ ĐOÁN VỚI AI**. Kiểm tra thời lượng, giờ ngắt, nguồn dự đoán và confidence.
-7. Nếu cần, mở **Nâng cao** và đặt “Dừng không muộn hơn”. Không phiên nào được vượt 7 giờ.
+7. Nếu cần, mở **Nâng cao** và đặt “Dừng không muộn hơn”. Không phiên nào được vượt 10 giờ.
 
 ## Lịch sử và biểu đồ sau khi sạc
 
