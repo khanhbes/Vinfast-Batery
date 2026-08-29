@@ -208,7 +208,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  for (final minutes in const [30, 60, 120, 240, 360, 420])
+                  for (final minutes in const [30, 60, 120, 240, 360, 600])
                     ActionChip(
                       avatar: minutes == 60
                           ? const Icon(Icons.check_circle_rounded, size: 18)
@@ -1258,7 +1258,7 @@ class _HistoryMessage extends StatelessWidget {
 }
 
 String _compactDuration(Duration value) {
-  final minutes = value.inMinutes.clamp(0, 7 * 60);
+  final minutes = value.inMinutes.clamp(0, 10 * 60);
   final hours = minutes ~/ 60;
   final remaining = minutes % 60;
   if (hours == 0) return '$remaining phút';

@@ -100,7 +100,15 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
       predictionSource: preview.predictionSource,
       predictionConfidence: preview.predictionConfidence,
       strategy: preview.draft.strategy,
-      hardDeadlineAt: preview.draft.hardDeadlineAt,
+      // targetSoc/aiTarget use a relative ten-hour safety window created by
+      // SmartChargerService at the moment the relay is armed. Forwarding the
+      // draft's initialization-time deadline could silently shorten a fresh
+      // 7h ETA to only the time left since the screen was first opened.
+      hardDeadlineAt:
+          preview.draft.strategy == ChargingStrategy.deadline ||
+              preview.draft.strategy == ChargingStrategy.smartCombined
+          ? preview.draft.hardDeadlineAt
+          : null,
       estimatedCapacityWh: preview.draft.estimatedCapacityWh,
       acknowledgeEstimatedSoc: true,
       predictedDurationSeconds: preview.predictedDurationSeconds,

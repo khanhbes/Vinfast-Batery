@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vinfast_battery/data/models/vinfast_model_spec.dart';
+import 'package:vinfast_battery/data/models/vehicle_model.dart';
 import 'package:vinfast_battery/data/services/battery_capacity_service.dart';
 
 /// ========================================================================
@@ -223,5 +224,14 @@ void main() {
       const String modelId = 'feliz';
       expect(modelId.isNotEmpty, isTrue);
     });
+  });
+
+  test('VehicleModel reads legacy batteryCapacity as Wh', () {
+    final vehicle = VehicleModel.fromMap({
+      'vehicleId': 'VF-001',
+      'currentOdo': 0,
+      'batteryCapacity': 3500,
+    });
+    expect(vehicle.batteryCapacityWh, 3500);
   });
 }

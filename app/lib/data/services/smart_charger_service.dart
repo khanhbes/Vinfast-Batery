@@ -65,7 +65,7 @@ class SmartChargerService {
        _delay = delay ?? Future<void>.delayed;
 
   static const _activeSessionKey = 'smart_charger.active_shelly_session.v1';
-  static const maxSessionDuration = Duration(hours: 7);
+  static const maxSessionDuration = Duration(hours: 10);
   final SmartChargerCredentialsService _credentials;
   final ShellyCloudClient _cloud;
   final ShellyLanClient _lan;
@@ -245,7 +245,7 @@ class SmartChargerService {
     final duration = plan.effectiveDuration(now);
     if (duration <= Duration.zero || duration > maxSessionDuration) {
       throw const SmartChargerException(
-        'Phiên sạc phải lớn hơn 0 và không vượt quá 7 giờ.',
+        'Phiên sạc phải lớn hơn 0 và không vượt quá 10 giờ.',
         code: 'unsafeDuration',
       );
     }
