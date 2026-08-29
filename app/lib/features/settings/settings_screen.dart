@@ -21,6 +21,7 @@ import 'appearance_settings_screen.dart';
 import 'profile_screen.dart';
 import 'vehicle_garage_screen.dart';
 import 'guide_screen.dart';
+import 'personal_ai_settings_screen.dart';
 
 // =============================================================================
 // Settings Screen V5 — PLAN #4, #5, #7
@@ -655,6 +656,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             value: _shellyConfigured ? _shellyLabel : 'Shelly chưa kết nối',
             icon: Icons.ev_station_rounded,
             onTap: _openShellySetup,
+          ),
+          Divider(
+            color: AppColors.glassBorder,
+            height: 1,
+            indent: 20,
+            endIndent: 20,
+          ),
+
+          _buildTapRow(
+            title: 'AI cá nhân',
+            value: 'Riêng cho từng xe',
+            icon: Icons.psychology_alt_rounded,
+            onTap: () {
+              final vehicleId = ref.read(selectedVehicleIdProvider);
+              if (vehicleId.isEmpty) {
+                AppPopup.showWarning('Hãy chọn xe trước khi bật AI cá nhân');
+                return;
+              }
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      PersonalAiSettingsScreen(vehicleId: vehicleId),
+                ),
+              );
+            },
           ),
           Divider(
             color: AppColors.glassBorder,

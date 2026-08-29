@@ -384,10 +384,7 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
             doc.id,
             d['label'] as String? ?? d['name'] as String? ?? doc.id,
           ),
-          shortName: _catalogShortName(
-            doc.id,
-            d['shortName'] as String? ?? '',
-          ),
+          shortName: _catalogShortName(doc.id, d['shortName'] as String? ?? ''),
           phase:
               d['phase'] as String? ?? (isDeployed ? 'production' : 'planned'),
           registryStatus: d['status'] as String? ?? 'planned',

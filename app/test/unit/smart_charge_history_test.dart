@@ -88,9 +88,7 @@ SmartChargingSession _session({required double energyUsedWh}) {
 SmartChargeTelemetryPoint _point(DateTime timestamp, double energyWh) =>
     SmartChargeTelemetryPoint(
       timestamp: timestamp,
-      elapsedSeconds: timestamp
-          .difference(DateTime.utc(2026, 8, 29))
-          .inSeconds,
+      elapsedSeconds: timestamp.difference(DateTime.utc(2026, 8, 29)).inSeconds,
       powerAverageW: 500,
       powerMinimumW: 480,
       powerMaximumW: 520,

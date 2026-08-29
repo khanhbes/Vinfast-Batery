@@ -7,27 +7,27 @@ class ChargeSampleModel {
   final String? sessionId;
   final String? ownerUid;
   final String? vehicleId;
-  
+
   // Prediction inputs
   final int? startBatteryPercent;
   final int? targetBatteryPercent;
   final double? ambientTempC;
-  
+
   // Prediction metadata
   final DateTime? predictedStopAt;
   final double? predictedDurationSec;
   final String? modelVersion;
   final String? modelSource;
-  
+
   // Actual results (filled when session ends)
   final int? actualEndBatteryPercent;
   final DateTime? actualEndTime;
   final double? actualDurationSec;
-  
+
   // Location (if available)
   final double? latitude;
   final double? longitude;
-  
+
   // Flags
   final bool? eligibleForTraining;
   final DateTime? createdAt;
@@ -91,20 +91,29 @@ class ChargeSampleModel {
       if (sessionId != null) 'sessionId': sessionId,
       if (ownerUid != null) 'ownerUid': ownerUid,
       if (vehicleId != null) 'vehicleId': vehicleId,
-      if (startBatteryPercent != null) 'startBatteryPercent': startBatteryPercent,
-      if (targetBatteryPercent != null) 'targetBatteryPercent': targetBatteryPercent,
+      if (startBatteryPercent != null)
+        'startBatteryPercent': startBatteryPercent,
+      if (targetBatteryPercent != null)
+        'targetBatteryPercent': targetBatteryPercent,
       if (ambientTempC != null) 'ambientTempC': ambientTempC,
-      if (predictedStopAt != null) 'predictedStopAt': Timestamp.fromDate(predictedStopAt!),
-      if (predictedDurationSec != null) 'predictedDurationSec': predictedDurationSec,
+      if (predictedStopAt != null)
+        'predictedStopAt': Timestamp.fromDate(predictedStopAt!),
+      if (predictedDurationSec != null)
+        'predictedDurationSec': predictedDurationSec,
       if (modelVersion != null) 'modelVersion': modelVersion,
       if (modelSource != null) 'modelSource': modelSource,
-      if (actualEndBatteryPercent != null) 'actualEndBatteryPercent': actualEndBatteryPercent,
-      if (actualEndTime != null) 'actualEndTime': Timestamp.fromDate(actualEndTime!),
+      if (actualEndBatteryPercent != null)
+        'actualEndBatteryPercent': actualEndBatteryPercent,
+      if (actualEndTime != null)
+        'actualEndTime': Timestamp.fromDate(actualEndTime!),
       if (actualDurationSec != null) 'actualDurationSec': actualDurationSec,
       if (latitude != null) 'latitude': latitude,
       if (longitude != null) 'longitude': longitude,
-      if (eligibleForTraining != null) 'eligibleForTraining': eligibleForTraining,
-      'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : FieldValue.serverTimestamp(),
+      if (eligibleForTraining != null)
+        'eligibleForTraining': eligibleForTraining,
+      'createdAt': createdAt != null
+          ? Timestamp.fromDate(createdAt!)
+          : FieldValue.serverTimestamp(),
     };
   }
 
@@ -146,13 +155,17 @@ class ChargeSampleModel {
     required int actualEndBatteryPercent,
     required DateTime actualEndTime,
   }) {
-    final duration = actualEndTime.difference(createdAt ?? actualEndTime).inSeconds.toDouble();
-    
+    final duration = actualEndTime
+        .difference(createdAt ?? actualEndTime)
+        .inSeconds
+        .toDouble();
+
     // Determine eligibility for training
-    final eligible = actualEndBatteryPercent > (startBatteryPercent ?? 0) &&
-                    duration > 60 && // > 1 minute
-                    (targetBatteryPercent != null && 
-                     actualEndBatteryPercent >= targetBatteryPercent! - 5);
+    final eligible =
+        actualEndBatteryPercent > (startBatteryPercent ?? 0) &&
+        duration > 60 && // > 1 minute
+        (targetBatteryPercent != null &&
+            actualEndBatteryPercent >= targetBatteryPercent! - 5);
 
     return ChargeSampleModel(
       sampleId: sampleId,

@@ -28,7 +28,9 @@ class ApiException implements Exception {
   String toString() {
     final sb = StringBuffer('ApiException');
     if (statusCode != null) sb.write(' (HTTP $statusCode)');
-    sb.write(' on $endpoint: ${message ?? responseBody ?? "Unknown API error"}');
+    sb.write(
+      ' on $endpoint: ${message ?? responseBody ?? "Unknown API error"}',
+    );
     if (debugCode != null) sb.write(' [$debugCode]');
     return sb.toString();
   }
@@ -67,10 +69,7 @@ class ApiService {
         source: 'FirebaseAuth',
         debugCode: 'AUTH_TOKEN_ERROR',
       );
-      return {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      };
+      return {'Content-Type': 'application/json', 'Accept': 'application/json'};
     }
   }
 
@@ -78,10 +77,9 @@ class ApiService {
   Future<Map<String, dynamic>> get(String endpoint) async {
     try {
       final headers = await getHeaders();
-      final response = await http.get(
-        Uri.parse('$_baseUrl$endpoint'),
-        headers: headers,
-      ).timeout(const Duration(seconds: 30));
+      final response = await http
+          .get(Uri.parse('$_baseUrl$endpoint'), headers: headers)
+          .timeout(const Duration(seconds: 30));
 
       return _handleResponse(endpoint, response);
     } on TimeoutException catch (e, stack) {
@@ -97,7 +95,10 @@ class ApiService {
         endpoint: endpoint,
         debugCode: 'GET_TIMEOUT',
       );
-      return {'success': false, 'error': 'Yêu cầu hết thời gian chờ (Timeout).'};
+      return {
+        'success': false,
+        'error': 'Yêu cầu hết thời gian chờ (Timeout).',
+      };
     } on SocketException catch (e, stack) {
       final err = ApiException(
         endpoint: endpoint,
@@ -143,11 +144,13 @@ class ApiService {
   ) async {
     try {
       final headers = await getHeaders();
-      final response = await http.post(
-        Uri.parse('$_baseUrl$endpoint'),
-        headers: headers,
-        body: jsonEncode(body),
-      ).timeout(const Duration(seconds: 30));
+      final response = await http
+          .post(
+            Uri.parse('$_baseUrl$endpoint'),
+            headers: headers,
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 30));
 
       return _handleResponse(endpoint, response);
     } on TimeoutException catch (e, stack) {
@@ -163,7 +166,10 @@ class ApiService {
         endpoint: endpoint,
         debugCode: 'POST_TIMEOUT',
       );
-      return {'success': false, 'error': 'Yêu cầu hết thời gian chờ (Timeout).'};
+      return {
+        'success': false,
+        'error': 'Yêu cầu hết thời gian chờ (Timeout).',
+      };
     } on SocketException catch (e, stack) {
       final err = ApiException(
         endpoint: endpoint,
@@ -191,14 +197,14 @@ class ApiService {
         endpoint: endpoint,
         debugCode: 'POST_ERROR',
       );
-      return {
-        'success': false,
-        'error': 'Lỗi kết nối: $e',
-      };
+      return {'success': false, 'error': 'Lỗi kết nối: $e'};
     }
   }
 
-  Map<String, dynamic> _handleResponse(String endpoint, http.Response response) {
+  Map<String, dynamic> _handleResponse(
+    String endpoint,
+    http.Response response,
+  ) {
     Map<String, dynamic>? parsedJson;
     try {
       final decoded = jsonDecode(response.body);
@@ -234,9 +240,11 @@ class ApiService {
       return parsedJson ?? <String, dynamic>{'success': true};
     }
 
-    final errorMessage = parsedJson?['error']?.toString() ??
+    final errorMessage =
+        parsedJson?['error']?.toString() ??
         'HTTP ${response.statusCode}: ${response.body}';
-    final debugCode = parsedJson?['debugCode']?.toString() ?? 'HTTP_${response.statusCode}';
+    final debugCode =
+        parsedJson?['debugCode']?.toString() ?? 'HTTP_${response.statusCode}';
     final debugDetail = parsedJson?['debugDetail']?.toString();
 
     final apiError = ApiException(
@@ -268,7 +276,7 @@ class ApiService {
   }
 
   /// Predict charging time using AI Center model
-  /// 
+  ///
   /// Response format per PLAN1.md:
   /// {
   ///   'predictedDurationSec': double,

@@ -58,8 +58,7 @@ class AddChargeLogState {
 class AddChargeLogNotifier extends StateNotifier<AddChargeLogState> {
   final ChargeLogRepository _repository;
 
-  AddChargeLogNotifier(this._repository)
-      : super(const AddChargeLogState());
+  AddChargeLogNotifier(this._repository) : super(const AddChargeLogState());
 
   /// Load thông tin xe để validation ODO
   Future<void> loadVehicle(String vehicleId) async {
@@ -234,9 +233,9 @@ class AddChargeLogNotifier extends StateNotifier<AddChargeLogState> {
 // ============================================================================
 
 final addChargeLogProvider =
-    StateNotifierProvider.autoDispose<AddChargeLogNotifier, AddChargeLogState>(
-  (ref) {
-    final repository = ref.watch(chargeLogRepositoryProvider);
-    return AddChargeLogNotifier(repository);
-  },
-);
+    StateNotifierProvider.autoDispose<AddChargeLogNotifier, AddChargeLogState>((
+      ref,
+    ) {
+      final repository = ref.watch(chargeLogRepositoryProvider);
+      return AddChargeLogNotifier(repository);
+    });

@@ -55,7 +55,11 @@ void main() {
     });
 
     test('1 log → fallback linear using that log rate', () {
-      final log = _makeLog(startPercent: 20, endPercent: 80, durationMinutes: 150);
+      final log = _makeLog(
+        startPercent: 20,
+        endPercent: 80,
+        durationMinutes: 150,
+      );
       // rate = 60% / 150min = 0.4%/min
       // 40% / 0.4 = 100 min
       final result = SmartChargingService.estimateChargeMinutes(
@@ -161,7 +165,11 @@ void main() {
     });
 
     test('returns DateTime in the future', () {
-      final log = _makeLog(startPercent: 20, endPercent: 80, durationMinutes: 150);
+      final log = _makeLog(
+        startPercent: 20,
+        endPercent: 80,
+        durationMinutes: 150,
+      );
       final result = SmartChargingService.estimateCompleteAt(
         currentPercent: 50,
         targetPercent: 80,
@@ -185,7 +193,11 @@ void main() {
     });
 
     test('very slow charge rate → large ETA', () {
-      final log = _makeLog(startPercent: 40, endPercent: 42, durationMinutes: 60);
+      final log = _makeLog(
+        startPercent: 40,
+        endPercent: 42,
+        durationMinutes: 60,
+      );
       // rate = 2% / 60min = 0.033%/min
       // 50% / 0.033 = ~1500 min
       final result = SmartChargingService.estimateChargeMinutes(

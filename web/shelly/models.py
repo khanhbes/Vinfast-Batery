@@ -31,6 +31,95 @@ class DeviceStatus:
 
 
 @dataclass
+class EtaCandidate:
+    source: str
+    duration_seconds: int
+    weight: float
+    confidence: float
+    available: bool = True
+    reason: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "source": self.source,
+            "durationSeconds": self.duration_seconds,
+            "weight": round(self.weight, 4),
+            "confidence": round(self.confidence, 2),
+            "available": self.available,
+            "reason": self.reason,
+        }
+
+
+@dataclass
+class PersonalChargingProfile:
+    owner_uid: str
+    vehicle_id: str
+    consent_enabled: bool = False
+    valid_sessions: int = 0
+    power_sessions: int = 0
+    eta_bias_ratio: float = 0.0
+    median_power_w: float | None = None
+    efficiency: float = 0.90
+    usable_capacity_wh: float | None = None
+    validation_mape: float | None = None
+    adapter_version: str = "personal-v0"
+    active: bool = False
+    updated_at: datetime = field(default_factory=utcnow)
+
+    def to_dict(self, *, public: bool = False) -> dict[str, Any]:
+        value = {
+            "vehicleId": self.vehicle_id,
+            "consentEnabled": self.consent_enabled,
+            "validSessions": self.valid_sessions,
+            "powerSessions": self.power_sessions,
+            "etaBiasRatio": self.eta_bias_ratio,
+            "medianPowerW": self.median_power_w,
+            "efficiency": self.efficiency,
+            "usableCapacityWh": self.usable_capacity_wh,
+            "validationMape": self.validation_mape,
+            "adapterVersion": self.adapter_version,
+            "active": self.active,
+            "updatedAt": iso(self.updated_at),
+        }
+        if not public:
+            value["ownerUid"] = self.owner_uid
+        return value
+
+
+@dataclass(frozen=True)
+class SmartChargeSafetyPolicy:
+    warning_current_a: float = 10.5
+    warning_power_w: float = 2300
+    warning_temperature_c: float = 65
+    warning_voltage_min_v: float = 200
+    warning_voltage_max_v: float = 250
+    cutoff_current_a: float = 11.5
+    cutoff_power_w: float = 2450
+    cutoff_temperature_c: float = 75
+    cutoff_voltage_min_v: float = 190
+    cutoff_voltage_max_v: float = 255
+    consecutive_samples: int = 2
+
+
+@dataclass
+class SmartChargeSafetyEvent:
+    kind: str
+    severity: str
+    message: str
+    observed_value: float | None
+    created_at: datetime = field(default_factory=utcnow)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kind": self.kind,
+            "severity": self.severity,
+            "message": self.message,
+            "observedValue": self.observed_value,
+            "createdAt": iso(self.created_at),
+        }
+
+
+@dataclass
 class DeviceBinding:
     device_id: str
     display_name: str
@@ -88,6 +177,12 @@ class ChargePreview:
     analyzed_at: datetime
     ai_charge_eligible: bool
     expires_at: datetime
+    eta_candidates: list[EtaCandidate] = field(default_factory=list)
+    fusion_reason: str = "global_ai_only"
+    profile_version: str | None = None
+    adapter_version: str | None = None
+    capacity_confidence: float | None = None
+    efficiency_confidence: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -109,6 +204,12 @@ class ChargePreview:
             "aiChargeEligible": self.ai_charge_eligible,
             "socIsEstimated": True,
             "expiresAt": iso(self.expires_at),
+            "etaCandidates": [item.to_dict() for item in self.eta_candidates],
+            "fusionReason": self.fusion_reason,
+            "profileVersion": self.profile_version,
+            "adapterVersion": self.adapter_version,
+            "capacityConfidence": self.capacity_confidence,
+            "efficiencyConfidence": self.efficiency_confidence,
         }
 
 
@@ -147,6 +248,14 @@ class ChargingSession:
     stop_reason: str | None = None
     version: int = 1
     last_error: str | None = None
+    eta_candidates: list[EtaCandidate] = field(default_factory=list)
+    fusion_reason: str = "global_ai_only"
+    profile_version: str | None = None
+    adapter_version: str | None = None
+    safety_events: list[SmartChargeSafetyEvent] = field(default_factory=list)
+    actual_end_soc: float | None = None
+    training_eligible: bool = False
+    telemetry_coverage: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -187,4 +296,12 @@ class ChargingSession:
             "transport": self.transport,
             "version": self.version,
             "last_error": self.last_error,
+            "eta_candidates": [item.to_dict() for item in self.eta_candidates],
+            "fusion_reason": self.fusion_reason,
+            "profile_version": self.profile_version,
+            "adapter_version": self.adapter_version,
+            "safety_events": [item.to_dict() for item in self.safety_events],
+            "actual_end_soc": self.actual_end_soc,
+            "training_eligible": self.training_eligible,
+            "telemetry_coverage": self.telemetry_coverage,
         }

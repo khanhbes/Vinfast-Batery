@@ -3,7 +3,14 @@ from __future__ import annotations
 import threading
 from datetime import datetime, timezone
 
-from .models import ChargePreview, ChargingSession, DeviceBinding
+from .models import (
+    ChargePreview,
+    ChargingSession,
+    DeviceBinding,
+    EtaCandidate,
+    PersonalChargingProfile,
+    SmartChargeSafetyEvent,
+)
 
 
 class SmartChargeRepository:
@@ -18,6 +25,8 @@ class SmartChargeRepository:
         self._idempotency: dict[tuple[str, str], str] = {}
         self._consent: dict[str, tuple[str, datetime, bool]] = {}
         self._audits: list[dict] = []
+        self._personal_profiles: dict[tuple[str, str], PersonalChargingProfile] = {}
+        self._telemetry: dict[tuple[str, str], list[dict]] = {}
 
     def save_binding(self, uid: str, binding: DeviceBinding) -> None:
         with self._lock:
@@ -81,8 +90,8 @@ class SmartChargeRepository:
             self.db.collection("users").document(uid).collection("smartChargingSessions").document(session.session_id).set(payload, merge=True)
 
     def upsert_charge_log(self, uid: str, session: ChargingSession) -> None:
-        """Write one terminal ChargeLogs document per Smart Charge session."""
-        if not self.db or session.state not in ("completed", "cancelled", "interrupted", "failed"):
+        """Upsert the same ChargeLogs document while active and when terminal."""
+        if not self.db:
             return
         payload = {
             "id": session.session_id,
@@ -90,7 +99,7 @@ class SmartChargeRepository:
             "vehicleId": session.vehicle_id,
             "ownerUid": uid,
             "startTime": session.created_at,
-            "endTime": session.stopped_at or session.updated_at,
+            "endTime": session.stopped_at if session.state in ("completed", "cancelled", "interrupted", "failed") else None,
             "startBatteryPercent": round(session.start_soc),
             "endBatteryPercent": round(session.estimated_soc if session.estimated_soc is not None else session.target_soc),
             "targetBatteryPercent": round(session.target_soc),
@@ -100,6 +109,8 @@ class SmartChargeRepository:
             "plannedStopAt": session.effective_stop_at,
             "actualStopAt": session.stopped_at or session.updated_at,
             "stopReason": session.stop_reason,
+            "sessionState": session.state,
+            "isActive": session.state in ("arming", "active"),
             "energyWh": session.energy_used_wh,
             "predictionSource": session.prediction_source,
             "predictionConfidence": session.prediction_confidence,
@@ -111,6 +122,14 @@ class SmartChargeRepository:
             "predictedDurationSeconds": session.predicted_duration_seconds,
             "predictionAnalyzedAt": session.prediction_analyzed_at,
             "socEstimated": True,
+            "etaCandidates": [item.to_dict() for item in session.eta_candidates],
+            "etaFusionReason": session.fusion_reason,
+            "personalProfileVersion": session.profile_version,
+            "personalAdapterVersion": session.adapter_version,
+            "safetyEvents": [item.to_dict() for item in session.safety_events],
+            "actualEndSoc": session.actual_end_soc,
+            "trainingEligible": session.training_eligible,
+            "telemetryCoverage": session.telemetry_coverage,
             "isDeleted": False,
             "updatedAt": datetime.now(timezone.utc),
         }
@@ -164,6 +183,90 @@ class SmartChargeRepository:
         if self.db:
             self.db.collection("smartChargingAudit").add(record)
 
+    def get_personal_profile(self, uid: str, vehicle_id: str) -> PersonalChargingProfile | None:
+        """Profiles are always keyed by owner and vehicle; vehicle id alone is never trusted."""
+        key = (uid, vehicle_id)
+        with self._lock:
+            cached = self._personal_profiles.get(key)
+        if cached or not self.db:
+            return cached
+        snapshot = (self.db.collection("users").document(uid)
+                    .collection("personalChargingProfiles").document(vehicle_id).get())
+        if not snapshot.exists:
+            return None
+        data = snapshot.to_dict() or {}
+        if data.get("ownerUid") != uid:
+            return None
+        profile = _profile(uid, vehicle_id, data)
+        with self._lock:
+            self._personal_profiles[key] = profile
+        return profile
+
+    def save_personal_profile(self, profile: PersonalChargingProfile) -> None:
+        key = (profile.owner_uid, profile.vehicle_id)
+        with self._lock:
+            self._personal_profiles[key] = profile
+        if self.db:
+            (self.db.collection("users").document(profile.owner_uid)
+             .collection("personalChargingProfiles").document(profile.vehicle_id)
+             .set(profile.to_dict(), merge=True))
+
+    def delete_personal_profile(self, uid: str, vehicle_id: str) -> None:
+        with self._lock:
+            self._personal_profiles.pop((uid, vehicle_id), None)
+        if self.db:
+            root = self.db.collection("users").document(uid)
+            root.collection("personalChargingProfiles").document(vehicle_id).delete()
+            samples = root.collection("chargingTrainingSamples").where("vehicleId", "==", vehicle_id).stream()
+            for sample in samples:
+                sample.reference.delete()
+
+    def save_training_sample(self, uid: str, session: ChargingSession, payload: dict) -> None:
+        if not self.db:
+            return
+        value = dict(payload)
+        value.update({
+            "ownerUid": uid,
+            "vehicleId": session.vehicle_id,
+            "sessionId": session.session_id,
+            "updatedAt": datetime.now(timezone.utc),
+        })
+        (self.db.collection("users").document(uid).collection("chargingTrainingSamples")
+         .document(session.session_id).set(value, merge=True))
+
+    def enqueue_personal_training(self, uid: str, vehicle_id: str, session_id: str) -> None:
+        if not self.db:
+            return
+        self.db.collection("personalChargingTrainingJobs").document(f"{uid}_{vehicle_id}").set({
+            "ownerUid": uid,
+            "vehicleId": vehicle_id,
+            "triggerSessionId": session_id,
+            "state": "pending",
+            "updatedAt": datetime.now(timezone.utc),
+        }, merge=True)
+
+    def save_telemetry(self, uid: str, session_id: str, point: dict) -> None:
+        key = (uid, session_id)
+        value = dict(point)
+        value["ownerUid"] = uid
+        with self._lock:
+            self._telemetry.setdefault(key, []).append(value)
+        if self.db:
+            stamp = str(value.get("timestamp") or datetime.now(timezone.utc).isoformat())
+            doc_id = stamp.replace(":", "-").replace(".", "-")
+            (self.db.collection("ChargeLogs").document(session_id)
+             .collection("smartChargeTelemetry").document(doc_id).set(value, merge=True))
+
+    def telemetry(self, uid: str, session_id: str) -> list[dict]:
+        with self._lock:
+            cached = list(self._telemetry.get((uid, session_id), []))
+        if cached or not self.db:
+            return cached
+        parent = self.db.collection("ChargeLogs").document(session_id).get()
+        if not parent.exists or (parent.to_dict() or {}).get("ownerUid") != uid:
+            return []
+        return [item.to_dict() or {} for item in parent.reference.collection("smartChargeTelemetry").order_by("timestamp").stream()]
+
 
 def _date(value):
     if isinstance(value, datetime):
@@ -195,4 +298,35 @@ def _session(data: dict) -> ChargingSession:
         estimated_soc=data.get("estimated_soc"), baseline_energy_wh=data.get("baseline_energy_wh"), energy_used_wh=float(data.get("energy_used_wh") or 0),
         relay_verified=bool(data.get("relay_verified")), timer_verified=bool(data.get("timer_verified")), transport=str(data.get("transport") or "shelly_cloud"),
         stopped_at=_date(data.get("stopped_at")), stop_reason=data.get("stop_reason"), version=int(data.get("version") or 1), last_error=data.get("last_error"),
+        eta_candidates=[EtaCandidate(
+            source=str(item.get("source") or "unknown"),
+            duration_seconds=int(item.get("durationSeconds") or item.get("duration_seconds") or 0),
+            weight=float(item.get("weight") or 0), confidence=float(item.get("confidence") or 0),
+            available=bool(item.get("available", True)), reason=item.get("reason"),
+        ) for item in (data.get("eta_candidates") or []) if isinstance(item, dict)],
+        fusion_reason=str(data.get("fusion_reason") or "global_ai_only"),
+        profile_version=data.get("profile_version"), adapter_version=data.get("adapter_version"),
+        safety_events=[SmartChargeSafetyEvent(
+            kind=str(item.get("kind") or "unknown"), severity=str(item.get("severity") or "warning"),
+            message=str(item.get("message") or ""), observed_value=item.get("observedValue"),
+            created_at=_date(item.get("createdAt")) or datetime.now(timezone.utc),
+        ) for item in (data.get("safety_events") or []) if isinstance(item, dict)],
+        actual_end_soc=data.get("actual_end_soc"), training_eligible=bool(data.get("training_eligible")),
+        telemetry_coverage=float(data.get("telemetry_coverage") or 0),
+    )
+
+
+def _profile(uid: str, vehicle_id: str, data: dict) -> PersonalChargingProfile:
+    return PersonalChargingProfile(
+        owner_uid=uid, vehicle_id=vehicle_id,
+        consent_enabled=bool(data.get("consentEnabled")),
+        valid_sessions=int(data.get("validSessions") or 0),
+        power_sessions=int(data.get("powerSessions") or 0),
+        eta_bias_ratio=float(data.get("etaBiasRatio") or 0),
+        median_power_w=(float(data["medianPowerW"]) if data.get("medianPowerW") is not None else None),
+        efficiency=float(data.get("efficiency") or 0.90),
+        usable_capacity_wh=(float(data["usableCapacityWh"]) if data.get("usableCapacityWh") is not None else None),
+        validation_mape=(float(data["validationMape"]) if data.get("validationMape") is not None else None),
+        adapter_version=str(data.get("adapterVersion") or "personal-v0"),
+        active=bool(data.get("active")), updated_at=_date(data.get("updatedAt")) or datetime.now(timezone.utc),
     )

@@ -123,7 +123,9 @@ class TripLogModel {
       startOdo: data['startOdo'] ?? 0,
       endOdo: data['endOdo'] ?? 0,
       entryMode: TripEntryMode.fromString(data['entryMode'] ?? 'live'),
-      distanceSource: DistanceSource.fromString(data['distanceSource'] ?? 'gps'),
+      distanceSource: DistanceSource.fromString(
+        data['distanceSource'] ?? 'gps',
+      ),
     );
   }
 

@@ -31,7 +31,8 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
   SmartChargerConnectionMode mode = SmartChargerConnectionMode.serverCloud;
   SmartChargerBinding? binding;
   SmartChargerCapabilities capabilities = SmartChargerCapabilities.unavailable;
-  SmartChargerVerificationState verification = SmartChargerVerificationState.unverified;
+  SmartChargerVerificationState verification =
+      SmartChargerVerificationState.unverified;
   List<DiscoveredShellyDevice> devices = const [];
   bool busy = true;
   bool obscure = true;
@@ -74,7 +75,11 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
     } else {
       capabilities = await direct.capabilities();
     }
-    if (mounted) setState(() { busy = false; dirty = draft != null; });
+    if (mounted)
+      setState(() {
+        busy = false;
+        dirty = draft != null;
+      });
   }
 
   ShellyConnectionProfile get profile => ShellyConnectionProfile(
@@ -101,7 +106,8 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
       if (error.code == 'notConfigured') return true;
       AppPopup.showWarning(
         'Chưa thể xác minh trạng thái relay',
-        detail: 'Không đổi cấu hình để tránh bỏ sót một phiên đang chạy. ${error.message}',
+        detail:
+            'Không đổi cấu hình để tránh bỏ sót một phiên đang chạy. ${error.message}',
       );
       return false;
     }
@@ -109,7 +115,9 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
 
   Future<void> _selectMode(SmartChargerConnectionMode next) async {
     if (next == mode || !await _guardInactive()) return;
-    setState(() { busy = true; });
+    setState(() {
+      busy = true;
+    });
     mode = next;
     if (next == SmartChargerConnectionMode.serverCloud) {
       try {
@@ -121,7 +129,10 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
     } else {
       capabilities = await direct.capabilities();
     }
-    if (mounted) setState(() { busy = false; });
+    if (mounted)
+      setState(() {
+        busy = false;
+      });
   }
 
   Future<void> _testEasy() async {
@@ -133,11 +144,15 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
         await SmartChargerRepositoryFactory.setMode(
           SmartChargerConnectionMode.serverCloud,
         );
-        AppPopup.showSuccess('Easy đã kết nối', detail: 'Timer, status và OFF đã được xác minh.');
+        AppPopup.showSuccess(
+          'Easy đã kết nối',
+          detail: 'Timer, status và OFF đã được xác minh.',
+        );
       } else {
         AppPopup.showWarning(
           'Easy chưa khả dụng để điều khiển',
-          detail: 'Tài khoản chưa có Shelly Integrator license/capability timer. Hãy dùng Direct Cloud + LAN.',
+          detail:
+              'Tài khoản chưa có Shelly Integrator license/capability timer. Hãy dùng Direct Cloud + LAN.',
         );
       }
     } on SmartChargerException catch (error) {
@@ -157,8 +172,12 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
     try {
       devices = await direct.discoverDevices();
       AppPopup.showInfo(
-        devices.isEmpty ? 'Không tìm thấy Plug S Gen3' : 'Đã tìm thấy ${devices.length} thiết bị',
-        detail: devices.isEmpty ? 'Bạn vẫn có thể nhập IP riêng hoặc hostname .local.' : null,
+        devices.isEmpty
+            ? 'Không tìm thấy Plug S Gen3'
+            : 'Đã tìm thấy ${devices.length} thiết bị',
+        detail: devices.isEmpty
+            ? 'Bạn vẫn có thể nhập IP riêng hoặc hostname .local.'
+            : null,
       );
     } finally {
       if (mounted) setState(() => busy = false);
@@ -194,23 +213,32 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
         verification = activeVerification;
         AppPopup.showWarning(
           'Kết nối Cloud thành công nhưng chưa an toàn',
-          detail: 'Cần LAN để xác minh safe boot và chạy test không tải trước lần ON đầu.',
+          detail:
+              'Cần LAN để xác minh safe boot và chạy test không tải trước lần ON đầu.',
         );
         return;
       }
       final confirmed = await _confirmNoLoad();
       if (!confirmed) {
         verification = activeVerification;
-        AppPopup.showWarning('Đã lưu draft', detail: 'Cần hoàn tất test không tải để kích hoạt cấu hình.');
+        AppPopup.showWarning(
+          'Đã lưu draft',
+          detail: 'Cần hoàn tất test không tải để kích hoạt cấu hình.',
+        );
         return;
       }
       await direct.runNoLoadTest(profile: profile);
-      final verified = next.copyWith(noLoadTestVerified: true, lastVerifiedAt: DateTime.now());
+      final verified = next.copyWith(
+        noLoadTestVerified: true,
+        lastVerifiedAt: DateTime.now(),
+      );
       await credentials.saveProfile(profile);
       await credentials.saveVerification(verified);
       verification = verified;
       await credentials.clearDraft();
-      await SmartChargerRepositoryFactory.setMode(SmartChargerConnectionMode.advancedDirect);
+      await SmartChargerRepositoryFactory.setMode(
+        SmartChargerConnectionMode.advancedDirect,
+      );
       mode = SmartChargerConnectionMode.advancedDirect;
       capabilities = await direct.capabilities();
       dirty = false;
@@ -241,11 +269,18 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
             'Rút sạc xe và mọi tải khỏi Shelly. App sẽ bật relay 5 giây, gửi OFF rồi đọc lại trạng thái.',
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Để sau')),
-            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('ĐÃ RÚT TẢI · CHẠY TEST')),
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Để sau'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('ĐÃ RÚT TẢI · CHẠY TEST'),
+            ),
           ],
         ),
-      ) ?? false;
+      ) ??
+      false;
 
   Future<void> _delete() async {
     if (!await _guardInactive() || !mounted) return;
@@ -253,16 +288,28 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Xóa cấu hình Shelly?'),
-        content: const Text('Cloud key và mật khẩu local sẽ bị xóa khỏi Secure Storage.'),
+        content: const Text(
+          'Cloud key và mật khẩu local sẽ bị xóa khỏi Secure Storage.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Hủy')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Xóa')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Xóa'),
+          ),
         ],
       ),
     );
     if (yes != true) return;
     await credentials.clearProfile();
-    host.clear(); cloudKey.clear(); deviceId.clear(); lan.clear(); password.clear();
+    host.clear();
+    cloudKey.clear();
+    deviceId.clear();
+    lan.clear();
+    password.clear();
     verification = SmartChargerVerificationState.unverified;
     capabilities = SmartChargerCapabilities.unavailable;
     if (mounted) setState(() {});
@@ -285,37 +332,81 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
       appBar: AppBar(
         title: const Text('Smart Charger'),
         actions: [
-          IconButton(tooltip: 'Xóa cấu hình', onPressed: busy ? null : _delete, icon: const Icon(Icons.delete_outline_rounded)),
+          IconButton(
+            tooltip: 'Xóa cấu hình',
+            onPressed: busy ? null : _delete,
+            icon: const Icon(Icons.delete_outline_rounded),
+          ),
         ],
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
         children: [
           if (busy) const LinearProgressIndicator(minHeight: 2),
-          _StatusCard(ready: ready, mode: mode, capabilities: capabilities, verification: verification),
+          _StatusCard(
+            ready: ready,
+            mode: mode,
+            capabilities: capabilities,
+            verification: verification,
+          ),
           const SizedBox(height: 20),
           SegmentedButton<SmartChargerConnectionMode>(
             segments: const [
-              ButtonSegment(value: SmartChargerConnectionMode.serverCloud, label: Text('Easy / Server'), icon: Icon(Icons.cloud_rounded)),
-              ButtonSegment(value: SmartChargerConnectionMode.advancedDirect, label: Text('Direct'), icon: Icon(Icons.router_rounded)),
+              ButtonSegment(
+                value: SmartChargerConnectionMode.serverCloud,
+                label: Text('Easy / Server'),
+                icon: Icon(Icons.cloud_rounded),
+              ),
+              ButtonSegment(
+                value: SmartChargerConnectionMode.advancedDirect,
+                label: Text('Direct'),
+                icon: Icon(Icons.router_rounded),
+              ),
             ],
             selected: {mode},
-            onSelectionChanged: busy ? null : (value) => _selectMode(value.first),
+            onSelectionChanged: busy
+                ? null
+                : (value) => _selectMode(value.first),
           ),
           const SizedBox(height: 20),
           if (mode == SmartChargerConnectionMode.serverCloud) ...[
-            Text('Easy / Server', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              'Easy / Server',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 6),
-            const Text('Easy cần Shelly Integrator license và chỉ mở điều khiển khi backend xác minh timer, status và OFF.'),
-            if (binding != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text('${binding!.displayName} · ${binding!.deviceId}')),
+            const Text(
+              'Easy cần Shelly Integrator license và chỉ mở điều khiển khi backend xác minh timer, status và OFF.',
+            ),
+            if (binding != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text('${binding!.displayName} · ${binding!.deviceId}'),
+              ),
             const SizedBox(height: 14),
-            FilledButton.icon(onPressed: busy ? null : _testEasy, icon: const Icon(Icons.fact_check_rounded), label: const Text('KIỂM TRA EASY')),
+            FilledButton.icon(
+              onPressed: busy ? null : _testEasy,
+              icon: const Icon(Icons.fact_check_rounded),
+              label: const Text('KIỂM TRA EASY'),
+            ),
           ] else ...[
-            Text('Direct Cloud + LAN', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              'Direct Cloud + LAN',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 6),
-            Text('Cloud key chỉ lưu trong Android Secure Storage và không đồng bộ lên server.', style: TextStyle(color: colors.tertiary)),
+            Text(
+              'Cloud key chỉ lưu trong Android Secure Storage và không đồng bộ lên server.',
+              style: TextStyle(color: colors.tertiary),
+            ),
             const SizedBox(height: 16),
-            TextField(controller: host, decoration: const InputDecoration(labelText: 'Shelly Cloud Server URI', hintText: 'https://shelly-xxx-eu.shelly.cloud')),
+            TextField(
+              controller: host,
+              decoration: const InputDecoration(
+                labelText: 'Shelly Cloud Server URI',
+                hintText: 'https://shelly-xxx-eu.shelly.cloud',
+              ),
+            ),
             const SizedBox(height: 12),
             TextField(
               controller: cloudKey,
@@ -324,16 +415,35 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
               enableSuggestions: false,
               decoration: InputDecoration(
                 labelText: 'Authorization Cloud Key',
-                suffixIcon: IconButton(onPressed: () => setState(() => obscure = !obscure), icon: Icon(obscure ? Icons.visibility_rounded : Icons.visibility_off_rounded)),
+                suffixIcon: IconButton(
+                  onPressed: () => setState(() => obscure = !obscure),
+                  icon: Icon(
+                    obscure
+                        ? Icons.visibility_rounded
+                        : Icons.visibility_off_rounded,
+                  ),
+                ),
               ),
             ),
             const SizedBox(height: 12),
-            TextField(controller: deviceId, decoration: const InputDecoration(labelText: 'Device ID')),
+            TextField(
+              controller: deviceId,
+              decoration: const InputDecoration(labelText: 'Device ID'),
+            ),
             const SizedBox(height: 20),
             Row(
               children: [
-                Expanded(child: Text('LAN fallback', style: Theme.of(context).textTheme.titleMedium)),
-                TextButton.icon(onPressed: busy ? null : _scan, icon: const Icon(Icons.radar_rounded), label: const Text('QUÉT')),
+                Expanded(
+                  child: Text(
+                    'LAN fallback',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: busy ? null : _scan,
+                  icon: const Icon(Icons.radar_rounded),
+                  label: const Text('QUÉT'),
+                ),
               ],
             ),
             for (final device in devices)
@@ -341,11 +451,27 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
                 contentPadding: EdgeInsets.zero,
                 title: Text(device.name ?? device.id),
                 subtitle: Text('${device.model} · ${device.address}'),
-                onTap: () { lan.text = device.address; if (deviceId.text.isEmpty) deviceId.text = device.id; },
+                onTap: () {
+                  lan.text = device.address;
+                  if (deviceId.text.isEmpty) deviceId.text = device.id;
+                },
               ),
-            TextField(controller: lan, decoration: const InputDecoration(labelText: 'IP riêng hoặc hostname .local', hintText: '192.168.1.50')),
+            TextField(
+              controller: lan,
+              decoration: const InputDecoration(
+                labelText: 'IP riêng hoặc hostname .local',
+                hintText: '192.168.1.50',
+              ),
+            ),
             const SizedBox(height: 12),
-            TextField(controller: password, obscureText: true, autocorrect: false, decoration: const InputDecoration(labelText: 'Mật khẩu local (nếu có)')),
+            TextField(
+              controller: password,
+              obscureText: true,
+              autocorrect: false,
+              decoration: const InputDecoration(
+                labelText: 'Mật khẩu local (nếu có)',
+              ),
+            ),
             const SizedBox(height: 20),
             SizedBox(
               height: 54,
@@ -364,7 +490,12 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
 }
 
 class _StatusCard extends StatelessWidget {
-  const _StatusCard({required this.ready, required this.mode, required this.capabilities, required this.verification});
+  const _StatusCard({
+    required this.ready,
+    required this.mode,
+    required this.capabilities,
+    required this.verification,
+  });
   final bool ready;
   final SmartChargerConnectionMode mode;
   final SmartChargerCapabilities capabilities;
@@ -375,21 +506,45 @@ class _StatusCard extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: colors.surfaceContainerHighest, borderRadius: BorderRadius.circular(18)),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(18),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [
-            Icon(ready ? Icons.verified_rounded : Icons.shield_outlined, color: ready ? const Color(0xFF22C55E) : colors.tertiary),
-            const SizedBox(width: 10),
-            Expanded(child: Text(ready ? 'Sẵn sàng điều khiển' : 'Chưa hoàn tất xác minh', style: const TextStyle(fontWeight: FontWeight.w800))),
-          ]),
+          Row(
+            children: [
+              Icon(
+                ready ? Icons.verified_rounded : Icons.shield_outlined,
+                color: ready ? const Color(0xFF22C55E) : colors.tertiary,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  ready ? 'Sẵn sàng điều khiển' : 'Chưa hoàn tất xác minh',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 8),
-          Text(mode == SmartChargerConnectionMode.serverCloud ? 'Easy / Server' : 'Direct Cloud + LAN'),
-          Text('Cloud ${_yes(capabilities.cloudAvailable || verification.cloudVerified)} · LAN ${_yes(capabilities.lanAvailable || verification.lanVerified)} · Power ${_yes(capabilities.canReadPower || verification.powerMeterVerified)}'),
-          Text('Safe boot ${_yes(capabilities.safeBootVerified || verification.safeBootVerified)} · No-load ${_yes(capabilities.noLoadTestVerified || verification.noLoadTestVerified)}'),
+          Text(
+            mode == SmartChargerConnectionMode.serverCloud
+                ? 'Easy / Server'
+                : 'Direct Cloud + LAN',
+          ),
+          Text(
+            'Cloud ${_yes(capabilities.cloudAvailable || verification.cloudVerified)} · LAN ${_yes(capabilities.lanAvailable || verification.lanVerified)} · Power ${_yes(capabilities.canReadPower || verification.powerMeterVerified)}',
+          ),
+          Text(
+            'Safe boot ${_yes(capabilities.safeBootVerified || verification.safeBootVerified)} · No-load ${_yes(capabilities.noLoadTestVerified || verification.noLoadTestVerified)}',
+          ),
           if (verification.lastVerifiedAt != null)
-            Text('Kiểm tra gần nhất: ${DateFormat('dd/MM/yyyy HH:mm').format(verification.lastVerifiedAt!.toLocal())}', style: Theme.of(context).textTheme.bodySmall),
+            Text(
+              'Kiểm tra gần nhất: ${DateFormat('dd/MM/yyyy HH:mm').format(verification.lastVerifiedAt!.toLocal())}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
         ],
       ),
     );

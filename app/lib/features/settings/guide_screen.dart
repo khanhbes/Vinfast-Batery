@@ -33,8 +33,11 @@ class GuideScreen extends StatelessWidget {
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: AppColors.border),
                         ),
-                        child: const Icon(Icons.arrow_back_rounded,
-                            color: AppColors.textSecondary, size: 20),
+                        child: const Icon(
+                          Icons.arrow_back_rounded,
+                          color: AppColors.textSecondary,
+                          size: 20,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -42,18 +45,22 @@ class GuideScreen extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Hướng dẫn sử dụng',
-                              style: TextStyle(
-                                color: AppColors.textPrimary,
-                                fontSize: 22,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -0.5,
-                              )),
-                          Text('Mọi thứ bạn cần biết',
-                              style: TextStyle(
-                                color: AppColors.textSecondary,
-                                fontSize: 13,
-                              )),
+                          Text(
+                            'Hướng dẫn sử dụng',
+                            style: TextStyle(
+                              color: AppColors.textPrimary,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                          Text(
+                            'Mọi thứ bạn cần biết',
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 13,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -259,23 +266,31 @@ class _GuideSectionState extends State<_GuideSection>
                         color: widget.iconColor.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Icon(widget.icon,
-                          color: widget.iconColor, size: 20),
+                      child: Icon(
+                        widget.icon,
+                        color: widget.iconColor,
+                        size: 20,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: Text(widget.title,
-                          style: const TextStyle(
-                            color: AppColors.textPrimary,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                          )),
+                      child: Text(
+                        widget.title,
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
                     AnimatedRotation(
                       turns: _expanded ? 0.5 : 0,
                       duration: const Duration(milliseconds: 200),
-                      child: const Icon(Icons.expand_more_rounded,
-                          color: AppColors.textSecondary, size: 22),
+                      child: const Icon(
+                        Icons.expand_more_rounded,
+                        color: AppColors.textSecondary,
+                        size: 22,
+                      ),
                     ),
                   ],
                 ),
@@ -305,24 +320,28 @@ class _GuideSectionState extends State<_GuideSection>
     final parts = text.split('**');
     for (int i = 0; i < parts.length; i++) {
       if (i % 2 == 1) {
-        spans.add(TextSpan(
-          text: parts[i],
-          style: const TextStyle(
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.w700,
-            fontSize: 13,
-            height: 1.6,
+        spans.add(
+          TextSpan(
+            text: parts[i],
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+              height: 1.6,
+            ),
           ),
-        ));
+        );
       } else {
-        spans.add(TextSpan(
-          text: parts[i],
-          style: const TextStyle(
-            color: AppColors.textSecondary,
-            fontSize: 13,
-            height: 1.6,
+        spans.add(
+          TextSpan(
+            text: parts[i],
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 13,
+              height: 1.6,
+            ),
           ),
-        ));
+        );
       }
     }
     return RichText(text: TextSpan(children: spans));

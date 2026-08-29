@@ -138,9 +138,7 @@ class AppTheme {
         backgroundColor: AppColorsLight.primary,
         foregroundColor: Colors.white,
         elevation: 4,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
@@ -171,18 +169,14 @@ class AppTheme {
         backgroundColor: AppColorsLight.surfaceVariant,
         selectedColor: AppColorsLight.primaryContainer,
         labelStyle: TextStyle(color: AppColorsLight.textPrimary, fontSize: 12),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         side: BorderSide(color: AppColorsLight.border),
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: AppColorsLight.textPrimary,
         contentTextStyle: TextStyle(color: Colors.white),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       dividerTheme: DividerThemeData(
         color: AppColorsLight.border,
@@ -190,9 +184,7 @@ class AppTheme {
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: AppColorsLight.card,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: AppColorsLight.card,
@@ -335,9 +327,7 @@ class AppTheme {
         backgroundColor: AppColorsDark.primaryContainer,
         foregroundColor: AppColorsDark.primary,
         elevation: 8,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
@@ -367,19 +357,18 @@ class AppTheme {
       chipTheme: ChipThemeData(
         backgroundColor: AppColorsDark.surfaceVariant,
         selectedColor: AppColorsDark.primaryContainer,
-        labelStyle: const TextStyle(color: AppColorsDark.textPrimary, fontSize: 12),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+        labelStyle: const TextStyle(
+          color: AppColorsDark.textPrimary,
+          fontSize: 12,
         ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         side: const BorderSide(color: AppColorsDark.borderLight),
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: AppColorsDark.cardElevated,
         contentTextStyle: const TextStyle(color: AppColorsDark.textPrimary),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       dividerTheme: const DividerThemeData(
         color: AppColorsDark.border,
@@ -387,9 +376,7 @@ class AppTheme {
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: AppColorsDark.card,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       ),
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: AppColorsDark.card,

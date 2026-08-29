@@ -13,11 +13,7 @@ enum NotificationType {
 }
 
 /// Trạng thái thông báo
-enum NotificationStatus {
-  unread,
-  read,
-  archived,
-}
+enum NotificationStatus { unread, read, archived }
 
 /// Model đại diện cho một thông báo trong Notification Center
 class UserNotification {
@@ -97,10 +93,7 @@ class UserNotification {
   }
 
   /// Tạo bản sao với trạng thái mới
-  UserNotification copyWith({
-    NotificationStatus? status,
-    DateTime? readAt,
-  }) {
+  UserNotification copyWith({NotificationStatus? status, DateTime? readAt}) {
     return UserNotification(
       id: id,
       userId: userId,
@@ -119,23 +112,34 @@ class UserNotification {
   /// Parse type từ string
   static NotificationType _parseType(String? value) {
     switch (value) {
-      case 'modelUpdated': return NotificationType.modelUpdated;
-      case 'modelDownloadFailed': return NotificationType.modelDownloadFailed;
-      case 'syncCompleted': return NotificationType.syncCompleted;
-      case 'syncFailed': return NotificationType.syncFailed;
-      case 'maintenanceDue': return NotificationType.maintenanceDue;
-      case 'batteryAlert': return NotificationType.batteryAlert;
-      case 'chargeReminder': return NotificationType.chargeReminder;
-      default: return NotificationType.system;
+      case 'modelUpdated':
+        return NotificationType.modelUpdated;
+      case 'modelDownloadFailed':
+        return NotificationType.modelDownloadFailed;
+      case 'syncCompleted':
+        return NotificationType.syncCompleted;
+      case 'syncFailed':
+        return NotificationType.syncFailed;
+      case 'maintenanceDue':
+        return NotificationType.maintenanceDue;
+      case 'batteryAlert':
+        return NotificationType.batteryAlert;
+      case 'chargeReminder':
+        return NotificationType.chargeReminder;
+      default:
+        return NotificationType.system;
     }
   }
 
   /// Parse status từ string
   static NotificationStatus _parseStatus(String? value) {
     switch (value) {
-      case 'read': return NotificationStatus.read;
-      case 'archived': return NotificationStatus.archived;
-      default: return NotificationStatus.unread;
+      case 'read':
+        return NotificationStatus.read;
+      case 'archived':
+        return NotificationStatus.archived;
+      default:
+        return NotificationStatus.unread;
     }
   }
 

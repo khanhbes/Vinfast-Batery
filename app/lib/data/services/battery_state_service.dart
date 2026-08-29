@@ -13,7 +13,9 @@ class BatteryStateService {
   static const Duration _timeout = Duration(seconds: 30);
 
   /// Lấy trạng thái pin hiện tại từ vehicle
-  static Future<BatteryStateModel> getCurrentBatteryState(String vehicleId) async {
+  static Future<BatteryStateModel> getCurrentBatteryState(
+    String vehicleId,
+  ) async {
     try {
       // Lấy vehicle information
       final vehicleDoc = await FirebaseFirestore.instance
@@ -63,32 +65,32 @@ class BatteryStateService {
     try {
       // Gọi API SOC prediction
       final url = Uri.parse('$_baseUrl/api/soc/predict');
-      
-      final response = await http.post(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'currentBattery': currentBattery,
-          'temperature': temperature,
-          'voltage': voltage,
-          'current': current,
-          'odometer': odometer,
-          'timeOfDay': timeOfDay,
-          'dayOfWeek': dayOfWeek,
-          'avgSpeed': avgSpeed,
-          'elevationGain': elevationGain,
-          'weatherCondition': weatherCondition,
-        }),
-      ).timeout(_timeout);
+
+      final response = await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'currentBattery': currentBattery,
+              'temperature': temperature,
+              'voltage': voltage,
+              'current': current,
+              'odometer': odometer,
+              'timeOfDay': timeOfDay,
+              'dayOfWeek': dayOfWeek,
+              'avgSpeed': avgSpeed,
+              'elevationGain': elevationGain,
+              'weatherCondition': weatherCondition,
+            }),
+          )
+          .timeout(_timeout);
 
       if (response.statusCode != 200) {
         throw Exception('SOC API call failed: ${response.statusCode}');
       }
 
       final data = jsonDecode(response.body);
-      
+
       if (!data['success']) {
         throw Exception('SOC API returned error: ${data['error']}');
       }
@@ -96,7 +98,7 @@ class BatteryStateService {
       return data['data'];
     } catch (e) {
       print('SOC prediction failed: $e');
-      
+
       // Fallback prediction
       return _generateFallbackSOCPrediction(
         currentBattery: currentBattery,
@@ -165,10 +167,10 @@ class BatteryStateService {
           .collection('Vehicles')
           .doc(vehicleId)
           .update({
-        'currentBattery': percentage.round(),
-        'lastBatteryPercent': percentage.round(),
-        'lastUpdated': FieldValue.serverTimestamp(),
-      });
+            'currentBattery': percentage.round(),
+            'lastBatteryPercent': percentage.round(),
+            'lastUpdated': FieldValue.serverTimestamp(),
+          });
 
       print('Battery state updated for vehicle: $vehicleId');
     } catch (e) {
@@ -180,17 +182,27 @@ class BatteryStateService {
   static Future<Map<String, dynamic>> getBatteryStats(String vehicleId) async {
     try {
       final history = await getBatteryHistory(vehicleId: vehicleId, limit: 100);
-      
+
       if (history.isEmpty) {
         return {};
       }
 
       final currentSOC = history.first.percentage;
-      final avgSOC = history.fold<double>(0, (sum, state) => sum + state.percentage) / history.length;
-      final minSOC = history.map((s) => s.percentage).reduce((a, b) => a < b ? a : b);
-      final maxSOC = history.map((s) => s.percentage).reduce((a, b) => a > b ? a : b);
-      final avgTemp = history.fold<double>(0, (sum, state) => sum + state.temp) / history.length;
-      final avgSOH = history.fold<double>(0, (sum, state) => sum + state.soh) / history.length;
+      final avgSOC =
+          history.fold<double>(0, (sum, state) => sum + state.percentage) /
+          history.length;
+      final minSOC = history
+          .map((s) => s.percentage)
+          .reduce((a, b) => a < b ? a : b);
+      final maxSOC = history
+          .map((s) => s.percentage)
+          .reduce((a, b) => a > b ? a : b);
+      final avgTemp =
+          history.fold<double>(0, (sum, state) => sum + state.temp) /
+          history.length;
+      final avgSOH =
+          history.fold<double>(0, (sum, state) => sum + state.soh) /
+          history.length;
 
       // Tính xu hướng tiêu hao
       final consumptionTrend = _calculateConsumptionTrend(history);
@@ -216,17 +228,17 @@ class BatteryStateService {
   static Future<void> syncWithWebDashboard(String vehicleId) async {
     try {
       final batteryState = await getCurrentBatteryState(vehicleId);
-      
+
       final url = Uri.parse('$_baseUrl/api/web/sync/battery-state');
-      
-      await http.post(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode(batteryState.toFirestore()),
-      ).timeout(_timeout);
-      
+
+      await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(batteryState.toFirestore()),
+          )
+          .timeout(_timeout);
+
       print('Battery state synced to web dashboard: $vehicleId');
     } catch (e) {
       print('Failed to sync battery state to web dashboard: $e');
@@ -234,7 +246,9 @@ class BatteryStateService {
   }
 
   /// Lưu battery state vào Firestore
-  static Future<void> _saveBatteryStateToFirestore(BatteryStateModel batteryState) async {
+  static Future<void> _saveBatteryStateToFirestore(
+    BatteryStateModel batteryState,
+  ) async {
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) {
@@ -247,7 +261,9 @@ class BatteryStateService {
       };
       await FirebaseFirestore.instance
           .collection('battery_states')
-          .doc('${batteryState.vehicleId}_${batteryState.timestamp.millisecondsSinceEpoch}')
+          .doc(
+            '${batteryState.vehicleId}_${batteryState.timestamp.millisecondsSinceEpoch}',
+          )
           .set(payload);
     } catch (e) {
       print('Failed to save battery state to Firestore: $e');
@@ -295,7 +311,10 @@ class BatteryStateService {
   }
 
   /// Tính estimated range
-  static Future<double> _calculateEstimatedRange(String vehicleId, double currentBattery) async {
+  static Future<double> _calculateEstimatedRange(
+    String vehicleId,
+    double currentBattery,
+  ) async {
     try {
       final vehicleDoc = await FirebaseFirestore.instance
           .collection('Vehicles')
@@ -313,7 +332,9 @@ class BatteryStateService {
   }
 
   /// Tính xu hướng tiêu hao
-  static Map<String, dynamic> _calculateConsumptionTrend(List<BatteryStateModel> history) {
+  static Map<String, dynamic> _calculateConsumptionTrend(
+    List<BatteryStateModel> history,
+  ) {
     if (history.length < 2) {
       return {'trend': 'stable', 'rate': 0.0};
     }
@@ -325,8 +346,12 @@ class BatteryStateService {
       return {'trend': 'stable', 'rate': 0.0};
     }
 
-    final recentAvg = recent.fold<double>(0, (sum, state) => sum + state.percentage) / recent.length;
-    final olderAvg = older.fold<double>(0, (sum, state) => sum + state.percentage) / older.length;
+    final recentAvg =
+        recent.fold<double>(0, (sum, state) => sum + state.percentage) /
+        recent.length;
+    final olderAvg =
+        older.fold<double>(0, (sum, state) => sum + state.percentage) /
+        older.length;
 
     final rate = recentAvg - olderAvg;
 
@@ -356,22 +381,22 @@ class BatteryStateService {
     for (int i = 0; i < 24; i++) {
       // Base consumption rate
       double consumptionRate = 0.5;
-      
+
       // Adjust for speed
       consumptionRate += (avgSpeed / 100) * 0.3;
-      
+
       // Adjust for temperature
       if (temperature > 35) {
         consumptionRate += 0.2;
       } else if (temperature < 10) {
         consumptionRate += 0.3;
       }
-      
+
       // Adjust for weather
       if (weatherCondition.toLowerCase().contains('rain')) {
         consumptionRate += 0.3;
       }
-      
+
       soc = (soc - consumptionRate).clamp(0.0, 100.0);
       timeSeries.add(soc);
     }
@@ -388,23 +413,26 @@ class BatteryStateService {
   }
 
   /// Generate recommendations
-  static List<String> _generateRecommendations(double currentBattery, double temperature) {
+  static List<String> _generateRecommendations(
+    double currentBattery,
+    double temperature,
+  ) {
     final recommendations = <String>[];
-    
+
     if (currentBattery < 20) {
       recommendations.add('Pin yếu, nên sạc sớm');
     }
-    
+
     if (temperature > 35) {
       recommendations.add('Nhiệt độ cao, nên đỗ xe trong bóng mát');
     } else if (temperature < 10) {
       recommendations.add('Nhiệt độ thấp, hiệu suất pin giảm');
     }
-    
+
     if (currentBattery > 80) {
       recommendations.add('Pin đầy, có thể sử dụng cho các chuyến đi dài');
     }
-    
+
     return recommendations;
   }
 
@@ -431,19 +459,21 @@ class BatteryStateService {
   }) async {
     try {
       final url = Uri.parse('$_baseUrl/api/ai/charge-feedback');
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'vehicleId': vehicleId,
-          'predictionId': predictionId,
-          'predictedDurationMinutes': predictedDurationMinutes,
-          'actualSOC': actualSOC,
-          'targetSOC': targetSOC,
-          'chargingMode': chargingMode,
-          'timestamp': DateTime.now().toIso8601String(),
-        }),
-      ).timeout(_timeout);
+      final response = await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'vehicleId': vehicleId,
+              'predictionId': predictionId,
+              'predictedDurationMinutes': predictedDurationMinutes,
+              'actualSOC': actualSOC,
+              'targetSOC': targetSOC,
+              'chargingMode': chargingMode,
+              'timestamp': DateTime.now().toIso8601String(),
+            }),
+          )
+          .timeout(_timeout);
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body);

@@ -23,7 +23,8 @@ class GradientCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = gradientColors ??
+    final colors =
+        gradientColors ??
         [
           AppColors.primary.withValues(alpha: 0.15),
           AppColors.info.withValues(alpha: 0.05),
@@ -39,9 +40,7 @@ class GradientCard extends StatelessWidget {
             end: Alignment.bottomRight,
             colors: colors,
           ),
-          border: Border.all(
-            color: AppColors.glassBorder,
-          ),
+          border: Border.all(color: AppColors.glassBorder),
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(borderRadius),

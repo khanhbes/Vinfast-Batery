@@ -55,17 +55,23 @@ class AiPredictionData {
   Map<String, dynamic> toMap() {
     return {
       if (requestedAt != null) 'requestedAt': Timestamp.fromDate(requestedAt!),
-      if (startBatteryPercent != null) 'startBatteryPercent': startBatteryPercent,
-      if (targetBatteryPercent != null) 'targetBatteryPercent': targetBatteryPercent,
-      if (predictedDurationSec != null) 'predictedDurationSec': predictedDurationSec,
-      if (predictedStopAt != null) 'predictedStopAt': Timestamp.fromDate(predictedStopAt!),
+      if (startBatteryPercent != null)
+        'startBatteryPercent': startBatteryPercent,
+      if (targetBatteryPercent != null)
+        'targetBatteryPercent': targetBatteryPercent,
+      if (predictedDurationSec != null)
+        'predictedDurationSec': predictedDurationSec,
+      if (predictedStopAt != null)
+        'predictedStopAt': Timestamp.fromDate(predictedStopAt!),
       if (modelSource != null) 'modelSource': modelSource,
       if (modelVersion != null) 'modelVersion': modelVersion,
       if (isBeta != null) 'isBeta': isBeta,
-      if (actualStopBatteryPercent != null) 'actualStopBatteryPercent': actualStopBatteryPercent,
+      if (actualStopBatteryPercent != null)
+        'actualStopBatteryPercent': actualStopBatteryPercent,
       if (actualDurationSec != null) 'actualDurationSec': actualDurationSec,
       if (predictionErrorSec != null) 'predictionErrorSec': predictionErrorSec,
-      if (eligibleForTraining != null) 'eligibleForTraining': eligibleForTraining,
+      if (eligibleForTraining != null)
+        'eligibleForTraining': eligibleForTraining,
     };
   }
 
@@ -73,7 +79,8 @@ class AiPredictionData {
   Map<String, dynamic> toJson() => toMap();
 
   /// Create from JSON map (from SharedPreferences)
-  factory AiPredictionData.fromJson(Map<String, dynamic> json) => AiPredictionData.fromMap(json);
+  factory AiPredictionData.fromJson(Map<String, dynamic> json) =>
+      AiPredictionData.fromMap(json);
 
   /// Format duration as hours/minutes string
   String get formattedDuration {
@@ -88,14 +95,19 @@ class AiPredictionData {
 
   /// Calculate prediction error after session ends
   AiPredictionData copyWithActual(int actualBattery, DateTime actualEndTime) {
-    final actualDuration = actualEndTime.difference(requestedAt ?? actualEndTime).inSeconds.toDouble();
+    final actualDuration = actualEndTime
+        .difference(requestedAt ?? actualEndTime)
+        .inSeconds
+        .toDouble();
     final predictedDuration = predictedDurationSec ?? 0;
     final error = actualDuration - predictedDuration;
-    
+
     // Determine if eligible for training
-    final eligible = actualBattery > (startBatteryPercent ?? 0) && // Pin phải tăng
-                    actualDuration > 60 && // Thời gian > 1 phút
-                    (targetBatteryPercent != null && actualBattery >= targetBatteryPercent! - 5); // Gần đạt target
+    final eligible =
+        actualBattery > (startBatteryPercent ?? 0) && // Pin phải tăng
+        actualDuration > 60 && // Thời gian > 1 phút
+        (targetBatteryPercent != null &&
+            actualBattery >= targetBatteryPercent! - 5); // Gần đạt target
 
     return AiPredictionData(
       requestedAt: requestedAt,
@@ -196,8 +208,8 @@ class ChargeLogModel {
       estimatedCompleteAt: data['estimatedCompleteAt'] is DateTime
           ? data['estimatedCompleteAt']
           : data['estimatedCompleteAt'] != null
-              ? DateTime.parse(data['estimatedCompleteAt'])
-              : null,
+          ? DateTime.parse(data['estimatedCompleteAt'])
+          : null,
       aiPrediction: AiPredictionData.fromMap(data['aiPrediction']),
     );
   }

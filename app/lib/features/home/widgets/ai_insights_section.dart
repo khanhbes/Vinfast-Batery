@@ -72,14 +72,16 @@ class AiInsightsSection extends StatelessWidget {
           iconColor: AppColors.error,
           title: 'Dự đoán độ chai pin',
           subtitle: 'AI DEGRADATION',
-          conclusion: 'Dự đoán mức độ chai pin trong 6 tháng tới dựa trên lịch sử sạc và sử dụng.',
+          conclusion:
+              'Dự đoán mức độ chai pin trong 6 tháng tới dựa trên lịch sử sạc và sử dụng.',
           trendLabel: 'Đang phát triển',
           trendColor: AppColors.warning,
           trendIcon: Icons.construction_rounded,
           onTap: (ctx) => UnderDevelopmentNotice.showDialog(
             ctx,
             featureName: 'AI Dự đoán độ chai pin',
-            description: 'Tính năng sử dụng AI để phân tích lịch sử sạc và dự đoán mức độ chai pin trong 6 tháng tới. Đang trong quá trình phát triển và huấn luyện mô hình.',
+            description:
+                'Tính năng sử dụng AI để phân tích lịch sử sạc và dự đoán mức độ chai pin trong 6 tháng tới. Đang trong quá trình phát triển và huấn luyện mô hình.',
           ),
         ),
 
@@ -92,14 +94,16 @@ class AiInsightsSection extends StatelessWidget {
           iconColor: AppColors.info,
           title: 'Dự đoán hao hụt theo quãng đường',
           subtitle: 'AI RANGE PREDICTION',
-          conclusion: 'Ước lượng pin tiêu hao cho mỗi tuyến đường dựa trên thói quen lái xe thực tế.',
+          conclusion:
+              'Ước lượng pin tiêu hao cho mỗi tuyến đường dựa trên thói quen lái xe thực tế.',
           trendLabel: 'Đang phát triển',
           trendColor: AppColors.warning,
           trendIcon: Icons.construction_rounded,
           onTap: (ctx) => UnderDevelopmentNotice.showDialog(
             ctx,
             featureName: 'AI Dự đoán hao hụt pin',
-            description: 'Tính năng dự đoán mức tiêu hao pin dựa trên quãng đường, tải trọng, và điều kiện thời tiết. AI sẽ học từ lịch sử chuyến đi của bạn.',
+            description:
+                'Tính năng dự đoán mức tiêu hao pin dựa trên quãng đường, tải trọng, và điều kiện thời tiết. AI sẽ học từ lịch sử chuyến đi của bạn.',
           ),
         ),
 
@@ -112,14 +116,16 @@ class AiInsightsSection extends StatelessWidget {
           iconColor: AppColors.success,
           title: 'Phân tích thói quen sử dụng',
           subtitle: 'AI USAGE HABITS',
-          conclusion: 'Phân tích và đưa ra gợi ý tối ưu thói quen sạc, lái xe để kéo dài tuổi thọ pin.',
+          conclusion:
+              'Phân tích và đưa ra gợi ý tối ưu thói quen sạc, lái xe để kéo dài tuổi thọ pin.',
           trendLabel: 'Đang phát triển',
           trendColor: AppColors.warning,
           trendIcon: Icons.construction_rounded,
           onTap: (ctx) => UnderDevelopmentNotice.showDialog(
             ctx,
             featureName: 'AI Thói quen sử dụng',
-            description: 'Tính năng phân tích thói quen sạc và lái xe hàng ngày, đưa ra gợi ý cá nhân hóa để bảo vệ pin và tiết kiệm năng lượng.',
+            description:
+                'Tính năng phân tích thói quen sạc và lái xe hàng ngày, đưa ra gợi ý cá nhân hóa để bảo vệ pin và tiết kiệm năng lượng.',
           ),
         ),
       ],
@@ -156,130 +162,133 @@ class _AiFeatureCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => onTap(context),
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.glassBorder),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+          onTap: () => onTap(context),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppColors.glassBorder),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: iconColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Icon(icon, color: iconColor, size: 22),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          color: iconColor,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.5,
-                        ),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: iconColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(14),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          color: AppColors.textPrimary,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                        ),
+                      child: Icon(icon, color: iconColor, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            subtitle,
+                            style: TextStyle(
+                              color: iconColor,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.5,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            title,
+                            style: const TextStyle(
+                              color: AppColors.textPrimary,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: trendColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(trendIcon, size: 12, color: trendColor),
+                          const SizedBox(width: 4),
+                          Text(
+                            trendLabel,
+                            style: TextStyle(
+                              color: trendColor,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  '"$conclusion"',
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    fontStyle: FontStyle.italic,
+                    height: 1.5,
                   ),
                 ),
+                const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
+                    horizontal: 12,
+                    vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: trendColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
+                    color: AppColors.glass,
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
+                  child: const Row(
                     children: [
-                      Icon(trendIcon, size: 12, color: trendColor),
-                      const SizedBox(width: 4),
-                      Text(
-                        trendLabel,
-                        style: TextStyle(
-                          color: trendColor,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
+                      Icon(
+                        Icons.info_outline_rounded,
+                        color: AppColors.textHint,
+                        size: 14,
+                      ),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Nhấn để xem chi tiết tính năng',
+                          style: TextStyle(
+                            color: AppColors.textHint,
+                            fontSize: 11,
+                            fontStyle: FontStyle.italic,
+                          ),
                         ),
+                      ),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        color: AppColors.textHint,
+                        size: 16,
                       ),
                     ],
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            Text(
-              '"$conclusion"',
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                fontStyle: FontStyle.italic,
-                height: 1.5,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 8,
-              ),
-              decoration: BoxDecoration(
-                color: AppColors.glass,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Row(
-                children: [
-                  Icon(
-                    Icons.info_outline_rounded,
-                    color: AppColors.textHint,
-                    size: 14,
-                  ),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Nhấn để xem chi tiết tính năng',
-                      style: TextStyle(
-                        color: AppColors.textHint,
-                        fontSize: 11,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ),
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    color: AppColors.textHint,
-                    size: 16,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    ).animate().fadeIn(delay: Duration(milliseconds: 100 * index)).slideY(begin: 0.1);
+          ),
+        )
+        .animate()
+        .fadeIn(delay: Duration(milliseconds: 100 * index))
+        .slideY(begin: 0.1);
   }
 }

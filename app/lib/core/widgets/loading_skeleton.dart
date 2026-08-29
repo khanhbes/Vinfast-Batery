@@ -240,9 +240,4 @@ class LoadingSkeleton extends StatelessWidget {
   }
 }
 
-enum SkeletonLayout {
-  card,
-  list,
-  stats,
-  gauge,
-}
+enum SkeletonLayout { card, list, stats, gauge }

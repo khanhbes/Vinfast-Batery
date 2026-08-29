@@ -10,7 +10,7 @@ class TripLogRepository {
   final FirebaseFirestore _firestore;
 
   TripLogRepository({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
   CollectionReference get _tripLogsRef => _firestore.collection('TripLogs');
   CollectionReference get _vehiclesRef => _firestore.collection('Vehicles');
@@ -30,7 +30,10 @@ class TripLogRepository {
   }
 
   /// Lấy N chuyến đi gần nhất (dùng cho tính SoH) — index-safe
-  Future<List<TripLogModel>> getRecentTrips(String vehicleId, {int count = 10}) async {
+  Future<List<TripLogModel>> getRecentTrips(
+    String vehicleId, {
+    int count = 10,
+  }) async {
     final docs = await FirestoreSafeQuery.orderedQuery(
       collection: _tripLogsRef,
       whereField: 'vehicleId',

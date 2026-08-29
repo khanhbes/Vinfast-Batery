@@ -79,7 +79,8 @@ class UnderDevelopmentNotice extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  description ?? 'Tính năng này đang được phát triển và sẽ sớm ra mắt trong phiên bản tiếp theo.',
+                  description ??
+                      'Tính năng này đang được phát triển và sẽ sớm ra mắt trong phiên bản tiếp theo.',
                   style: const TextStyle(
                     color: AppColors.textTertiary,
                     fontSize: 14,
@@ -126,9 +127,7 @@ class UnderDevelopmentNotice extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.warningBg,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: AppColors.warning.withValues(alpha: 0.3),
-        ),
+        border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [

@@ -8,7 +8,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 /// ========================================================================
 /// SOC PREDICTION SERVICE - Tích hợp mô hình AI ev_soc_pipeline.pkl
 /// ========================================================================
-/// 
+///
 /// Service này chịu trách nhiệm:
 /// 1. Load mô hình AI từ assets
 /// 2. Dự đoán State of Charge (SOC) dựa trên dữ liệu xe
@@ -91,7 +91,9 @@ class SOCPredictionResult {
     return SOCPredictionResult(
       predictedSOC: (json['predictedSOC'] as num).toDouble(),
       confidence: (json['confidence'] as num).toDouble(),
-      timeSeries: (json['timeSeries'] as List).map((e) => (e as num).toDouble()).toList(),
+      timeSeries: (json['timeSeries'] as List)
+          .map((e) => (e as num).toDouble())
+          .toList(),
       batteryHealth: (json['batteryHealth'] as num).toDouble(),
       recommendations: List<String>.from(json['recommendations']),
       timestamp: DateTime.parse(json['timestamp']),
@@ -114,12 +116,12 @@ class SOCPredictionService {
       // Copy model từ assets đến thư mục temporary
       final byteData = await rootBundle.load(_modelPath);
       final buffer = byteData.buffer;
-      
+
       final directory = await getTemporaryDirectory();
       _modelFile = File('${directory.path}/ev_soc_pipeline.pkl');
-      
+
       await _modelFile?.writeAsBytes(
-        buffer.asUint8List(byteData.offsetInBytes, byteData.lengthInBytes)
+        buffer.asUint8List(byteData.offsetInBytes, byteData.lengthInBytes),
       );
 
       _isModelLoaded = true;
@@ -140,12 +142,12 @@ class SOCPredictionService {
       // TODO: Implement actual model inference
       // Hiện tại đang simulate kết quả
       // Trong thực tế sẽ gọi Python model qua FFI hoặc HTTP endpoint
-      
+
       final result = await _simulateModelInference(input);
-      
+
       // Lưu kết quả vào Firestore
       await _savePredictionResult(input, result);
-      
+
       return result;
     } catch (e) {
       print('❌ Error predicting SOC: $e');
@@ -154,17 +156,20 @@ class SOCPredictionService {
   }
 
   /// Simulate model inference (placeholder cho Python model)
-  Future<SOCPredictionResult> _simulateModelInference(SOCPredictionInput input) async {
+  Future<SOCPredictionResult> _simulateModelInference(
+    SOCPredictionInput input,
+  ) async {
     // Simulate processing time
     await Future.delayed(Duration(milliseconds: 500));
 
     // Generate time series prediction (24 hours)
     final List<double> timeSeries = [];
     double currentSOC = input.currentBattery;
-    
+
     for (int i = 0; i < 24; i++) {
       // Simulate SOC degradation/consumption
-      double consumption = 0.5 + (input.avgSpeed / 100) + (input.temperature / 100);
+      double consumption =
+          0.5 + (input.avgSpeed / 100) + (input.temperature / 100);
       currentSOC = (currentSOC - consumption).clamp(0.0, 100.0);
       timeSeries.add(currentSOC);
     }
@@ -193,7 +198,8 @@ class SOCPredictionService {
 
     return SOCPredictionResult(
       predictedSOC: timeSeries.last,
-      confidence: 85.0 + (batteryHealth / 20), // Higher confidence with better health
+      confidence:
+          85.0 + (batteryHealth / 20), // Higher confidence with better health
       timeSeries: timeSeries,
       batteryHealth: batteryHealth,
       recommendations: recommendations,
@@ -203,7 +209,10 @@ class SOCPredictionService {
   }
 
   /// Lưu kết quả dự đoán vào Firestore
-  Future<void> _savePredictionResult(SOCPredictionInput input, SOCPredictionResult result) async {
+  Future<void> _savePredictionResult(
+    SOCPredictionInput input,
+    SOCPredictionResult result,
+  ) async {
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) {
@@ -211,7 +220,7 @@ class SOCPredictionService {
         return;
       }
       final firestore = FirebaseFirestore.instance;
-      
+
       // Lưu vào collection soc_predictions
       await firestore.collection('soc_predictions').add({
         'ownerUid': uid,
@@ -228,7 +237,10 @@ class SOCPredictionService {
   }
 
   /// Lấy lịch sử dự đoán SOC
-  Future<List<SOCPredictionResult>> getPredictionHistory(String vehicleId, {int limit = 10}) async {
+  Future<List<SOCPredictionResult>> getPredictionHistory(
+    String vehicleId, {
+    int limit = 10,
+  }) async {
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       final firestore = FirebaseFirestore.instance;

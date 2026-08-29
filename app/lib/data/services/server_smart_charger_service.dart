@@ -8,6 +8,8 @@ import '../models/smart_charger_binding.dart';
 import '../models/smart_charger_capabilities.dart';
 import '../models/smart_charger_status.dart';
 import '../models/smart_charging_session.dart';
+import '../models/personal_charging_profile.dart';
+import '../models/smart_charge_history.dart';
 import '../models/shelly_connection.dart';
 import 'smart_charger_service.dart';
 
@@ -151,6 +153,15 @@ class ServerSmartChargerService {
       fallbackReason: data['fallbackReason']?.toString(),
       analyzedAt: DateTime.tryParse(data['analyzedAt']?.toString() ?? ''),
       aiChargeEligible: data['aiChargeEligible'] == true,
+      etaCandidates: ((data['etaCandidates'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((item) => EtaCandidate.fromJson(Map<String, dynamic>.from(item)))
+          .toList(),
+      fusionReason: data['fusionReason']?.toString() ?? 'global_ai_only',
+      profileVersion: data['profileVersion']?.toString(),
+      adapterVersion: data['adapterVersion']?.toString(),
+      capacityConfidence: (data['capacityConfidence'] as num?)?.toDouble(),
+      efficiencyConfidence: (data['efficiencyConfidence'] as num?)?.toDouble(),
     );
   }
 
@@ -219,6 +230,74 @@ class ServerSmartChargerService {
         'currentSoc': currentSoc,
       },
       headers: {'Idempotency-Key': idempotencyKey},
+    ),
+  );
+
+  Future<PersonalChargingProfile> getPersonalProfile(String vehicleId) async =>
+      PersonalChargingProfile.fromJson(
+        await _request(
+          'GET',
+          '/api/smart-charging/personal-profile/$vehicleId',
+        ),
+      );
+
+  Future<PersonalChargingProfile> setPersonalAiConsent(
+    String vehicleId,
+    bool enabled,
+  ) async => PersonalChargingProfile.fromJson(
+    await _request(
+      'PUT',
+      '/api/smart-charging/personal-profile/$vehicleId',
+      body: {'consentEnabled': enabled},
+    ),
+  );
+
+  Future<void> deletePersonalProfile(String vehicleId) async =>
+      _request('DELETE', '/api/smart-charging/personal-profile/$vehicleId');
+
+  Future<List<SmartChargeTelemetryPoint>> telemetry(String sessionId) async {
+    final data = await _request(
+      'GET',
+      '/api/smart-charging/sessions/$sessionId/telemetry',
+    );
+    return ((data['items'] as List?) ?? const [])
+        .whereType<Map>()
+        .map(
+          (item) => SmartChargeTelemetryPoint.fromJson(
+            Map<String, dynamic>.from(item),
+          ),
+        )
+        .toList();
+  }
+
+  Future<void> recordTelemetry(
+    String sessionId,
+    SmartChargerStatus status,
+  ) async {
+    await _request(
+      'POST',
+      '/api/smart-charging/sessions/$sessionId/telemetry',
+      body: {
+        'powerW': status.powerW,
+        'voltageV': status.voltageV,
+        'currentA': status.currentA,
+        'temperatureC': status.temperatureC,
+        'energyWh': status.energyWh,
+        'relay': status.relay,
+        'timerRemainingSeconds': status.timerRemaining?.inSeconds,
+        'transport': status.transport?.name,
+      },
+    );
+  }
+
+  Future<SmartChargingSession> confirmActualSoc(
+    String sessionId,
+    double soc,
+  ) async => SmartChargingSession.fromJson(
+    await _request(
+      'PATCH',
+      '/api/smart-charging/sessions/$sessionId/actual-soc',
+      body: {'actualSoc': soc},
     ),
   );
 }

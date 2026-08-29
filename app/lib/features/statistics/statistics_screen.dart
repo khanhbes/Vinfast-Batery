@@ -43,176 +43,174 @@ class StatisticsScreen extends ConsumerWidget {
               parent: BouncingScrollPhysics(),
             ),
             slivers: [
-            // ── Header ──
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: AppColors.info.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(12),
+              // ── Header ──
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.info.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.analytics_rounded,
+                          color: AppColors.info,
+                          size: 22,
+                        ),
                       ),
-                      child: const Icon(Icons.analytics_rounded,
-                          color: AppColors.info, size: 22),
-                    ),
-                    const SizedBox(width: 12),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Thống kê',
-                            style: TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 22,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: -0.5,
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Thống kê',
+                              style: TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: 22,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -0.5,
+                              ),
                             ),
-                          ),
-                          Text(
-                            'Phân tích chu kỳ sạc & tiêu thụ',
-                            style: TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 13,
+                            Text(
+                              'Phân tích chu kỳ sạc & tiêu thụ',
+                              style: TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 13,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              ).animate().fadeIn(duration: 400.ms),
-            ),
+                    ],
+                  ),
+                ).animate().fadeIn(duration: 400.ms),
+              ),
 
-            // ── Summary Cards ──
-            SliverToBoxAdapter(
-              child: statsAsync.when(
-                data: (stats) => _buildSummaryCards(stats),
-                loading: () => const Padding(
-                  padding: EdgeInsets.all(20),
-                  child: LoadingSkeleton(layout: SkeletonLayout.stats),
+              // ── Summary Cards ──
+              SliverToBoxAdapter(
+                child: statsAsync.when(
+                  data: (stats) => _buildSummaryCards(stats),
+                  loading: () => const Padding(
+                    padding: EdgeInsets.all(20),
+                    child: LoadingSkeleton(layout: SkeletonLayout.stats),
+                  ),
+                  error: (e, _) => ErrorState.fromError(
+                    error: e,
+                    prefix: 'Không tải được thống kê',
+                    onRetry: () {
+                      ref.invalidate(vehicleStatsProvider(vehicleId));
+                    },
+                  ),
                 ),
-                error: (e, _) => ErrorState.fromError(
-                  error: e,
-                  prefix: 'Không tải được thống kê',
-                  onRetry: () {
-                    ref.invalidate(vehicleStatsProvider(vehicleId));
+              ),
+
+              // ── Empty state khi chưa có dữ liệu ──
+              SliverToBoxAdapter(
+                child: logsAsync.when(
+                  data: (logs) {
+                    if (logs.isEmpty) {
+                      return const EmptyState(
+                        icon: Icons.analytics_rounded,
+                        title: 'Chưa có dữ liệu thống kê',
+                        message:
+                            'Hãy nhập ít nhất 2 lần sạc để xem biểu đồ phân tích',
+                      );
+                    }
+                    return const SizedBox.shrink();
                   },
+                  loading: () => const SizedBox.shrink(),
+                  error: (e, _) => ErrorState.fromError(
+                    error: e,
+                    prefix: 'Không tải được nhật ký sạc',
+                    onRetry: () {
+                      ref.invalidate(chargeLogsProvider(vehicleId));
+                    },
+                  ),
                 ),
               ),
-            ),
 
-            // ── Empty state khi chưa có dữ liệu ──
-            SliverToBoxAdapter(
-              child: logsAsync.when(
-                data: (logs) {
-                  if (logs.isEmpty) {
-                    return const EmptyState(
-                      icon: Icons.analytics_rounded,
-                      title: 'Chưa có dữ liệu thống kê',
-                      message: 'Hãy nhập ít nhất 2 lần sạc để xem biểu đồ phân tích',
-                    );
-                  }
-                  return const SizedBox.shrink();
-                },
-                loading: () => const SizedBox.shrink(),
-                error: (e, _) => ErrorState.fromError(
-                  error: e,
-                  prefix: 'Không tải được nhật ký sạc',
-                  onRetry: () {
-                    ref.invalidate(chargeLogsProvider(vehicleId));
-                  },
+              // ── Charge Trend Chart ──
+              SliverToBoxAdapter(
+                child: logsAsync.when(
+                  data: (logs) => _buildChargeTrendChart(logs),
+                  loading: () => const Padding(
+                    padding: EdgeInsets.all(20),
+                    child: LoadingSkeleton(layout: SkeletonLayout.card),
+                  ),
+                  error: (_, _) => const SizedBox.shrink(),
                 ),
               ),
-            ),
 
-            // ── Charge Trend Chart ──
-            SliverToBoxAdapter(
-              child: logsAsync.when(
-                data: (logs) => _buildChargeTrendChart(logs),
-                loading: () => const Padding(
-                  padding: EdgeInsets.all(20),
-                  child: LoadingSkeleton(layout: SkeletonLayout.card),
+              // ── Battery Health Indicator ──
+              SliverToBoxAdapter(
+                child: logsAsync.when(
+                  data: (logs) => _buildBatteryHealthCard(logs),
+                  loading: () => const Padding(
+                    padding: EdgeInsets.all(20),
+                    child: LoadingSkeleton(layout: SkeletonLayout.card),
+                  ),
+                  error: (_, _) => const SizedBox.shrink(),
                 ),
-                error: (_, _) => const SizedBox.shrink(),
               ),
-            ),
 
-            // ── Battery Health Indicator ──
-            SliverToBoxAdapter(
-              child: logsAsync.when(
-                data: (logs) => _buildBatteryHealthCard(logs),
-                loading: () => const Padding(
-                  padding: EdgeInsets.all(20),
-                  child: LoadingSkeleton(layout: SkeletonLayout.card),
+              // ── AI Prediction ──
+              SliverToBoxAdapter(
+                child: logsAsync.when(
+                  data: (logs) =>
+                      _AiCapacityDetailPanel(vehicleId: vehicleId, logs: logs),
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, _) => const SizedBox.shrink(),
                 ),
-                error: (_, _) => const SizedBox.shrink(),
               ),
-            ),
 
-            // ── AI Prediction ──
-            SliverToBoxAdapter(
-              child: logsAsync.when(
-                data: (logs) => _AiCapacityDetailPanel(
-                  vehicleId: vehicleId,
-                  logs: logs,
+              // ── AI Degradation Prediction ──
+              SliverToBoxAdapter(
+                child: logsAsync.when(
+                  data: (logs) =>
+                      _AiPredictionWidget(vehicleId: vehicleId, logs: logs),
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, _) => const SizedBox.shrink(),
                 ),
-                loading: () => const SizedBox.shrink(),
-                error: (_, _) => const SizedBox.shrink(),
               ),
-            ),
 
-            // ── AI Degradation Prediction ──
-            SliverToBoxAdapter(
-              child: logsAsync.when(
-                data: (logs) => _AiPredictionWidget(
-                  vehicleId: vehicleId,
-                  logs: logs,
+              // ── AI Charging Pattern Analysis ──
+              SliverToBoxAdapter(
+                child: logsAsync.when(
+                  data: (logs) =>
+                      _AiPatternWidget(vehicleId: vehicleId, logs: logs),
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, _) => const SizedBox.shrink(),
                 ),
-                loading: () => const SizedBox.shrink(),
-                error: (_, _) => const SizedBox.shrink(),
               ),
-            ),
 
-            // ── AI Charging Pattern Analysis ──
-            SliverToBoxAdapter(
-              child: logsAsync.when(
-                data: (logs) => _AiPatternWidget(
-                  vehicleId: vehicleId,
-                  logs: logs,
+              // ── Consumption Analysis ──
+              SliverToBoxAdapter(
+                child: logsAsync.when(
+                  data: (logs) => _buildConsumptionChart(logs),
+                  loading: () => const Padding(
+                    padding: EdgeInsets.all(20),
+                    child: LoadingSkeleton(layout: SkeletonLayout.card),
+                  ),
+                  error: (_, _) => const SizedBox.shrink(),
                 ),
-                loading: () => const SizedBox.shrink(),
-                error: (_, _) => const SizedBox.shrink(),
               ),
-            ),
 
-            // ── Consumption Analysis ──
-            SliverToBoxAdapter(
-              child: logsAsync.when(
-                data: (logs) => _buildConsumptionChart(logs),
-                loading: () => const Padding(
-                  padding: EdgeInsets.all(20),
-                  child: LoadingSkeleton(layout: SkeletonLayout.card),
+              // ── Charging Pattern ──
+              SliverToBoxAdapter(
+                child: logsAsync.when(
+                  data: (logs) => _buildChargingPatternCard(logs),
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, _) => const SizedBox.shrink(),
                 ),
-                error: (_, _) => const SizedBox.shrink(),
               ),
-            ),
 
-            // ── Charging Pattern ──
-            SliverToBoxAdapter(
-              child: logsAsync.when(
-                data: (logs) => _buildChargingPatternCard(logs),
-                loading: () => const SizedBox.shrink(),
-                error: (_, _) => const SizedBox.shrink(),
-              ),
-            ),
-
-            const SliverToBoxAdapter(child: SizedBox(height: 100)),
-          ],
-        ),
+              const SliverToBoxAdapter(child: SizedBox(height: 100)),
+            ],
+          ),
         ),
       ),
     );
@@ -227,41 +225,48 @@ class StatisticsScreen extends ConsumerWidget {
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final ratio = constraints.maxWidth > 380 ? 1.3 : constraints.maxWidth > 300 ? 1.1 : 0.95;
+          final ratio = constraints.maxWidth > 380
+              ? 1.3
+              : constraints.maxWidth > 300
+              ? 1.1
+              : 0.95;
           return GridView.count(
-        crossAxisCount: 2,
-        mainAxisSpacing: 12,
-        crossAxisSpacing: 12,
-        childAspectRatio: ratio,
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        children: [
-          StatCard(
-            icon: Icons.battery_charging_full_rounded,
-            iconColor: AppColors.primary,
-            title: 'Tổng lần sạc',
-            value: '$totalCharges',
-          ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.2),
-          StatCard(
-            icon: Icons.trending_up_rounded,
-            iconColor: AppColors.info,
-            title: 'Sạc TB / lần',
-            value: '${((stats['avgChargeGain'] as double?) ?? 0.0).toStringAsFixed(0)}%',
-          ).animate().fadeIn(delay: 300.ms).slideY(begin: 0.2),
-          StatCard(
-            icon: Icons.battery_1_bar_rounded,
-            iconColor: AppColors.warning,
-            title: 'Pin bắt đầu TB',
-            value: '${((stats['avgStartBattery'] as double?) ?? 0.0).toStringAsFixed(0)}%',
-          ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.2),
-          StatCard(
-            icon: Icons.timer_outlined,
-            iconColor: AppColors.error,
-            title: 'Thời gian sạc TB',
-            value: '${((stats['avgChargeDuration'] as double?) ?? 0.0).toStringAsFixed(1)}h',
-          ).animate().fadeIn(delay: 500.ms).slideY(begin: 0.2),
-        ],
-      );
+            crossAxisCount: 2,
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            childAspectRatio: ratio,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            children: [
+              StatCard(
+                icon: Icons.battery_charging_full_rounded,
+                iconColor: AppColors.primary,
+                title: 'Tổng lần sạc',
+                value: '$totalCharges',
+              ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.2),
+              StatCard(
+                icon: Icons.trending_up_rounded,
+                iconColor: AppColors.info,
+                title: 'Sạc TB / lần',
+                value:
+                    '${((stats['avgChargeGain'] as double?) ?? 0.0).toStringAsFixed(0)}%',
+              ).animate().fadeIn(delay: 300.ms).slideY(begin: 0.2),
+              StatCard(
+                icon: Icons.battery_1_bar_rounded,
+                iconColor: AppColors.warning,
+                title: 'Pin bắt đầu TB',
+                value:
+                    '${((stats['avgStartBattery'] as double?) ?? 0.0).toStringAsFixed(0)}%',
+              ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.2),
+              StatCard(
+                icon: Icons.timer_outlined,
+                iconColor: AppColors.error,
+                title: 'Thời gian sạc TB',
+                value:
+                    '${((stats['avgChargeDuration'] as double?) ?? 0.0).toStringAsFixed(1)}h',
+              ).animate().fadeIn(delay: 500.ms).slideY(begin: 0.2),
+            ],
+          );
         },
       ),
     );
@@ -278,8 +283,12 @@ class StatisticsScreen extends ConsumerWidget {
     final startBatterySpots = <FlSpot>[];
 
     for (int i = 0; i < recentLogs.length; i++) {
-      chargeGainSpots.add(FlSpot(i.toDouble(), recentLogs[i].chargeGain.toDouble()));
-      startBatterySpots.add(FlSpot(i.toDouble(), recentLogs[i].startBatteryPercent.toDouble()));
+      chargeGainSpots.add(
+        FlSpot(i.toDouble(), recentLogs[i].chargeGain.toDouble()),
+      );
+      startBatterySpots.add(
+        FlSpot(i.toDouble(), recentLogs[i].startBatteryPercent.toDouble()),
+      );
     }
 
     return _ChartCard(
@@ -377,11 +386,17 @@ class StatisticsScreen extends ConsumerWidget {
                 tooltipRoundedRadius: 8,
                 getTooltipItems: (spots) {
                   return spots.map((s) {
-                    final color = s.barIndex == 0 ? AppColors.primary : AppColors.error;
+                    final color = s.barIndex == 0
+                        ? AppColors.primary
+                        : AppColors.error;
                     final label = s.barIndex == 0 ? 'Sạc được' : 'Pin bắt đầu';
                     return LineTooltipItem(
                       '$label: ${s.y.toInt()}%',
-                      TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600),
+                      TextStyle(
+                        color: color,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
                     );
                   }).toList();
                 },
@@ -415,21 +430,23 @@ class StatisticsScreen extends ConsumerWidget {
 
     final recentRate = calcChargeRate(recent5);
     final olderRate = calcChargeRate(older5);
-    final degradation = olderRate > 0 ? ((recentRate - olderRate) / olderRate * 100) : 0.0;
+    final degradation = olderRate > 0
+        ? ((recentRate - olderRate) / olderRate * 100)
+        : 0.0;
 
     final healthScore = (100 + degradation).clamp(0, 100);
     final healthText = healthScore >= 80
         ? 'Tốt'
         : healthScore >= 60
-            ? 'Khá'
-            : healthScore >= 40
-                ? 'Trung bình'
-                : 'Cần kiểm tra';
+        ? 'Khá'
+        : healthScore >= 40
+        ? 'Trung bình'
+        : 'Cần kiểm tra';
     final healthColor = healthScore >= 80
         ? AppColors.primary
         : healthScore >= 60
-            ? AppColors.warning
-            : AppColors.error;
+        ? AppColors.warning
+        : AppColors.error;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
@@ -439,10 +456,7 @@ class StatisticsScreen extends ConsumerWidget {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              healthColor.withValues(alpha: 0.1),
-              AppColors.card,
-            ],
+            colors: [healthColor.withValues(alpha: 0.1), AppColors.card],
           ),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: healthColor.withValues(alpha: 0.3)),
@@ -452,7 +466,11 @@ class StatisticsScreen extends ConsumerWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.health_and_safety_rounded, color: healthColor, size: 22),
+                Icon(
+                  Icons.health_and_safety_rounded,
+                  color: healthColor,
+                  size: 22,
+                ),
                 const SizedBox(width: 8),
                 const Text(
                   'Tình trạng pin',
@@ -464,7 +482,10 @@ class StatisticsScreen extends ConsumerWidget {
                 ),
                 const Spacer(),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: healthColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(8),
@@ -549,7 +570,8 @@ class StatisticsScreen extends ConsumerWidget {
     final barGroups = <BarChartGroupData>[];
     for (int i = 0; i < weeks.length; i++) {
       final weekLogs = weeklyLogs[weeks[i]]!;
-      final avgGain = weekLogs.fold<int>(0, (s, l) => s + l.chargeGain) / weekLogs.length;
+      final avgGain =
+          weekLogs.fold<int>(0, (s, l) => s + l.chargeGain) / weekLogs.length;
 
       barGroups.add(
         BarChartGroupData(
@@ -558,7 +580,9 @@ class StatisticsScreen extends ConsumerWidget {
             BarChartRodData(
               toY: avgGain,
               width: 16,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(6),
+              ),
               gradient: const LinearGradient(
                 begin: Alignment.bottomCenter,
                 end: Alignment.topCenter,
@@ -595,7 +619,10 @@ class StatisticsScreen extends ConsumerWidget {
                   interval: 20,
                   getTitlesWidget: (value, _) => Text(
                     '${value.toInt()}%',
-                    style: const TextStyle(color: AppColors.textTertiary, fontSize: 10),
+                    style: const TextStyle(
+                      color: AppColors.textTertiary,
+                      fontSize: 10,
+                    ),
                   ),
                 ),
               ),
@@ -610,7 +637,10 @@ class StatisticsScreen extends ConsumerWidget {
                         padding: const EdgeInsets.only(top: 6),
                         child: Text(
                           w == 0 ? 'Nay' : '${w}w',
-                          style: const TextStyle(color: AppColors.textTertiary, fontSize: 10),
+                          style: const TextStyle(
+                            color: AppColors.textTertiary,
+                            fontSize: 10,
+                          ),
                         ),
                       );
                     }
@@ -618,8 +648,12 @@ class StatisticsScreen extends ConsumerWidget {
                   },
                 ),
               ),
-              topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-              rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              topTitles: const AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
+              rightTitles: const AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
             ),
             borderData: FlBorderData(show: false),
             barGroups: barGroups,
@@ -654,15 +688,27 @@ class StatisticsScreen extends ConsumerWidget {
     for (final log in logs) {
       hourCounts[log.startTime.hour]++;
     }
-    final peakHour = hourCounts.indexOf(hourCounts.reduce((a, b) => a > b ? a : b));
+    final peakHour = hourCounts.indexOf(
+      hourCounts.reduce((a, b) => a > b ? a : b),
+    );
 
     // Phân tích ngày sạc nhiều nhất
     final dayCounts = List.filled(7, 0);
     for (final log in logs) {
       dayCounts[log.startTime.weekday - 1]++;
     }
-    final peakDay = dayCounts.indexOf(dayCounts.reduce((a, b) => a > b ? a : b));
-    final dayNames = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'CN'];
+    final peakDay = dayCounts.indexOf(
+      dayCounts.reduce((a, b) => a > b ? a : b),
+    );
+    final dayNames = [
+      'Thứ 2',
+      'Thứ 3',
+      'Thứ 4',
+      'Thứ 5',
+      'Thứ 6',
+      'Thứ 7',
+      'CN',
+    ];
 
     // Khoảng cách trung bình giữa các lần sạc
     double avgDaysBetween = 0;
@@ -671,7 +717,9 @@ class StatisticsScreen extends ConsumerWidget {
         ..sort((a, b) => a.startTime.compareTo(b.startTime));
       double totalDays = 0;
       for (int i = 1; i < sorted.length; i++) {
-        totalDays += sorted[i].startTime.difference(sorted[i - 1].startTime).inHours / 24;
+        totalDays +=
+            sorted[i].startTime.difference(sorted[i - 1].startTime).inHours /
+            24;
       }
       avgDaysBetween = totalDays / (sorted.length - 1);
     }
@@ -690,7 +738,11 @@ class StatisticsScreen extends ConsumerWidget {
           children: [
             const Row(
               children: [
-                Icon(Icons.insights_rounded, color: AppColors.warning, size: 20),
+                Icon(
+                  Icons.insights_rounded,
+                  color: AppColors.warning,
+                  size: 20,
+                ),
                 SizedBox(width: 8),
                 Text(
                   'Thói quen sạc',
@@ -772,14 +824,14 @@ class _ChartCard extends StatelessWidget {
             const SizedBox(height: 2),
             Text(
               subtitle,
-              style: const TextStyle(color: AppColors.textTertiary, fontSize: 12),
+              style: const TextStyle(
+                color: AppColors.textTertiary,
+                fontSize: 12,
+              ),
             ),
             if (legend != null) ...[
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 16,
-                children: legend!,
-              ),
+              Wrap(spacing: 16, children: legend!),
             ],
             const SizedBox(height: 16),
             child,
@@ -804,10 +856,16 @@ class _LegendItem extends StatelessWidget {
         Container(
           width: 10,
           height: 10,
-          decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3)),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(3),
+          ),
         ),
         const SizedBox(width: 6),
-        Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+        Text(
+          label,
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+        ),
       ],
     );
   }
@@ -838,7 +896,13 @@ class _PatternTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
                 Text(
                   value,
                   style: const TextStyle(
@@ -941,15 +1005,10 @@ class _AiPredictionWidgetState extends ConsumerState<_AiPredictionWidget> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              AppColors.warning.withValues(alpha: 0.08),
-              AppColors.card,
-            ],
+            colors: [AppColors.warning.withValues(alpha: 0.08), AppColors.card],
           ),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: AppColors.warning.withValues(alpha: 0.2),
-          ),
+          border: Border.all(color: AppColors.warning.withValues(alpha: 0.2)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -962,8 +1021,11 @@ class _AiPredictionWidgetState extends ConsumerState<_AiPredictionWidget> {
                     color: AppColors.warning.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.smart_toy_rounded,
-                      color: AppColors.warning, size: 20),
+                  child: const Icon(
+                    Icons.smart_toy_rounded,
+                    color: AppColors.warning,
+                    size: 20,
+                  ),
                 ),
                 const SizedBox(width: 10),
                 const Expanded(
@@ -997,8 +1059,11 @@ class _AiPredictionWidgetState extends ConsumerState<_AiPredictionWidget> {
                         color: AppColors.surfaceLight,
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Icon(Icons.refresh_rounded,
-                          color: AppColors.textSecondary, size: 16),
+                      child: const Icon(
+                        Icons.refresh_rounded,
+                        color: AppColors.textSecondary,
+                        size: 16,
+                      ),
                     ),
                   ),
               ],
@@ -1022,8 +1087,10 @@ class _AiPredictionWidgetState extends ConsumerState<_AiPredictionWidget> {
                       SizedBox(height: 8),
                       Text(
                         'Đang phân tích...',
-                        style:
-                            TextStyle(color: AppColors.textTertiary, fontSize: 12),
+                        style: TextStyle(
+                          color: AppColors.textTertiary,
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                   ),
@@ -1038,8 +1105,11 @@ class _AiPredictionWidgetState extends ConsumerState<_AiPredictionWidget> {
                 ),
                 child: const Row(
                   children: [
-                    Icon(Icons.hourglass_empty_rounded,
-                        color: AppColors.textTertiary, size: 18),
+                    Icon(
+                      Icons.hourglass_empty_rounded,
+                      color: AppColors.textTertiary,
+                      size: 18,
+                    ),
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -1077,8 +1147,8 @@ class _AiPredictionWidgetState extends ConsumerState<_AiPredictionWidget> {
     final healthColor = healthScore >= 80
         ? AppColors.primary
         : healthScore >= 60
-            ? AppColors.warning
-            : AppColors.error;
+        ? AppColors.warning
+        : AppColors.error;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1131,8 +1201,10 @@ class _AiPredictionWidgetState extends ConsumerState<_AiPredictionWidget> {
                 ),
                 const SizedBox(height: 4),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.surfaceLight,
                     borderRadius: BorderRadius.circular(6),
@@ -1171,13 +1243,13 @@ class _AiPredictionWidgetState extends ConsumerState<_AiPredictionWidget> {
             final icon = severity == 'high'
                 ? Icons.warning_rounded
                 : severity == 'medium'
-                    ? Icons.info_rounded
-                    : Icons.check_circle_rounded;
+                ? Icons.info_rounded
+                : Icons.check_circle_rounded;
             final color = severity == 'high'
                 ? AppColors.error
                 : severity == 'medium'
-                    ? AppColors.warning
-                    : AppColors.primary;
+                ? AppColors.warning
+                : AppColors.primary;
             return Padding(
               padding: const EdgeInsets.only(bottom: 6),
               child: Row(
@@ -1204,16 +1276,20 @@ class _AiPredictionWidgetState extends ConsumerState<_AiPredictionWidget> {
           const SizedBox(height: 10),
           const Divider(color: AppColors.border, height: 1),
           const SizedBox(height: 10),
-          ...recs.take(2).map((r) => Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(
-                  r.toString(),
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 12,
+          ...recs
+              .take(2)
+              .map(
+                (r) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    r.toString(),
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
                   ),
                 ),
-              )),
+              ),
         ],
       ],
     );
@@ -1247,7 +1323,10 @@ class _AiPatternWidgetState extends ConsumerState<_AiPatternWidget> {
 
   Future<void> _loadPatterns() async {
     if (widget.logs.length < 3) return;
-    setState(() { _isLoading = true; _hasError = false; });
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+    });
 
     // Read from Firestore insight instead of HTTP AI API
     final insightRepo = ref.read(aiInsightsRepositoryProvider);
@@ -1288,10 +1367,7 @@ class _AiPatternWidgetState extends ConsumerState<_AiPatternWidget> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              AppColors.info.withValues(alpha: 0.08),
-              AppColors.card,
-            ],
+            colors: [AppColors.info.withValues(alpha: 0.08), AppColors.card],
           ),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: AppColors.info.withValues(alpha: 0.2)),
@@ -1307,17 +1383,22 @@ class _AiPatternWidgetState extends ConsumerState<_AiPatternWidget> {
                     color: AppColors.info.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.insights_rounded,
-                      color: AppColors.info, size: 20),
+                  child: const Icon(
+                    Icons.insights_rounded,
+                    color: AppColors.info,
+                    size: 20,
+                  ),
                 ),
                 const SizedBox(width: 10),
                 const Expanded(
-                  child: Text('Thói quen sạc (AI)',
-                      style: TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                      )),
+                  child: Text(
+                    'Thói quen sạc (AI)',
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
                 GestureDetector(
                   onTap: _loadPatterns,
@@ -1333,20 +1414,30 @@ class _AiPatternWidgetState extends ConsumerState<_AiPatternWidget> {
             if (_isLoading)
               const Center(
                 child: SizedBox(
-                  width: 24, height: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.info),
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.info,
+                  ),
                 ),
               )
             else if (_hasError)
               Row(
                 children: [
-                  const Icon(Icons.cloud_off_rounded,
-                      color: AppColors.textTertiary, size: 16),
+                  const Icon(
+                    Icons.cloud_off_rounded,
+                    color: AppColors.textTertiary,
+                    size: 16,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'AI API chưa kết nối — chạy ai_api.py để kích hoạt',
-                      style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                 ],
@@ -1354,8 +1445,10 @@ class _AiPatternWidgetState extends ConsumerState<_AiPatternWidget> {
             else if (_patterns != null)
               _buildPatternContent(_patterns!)
             else
-              const Text('Nhấn refresh để phân tích',
-                  style: TextStyle(color: AppColors.textTertiary, fontSize: 12)),
+              const Text(
+                'Nhấn refresh để phân tích',
+                style: TextStyle(color: AppColors.textTertiary, fontSize: 12),
+              ),
           ],
         ),
       ),
@@ -1378,27 +1471,39 @@ class _AiPatternWidgetState extends ConsumerState<_AiPatternWidget> {
           spacing: 12,
           runSpacing: 8,
           children: [
-            if (peakHour != null)
-              _patternChip('🕐 Giờ cao điểm', peakHour),
-            if (peakDay != null)
-              _patternChip('📅 Ngày phổ biến', peakDay),
+            if (peakHour != null) _patternChip('🕐 Giờ cao điểm', peakHour),
+            if (peakDay != null) _patternChip('📅 Ngày phổ biến', peakDay),
             if (freq != null)
-              _patternChip('🔄 Tần suất', '${freq.toStringAsFixed(1)} lần/tuần'),
+              _patternChip(
+                '🔄 Tần suất',
+                '${freq.toStringAsFixed(1)} lần/tuần',
+              ),
             if (avgDuration != null)
-              _patternChip('⏱ TB mỗi lần', '${avgDuration.toStringAsFixed(1)}h'),
+              _patternChip(
+                '⏱ TB mỗi lần',
+                '${avgDuration.toStringAsFixed(1)}h',
+              ),
             if (pRange != null)
-              _patternChip('🔋 Khoảng sạc', '${pRange['avgStart']}% → ${pRange['avgEnd']}%'),
+              _patternChip(
+                '🔋 Khoảng sạc',
+                '${pRange['avgStart']}% → ${pRange['avgEnd']}%',
+              ),
           ],
         ),
         if (patterns.isNotEmpty) ...[
           const SizedBox(height: 12),
-          ...patterns.map((p) => Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Text(
-              p,
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+          ...patterns.map(
+            (p) => Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                p,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 13,
+                ),
+              ),
             ),
-          )),
+          ),
         ],
       ],
     );
@@ -1416,13 +1521,19 @@ class _AiPatternWidgetState extends ConsumerState<_AiPatternWidget> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label, style: const TextStyle(color: AppColors.textTertiary, fontSize: 10)),
+          Text(
+            label,
+            style: const TextStyle(color: AppColors.textTertiary, fontSize: 10),
+          ),
           const SizedBox(height: 2),
-          Text(value, style: const TextStyle(
-            color: AppColors.textPrimary,
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-          )),
+          Text(
+            value,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
       ),
     );
@@ -1487,7 +1598,11 @@ class _AiCapacityDetailPanelState
         insight: insight,
       );
 
-      if (mounted) setState(() { _result = result; _loading = false; });
+      if (mounted)
+        setState(() {
+          _result = result;
+          _loading = false;
+        });
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
@@ -1513,10 +1628,7 @@ class _AiCapacityDetailPanelState
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              AppColors.info.withValues(alpha: 0.08),
-              AppColors.card,
-            ],
+            colors: [AppColors.info.withValues(alpha: 0.08), AppColors.card],
           ),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: AppColors.info.withValues(alpha: 0.2)),
@@ -1533,25 +1645,32 @@ class _AiCapacityDetailPanelState
                     color: AppColors.info.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.battery_full_rounded,
-                      color: AppColors.info, size: 20),
+                  child: const Icon(
+                    Icons.battery_full_rounded,
+                    color: AppColors.info,
+                    size: 20,
+                  ),
                 ),
                 const SizedBox(width: 10),
                 const Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('⚡ Phân tích dung lượng AI',
-                          style: TextStyle(
-                            color: AppColors.textPrimary,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                          )),
-                      Text('So sánh danh nghĩa vs khả dụng',
-                          style: TextStyle(
-                            color: AppColors.textTertiary,
-                            fontSize: 11,
-                          )),
+                      Text(
+                        '⚡ Phân tích dung lượng AI',
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        'So sánh danh nghĩa vs khả dụng',
+                        style: TextStyle(
+                          color: AppColors.textTertiary,
+                          fontSize: 11,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -1584,18 +1703,22 @@ class _AiCapacityDetailPanelState
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('SoH: ${r.sohPercent.toStringAsFixed(1)}%',
-                    style: TextStyle(
-                      color: alertColor,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    )),
-                Text(r.alertLevel.message,
-                    style: TextStyle(
-                      color: alertColor,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    )),
+                Text(
+                  'SoH: ${r.sohPercent.toStringAsFixed(1)}%',
+                  style: TextStyle(
+                    color: alertColor,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  r.alertLevel.message,
+                  style: TextStyle(
+                    color: alertColor,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 6),
@@ -1616,14 +1739,19 @@ class _AiCapacityDetailPanelState
               const SizedBox(height: 10),
               Row(
                 children: [
-                  const Icon(Icons.electric_bolt_rounded,
-                      color: AppColors.warning, size: 16),
+                  const Icon(
+                    Icons.electric_bolt_rounded,
+                    color: AppColors.warning,
+                    size: 16,
+                  ),
                   const SizedBox(width: 6),
-                  const Text('Công suất sạc quan sát',
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 12,
-                      )),
+                  const Text(
+                    'Công suất sạc quan sát',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
                   const Spacer(),
                   Text(
                     '${r.observedChargePowerW!.toStringAsFixed(0)}W',
@@ -1646,12 +1774,13 @@ class _AiCapacityDetailPanelState
               ClipRRect(
                 borderRadius: BorderRadius.circular(4),
                 child: LinearProgressIndicator(
-                  value: (r.observedChargePowerW! / r.maxChargePowerW)
-                      .clamp(0.0, 1.0),
+                  value: (r.observedChargePowerW! / r.maxChargePowerW).clamp(
+                    0.0,
+                    1.0,
+                  ),
                   minHeight: 4,
                   backgroundColor: AppColors.border,
-                  valueColor:
-                      const AlwaysStoppedAnimation(AppColors.warning),
+                  valueColor: const AlwaysStoppedAnimation(AppColors.warning),
                 ),
               ),
             ],
@@ -1684,39 +1813,51 @@ class _AiCapacityDetailPanelState
     ).animate().fadeIn(delay: 750.ms).slideY(begin: 0.2);
   }
 
-  Widget _buildCompareRow(String label, String nominal, String usable,
-      String unit, double ratio, Color color) {
+  Widget _buildCompareRow(
+    String label,
+    String nominal,
+    String usable,
+    String unit,
+    double ratio,
+    Color color,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 12,
-            )),
+        Text(
+          label,
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+        ),
         const SizedBox(height: 4),
         Row(
           children: [
             Expanded(
               child: Row(
                 children: [
-                  Text(nominal,
-                      style: const TextStyle(
-                        color: AppColors.textTertiary,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        decoration: TextDecoration.lineThrough,
-                      )),
+                  Text(
+                    nominal,
+                    style: const TextStyle(
+                      color: AppColors.textTertiary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      decoration: TextDecoration.lineThrough,
+                    ),
+                  ),
                   const SizedBox(width: 8),
-                  const Icon(Icons.arrow_forward_rounded,
-                      color: AppColors.textTertiary, size: 14),
+                  const Icon(
+                    Icons.arrow_forward_rounded,
+                    color: AppColors.textTertiary,
+                    size: 14,
+                  ),
                   const SizedBox(width: 8),
-                  Text('$usable $unit',
-                      style: TextStyle(
-                        color: color,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                      )),
+                  Text(
+                    '$usable $unit',
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -1738,12 +1879,14 @@ class _AiCapacityDetailPanelState
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Text(c.label,
-          style: TextStyle(
-            color: color,
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-          )),
+      child: Text(
+        c.label,
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
     );
   }
 }

@@ -126,6 +126,41 @@ class SmartChargeServiceTests(unittest.TestCase):
             service.start("user-a", preview.preview_id, "fallback")
         self.assertEqual(caught.exception.code, "aiPredictionUnavailable")
 
+    def test_personal_profile_is_scoped_by_owner_and_fuses_eta(self):
+        profile = self.service.update_personal_consent("user-a", "VF-001", True)
+        profile.valid_sessions = 5
+        profile.active = True
+        profile.eta_bias_ratio = 0.10
+        profile.validation_mape = 8
+        profile.adapter_version = "personal-v5"
+        profile.median_power_w = 500
+        self.repo.save_personal_profile(profile)
+        preview = self.service.create_preview("user-a", {
+            "vehicleId": "VF-001", "currentSoc": 20, "targetSoc": 80,
+            "estimatedCapacityWh": 3000, "capacityConfidence": 90,
+        })
+        sources = {item.source for item in preview.eta_candidates}
+        self.assertEqual(sources, {"global_ai", "physics", "personal"})
+        self.assertAlmostEqual(sum(item.weight for item in preview.eta_candidates), 1.0)
+        self.assertIsNone(self.repo.get_personal_profile("user-b", "VF-001"))
+
+    def test_personal_data_delete_does_not_cross_owner(self):
+        self.service.update_personal_consent("user-a", "VF-001", True)
+        self.service.update_personal_consent("user-b", "VF-001", True)
+        self.service.delete_personal_profile("user-a", "VF-001")
+        self.assertIsNone(self.repo.get_personal_profile("user-a", "VF-001"))
+        self.assertIsNotNone(self.repo.get_personal_profile("user-b", "VF-001"))
+
+    def test_safety_cutoff_requires_two_consecutive_samples(self):
+        active = self.service.start("user-a", self.preview().preview_id, "safety")
+        self.provider.status.power_w = 2460
+        self.service.status("user-a")
+        self.assertTrue(self.provider.status.relay)
+        self.service.status("user-a")
+        self.assertFalse(self.provider.status.relay)
+        terminal = next(item for item in self.repo.history("user-a") if item.session_id == active.session_id)
+        self.assertEqual(terminal.stop_reason, "safety_cutoff")
+
 
 class LegacyCloudResponseTests(unittest.TestCase):
     def test_official_top_level_device_state_list_is_parsed(self):
@@ -234,6 +269,16 @@ class RouteContractTests(unittest.TestCase):
         self.client.post("/api/shelly/consent/start")
         response = self.client.get("/api/shelly/capabilities")
         self.assertTrue(response.get_json()["data"]["readyForControl"])
+
+    def test_personal_profile_consent_contract(self):
+        response = self.client.put(
+            "/api/smart-charging/personal-profile/VF-001",
+            json={"consentEnabled": True},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["data"]["consentEnabled"])
+        other_repo = self.repo.get_personal_profile("someone-else", "VF-001")
+        self.assertIsNone(other_repo)
 
 
 class SecurityTests(unittest.TestCase):

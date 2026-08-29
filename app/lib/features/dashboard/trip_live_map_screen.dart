@@ -41,7 +41,8 @@ class _TripLiveMapScreenState extends State<TripLiveMapScreen> {
 
     _snapshotSub = _tripService.snapshotStream.listen((snap) {
       if (!mounted) return;
-      final posChanged = snap.latitude != _snapshot.latitude ||
+      final posChanged =
+          snap.latitude != _snapshot.latitude ||
           snap.longitude != _snapshot.longitude;
       if (posChanged && snap.latitude != null) {
         _lastGpsUpdate = DateTime.now();
@@ -74,7 +75,8 @@ class _TripLiveMapScreenState extends State<TripLiveMapScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final hasPosition = _snapshot.latitude != null && _snapshot.longitude != null;
+    final hasPosition =
+        _snapshot.latitude != null && _snapshot.longitude != null;
     final center = hasPosition
         ? LatLng(_snapshot.latitude!, _snapshot.longitude!)
         : const LatLng(21.0285, 105.8542); // Hà Nội default
@@ -149,7 +151,9 @@ class _TripLiveMapScreenState extends State<TripLiveMapScreen> {
                 onTap: () {
                   _followCamera = true;
                   if (hasPosition) {
-                    _safeMoveMap(LatLng(_snapshot.latitude!, _snapshot.longitude!));
+                    _safeMoveMap(
+                      LatLng(_snapshot.latitude!, _snapshot.longitude!),
+                    );
                   }
                 },
               ),
@@ -162,7 +166,10 @@ class _TripLiveMapScreenState extends State<TripLiveMapScreen> {
               left: 16,
               right: 16,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.warning.withValues(alpha: 0.95),
                   borderRadius: BorderRadius.circular(12),
@@ -175,7 +182,11 @@ class _TripLiveMapScreenState extends State<TripLiveMapScreen> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.gps_off_rounded, color: Colors.white, size: 20),
+                    const Icon(
+                      Icons.gps_off_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                     const SizedBox(width: 8),
                     const Expanded(
                       child: Text(
@@ -190,16 +201,22 @@ class _TripLiveMapScreenState extends State<TripLiveMapScreen> {
                     GestureDetector(
                       onTap: _isReloadingGps ? null : _reloadGps,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.25),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: _isReloadingGps
                             ? const SizedBox(
-                                width: 16, height: 16,
+                                width: 16,
+                                height: 16,
                                 child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.white),
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
                               )
                             : const Text(
                                 'Reload GPS',
@@ -288,23 +305,40 @@ class _TripLiveMapScreenState extends State<TripLiveMapScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _ConfirmRow(label: 'Quãng đường', value: '${_snapshot.totalDistance.toStringAsFixed(1)} km'),
-            _ConfirmRow(label: 'Pin tiêu thụ', value: '-${_snapshot.batteryConsumed}%'),
+            _ConfirmRow(
+              label: 'Quãng đường',
+              value: '${_snapshot.totalDistance.toStringAsFixed(1)} km',
+            ),
+            _ConfirmRow(
+              label: 'Pin tiêu thụ',
+              value: '-${_snapshot.batteryConsumed}%',
+            ),
             _ConfirmRow(label: 'Thời gian', value: _tripService.elapsedText),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Tiếp tục đi', style: TextStyle(color: AppColors.textSecondary)),
+            child: const Text(
+              'Tiếp tục đi',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.error,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
-            child: const Text('Kết thúc', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+            child: const Text(
+              'Kết thúc',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         ],
       ),
@@ -314,7 +348,10 @@ class _TripLiveMapScreenState extends State<TripLiveMapScreen> {
     try {
       await _tripService.stopTrip();
       BackgroundServiceConfig.sendCommand('stopTrip');
-      if (mounted) Navigator.of(context).pop(true); // pop với result=true báo Dashboard refresh
+      if (mounted)
+        Navigator.of(
+          context,
+        ).pop(true); // pop với result=true báo Dashboard refresh
     } catch (e) {
       AppPopup.showError('Kết thúc chuyến đi thất bại: $e');
     }
@@ -341,7 +378,12 @@ class _BottomPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(context).padding.bottom + 20),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        20,
+        20,
+        MediaQuery.of(context).padding.bottom + 20,
+      ),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -383,7 +425,11 @@ class _BottomPanel extends StatelessWidget {
                         color: AppColors.info.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Icon(Icons.navigation_rounded, color: AppColors.info, size: 18),
+                      child: const Icon(
+                        Icons.navigation_rounded,
+                        color: AppColors.info,
+                        size: 18,
+                      ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -400,7 +446,10 @@ class _BottomPanel extends StatelessWidget {
                           ),
                           Text(
                             payloadLabel,
-                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 12,
+                            ),
                           ),
                         ],
                       ),
@@ -453,7 +502,9 @@ class _BottomPanel extends StatelessWidget {
                 backgroundColor: AppColors.error,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 elevation: 4,
               ),
               icon: const Icon(Icons.stop_rounded, size: 22),
@@ -474,7 +525,11 @@ class _StatColumn extends StatelessWidget {
   final String value;
   final Color color;
 
-  const _StatColumn({required this.label, required this.value, required this.color});
+  const _StatColumn({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -482,7 +537,11 @@ class _StatColumn extends StatelessWidget {
       children: [
         Text(
           value,
-          style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.w800),
+          style: TextStyle(
+            color: color,
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+          ),
         ),
         const SizedBox(height: 2),
         Text(
@@ -507,8 +566,21 @@ class _ConfirmRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 14)),
-          Text(value, style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w700)),
+          Text(
+            label,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 14,
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
         ],
       ),
     );

@@ -33,8 +33,16 @@ void main() {
   group('RoutePredictionService.predict', () {
     test('1 person, enough battery', () {
       final trips = [
-        _makeTrip(distance: 12, batteryConsumed: 10, payload: PayloadType.onePerson),
-        _makeTrip(distance: 10, batteryConsumed: 8, payload: PayloadType.onePerson),
+        _makeTrip(
+          distance: 12,
+          batteryConsumed: 10,
+          payload: PayloadType.onePerson,
+        ),
+        _makeTrip(
+          distance: 10,
+          batteryConsumed: 8,
+          payload: PayloadType.onePerson,
+        ),
       ];
       // Avg efficiency for onePerson: (1.2 + 1.25) / 2 = 1.225
       // With 80% battery, 10km trip:
@@ -56,7 +64,11 @@ void main() {
 
     test('2 person, enough battery', () {
       final trips = [
-        _makeTrip(distance: 10, batteryConsumed: 13, payload: PayloadType.twoPerson),
+        _makeTrip(
+          distance: 10,
+          batteryConsumed: 13,
+          payload: PayloadType.twoPerson,
+        ),
       ];
       // Efficiency for twoPerson matching trip: 10/13 ≈ 0.769
       // drain = 10 / 0.769 * 1.3 (factor) = ceil(16.9) = 17
@@ -73,7 +85,11 @@ void main() {
 
     test('not enough battery → isEnough=false', () {
       final trips = [
-        _makeTrip(distance: 12, batteryConsumed: 10, payload: PayloadType.onePerson),
+        _makeTrip(
+          distance: 12,
+          batteryConsumed: 10,
+          payload: PayloadType.onePerson,
+        ),
       ];
       // efficiency = 1.2 km/1%
       // 50km → drain = ceil(50/1.2 * 1.0) = ceil(41.67) = 42
@@ -103,32 +119,41 @@ void main() {
       expect(result.isEnough, isTrue);
     });
 
-    test('no matching payload trips → falls back to all trips + payload adjust', () {
-      final trips = [
-        _makeTrip(distance: 12, batteryConsumed: 10, payload: PayloadType.onePerson),
-      ];
-      // No twoPerson trips → falls back to all trips
-      // avg eff from onePerson trips = 1.2
-      // adjusted for twoPerson: 1.2 / 1.3 = 0.923
-      // drain = ceil(10 / 0.923 * 1.3) = ceil(14.08) = 15
-      final result = RoutePredictionService.predict(
-        distanceKm: 10,
-        currentBattery: 80,
-        payload: PayloadType.twoPerson,
-        trips: trips,
-      );
-      expect(result.isEnough, isTrue);
-      expect(result.estimatedBatteryDrain, greaterThan(0));
-      // twoPerson should consume more than onePerson for same distance
-      final result1p = RoutePredictionService.predict(
-        distanceKm: 10,
-        currentBattery: 80,
-        payload: PayloadType.onePerson,
-        trips: trips,
-      );
-      expect(result.estimatedBatteryDrain,
-          greaterThanOrEqualTo(result1p.estimatedBatteryDrain));
-    });
+    test(
+      'no matching payload trips → falls back to all trips + payload adjust',
+      () {
+        final trips = [
+          _makeTrip(
+            distance: 12,
+            batteryConsumed: 10,
+            payload: PayloadType.onePerson,
+          ),
+        ];
+        // No twoPerson trips → falls back to all trips
+        // avg eff from onePerson trips = 1.2
+        // adjusted for twoPerson: 1.2 / 1.3 = 0.923
+        // drain = ceil(10 / 0.923 * 1.3) = ceil(14.08) = 15
+        final result = RoutePredictionService.predict(
+          distanceKm: 10,
+          currentBattery: 80,
+          payload: PayloadType.twoPerson,
+          trips: trips,
+        );
+        expect(result.isEnough, isTrue);
+        expect(result.estimatedBatteryDrain, greaterThan(0));
+        // twoPerson should consume more than onePerson for same distance
+        final result1p = RoutePredictionService.predict(
+          distanceKm: 10,
+          currentBattery: 80,
+          payload: PayloadType.onePerson,
+          trips: trips,
+        );
+        expect(
+          result.estimatedBatteryDrain,
+          greaterThanOrEqualTo(result1p.estimatedBatteryDrain),
+        );
+      },
+    );
 
     test('no trips at all → uses defaultEfficiency', () {
       final result = RoutePredictionService.predict(

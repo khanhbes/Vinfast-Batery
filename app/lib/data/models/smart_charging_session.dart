@@ -1,3 +1,5 @@
+import 'personal_charging_profile.dart';
+
 enum ChargingStrategy {
   targetSoc('target_soc'),
   deadline('deadline'),
@@ -46,6 +48,7 @@ enum ChargingStopReason {
   absoluteSafety('absolute_safety'),
   manual('manual'),
   relayOff('relay_off'),
+  safetyCutoff('safety_cutoff'),
   gatewayRestartExpired('gateway_restart_expired'),
   commandFailed('command_failed');
 
@@ -122,6 +125,12 @@ class SmartChargingPlanPreview {
     this.fallbackReason,
     this.analyzedAt,
     this.aiChargeEligible = true,
+    this.etaCandidates = const [],
+    this.fusionReason = 'global_ai_only',
+    this.profileVersion,
+    this.adapterVersion,
+    this.capacityConfidence,
+    this.efficiencyConfidence,
   });
 
   final SmartChargingPlanDraft draft;
@@ -141,6 +150,12 @@ class SmartChargingPlanPreview {
   final String? fallbackReason;
   final DateTime? analyzedAt;
   final bool aiChargeEligible;
+  final List<EtaCandidate> etaCandidates;
+  final String fusionReason;
+  final String? profileVersion;
+  final String? adapterVersion;
+  final double? capacityConfidence;
+  final double? efficiencyConfidence;
 
   /// Present for server-generated previews. It prevents clients from changing
   /// the prediction between preview and Start.
@@ -210,6 +225,10 @@ class SmartChargingSessionRequest {
     this.predictionWarnings = const [],
     this.fallbackReason,
     this.predictionAnalyzedAt,
+    this.etaCandidates = const [],
+    this.fusionReason = 'global_ai_only',
+    this.profileVersion,
+    this.adapterVersion,
   });
 
   final String vehicleId;
@@ -232,6 +251,10 @@ class SmartChargingSessionRequest {
   final List<String> predictionWarnings;
   final String? fallbackReason;
   final DateTime? predictionAnalyzedAt;
+  final List<EtaCandidate> etaCandidates;
+  final String fusionReason;
+  final String? profileVersion;
+  final String? adapterVersion;
 
   Map<String, dynamic> toJson() => {
     'vehicle_id': vehicleId,
@@ -342,6 +365,14 @@ class SmartChargingSession {
     this.predictionAnalyzedAt,
     this.timerVerified = false,
     this.idempotencyKey,
+    this.etaCandidates = const [],
+    this.fusionReason = 'global_ai_only',
+    this.profileVersion,
+    this.adapterVersion,
+    this.safetyEvents = const [],
+    this.actualEndSoc,
+    this.trainingEligible = false,
+    this.telemetryCoverage = 0,
   });
 
   final String sessionId;
@@ -383,6 +414,14 @@ class SmartChargingSession {
   final DateTime? predictionAnalyzedAt;
   final bool timerVerified;
   final String? idempotencyKey;
+  final List<EtaCandidate> etaCandidates;
+  final String fusionReason;
+  final String? profileVersion;
+  final String? adapterVersion;
+  final List<SmartChargeSafetyEvent> safetyEvents;
+  final double? actualEndSoc;
+  final bool trainingEligible;
+  final double telemetryCoverage;
 
   Duration remaining([DateTime? now]) {
     final value = effectiveStopAt.difference(now ?? DateTime.now());
@@ -454,6 +493,24 @@ class SmartChargingSession {
       ),
       timerVerified: json['timer_verified'] == true,
       idempotencyKey: json['idempotency_key']?.toString(),
+      etaCandidates: ((json['eta_candidates'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((item) => EtaCandidate.fromJson(Map<String, dynamic>.from(item)))
+          .toList(),
+      fusionReason: json['fusion_reason']?.toString() ?? 'global_ai_only',
+      profileVersion: json['profile_version']?.toString(),
+      adapterVersion: json['adapter_version']?.toString(),
+      safetyEvents: ((json['safety_events'] as List?) ?? const [])
+          .whereType<Map>()
+          .map(
+            (item) => SmartChargeSafetyEvent.fromJson(
+              Map<String, dynamic>.from(item),
+            ),
+          )
+          .toList(),
+      actualEndSoc: (json['actual_end_soc'] as num?)?.toDouble(),
+      trainingEligible: json['training_eligible'] == true,
+      telemetryCoverage: (json['telemetry_coverage'] as num?)?.toDouble() ?? 0,
     );
   }
 
@@ -502,6 +559,36 @@ class SmartChargingSession {
       'prediction_analyzed_at': predictionAnalyzedAt!.toIso8601String(),
     'timer_verified': timerVerified,
     if (idempotencyKey != null) 'idempotency_key': idempotencyKey,
+    'eta_candidates': etaCandidates
+        .map(
+          (item) => {
+            'source': item.source,
+            'durationSeconds': item.durationSeconds,
+            'weight': item.weight,
+            'confidence': item.confidence,
+            'available': item.available,
+            if (item.reason != null) 'reason': item.reason,
+          },
+        )
+        .toList(),
+    'fusion_reason': fusionReason,
+    if (profileVersion != null) 'profile_version': profileVersion,
+    if (adapterVersion != null) 'adapter_version': adapterVersion,
+    'safety_events': safetyEvents
+        .map(
+          (item) => {
+            'kind': item.kind,
+            'severity': item.severity,
+            'message': item.message,
+            if (item.observedValue != null) 'observedValue': item.observedValue,
+            if (item.createdAt != null)
+              'createdAt': item.createdAt!.toIso8601String(),
+          },
+        )
+        .toList(),
+    if (actualEndSoc != null) 'actual_end_soc': actualEndSoc,
+    'training_eligible': trainingEligible,
+    'telemetry_coverage': telemetryCoverage,
   };
 
   SmartChargingSession copyWith({
@@ -559,5 +646,13 @@ class SmartChargingSession {
     predictionAnalyzedAt: predictionAnalyzedAt,
     timerVerified: timerVerified ?? this.timerVerified,
     idempotencyKey: idempotencyKey,
+    etaCandidates: etaCandidates,
+    fusionReason: fusionReason,
+    profileVersion: profileVersion,
+    adapterVersion: adapterVersion,
+    safetyEvents: safetyEvents,
+    actualEndSoc: actualEndSoc,
+    trainingEligible: trainingEligible,
+    telemetryCoverage: telemetryCoverage,
   );
 }

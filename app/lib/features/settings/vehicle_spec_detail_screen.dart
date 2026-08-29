@@ -21,7 +21,8 @@ class VehicleSpecDetailScreen extends StatefulWidget {
   });
 
   @override
-  State<VehicleSpecDetailScreen> createState() => _VehicleSpecDetailScreenState();
+  State<VehicleSpecDetailScreen> createState() =>
+      _VehicleSpecDetailScreenState();
 }
 
 class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
@@ -41,12 +42,20 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
   void initState() {
     super.initState();
     final v = widget.vehicleData;
-    _modelCtrl = TextEditingController(text: v['model'] ?? v['vehicleName'] ?? '');
+    _modelCtrl = TextEditingController(
+      text: v['model'] ?? v['vehicleName'] ?? '',
+    );
     _yearCtrl = TextEditingController(text: '${v['year'] ?? 2024}');
-    _batteryCapCtrl = TextEditingController(text: '${(v['batteryCapacity'] ?? 0).toInt()}');
-    _sohCtrl = TextEditingController(text: '${(v['stateOfHealth'] ?? 100).toInt()}');
+    _batteryCapCtrl = TextEditingController(
+      text: '${(v['batteryCapacity'] ?? 0).toInt()}',
+    );
+    _sohCtrl = TextEditingController(
+      text: '${(v['stateOfHealth'] ?? 100).toInt()}',
+    );
     _odoCtrl = TextEditingController(text: '${(v['currentOdo'] ?? 0).toInt()}');
-    _efficiencyCtrl = TextEditingController(text: '${(v['defaultEfficiency'] ?? 1.2)}');
+    _efficiencyCtrl = TextEditingController(
+      text: '${(v['defaultEfficiency'] ?? 1.2)}',
+    );
     _loadSpec();
   }
 
@@ -62,7 +71,8 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
   }
 
   Future<void> _loadSpec() async {
-    final modelName = widget.vehicleData['model'] ?? widget.vehicleData['vehicleName'] ?? '';
+    final modelName =
+        widget.vehicleData['model'] ?? widget.vehicleData['vehicleName'] ?? '';
     if (modelName.toString().isEmpty) return;
 
     final repo = VehicleSpecRepository();
@@ -117,12 +127,20 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
         backgroundColor: AppColors.background,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.textPrimary, size: 20),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: AppColors.textPrimary,
+            size: 20,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           modelName,
-          style: const TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w700),
+          style: const TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
         ),
         actions: [
           TextButton(
@@ -139,11 +157,17 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
                 ? const SizedBox(
                     width: 18,
                     height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.primary,
+                    ),
                   )
                 : Text(
                     _isEditing ? 'Lưu' : 'Sửa',
-                    style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700),
+                    style: TextStyle(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
           ),
         ],
@@ -153,20 +177,54 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
         child: Column(
           children: [
             // Vehicle header card
-            _buildHeaderCard(modelName)
-                .animate()
-                .fadeIn(duration: 400.ms)
-                .slideY(begin: 0.05),
+            _buildHeaderCard(
+              modelName,
+            ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.05),
             const SizedBox(height: 24),
 
             // Editable Specs
             _buildSpecSection('THÔNG SỐ XE', [
-              _SpecRow(label: 'Model', controller: _modelCtrl, isEditing: _isEditing, icon: Icons.electric_moped_rounded),
-              _SpecRow(label: 'Năm SX', controller: _yearCtrl, isEditing: _isEditing, icon: Icons.calendar_today, keyboardType: TextInputType.number),
-              _SpecRow(label: 'Dung lượng pin (Wh)', controller: _batteryCapCtrl, isEditing: _isEditing, icon: Icons.battery_full_rounded, keyboardType: TextInputType.number),
-              _SpecRow(label: 'SoH (%)', controller: _sohCtrl, isEditing: _isEditing, icon: Icons.favorite_outline, keyboardType: TextInputType.number),
-              _SpecRow(label: 'ODO (km)', controller: _odoCtrl, isEditing: _isEditing, icon: Icons.speed_rounded, keyboardType: TextInputType.number),
-              _SpecRow(label: 'Hiệu suất (km/%)', controller: _efficiencyCtrl, isEditing: _isEditing, icon: Icons.eco_rounded, keyboardType: TextInputType.numberWithOptions(decimal: true)),
+              _SpecRow(
+                label: 'Model',
+                controller: _modelCtrl,
+                isEditing: _isEditing,
+                icon: Icons.electric_moped_rounded,
+              ),
+              _SpecRow(
+                label: 'Năm SX',
+                controller: _yearCtrl,
+                isEditing: _isEditing,
+                icon: Icons.calendar_today,
+                keyboardType: TextInputType.number,
+              ),
+              _SpecRow(
+                label: 'Dung lượng pin (Wh)',
+                controller: _batteryCapCtrl,
+                isEditing: _isEditing,
+                icon: Icons.battery_full_rounded,
+                keyboardType: TextInputType.number,
+              ),
+              _SpecRow(
+                label: 'SoH (%)',
+                controller: _sohCtrl,
+                isEditing: _isEditing,
+                icon: Icons.favorite_outline,
+                keyboardType: TextInputType.number,
+              ),
+              _SpecRow(
+                label: 'ODO (km)',
+                controller: _odoCtrl,
+                isEditing: _isEditing,
+                icon: Icons.speed_rounded,
+                keyboardType: TextInputType.number,
+              ),
+              _SpecRow(
+                label: 'Hiệu suất (km/%)',
+                controller: _efficiencyCtrl,
+                isEditing: _isEditing,
+                icon: Icons.eco_rounded,
+                keyboardType: TextInputType.numberWithOptions(decimal: true),
+              ),
             ]).animate().fadeIn(delay: 100.ms).slideY(begin: 0.05),
 
             // Catalog specs (read-only from VinFast database)
@@ -208,7 +266,11 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
               color: AppColors.primary.withAlpha(40),
               borderRadius: BorderRadius.circular(18),
             ),
-            child: const Icon(Icons.electric_moped_rounded, color: AppColors.primary, size: 36),
+            child: const Icon(
+              Icons.electric_moped_rounded,
+              color: AppColors.primary,
+              size: 36,
+            ),
           ),
           const SizedBox(width: 20),
           Expanded(
@@ -250,7 +312,11 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
       ),
       child: Text(
         text,
-        style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w600),
+        style: TextStyle(
+          color: AppColors.primary,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
@@ -270,7 +336,11 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: Row(
               children: [
-                Icon(Icons.settings_outlined, color: AppColors.primary, size: 16),
+                Icon(
+                  Icons.settings_outlined,
+                  color: AppColors.primary,
+                  size: 16,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   title,
@@ -284,14 +354,21 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
                 if (_isEditing) ...[
                   const Spacer(),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
                     decoration: BoxDecoration(
                       color: AppColors.warningBg,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
                       'ĐANG SỬA',
-                      style: TextStyle(color: AppColors.warning, fontSize: 10, fontWeight: FontWeight.w700),
+                      style: TextStyle(
+                        color: AppColors.warning,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ],
@@ -303,7 +380,13 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
             final row = entry.value;
             return Column(
               children: [
-                if (i > 0) Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
+                if (i > 0)
+                  Divider(
+                    color: AppColors.glassBorder,
+                    height: 1,
+                    indent: 20,
+                    endIndent: 20,
+                  ),
                 _buildSpecRow(row),
               ],
             );
@@ -324,7 +407,11 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
             flex: 2,
             child: Text(
               row.label,
-              style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w500),
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
           Expanded(
@@ -333,16 +420,25 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
                 ? TextField(
                     controller: row.controller,
                     keyboardType: row.keyboardType,
-                    style: const TextStyle(color: AppColors.primary, fontSize: 14, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      color: AppColors.primary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
                     textAlign: TextAlign.right,
                     decoration: InputDecoration(
                       isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                      contentPadding: const EdgeInsets.symmetric(
+                        vertical: 6,
+                        horizontal: 8,
+                      ),
                       filled: true,
                       fillColor: AppColors.surfaceLight,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: AppColors.primary.withAlpha(51)),
+                        borderSide: BorderSide(
+                          color: AppColors.primary.withAlpha(51),
+                        ),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
@@ -382,7 +478,11 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: Row(
               children: [
-                Icon(Icons.inventory_2_outlined, color: AppColors.primary, size: 16),
+                Icon(
+                  Icons.inventory_2_outlined,
+                  color: AppColors.primary,
+                  size: 16,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   'CATALOG VINFAST',
@@ -395,33 +495,81 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
                 ),
                 const Spacer(),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.infoBg,
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
                     'CHỈ ĐỌC',
-                    style: TextStyle(color: AppColors.info, fontSize: 10, fontWeight: FontWeight.w700),
+                    style: TextStyle(
+                      color: AppColors.info,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
           _catalogRow('Tên model', _spec!.modelName),
-          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
+          Divider(
+            color: AppColors.glassBorder,
+            height: 1,
+            indent: 20,
+            endIndent: 20,
+          ),
           _catalogRow('Dung lượng (Wh)', '${_spec!.nominalCapacityWh.toInt()}'),
-          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
-          _catalogRow('Dung lượng (Ah)', '${_spec!.nominalCapacityAh.toStringAsFixed(1)}'),
-          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
+          Divider(
+            color: AppColors.glassBorder,
+            height: 1,
+            indent: 20,
+            endIndent: 20,
+          ),
+          _catalogRow(
+            'Dung lượng (Ah)',
+            '${_spec!.nominalCapacityAh.toStringAsFixed(1)}',
+          ),
+          Divider(
+            color: AppColors.glassBorder,
+            height: 1,
+            indent: 20,
+            endIndent: 20,
+          ),
           _catalogRow('Điện áp (V)', '${_spec!.nominalVoltageV.toInt()}'),
-          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
+          Divider(
+            color: AppColors.glassBorder,
+            height: 1,
+            indent: 20,
+            endIndent: 20,
+          ),
           _catalogRow('Sạc tối đa (W)', '${_spec!.maxChargePowerW.toInt()}'),
-          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
-          _catalogRow('Motor định mức (W)', '${_spec!.ratedMotorPowerW.toInt()}'),
-          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
+          Divider(
+            color: AppColors.glassBorder,
+            height: 1,
+            indent: 20,
+            endIndent: 20,
+          ),
+          _catalogRow(
+            'Motor định mức (W)',
+            '${_spec!.ratedMotorPowerW.toInt()}',
+          ),
+          Divider(
+            color: AppColors.glassBorder,
+            height: 1,
+            indent: 20,
+            endIndent: 20,
+          ),
           _catalogRow('Motor peak (W)', '${_spec!.peakMotorPowerW.toInt()}'),
-          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
+          Divider(
+            color: AppColors.glassBorder,
+            height: 1,
+            indent: 20,
+            endIndent: 20,
+          ),
           _catalogRow('Nguồn dữ liệu', _spec!.source),
         ],
       ),
@@ -434,11 +582,18 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
       child: Row(
         children: [
           Expanded(
-            child: Text(label, style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+            child: Text(
+              label,
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+            ),
           ),
           Text(
             value,
-            style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w600),
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),

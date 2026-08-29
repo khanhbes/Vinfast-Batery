@@ -90,11 +90,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception('Chưa đăng nhập');
 
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
-        'name': _nameCtrl.text.trim(),
-        'phone': _phoneCtrl.text.trim(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .update({
+            'name': _nameCtrl.text.trim(),
+            'phone': _phoneCtrl.text.trim(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
 
       await user.updateDisplayName(_nameCtrl.text.trim());
 
@@ -128,13 +131,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
           builder: (ctx, setDialogState) {
             return Dialog(
               backgroundColor: AppColors.card,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.lock_reset_rounded, color: AppColors.primary, size: 32),
+                    const Icon(
+                      Icons.lock_reset_rounded,
+                      color: AppColors.primary,
+                      size: 32,
+                    ),
                     const SizedBox(height: 12),
                     const Text(
                       'Đổi mật khẩu',
@@ -187,7 +196,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               onPressed: () => Navigator.pop(ctx),
                               child: const Text(
                                 'Hủy',
-                                style: TextStyle(color: AppColors.textSecondary),
+                                style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                ),
                               ),
                             ),
                           ),
@@ -195,21 +206,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           Expanded(
                             child: ElevatedButton(
                               onPressed: () async {
-                                if (currentCtrl.text.isEmpty || newCtrl.text.length < 6) {
-                                  AppPopup.showError('Mật khẩu mới tối thiểu 6 ký tự');
+                                if (currentCtrl.text.isEmpty ||
+                                    newCtrl.text.length < 6) {
+                                  AppPopup.showError(
+                                    'Mật khẩu mới tối thiểu 6 ký tự',
+                                  );
                                   return;
                                 }
                                 setDialogState(() => loading = true);
-                                final result = await _authService.changePassword(
-                                  currentPassword: currentCtrl.text,
-                                  newPassword: newCtrl.text,
-                                );
+                                final result = await _authService
+                                    .changePassword(
+                                      currentPassword: currentCtrl.text,
+                                      newPassword: newCtrl.text,
+                                    );
                                 setDialogState(() => loading = false);
                                 if (result['success'] == true) {
                                   if (ctx.mounted) Navigator.pop(ctx);
-                                  AppPopup.showSuccess('Đổi mật khẩu thành công');
+                                  AppPopup.showSuccess(
+                                    'Đổi mật khẩu thành công',
+                                  );
                                 } else {
-                                  AppPopup.showError(result['error'] ?? 'Đổi mật khẩu thất bại');
+                                  AppPopup.showError(
+                                    result['error'] ?? 'Đổi mật khẩu thất bại',
+                                  );
                                 }
                               },
                               style: ElevatedButton.styleFrom(
@@ -242,7 +261,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         backgroundColor: AppColors.background,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.textPrimary, size: 20),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: AppColors.textPrimary,
+            size: 20,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
@@ -274,7 +297,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.primary),
+            )
           : SingleChildScrollView(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -315,7 +340,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildAvatarSection() {
     final initials = _name.isNotEmpty
-        ? _name.split(' ').map((w) => w.isNotEmpty ? w[0] : '').take(2).join().toUpperCase()
+        ? _name
+              .split(' ')
+              .map((w) => w.isNotEmpty ? w[0] : '')
+              .take(2)
+              .join()
+              .toUpperCase()
         : '?';
 
     return Column(
@@ -361,10 +391,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         const SizedBox(height: 4),
         Text(
           _email,
-          style: TextStyle(
-            color: AppColors.textSecondary,
-            fontSize: 14,
-          ),
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
         ),
       ],
     );
@@ -406,14 +433,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
             isEditing: _isEditing,
             controller: _nameCtrl,
           ),
-          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
+          Divider(
+            color: AppColors.glassBorder,
+            height: 1,
+            indent: 20,
+            endIndent: 20,
+          ),
           _buildInfoRow(
             icon: Icons.email_outlined,
             label: 'Email',
             value: _email,
             isEditing: false, // Email not editable
           ),
-          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
+          Divider(
+            color: AppColors.glassBorder,
+            height: 1,
+            indent: 20,
+            endIndent: 20,
+          ),
           _buildInfoRow(
             icon: Icons.phone_outlined,
             label: 'Số điện thoại',
@@ -455,7 +492,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 if (isEditing && controller != null)
                   TextField(
                     controller: controller,
-                    style: const TextStyle(color: AppColors.textPrimary, fontSize: 15),
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 15,
+                    ),
                     decoration: InputDecoration(
                       isDense: true,
                       contentPadding: const EdgeInsets.symmetric(vertical: 4),
@@ -463,7 +503,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         borderSide: BorderSide(color: AppColors.primary),
                       ),
                       focusedBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(color: AppColors.primary, width: 2),
+                        borderSide: BorderSide(
+                          color: AppColors.primary,
+                          width: 2,
+                        ),
                       ),
                     ),
                   )
@@ -498,7 +541,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: Row(
               children: [
-                Icon(Icons.security_outlined, color: AppColors.primary, size: 16),
+                Icon(
+                  Icons.security_outlined,
+                  color: AppColors.primary,
+                  size: 16,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   'BẢO MẬT',
@@ -518,7 +565,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               child: Row(
                 children: [
-                  Icon(Icons.lock_reset_rounded, color: AppColors.textSecondary, size: 20),
+                  Icon(
+                    Icons.lock_reset_rounded,
+                    color: AppColors.textSecondary,
+                    size: 20,
+                  ),
                   const SizedBox(width: 12),
                   const Expanded(
                     child: Text(
@@ -530,7 +581,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                   ),
-                  const Icon(Icons.chevron_right, color: AppColors.textTertiary, size: 20),
+                  const Icon(
+                    Icons.chevron_right,
+                    color: AppColors.textTertiary,
+                    size: 20,
+                  ),
                 ],
               ),
             ),
@@ -554,7 +609,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: Row(
               children: [
-                Icon(Icons.history_outlined, color: AppColors.primary, size: 16),
+                Icon(
+                  Icons.history_outlined,
+                  color: AppColors.primary,
+                  size: 16,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   'THÔNG TIN TÀI KHOẢN',
@@ -569,9 +628,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           _buildMetaRow('Ngày tạo', _createdAt),
-          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
-          _buildMetaRow('Nguồn', _source == 'flutter_app' ? 'Ứng dụng mobile' : _source),
-          Divider(color: AppColors.glassBorder, height: 1, indent: 20, endIndent: 20),
+          Divider(
+            color: AppColors.glassBorder,
+            height: 1,
+            indent: 20,
+            endIndent: 20,
+          ),
+          _buildMetaRow(
+            'Nguồn',
+            _source == 'flutter_app' ? 'Ứng dụng mobile' : _source,
+          ),
+          Divider(
+            color: AppColors.glassBorder,
+            height: 1,
+            indent: 20,
+            endIndent: 20,
+          ),
           _buildMetaRow('UID', FirebaseAuth.instance.currentUser?.uid ?? ''),
         ],
       ),

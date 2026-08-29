@@ -3,18 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Theme mode options
-enum AppThemeMode {
-  system,
-  light,
-  dark,
-}
+enum AppThemeMode { system, light, dark }
 
 /// Language options
-enum AppLanguage {
-  system,
-  vietnamese,
-  english,
-}
+enum AppLanguage { system, vietnamese, english }
 
 /// Reactive settings service (theme + language).
 ///

@@ -104,13 +104,17 @@ class TripPredictionModel {
   }) {
     // Calculate estimated duration (average speed 30 km/h)
     final duration = (distance / 30 * 60).round();
-    
+
     // Calculate consumption using AI model or fallback
-    final consumption = _calculateConsumption(distance, temperature, riderWeight);
-    
+    final consumption = _calculateConsumption(
+      distance,
+      temperature,
+      riderWeight,
+    );
+
     final endBattery = (startBattery - consumption).clamp(0.0, 100.0);
     final isSafe = endBattery > 15; // Safe if more than 15% battery
-    
+
     return TripPredictionModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       vehicleId: vehicleId,
@@ -120,7 +124,12 @@ class TripPredictionModel {
       duration: duration,
       consumption: consumption,
       reasoning: 0.8, // AI reasoning score
-      reasoningText: _generateReasoningText(distance, temperature, riderWeight, consumption),
+      reasoningText: _generateReasoningText(
+        distance,
+        temperature,
+        riderWeight,
+        consumption,
+      ),
       confidence: 0.85,
       startBattery: startBattery,
       endBattery: endBattery,
@@ -134,10 +143,14 @@ class TripPredictionModel {
   }
 
   /// Calculate consumption using AI model or fallback
-  static double _calculateConsumption(double distance, double temperature, double weight) {
+  static double _calculateConsumption(
+    double distance,
+    double temperature,
+    double weight,
+  ) {
     // Base consumption: 0.8% per km for VinFast Feliz Neo
     double baseConsumption = distance * 0.8;
-    
+
     // Temperature factor
     double tempFactor = 1.0;
     if (temperature < 10) {
@@ -145,20 +158,32 @@ class TripPredictionModel {
     } else if (temperature > 35) {
       tempFactor = 1.1; // Hot weather increases consumption
     }
-    
+
     // Weight factor
-    double weightFactor = 1.0 + ((weight - 70) / 70) * 0.3; // 30% more for every 70kg above base
-    
+    double weightFactor =
+        1.0 + ((weight - 70) / 70) * 0.3; // 30% more for every 70kg above base
+
     return baseConsumption * tempFactor * weightFactor;
   }
 
   /// Generate reasoning text
-  static String _generateReasoningText(double distance, double temperature, double weight, double consumption) {
-    final tempDesc = temperature < 10 ? 'thời tiết lạnh' : 
-                     temperature > 35 ? 'thời tiết nóng' : 'thời tiết lý tưởng';
-    final weightDesc = weight > 80 ? 'trọng lượng nặng' : 
-                       weight < 60 ? 'trọng lượng nhẹ' : 'trọng lượng trung bình';
-    
+  static String _generateReasoningText(
+    double distance,
+    double temperature,
+    double weight,
+    double consumption,
+  ) {
+    final tempDesc = temperature < 10
+        ? 'thời tiết lạnh'
+        : temperature > 35
+        ? 'thời tiết nóng'
+        : 'thời tiết lý tưởng';
+    final weightDesc = weight > 80
+        ? 'trọng lượng nặng'
+        : weight < 60
+        ? 'trọng lượng nhẹ'
+        : 'trọng lượng trung bình';
+
     return 'Dự đoán dựa trên quãng đường $distance km với $tempDesc và $weightDesc. Tiêu hao pin ước tính là ${consumption.toStringAsFixed(1)}%.';
   }
 

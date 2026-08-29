@@ -12,7 +12,8 @@ class AppErrorFormatter {
     }
 
     // Firestore permission errors
-    if (msg.contains('permission-denied') || msg.contains('PERMISSION_DENIED')) {
+    if (msg.contains('permission-denied') ||
+        msg.contains('PERMISSION_DENIED')) {
       return 'Không có quyền truy cập dữ liệu.';
     }
 

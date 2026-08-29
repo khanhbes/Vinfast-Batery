@@ -8,7 +8,7 @@ import '../../core/services/api_service.dart';
 import '../../data/services/charge_tracking_service.dart';
 
 /// Smart Charging ETA (Beta) Bottom Sheet
-/// 
+///
 /// Flow:
 /// 1. User enters current battery % (prefilled from vehicle)
 /// 2. User enters target battery %
@@ -37,11 +37,11 @@ class SmartChargingEtaSheet extends ConsumerStatefulWidget {
 class _SmartChargingEtaSheetState extends ConsumerState<SmartChargingEtaSheet> {
   late final TextEditingController _currentBatteryCtrl;
   late final TextEditingController _targetBatteryCtrl;
-  
+
   bool _reminderEnabled = true;
   bool _isLoading = false;
   bool _showResult = false;
-  
+
   // AI Prediction result
   double? _predictedDurationSec;
   double? _predictedDurationMin;
@@ -56,7 +56,9 @@ class _SmartChargingEtaSheetState extends ConsumerState<SmartChargingEtaSheet> {
   @override
   void initState() {
     super.initState();
-    _currentBatteryCtrl = TextEditingController(text: '${widget.initialBattery}');
+    _currentBatteryCtrl = TextEditingController(
+      text: '${widget.initialBattery}',
+    );
     _targetBatteryCtrl = TextEditingController(text: '80'); // Default target
   }
 
@@ -68,7 +70,8 @@ class _SmartChargingEtaSheetState extends ConsumerState<SmartChargingEtaSheet> {
   }
 
   Future<void> _getPrediction() async {
-    final current = int.tryParse(_currentBatteryCtrl.text) ?? widget.initialBattery;
+    final current =
+        int.tryParse(_currentBatteryCtrl.text) ?? widget.initialBattery;
     final target = int.tryParse(_targetBatteryCtrl.text) ?? 80;
 
     // Validation
@@ -103,15 +106,16 @@ class _SmartChargingEtaSheetState extends ConsumerState<SmartChargingEtaSheet> {
           _modelSource = data['modelSource'] as String?;
           _modelVersion = data['modelVersion'] as String?;
           _confidence = data['confidence']?.toDouble();
-          _warnings = (data['warnings'] as List<dynamic>?)?.cast<String>() ?? [];
-          
+          _warnings =
+              (data['warnings'] as List<dynamic>?)?.cast<String>() ?? [];
+
           // Calculate predicted stop time
           if (_predictedDurationSec != null) {
             _predictedStopAt = DateTime.now().add(
               Duration(seconds: _predictedDurationSec!.toInt()),
             );
           }
-          
+
           _showResult = true;
         });
       } else {
@@ -125,7 +129,8 @@ class _SmartChargingEtaSheetState extends ConsumerState<SmartChargingEtaSheet> {
   }
 
   Future<void> _startCharging() async {
-    final current = int.tryParse(_currentBatteryCtrl.text) ?? widget.initialBattery;
+    final current =
+        int.tryParse(_currentBatteryCtrl.text) ?? widget.initialBattery;
     final target = int.tryParse(_targetBatteryCtrl.text) ?? 80;
 
     await widget.chargeService.startCharging(
@@ -200,9 +205,7 @@ class _SmartChargingEtaSheetState extends ConsumerState<SmartChargingEtaSheet> {
                 decoration: BoxDecoration(
                   color: AppColors.primary.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: AppColors.primary.withOpacity(0.3),
-                  ),
+                  border: Border.all(color: AppColors.primary.withOpacity(0.3)),
                 ),
                 child: Text(
                   'Beta',
@@ -291,127 +294,134 @@ class _SmartChargingEtaSheetState extends ConsumerState<SmartChargingEtaSheet> {
           // Prediction result
           if (_showResult && _predictedDurationSec != null) ...[
             Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: AppColors.primary.withOpacity(0.2),
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.access_time,
-                        color: AppColors.primary,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Kết quả dự đoán',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ],
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: AppColors.primary.withOpacity(0.2),
+                    ),
                   ),
-                  const SizedBox(height: 12),
-                  Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _formattedDuration ?? '--',
-                              style: theme.textTheme.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Rút lúc $_predictedStopTimeText',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                color: theme.colorScheme.onSurface.withOpacity(0.7),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  // Model source and confidence
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surface,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          _modelSource?.contains('ai') == true
-                              ? 'AI Model'
-                              : 'Heuristic',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: theme.colorScheme.onSurface.withOpacity(0.6),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      if (_confidence != null)
-                        Text(
-                          'Độ tin: ${_confidence!.toInt()}%',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: theme.colorScheme.onSurface.withOpacity(0.5),
-                          ),
-                        ),
-                    ],
-                  ),
-                  // Warnings
-                  if (_warnings.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    ..._warnings.map((w) => Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Row(
+                      Row(
                         children: [
                           Icon(
-                            Icons.info_outline,
-                            size: 14,
-                            color: Colors.orange.withOpacity(0.7),
+                            Icons.access_time,
+                            color: AppColors.primary,
+                            size: 20,
                           ),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              w,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.orange.withOpacity(0.8),
-                              ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Kết quả dự đoán',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primary,
                             ),
                           ),
                         ],
                       ),
-                    )),
-                  ],
-                ],
-              ),
-            ).animate().fadeIn(duration: 300.ms).slideY(
-              begin: 0.2,
-              end: 0,
-              duration: 300.ms,
-            ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _formattedDuration ?? '--',
+                                  style: theme.textTheme.headlineSmall
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.primary,
+                                      ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Rút lúc $_predictedStopTimeText',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    color: theme.colorScheme.onSurface
+                                        .withOpacity(0.7),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      // Model source and confidence
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.surface,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              _modelSource?.contains('ai') == true
+                                  ? 'AI Model'
+                                  : 'Heuristic',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: theme.colorScheme.onSurface.withOpacity(
+                                  0.6,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          if (_confidence != null)
+                            Text(
+                              'Độ tin: ${_confidence!.toInt()}%',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: theme.colorScheme.onSurface.withOpacity(
+                                  0.5,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      // Warnings
+                      if (_warnings.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        ..._warnings.map(
+                          (w) => Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.info_outline,
+                                  size: 14,
+                                  color: Colors.orange.withOpacity(0.7),
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    w,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.orange.withOpacity(0.8),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                )
+                .animate()
+                .fadeIn(duration: 300.ms)
+                .slideY(begin: 0.2, end: 0, duration: 300.ms),
             const SizedBox(height: 20),
           ],
 
@@ -430,9 +440,7 @@ class _SmartChargingEtaSheetState extends ConsumerState<SmartChargingEtaSheet> {
                 child: ElevatedButton(
                   onPressed: _isLoading
                       ? null
-                      : (_showResult
-                          ? _startCharging
-                          : _getPrediction),
+                      : (_showResult ? _startCharging : _getPrediction),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
@@ -482,9 +490,7 @@ class _SmartChargingEtaSheetState extends ConsumerState<SmartChargingEtaSheet> {
               horizontal: 12,
               vertical: 12,
             ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
           ),
         ),
       ],

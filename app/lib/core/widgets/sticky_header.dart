@@ -6,16 +6,17 @@ class StickyHeaderDelegate extends SliverPersistentHeaderDelegate {
   final Widget child;
   final double height;
 
-  StickyHeaderDelegate({
-    required this.child,
-    this.height = 72,
-  });
+  StickyHeaderDelegate({required this.child, this.height = 72});
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
     final progress = shrinkOffset / maxExtent;
     final opacity = (progress * 0.8).clamp(0.0, 0.9);
-    
+
     return Container(
       decoration: BoxDecoration(
         color: AppColors.background.withOpacity(opacity > 0.3 ? 1.0 : 0.0),
@@ -40,7 +41,8 @@ class StickyHeaderDelegate extends SliverPersistentHeaderDelegate {
   double get minExtent => height;
 
   @override
-  bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) => false;
+  bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) =>
+      false;
 }
 
 class SharedStickyHeader extends StatelessWidget {

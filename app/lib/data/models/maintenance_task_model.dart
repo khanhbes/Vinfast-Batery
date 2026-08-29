@@ -59,12 +59,7 @@ enum ServiceType {
 }
 
 /// Mức độ khẩn cấp của 1 maintenance task (tính từ ODO hiện tại).
-enum MaintenanceUrgency {
-  completed,
-  overdue,
-  dueSoon,
-  upcoming,
-}
+enum MaintenanceUrgency { completed, overdue, dueSoon, upcoming }
 
 /// Model mốc bảo dưỡng xe
 class MaintenanceTaskModel {
@@ -177,12 +172,14 @@ class MaintenanceTaskModel {
       'description': description,
       'targetOdo': targetOdo,
       'isCompleted': isCompleted,
-      'completedDate':
-          completedDate != null ? Timestamp.fromDate(completedDate!) : null,
+      'completedDate': completedDate != null
+          ? Timestamp.fromDate(completedDate!)
+          : null,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': FieldValue.serverTimestamp(),
-      'scheduledDate':
-          scheduledDate != null ? Timestamp.fromDate(scheduledDate!) : null,
+      'scheduledDate': scheduledDate != null
+          ? Timestamp.fromDate(scheduledDate!)
+          : null,
       'serviceType': serviceType.name,
     };
   }
