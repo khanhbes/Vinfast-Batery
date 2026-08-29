@@ -99,71 +99,94 @@ void main() {
 
     test('startBat == endBat → error (không tiêu hao)', () {
       final err = validateForm(
-        startBat: 80, endBat: 80,
-        startOdo: 1000, endOdo: 1010,
-        startTime: baseStart, endTime: baseEnd,
+        startBat: 80,
+        endBat: 80,
+        startOdo: 1000,
+        endOdo: 1010,
+        startTime: baseStart,
+        endTime: baseEnd,
       );
       expect(err, contains('Pin đầu phải lớn hơn pin cuối'));
     });
 
     test('startBat < endBat → error (pin tăng = không hợp lệ cho trip)', () {
       final err = validateForm(
-        startBat: 50, endBat: 80,
-        startOdo: 1000, endOdo: 1010,
-        startTime: baseStart, endTime: baseEnd,
+        startBat: 50,
+        endBat: 80,
+        startOdo: 1000,
+        endOdo: 1010,
+        startTime: baseStart,
+        endTime: baseEnd,
       );
       expect(err, contains('Pin đầu phải lớn hơn pin cuối'));
     });
 
     test('endOdo == startOdo → error', () {
       final err = validateForm(
-        startBat: 80, endBat: 70,
-        startOdo: 1000, endOdo: 1000,
-        startTime: baseStart, endTime: baseEnd,
+        startBat: 80,
+        endBat: 70,
+        startOdo: 1000,
+        endOdo: 1000,
+        startTime: baseStart,
+        endTime: baseEnd,
       );
       expect(err, contains('ODO cuối phải lớn hơn ODO đầu'));
     });
 
     test('endOdo < startOdo → error', () {
       final err = validateForm(
-        startBat: 80, endBat: 70,
-        startOdo: 1000, endOdo: 999,
-        startTime: baseStart, endTime: baseEnd,
+        startBat: 80,
+        endBat: 70,
+        startOdo: 1000,
+        endOdo: 999,
+        startTime: baseStart,
+        endTime: baseEnd,
       );
       expect(err, contains('ODO cuối phải lớn hơn ODO đầu'));
     });
 
     test('endTime == startTime → error', () {
       final err = validateForm(
-        startBat: 80, endBat: 70,
-        startOdo: 1000, endOdo: 1010,
-        startTime: baseStart, endTime: baseStart,
+        startBat: 80,
+        endBat: 70,
+        startOdo: 1000,
+        endOdo: 1010,
+        startTime: baseStart,
+        endTime: baseStart,
       );
       expect(err, contains('Giờ kết thúc phải sau giờ xuất phát'));
     });
 
     test('endTime before startTime → error', () {
       final err = validateForm(
-        startBat: 80, endBat: 70,
-        startOdo: 1000, endOdo: 1010,
-        startTime: baseEnd, endTime: baseStart,
+        startBat: 80,
+        endBat: 70,
+        startOdo: 1000,
+        endOdo: 1010,
+        startTime: baseEnd,
+        endTime: baseStart,
       );
       expect(err, contains('Giờ kết thúc phải sau giờ xuất phát'));
     });
 
     test('all valid → null', () {
       final err = validateForm(
-        startBat: 80, endBat: 70,
-        startOdo: 1000, endOdo: 1010,
-        startTime: baseStart, endTime: baseEnd,
+        startBat: 80,
+        endBat: 70,
+        startOdo: 1000,
+        endOdo: 1010,
+        startTime: baseStart,
+        endTime: baseEnd,
       );
       expect(err, isNull);
     });
 
     test('edge case: 1% consumed, 1km driven, 1 min → valid', () {
       final err = validateForm(
-        startBat: 1, endBat: 0,
-        startOdo: 0, endOdo: 1,
+        startBat: 1,
+        endBat: 0,
+        startOdo: 0,
+        endOdo: 1,
         startTime: baseStart,
         endTime: baseStart.add(const Duration(minutes: 1)),
       );

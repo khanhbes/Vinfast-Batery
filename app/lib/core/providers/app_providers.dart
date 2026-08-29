@@ -26,27 +26,33 @@ final vehicleProvider = FutureProvider.family<VehicleModel?, String>((ref, id) {
 
 /// Get all vehicles
 final allVehiclesProvider = FutureProvider<List<VehicleModel>>((ref) async {
-  final vehicles = await ref.watch(chargeLogRepositoryProvider).getAllVehicles();
+  final vehicles = await ref
+      .watch(chargeLogRepositoryProvider)
+      .getAllVehicles();
   return vehicles;
 });
 
 /// Get charge logs for a vehicle
-final chargeLogsProvider = FutureProvider.family<List<ChargeLogModel>, String>((ref, id) {
+final chargeLogsProvider = FutureProvider.family<List<ChargeLogModel>, String>((
+  ref,
+  id,
+) {
   if (id.isEmpty) return Future.value([]);
   return ref.watch(chargeLogRepositoryProvider).getChargeLogs(id);
 });
 
 /// Get vehicle statistics
-final vehicleStatsProvider = FutureProvider.family<Map<String, dynamic>, String>((ref, id) {
-  if (id.isEmpty) {
-    return Future.value({
-      'totalCharges': 0,
-      'avgChargeGain': 0.0,
-      'totalEnergyGained': 0,
-      'avgChargeDuration': 0.0,
-      'avgStartBattery': 0.0,
-      'avgEndBattery': 0.0,
+final vehicleStatsProvider =
+    FutureProvider.family<Map<String, dynamic>, String>((ref, id) {
+      if (id.isEmpty) {
+        return Future.value({
+          'totalCharges': 0,
+          'avgChargeGain': 0.0,
+          'totalEnergyGained': 0,
+          'avgChargeDuration': 0.0,
+          'avgStartBattery': 0.0,
+          'avgEndBattery': 0.0,
+        });
+      }
+      return ref.watch(chargeLogRepositoryProvider).getStats(id);
     });
-  }
-  return ref.watch(chargeLogRepositoryProvider).getStats(id);
-});

@@ -155,51 +155,57 @@ void main() {
     expect(preview.predictionConfidence, 91);
   });
 
-  test('API failure in strict AI mode throws SmartChargePredictionException', () async {
-    final adapter = ChargingPredictionAdapter(
-      predictionCall:
-          ({
-            required vehicleId,
-            required currentBattery,
-            required targetBattery,
-            ambientTempC,
-            bool strictAi = false,
-          }) async => {
-            'success': false,
-            'statusCode': 503,
-            'error': 'Model AI hiện chưa khả dụng.',
-            'debugCode': 'AI_MODEL_UNAVAILABLE',
-          },
-    );
-    expect(
-      () => adapter.predict(draft(current: 20, target: 30), now: now),
-      throwsA(isA<SmartChargePredictionException>()),
-    );
-  });
+  test(
+    'API failure in strict AI mode throws SmartChargePredictionException',
+    () async {
+      final adapter = ChargingPredictionAdapter(
+        predictionCall:
+            ({
+              required vehicleId,
+              required currentBattery,
+              required targetBattery,
+              ambientTempC,
+              bool strictAi = false,
+            }) async => {
+              'success': false,
+              'statusCode': 503,
+              'error': 'Model AI hiện chưa khả dụng.',
+              'debugCode': 'AI_MODEL_UNAVAILABLE',
+            },
+      );
+      expect(
+        () => adapter.predict(draft(current: 20, target: 30), now: now),
+        throwsA(isA<SmartChargePredictionException>()),
+      );
+    },
+  );
 
-  test('API failure uses Wh-dimensional physics fallback when allowPhysicsFallback is true', () async {
-    final adapter = ChargingPredictionAdapter(
-      standardPowerW: 400,
-      efficiency: 1,
-      allowPhysicsFallback: true,
-      predictionCall:
-          ({
-            required vehicleId,
-            required currentBattery,
-            required targetBattery,
-            ambientTempC,
-            bool strictAi = false,
-          }) async => throw Exception('offline'),
-    );
-    final preview = await adapter.predict(
-      draft(current: 20, target: 30),
-      now: now,
-    );
-    // 300 Wh / 400 W = 0.75 h = 45 minutes.
-    expect(preview.predictedMinutes, 45);
-    expect(preview.predictionSource, 'physics_fallback');
-    expect(preview.isPhysicsFallback, isTrue);
-  });
+  test(
+    'API failure uses Wh-dimensional physics fallback when allowPhysicsFallback is true',
+    () async {
+      final adapter = ChargingPredictionAdapter(
+        standardPowerW: 400,
+        efficiency: 1,
+        allowPhysicsFallback: true,
+        predictionCall:
+            ({
+              required vehicleId,
+              required currentBattery,
+              required targetBattery,
+              ambientTempC,
+              bool strictAi = false,
+            }) async => throw Exception('offline'),
+      );
+      final preview = await adapter.predict(
+        draft(current: 20, target: 30),
+        now: now,
+      );
+      // 300 Wh / 400 W = 0.75 h = 45 minutes.
+      expect(preview.predictedMinutes, 45);
+      expect(preview.predictionSource, 'physics_fallback');
+      expect(preview.isPhysicsFallback, isTrue);
+    },
+  );
 
   test('physics fallback rejects invalid charger configuration', () {
     final adapter = ChargingPredictionAdapter(standardPowerW: 0);

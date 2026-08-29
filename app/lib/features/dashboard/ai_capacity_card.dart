@@ -60,7 +60,10 @@ class _AiCapacityCardState extends ConsumerState<AiCapacityCard> {
       final specRepo = ref.read(vehicleSpecRepositoryProvider);
       final spec = await specRepo.getSpec(widget.vehicle.vinfastModelId!);
       if (spec == null) {
-        setState(() { _loading = false; _error = true; });
+        setState(() {
+          _loading = false;
+          _error = true;
+        });
         return;
       }
 
@@ -91,7 +94,10 @@ class _AiCapacityCardState extends ConsumerState<AiCapacityCard> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() { _loading = false; _error = true; });
+        setState(() {
+          _loading = false;
+          _error = true;
+        });
       }
     }
   }
@@ -109,9 +115,12 @@ class _AiCapacityCardState extends ConsumerState<AiCapacityCard> {
         decoration: _cardDecoration(AppColors.info),
         child: const Center(
           child: SizedBox(
-            width: 24, height: 24,
+            width: 24,
+            height: 24,
             child: CircularProgressIndicator(
-              color: AppColors.info, strokeWidth: 2),
+              color: AppColors.info,
+              strokeWidth: 2,
+            ),
           ),
         ),
       );
@@ -140,30 +149,40 @@ class _AiCapacityCardState extends ConsumerState<AiCapacityCard> {
               color: AppColors.warning.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.link_rounded,
-                color: AppColors.warning, size: 22),
+            child: const Icon(
+              Icons.link_rounded,
+              color: AppColors.warning,
+              size: 22,
+            ),
           ),
           const SizedBox(width: 12),
           const Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Liên kết model VinFast',
-                    style: TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    )),
-                Text('Để xem dung lượng pin AI chính xác',
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 12,
-                    )),
+                Text(
+                  'Liên kết model VinFast',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  'Để xem dung lượng pin AI chính xác',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
               ],
             ),
           ),
-          const Icon(Icons.chevron_right_rounded,
-              color: AppColors.textSecondary, size: 20),
+          const Icon(
+            Icons.chevron_right_rounded,
+            color: AppColors.textSecondary,
+            size: 20,
+          ),
         ],
       ),
     ).animate().fadeIn(duration: 400.ms);
@@ -186,17 +205,22 @@ class _AiCapacityCardState extends ConsumerState<AiCapacityCard> {
                   color: AppColors.info.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.battery_charging_full_rounded,
-                    color: AppColors.info, size: 20),
+                child: const Icon(
+                  Icons.battery_charging_full_rounded,
+                  color: AppColors.info,
+                  size: 20,
+                ),
               ),
               const SizedBox(width: 10),
               const Expanded(
-                child: Text('Dung lượng pin AI',
-                    style: TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    )),
+                child: Text(
+                  'Dung lượng pin AI',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
               _buildConfidenceBadge(r.confidence),
             ],
@@ -206,23 +230,29 @@ class _AiCapacityCardState extends ConsumerState<AiCapacityCard> {
           // Main stats
           Row(
             children: [
-              Expanded(child: _buildStatCell(
-                '${r.usableCapacityWh.toStringAsFixed(0)} Wh',
-                'Khả dụng',
-                AppColors.primary,
-              )),
+              Expanded(
+                child: _buildStatCell(
+                  '${r.usableCapacityWh.toStringAsFixed(0)} Wh',
+                  'Khả dụng',
+                  AppColors.primary,
+                ),
+              ),
               Container(width: 1, height: 40, color: AppColors.border),
-              Expanded(child: _buildStatCell(
-                '${r.usableCapacityAh.toStringAsFixed(1)} Ah',
-                'Khả dụng',
-                AppColors.info,
-              )),
+              Expanded(
+                child: _buildStatCell(
+                  '${r.usableCapacityAh.toStringAsFixed(1)} Ah',
+                  'Khả dụng',
+                  AppColors.info,
+                ),
+              ),
               Container(width: 1, height: 40, color: AppColors.border),
-              Expanded(child: _buildStatCell(
-                '${r.sohPercent.toStringAsFixed(1)}%',
-                'SoH',
-                alertColor,
-              )),
+              Expanded(
+                child: _buildStatCell(
+                  '${r.sohPercent.toStringAsFixed(1)}%',
+                  'SoH',
+                  alertColor,
+                ),
+              ),
             ],
           ),
 
@@ -238,16 +268,21 @@ class _AiCapacityCardState extends ConsumerState<AiCapacityCard> {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.warning_amber_rounded,
-                      color: alertColor, size: 16),
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    color: alertColor,
+                    size: 16,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(r.alertLevel.message,
-                        style: TextStyle(
-                          color: alertColor,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        )),
+                    child: Text(
+                      r.alertLevel.message,
+                      style: TextStyle(
+                        color: alertColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -260,11 +295,13 @@ class _AiCapacityCardState extends ConsumerState<AiCapacityCard> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Công suất sạc quan sát',
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 12,
-                    )),
+                Text(
+                  'Công suất sạc quan sát',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
                 Text(
                   '${r.observedChargePowerW!.toStringAsFixed(0)}W / ${r.maxChargePowerW.toStringAsFixed(0)}W',
                   style: const TextStyle(
@@ -283,7 +320,9 @@ class _AiCapacityCardState extends ConsumerState<AiCapacityCard> {
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               Icon(
-                r.usedAiInsight ? Icons.cloud_done_rounded : Icons.computer_rounded,
+                r.usedAiInsight
+                    ? Icons.cloud_done_rounded
+                    : Icons.computer_rounded,
                 color: AppColors.textTertiary,
                 size: 12,
               ),
@@ -314,30 +353,33 @@ class _AiCapacityCardState extends ConsumerState<AiCapacityCard> {
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Text(c.label,
-          style: TextStyle(
-            color: color,
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-          )),
+      child: Text(
+        c.label,
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
     );
   }
 
   Widget _buildStatCell(String value, String label, Color color) {
     return Column(
       children: [
-        Text(value,
-            style: TextStyle(
-              color: color,
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-            )),
+        Text(
+          value,
+          style: TextStyle(
+            color: color,
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
         const SizedBox(height: 2),
-        Text(label,
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 11,
-            )),
+        Text(
+          label,
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+        ),
       ],
     );
   }
@@ -347,10 +389,7 @@ class _AiCapacityCardState extends ConsumerState<AiCapacityCard> {
       gradient: LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [
-          accent.withValues(alpha: 0.06),
-          AppColors.card,
-        ],
+        colors: [accent.withValues(alpha: 0.06), AppColors.card],
       ),
       borderRadius: BorderRadius.circular(20),
       border: Border.all(color: accent.withValues(alpha: 0.15)),

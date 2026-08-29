@@ -131,28 +131,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                   // Logo
                   Container(
-                    width: 72,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          AppColors.primary.withAlpha(40),
-                          AppColors.primaryContainer.withAlpha(60),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: AppColors.primary.withAlpha(51),
-                      ),
-                    ),
-                    child: const Icon(
-                      Icons.person_add_rounded,
-                      color: AppColors.primary,
-                      size: 34,
-                    ),
-                  ).animate().fadeIn(duration: 400.ms).scale(
+                        width: 72,
+                        height: 72,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              AppColors.primary.withAlpha(40),
+                              AppColors.primaryContainer.withAlpha(60),
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: AppColors.primary.withAlpha(51),
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.person_add_rounded,
+                          color: AppColors.primary,
+                          size: 34,
+                        ),
+                      )
+                      .animate()
+                      .fadeIn(duration: 400.ms)
+                      .scale(
                         begin: const Offset(0.8, 0.8),
                         curve: Curves.easeOutBack,
                       ),
@@ -191,17 +194,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.error_outline, color: AppColors.error, size: 18),
+                          Icon(
+                            Icons.error_outline,
+                            color: AppColors.error,
+                            size: 18,
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               _error!,
-                              style: TextStyle(color: AppColors.error, fontSize: 13),
+                              style: TextStyle(
+                                color: AppColors.error,
+                                fontSize: 13,
+                              ),
                             ),
                           ),
                         ],
                       ),
-                    ).animate().fadeIn().shake(hz: 3, offset: const Offset(4, 0)),
+                    ).animate().fadeIn().shake(
+                      hz: 3,
+                      offset: const Offset(4, 0),
+                    ),
                     const SizedBox(height: 16),
                   ],
 
@@ -209,13 +222,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   TextFormField(
                     controller: _nameCtrl,
                     textCapitalization: TextCapitalization.words,
-                    style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 14,
+                    ),
                     decoration: _inputDecoration(
                       label: 'Họ và Tên',
                       icon: Icons.person_outline_rounded,
                     ),
                     validator: (v) {
-                      if (v == null || v.trim().isEmpty) return 'Vui lòng nhập họ tên';
+                      if (v == null || v.trim().isEmpty)
+                        return 'Vui lòng nhập họ tên';
                       if (v.trim().length < 2) return 'Họ tên quá ngắn';
                       return null;
                     },
@@ -226,14 +243,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   TextFormField(
                     controller: _emailCtrl,
                     keyboardType: TextInputType.emailAddress,
-                    style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 14,
+                    ),
                     decoration: _inputDecoration(
                       label: 'Email',
                       icon: Icons.email_outlined,
                     ),
                     validator: (v) {
-                      if (v == null || v.trim().isEmpty) return 'Vui lòng nhập email';
-                      if (!v.contains('@') || !v.contains('.')) return 'Email không hợp lệ';
+                      if (v == null || v.trim().isEmpty)
+                        return 'Vui lòng nhập email';
+                      if (!v.contains('@') || !v.contains('.'))
+                        return 'Email không hợp lệ';
                       return null;
                     },
                   ).animate().fadeIn(delay: 250.ms).slideX(begin: -0.05),
@@ -243,14 +265,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   TextFormField(
                     controller: _phoneCtrl,
                     keyboardType: TextInputType.phone,
-                    style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 14,
+                    ),
                     decoration: _inputDecoration(
                       label: 'Số điện thoại',
                       icon: Icons.phone_outlined,
                     ),
                     validator: (v) {
-                      if (v == null || v.trim().isEmpty) return 'Vui lòng nhập số điện thoại';
-                      if (v.trim().length < 9) return 'Số điện thoại không hợp lệ';
+                      if (v == null || v.trim().isEmpty)
+                        return 'Vui lòng nhập số điện thoại';
+                      if (v.trim().length < 9)
+                        return 'Số điện thoại không hợp lệ';
                       return null;
                     },
                   ).animate().fadeIn(delay: 300.ms).slideX(begin: -0.05),
@@ -260,21 +287,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   TextFormField(
                     controller: _passCtrl,
                     obscureText: _obscurePass,
-                    style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 14,
+                    ),
                     decoration: _inputDecoration(
                       label: 'Mật khẩu',
                       icon: Icons.lock_outlined,
                       suffix: IconButton(
                         icon: Icon(
-                          _obscurePass ? Icons.visibility_off : Icons.visibility,
+                          _obscurePass
+                              ? Icons.visibility_off
+                              : Icons.visibility,
                           color: AppColors.textSecondary,
                           size: 20,
                         ),
-                        onPressed: () => setState(() => _obscurePass = !_obscurePass),
+                        onPressed: () =>
+                            setState(() => _obscurePass = !_obscurePass),
                       ),
                     ),
                     validator: (v) {
-                      if (v == null || v.isEmpty) return 'Vui lòng nhập mật khẩu';
+                      if (v == null || v.isEmpty)
+                        return 'Vui lòng nhập mật khẩu';
                       if (v.length < 6) return 'Mật khẩu tối thiểu 6 ký tự';
                       return null;
                     },
@@ -285,21 +319,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   TextFormField(
                     controller: _confirmPassCtrl,
                     obscureText: _obscureConfirm,
-                    style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 14,
+                    ),
                     decoration: _inputDecoration(
                       label: 'Xác nhận mật khẩu',
                       icon: Icons.lock_outline_rounded,
                       suffix: IconButton(
                         icon: Icon(
-                          _obscureConfirm ? Icons.visibility_off : Icons.visibility,
+                          _obscureConfirm
+                              ? Icons.visibility_off
+                              : Icons.visibility,
                           color: AppColors.textSecondary,
                           size: 20,
                         ),
-                        onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                        onPressed: () =>
+                            setState(() => _obscureConfirm = !_obscureConfirm),
                       ),
                     ),
                     validator: (v) {
-                      if (v == null || v.isEmpty) return 'Vui lòng xác nhận mật khẩu';
+                      if (v == null || v.isEmpty)
+                        return 'Vui lòng xác nhận mật khẩu';
                       if (v != _passCtrl.text) return 'Mật khẩu không khớp';
                       return null;
                     },
@@ -326,7 +367,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               height: 22,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2.5,
-                                valueColor: AlwaysStoppedAnimation(AppColors.background),
+                                valueColor: AlwaysStoppedAnimation(
+                                  AppColors.background,
+                                ),
                               ),
                             )
                           : const Text(
@@ -346,7 +389,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     child: RichText(
                       text: TextSpan(
                         text: 'Đã có tài khoản? ',
-                        style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 13,
+                        ),
                         children: [
                           TextSpan(
                             text: 'Đăng nhập',

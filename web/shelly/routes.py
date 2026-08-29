@@ -187,4 +187,46 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
     def stop(uid, session_id):
         return execute(lambda: ok(service.stop(uid, session_id).to_dict()))
 
+    @bp.get("/api/smart-charging/personal-profile/<vehicle_id>")
+    @authenticated
+    def personal_profile(uid, vehicle_id):
+        return execute(lambda: ok(service.personal_profile(uid, vehicle_id).to_dict(public=True)))
+
+    @bp.put("/api/smart-charging/personal-profile/<vehicle_id>")
+    @authenticated
+    def update_personal_profile(uid, vehicle_id):
+        body = request.get_json(silent=True) or {}
+        return execute(lambda: ok(service.update_personal_consent(
+            uid, vehicle_id, bool(body.get("consentEnabled")),
+        ).to_dict(public=True)))
+
+    @bp.delete("/api/smart-charging/personal-profile/<vehicle_id>")
+    @authenticated
+    def delete_personal_profile(uid, vehicle_id):
+        def action():
+            service.delete_personal_profile(uid, vehicle_id)
+            return ok({"deleted": True})
+        return execute(action)
+
+    @bp.patch("/api/smart-charging/sessions/<session_id>/actual-soc")
+    @authenticated
+    def actual_soc(uid, session_id):
+        body = request.get_json(silent=True) or {}
+        return execute(lambda: ok(service.confirm_actual_soc(
+            uid, session_id, float(body.get("actualSoc")),
+        ).to_dict()))
+
+    @bp.get("/api/smart-charging/sessions/<session_id>/telemetry")
+    @authenticated
+    def telemetry(uid, session_id):
+        # Repository verifies the ChargeLog owner before returning Firestore data.
+        return ok(repository.telemetry(uid, session_id))
+
+    @bp.post("/api/smart-charging/sessions/<session_id>/telemetry")
+    @authenticated
+    def record_telemetry(uid, session_id):
+        return execute(lambda: ok(service.record_telemetry(
+            uid, session_id, request.get_json(silent=True) or {},
+        )))
+
     return bp

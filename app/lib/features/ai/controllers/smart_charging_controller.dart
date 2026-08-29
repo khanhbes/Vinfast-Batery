@@ -54,6 +54,7 @@ class SmartChargingUiState {
     this.telemetryStatus = SmartChargeTelemetryStatus.idle,
     this.historySyncedAt,
     this.actionError,
+    this.safetyWarning,
     this.refreshing = false,
     this.capabilities = SmartChargerCapabilities.unavailable,
   });
@@ -71,6 +72,7 @@ class SmartChargingUiState {
   final SmartChargeTelemetryStatus telemetryStatus;
   final DateTime? historySyncedAt;
   final String? actionError;
+  final String? safetyWarning;
   final bool refreshing;
   final SmartChargerCapabilities capabilities;
   final DateTime now;
@@ -119,6 +121,7 @@ class SmartChargingUiState {
     SmartChargeTelemetryStatus? telemetryStatus,
     Object? historySyncedAt = _unset,
     Object? actionError = _unset,
+    Object? safetyWarning = _unset,
     bool? refreshing,
     SmartChargerCapabilities? capabilities,
     DateTime? now,
@@ -152,6 +155,9 @@ class SmartChargingUiState {
     actionError: identical(actionError, _unset)
         ? this.actionError
         : actionError as String?,
+    safetyWarning: identical(safetyWarning, _unset)
+        ? this.safetyWarning
+        : safetyWarning as String?,
     refreshing: refreshing ?? this.refreshing,
     capabilities: capabilities ?? this.capabilities,
     now: now ?? this.now,
@@ -334,12 +340,17 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
           .statuses
           .listen((status) {
             if (_disposed) return;
-            state = state.copyWith(chargerStatus: status, gatewayError: null);
+            state = state.copyWith(
+              chargerStatus: status,
+              gatewayError: null,
+              safetyWarning: _safetyWarning(status),
+            );
             if (!status.relay) {
               _foregroundPolling = false;
               state = state.copyWith(
                 telemetryStatus: SmartChargeTelemetryStatus.complete,
               );
+              unawaited(_refreshSession());
             }
             final session = state.session;
             if (session != null && !session.state.isTerminal) {
@@ -427,7 +438,11 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     try {
       final status = await _repository!.status();
       if (!_disposed) {
-        state = state.copyWith(chargerStatus: status, gatewayError: null);
+        state = state.copyWith(
+          chargerStatus: status,
+          gatewayError: null,
+          safetyWarning: _safetyWarning(status),
+        );
         final session = state.session;
         if (session != null && !session.state.isTerminal) {
           unawaited(_recordTelemetry(session, status));
@@ -450,6 +465,22 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     } finally {
       _statusRequestRunning = false;
     }
+  }
+
+  String? _safetyWarning(SmartChargerStatus status) {
+    if (!status.relay) return null;
+    if (status.currentA >= 10.5)
+      return 'Dòng điện đang cao (${status.currentA.toStringAsFixed(1)} A).';
+    if (status.powerW >= 2300)
+      return 'Công suất đang gần giới hạn (${status.powerW.toStringAsFixed(0)} W).';
+    if (status.temperatureC != null && status.temperatureC! >= 65) {
+      return 'Nhiệt độ Shelly đang cao (${status.temperatureC!.toStringAsFixed(1)} °C).';
+    }
+    if (status.voltageV > 0 &&
+        (status.voltageV < 200 || status.voltageV > 250)) {
+      return 'Điện áp đang ngoài vùng khuyến nghị (${status.voltageV.toStringAsFixed(1)} V).';
+    }
+    return null;
   }
 
   Future<void> _refreshCapabilities() async {
@@ -477,6 +508,10 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
   }
 
   Future<void> _refreshSession() async {
+    if (_foregroundPolling &&
+        state.session?.state == ChargingSessionState.active) {
+      return;
+    }
     if (_sessionRequestRunning || _disposed) return;
     _sessionRequestRunning = true;
     try {
@@ -486,6 +521,14 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       final previouslyActive = state.hasActiveSession;
       state = state.copyWith(
         session: current,
+        history: current == null
+            ? state.history
+            : [
+                current,
+                ...state.history.where(
+                  (item) => item.sessionId != current.sessionId,
+                ),
+              ],
         phase: current != null && !current.state.isTerminal
             ? SmartChargingViewPhase.active
             : (state.preview == null
@@ -536,11 +579,18 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
             }
           }
         }
+        final active = state.session;
+        final merged = active != null && !active.state.isTerminal
+            ? [
+                active,
+                ...history.where((item) => item.sessionId != active.sessionId),
+              ]
+            : history;
         state = state.copyWith(
-          history: history,
+          history: merged,
           session: completed ?? state.session,
           historyError: null,
-          historyStatus: history.isEmpty
+          historyStatus: merged.isEmpty
               ? SmartChargeHistoryStatus.empty
               : SmartChargeHistoryStatus.ready,
           historySyncedAt: _clock(),
@@ -844,6 +894,10 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
 
       state = state.copyWith(
         session: session,
+        history: [
+          session,
+          ...state.history.where((item) => item.sessionId != session.sessionId),
+        ],
         chargerStatus: currentStatus ?? state.chargerStatus,
         phase: SmartChargingViewPhase.active,
         gatewayError: null,
@@ -995,6 +1049,10 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       if (_disposed) return false;
       state = state.copyWith(
         session: session,
+        history: [
+          session,
+          ...state.history.where((item) => item.sessionId != session.sessionId),
+        ],
         phase: SmartChargingViewPhase.active,
         actionError: null,
       );

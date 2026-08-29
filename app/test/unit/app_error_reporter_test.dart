@@ -32,11 +32,7 @@ void main() {
 
     test('stores max 50 entries and orders newest first', () {
       for (var i = 1; i <= 60; i++) {
-        AppErrorReporter.report(
-          'Error $i',
-          null,
-          source: 'BatchTest',
-        );
+        AppErrorReporter.report('Error $i', null, source: 'BatchTest');
       }
 
       expect(AppErrorReporter.entries.length, 50);
@@ -47,21 +43,24 @@ void main() {
     });
 
     test('redacts Bearer tokens', () {
-      const sensitive = 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.secret';
+      const sensitive =
+          'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.secret';
       final redacted = AppErrorReporter.redactSecrets(sensitive);
       expect(redacted, contains('Bearer ***'));
       expect(redacted, isNot(contains('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9')));
     });
 
     test('redacts passwords in URLs and JSON', () {
-      const jsonStr = '{"username": "admin", "password": "super_secret_password_123"}';
+      const jsonStr =
+          '{"username": "admin", "password": "super_secret_password_123"}';
       final redacted = AppErrorReporter.redactSecrets(jsonStr);
       expect(redacted, contains('"password": "***"'));
       expect(redacted, isNot(contains('super_secret_password_123')));
     });
 
     test('redacts API keys and auth keys', () {
-      const text = 'api_key=AIzaSyD_SECRET_KEY_HERE&auth_key=shelly_auth_key_12345';
+      const text =
+          'api_key=AIzaSyD_SECRET_KEY_HERE&auth_key=shelly_auth_key_12345';
       final redacted = AppErrorReporter.redactSecrets(text);
       expect(redacted, contains('api_key=***'));
       expect(redacted, contains('auth_key=***'));

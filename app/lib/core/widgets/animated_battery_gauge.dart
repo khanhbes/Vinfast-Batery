@@ -36,10 +36,7 @@ class _AnimatedBatteryGaugeState extends State<AnimatedBatteryGauge>
     _animation = Tween<double>(
       begin: 0,
       end: widget.batteryPercent / 100.0,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOutCubic,
-    ));
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
     _controller.forward();
   }
 
@@ -47,13 +44,13 @@ class _AnimatedBatteryGaugeState extends State<AnimatedBatteryGauge>
   void didUpdateWidget(covariant AnimatedBatteryGauge oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.batteryPercent != widget.batteryPercent) {
-      _animation = Tween<double>(
-        begin: _animation.value,
-        end: widget.batteryPercent / 100.0,
-      ).animate(CurvedAnimation(
-        parent: _controller,
-        curve: Curves.easeOutCubic,
-      ));
+      _animation =
+          Tween<double>(
+            begin: _animation.value,
+            end: widget.batteryPercent / 100.0,
+          ).animate(
+            CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
+          );
       _controller
         ..reset()
         ..forward();
@@ -95,10 +92,7 @@ class _AnimatedBatteryGaugeState extends State<AnimatedBatteryGauge>
               // Filled arc
               CustomPaint(
                 size: Size(widget.size, widget.size),
-                painter: _GaugeFillPainter(
-                  value: value,
-                  color: color,
-                ),
+                painter: _GaugeFillPainter(value: value, color: color),
               ),
               // Glow effect
               Container(
@@ -192,10 +186,7 @@ class _GaugeFillPainter extends CustomPainter {
       ..shader = SweepGradient(
         startAngle: math.pi * 0.75,
         endAngle: math.pi * 0.75 + math.pi * 1.5 * value,
-        colors: [
-          color.withValues(alpha: 0.6),
-          color,
-        ],
+        colors: [color.withValues(alpha: 0.6), color],
       ).createShader(Rect.fromCircle(center: center, radius: radius))
       ..style = PaintingStyle.stroke
       ..strokeWidth = 12

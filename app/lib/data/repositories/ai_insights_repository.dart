@@ -79,9 +79,11 @@ class AiVehicleInsight {
       confidence: (map['confidence'] as num?)?.toDouble() ?? 0,
       peakChargingHour: (map['peakChargingHour'] as num?)?.toInt(),
       peakChargingDay: map['peakChargingDay']?.toString(),
-      chargeFrequencyPerWeek: (map['chargeFrequencyPerWeek'] as num?)?.toDouble(),
+      chargeFrequencyPerWeek: (map['chargeFrequencyPerWeek'] as num?)
+          ?.toDouble(),
       avgSessionDuration: (map['avgSessionDuration'] as num?)?.toDouble(),
-      recommendations: (map['recommendations'] as List?)
+      recommendations:
+          (map['recommendations'] as List?)
               ?.map((e) => e.toString())
               .toList() ??
           [],
@@ -122,7 +124,7 @@ class AiInsightsRepository {
   final FirebaseFirestore _firestore;
 
   AiInsightsRepository({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
   /// Lấy insight theo vehicleId (1 doc)
   Future<AiVehicleInsight?> getInsight(String vehicleId) async {
@@ -147,9 +149,9 @@ class AiInsightsRepository {
         .doc(vehicleId)
         .snapshots()
         .map((snap) {
-      if (!snap.exists || snap.data() == null) return null;
-      return AiVehicleInsight.fromMap(snap.data()!);
-    });
+          if (!snap.exists || snap.data() == null) return null;
+          return AiVehicleInsight.fromMap(snap.data()!);
+        });
   }
 }
 
@@ -159,7 +161,9 @@ final aiInsightsRepositoryProvider = Provider<AiInsightsRepository>((ref) {
 });
 
 /// Stream provider cho insight theo vehicleId
-final aiInsightProvider =
-    StreamProvider.family<AiVehicleInsight?, String>((ref, vehicleId) {
+final aiInsightProvider = StreamProvider.family<AiVehicleInsight?, String>((
+  ref,
+  vehicleId,
+) {
   return ref.watch(aiInsightsRepositoryProvider).watchInsight(vehicleId);
 });

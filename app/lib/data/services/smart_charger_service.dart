@@ -9,6 +9,7 @@ import '../models/shelly_connection.dart';
 import '../models/smart_charger_status.dart';
 import '../models/smart_charger_capabilities.dart';
 import '../models/smart_charging_session.dart';
+import '../models/personal_charging_profile.dart';
 import 'shelly_clients.dart';
 import 'shelly_discovery_service.dart';
 import 'smart_charger_credentials_service.dart';
@@ -74,6 +75,7 @@ class SmartChargerService {
   final DateTime Function() _clock;
   final Future<void> Function(Duration) _delay;
   ShellyTransport? _lastTransport;
+  int _criticalSafetySamples = 0;
 
   // Kept synchronous for existing entry points. Missing configuration is
   // reported by getStatus/armSmartCharge with the typed notConfigured error.
@@ -121,10 +123,11 @@ class SmartChargerService {
       lan = await _translate(() => _lan.getStatus(selected));
     }
     if (cloud == null && lan == null) {
-      throw cloudError ?? const SmartChargerException(
-        'Cloud và LAN đều không khả dụng.',
-        code: 'deviceOffline',
-      );
+      throw cloudError ??
+          const SmartChargerException(
+            'Cloud và LAN đều không khả dụng.',
+            code: 'deviceOffline',
+          );
     }
     return SmartChargerConnectionTest(
       cloudStatus: cloud,
@@ -174,8 +177,43 @@ class SmartChargerService {
     }
   }
 
-  Future<SmartChargerStatus> getStatus() async =>
-      _getStatus(await _requireProfile());
+  Future<SmartChargerStatus> getStatus() async {
+    final profile = await _requireProfile();
+    final status = await _getStatus(profile);
+    await _enforceSafety(profile, status);
+    return status;
+  }
+
+  Future<void> _enforceSafety(
+    ShellyConnectionProfile profile,
+    SmartChargerStatus status,
+  ) async {
+    if (!status.relay) {
+      _criticalSafetySamples = 0;
+      return;
+    }
+    final critical =
+        status.currentA >= 11.5 ||
+        status.powerW >= 2450 ||
+        (status.temperatureC != null && status.temperatureC! >= 75) ||
+        (status.voltageV > 0 &&
+            (status.voltageV < 190 || status.voltageV > 255));
+    _criticalSafetySamples = critical ? _criticalSafetySamples + 1 : 0;
+    if (_criticalSafetySamples < 2) return;
+    await _bestEffortOff(profile);
+    final verified = await _getStatus(profile);
+    if (verified.relay) {
+      throw const SmartChargerException(
+        'Thông số điện không an toàn và không xác minh được OFF. Hãy ngắt nguồn vật lý ngay.',
+        code: 'relayUnverified',
+      );
+    }
+    await turnOffAndVerify(reason: ChargingStopReason.safetyCutoff);
+    throw const SmartChargerException(
+      'Đã ngắt sạc tự động vì thông số điện vượt ngưỡng an toàn.',
+      code: 'safetyCutoff',
+    );
+  }
 
   Future<SmartChargerCapabilities> capabilities() async {
     final profile = await _credentials.readProfile();
@@ -185,7 +223,8 @@ class SmartChargerService {
       canReadStatus: verification.cloudVerified || verification.lanVerified,
       canManualOn: verification.readyForControl,
       canManualOff: verification.cloudVerified || verification.lanVerified,
-      supportsDeviceTimer: verification.cloudVerified || verification.lanVerified,
+      supportsDeviceTimer:
+          verification.cloudVerified || verification.lanVerified,
       canReadPower: verification.powerMeterVerified,
       canConfigureSafeBoot: profile.hasLan,
       cloudAvailable: verification.cloudVerified,
@@ -229,11 +268,14 @@ class SmartChargerService {
     String? fallbackReason,
     DateTime? predictionAnalyzedAt,
     String? idempotencyKey,
+    List<EtaCandidate> etaCandidates = const [],
+    String fusionReason = 'global_ai_only',
+    String? profileVersion,
+    String? adapterVersion,
   }) async {
     final existing = await _readActive();
     if (existing != null) {
-      if (idempotencyKey != null &&
-          existing.idempotencyKey == idempotencyKey) {
+      if (idempotencyKey != null && existing.idempotencyKey == idempotencyKey) {
         return existing;
       }
       throw const SmartChargerException(
@@ -274,13 +316,18 @@ class SmartChargerService {
       modelKey: strategy == ChargingStrategy.manualTimed
           ? 'none'
           : 'charging_time',
-      modelVersion: modelVersion ??
+      modelVersion:
+          modelVersion ??
           (strategy == ChargingStrategy.manualTimed ? 'manual' : 'unknown'),
       runtimeHealth: runtimeHealth,
       predictionWarnings: predictionWarnings,
       fallbackReason: fallbackReason,
       predictionAnalyzedAt: predictionAnalyzedAt,
       idempotencyKey: idempotencyKey,
+      etaCandidates: etaCandidates,
+      fusionReason: fusionReason,
+      profileVersion: profileVersion,
+      adapterVersion: adapterVersion,
     );
     await _saveActive(session);
     try {
@@ -413,6 +460,8 @@ class SmartChargerService {
     final stopped = active.copyWith(
       state: reason == ChargingStopReason.manual
           ? ChargingSessionState.cancelled
+          : reason == ChargingStopReason.safetyCutoff
+          ? ChargingSessionState.interrupted
           : reason == ChargingStopReason.commandFailed
           ? ChargingSessionState.failed
           : ChargingSessionState.completed,
@@ -498,10 +547,11 @@ class SmartChargerService {
   }
 
   @Deprecated('Use manualOn with a required device safety timer.')
-  Future<SmartChargerCommandResult> turnOn() => throw const SmartChargerException(
-    'Bật sạc bắt buộc phải có safety timer trên Shelly.',
-    code: 'unsafeDuration',
-  );
+  Future<SmartChargerCommandResult> turnOn() =>
+      throw const SmartChargerException(
+        'Bật sạc bắt buộc phải có safety timer trên Shelly.',
+        code: 'unsafeDuration',
+      );
 
   Future<SmartChargingSession> manualOn(
     Duration duration, {
@@ -561,6 +611,10 @@ class SmartChargerService {
     fallbackReason: request.fallbackReason,
     predictionAnalyzedAt: request.predictionAnalyzedAt,
     idempotencyKey: idempotencyKey,
+    etaCandidates: request.etaCandidates,
+    fusionReason: request.fusionReason,
+    profileVersion: request.profileVersion,
+    adapterVersion: request.adapterVersion,
   );
 
   Future<SmartChargingSession?> getCurrentSession() => reconcileActiveSession();

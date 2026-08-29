@@ -49,7 +49,10 @@ class BatteryStateModel {
   }
 
   /// Tạo từ VehicleModel
-  factory BatteryStateModel.fromVehicleModel(VehicleModel vehicle, {double? temp}) {
+  factory BatteryStateModel.fromVehicleModel(
+    VehicleModel vehicle, {
+    double? temp,
+  }) {
     return BatteryStateModel(
       vehicleId: vehicle.vehicleId,
       percentage: vehicle.currentBattery.toDouble(),

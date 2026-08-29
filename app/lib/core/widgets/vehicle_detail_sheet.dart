@@ -20,8 +20,11 @@ class VehicleDetailSheet extends ConsumerStatefulWidget {
 
   const VehicleDetailSheet({super.key, required this.vehicle, this.onSelect});
 
-  static Future<void> show(BuildContext context, VehicleModel vehicle,
-      {VoidCallback? onSelect}) {
+  static Future<void> show(
+    BuildContext context,
+    VehicleModel vehicle, {
+    VoidCallback? onSelect,
+  }) {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -31,8 +34,7 @@ class VehicleDetailSheet extends ConsumerStatefulWidget {
   }
 
   @override
-  ConsumerState<VehicleDetailSheet> createState() =>
-      _VehicleDetailSheetState();
+  ConsumerState<VehicleDetailSheet> createState() => _VehicleDetailSheetState();
 }
 
 class _VehicleDetailSheetState extends ConsumerState<VehicleDetailSheet> {
@@ -74,7 +76,11 @@ class _VehicleDetailSheetState extends ConsumerState<VehicleDetailSheet> {
         trips: trips,
         insight: insight,
       );
-      if (mounted) setState(() { _capacityResult = result; _loadingCapacity = false; });
+      if (mounted)
+        setState(() {
+          _capacityResult = result;
+          _loadingCapacity = false;
+        });
     } catch (_) {
       if (mounted) setState(() => _loadingCapacity = false);
     }
@@ -105,7 +111,8 @@ class _VehicleDetailSheetState extends ConsumerState<VehicleDetailSheet> {
           children: [
             // Handle
             Container(
-              width: 40, height: 4,
+              width: 40,
+              height: 4,
               decoration: BoxDecoration(
                 color: AppColors.border,
                 borderRadius: BorderRadius.circular(2),
@@ -117,10 +124,14 @@ class _VehicleDetailSheetState extends ConsumerState<VehicleDetailSheet> {
             Row(
               children: [
                 Container(
-                  width: 56, height: 56,
+                  width: 56,
+                  height: 56,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [_avatarColor, _avatarColor.withValues(alpha: 0.7)],
+                      colors: [
+                        _avatarColor,
+                        _avatarColor.withValues(alpha: 0.7),
+                      ],
                     ),
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
@@ -131,8 +142,11 @@ class _VehicleDetailSheetState extends ConsumerState<VehicleDetailSheet> {
                       ),
                     ],
                   ),
-                  child: const Icon(Icons.electric_moped_rounded,
-                      color: Colors.white, size: 28),
+                  child: const Icon(
+                    Icons.electric_moped_rounded,
+                    color: Colors.white,
+                    size: 28,
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -150,8 +164,11 @@ class _VehicleDetailSheetState extends ConsumerState<VehicleDetailSheet> {
                       if (v.hasModelLink)
                         Row(
                           children: [
-                            const Icon(Icons.link_rounded,
-                                color: AppColors.info, size: 14),
+                            const Icon(
+                              Icons.link_rounded,
+                              color: AppColors.info,
+                              size: 14,
+                            ),
                             const SizedBox(width: 4),
                             Text(
                               v.vinfastModelName ?? v.vinfastModelId ?? '',
@@ -164,11 +181,13 @@ class _VehicleDetailSheetState extends ConsumerState<VehicleDetailSheet> {
                           ],
                         ),
                       if (!v.hasModelLink)
-                        const Text('Chưa liên kết model VinFast',
-                            style: TextStyle(
-                              color: AppColors.warning,
-                              fontSize: 12,
-                            )),
+                        const Text(
+                          'Chưa liên kết model VinFast',
+                          style: TextStyle(
+                            color: AppColors.warning,
+                            fontSize: 12,
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -180,24 +199,41 @@ class _VehicleDetailSheetState extends ConsumerState<VehicleDetailSheet> {
             // Main stats grid
             Row(
               children: [
-                _buildStatTile(Icons.battery_std_rounded, '${v.lastBatteryPercent}%',
-                    'Pin hiện tại',
-                    v.lastBatteryPercent > 50 ? AppColors.primary
-                        : v.lastBatteryPercent > 20 ? AppColors.warning
-                        : AppColors.error),
+                _buildStatTile(
+                  Icons.battery_std_rounded,
+                  '${v.lastBatteryPercent}%',
+                  'Pin hiện tại',
+                  v.lastBatteryPercent > 50
+                      ? AppColors.primary
+                      : v.lastBatteryPercent > 20
+                      ? AppColors.warning
+                      : AppColors.error,
+                ),
                 const SizedBox(width: 10),
-                _buildStatTile(Icons.speed_rounded, '${v.currentOdo} km',
-                    'ODO', AppColors.info),
+                _buildStatTile(
+                  Icons.speed_rounded,
+                  '${v.currentOdo} km',
+                  'ODO',
+                  AppColors.info,
+                ),
               ],
             ),
             const SizedBox(height: 10),
             Row(
               children: [
-                _buildStatTile(Icons.battery_charging_full_rounded,
-                    '${v.totalCharges} lần', 'Tổng sạc', AppColors.primary),
+                _buildStatTile(
+                  Icons.battery_charging_full_rounded,
+                  '${v.totalCharges} lần',
+                  'Tổng sạc',
+                  AppColors.primary,
+                ),
                 const SizedBox(width: 10),
-                _buildStatTile(Icons.route_rounded, '${v.totalTrips} lần',
-                    'Tổng chuyến', AppColors.warning),
+                _buildStatTile(
+                  Icons.route_rounded,
+                  '${v.totalTrips} lần',
+                  'Tổng chuyến',
+                  AppColors.warning,
+                ),
               ],
             ).animate().fadeIn(delay: 100.ms),
 
@@ -205,9 +241,14 @@ class _VehicleDetailSheetState extends ConsumerState<VehicleDetailSheet> {
             if (_loadingCapacity) ...[
               const SizedBox(height: 16),
               const Center(
-                child: SizedBox(width: 20, height: 20,
-                    child: CircularProgressIndicator(
-                        color: AppColors.info, strokeWidth: 2)),
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    color: AppColors.info,
+                    strokeWidth: 2,
+                  ),
+                ),
               ),
             ] else if (_capacityResult != null) ...[
               const SizedBox(height: 16),
@@ -229,11 +270,14 @@ class _VehicleDetailSheetState extends ConsumerState<VehicleDetailSheet> {
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
                   ),
                   icon: const Icon(Icons.check_circle_rounded, size: 20),
-                  label: const Text('Chọn xe này',
-                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                  label: const Text(
+                    'Chọn xe này',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                  ),
                 ),
               ).animate().fadeIn(delay: 200.ms),
             ],
@@ -243,7 +287,12 @@ class _VehicleDetailSheetState extends ConsumerState<VehicleDetailSheet> {
     );
   }
 
-  Widget _buildStatTile(IconData icon, String value, String label, Color color) {
+  Widget _buildStatTile(
+    IconData icon,
+    String value,
+    String label,
+    Color color,
+  ) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(14),
@@ -270,18 +319,22 @@ class _VehicleDetailSheetState extends ConsumerState<VehicleDetailSheet> {
                   FittedBox(
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerLeft,
-                    child: Text(value,
-                        style: TextStyle(
-                          color: color,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        )),
+                    child: Text(
+                      value,
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
-                  Text(label,
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 11,
-                      )),
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 11,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -312,22 +365,29 @@ class _VehicleDetailSheetState extends ConsumerState<VehicleDetailSheet> {
         children: [
           Row(
             children: [
-              const Icon(Icons.battery_full_rounded,
-                  color: AppColors.info, size: 18),
+              const Icon(
+                Icons.battery_full_rounded,
+                color: AppColors.info,
+                size: 18,
+              ),
               const SizedBox(width: 8),
-              const Text('Dung lượng pin AI',
-                  style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  )),
+              const Text(
+                'Dung lượng pin AI',
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               const Spacer(),
-              Text('SoH ${r.sohPercent.toStringAsFixed(1)}%',
-                  style: TextStyle(
-                    color: alertColor,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  )),
+              Text(
+                'SoH ${r.sohPercent.toStringAsFixed(1)}%',
+                style: TextStyle(
+                  color: alertColor,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 10),
@@ -344,27 +404,33 @@ class _VehicleDetailSheetState extends ConsumerState<VehicleDetailSheet> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Khả dụng: ${r.usableCapacityWh.toStringAsFixed(0)} Wh',
+              Text(
+                'Khả dụng: ${r.usableCapacityWh.toStringAsFixed(0)} Wh',
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                ),
+              ),
+              if (r.observedChargePowerW != null)
+                Text(
+                  'Sạc: ${r.observedChargePowerW!.toStringAsFixed(0)}W',
                   style: const TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 12,
-                  )),
-              if (r.observedChargePowerW != null)
-                Text('Sạc: ${r.observedChargePowerW!.toStringAsFixed(0)}W',
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 12,
-                    )),
+                  ),
+                ),
             ],
           ),
           if (r.alertLevel != SoHAlertLevel.none) ...[
             const SizedBox(height: 8),
-            Text(r.alertLevel.message,
-                style: TextStyle(
-                  color: alertColor,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                )),
+            Text(
+              r.alertLevel.message,
+              style: TextStyle(
+                color: alertColor,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ],
         ],
       ),

@@ -69,31 +69,46 @@ class AppErrorReporter {
 
     // Redact Authorization headers
     sanitized = sanitized.replaceAllMapped(
-      RegExp(r'(Authorization:\s*)(?:Bearer\s+)?[^\r\n,]+', caseSensitive: false),
+      RegExp(
+        r'(Authorization:\s*)(?:Bearer\s+)?[^\r\n,]+',
+        caseSensitive: false,
+      ),
       (m) => '${m[1]}Bearer ***',
     );
 
     // Redact password fields
     sanitized = sanitized.replaceAllMapped(
-      RegExp(r'(password["\x27]?\s*[:=]\s*["\x27]?)([^"\x27,\s&]+)(["\x27]?)', caseSensitive: false),
+      RegExp(
+        r'(password["\x27]?\s*[:=]\s*["\x27]?)([^"\x27,\s&]+)(["\x27]?)',
+        caseSensitive: false,
+      ),
       (m) => '${m[1]}***${m[3]}',
     );
 
     // Redact API keys and auth keys
     sanitized = sanitized.replaceAllMapped(
-      RegExp(r'((?:api[_\-]?key|apiKey|auth[_\-]?key|shelly[_\-]?key)["\x27]?\s*[:=]\s*["\x27]?)([^"\x27,\s&]+)(["\x27]?)', caseSensitive: false),
+      RegExp(
+        r'((?:api[_\-]?key|apiKey|auth[_\-]?key|shelly[_\-]?key)["\x27]?\s*[:=]\s*["\x27]?)([^"\x27,\s&]+)(["\x27]?)',
+        caseSensitive: false,
+      ),
       (m) => '${m[1]}***${m[3]}',
     );
 
     // Redact tokens
     sanitized = sanitized.replaceAllMapped(
-      RegExp(r'((?:refresh[_\-]?token|id[_\-]?token|firebase[_\-]?token|token)["\x27]?\s*[:=]\s*["\x27]?)([^"\x27,\s&]+)(["\x27]?)', caseSensitive: false),
+      RegExp(
+        r'((?:refresh[_\-]?token|id[_\-]?token|firebase[_\-]?token|token)["\x27]?\s*[:=]\s*["\x27]?)([^"\x27,\s&]+)(["\x27]?)',
+        caseSensitive: false,
+      ),
       (m) => '${m[1]}***${m[3]}',
     );
 
     // Redact cookies
     sanitized = sanitized.replaceAllMapped(
-      RegExp(r'(cookie["\x27]?\s*[:=]\s*["\x27]?)([^"\x27,\s;\r\n]+)(["\x27]?)', caseSensitive: false),
+      RegExp(
+        r'(cookie["\x27]?\s*[:=]\s*["\x27]?)([^"\x27,\s;\r\n]+)(["\x27]?)',
+        caseSensitive: false,
+      ),
       (m) => '${m[1]}***${m[3]}',
     );
 

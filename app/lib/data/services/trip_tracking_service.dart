@@ -162,7 +162,10 @@ class TripTrackingService {
     final ownerUid = prefs.getString('trip_ownerUid');
     final sessionId = prefs.getString('trip_sessionId');
 
-    if (vehicleId == null || startBattery == null || startOdo == null || startTimeStr == null) {
+    if (vehicleId == null ||
+        startBattery == null ||
+        startOdo == null ||
+        startTimeStr == null) {
       await _clearPersistedState();
       return false;
     }
@@ -212,17 +215,18 @@ class TripTrackingService {
 
     // Bắt đầu lắng nghe GPS lại
     try {
-      _positionStream = Geolocator.getPositionStream(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          distanceFilter: 10,
-        ),
-      ).listen(
-        _onPositionUpdate,
-        onError: (error) {
-          debugPrint('❌ GPS stream error on resume: $error');
-        },
-      );
+      _positionStream =
+          Geolocator.getPositionStream(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+              distanceFilter: 10,
+            ),
+          ).listen(
+            _onPositionUpdate,
+            onError: (error) {
+              debugPrint('❌ GPS stream error on resume: $error');
+            },
+          );
     } catch (e) {
       debugPrint('❌ Resume GPS stream failed: $e');
       _isTracking = false;
@@ -356,7 +360,8 @@ class TripTrackingService {
       if (permission == LocationPermission.deniedForever) {
         return const TripStartResult(
           status: TripStartStatus.permissionDeniedForever,
-          message: 'Quyền vị trí bị từ chối vĩnh viễn. Vui lòng cấp quyền trong Cài đặt.',
+          message:
+              'Quyền vị trí bị từ chối vĩnh viễn. Vui lòng cấp quyền trong Cài đặt.',
         );
       }
     } catch (e) {
@@ -373,7 +378,10 @@ class TripTrackingService {
     _currentBattery = currentBattery;
     _startOdo = currentOdo;
     _ownerUid = FirebaseAuth.instance.currentUser?.uid;
-    _tripSessionId ??= FirebaseFirestore.instance.collection('TripLogs').doc().id;
+    _tripSessionId ??= FirebaseFirestore.instance
+        .collection('TripLogs')
+        .doc()
+        .id;
     _defaultEfficiency = defaultEfficiency;
     _totalDistance = 0;
     _startTime = DateTime.now();
@@ -409,18 +417,19 @@ class TripTrackingService {
 
     // 5. Bắt đầu GPS stream
     try {
-      _positionStream = Geolocator.getPositionStream(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          distanceFilter: 10,
-        ),
-      ).listen(
-        _onPositionUpdate,
-        onError: (error) {
-          debugPrint('❌ GPS stream error: $error');
-          // Không crash — stream lỗi thì tiếp tục tracking nhưng không có GPS mới
-        },
-      );
+      _positionStream =
+          Geolocator.getPositionStream(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+              distanceFilter: 10,
+            ),
+          ).listen(
+            _onPositionUpdate,
+            onError: (error) {
+              debugPrint('❌ GPS stream error: $error');
+              // Không crash — stream lỗi thì tiếp tục tracking nhưng không có GPS mới
+            },
+          );
     } catch (e) {
       // Stream fail → rollback
       await _clearPersistedState();
@@ -442,7 +451,9 @@ class TripTrackingService {
       // Non-fatal — tracking vẫn chạy
     }
 
-    debugPrint('🛵 Trip tracking started: $vehicleId, payload: ${payload.label}');
+    debugPrint(
+      '🛵 Trip tracking started: $vehicleId, payload: ${payload.label}',
+    );
     _emitSnapshot();
     return TripStartResult.ok;
   }
@@ -459,8 +470,10 @@ class TripTrackingService {
     if (_lastLat != null && _lastLon != null) {
       // Tính khoảng cách bằng Haversine
       final dist = BatteryLogicService.haversineDistance(
-        _lastLat!, _lastLon!,
-        pos.latitude, pos.longitude,
+        _lastLat!,
+        _lastLon!,
+        pos.latitude,
+        pos.longitude,
       );
 
       // Lọc nhiễu GPS: bỏ qua nếu < 5m hoặc > 1km (nhảy GPS)
@@ -469,7 +482,9 @@ class TripTrackingService {
 
         // Tính % pin tiêu hao
         final drain = BatteryLogicService.batteryDrainForDistance(
-          dist, _defaultEfficiency, _payload,
+          dist,
+          _defaultEfficiency,
+          _payload,
         );
         _currentBattery = (_currentBattery - drain).clamp(0, 100);
       }
@@ -488,7 +503,8 @@ class TripTrackingService {
 
   Future<void> _syncTelemetryPoint(Position pos) async {
     final now = DateTime.now();
-    if (_lastTelemetrySyncAt != null && now.difference(_lastTelemetrySyncAt!) < const Duration(seconds: 8)) {
+    if (_lastTelemetrySyncAt != null &&
+        now.difference(_lastTelemetrySyncAt!) < const Duration(seconds: 8)) {
       return;
     }
     _lastTelemetrySyncAt = now;
@@ -519,7 +535,10 @@ class TripTrackingService {
   /// Cập nhật notification ongoing
   Future<void> _updateNotification() async {
     if (!_isTracking) return;
-    await NotificationService().showTripOngoing(_totalDistance, _currentBattery);
+    await NotificationService().showTripOngoing(
+      _totalDistance,
+      _currentBattery,
+    );
   }
 
   /// Kết thúc hành trình và lưu vào Firestore
@@ -568,7 +587,9 @@ class TripTrackingService {
     try {
       final firestore = FirebaseFirestore.instance;
       await firestore.runTransaction((transaction) async {
-        final tripRef = firestore.collection('TripLogs').doc(_tripSessionId ?? firestore.collection('TripLogs').doc().id);
+        final tripRef = firestore
+            .collection('TripLogs')
+            .doc(_tripSessionId ?? firestore.collection('TripLogs').doc().id);
         transaction.set(tripRef, {
           ...trip.toFirestore(),
           'tripSessionId': _tripSessionId,
@@ -597,7 +618,9 @@ class TripTrackingService {
           'updatedAt': FieldValue.serverTimestamp(),
         });
       });
-      debugPrint('✅ Trip saved: ${_totalDistance.toStringAsFixed(1)}km, -$consumed% pin');
+      debugPrint(
+        '✅ Trip saved: ${_totalDistance.toStringAsFixed(1)}km, -$consumed% pin',
+      );
     } catch (e) {
       debugPrint('❌ Error saving trip: $e');
     }
@@ -606,5 +629,4 @@ class TripTrackingService {
     _emitSnapshot();
     return trip;
   }
-
 }

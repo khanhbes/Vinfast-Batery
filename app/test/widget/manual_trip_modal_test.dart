@@ -20,9 +20,7 @@ Widget _wrapModal(Widget child) {
               showModalBottomSheet(
                 context: context,
                 isScrollControlled: true,
-                builder: (_) => ProviderScope(
-                  child: child,
-                ),
+                builder: (_) => ProviderScope(child: child),
               );
             },
             child: const Text('Open'),
@@ -43,9 +41,9 @@ void main() {
 
   group('AddManualTripModal', () {
     testWidgets('renders form with all fields', (tester) async {
-      await tester.pumpWidget(_wrapModal(
-        AddManualTripModal(vehicle: testVehicle),
-      ));
+      await tester.pumpWidget(
+        _wrapModal(AddManualTripModal(vehicle: testVehicle)),
+      );
       // Open the modal
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
@@ -66,9 +64,9 @@ void main() {
     });
 
     testWidgets('ODO đầu pre-filled with vehicle currentOdo', (tester) async {
-      await tester.pumpWidget(_wrapModal(
-        AddManualTripModal(vehicle: testVehicle),
-      ));
+      await tester.pumpWidget(
+        _wrapModal(AddManualTripModal(vehicle: testVehicle)),
+      );
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
 
@@ -80,9 +78,9 @@ void main() {
     });
 
     testWidgets('empty form shows validation errors on save', (tester) async {
-      await tester.pumpWidget(_wrapModal(
-        AddManualTripModal(vehicle: testVehicle),
-      ));
+      await tester.pumpWidget(
+        _wrapModal(AddManualTripModal(vehicle: testVehicle)),
+      );
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
 
@@ -95,9 +93,9 @@ void main() {
     });
 
     testWidgets('battery field rejects value > 100', (tester) async {
-      await tester.pumpWidget(_wrapModal(
-        AddManualTripModal(vehicle: testVehicle),
-      ));
+      await tester.pumpWidget(
+        _wrapModal(AddManualTripModal(vehicle: testVehicle)),
+      );
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
 
@@ -112,9 +110,9 @@ void main() {
     });
 
     testWidgets('time picker labels exist', (tester) async {
-      await tester.pumpWidget(_wrapModal(
-        AddManualTripModal(vehicle: testVehicle),
-      ));
+      await tester.pumpWidget(
+        _wrapModal(AddManualTripModal(vehicle: testVehicle)),
+      );
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
 
@@ -122,10 +120,12 @@ void main() {
       expect(find.text('Giờ kết thúc'), findsOneWidget);
     });
 
-    testWidgets('payload selector toggles between 1 and 2 person', (tester) async {
-      await tester.pumpWidget(_wrapModal(
-        AddManualTripModal(vehicle: testVehicle),
-      ));
+    testWidgets('payload selector toggles between 1 and 2 person', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _wrapModal(AddManualTripModal(vehicle: testVehicle)),
+      );
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
 

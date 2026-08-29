@@ -56,7 +56,8 @@ class _PremiumCardState extends State<PremiumCard> {
   @override
   Widget build(BuildContext context) {
     final bg = widget.backgroundColor ?? AppColors.card;
-    final border = widget.borderColor ??
+    final border =
+        widget.borderColor ??
         (widget.selected ? AppColors.primary : AppColors.glassBorder);
 
     Widget card = AnimatedContainer(
@@ -69,10 +70,7 @@ class _PremiumCardState extends State<PremiumCard> {
         color: widget.gradient == null ? bg : null,
         gradient: widget.gradient,
         borderRadius: widget.borderRadius,
-        border: Border.all(
-          color: border,
-          width: widget.selected ? 1.4 : 1,
-        ),
+        border: Border.all(color: border, width: widget.selected ? 1.4 : 1),
         boxShadow: widget.boxShadow,
       ),
       child: widget.child,

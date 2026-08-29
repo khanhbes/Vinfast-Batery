@@ -35,28 +35,33 @@ class SyncService {
       final userData = userDoc.data() ?? {};
 
       // Gửi đến web API
-      final response = await http.post(
-        Uri.parse('$_baseUrl/api/web/sync/user'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'uid': user.uid,
-          'email': user.email,
-          'displayName': user.displayName ?? userData['name'] ?? 'User',
-          'phoneNumber': user.phoneNumber ?? userData['phone'] ?? '',
-          'photoURL': user.photoURL ?? '',
-          'createdAt': DateTime.now().toIso8601String(),
-          'source': 'flutter_app',
-        }),
-      ).timeout(_timeout);
+      final response = await http
+          .post(
+            Uri.parse('$_baseUrl/api/web/sync/user'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'uid': user.uid,
+              'email': user.email,
+              'displayName': user.displayName ?? userData['name'] ?? 'User',
+              'phoneNumber': user.phoneNumber ?? userData['phone'] ?? '',
+              'photoURL': user.photoURL ?? '',
+              'createdAt': DateTime.now().toIso8601String(),
+              'source': 'flutter_app',
+            }),
+          )
+          .timeout(_timeout);
 
       if (response.statusCode == 200) {
         print('User synced to web successfully: ${user.uid}');
-        
+
         // Lưu vào SharedPreferences đánh dấu đã sync
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('user_synced_to_web', true);
-        await prefs.setString('last_user_sync', DateTime.now().toIso8601String());
-        
+        await prefs.setString(
+          'last_user_sync',
+          DateTime.now().toIso8601String(),
+        );
+
         return true;
       } else {
         print('Failed to sync user: ${response.statusCode} - ${response.body}');
@@ -75,7 +80,10 @@ class SyncService {
       if (user == null) return false;
 
       // Lấy thông tin vehicle
-      final vehicleDoc = await _firestore.collection('Vehicles').doc(vehicleId).get();
+      final vehicleDoc = await _firestore
+          .collection('Vehicles')
+          .doc(vehicleId)
+          .get();
       if (!vehicleDoc.exists) {
         print('Vehicle not found: $vehicleId');
         return false;
@@ -84,34 +92,36 @@ class SyncService {
       final vehicleData = vehicleDoc.data()!;
 
       // Gửi đến web API
-      final response = await http.post(
-        Uri.parse('$_baseUrl/api/web/sync/vehicle'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'vehicleId': vehicleId,
-          'ownerUid': user.uid,
-          'model': vehicleData['model'] ?? 'Unknown',
-          'year': vehicleData['year'] ?? DateTime.now().year,
-          'batteryCapacity': vehicleData['batteryCapacity'] ?? 0,
-          'currentBattery': vehicleData['currentBattery'] ?? 0,
-          'stateOfHealth': vehicleData['stateOfHealth'] ?? 100,
-          'currentOdo': vehicleData['currentOdo'] ?? 0,
-          'defaultEfficiency': vehicleData['defaultEfficiency'] ?? 1.0,
-          'lastBatteryPercent': vehicleData['lastBatteryPercent'] ?? 0,
-          'syncedAt': DateTime.now().toIso8601String(),
-          'source': 'flutter_app',
-        }),
-      ).timeout(_timeout);
+      final response = await http
+          .post(
+            Uri.parse('$_baseUrl/api/web/sync/vehicle'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'vehicleId': vehicleId,
+              'ownerUid': user.uid,
+              'model': vehicleData['model'] ?? 'Unknown',
+              'year': vehicleData['year'] ?? DateTime.now().year,
+              'batteryCapacity': vehicleData['batteryCapacity'] ?? 0,
+              'currentBattery': vehicleData['currentBattery'] ?? 0,
+              'stateOfHealth': vehicleData['stateOfHealth'] ?? 100,
+              'currentOdo': vehicleData['currentOdo'] ?? 0,
+              'defaultEfficiency': vehicleData['defaultEfficiency'] ?? 1.0,
+              'lastBatteryPercent': vehicleData['lastBatteryPercent'] ?? 0,
+              'syncedAt': DateTime.now().toIso8601String(),
+              'source': 'flutter_app',
+            }),
+          )
+          .timeout(_timeout);
 
       if (response.statusCode == 200) {
         print('Vehicle synced to web: $vehicleId');
-        
+
         // Cập nhật flag trong Firestore
         await _firestore.collection('Vehicles').doc(vehicleId).update({
           'syncedToWeb': true,
           'lastWebSync': FieldValue.serverTimestamp(),
         });
-        
+
         return true;
       } else {
         print('Failed to sync vehicle: ${response.statusCode}');
@@ -181,19 +191,23 @@ class SyncService {
 
       final batteryState = snapshot.docs.first.data() as Map<String, dynamic>;
 
-      final response = await http.post(
-        Uri.parse('$_baseUrl/api/web/sync/battery-state'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'vehicleId': vehicleId,
-          'percentage': batteryState['percentage'] ?? 0,
-          'soh': batteryState['soh'] ?? 100,
-          'estimatedRange': batteryState['estimatedRange'] ?? 0,
-          'temp': batteryState['temp'] ?? 25.0,
-          'timestamp': (batteryState['timestamp'] as Timestamp).toDate().toIso8601String(),
-          'source': 'flutter_app',
-        }),
-      ).timeout(_timeout);
+      final response = await http
+          .post(
+            Uri.parse('$_baseUrl/api/web/sync/battery-state'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'vehicleId': vehicleId,
+              'percentage': batteryState['percentage'] ?? 0,
+              'soh': batteryState['soh'] ?? 100,
+              'estimatedRange': batteryState['estimatedRange'] ?? 0,
+              'temp': batteryState['temp'] ?? 25.0,
+              'timestamp': (batteryState['timestamp'] as Timestamp)
+                  .toDate()
+                  .toIso8601String(),
+              'source': 'flutter_app',
+            }),
+          )
+          .timeout(_timeout);
 
       if (response.statusCode == 200) {
         print('Battery state synced to web: $vehicleId');
@@ -211,32 +225,39 @@ class SyncService {
   /// Đồng bộ trip prediction với web
   Future<bool> syncTripPredictionToWeb(String predictionId) async {
     try {
-      final doc = await _firestore.collection('trip_predictions').doc(predictionId).get();
+      final doc = await _firestore
+          .collection('trip_predictions')
+          .doc(predictionId)
+          .get();
       if (!doc.exists) return false;
 
       final data = doc.data()!;
 
-      final response = await http.post(
-        Uri.parse('$_baseUrl/api/web/sync/trip-prediction'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'predictionId': predictionId,
-          'vehicleId': data['vehicleId'],
-          'from': data['from'],
-          'to': data['to'],
-          'distance': data['distance'],
-          'duration': data['duration'],
-          'consumption': data['consumption'],
-          'startBattery': data['startBattery'],
-          'endBattery': data['endBattery'],
-          'isSafe': data['isSafe'],
-          'weather': data['weather'],
-          'temperature': data['temperature'],
-          'riderWeight': data['riderWeight'],
-          'timestamp': (data['timestamp'] as Timestamp).toDate().toIso8601String(),
-          'source': 'flutter_app',
-        }),
-      ).timeout(_timeout);
+      final response = await http
+          .post(
+            Uri.parse('$_baseUrl/api/web/sync/trip-prediction'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'predictionId': predictionId,
+              'vehicleId': data['vehicleId'],
+              'from': data['from'],
+              'to': data['to'],
+              'distance': data['distance'],
+              'duration': data['duration'],
+              'consumption': data['consumption'],
+              'startBattery': data['startBattery'],
+              'endBattery': data['endBattery'],
+              'isSafe': data['isSafe'],
+              'weather': data['weather'],
+              'temperature': data['temperature'],
+              'riderWeight': data['riderWeight'],
+              'timestamp': (data['timestamp'] as Timestamp)
+                  .toDate()
+                  .toIso8601String(),
+              'source': 'flutter_app',
+            }),
+          )
+          .timeout(_timeout);
 
       if (response.statusCode == 200) {
         print('Trip prediction synced to web: $predictionId');
@@ -338,13 +359,13 @@ class SyncService {
         .where('needsSync', isEqualTo: true)
         .snapshots()
         .listen((snapshot) {
-      for (final change in snapshot.docChanges) {
-        if (change.type == DocumentChangeType.added ||
-            change.type == DocumentChangeType.modified) {
-          syncVehicleToWeb(change.doc.id);
-        }
-      }
-    });
+          for (final change in snapshot.docChanges) {
+            if (change.type == DocumentChangeType.added ||
+                change.type == DocumentChangeType.modified) {
+              syncVehicleToWeb(change.doc.id);
+            }
+          }
+        });
 
     print('Auto sync started for user: ${user.uid}');
   }

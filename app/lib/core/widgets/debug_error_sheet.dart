@@ -5,10 +5,7 @@ import '../services/app_error_reporter.dart';
 
 /// Modal bottom sheet displaying detailed error and debug information.
 class DebugErrorSheet extends StatelessWidget {
-  const DebugErrorSheet({
-    super.key,
-    required this.entry,
-  });
+  const DebugErrorSheet({super.key, required this.entry});
 
   final AppErrorEntry entry;
 
@@ -32,11 +29,17 @@ class DebugErrorSheet extends StatelessWidget {
         time: DateTime.now(),
         source: source,
         message: AppErrorReporter.redactSecrets(error.toString()),
-        stackTrace: AppErrorReporter.redactSecrets(stackTrace?.toString() ?? ''),
-        endpoint: endpoint != null ? AppErrorReporter.redactSecrets(endpoint) : null,
+        stackTrace: AppErrorReporter.redactSecrets(
+          stackTrace?.toString() ?? '',
+        ),
+        endpoint: endpoint != null
+            ? AppErrorReporter.redactSecrets(endpoint)
+            : null,
         statusCode: statusCode,
         debugCode: debugCode,
-        debugDetail: debugDetail != null ? AppErrorReporter.redactSecrets(debugDetail) : null,
+        debugDetail: debugDetail != null
+            ? AppErrorReporter.redactSecrets(debugDetail)
+            : null,
       );
     } else if (AppErrorReporter.entries.isNotEmpty) {
       targetEntry = AppErrorReporter.entries.first;
@@ -101,7 +104,10 @@ class DebugErrorSheet extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               child: Row(
                 children: [
-                  const Icon(Icons.bug_report_rounded, color: Colors.orangeAccent),
+                  const Icon(
+                    Icons.bug_report_rounded,
+                    color: Colors.orangeAccent,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -131,9 +137,14 @@ class DebugErrorSheet extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
-                          color: isDark ? Colors.blueGrey.shade800 : Colors.blueGrey.shade100,
+                          color: isDark
+                              ? Colors.blueGrey.shade800
+                              : Colors.blueGrey.shade100,
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
@@ -141,7 +152,9 @@ class DebugErrorSheet extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: isDark ? Colors.lightBlueAccent : Colors.blueGrey.shade800,
+                            color: isDark
+                                ? Colors.lightBlueAccent
+                                : Colors.blueGrey.shade800,
                           ),
                         ),
                       ),
@@ -156,7 +169,8 @@ class DebugErrorSheet extends StatelessWidget {
                   const SizedBox(height: 14),
 
                   // HTTP & Debug code tags
-                  if (entry.statusCode != null || (entry.debugCode != null && entry.debugCode!.isNotEmpty))
+                  if (entry.statusCode != null ||
+                      (entry.debugCode != null && entry.debugCode!.isNotEmpty))
                     Padding(
                       padding: const EdgeInsets.only(bottom: 12),
                       child: Wrap(
@@ -165,7 +179,10 @@ class DebugErrorSheet extends StatelessWidget {
                         children: [
                           if (entry.statusCode != null)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
                               decoration: BoxDecoration(
                                 color: entry.statusCode! >= 500
                                     ? Colors.red.withOpacity(0.15)
@@ -188,9 +205,13 @@ class DebugErrorSheet extends StatelessWidget {
                                 ),
                               ),
                             ),
-                          if (entry.debugCode != null && entry.debugCode!.isNotEmpty)
+                          if (entry.debugCode != null &&
+                              entry.debugCode!.isNotEmpty)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.purple.withOpacity(0.15),
                                 borderRadius: BorderRadius.circular(6),
@@ -230,7 +251,9 @@ class DebugErrorSheet extends StatelessWidget {
                             width: double.infinity,
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: isDark ? const Color(0xFF14171E) : const Color(0xFFF1F3F5),
+                              color: isDark
+                                  ? const Color(0xFF14171E)
+                                  : const Color(0xFFF1F3F5),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
@@ -260,19 +283,24 @@ class DebugErrorSheet extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: Colors.red.withOpacity(0.08),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
+                      border: Border.all(
+                        color: Colors.redAccent.withOpacity(0.3),
+                      ),
                     ),
                     child: Text(
                       entry.message,
                       style: TextStyle(
-                        color: isDark ? Colors.red.shade200 : Colors.red.shade900,
+                        color: isDark
+                            ? Colors.red.shade200
+                            : Colors.red.shade900,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
 
                   // Detail if present
-                  if (entry.debugDetail != null && entry.debugDetail!.isNotEmpty) ...[
+                  if (entry.debugDetail != null &&
+                      entry.debugDetail!.isNotEmpty) ...[
                     const SizedBox(height: 12),
                     Text(
                       'Chi tiết bổ sung',
@@ -286,12 +314,17 @@ class DebugErrorSheet extends StatelessWidget {
                       width: double.infinity,
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF14171E) : const Color(0xFFF1F3F5),
+                        color: isDark
+                            ? const Color(0xFF14171E)
+                            : const Color(0xFFF1F3F5),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
                         entry.debugDetail!,
-                        style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 12,
+                        ),
                       ),
                     ),
                   ],
@@ -312,7 +345,9 @@ class DebugErrorSheet extends StatelessWidget {
                       padding: const EdgeInsets.all(12),
                       constraints: const BoxConstraints(maxHeight: 180),
                       decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF101217) : const Color(0xFFE9ECEF),
+                        color: isDark
+                            ? const Color(0xFF101217)
+                            : const Color(0xFFE9ECEF),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: SingleChildScrollView(
@@ -339,10 +374,14 @@ class DebugErrorSheet extends StatelessWidget {
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () {
-                        Clipboard.setData(ClipboardData(text: entry.toCopyableString()));
+                        Clipboard.setData(
+                          ClipboardData(text: entry.toCopyableString()),
+                        );
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('Đã sao chép chi tiết lỗi vào bộ nhớ tạm'),
+                            content: Text(
+                              'Đã sao chép chi tiết lỗi vào bộ nhớ tạm',
+                            ),
                             duration: Duration(seconds: 2),
                           ),
                         );
@@ -361,7 +400,10 @@ class DebugErrorSheet extends StatelessWidget {
                   ElevatedButton(
                     onPressed: () => Navigator.of(context).pop(),
                     style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),

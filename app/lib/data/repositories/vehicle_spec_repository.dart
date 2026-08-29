@@ -19,7 +19,7 @@ class VehicleSpecRepository {
   final FirebaseFirestore _firestore;
 
   VehicleSpecRepository({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
   CollectionReference get _specsRef =>
       _firestore.collection('VinFastModelSpecs');
@@ -80,7 +80,9 @@ class VehicleSpecRepository {
     // If Firestore is empty, return [] so the caller falls back to cache/asset.
     final snapshot = await _specsRef.get();
     if (snapshot.docs.isEmpty) {
-      debugPrint('ℹ️ VehicleSpecRepository: Firestore VinFastModelSpecs empty (backend-managed)');
+      debugPrint(
+        'ℹ️ VehicleSpecRepository: Firestore VinFastModelSpecs empty (backend-managed)',
+      );
       return [];
     }
     return snapshot.docs.map((doc) {
@@ -95,7 +97,10 @@ class VehicleSpecRepository {
     final prefs = await SharedPreferences.getInstance();
     final json = jsonEncode(specs.map((s) => s.toMap()).toList());
     await prefs.setString(_cacheKey, json);
-    await prefs.setInt(_cacheTimestampKey, DateTime.now().millisecondsSinceEpoch);
+    await prefs.setInt(
+      _cacheTimestampKey,
+      DateTime.now().millisecondsSinceEpoch,
+    );
   }
 
   Future<List<VinFastModelSpec>> _loadFromCache() async {
@@ -116,7 +121,9 @@ class VehicleSpecRepository {
   // ── Local Asset Fallback ──
 
   Future<List<VinFastModelSpec>> _loadFromAsset() async {
-    final raw = await rootBundle.loadString('assets/vinfast_specs_fallback.json');
+    final raw = await rootBundle.loadString(
+      'assets/vinfast_specs_fallback.json',
+    );
     final list = jsonDecode(raw) as List;
     return list
         .map((e) => VinFastModelSpec.fromMap(e as Map<String, dynamic>))

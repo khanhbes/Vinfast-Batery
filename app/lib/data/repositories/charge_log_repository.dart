@@ -22,13 +22,11 @@ class ChargeLogRepository {
   final FirebaseFirestore _firestore;
 
   ChargeLogRepository({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
-  CollectionReference get _chargeLogsRef =>
-      _firestore.collection('ChargeLogs');
+  CollectionReference get _chargeLogsRef => _firestore.collection('ChargeLogs');
 
-  CollectionReference get _vehiclesRef =>
-      _firestore.collection('Vehicles');
+  CollectionReference get _vehiclesRef => _firestore.collection('Vehicles');
 
   String? get _uid => FirebaseAuth.instance.currentUser?.uid;
 
@@ -208,7 +206,7 @@ class ChargeLogRepository {
     });
   }
 
-  /// Xóa một charge log 
+  /// Xóa một charge log
   Future<void> deleteChargeLog(String logId) async {
     await _chargeLogsRef.doc(logId).delete();
   }
@@ -237,10 +235,9 @@ class ChargeLogRepository {
     );
     final avgStart =
         logs.fold<int>(0, (acc, l) => acc + l.startBatteryPercent) /
-            totalCharges;
+        totalCharges;
     final avgEnd =
-        logs.fold<int>(0, (acc, l) => acc + l.endBatteryPercent) /
-            totalCharges;
+        logs.fold<int>(0, (acc, l) => acc + l.endBatteryPercent) / totalCharges;
 
     return {
       'totalCharges': totalCharges,

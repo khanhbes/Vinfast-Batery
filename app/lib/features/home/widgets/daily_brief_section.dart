@@ -84,73 +84,76 @@ class _BriefCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.glassBorder),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: _iconColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Icon(_icon, color: _iconColor, size: 22),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.glassBorder),
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  brief.title,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _iconColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(16),
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  brief.content,
-                  style: const TextStyle(
-                    color: AppColors.textTertiary,
-                    fontSize: 13,
-                    height: 1.5,
-                  ),
-                ),
-                if (brief.actionLabel != null) ...[
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Text(
-                        brief.actionLabel!,
-                        style: TextStyle(
-                          color: AppColors.primary,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.5,
-                        ),
+                child: Icon(_icon, color: _iconColor, size: 22),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      brief.title,
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
                       ),
-                      const SizedBox(width: 4),
-                      Icon(
-                        Icons.chevron_right_rounded,
-                        color: AppColors.primary,
-                        size: 16,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      brief.content,
+                      style: const TextStyle(
+                        color: AppColors.textTertiary,
+                        fontSize: 13,
+                        height: 1.5,
+                      ),
+                    ),
+                    if (brief.actionLabel != null) ...[
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Text(
+                            brief.actionLabel!,
+                            style: TextStyle(
+                              color: AppColors.primary,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            color: AppColors.primary,
+                            size: 16,
+                          ),
+                        ],
                       ),
                     ],
-                  ),
-                ],
-              ],
-            ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
-    ).animate().fadeIn(delay: Duration(milliseconds: 100 * index)).slideX(begin: -0.1);
+        )
+        .animate()
+        .fadeIn(delay: Duration(milliseconds: 100 * index))
+        .slideX(begin: -0.1);
   }
 
   IconData get _icon {

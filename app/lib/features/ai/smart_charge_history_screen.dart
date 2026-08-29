@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:async';
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -29,11 +30,21 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
   String? _error;
   bool _loading = true;
   bool _loadingMore = false;
+  Timer? _liveTimer;
 
   @override
   void initState() {
     super.initState();
     _load(reset: true);
+    _liveTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (_items.any((item) => !item.state.isTerminal)) _load(reset: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _liveTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _load({required bool reset}) async {
@@ -229,7 +240,6 @@ class _HistoryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final endSoc = session.estimatedSoc ?? session.targetSoc;
     final duration = (session.stoppedAt ?? session.updatedAt).difference(
       session.startedAt ?? session.createdAt,
     );
@@ -254,13 +264,28 @@ class _HistoryRow extends StatelessWidget {
               _energy(session.energyUsedWh),
               style: const TextStyle(fontWeight: FontWeight.w800),
             ),
+            if (!session.state.isTerminal) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(99),
+                ),
+                child: const Text(
+                  'ĐANG SẠC',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900),
+                ),
+              ),
+            ],
           ],
         ),
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 5),
           child: Text(
             '${DateFormat('dd/MM · HH:mm').format(session.createdAt.toLocal())}  ·  '
-            '~${session.startSoc.toStringAsFixed(0)} → ${endSoc.toStringAsFixed(0)}%  ·  ${_duration(duration)}',
+            '~${session.startSoc.toStringAsFixed(0)} → Mục tiêu ~${session.targetSoc.toStringAsFixed(0)}%  ·  '
+            '${!session.state.isTerminal ? '${_duration(session.remaining())} còn lại' : _duration(duration)}',
           ),
         ),
         trailing: const Icon(Icons.chevron_right_rounded),
@@ -289,11 +314,21 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
   SmartChargeEnergySummary? _summary;
   String? _error;
   _ChartMetric _metric = _ChartMetric.power;
+  Timer? _liveTimer;
 
   @override
   void initState() {
     super.initState();
     _load();
+    if (!widget.session.state.isTerminal) {
+      _liveTimer = Timer.periodic(const Duration(seconds: 5), (_) => _load());
+    }
+  }
+
+  @override
+  void dispose() {
+    _liveTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -331,6 +366,18 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
               context,
             ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
           ),
+          if (!widget.session.state.isTerminal) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Chip(
+                avatar: const Icon(Icons.bolt_rounded, size: 18),
+                label: Text(
+                  'ĐANG SẠC · Mục tiêu ~${widget.session.targetSoc.round()}%',
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 6),
           Text(
             '${DateFormat('dd/MM/yyyy · HH:mm').format(widget.session.createdAt.toLocal())}  ·  ${_duration(duration)}',

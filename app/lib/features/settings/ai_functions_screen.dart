@@ -54,8 +54,11 @@ class AiFunctionsScreen extends ConsumerWidget {
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: AppColors.border),
                         ),
-                        child: const Icon(Icons.arrow_back_rounded,
-                            color: AppColors.textSecondary, size: 20),
+                        child: const Icon(
+                          Icons.arrow_back_rounded,
+                          color: AppColors.textSecondary,
+                          size: 20,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -63,18 +66,22 @@ class AiFunctionsScreen extends ConsumerWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('AI Function Center',
-                              style: TextStyle(
-                                color: AppColors.textPrimary,
-                                fontSize: 22,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -0.5,
-                              )),
-                          Text('Dữ liệu AI quản lý từ Web Admin',
-                              style: TextStyle(
-                                color: AppColors.textSecondary,
-                                fontSize: 13,
-                              )),
+                          Text(
+                            'AI Function Center',
+                            style: TextStyle(
+                              color: AppColors.textPrimary,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                          Text(
+                            'Dữ liệu AI quản lý từ Web Admin',
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 13,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -141,12 +148,13 @@ class AiFunctionsScreen extends ConsumerWidget {
         icon: Icons.ev_station_rounded,
         iconColor: AppColors.primary,
         name: 'Smart Charge',
-        description: 'Dự đoán thời gian sạc bằng AI và tự ngắt nguồn qua Shelly.',
+        description:
+            'Dự đoán thời gian sạc bằng AI và tự ngắt nguồn qua Shelly.',
         status: totalCharges >= 3
             ? _FeatureStatus.active
             : totalCharges > 0
-                ? _FeatureStatus.learning
-                : _FeatureStatus.needsData,
+            ? _FeatureStatus.learning
+            : _FeatureStatus.needsData,
         detail: totalCharges >= 3
             ? 'Đủ $totalCharges lần sạc'
             : 'Cần sạc thêm ${3 - totalCharges} lần',
@@ -155,62 +163,65 @@ class AiFunctionsScreen extends ConsumerWidget {
         icon: Icons.route_rounded,
         iconColor: AppColors.info,
         name: 'Route Consumption',
-        description: 'Dự báo pin tiêu hao theo insight AI từ web + '
+        description:
+            'Dự báo pin tiêu hao theo insight AI từ web + '
             'fallback on-device.',
         status: hasTrained
             ? _FeatureStatus.active
             : totalTrips >= 3
-                ? _FeatureStatus.active
-                : totalTrips > 0
-                    ? _FeatureStatus.learning
-                    : _FeatureStatus.needsData,
+            ? _FeatureStatus.active
+            : totalTrips > 0
+            ? _FeatureStatus.learning
+            : _FeatureStatus.needsData,
         detail: hasTrained
             ? insightStatus == 'available'
-                ? 'AI insight + on-device ($totalTrips chuyến)'
-                : 'AI insight (stale) + on-device'
+                  ? 'AI insight + on-device ($totalTrips chuyến)'
+                  : 'AI insight (stale) + on-device'
             : totalTrips >= 3
-                ? 'On-device — chờ AI web'
-                : 'Cần đi thêm ${3 - totalTrips} chuyến',
+            ? 'On-device — chờ AI web'
+            : 'Cần đi thêm ${3 - totalTrips} chuyến',
       ),
       _AiFeature(
         icon: Icons.battery_full_rounded,
         iconColor: const Color(0xFFFF9800),
         name: 'AI Capacity / SoH',
-        description: 'Tính dung lượng pin khả dụng (Wh, Ah) và sức khỏe pin '
+        description:
+            'Tính dung lượng pin khả dụng (Wh, Ah) và sức khỏe pin '
             '(SoH%) từ Firestore AI insight.',
         status: !hasModel
             ? _FeatureStatus.needsModel
             : hasTrained
-                ? _FeatureStatus.active
-                : totalCharges >= 3
-                    ? _FeatureStatus.active
-                    : totalCharges > 0
-                        ? _FeatureStatus.learning
-                        : _FeatureStatus.needsData,
+            ? _FeatureStatus.active
+            : totalCharges >= 3
+            ? _FeatureStatus.active
+            : totalCharges > 0
+            ? _FeatureStatus.learning
+            : _FeatureStatus.needsData,
         detail: !hasModel
             ? 'Chưa link model VinFast'
             : hasTrained
-                ? 'AI insight ($insightStatus)'
-                : 'On-device (chờ AI web)',
+            ? 'AI insight ($insightStatus)'
+            : 'On-device (chờ AI web)',
       ),
       _AiFeature(
         icon: Icons.trending_down_rounded,
         iconColor: AppColors.error,
         name: 'Degradation Prediction',
-        description: 'Dự đoán mức độ chai pin từ AI insight '
+        description:
+            'Dự đoán mức độ chai pin từ AI insight '
             '(web admin train + refresh).',
         status: hasTrained
             ? _FeatureStatus.active
             : totalCharges >= 3
-                ? _FeatureStatus.waitingWeb
-                : totalCharges > 0
-                    ? _FeatureStatus.learning
-                    : _FeatureStatus.needsData,
+            ? _FeatureStatus.waitingWeb
+            : totalCharges > 0
+            ? _FeatureStatus.learning
+            : _FeatureStatus.needsData,
         detail: hasTrained
             ? 'AI insight ($insightStatus)'
             : totalCharges >= 3
-                ? 'Đủ data — cần web admin Train'
-                : 'Cần sạc thêm ${3 - totalCharges} lần',
+            ? 'Đủ data — cần web admin Train'
+            : 'Cần sạc thêm ${3 - totalCharges} lần',
       ),
       _AiFeature(
         icon: Icons.analytics_rounded,
@@ -220,24 +231,23 @@ class AiFunctionsScreen extends ConsumerWidget {
         status: hasTrained
             ? _FeatureStatus.active
             : totalCharges >= 3
-                ? _FeatureStatus.waitingWeb
-                : totalCharges > 0
-                    ? _FeatureStatus.learning
-                    : _FeatureStatus.needsData,
+            ? _FeatureStatus.waitingWeb
+            : totalCharges > 0
+            ? _FeatureStatus.learning
+            : _FeatureStatus.needsData,
         detail: hasTrained
             ? 'Có ${(totalCharges)} lần sạc'
             : totalCharges >= 3
-                ? 'Cần web admin Train'
-                : 'Cần sạc thêm ${3 - totalCharges} lần',
+            ? 'Cần web admin Train'
+            : 'Cần sạc thêm ${3 - totalCharges} lần',
       ),
     ];
 
     return [
       for (int i = 0; i < features.length; i++)
-        _AiFeatureCard(feature: features[i])
-            .animate()
-            .fadeIn(delay: (200 + i * 60).ms)
-            .slideY(begin: 0.08),
+        _AiFeatureCard(
+          feature: features[i],
+        ).animate().fadeIn(delay: (200 + i * 60).ms).slideY(begin: 0.08),
     ];
   }
 }
@@ -290,20 +300,24 @@ class _InsightStatusBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(icon,
-              size: 18,
-              color: hasTrained
-                  ? (status == 'available'
+          Icon(
+            icon,
+            size: 18,
+            color: hasTrained
+                ? (status == 'available'
                       ? AppColors.primary
                       : AppColors.warning)
-                  : AppColors.warning),
+                : AppColors.warning,
+          ),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(text,
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 12,
-                )),
+            child: Text(
+              text,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
           ),
           if (updatedAt != null)
             Text(
@@ -352,20 +366,28 @@ class _DataSummaryRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(vehicleName,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    )),
+                Text(
+                  vehicleName,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
                 const SizedBox(height: 6),
                 Row(
                   children: [
-                    _miniStat(Icons.bolt_rounded, '$totalCharges sạc',
-                        AppColors.primary),
+                    _miniStat(
+                      Icons.bolt_rounded,
+                      '$totalCharges sạc',
+                      AppColors.primary,
+                    ),
                     const SizedBox(width: 14),
                     _miniStat(
-                        Icons.route_rounded, '$totalTrips chuyến', AppColors.info),
+                      Icons.route_rounded,
+                      '$totalTrips chuyến',
+                      AppColors.info,
+                    ),
                     const SizedBox(width: 14),
                     _miniStat(
                       Icons.memory_rounded,
@@ -387,12 +409,14 @@ class _DataSummaryRow extends StatelessWidget {
       children: [
         Icon(icon, size: 14, color: color),
         const SizedBox(width: 3),
-        Text(text,
-            style: TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-            )),
+        Text(
+          text,
+          style: TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
       ],
     );
   }
@@ -402,13 +426,7 @@ class _DataSummaryRow extends StatelessWidget {
 // Feature models + card widget
 // =============================================================================
 
-enum _FeatureStatus {
-  active,
-  learning,
-  needsData,
-  needsModel,
-  waitingWeb,
-}
+enum _FeatureStatus { active, learning, needsData, needsModel, waitingWeb }
 
 class _AiFeature {
   final IconData icon;
@@ -461,30 +479,36 @@ class _AiFeatureCard extends StatelessWidget {
                 Row(
                   children: [
                     Expanded(
-                      child: Text(feature.name,
-                          style: const TextStyle(
-                            color: AppColors.textPrimary,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                          )),
+                      child: Text(
+                        feature.name,
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                     _statusBadge(feature.status),
                   ],
                 ),
                 const SizedBox(height: 4),
-                Text(feature.description,
-                    style: const TextStyle(
-                      color: AppColors.textTertiary,
-                      fontSize: 11.5,
-                      height: 1.3,
-                    )),
+                Text(
+                  feature.description,
+                  style: const TextStyle(
+                    color: AppColors.textTertiary,
+                    fontSize: 11.5,
+                    height: 1.3,
+                  ),
+                ),
                 const SizedBox(height: 6),
-                Text(feature.detail,
-                    style: TextStyle(
-                      color: _statusColor(feature.status),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    )),
+                Text(
+                  feature.detail,
+                  style: TextStyle(
+                    color: _statusColor(feature.status),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
             ),
           ),
@@ -508,12 +532,14 @@ class _AiFeatureCard extends StatelessWidget {
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Text(label,
-          style: TextStyle(
-            color: color,
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-          )),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
     );
   }
 

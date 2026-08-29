@@ -8,7 +8,8 @@ import 'package:intl/intl.dart';
 /// Saves charging prediction vs actual results to local CSV
 /// for fine-tuning the AI model later.
 class ChargingFeedbackService {
-  static final ChargingFeedbackService _instance = ChargingFeedbackService._internal();
+  static final ChargingFeedbackService _instance =
+      ChargingFeedbackService._internal();
   factory ChargingFeedbackService() => _instance;
   ChargingFeedbackService._internal();
 
@@ -83,7 +84,10 @@ class ChargingFeedbackService {
     try {
       final file = await _ensureFile();
       final content = await file.readAsString();
-      final lines = content.split('\n').where((l) => l.trim().isNotEmpty).toList();
+      final lines = content
+          .split('\n')
+          .where((l) => l.trim().isNotEmpty)
+          .toList();
 
       if (lines.length <= 1) return []; // Only header
 

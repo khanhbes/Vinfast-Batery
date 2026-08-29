@@ -11,8 +11,8 @@ enum ConnectionStatus { checking, online, offline, degraded }
 /// Provider trạng thái Firebase (ping Firestore timeout an toàn)
 final firebaseStatusProvider =
     StateNotifierProvider<FirebaseStatusNotifier, ConnectionStatus>((ref) {
-  return FirebaseStatusNotifier();
-});
+      return FirebaseStatusNotifier();
+    });
 
 class FirebaseStatusNotifier extends StateNotifier<ConnectionStatus> {
   FirebaseStatusNotifier() : super(ConnectionStatus.checking) {

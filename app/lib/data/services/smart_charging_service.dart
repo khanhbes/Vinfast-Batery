@@ -34,11 +34,15 @@ class SmartChargingService {
     final bucketRates = _buildBucketRates(chargeLogs);
 
     double totalMinutes = 0;
-    for (int bucketStart = (fromPercent ~/ 10) * 10;
-        bucketStart < toPercent;
-        bucketStart += 10) {
+    for (
+      int bucketStart = (fromPercent ~/ 10) * 10;
+      bucketStart < toPercent;
+      bucketStart += 10
+    ) {
       final bucketEnd = (bucketStart + 10).clamp(0, 100);
-      final effectiveStart = fromPercent > bucketStart ? fromPercent : bucketStart;
+      final effectiveStart = fromPercent > bucketStart
+          ? fromPercent
+          : bucketStart;
       final effectiveEnd = toPercent < bucketEnd ? toPercent : bucketEnd;
       final percentInBucket = effectiveEnd - effectiveStart;
 

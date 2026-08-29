@@ -105,22 +105,25 @@ void main() {
     controller.dispose();
   });
 
-  test('target SOC preview refreshes its relative ten-hour safety window', () async {
-    final controller = build(FakeSmartChargerService());
-    controller.updateDraft(
-      hardDeadlineAt: now.add(const Duration(hours: 4)),
-      strategy: ChargingStrategy.targetSoc,
-    );
+  test(
+    'target SOC preview refreshes its relative ten-hour safety window',
+    () async {
+      final controller = build(FakeSmartChargerService());
+      controller.updateDraft(
+        hardDeadlineAt: now.add(const Duration(hours: 4)),
+        strategy: ChargingStrategy.targetSoc,
+      );
 
-    await controller.createPreview();
+      await controller.createPreview();
 
-    expect(
-      controller.state.draft.hardDeadlineAt,
-      now.add(SmartChargerService.maxSessionDuration),
-    );
-    expect(controller.state.preview, isNotNull);
-    controller.dispose();
-  });
+      expect(
+        controller.state.draft.hardDeadlineAt,
+        now.add(SmartChargerService.maxSessionDuration),
+      );
+      expect(controller.state.preview, isNotNull);
+      controller.dispose();
+    },
+  );
 
   test('invalid SOC does not call prediction', () async {
     final controller = build(FakeSmartChargerService());

@@ -6,7 +6,8 @@ class AppearanceSettingsScreen extends StatefulWidget {
   const AppearanceSettingsScreen({super.key});
 
   @override
-  State<AppearanceSettingsScreen> createState() => _AppearanceSettingsScreenState();
+  State<AppearanceSettingsScreen> createState() =>
+      _AppearanceSettingsScreenState();
 }
 
 class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
@@ -151,10 +152,7 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
       ),
       subtitle: Text(
         subtitle,
-        style: TextStyle(
-          color: AppColors.textSecondary,
-          fontSize: 12,
-        ),
+        style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
       ),
       trailing: isSelected
           ? Icon(Icons.check_circle, color: AppColors.primary)
@@ -214,9 +212,7 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
               : AppColors.surfaceVariant,
           borderRadius: BorderRadius.circular(10),
         ),
-        child: Center(
-          child: Text(flag, style: const TextStyle(fontSize: 20)),
-        ),
+        child: Center(child: Text(flag, style: const TextStyle(fontSize: 20))),
       ),
       title: Text(
         title,
@@ -228,10 +224,7 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
       ),
       subtitle: Text(
         subtitle,
-        style: TextStyle(
-          color: AppColors.textSecondary,
-          fontSize: 12,
-        ),
+        style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
       ),
       trailing: isSelected
           ? Icon(Icons.check_circle, color: AppColors.primary)

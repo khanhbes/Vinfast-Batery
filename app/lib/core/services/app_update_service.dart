@@ -11,6 +11,7 @@ import '../constants/app_constants.dart';
 import '../theme/app_colors.dart';
 import 'api_service.dart';
 import 'notification_center_service.dart';
+import 'app_feature_flags.dart';
 
 /// Kiểm tra version mới + remote config từ /api/app/config và hiển thị
 /// dialog cập nhật (optional hoặc forced).
@@ -111,6 +112,10 @@ class AppUpdateService with WidgetsBindingObserver {
       final res = await ApiService().get('/api/app/config');
       if (res['success'] == true && res['data'] is Map) {
         _remoteConfig = Map<String, dynamic>.from(res['data'] as Map);
+        final features = _remoteConfig['features'];
+        if (features is Map) {
+          await AppFeatureFlags.apply(Map<String, dynamic>.from(features));
+        }
       }
     } catch (e) {
       debugPrint('[AppUpdate] fetch config error: $e');

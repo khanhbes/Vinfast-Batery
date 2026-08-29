@@ -75,15 +75,22 @@ class _AddManualTripModalState extends ConsumerState<AddManualTripModal> {
                 ),
               ),
               const SizedBox(height: 16),
-              const Text('Nhập chuyến đi thủ công',
-                  style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  )),
+              const Text(
+                'Nhập chuyến đi thủ công',
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
               const SizedBox(height: 4),
-              Text('Xe: ${widget.vehicle.vehicleName.isNotEmpty ? widget.vehicle.vehicleName : widget.vehicle.vehicleId}',
-                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+              Text(
+                'Xe: ${widget.vehicle.vehicleName.isNotEmpty ? widget.vehicle.vehicleName : widget.vehicle.vehicleId}',
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 13,
+                ),
+              ),
               const SizedBox(height: 20),
 
               // Payload
@@ -93,13 +100,17 @@ class _AddManualTripModalState extends ConsumerState<AddManualTripModal> {
               // Time pickers
               Row(
                 children: [
-                  Expanded(child: _buildTimePicker('Giờ xuất phát', _startTime, (dt) {
-                    setState(() => _startTime = dt);
-                  })),
+                  Expanded(
+                    child: _buildTimePicker('Giờ xuất phát', _startTime, (dt) {
+                      setState(() => _startTime = dt);
+                    }),
+                  ),
                   const SizedBox(width: 12),
-                  Expanded(child: _buildTimePicker('Giờ kết thúc', _endTime, (dt) {
-                    setState(() => _endTime = dt);
-                  })),
+                  Expanded(
+                    child: _buildTimePicker('Giờ kết thúc', _endTime, (dt) {
+                      setState(() => _endTime = dt);
+                    }),
+                  ),
                 ],
               ),
               const SizedBox(height: 16),
@@ -107,17 +118,21 @@ class _AddManualTripModalState extends ConsumerState<AddManualTripModal> {
               // Battery
               Row(
                 children: [
-                  Expanded(child: _buildTextField(
-                    controller: _startBatteryCtrl,
-                    label: 'Pin đầu (%)',
-                    validator: _validateBattery,
-                  )),
+                  Expanded(
+                    child: _buildTextField(
+                      controller: _startBatteryCtrl,
+                      label: 'Pin đầu (%)',
+                      validator: _validateBattery,
+                    ),
+                  ),
                   const SizedBox(width: 12),
-                  Expanded(child: _buildTextField(
-                    controller: _endBatteryCtrl,
-                    label: 'Pin cuối (%)',
-                    validator: _validateBattery,
-                  )),
+                  Expanded(
+                    child: _buildTextField(
+                      controller: _endBatteryCtrl,
+                      label: 'Pin cuối (%)',
+                      validator: _validateBattery,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 16),
@@ -125,17 +140,21 @@ class _AddManualTripModalState extends ConsumerState<AddManualTripModal> {
               // ODO
               Row(
                 children: [
-                  Expanded(child: _buildTextField(
-                    controller: _startOdoCtrl,
-                    label: 'ODO đầu (km)',
-                    validator: _validateOdo,
-                  )),
+                  Expanded(
+                    child: _buildTextField(
+                      controller: _startOdoCtrl,
+                      label: 'ODO đầu (km)',
+                      validator: _validateOdo,
+                    ),
+                  ),
                   const SizedBox(width: 12),
-                  Expanded(child: _buildTextField(
-                    controller: _endOdoCtrl,
-                    label: 'ODO cuối (km)',
-                    validator: _validateOdo,
-                  )),
+                  Expanded(
+                    child: _buildTextField(
+                      controller: _endOdoCtrl,
+                      label: 'ODO cuối (km)',
+                      validator: _validateOdo,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 24),
@@ -150,13 +169,22 @@ class _AddManualTripModalState extends ConsumerState<AddManualTripModal> {
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
                   ),
                   child: _saving
-                      ? const SizedBox(width: 20, height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Text('Lưu chuyến đi',
-                          style: TextStyle(fontWeight: FontWeight.w700)),
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text(
+                          'Lưu chuyến đi',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
                 ),
               ),
               const SizedBox(height: 8),
@@ -177,9 +205,16 @@ class _AddManualTripModalState extends ConsumerState<AddManualTripModal> {
       ),
       child: Row(
         children: [
-          const Icon(Icons.people_alt_rounded, color: AppColors.textSecondary, size: 18),
+          const Icon(
+            Icons.people_alt_rounded,
+            color: AppColors.textSecondary,
+            size: 18,
+          ),
           const SizedBox(width: 8),
-          const Text('Tải trọng:', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+          const Text(
+            'Tải trọng:',
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+          ),
           const Spacer(),
           ...PayloadType.values.map((p) {
             final sel = p == _payload;
@@ -188,16 +223,27 @@ class _AddManualTripModalState extends ConsumerState<AddManualTripModal> {
               child: GestureDetector(
                 onTap: () => setState(() => _payload = p),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: sel ? AppColors.info.withValues(alpha: 0.15) : AppColors.surface,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: sel ? AppColors.info : AppColors.border),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
                   ),
-                  child: Text(p.label,
+                  decoration: BoxDecoration(
+                    color: sel
+                        ? AppColors.info.withValues(alpha: 0.15)
+                        : AppColors.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: sel ? AppColors.info : AppColors.border,
+                    ),
+                  ),
+                  child: Text(
+                    p.label,
                     style: TextStyle(
                       color: sel ? AppColors.info : AppColors.textSecondary,
-                      fontSize: 12, fontWeight: FontWeight.w600)),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ),
             );
@@ -207,7 +253,11 @@ class _AddManualTripModalState extends ConsumerState<AddManualTripModal> {
     );
   }
 
-  Widget _buildTimePicker(String label, DateTime value, ValueChanged<DateTime> onChanged) {
+  Widget _buildTimePicker(
+    String label,
+    DateTime value,
+    ValueChanged<DateTime> onChanged,
+  ) {
     return GestureDetector(
       onTap: () async {
         final date = await showDatePicker(
@@ -222,7 +272,9 @@ class _AddManualTripModalState extends ConsumerState<AddManualTripModal> {
           initialTime: TimeOfDay.fromDateTime(value),
         );
         if (time == null) return;
-        onChanged(DateTime(date.year, date.month, date.day, time.hour, time.minute));
+        onChanged(
+          DateTime(date.year, date.month, date.day, time.hour, time.minute),
+        );
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -234,11 +286,21 @@ class _AddManualTripModalState extends ConsumerState<AddManualTripModal> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: const TextStyle(color: AppColors.textTertiary, fontSize: 11)),
+            Text(
+              label,
+              style: const TextStyle(
+                color: AppColors.textTertiary,
+                fontSize: 11,
+              ),
+            ),
             const SizedBox(height: 4),
             Text(
               '${value.day}/${value.month} ${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}',
-              style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
@@ -258,7 +320,10 @@ class _AddManualTripModalState extends ConsumerState<AddManualTripModal> {
       style: const TextStyle(color: AppColors.textPrimary),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+        labelStyle: const TextStyle(
+          color: AppColors.textSecondary,
+          fontSize: 13,
+        ),
         filled: true,
         fillColor: AppColors.card,
         border: OutlineInputBorder(
@@ -293,9 +358,11 @@ class _AddManualTripModalState extends ConsumerState<AddManualTripModal> {
     final startOdo = int.tryParse(_startOdoCtrl.text) ?? 0;
     final endOdo = int.tryParse(_endOdoCtrl.text) ?? 0;
 
-    if (startBat <= endBat) return 'Pin đầu phải lớn hơn pin cuối (vì tiêu hao)';
+    if (startBat <= endBat)
+      return 'Pin đầu phải lớn hơn pin cuối (vì tiêu hao)';
     if (endOdo <= startOdo) return 'ODO cuối phải lớn hơn ODO đầu';
-    if (!_endTime.isAfter(_startTime)) return 'Giờ kết thúc phải sau giờ xuất phát';
+    if (!_endTime.isAfter(_startTime))
+      return 'Giờ kết thúc phải sau giờ xuất phát';
     return null;
   }
 
@@ -337,10 +404,12 @@ class _AddManualTripModalState extends ConsumerState<AddManualTripModal> {
     );
 
     try {
-      await ref.read(tripLogRepositoryProvider).saveTripAndUpdateVehicle(
-        trip: trip,
-        vehicleId: widget.vehicle.vehicleId,
-      );
+      await ref
+          .read(tripLogRepositoryProvider)
+          .saveTripAndUpdateVehicle(
+            trip: trip,
+            vehicleId: widget.vehicle.vehicleId,
+          );
       ref.invalidate(vehicleProvider(widget.vehicle.vehicleId));
       if (mounted) {
         Navigator.of(context).pop();

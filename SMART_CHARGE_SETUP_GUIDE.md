@@ -97,3 +97,38 @@ Từ thư mục `app`:
 ```
 
 Script chạy `pub get`, analyze và toàn bộ test **trước khi tăng version**; sau đó build APK arm64, upload `VinFastBattery_latest.apk`, cập nhật `app_config.json` và xác minh endpoint download. API release bắt buộc HTTPS, mặc định là `https://api.evbattery.live`. Dùng `-NoDeploy` nếu chỉ muốn build local; dùng `-NoBump` nếu không muốn tăng version. Smart Charge không còn dùng `SMART_CHARGER_API_BASE_URL`; API chung lấy từ `APP_API_BASE_URL`.
+# AI cá nhân, ETA fusion và lịch sử realtime
+
+## Bật AI cá nhân
+
+1. Đăng nhập và chọn đúng xe trong Garage.
+2. Mở **Cài đặt → AI cá nhân**.
+3. Bật **Cho phép AI học từ phiên sạc**. Profile được tách riêng theo tài khoản và xe; hai tài khoản có cùng mã xe không dùng chung dữ liệu.
+4. Sau mỗi phiên, mở chi tiết lịch sử và nhập SOC thực tế cuối phiên nếu có. SOC này là tùy chọn, nhưng cần thiết để một phiên trở thành mẫu học mục tiêu đầy đủ.
+5. Màn hình hiển thị số phiên hợp lệ, số phiên học công suất, adapter đang chạy và MAPE validation. Batch adapter bắt đầu từ 5 phiên hợp lệ và chỉ được kích hoạt nếu tốt hơn bản đang chạy.
+6. Có thể tắt consent hoặc dùng **Xóa model & dữ liệu cá nhân**. Lịch sử sạc vẫn được giữ, nhưng profile và training sample của xe bị xóa.
+
+Phiên đầy đủ cần kéo dài ít nhất 20 phút, telemetry phủ tối thiểu 70%, energy hợp lệ, SOC tăng ít nhất 10 điểm và SOC cuối do người dùng xác nhận. Phiên bị dừng giữa chừng chỉ có thể học công suất/hiệu suất, không được dùng làm nhãn “đạt mục tiêu”.
+
+## Cách đọc ETA
+
+Preview Smart Charge có thể hiển thị ba nguồn: AI toàn cục, dung lượng/công suất thực và AI cá nhân. ETA cuối là trung bình thích nghi theo confidence, chất lượng dung lượng, độ ổn định công suất, số mẫu cá nhân và MAPE. Không có dung lượng/công suất đáng tin thì app không tự đặt giá trị giả và chỉ dùng nguồn còn hợp lệ.
+
+Sau 60 giây và tối thiểu 6 mẫu công suất ổn định, app có thể hiệu chỉnh timer nếu ETA lệch ít nhất 3 phút. Timer Shelly luôn là nguồn sự thật và không bao giờ vượt 10 giờ. `hardDeadlineAt` chỉ giới hạn timer khi người dùng chủ động chọn “Dừng không muộn hơn”.
+
+## Dừng sạc và mất mạng
+
+- **Dừng phiên** hỏi xác nhận và giải thích ảnh hưởng tới dữ liệu học.
+- **NGẮT NGUỒN NGAY** gửi OFF ngay, không hỏi lại, sau đó readback relay.
+- Khi mất Internet, app giữ dữ liệu cuối và hiện notice nổi. Timer đã arm vẫn chạy trên Shelly; nếu LAN còn hoạt động, status/OFF vẫn dùng LAN. Không tạo preview AI mới cho tới khi Internet trở lại.
+- Năng lượng mỗi phiên hiển thị từ `0 Wh` bằng delta so với baseline. App không reset công tơ năng lượng trọn đời của Shelly.
+
+## Ngưỡng an toàn mặc định
+
+- Cảnh báo: dòng từ 10,5 A; công suất từ 2300 W; nhiệt độ từ 65 °C; điện áp ngoài 200–250 V.
+- OFF tự động sau hai mẫu liên tiếp: dòng từ 11,5 A; công suất từ 2450 W; nhiệt độ từ 75 °C; điện áp ngoài 190–255 V.
+- Fault quá nhiệt/quá tải do Shelly báo phải OFF ngay. Nếu không readback được OFF, rút tải hoặc ngắt nguồn vật lý và không tiếp tục sạc.
+
+## Lịch sử realtime
+
+Phiên đang chạy được ghim đầu màn Lịch sử với badge **ĐANG SẠC**, mục tiêu SOC, countdown, power và biểu đồ. Dữ liệu biểu đồ tổng hợp khoảng 30 giây/điểm; khi kết thúc, cùng `sessionId` chuyển sang log terminal nên không tạo bản ghi trùng. Telemetry chi tiết có TTL 12 tháng, summary được giữ lâu dài.

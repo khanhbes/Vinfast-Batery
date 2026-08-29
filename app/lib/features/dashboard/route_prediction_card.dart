@@ -16,7 +16,8 @@ class RoutePredictionCard extends ConsumerStatefulWidget {
   const RoutePredictionCard({super.key});
 
   @override
-  ConsumerState<RoutePredictionCard> createState() => _RoutePredictionCardState();
+  ConsumerState<RoutePredictionCard> createState() =>
+      _RoutePredictionCardState();
 }
 
 class _RoutePredictionCardState extends ConsumerState<RoutePredictionCard> {
@@ -41,10 +42,7 @@ class _RoutePredictionCardState extends ConsumerState<RoutePredictionCard> {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            AppColors.info.withValues(alpha: 0.08),
-            AppColors.card,
-          ],
+          colors: [AppColors.info.withValues(alpha: 0.08), AppColors.card],
         ),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.info.withValues(alpha: 0.2)),
@@ -64,33 +62,42 @@ class _RoutePredictionCardState extends ConsumerState<RoutePredictionCard> {
                       color: AppColors.info.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.route_rounded,
-                        color: AppColors.info, size: 20),
+                    child: const Icon(
+                      Icons.route_rounded,
+                      color: AppColors.info,
+                      size: 20,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   const Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Dự báo lộ trình',
-                            style: TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                            )),
-                        Text('Dựa trên insight AI + dữ liệu on-device',
-                            style: TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 12,
-                            )),
+                        Text(
+                          'Dự báo lộ trình',
+                          style: TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        Text(
+                          'Dựa trên insight AI + dữ liệu on-device',
+                          style: TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
                       ],
                     ),
                   ),
                   AnimatedRotation(
                     turns: _expanded ? 0.5 : 0,
                     duration: const Duration(milliseconds: 200),
-                    child: const Icon(Icons.expand_more_rounded,
-                        color: AppColors.textSecondary),
+                    child: const Icon(
+                      Icons.expand_more_rounded,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                 ],
               ),
@@ -122,12 +129,21 @@ class _RoutePredictionCardState extends ConsumerState<RoutePredictionCard> {
             style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
             decoration: InputDecoration(
               hintText: 'Điểm đến (VD: Đại học Bách Khoa)',
-              hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 13),
-              prefixIcon: const Icon(Icons.place_rounded,
-                  color: AppColors.textSecondary, size: 18),
+              hintStyle: const TextStyle(
+                color: AppColors.textHint,
+                fontSize: 13,
+              ),
+              prefixIcon: const Icon(
+                Icons.place_rounded,
+                color: AppColors.textSecondary,
+                size: 18,
+              ),
               filled: true,
               fillColor: AppColors.surface,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 12,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: const BorderSide(color: AppColors.border),
@@ -147,14 +163,23 @@ class _RoutePredictionCardState extends ConsumerState<RoutePredictionCard> {
             style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
             decoration: InputDecoration(
               hintText: 'Khoảng cách (km)',
-              hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 13),
-              prefixIcon: const Icon(Icons.straighten_rounded,
-                  color: AppColors.textSecondary, size: 18),
+              hintStyle: const TextStyle(
+                color: AppColors.textHint,
+                fontSize: 13,
+              ),
+              prefixIcon: const Icon(
+                Icons.straighten_rounded,
+                color: AppColors.textSecondary,
+                size: 18,
+              ),
               suffixText: 'km',
               suffixStyle: const TextStyle(color: AppColors.textSecondary),
               filled: true,
               fillColor: AppColors.surface,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 12,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: const BorderSide(color: AppColors.border),
@@ -170,8 +195,11 @@ class _RoutePredictionCardState extends ConsumerState<RoutePredictionCard> {
           // Payload + Predict Button
           Row(
             children: [
-              const Icon(Icons.people_alt_rounded,
-                  color: AppColors.textSecondary, size: 16),
+              const Icon(
+                Icons.people_alt_rounded,
+                color: AppColors.textSecondary,
+                size: 16,
+              ),
               const SizedBox(width: 8),
               ...PayloadType.values.map((p) {
                 final sel = p == _payload;
@@ -183,17 +211,27 @@ class _RoutePredictionCardState extends ConsumerState<RoutePredictionCard> {
                       _result = null;
                     }),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
-                        color: sel ? AppColors.info.withValues(alpha: 0.15) : AppColors.surface,
+                        color: sel
+                            ? AppColors.info.withValues(alpha: 0.15)
+                            : AppColors.surface,
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                          color: sel ? AppColors.info : AppColors.border),
+                          color: sel ? AppColors.info : AppColors.border,
+                        ),
                       ),
-                      child: Text(p.label,
+                      child: Text(
+                        p.label,
                         style: TextStyle(
                           color: sel ? AppColors.info : AppColors.textSecondary,
-                          fontSize: 12, fontWeight: FontWeight.w600)),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
                   ),
                 );
@@ -202,25 +240,33 @@ class _RoutePredictionCardState extends ConsumerState<RoutePredictionCard> {
               GestureDetector(
                 onTap: _loading ? null : _predict,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
-                    color: _loading ? AppColors.info.withValues(alpha: 0.5) : AppColors.info,
+                    color: _loading
+                        ? AppColors.info.withValues(alpha: 0.5)
+                        : AppColors.info,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: _loading
                       ? const SizedBox(
-                          width: 14, height: 14,
+                          width: 14,
+                          height: 14,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
                             color: Colors.white,
                           ),
                         )
-                      : const Text('Dự báo',
+                      : const Text(
+                          'Dự báo',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
-                          )),
+                          ),
+                        ),
                 ),
               ),
             ],
@@ -258,13 +304,17 @@ class _RoutePredictionCardState extends ConsumerState<RoutePredictionCard> {
     // Get trips
     List<TripLogModel> trips = [];
     try {
-      trips = await ref.read(tripLogRepositoryProvider).getRecentTrips(vehicleId);
+      trips = await ref
+          .read(tripLogRepositoryProvider)
+          .getRecentTrips(vehicleId);
     } catch (_) {}
 
     // Get AI insight from Firestore
     AiVehicleInsight? insight;
     try {
-      insight = await ref.read(aiInsightsRepositoryProvider).getInsight(vehicleId);
+      insight = await ref
+          .read(aiInsightsRepositoryProvider)
+          .getInsight(vehicleId);
     } catch (_) {}
 
     // Predict using on-device + insight data
@@ -328,10 +378,23 @@ class _RoutePredictionCardState extends ConsumerState<RoutePredictionCard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _statItem('Tiêu hao', '-${result.estimatedBatteryDrain}%', AppColors.warning),
-              _statItem('Còn lại', '${result.remainingBattery}%',
-                  result.remainingBattery >= 20 ? AppColors.primary : AppColors.error),
-              _statItem('Hiệu suất', '${result.efficiencyUsed.toStringAsFixed(2)} km/%', AppColors.info),
+              _statItem(
+                'Tiêu hao',
+                '-${result.estimatedBatteryDrain}%',
+                AppColors.warning,
+              ),
+              _statItem(
+                'Còn lại',
+                '${result.remainingBattery}%',
+                result.remainingBattery >= 20
+                    ? AppColors.primary
+                    : AppColors.error,
+              ),
+              _statItem(
+                'Hiệu suất',
+                '${result.efficiencyUsed.toStringAsFixed(2)} km/%',
+                AppColors.info,
+              ),
             ],
           ),
 
@@ -376,12 +439,14 @@ class _RoutePredictionCardState extends ConsumerState<RoutePredictionCard> {
             children: [
               Icon(icon, size: 13, color: badgeColor),
               const SizedBox(width: 4),
-              Text(label,
-                  style: TextStyle(
-                    color: badgeColor,
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w700,
-                  )),
+              Text(
+                label,
+                style: TextStyle(
+                  color: badgeColor,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ],
           ),
         ),
@@ -408,10 +473,18 @@ class _RoutePredictionCardState extends ConsumerState<RoutePredictionCard> {
   Widget _statItem(String label, String value, Color color) {
     return Column(
       children: [
-        Text(value,
-            style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.w800)),
-        Text(label,
-            style: const TextStyle(color: AppColors.textTertiary, fontSize: 11)),
+        Text(
+          value,
+          style: TextStyle(
+            color: color,
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        Text(
+          label,
+          style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
+        ),
       ],
     );
   }

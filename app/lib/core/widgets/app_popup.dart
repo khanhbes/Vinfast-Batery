@@ -12,12 +12,27 @@ class AppPopup {
   static String? _lastSignature;
   static DateTime? _lastShownAt;
 
-  static void showSuccess(String title, {String? detail, VoidCallback? action}) =>
-      _show(AppNoticeKind.success, title, detail, action);
+  static void showSuccess(
+    String title, {
+    String? detail,
+    VoidCallback? action,
+  }) => _show(AppNoticeKind.success, title, detail, action);
   static void showError(String title, {String? detail, VoidCallback? action}) =>
       _show(AppNoticeKind.error, title, detail, action);
-  static void showWarning(String title, {String? detail, VoidCallback? action}) =>
-      _show(AppNoticeKind.warning, title, detail, action);
+  static void showWarning(
+    String title, {
+    String? detail,
+    VoidCallback? action,
+    String actionLabel = 'MỞ',
+    bool persistent = false,
+  }) => _show(
+    AppNoticeKind.warning,
+    title,
+    detail,
+    action,
+    actionLabel: actionLabel,
+    persistent: persistent,
+  );
   static void showInfo(String title, {String? detail, VoidCallback? action}) =>
       _show(AppNoticeKind.info, title, detail, action);
 
@@ -32,8 +47,10 @@ class AppPopup {
     AppNoticeKind kind,
     String title,
     String? detail,
-    VoidCallback? action,
-  ) {
+    VoidCallback? action, {
+    String actionLabel = 'MỞ',
+    bool persistent = false,
+  }) {
     final signature = '$kind|$title|$detail';
     final now = DateTime.now();
     if (_lastSignature == signature &&
@@ -57,16 +74,19 @@ class AppPopup {
         title: title,
         detail: detail,
         action: action,
+        actionLabel: actionLabel,
         onDismiss: dismiss,
       ),
     );
     overlay.insert(_entry!);
-    _timer = Timer(
-      kind == AppNoticeKind.error
-          ? const Duration(seconds: 6)
-          : const Duration(seconds: 4),
-      dismiss,
-    );
+    if (!persistent) {
+      _timer = Timer(
+        kind == AppNoticeKind.error
+            ? const Duration(seconds: 6)
+            : const Duration(seconds: 4),
+        dismiss,
+      );
+    }
   }
 }
 
@@ -76,21 +96,29 @@ class _NoticeOverlay extends StatelessWidget {
     required this.title,
     required this.detail,
     required this.action,
+    required this.actionLabel,
     required this.onDismiss,
   });
   final AppNoticeKind kind;
   final String title;
   final String? detail;
   final VoidCallback? action;
+  final String actionLabel;
   final VoidCallback onDismiss;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final (color, icon) = switch (kind) {
-      AppNoticeKind.success => (const Color(0xFF15803D), Icons.check_circle_rounded),
+      AppNoticeKind.success => (
+        const Color(0xFF15803D),
+        Icons.check_circle_rounded,
+      ),
       AppNoticeKind.error => (colors.error, Icons.error_rounded),
-      AppNoticeKind.warning => (const Color(0xFFB45309), Icons.warning_amber_rounded),
+      AppNoticeKind.warning => (
+        const Color(0xFFB45309),
+        Icons.warning_amber_rounded,
+      ),
       AppNoticeKind.info => (colors.primary, Icons.info_rounded),
     };
     return Positioned(
@@ -123,14 +151,20 @@ class _NoticeOverlay extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+                        Text(
+                          title,
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
                         if (detail != null)
-                          Text(detail!, style: Theme.of(context).textTheme.bodySmall),
+                          Text(
+                            detail!,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
                       ],
                     ),
                   ),
                   if (action != null)
-                    TextButton(onPressed: action, child: const Text('MỞ')),
+                    TextButton(onPressed: action, child: Text(actionLabel)),
                   IconButton(
                     tooltip: 'Đóng thông báo',
                     onPressed: onDismiss,

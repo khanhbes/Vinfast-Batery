@@ -47,10 +47,7 @@ class SessionSummaryModal extends StatelessWidget {
       transitionBuilder: (ctx, a1, a2, child) {
         return Transform.scale(
           scale: 0.9 + (0.1 * Curves.easeOutBack.transform(a1.value)),
-          child: Opacity(
-            opacity: a1.value,
-            child: child,
-          ),
+          child: Opacity(opacity: a1.value, child: child),
         );
       },
       pageBuilder: (ctx, a1, a2) => Center(
@@ -97,9 +94,7 @@ class SessionSummaryModal extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Icon(
-                    isDrive
-                        ? Icons.navigation_rounded
-                        : Icons.bolt_rounded,
+                    isDrive ? Icons.navigation_rounded : Icons.bolt_rounded,
                     color: AppColors.success,
                     size: 28,
                   ),
@@ -155,7 +150,8 @@ class SessionSummaryModal extends StatelessWidget {
                     child: _StatItem(
                       icon: Icons.navigation_rounded,
                       label: 'Quãng đường',
-                      value: '${summary.distance?.toStringAsFixed(1) ?? "0"} km',
+                      value:
+                          '${summary.distance?.toStringAsFixed(1) ?? "0"} km',
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -200,7 +196,8 @@ class SessionSummaryModal extends StatelessWidget {
                   child: _StatItem(
                     icon: Icons.trending_up_rounded,
                     label: 'Hiệu suất',
-                    value: '${summary.efficiency?.toStringAsFixed(0) ?? "N/A"} Wh/km',
+                    value:
+                        '${summary.efficiency?.toStringAsFixed(0) ?? "N/A"} Wh/km',
                   ),
                 ),
               ],

@@ -6,7 +6,7 @@ import 'soc_prediction_service.dart';
 /// ========================================================================
 /// SOC API SERVICE - HTTP server cho web dashboard gọi AI model
 /// ========================================================================
-/// 
+///
 /// Cung cấp REST API endpoints:
 /// - POST /api/soc/predict - Dự đoán SOC
 /// - GET /api/soc/status - Trạng thái model
@@ -54,8 +54,14 @@ class SOCApiService {
       final response = request.response;
       response.headers.contentType = ContentType.json;
       response.headers.set('Access-Control-Allow-Origin', '*');
-      response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-      response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      response.headers.set(
+        'Access-Control-Allow-Methods',
+        'GET, POST, PUT, DELETE, OPTIONS',
+      );
+      response.headers.set(
+        'Access-Control-Allow-Headers',
+        'Content-Type, Authorization',
+      );
 
       // Handle CORS preflight
       if (request.method == 'OPTIONS') {
@@ -80,16 +86,27 @@ class SOCApiService {
           await _handleHistory(request, response);
           break;
         default:
-          _sendError(response, HttpStatus.notFound, 'Endpoint not found: $method $path');
+          _sendError(
+            response,
+            HttpStatus.notFound,
+            'Endpoint not found: $method $path',
+          );
       }
     } catch (e) {
       print('❌ Error handling request: $e');
-      _sendError(request.response, HttpStatus.internalServerError, 'Internal server error: $e');
+      _sendError(
+        request.response,
+        HttpStatus.internalServerError,
+        'Internal server error: $e',
+      );
     }
   }
 
   /// Handle SOC prediction request
-  Future<void> _handlePredict(HttpRequest request, HttpResponse response) async {
+  Future<void> _handlePredict(
+    HttpRequest request,
+    HttpResponse response,
+  ) async {
     try {
       final body = await utf8.decoder.bind(request).join();
       final data = json.decode(body) as Map<String, dynamic>;
@@ -123,7 +140,11 @@ class SOCApiService {
       });
     } catch (e) {
       print('❌ Error in predict endpoint: $e');
-      _sendError(response, HttpStatus.internalServerError, 'Prediction failed: $e');
+      _sendError(
+        response,
+        HttpStatus.internalServerError,
+        'Prediction failed: $e',
+      );
     }
   }
 
@@ -131,29 +152,41 @@ class SOCApiService {
   Future<void> _handleStatus(HttpRequest request, HttpResponse response) async {
     try {
       final status = _socService.getModelStatus();
-      
-      _sendJson(response, HttpStatus.ok, {
-        'success': true,
-        'data': status,
-      });
+
+      _sendJson(response, HttpStatus.ok, {'success': true, 'data': status});
     } catch (e) {
       print('❌ Error in status endpoint: $e');
-      _sendError(response, HttpStatus.internalServerError, 'Status check failed: $e');
+      _sendError(
+        response,
+        HttpStatus.internalServerError,
+        'Status check failed: $e',
+      );
     }
   }
 
   /// Handle prediction history request
-  Future<void> _handleHistory(HttpRequest request, HttpResponse response) async {
+  Future<void> _handleHistory(
+    HttpRequest request,
+    HttpResponse response,
+  ) async {
     try {
       final vehicleId = request.uri.queryParameters['vehicleId'];
-      final limit = int.tryParse(request.uri.queryParameters['limit'] ?? '10') ?? 10;
+      final limit =
+          int.tryParse(request.uri.queryParameters['limit'] ?? '10') ?? 10;
 
       if (vehicleId == null || vehicleId.isEmpty) {
-        _sendError(response, HttpStatus.badRequest, 'vehicleId parameter required');
+        _sendError(
+          response,
+          HttpStatus.badRequest,
+          'vehicleId parameter required',
+        );
         return;
       }
 
-      final history = await _socService.getPredictionHistory(vehicleId, limit: limit);
+      final history = await _socService.getPredictionHistory(
+        vehicleId,
+        limit: limit,
+      );
 
       _sendJson(response, HttpStatus.ok, {
         'success': true,
@@ -165,16 +198,27 @@ class SOCApiService {
       });
     } catch (e) {
       print('❌ Error in history endpoint: $e');
-      _sendError(response, HttpStatus.internalServerError, 'History retrieval failed: $e');
+      _sendError(
+        response,
+        HttpStatus.internalServerError,
+        'History retrieval failed: $e',
+      );
     }
   }
 
   /// Validate predict input
   bool _validatePredictInput(Map<String, dynamic> data) {
     final requiredFields = [
-      'currentBattery', 'temperature', 'voltage', 'current',
-      'odometer', 'timeOfDay', 'dayOfWeek', 'avgSpeed',
-      'elevationGain', 'weatherCondition'
+      'currentBattery',
+      'temperature',
+      'voltage',
+      'current',
+      'odometer',
+      'timeOfDay',
+      'dayOfWeek',
+      'avgSpeed',
+      'elevationGain',
+      'weatherCondition',
     ];
 
     for (final field in requiredFields) {
@@ -207,7 +251,11 @@ class SOCApiService {
   }
 
   /// Send JSON response
-  void _sendJson(HttpResponse response, int statusCode, Map<String, dynamic> data) {
+  void _sendJson(
+    HttpResponse response,
+    int statusCode,
+    Map<String, dynamic> data,
+  ) {
     response.statusCode = statusCode;
     response.write(json.encode(data));
     response.close();
@@ -215,10 +263,7 @@ class SOCApiService {
 
   /// Send error response
   void _sendError(HttpResponse response, int statusCode, String message) {
-    _sendJson(response, statusCode, {
-      'success': false,
-      'error': message,
-    });
+    _sendJson(response, statusCode, {'success': false, 'error': message});
   }
 
   /// Get server status

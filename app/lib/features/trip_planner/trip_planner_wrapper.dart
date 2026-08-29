@@ -47,8 +47,11 @@ class TripPlannerWrapper extends ConsumerWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.electric_moped_rounded,
-                      color: AppColors.textTertiary, size: 64),
+                  Icon(
+                    Icons.electric_moped_rounded,
+                    color: AppColors.textTertiary,
+                    size: 64,
+                  ),
                   SizedBox(height: 16),
                   Text(
                     'Trip Planner / Lộ trình',

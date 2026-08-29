@@ -36,7 +36,8 @@ class HomeScreen extends ConsumerWidget {
       if (vehicles.isNotEmpty && vehicleId.isEmpty) {
         String targetId = vehicles.first.vehicleId;
         restoredId.whenData((savedId) {
-          if (savedId.isNotEmpty && vehicles.any((v) => v.vehicleId == savedId)) {
+          if (savedId.isNotEmpty &&
+              vehicles.any((v) => v.vehicleId == savedId)) {
             targetId = savedId;
           }
         });
@@ -50,7 +51,9 @@ class HomeScreen extends ConsumerWidget {
     // 2. Nếu vehicleId đang chọn KHÔNG resolve được (stale: xe đã xoá / không
     //    thuộc user / firestore từ chối quyền) → reset về '' để build sau
     //    tự pick lại từ allVehicles.
-    if (vehicleId.isNotEmpty && vehicleAsync.hasValue && vehicleAsync.value == null) {
+    if (vehicleId.isNotEmpty &&
+        vehicleAsync.hasValue &&
+        vehicleAsync.value == null) {
       Future.microtask(() {
         ref.read(selectedVehicleIdProvider.notifier).state = '';
         SessionService().setSelectedVehicleId(null);
@@ -70,7 +73,9 @@ class HomeScreen extends ConsumerWidget {
             await Future<void>.delayed(const Duration(milliseconds: 300));
           },
           child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
+            ),
             slivers: [
               // ── Hiển thị banner cảnh báo nếu user chưa có xe nào ──
               if (allVehiclesAsync.hasValue &&
@@ -115,7 +120,9 @@ class HomeScreen extends ConsumerWidget {
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
                   child: vehicleAsync.when(
-                    data: (vehicle) => vehicle == null ? const SizedBox.shrink() : RangePredictionCard(vehicle: vehicle),
+                    data: (vehicle) => vehicle == null
+                        ? const SizedBox.shrink()
+                        : RangePredictionCard(vehicle: vehicle),
                     loading: () => const SizedBox.shrink(),
                     error: (_, __) => const SizedBox.shrink(),
                   ),
@@ -144,7 +151,8 @@ class HomeScreen extends ConsumerWidget {
                       vehicleId: vehicle?.vehicleId ?? '',
                     ),
                     loading: () => const _BatteryHealthShimmer(),
-                    error: (_, __) => const _BatteryHealthCard(soh: 96, vehicleId: ''),
+                    error: (_, __) =>
+                        const _BatteryHealthCard(soh: 96, vehicleId: ''),
                   ),
                 ),
               ),
@@ -204,10 +212,7 @@ class HomeScreen extends ConsumerWidget {
   }
 
   void _showSyncDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => _SyncDialog(),
-    );
+    showDialog(context: context, builder: (context) => _SyncDialog());
   }
 
   // Efficiency Card Widget
@@ -263,7 +268,9 @@ class HomeScreen extends ConsumerWidget {
             child: LinearProgressIndicator(
               value: efficiency / 100,
               backgroundColor: AppColors.surfaceVariant,
-              valueColor: const AlwaysStoppedAnimation<Color>(AppColors.success),
+              valueColor: const AlwaysStoppedAnimation<Color>(
+                AppColors.success,
+              ),
               minHeight: 8,
             ),
           ),
@@ -520,7 +527,9 @@ class _VehicleBanner extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(28),
         image: const DecorationImage(
-          image: NetworkImage('https://images.unsplash.com/photo-1617788138017-80ad40651399?w=800'),
+          image: NetworkImage(
+            'https://images.unsplash.com/photo-1617788138017-80ad40651399?w=800',
+          ),
           fit: BoxFit.cover,
         ),
       ),
@@ -687,7 +696,9 @@ class _StatCard extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: isHighlighted ? AppColors.primary.withOpacity(0.8) : AppColors.textTertiary,
+              color: isHighlighted
+                  ? AppColors.primary.withOpacity(0.8)
+                  : AppColors.textTertiary,
               fontSize: 10,
               fontWeight: FontWeight.w600,
               letterSpacing: 0.5,
@@ -705,16 +716,19 @@ class _StatCardsRowShimmer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      children: List.generate(3, (index) => Expanded(
-        child: Container(
-          margin: EdgeInsets.only(right: index < 2 ? 12 : 0),
-          height: 100,
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.circular(24),
+      children: List.generate(
+        3,
+        (index) => Expanded(
+          child: Container(
+            margin: EdgeInsets.only(right: index < 2 ? 12 : 0),
+            height: 100,
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(24),
+            ),
           ),
         ),
-      )),
+      ),
     );
   }
 }
@@ -729,7 +743,8 @@ class _BatteryHealthCard extends StatefulWidget {
   State<_BatteryHealthCard> createState() => _BatteryHealthCardState();
 }
 
-class _BatteryHealthCardState extends State<_BatteryHealthCard> with SingleTickerProviderStateMixin {
+class _BatteryHealthCardState extends State<_BatteryHealthCard>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
   bool _isLoading = false;
@@ -741,9 +756,10 @@ class _BatteryHealthCardState extends State<_BatteryHealthCard> with SingleTicke
       duration: const Duration(milliseconds: 150),
       vsync: this,
     );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.97).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.97,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override
@@ -754,20 +770,22 @@ class _BatteryHealthCardState extends State<_BatteryHealthCard> with SingleTicke
 
   Future<void> _syncBatteryState() async {
     if (widget.vehicleId.isEmpty) return;
-    
+
     setState(() => _isLoading = true);
-    
+
     try {
       // Sync battery state to web
       await BatteryStateService.syncWithWebDashboard(widget.vehicleId);
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('Battery health synced to web dashboard'),
             backgroundColor: AppColors.success,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         );
       }
@@ -778,7 +796,9 @@ class _BatteryHealthCardState extends State<_BatteryHealthCard> with SingleTicke
             content: Text('Sync failed: $e'),
             backgroundColor: AppColors.error,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         );
       }
@@ -790,7 +810,7 @@ class _BatteryHealthCardState extends State<_BatteryHealthCard> with SingleTicke
   @override
   Widget build(BuildContext context) {
     final isHealthy = widget.soh >= 90;
-    
+
     return GestureDetector(
       onTapDown: (_) => _controller.forward(),
       onTapUp: (_) {
@@ -862,7 +882,9 @@ class _BatteryHealthCardState extends State<_BatteryHealthCard> with SingleTicke
               ),
               const SizedBox(height: 12),
               Text(
-                isHealthy ? 'Excellent condition' : 'Consider maintenance check',
+                isHealthy
+                    ? 'Excellent condition'
+                    : 'Consider maintenance check',
                 style: TextStyle(
                   color: isHealthy ? AppColors.success : AppColors.warning,
                   fontSize: 12,
@@ -954,12 +976,14 @@ class _AnimatedActionButtonState extends State<_AnimatedActionButton>
       duration: const Duration(milliseconds: 200),
       vsync: this,
     );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.92).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
-    _rotateAnimation = Tween<double>(begin: 0, end: 0.1).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.92,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+    _rotateAnimation = Tween<double>(
+      begin: 0,
+      end: 0.1,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override
@@ -1022,16 +1046,19 @@ class _QuickActionsShimmer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      children: List.generate(3, (index) => Expanded(
-        child: Container(
-          margin: EdgeInsets.only(right: index < 2 ? 12 : 0),
-          height: 80,
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.circular(20),
+      children: List.generate(
+        3,
+        (index) => Expanded(
+          child: Container(
+            margin: EdgeInsets.only(right: index < 2 ? 12 : 0),
+            height: 80,
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(20),
+            ),
           ),
         ),
-      )),
+      ),
     );
   }
 }
@@ -1041,7 +1068,8 @@ class _SyncDialog extends StatefulWidget {
   State<_SyncDialog> createState() => _SyncDialogState();
 }
 
-class _SyncDialogState extends State<_SyncDialog> with SingleTickerProviderStateMixin {
+class _SyncDialogState extends State<_SyncDialog>
+    with SingleTickerProviderStateMixin {
   bool _isSyncing = false;
   String _status = 'Ready to sync';
   late AnimationController _animationController;
@@ -1116,10 +1144,7 @@ class _SyncDialogState extends State<_SyncDialog> with SingleTickerProviderState
             const SizedBox(height: 8),
             Text(
               _status,
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 14,
-              ),
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
             ),
             const SizedBox(height: 24),
             if (_isSyncing)
@@ -1206,7 +1231,9 @@ class _SyncDialogState extends State<_SyncDialog> with SingleTickerProviderState
             child: LinearProgressIndicator(
               value: efficiency / 100,
               backgroundColor: AppColors.surfaceVariant,
-              valueColor: const AlwaysStoppedAnimation<Color>(AppColors.success),
+              valueColor: const AlwaysStoppedAnimation<Color>(
+                AppColors.success,
+              ),
               minHeight: 8,
             ),
           ),
@@ -1346,9 +1373,10 @@ class _AnimatedButtonState extends State<_AnimatedButton>
       duration: const Duration(milliseconds: 150),
       vsync: this,
     );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.95).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.95,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override
@@ -1371,14 +1399,18 @@ class _AnimatedButtonState extends State<_AnimatedButton>
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 14),
           decoration: BoxDecoration(
-            color: widget.isSecondary ? AppColors.surfaceVariant : AppColors.primary,
+            color: widget.isSecondary
+                ? AppColors.surfaceVariant
+                : AppColors.primary,
             borderRadius: BorderRadius.circular(16),
           ),
           child: Center(
             child: Text(
               widget.label,
               style: TextStyle(
-                color: widget.isSecondary ? AppColors.textPrimary : Colors.white,
+                color: widget.isSecondary
+                    ? AppColors.textPrimary
+                    : Colors.white,
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
               ),
@@ -1436,8 +1468,11 @@ class _InlineErrorBanner extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.error_outline_rounded,
-                  color: AppColors.error, size: 20),
+              const Icon(
+                Icons.error_outline_rounded,
+                color: AppColors.error,
+                size: 20,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -1451,8 +1486,11 @@ class _InlineErrorBanner extends StatelessWidget {
               ),
               IconButton(
                 onPressed: onRetry,
-                icon: const Icon(Icons.refresh_rounded,
-                    color: AppColors.error, size: 20),
+                icon: const Icon(
+                  Icons.refresh_rounded,
+                  color: AppColors.error,
+                  size: 20,
+                ),
                 visualDensity: VisualDensity.compact,
                 tooltip: 'Thử lại',
               ),
@@ -1497,8 +1535,11 @@ class _NoVehicleBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.directions_car_outlined,
-              color: AppColors.warning, size: 20),
+          const Icon(
+            Icons.directions_car_outlined,
+            color: AppColors.warning,
+            size: 20,
+          ),
           const SizedBox(width: 10),
           const Expanded(
             child: Text(

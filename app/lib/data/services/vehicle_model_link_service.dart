@@ -13,7 +13,7 @@ class VehicleModelLinkService {
   final FirebaseFirestore _firestore;
 
   VehicleModelLinkService({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
   /// Liên kết xe với model VinFast (manual flow)
   Future<void> linkModel({
@@ -28,7 +28,9 @@ class VehicleModelLinkService {
       'specLinkedAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
-    debugPrint('🔗 Linked $vehicleId → ${spec.modelName} (v${spec.specVersion})');
+    debugPrint(
+      '🔗 Linked $vehicleId → ${spec.modelName} (v${spec.specVersion})',
+    );
   }
 
   /// Bỏ liên kết model
@@ -66,6 +68,8 @@ class VehicleModelLinkService {
 }
 
 /// Riverpod provider
-final vehicleModelLinkServiceProvider = Provider<VehicleModelLinkService>((ref) {
+final vehicleModelLinkServiceProvider = Provider<VehicleModelLinkService>((
+  ref,
+) {
   return VehicleModelLinkService();
 });

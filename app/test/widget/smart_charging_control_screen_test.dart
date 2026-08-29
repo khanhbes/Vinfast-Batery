@@ -20,7 +20,10 @@ void main() {
     // Phase 8, 9 & 10 assertions
     expect(find.text('Pin hiện tại'), findsOneWidget);
     expect(find.text('Pin muốn sạc tới'), findsOneWidget);
-    expect(find.byKey(const ValueKey('target-battery-slider')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('target-battery-selector')),
+      findsOneWidget,
+    );
     expect(find.text('80%'), findsWidgets);
     expect(find.text('90%'), findsOneWidget);
     expect(find.text('100%'), findsWidgets);
@@ -49,7 +52,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('creates clean preview with duration and stop time', (tester) async {
+  testWidgets('creates clean preview with duration and stop time', (
+    tester,
+  ) async {
     final controller = harness();
     await tester.pumpWidget(app(controller));
 
@@ -104,7 +109,9 @@ void main() {
     tester,
   ) async {
     final controller = harness();
-    controller.seed(controller.state.copyWith(gatewayError: 'Không thể kết nối ổ sạc'));
+    controller.seed(
+      controller.state.copyWith(gatewayError: 'Không thể kết nối ổ sạc'),
+    );
     await tester.pumpWidget(app(controller));
 
     expect(find.text('Không kết nối được ổ sạc.'), findsOneWidget);
@@ -136,7 +143,7 @@ void main() {
     expect(find.text('ĐANG SẠC'), findsWidgets);
     expect(find.byKey(const ValueKey('session-countdown')), findsOneWidget);
     expect(find.text('402 W'), findsOneWidget);
-    expect(find.text('DỪNG SẠC'), findsOneWidget);
+    expect(find.text('NGẮT NGUỒN NGAY'), findsOneWidget);
   });
 
   testWidgets('charger display state maps correctly to UI indicators', (

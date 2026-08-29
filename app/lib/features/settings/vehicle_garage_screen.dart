@@ -19,7 +19,8 @@ class VehicleGarageScreen extends ConsumerStatefulWidget {
   const VehicleGarageScreen({super.key});
 
   @override
-  ConsumerState<VehicleGarageScreen> createState() => _VehicleGarageScreenState();
+  ConsumerState<VehicleGarageScreen> createState() =>
+      _VehicleGarageScreenState();
 }
 
 class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
@@ -36,7 +37,11 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
     setState(() => _isLoading = true);
     try {
       final vehicles = await AuthService().getUserVehicles();
-      if (mounted) setState(() { _vehicles = vehicles; _isLoading = false; });
+      if (mounted)
+        setState(() {
+          _vehicles = vehicles;
+          _isLoading = false;
+        });
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -67,7 +72,10 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Xóa xe', style: TextStyle(color: AppColors.textPrimary)),
+        title: const Text(
+          'Xóa xe',
+          style: TextStyle(color: AppColors.textPrimary),
+        ),
         content: const Text(
           'Bạn có chắc chắn muốn xóa xe này? Thao tác không thể hoàn tác.',
           style: TextStyle(color: AppColors.textSecondary),
@@ -75,14 +83,19 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Hủy', style: TextStyle(color: AppColors.textSecondary)),
+            child: const Text(
+              'Hủy',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.error,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
             child: const Text('Xóa'),
           ),
@@ -110,12 +123,20 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
         backgroundColor: AppColors.background,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.textPrimary, size: 20),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: AppColors.textPrimary,
+            size: 20,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
           'Garage Xe',
-          style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w700),
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
         ),
         actions: [
           GestureDetector(
@@ -130,7 +151,11 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.add_rounded, color: AppColors.background, size: 18),
+                  Icon(
+                    Icons.add_rounded,
+                    color: AppColors.background,
+                    size: 18,
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     'Thêm xe',
@@ -147,10 +172,12 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.primary),
+            )
           : _vehicles.isEmpty
-              ? _buildEmptyState()
-              : _buildVehicleList(),
+          ? _buildEmptyState()
+          : _buildVehicleList(),
     );
   }
 
@@ -165,12 +192,20 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
               color: AppColors.surfaceVariant,
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.directions_car_outlined, color: AppColors.textTertiary, size: 48),
+            child: const Icon(
+              Icons.directions_car_outlined,
+              color: AppColors.textTertiary,
+              size: 48,
+            ),
           ),
           const SizedBox(height: 20),
           const Text(
             'Chưa có xe nào',
-            style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w700),
+            style: TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: 8),
           Text(
@@ -186,7 +221,9 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
               backgroundColor: AppColors.primary,
               foregroundColor: AppColors.background,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
             ),
           ),
         ],
@@ -201,32 +238,36 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (ctx, i) {
         final v = _vehicles[i];
-        final isSelected = ref.watch(selectedVehicleIdProvider) == (v['id'] ?? v['vehicleId']);
+        final isSelected =
+            ref.watch(selectedVehicleIdProvider) == (v['id'] ?? v['vehicleId']);
 
         return _VehicleCard(
-          model: v['model'] ?? v['vehicleName'] ?? 'Xe không tên',
-          year: v['year'] ?? 2024,
-          battery: (v['batteryCapacity'] ?? 0).toDouble(),
-          soh: (v['stateOfHealth'] ?? 100).toDouble(),
-          odo: (v['currentOdo'] ?? 0).toDouble(),
-          isSelected: isSelected,
-          onTap: () {
-            final id = v['id'] ?? v['vehicleId'] ?? '';
-            ref.read(selectedVehicleIdProvider.notifier).state = id;
-          },
-          onDelete: () => _deleteVehicle(v['id'] ?? v['vehicleId'] ?? ''),
-          onViewSpec: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => VehicleSpecDetailScreen(
-                  vehicleId: v['id'] ?? v['vehicleId'] ?? '',
-                  vehicleData: v,
-                ),
-              ),
-            );
-          },
-        ).animate().fadeIn(delay: Duration(milliseconds: i * 80)).slideX(begin: 0.05);
+              model: v['model'] ?? v['vehicleName'] ?? 'Xe không tên',
+              year: v['year'] ?? 2024,
+              battery: (v['batteryCapacity'] ?? 0).toDouble(),
+              soh: (v['stateOfHealth'] ?? 100).toDouble(),
+              odo: (v['currentOdo'] ?? 0).toDouble(),
+              isSelected: isSelected,
+              onTap: () {
+                final id = v['id'] ?? v['vehicleId'] ?? '';
+                ref.read(selectedVehicleIdProvider.notifier).state = id;
+              },
+              onDelete: () => _deleteVehicle(v['id'] ?? v['vehicleId'] ?? ''),
+              onViewSpec: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => VehicleSpecDetailScreen(
+                      vehicleId: v['id'] ?? v['vehicleId'] ?? '',
+                      vehicleData: v,
+                    ),
+                  ),
+                );
+              },
+            )
+            .animate()
+            .fadeIn(delay: Duration(milliseconds: i * 80))
+            .slideX(begin: 0.05);
       },
     );
   }
@@ -269,11 +310,19 @@ class _VehicleCard extends StatelessWidget {
           color: AppColors.card,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isSelected ? AppColors.primary.withAlpha(102) : AppColors.glassBorder,
+            color: isSelected
+                ? AppColors.primary.withAlpha(102)
+                : AppColors.glassBorder,
             width: isSelected ? 1.5 : 1,
           ),
           boxShadow: isSelected
-              ? [BoxShadow(color: AppColors.primary.withAlpha(15), blurRadius: 16, spreadRadius: 2)]
+              ? [
+                  BoxShadow(
+                    color: AppColors.primary.withAlpha(15),
+                    blurRadius: 16,
+                    spreadRadius: 2,
+                  ),
+                ]
               : null,
         ),
         child: Column(
@@ -284,12 +333,16 @@ class _VehicleCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: isSelected ? AppColors.primaryContainer : AppColors.surfaceVariant,
+                    color: isSelected
+                        ? AppColors.primaryContainer
+                        : AppColors.surfaceVariant,
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Icon(
                     Icons.electric_moped_rounded,
-                    color: isSelected ? AppColors.primary : AppColors.textSecondary,
+                    color: isSelected
+                        ? AppColors.primary
+                        : AppColors.textSecondary,
                     size: 24,
                   ),
                 ),
@@ -319,7 +372,10 @@ class _VehicleCard extends StatelessWidget {
                 ),
                 if (isSelected)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
                     decoration: BoxDecoration(
                       color: AppColors.success.withAlpha(26),
                       borderRadius: BorderRadius.circular(10),
@@ -352,7 +408,11 @@ class _VehicleCard extends StatelessWidget {
                       color: AppColors.surfaceVariant,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.info_outline_rounded, color: AppColors.textSecondary, size: 18),
+                    child: const Icon(
+                      Icons.info_outline_rounded,
+                      color: AppColors.textSecondary,
+                      size: 18,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -364,7 +424,11 @@ class _VehicleCard extends StatelessWidget {
                       color: AppColors.errorBg,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Icon(Icons.delete_outline_rounded, color: AppColors.error, size: 18),
+                    child: Icon(
+                      Icons.delete_outline_rounded,
+                      color: AppColors.error,
+                      size: 18,
+                    ),
                   ),
                 ),
               ],
@@ -389,11 +453,19 @@ class _VehicleCard extends StatelessWidget {
           children: [
             Text(
               label,
-              style: TextStyle(color: AppColors.textTertiary, fontSize: 10, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                color: AppColors.textTertiary,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             Text(
               value,
-              style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w700),
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ],
         ),
@@ -460,7 +532,9 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
     setState(() {
       _filteredSpecs = query.isEmpty
           ? _allSpecs
-          : _allSpecs.where((s) => s.modelName.toLowerCase().contains(query)).toList();
+          : _allSpecs
+                .where((s) => s.modelName.toLowerCase().contains(query))
+                .toList();
     });
   }
 
@@ -544,7 +618,10 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
                       SizedBox(height: 4),
                       Text(
                         'Chọn model từ danh sách VinFast',
-                        style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 13,
+                        ),
                       ),
                     ],
                   ),
@@ -557,7 +634,11 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
                       color: AppColors.surfaceVariant,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.close, color: AppColors.textSecondary, size: 20),
+                    child: const Icon(
+                      Icons.close,
+                      color: AppColors.textSecondary,
+                      size: 20,
+                    ),
                   ),
                 ),
               ],
@@ -568,11 +649,18 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             child: TextField(
               controller: _searchCtrl,
-              style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 14,
+              ),
               decoration: InputDecoration(
                 hintText: 'Tìm kiếm model...',
                 hintStyle: const TextStyle(color: AppColors.textHint),
-                prefixIcon: const Icon(Icons.search_rounded, color: AppColors.textSecondary, size: 20),
+                prefixIcon: const Icon(
+                  Icons.search_rounded,
+                  color: AppColors.textSecondary,
+                  size: 20,
+                ),
                 filled: true,
                 fillColor: AppColors.surfaceLight,
                 border: OutlineInputBorder(
@@ -590,7 +678,13 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
               height: 40,
               child: Row(
                 children: [
-                  Text('Năm sản xuất:', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                  Text(
+                    'Năm sản xuất:',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
+                    ),
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: ListView.separated(
@@ -603,15 +697,22 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
                         return GestureDetector(
                           onTap: () => setState(() => _selectedYear = year),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
+                            ),
                             decoration: BoxDecoration(
-                              color: selected ? AppColors.primary : AppColors.surfaceVariant,
+                              color: selected
+                                  ? AppColors.primary
+                                  : AppColors.surfaceVariant,
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
                               '$year',
                               style: TextStyle(
-                                color: selected ? AppColors.background : AppColors.textSecondary,
+                                color: selected
+                                    ? AppColors.background
+                                    : AppColors.textSecondary,
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -629,28 +730,30 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
           // List
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+                ? const Center(
+                    child: CircularProgressIndicator(color: AppColors.primary),
+                  )
                 : _filteredSpecs.isEmpty
-                    ? Center(
-                        child: Text(
-                          'Không tìm thấy model nào',
-                          style: TextStyle(color: AppColors.textSecondary),
-                        ),
-                      )
-                    : ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
-                        itemCount: _filteredSpecs.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 10),
-                        itemBuilder: (ctx, i) {
-                          final spec = _filteredSpecs[i];
-                          return _SpecCard(
-                            spec: spec,
-                            isAdding: _isAdding,
-                            onAdd: () => _addVehicle(spec),
-                            onPreview: () => _showSpecPreview(spec),
-                          ).appFadeSlideIn(index: i);
-                        },
-                      ),
+                ? Center(
+                    child: Text(
+                      'Không tìm thấy model nào',
+                      style: TextStyle(color: AppColors.textSecondary),
+                    ),
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
+                    itemCount: _filteredSpecs.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (ctx, i) {
+                      final spec = _filteredSpecs[i];
+                      return _SpecCard(
+                        spec: spec,
+                        isAdding: _isAdding,
+                        onAdd: () => _addVehicle(spec),
+                        onPreview: () => _showSpecPreview(spec),
+                      ).appFadeSlideIn(index: i);
+                    },
+                  ),
           ),
         ],
       ),
@@ -707,8 +810,11 @@ class _SpecCard extends StatelessWidget {
                     color: AppColors.primaryContainer,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(Icons.electric_moped_rounded,
-                      color: AppColors.primary, size: 22),
+                  child: const Icon(
+                    Icons.electric_moped_rounded,
+                    color: AppColors.primary,
+                    size: 22,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -733,7 +839,9 @@ class _SpecCard extends StatelessWidget {
                             const SizedBox(width: 6),
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
                                 color: AppColors.surfaceVariant,
                                 borderRadius: BorderRadius.circular(6),
@@ -757,7 +865,9 @@ class _SpecCard extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                            color: AppColors.textSecondary, fontSize: 12),
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                   ),
@@ -766,7 +876,9 @@ class _SpecCard extends StatelessWidget {
                   onTap: isAdding ? null : onAdd,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 8),
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
                       color: AppColors.primary,
                       borderRadius: BorderRadius.circular(10),
@@ -776,8 +888,9 @@ class _SpecCard extends StatelessWidget {
                             width: 16,
                             height: 16,
                             child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AppColors.background),
+                              strokeWidth: 2,
+                              color: AppColors.background,
+                            ),
                           )
                         : Text(
                             'Thêm',
@@ -798,9 +911,11 @@ class _SpecCard extends StatelessWidget {
               runSpacing: 6,
               children: [
                 _specChip(
-                    'Pin: ${spec.nominalCapacityWh.toInt()} Wh • ${spec.nominalVoltageV.toInt()}V'),
+                  'Pin: ${spec.nominalCapacityWh.toInt()} Wh • ${spec.nominalVoltageV.toInt()}V',
+                ),
                 _specChip(
-                    'Motor: ${(spec.ratedMotorPowerW / 1000).toStringAsFixed(1)} kW'),
+                  'Motor: ${(spec.ratedMotorPowerW / 1000).toStringAsFixed(1)} kW',
+                ),
                 if (spec.topSpeedKmh != null)
                   _specChip('Tốc độ: ${spec.topSpeedKmh!.toInt()} km/h'),
                 if (spec.rangeKm != null)
@@ -822,7 +937,11 @@ class _SpecCard extends StatelessWidget {
       ),
       child: Text(
         text,
-        style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w500),
+        style: TextStyle(
+          color: AppColors.textSecondary,
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+        ),
       ),
     );
   }
@@ -876,11 +995,11 @@ class _SuccessOverlayState extends State<_SuccessOverlay> {
                 size: 36,
               ),
             ).animate().scale(
-                  begin: const Offset(0.4, 0.4),
-                  end: const Offset(1, 1),
-                  duration: AppMotion.base,
-                  curve: AppMotion.emphasized,
-                ),
+              begin: const Offset(0.4, 0.4),
+              end: const Offset(1, 1),
+              duration: AppMotion.base,
+              curve: AppMotion.emphasized,
+            ),
             const SizedBox(height: 14),
             const Text(
               'Đã thêm xe',
@@ -925,8 +1044,11 @@ class _SpecPreviewDialog extends StatelessWidget {
               color: AppColors.primaryContainer,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.electric_moped_rounded,
-                color: AppColors.primary, size: 22),
+            child: const Icon(
+              Icons.electric_moped_rounded,
+              color: AppColors.primary,
+              size: 22,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -947,7 +1069,9 @@ class _SpecPreviewDialog extends StatelessWidget {
                     child: Text(
                       spec.tagline!,
                       style: TextStyle(
-                          color: AppColors.textSecondary, fontSize: 12),
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
               ],
@@ -960,25 +1084,40 @@ class _SpecPreviewDialog extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _row('Pin', '${spec.nominalCapacityWh.toInt()} Wh • ${spec.nominalCapacityAh.toInt()} Ah'),
+            _row(
+              'Pin',
+              '${spec.nominalCapacityWh.toInt()} Wh • ${spec.nominalCapacityAh.toInt()} Ah',
+            ),
             _row('Điện áp', '${spec.nominalVoltageV.toInt()} V'),
             _row('Sạc tối đa', '${spec.maxChargePowerW.toInt()} W'),
-            _row('Motor (định mức)', '${(spec.ratedMotorPowerW / 1000).toStringAsFixed(1)} kW'),
-            _row('Motor (đỉnh)', '${(spec.peakMotorPowerW / 1000).toStringAsFixed(1)} kW'),
+            _row(
+              'Motor (định mức)',
+              '${(spec.ratedMotorPowerW / 1000).toStringAsFixed(1)} kW',
+            ),
+            _row(
+              'Motor (đỉnh)',
+              '${(spec.peakMotorPowerW / 1000).toStringAsFixed(1)} kW',
+            ),
             if (spec.topSpeedKmh != null)
               _row('Tốc độ tối đa', '${spec.topSpeedKmh!.toInt()} km/h'),
             if (spec.rangeKm != null)
               _row('Tầm hoạt động', '~${spec.rangeKm!.toInt()} km'),
-            _row('Hiệu suất', '~${spec.defaultEfficiencyKmPerPercent.toStringAsFixed(2)} km/%'),
-            if (spec.releaseYear != null) _row('Năm ra mắt', '${spec.releaseYear}'),
+            _row(
+              'Hiệu suất',
+              '~${spec.defaultEfficiencyKmPerPercent.toStringAsFixed(2)} km/%',
+            ),
+            if (spec.releaseYear != null)
+              _row('Năm ra mắt', '${spec.releaseYear}'),
           ],
         ),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Đóng',
-              style: TextStyle(color: AppColors.textSecondary)),
+          child: const Text(
+            'Đóng',
+            style: TextStyle(color: AppColors.textSecondary),
+          ),
         ),
         FilledButton.icon(
           onPressed: onAdd,
@@ -987,8 +1126,9 @@ class _SpecPreviewDialog extends StatelessWidget {
           style: FilledButton.styleFrom(
             backgroundColor: AppColors.primary,
             foregroundColor: AppColors.background,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         ),
       ],

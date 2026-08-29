@@ -5,6 +5,7 @@ import 'core/services/settings_service.dart';
 import 'core/constants/app_constants.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/app_popup.dart';
+import 'core/widgets/internet_connection_notice.dart';
 import 'data/services/notification_service.dart';
 import 'features/ai/smart_charging_control_screen.dart';
 import 'features/auth/auth_gate.dart';
@@ -60,10 +61,7 @@ class _VinFastBatteryAppState extends State<VinFastBatteryApp> {
 
         // Localization support (Vietnamese/English per PLAN1)
         locale: _settings.getLocale(),
-        supportedLocales: const [
-          Locale('vi'),
-          Locale('en'),
-        ],
+        supportedLocales: const [Locale('vi'), Locale('en')],
         localizationsDelegates: const [
           AppLocalizations.delegate,
           GlobalMaterialLocalizations.delegate,
@@ -73,6 +71,8 @@ class _VinFastBatteryAppState extends State<VinFastBatteryApp> {
 
         scaffoldMessengerKey: AppPopup.messengerKey,
         navigatorKey: AppPopup.navigatorKey,
+        builder: (context, child) =>
+            InternetConnectionNotice(child: child ?? const SizedBox.shrink()),
         home: const AuthGate(),
       ),
     );

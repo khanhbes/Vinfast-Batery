@@ -13,10 +13,7 @@ import 'add_charge_log_controller.dart';
 class AddChargeLogModal extends ConsumerStatefulWidget {
   final String vehicleId;
 
-  const AddChargeLogModal({
-    super.key,
-    required this.vehicleId,
-  });
+  const AddChargeLogModal({super.key, required this.vehicleId});
 
   /// Helper method để mở modal từ bất kỳ đâu
   static Future<bool?> show(BuildContext context, String vehicleId) {
@@ -45,9 +42,7 @@ class _AddChargeLogModalState extends ConsumerState<AddChargeLogModal> {
     super.initState();
     // Load thông tin xe khi modal mở
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref
-          .read(addChargeLogProvider.notifier)
-          .loadVehicle(widget.vehicleId);
+      ref.read(addChargeLogProvider.notifier).loadVehicle(widget.vehicleId);
     });
   }
 
@@ -63,7 +58,10 @@ class _AddChargeLogModalState extends ConsumerState<AddChargeLogModal> {
   // Date/Time Picker helpers
   // --------------------------------------------------------------------------
 
-  Future<DateTime?> _pickDateTime(BuildContext context, DateTime? initial) async {
+  Future<DateTime?> _pickDateTime(
+    BuildContext context,
+    DateTime? initial,
+  ) async {
     final now = DateTime.now();
     final initialDate = initial ?? now;
 
@@ -148,7 +146,9 @@ class _AddChargeLogModalState extends ConsumerState<AddChargeLogModal> {
           ),
           backgroundColor: AppColors.primary,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       );
       Navigator.of(context).pop(true);
@@ -166,7 +166,8 @@ class _AddChargeLogModalState extends ConsumerState<AddChargeLogModal> {
 
     // Listen for error messages from controller-level validation
     ref.listen<AddChargeLogState>(addChargeLogProvider, (prev, next) {
-      if (next.errorMessage != null && next.errorMessage != prev?.errorMessage) {
+      if (next.errorMessage != null &&
+          next.errorMessage != prev?.errorMessage) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
@@ -241,7 +242,9 @@ class _AddChargeLogModalState extends ConsumerState<AddChargeLogModal> {
                               validator: (value) => ref
                                   .read(addChargeLogProvider.notifier)
                                   .validateBatteryPercent(
-                                      value, 'Mức pin trước sạc'),
+                                    value,
+                                    'Mức pin trước sạc',
+                                  ),
                             ),
                           ),
                           const Padding(
@@ -266,7 +269,9 @@ class _AddChargeLogModalState extends ConsumerState<AddChargeLogModal> {
                               validator: (value) => ref
                                   .read(addChargeLogProvider.notifier)
                                   .validateBatteryPercent(
-                                      value, 'Mức pin sau sạc'),
+                                    value,
+                                    'Mức pin sau sạc',
+                                  ),
                             ),
                           ),
                         ],
@@ -306,7 +311,10 @@ class _AddChargeLogModalState extends ConsumerState<AddChargeLogModal> {
                         iconColor: AppColors.primary,
                         value: state.startTime,
                         onTap: () async {
-                          final dt = await _pickDateTime(context, state.startTime);
+                          final dt = await _pickDateTime(
+                            context,
+                            state.startTime,
+                          );
                           if (dt != null) {
                             ref
                                 .read(addChargeLogProvider.notifier)
@@ -321,7 +329,10 @@ class _AddChargeLogModalState extends ConsumerState<AddChargeLogModal> {
                         iconColor: AppColors.error,
                         value: state.endTime,
                         onTap: () async {
-                          final dt = await _pickDateTime(context, state.endTime);
+                          final dt = await _pickDateTime(
+                            context,
+                            state.endTime,
+                          );
                           if (dt != null) {
                             ref
                                 .read(addChargeLogProvider.notifier)
@@ -420,7 +431,10 @@ class _AddChargeLogModalState extends ConsumerState<AddChargeLogModal> {
           ),
           IconButton(
             onPressed: () => Navigator.of(context).pop(),
-            icon: const Icon(Icons.close_rounded, color: AppColors.textSecondary),
+            icon: const Icon(
+              Icons.close_rounded,
+              color: AppColors.textSecondary,
+            ),
           ),
         ],
       ),
@@ -492,10 +506,7 @@ class _AddChargeLogModalState extends ConsumerState<AddChargeLogModal> {
         const SizedBox(width: 8),
         Text(
           subtitle,
-          style: const TextStyle(
-            color: AppColors.textSecondary,
-            fontSize: 12,
-          ),
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
         ),
       ],
     );
@@ -519,13 +530,19 @@ class _AddChargeLogModalState extends ConsumerState<AddChargeLogModal> {
       style: const TextStyle(color: AppColors.textPrimary, fontSize: 15),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+        labelStyle: const TextStyle(
+          color: AppColors.textSecondary,
+          fontSize: 13,
+        ),
         hintText: hint,
         hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 13),
         prefixIcon: Icon(icon, color: iconColor, size: 20),
         filled: true,
         fillColor: AppColors.surfaceLight,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: AppColors.border),
@@ -546,10 +563,7 @@ class _AddChargeLogModalState extends ConsumerState<AddChargeLogModal> {
           borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: AppColors.error, width: 1.5),
         ),
-        errorStyle: const TextStyle(
-          color: AppColors.error,
-          fontSize: 11,
-        ),
+        errorStyle: const TextStyle(color: AppColors.error, fontSize: 11),
       ),
     );
   }
@@ -649,18 +663,14 @@ class _AddChargeLogModalState extends ConsumerState<AddChargeLogModal> {
           children: [
             Icon(
               isValid ? Icons.timer_outlined : Icons.warning_amber_rounded,
-              color: isValid
-                  ? AppColors.primary
-                  : AppColors.error,
+              color: isValid ? AppColors.primary : AppColors.error,
               size: 18,
             ),
             const SizedBox(width: 8),
             Text(
               isValid ? 'Thời gian sạc: $durationText' : durationText,
               style: TextStyle(
-                color: isValid
-                    ? AppColors.primary
-                    : AppColors.error,
+                color: isValid ? AppColors.primary : AppColors.error,
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
               ),

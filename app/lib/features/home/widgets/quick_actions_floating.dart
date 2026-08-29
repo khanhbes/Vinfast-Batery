@@ -72,24 +72,28 @@ class _QuickActionsFloatingState extends State<QuickActionsFloating>
                   icon: Icons.bolt_rounded,
                   label: 'Sạc ngay',
                   color: AppColors.warning,
-                  onTap: widget.onCharge ?? () {
-                    UnderDevelopmentNotice.showDialog(
-                      context,
-                      featureName: 'Sạc nhanh',
-                    );
-                  },
+                  onTap:
+                      widget.onCharge ??
+                      () {
+                        UnderDevelopmentNotice.showDialog(
+                          context,
+                          featureName: 'Sạc nhanh',
+                        );
+                      },
                 ),
                 const SizedBox(height: 10),
                 _ActionButton(
                   icon: Icons.location_on_rounded,
                   label: 'Trạm sạc',
                   color: AppColors.info,
-                  onTap: widget.onStation ?? () {
-                    UnderDevelopmentNotice.showDialog(
-                      context,
-                      featureName: 'Tìm trạm sạc gần nhất',
-                    );
-                  },
+                  onTap:
+                      widget.onStation ??
+                      () {
+                        UnderDevelopmentNotice.showDialog(
+                          context,
+                          featureName: 'Tìm trạm sạc gần nhất',
+                        );
+                      },
                 ),
                 const SizedBox(height: 10),
                 _ActionButton(
@@ -103,12 +107,14 @@ class _QuickActionsFloatingState extends State<QuickActionsFloating>
                   icon: Icons.sos_rounded,
                   label: 'Cứu hộ',
                   color: AppColors.error,
-                  onTap: widget.onEmergency ?? () {
-                    UnderDevelopmentNotice.showDialog(
-                      context,
-                      featureName: 'Cứu hộ khẩn cấp',
-                    );
-                  },
+                  onTap:
+                      widget.onEmergency ??
+                      () {
+                        UnderDevelopmentNotice.showDialog(
+                          context,
+                          featureName: 'Cứu hộ khẩn cấp',
+                        );
+                      },
                 ),
                 const SizedBox(height: 12),
               ],

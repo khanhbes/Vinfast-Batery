@@ -118,6 +118,10 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
       predictionWarnings: preview.warnings,
       fallbackReason: preview.fallbackReason,
       predictionAnalyzedAt: preview.analyzedAt,
+      etaCandidates: preview.etaCandidates,
+      fusionReason: preview.fusionReason,
+      profileVersion: preview.profileVersion,
+      adapterVersion: preview.adapterVersion,
     ),
     idempotencyKey: key,
   );
@@ -237,24 +241,28 @@ class ServerSmartChargerRepository implements SmartChargerRepository {
   }
 
   @override
-  Future<List<SmartChargeTelemetryPoint>> getTelemetry(
-    String sessionId,
-  ) async => const [];
+  Future<List<SmartChargeTelemetryPoint>> getTelemetry(String sessionId) =>
+      service.telemetry(sessionId);
 
   @override
   Future<SmartChargeEnergySummary> confirmActualEndSoc(
     SmartChargingSession session,
     double soc,
-  ) => throw const SmartChargerException(
-    'Xác nhận SOC chưa khả dụng ở chế độ Easy.',
-    code: 'notSupported',
-  );
+  ) async {
+    final updated = await service.confirmActualSoc(session.sessionId, soc);
+    final points = await service.telemetry(session.sessionId);
+    return SmartChargeEnergySummary.calculate(
+      session: updated,
+      points: points,
+      confirmedEndSoc: soc,
+    );
+  }
 
   @override
   Future<void> recordStatusSample(
     SmartChargingSession session,
     SmartChargerStatus status,
-  ) async {}
+  ) => service.recordTelemetry(session.sessionId, status);
 
   @override
   Future<void> flushPendingTelemetry(String sessionId) async {}

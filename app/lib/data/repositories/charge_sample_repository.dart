@@ -9,10 +9,11 @@ import '../models/charge_sample_model.dart';
 import '../../core/services/api_service.dart';
 
 /// Repository để gửi ChargeSample (training data) về backend
-/// 
+///
 /// Tối ưu hóa: Offline queue → auto-sync khi có mạng
 class ChargeSampleRepository {
-  static final ChargeSampleRepository _instance = ChargeSampleRepository._internal();
+  static final ChargeSampleRepository _instance =
+      ChargeSampleRepository._internal();
   factory ChargeSampleRepository() => _instance;
   ChargeSampleRepository._internal();
 
@@ -26,7 +27,7 @@ class ChargeSampleRepository {
   }
 
   /// Tạo và gửi ChargeSample từ dữ liệu session sạc
-  /// 
+  ///
   /// Flow:
   /// 1. Nhận prediction metadata từ ChargeLog
   /// 2. Thu thập location
@@ -101,21 +102,28 @@ class ChargeSampleRepository {
   /// Sync ChargeSample to backend training endpoint
   Future<void> _syncToBackend(ChargeSampleModel sample) async {
     try {
-      final response = await http.post(
-        Uri.parse('${_apiService.baseUrl}/api/ai/charge-sample'),
-        headers: await _apiService.getHeaders(),
-        body: jsonEncode(sample.toFirestore()),
-      ).timeout(const Duration(seconds: 30));
+      final response = await http
+          .post(
+            Uri.parse('${_apiService.baseUrl}/api/ai/charge-sample'),
+            headers: await _apiService.getHeaders(),
+            body: jsonEncode(sample.toFirestore()),
+          )
+          .timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         // Update synced flag
         await _firestore
             .collection('ChargeSamples')
             .doc(sample.sessionId)
-            .update({'syncedToBackend': true, 'syncedAt': FieldValue.serverTimestamp()});
+            .update({
+              'syncedToBackend': true,
+              'syncedAt': FieldValue.serverTimestamp(),
+            });
         debugPrint('☁️ ChargeSample synced to backend: ${sample.sessionId}');
       } else {
-        debugPrint('⚠️ Failed to sync ChargeSample: HTTP ${response.statusCode}');
+        debugPrint(
+          '⚠️ Failed to sync ChargeSample: HTTP ${response.statusCode}',
+        );
       }
     } catch (e) {
       debugPrint('⚠️ Error syncing ChargeSample: $e');
@@ -154,8 +162,11 @@ class ChargeSampleRepository {
         .where('isDeleted', isEqualTo: false)
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snapshot) =>
-            snapshot.docs.map((d) => ChargeSampleModel.fromFirestore(d)).toList());
+        .map(
+          (snapshot) => snapshot.docs
+              .map((d) => ChargeSampleModel.fromFirestore(d))
+              .toList(),
+        );
   }
 
   /// Delete a sample (soft delete)

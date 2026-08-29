@@ -125,29 +125,27 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
                           ? 'Nhấn nút + để thêm mốc bảo dưỡng đầu tiên cho xe.'
                           : null,
                       actionLabel: tasks.isEmpty ? 'Thêm mốc đầu tiên' : null,
-                      onAction:
-                          tasks.isEmpty ? () => _showAddEditDialog(context) : null,
+                      onAction: tasks.isEmpty
+                          ? () => _showAddEditDialog(context)
+                          : null,
                     ),
                   ),
                 )
               else
                 SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, i) {
-                      final task = filtered[i];
-                      return Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                        child: _MaintenanceCard(
-                          task: task,
-                          currentOdo: _currentOdo,
-                          onTap: () => _showAddEditDialog(context, task: task),
-                          onComplete: () => _completeTask(task),
-                          onDelete: () => _confirmDelete(task),
-                        ).appFadeSlideIn(index: i),
-                      );
-                    },
-                    childCount: filtered.length,
-                  ),
+                  delegate: SliverChildBuilderDelegate((context, i) {
+                    final task = filtered[i];
+                    return Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                      child: _MaintenanceCard(
+                        task: task,
+                        currentOdo: _currentOdo,
+                        onTap: () => _showAddEditDialog(context, task: task),
+                        onComplete: () => _completeTask(task),
+                        onDelete: () => _confirmDelete(task),
+                      ).appFadeSlideIn(index: i),
+                    );
+                  }, childCount: filtered.length),
                 ),
               const SliverToBoxAdapter(child: SizedBox(height: 110)),
             ],
@@ -180,7 +178,10 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
                 SizedBox(height: 4),
                 Text(
                   'Theo dõi mốc bảo dưỡng theo ODO',
-                  style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 13,
+                  ),
                 ),
               ],
             ),
@@ -195,8 +196,11 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.speed_rounded,
-                      color: AppColors.primary, size: 14),
+                  const Icon(
+                    Icons.speed_rounded,
+                    color: AppColors.primary,
+                    size: 14,
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     '$_currentOdo km',
@@ -318,7 +322,9 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          const Expanded(child: LoadingSkeleton(layout: SkeletonLayout.list, itemCount: 4)),
+          const Expanded(
+            child: LoadingSkeleton(layout: SkeletonLayout.list, itemCount: 4),
+          ),
         ],
       ),
     );
@@ -333,8 +339,8 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
     final filtered = filter == _UrgencyFilter.all
         ? List<MaintenanceTaskModel>.from(tasks)
         : tasks
-            .where((t) => t.urgency(_currentOdo) == filter.toUrgency())
-            .toList();
+              .where((t) => t.urgency(_currentOdo) == filter.toUrgency())
+              .toList();
     // Ưu tiên hiển thị: overdue > dueSoon > upcoming > completed; cùng nhóm
     // sort theo targetOdo tăng dần.
     int rank(MaintenanceTaskModel t) {
@@ -380,10 +386,7 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Lỗi: $e'),
-            backgroundColor: AppColors.error,
-          ),
+          SnackBar(content: Text('Lỗi: $e'), backgroundColor: AppColors.error),
         );
       }
     }
@@ -395,8 +398,10 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
       builder: (_) => AlertDialog(
         backgroundColor: AppColors.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Xóa mốc bảo dưỡng',
-            style: TextStyle(color: AppColors.textPrimary)),
+        title: const Text(
+          'Xóa mốc bảo dưỡng',
+          style: TextStyle(color: AppColors.textPrimary),
+        ),
         content: Text(
           'Xóa "${task.title}"? Thao tác này không thể hoàn tác.',
           style: const TextStyle(color: AppColors.textSecondary),
@@ -404,8 +409,10 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Hủy',
-                style: TextStyle(color: AppColors.textSecondary)),
+            child: const Text(
+              'Hủy',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
@@ -453,7 +460,9 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
           try {
             if (task?.taskId != null) {
               await MaintenanceRepository.updateMaintenanceTask(
-                  task!.taskId!, newTask.toFirestore());
+                task!.taskId!,
+                newTask.toFirestore(),
+              );
             } else {
               await MaintenanceRepository.createMaintenanceTask(
                 vehicleId: vehicleId,
@@ -468,7 +477,9 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text(task != null ? 'Đã cập nhật' : 'Đã thêm mốc bảo dưỡng'),
+                  content: Text(
+                    task != null ? 'Đã cập nhật' : 'Đã thêm mốc bảo dưỡng',
+                  ),
                   backgroundColor: AppColors.success,
                   behavior: SnackBarBehavior.floating,
                 ),
@@ -477,7 +488,10 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
           } catch (e) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Lỗi: $e'), backgroundColor: AppColors.error),
+                SnackBar(
+                  content: Text('Lỗi: $e'),
+                  backgroundColor: AppColors.error,
+                ),
               );
             }
           }
@@ -650,7 +664,9 @@ class _FilterChip extends StatelessWidget {
             Text(
               label,
               style: TextStyle(
-                color: selected ? AppColors.background : AppColors.textSecondary,
+                color: selected
+                    ? AppColors.background
+                    : AppColors.textSecondary,
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
               ),
@@ -667,7 +683,9 @@ class _FilterChip extends StatelessWidget {
               child: Text(
                 '$count',
                 style: TextStyle(
-                  color: selected ? AppColors.background : AppColors.textTertiary,
+                  color: selected
+                      ? AppColors.background
+                      : AppColors.textTertiary,
                   fontSize: 10,
                   fontWeight: FontWeight.w800,
                 ),
@@ -742,7 +760,8 @@ class _MaintenanceCard extends StatelessWidget {
                                   : AppColors.textPrimary,
                               fontSize: 15,
                               fontWeight: FontWeight.w700,
-                              decoration: urgency == MaintenanceUrgency.completed
+                              decoration:
+                                  urgency == MaintenanceUrgency.completed
                                   ? TextDecoration.lineThrough
                                   : null,
                             ),
@@ -767,7 +786,10 @@ class _MaintenanceCard extends StatelessWidget {
               if (task.scheduledDate != null)
                 Container(
                   margin: const EdgeInsets.only(left: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.primary.withAlpha(26),
                     borderRadius: BorderRadius.circular(8),
@@ -942,77 +964,193 @@ class _ServiceTypeMeta {
     switch (type) {
       // ── Hệ điều khiển ──
       case ServiceType.brakeLever:
-        return const _ServiceTypeMeta(Icons.pan_tool_alt_rounded, Color(0xFFE8A87C), 'Tay phanh');
+        return const _ServiceTypeMeta(
+          Icons.pan_tool_alt_rounded,
+          Color(0xFFE8A87C),
+          'Tay phanh',
+        );
       case ServiceType.throttleGrip:
-        return const _ServiceTypeMeta(Icons.swipe_rounded, Color(0xFFB59BFF), 'Vỏ bọc, tay ga');
+        return const _ServiceTypeMeta(
+          Icons.swipe_rounded,
+          Color(0xFFB59BFF),
+          'Vỏ bọc, tay ga',
+        );
       case ServiceType.lightsHornDash:
-        return const _ServiceTypeMeta(Icons.dashboard_rounded, Color(0xFF45B7D1), 'Đèn / Còi / Đồng hồ');
+        return const _ServiceTypeMeta(
+          Icons.dashboard_rounded,
+          Color(0xFF45B7D1),
+          'Đèn / Còi / Đồng hồ',
+        );
 
       // ── Khung & khoá ──
       case ServiceType.sideStand:
-        return const _ServiceTypeMeta(Icons.support_rounded, Color(0xFF9BA8B5), 'Chân chống');
+        return const _ServiceTypeMeta(
+          Icons.support_rounded,
+          Color(0xFF9BA8B5),
+          'Chân chống',
+        );
       case ServiceType.seatLock:
-        return const _ServiceTypeMeta(Icons.lock_rounded, Color(0xFFFBBF24), 'Khoá yên');
+        return const _ServiceTypeMeta(
+          Icons.lock_rounded,
+          Color(0xFFFBBF24),
+          'Khoá yên',
+        );
 
       // ── Pin ──
       case ServiceType.battery:
-        return const _ServiceTypeMeta(Icons.battery_charging_full_rounded, Color(0xFF4ECDC4), 'Pin Li-ion');
+        return const _ServiceTypeMeta(
+          Icons.battery_charging_full_rounded,
+          Color(0xFF4ECDC4),
+          'Pin Li-ion',
+        );
       case ServiceType.batteryCheck:
-        return const _ServiceTypeMeta(Icons.battery_charging_full_rounded, Color(0xFF4ECDC4), 'Pin');
+        return const _ServiceTypeMeta(
+          Icons.battery_charging_full_rounded,
+          Color(0xFF4ECDC4),
+          'Pin',
+        );
 
       // ── Phanh ──
       case ServiceType.brakeFluid:
-        return const _ServiceTypeMeta(Icons.water_drop_rounded, Color(0xFF45B7D1), 'Dầu phanh');
+        return const _ServiceTypeMeta(
+          Icons.water_drop_rounded,
+          Color(0xFF45B7D1),
+          'Dầu phanh',
+        );
       case ServiceType.brakeFront:
-        return const _ServiceTypeMeta(Icons.do_not_disturb_on_rounded, Color(0xFFFF6B6B), 'Phanh trước');
+        return const _ServiceTypeMeta(
+          Icons.do_not_disturb_on_rounded,
+          Color(0xFFFF6B6B),
+          'Phanh trước',
+        );
       case ServiceType.brakeRear:
-        return const _ServiceTypeMeta(Icons.do_not_disturb_on_rounded, Color(0xFFFF8A65), 'Phanh sau');
+        return const _ServiceTypeMeta(
+          Icons.do_not_disturb_on_rounded,
+          Color(0xFFFF8A65),
+          'Phanh sau',
+        );
       case ServiceType.brakeHose:
-        return const _ServiceTypeMeta(Icons.cable_rounded, Color(0xFFFF6B6B), 'Ống dầu phanh');
+        return const _ServiceTypeMeta(
+          Icons.cable_rounded,
+          Color(0xFFFF6B6B),
+          'Ống dầu phanh',
+        );
       case ServiceType.brakeCable:
-        return const _ServiceTypeMeta(Icons.cable_rounded, Color(0xFFFFA726), 'Dây phanh');
+        return const _ServiceTypeMeta(
+          Icons.cable_rounded,
+          Color(0xFFFFA726),
+          'Dây phanh',
+        );
       case ServiceType.brakeService:
-        return const _ServiceTypeMeta(Icons.do_not_disturb_on_rounded, Color(0xFFFF6B6B), 'Phanh');
+        return const _ServiceTypeMeta(
+          Icons.do_not_disturb_on_rounded,
+          Color(0xFFFF6B6B),
+          'Phanh',
+        );
 
       // ── Bánh xe ──
       case ServiceType.wheelFront:
-        return const _ServiceTypeMeta(Icons.donut_large_rounded, Color(0xFF9BA8B5), 'Vành trước');
+        return const _ServiceTypeMeta(
+          Icons.donut_large_rounded,
+          Color(0xFF9BA8B5),
+          'Vành trước',
+        );
       case ServiceType.wheelRear:
-        return const _ServiceTypeMeta(Icons.donut_large_rounded, Color(0xFF7C8B99), 'Vành sau');
+        return const _ServiceTypeMeta(
+          Icons.donut_large_rounded,
+          Color(0xFF7C8B99),
+          'Vành sau',
+        );
       case ServiceType.tireFront:
-        return const _ServiceTypeMeta(Icons.tire_repair_rounded, Color(0xFFE8A87C), 'Lốp trước');
+        return const _ServiceTypeMeta(
+          Icons.tire_repair_rounded,
+          Color(0xFFE8A87C),
+          'Lốp trước',
+        );
       case ServiceType.tireRear:
-        return const _ServiceTypeMeta(Icons.tire_repair_rounded, Color(0xFFD68B5F), 'Lốp sau');
+        return const _ServiceTypeMeta(
+          Icons.tire_repair_rounded,
+          Color(0xFFD68B5F),
+          'Lốp sau',
+        );
       case ServiceType.tireRotation:
-        return const _ServiceTypeMeta(Icons.tire_repair_rounded, Color(0xFFE8A87C), 'Lốp xe');
+        return const _ServiceTypeMeta(
+          Icons.tire_repair_rounded,
+          Color(0xFFE8A87C),
+          'Lốp xe',
+        );
 
       // ── Hệ treo ──
       case ServiceType.steeringBearing:
-        return const _ServiceTypeMeta(Icons.gps_fixed_rounded, Color(0xFFB59BFF), 'Cổ phốt');
+        return const _ServiceTypeMeta(
+          Icons.gps_fixed_rounded,
+          Color(0xFFB59BFF),
+          'Cổ phốt',
+        );
       case ServiceType.suspensionFront:
-        return const _ServiceTypeMeta(Icons.unfold_more_rounded, Color(0xFF7986CB), 'Giảm xóc trước');
+        return const _ServiceTypeMeta(
+          Icons.unfold_more_rounded,
+          Color(0xFF7986CB),
+          'Giảm xóc trước',
+        );
       case ServiceType.suspensionRear:
-        return const _ServiceTypeMeta(Icons.unfold_more_rounded, Color(0xFF5C6BC0), 'Giảm xóc sau');
+        return const _ServiceTypeMeta(
+          Icons.unfold_more_rounded,
+          Color(0xFF5C6BC0),
+          'Giảm xóc sau',
+        );
 
       // ── Động cơ ──
       case ServiceType.motor:
-        return const _ServiceTypeMeta(Icons.electric_bolt_rounded, Color(0xFF4ADE80), 'Động cơ');
+        return const _ServiceTypeMeta(
+          Icons.electric_bolt_rounded,
+          Color(0xFF4ADE80),
+          'Động cơ',
+        );
       case ServiceType.motorSeal:
-        return const _ServiceTypeMeta(Icons.shield_rounded, Color(0xFF66BB6A), 'Phớt động cơ');
+        return const _ServiceTypeMeta(
+          Icons.shield_rounded,
+          Color(0xFF66BB6A),
+          'Phớt động cơ',
+        );
 
       // ── Legacy / khác ──
       case ServiceType.oilChange:
-        return const _ServiceTypeMeta(Icons.oil_barrel_rounded, Color(0xFFE8A87C), 'Thay dầu');
+        return const _ServiceTypeMeta(
+          Icons.oil_barrel_rounded,
+          Color(0xFFE8A87C),
+          'Thay dầu',
+        );
       case ServiceType.airFilter:
-        return const _ServiceTypeMeta(Icons.air_rounded, Color(0xFF9BA8B5), 'Lọc gió');
+        return const _ServiceTypeMeta(
+          Icons.air_rounded,
+          Color(0xFF9BA8B5),
+          'Lọc gió',
+        );
       case ServiceType.coolantFlush:
-        return const _ServiceTypeMeta(Icons.water_drop_rounded, Color(0xFF45B7D1), 'Nước làm mát');
+        return const _ServiceTypeMeta(
+          Icons.water_drop_rounded,
+          Color(0xFF45B7D1),
+          'Nước làm mát',
+        );
       case ServiceType.transmissionService:
-        return const _ServiceTypeMeta(Icons.settings_suggest_rounded, Color(0xFFB59BFF), 'Hộp số');
+        return const _ServiceTypeMeta(
+          Icons.settings_suggest_rounded,
+          Color(0xFFB59BFF),
+          'Hộp số',
+        );
       case ServiceType.inspection:
-        return const _ServiceTypeMeta(Icons.fact_check_rounded, Color(0xFF96CEB4), 'Kiểm tra');
+        return const _ServiceTypeMeta(
+          Icons.fact_check_rounded,
+          Color(0xFF96CEB4),
+          'Kiểm tra',
+        );
       case ServiceType.other:
-        return const _ServiceTypeMeta(Icons.build_rounded, Color(0xFF9BA8B5), 'Khác');
+        return const _ServiceTypeMeta(
+          Icons.build_rounded,
+          Color(0xFF9BA8B5),
+          'Khác',
+        );
     }
   }
 }
@@ -1149,8 +1287,11 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
                         color: AppColors.surfaceVariant,
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Icon(Icons.close,
-                          color: AppColors.textSecondary, size: 18),
+                      child: const Icon(
+                        Icons.close,
+                        color: AppColors.textSecondary,
+                        size: 18,
+                      ),
                     ),
                   ),
                 ],
@@ -1201,7 +1342,8 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
                   backgroundColor: AppColors.primary,
                   foregroundColor: AppColors.background,
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                 ),
                 child: Text(
                   widget.task != null ? 'CẬP NHẬT' : 'THÊM MỚI',
@@ -1252,8 +1394,10 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
         ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 12,
+        ),
       ),
     );
   }
@@ -1354,7 +1498,8 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
               itemBuilder: (_, i) {
                 final preset = entry.value[i];
                 final meta = _ServiceTypeMeta.of(preset.type);
-                final selected = _selectedType == preset.type &&
+                final selected =
+                    _selectedType == preset.type &&
                     _titleCtrl.text.trim() == preset.title;
                 return _PresetCard(
                   preset: preset,
@@ -1403,8 +1548,11 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
         ),
         child: Row(
           children: [
-            const Icon(Icons.calendar_today_rounded,
-                color: AppColors.textTertiary, size: 18),
+            const Icon(
+              Icons.calendar_today_rounded,
+              color: AppColors.textTertiary,
+              size: 18,
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
@@ -1422,8 +1570,11 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
             if (_scheduledDate != null)
               GestureDetector(
                 onTap: () => setState(() => _scheduledDate = null),
-                child: const Icon(Icons.close_rounded,
-                    color: AppColors.textTertiary, size: 16),
+                child: const Icon(
+                  Icons.close_rounded,
+                  color: AppColors.textTertiary,
+                  size: 16,
+                ),
               ),
           ],
         ),
@@ -1509,7 +1660,10 @@ class _PresetCard extends StatelessWidget {
                 ),
                 const Spacer(),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.card,
                     borderRadius: BorderRadius.circular(6),
@@ -1652,7 +1806,11 @@ class _TypePickerSheet extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(meta.icon, color: selected ? meta.color : AppColors.textSecondary, size: 14),
+            Icon(
+              meta.icon,
+              color: selected ? meta.color : AppColors.textSecondary,
+              size: 14,
+            ),
             const SizedBox(width: 6),
             Text(
               meta.label,
@@ -1676,10 +1834,7 @@ class _TypePickerSheet extends StatelessWidget {
         ServiceType.throttleGrip,
         ServiceType.lightsHornDash,
       ],
-      'Khung & khoá': [
-        ServiceType.sideStand,
-        ServiceType.seatLock,
-      ],
+      'Khung & khoá': [ServiceType.sideStand, ServiceType.seatLock],
       'Pin': [ServiceType.battery],
       'Phanh': [
         ServiceType.brakeFluid,
@@ -1699,10 +1854,7 @@ class _TypePickerSheet extends StatelessWidget {
         ServiceType.suspensionFront,
         ServiceType.suspensionRear,
       ],
-      'Động cơ': [
-        ServiceType.motor,
-        ServiceType.motorSeal,
-      ],
+      'Động cơ': [ServiceType.motor, ServiceType.motorSeal],
       'Khác': [
         ServiceType.oilChange,
         ServiceType.airFilter,

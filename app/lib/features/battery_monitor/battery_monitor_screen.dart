@@ -8,13 +8,11 @@ import '../../data/services/battery_state_service.dart';
 class BatteryMonitorScreen extends ConsumerStatefulWidget {
   final VehicleModel vehicle;
 
-  const BatteryMonitorScreen({
-    super.key,
-    required this.vehicle,
-  });
+  const BatteryMonitorScreen({super.key, required this.vehicle});
 
   @override
-  ConsumerState<BatteryMonitorScreen> createState() => _BatteryMonitorScreenState();
+  ConsumerState<BatteryMonitorScreen> createState() =>
+      _BatteryMonitorScreenState();
 }
 
 class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
@@ -38,17 +36,21 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
 
     try {
       // Load current battery state
-      final currentState = await BatteryStateService.getCurrentBatteryState(widget.vehicle.vehicleId);
-      
+      final currentState = await BatteryStateService.getCurrentBatteryState(
+        widget.vehicle.vehicleId,
+      );
+
       // Load battery history (last 24 hours)
       final history = await BatteryStateService.getBatteryHistory(
         vehicleId: widget.vehicle.vehicleId,
         limit: 24,
         timeRange: const Duration(hours: 24),
       );
-      
+
       // Load battery statistics
-      final stats = await BatteryStateService.getBatteryStats(widget.vehicle.vehicleId);
+      final stats = await BatteryStateService.getBatteryStats(
+        widget.vehicle.vehicleId,
+      );
 
       setState(() {
         _currentBatteryState = currentState;
@@ -75,10 +77,7 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
         title: const Text('Giám sát pin'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
-          IconButton(
-            onPressed: _refreshData,
-            icon: const Icon(Icons.refresh),
-          ),
+          IconButton(onPressed: _refreshData, icon: const Icon(Icons.refresh)),
         ],
       ),
       body: RefreshIndicator(
@@ -94,19 +93,19 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
                 _buildCurrentBatteryCard(),
                 const SizedBox(height: 16),
               ],
-              
+
               // Battery Statistics
               if (_batteryStats != null) ...[
                 _buildBatteryStatsCard(),
                 const SizedBox(height: 16),
               ],
-              
+
               // Battery Chart
               if (_batteryHistory.isNotEmpty) ...[
                 _buildBatteryChart(),
                 const SizedBox(height: 16),
               ],
-              
+
               // Error Message
               if (_error != null) ...[
                 Card(
@@ -117,21 +116,29 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
                       children: [
                         const Icon(Icons.error_outline, color: Colors.red),
                         const SizedBox(width: 8),
-                        Expanded(child: Text(_error!, style: const TextStyle(color: Colors.red))),
-                        IconButton(onPressed: _refreshData, icon: const Icon(Icons.refresh)),
+                        Expanded(
+                          child: Text(
+                            _error!,
+                            style: const TextStyle(color: Colors.red),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: _refreshData,
+                          icon: const Icon(Icons.refresh),
+                        ),
                       ],
                     ),
                   ),
                 ),
                 const SizedBox(height: 16),
               ],
-              
+
               // Loading Indicator
               if (_isLoading) ...[
                 const Center(child: CircularProgressIndicator()),
                 const SizedBox(height: 16),
               ],
-              
+
               // SOC Prediction Button
               _buildSOCPredictionCard(),
             ],
@@ -143,7 +150,7 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
 
   Widget _buildCurrentBatteryCard() {
     final batteryState = _currentBatteryState!;
-    
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -167,14 +174,14 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
                 const Spacer(),
                 Text(
                   'Cập nhật: ${_formatTime(batteryState.timestamp)}',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.grey[600],
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
                 ),
               ],
             ),
             const SizedBox(height: 16),
-            
+
             // Battery Percentage
             SizedBox(
               height: 120,
@@ -198,10 +205,11 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
                     children: [
                       Text(
                         '${batteryState.percentage.toStringAsFixed(1)}%',
-                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: _getBatteryColor(batteryState.percentage),
-                        ),
+                        style: Theme.of(context).textTheme.headlineMedium
+                            ?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: _getBatteryColor(batteryState.percentage),
+                            ),
                       ),
                       Text(
                         batteryState.statusText,
@@ -215,7 +223,7 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            
+
             // Battery Details
             Row(
               children: [
@@ -271,17 +279,14 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
         children: [
           Text(
             label,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Colors.grey[600],
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
           ),
           const SizedBox(height: 4),
           Text(
             value,
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
+            style: TextStyle(fontWeight: FontWeight.bold, color: color),
           ),
         ],
       ),
@@ -290,7 +295,7 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
 
   Widget _buildBatteryStatsCard() {
     final stats = _batteryStats!;
-    
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -299,11 +304,7 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
           children: [
             Row(
               children: [
-                Icon(
-                  Icons.analytics,
-                  color: Colors.blue,
-                  size: 24,
-                ),
+                Icon(Icons.analytics, color: Colors.blue, size: 24),
                 const SizedBox(width: 8),
                 Text(
                   'Thống kê pin (24h)',
@@ -314,7 +315,7 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
               ],
             ),
             const SizedBox(height: 16),
-            
+
             Row(
               children: [
                 Expanded(
@@ -388,18 +389,15 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
         children: [
           Text(
             label,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Colors.grey[600],
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 4),
           Text(
             value,
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
+            style: TextStyle(fontWeight: FontWeight.bold, color: color),
             textAlign: TextAlign.center,
           ),
         ],
@@ -416,11 +414,7 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
           children: [
             Row(
               children: [
-                Icon(
-                  Icons.show_chart,
-                  color: Colors.blue,
-                  size: 24,
-                ),
+                Icon(Icons.show_chart, color: Colors.blue, size: 24),
                 const SizedBox(width: 8),
                 Text(
                   'Biểu đồ pin (24h)',
@@ -431,7 +425,7 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
               ],
             ),
             const SizedBox(height: 16),
-            
+
             SizedBox(
               height: 200,
               child: LineChart(
@@ -442,22 +436,20 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
                     horizontalInterval: 20,
                     verticalInterval: 2,
                     getDrawingHorizontalLine: (value) {
-                      return FlLine(
-                        color: Colors.grey[300],
-                        strokeWidth: 1,
-                      );
+                      return FlLine(color: Colors.grey[300], strokeWidth: 1);
                     },
                     getDrawingVerticalLine: (value) {
-                      return FlLine(
-                        color: Colors.grey[300],
-                        strokeWidth: 1,
-                      );
+                      return FlLine(color: Colors.grey[300], strokeWidth: 1);
                     },
                   ),
                   titlesData: FlTitlesData(
                     show: true,
-                    rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    topTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
                     bottomTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
@@ -507,7 +499,10 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
                   lineBarsData: [
                     LineChartBarData(
                       spots: _batteryHistory.asMap().entries.map((entry) {
-                        return FlSpot(entry.key.toDouble(), entry.value.percentage);
+                        return FlSpot(
+                          entry.key.toDouble(),
+                          entry.value.percentage,
+                        );
                       }).toList(),
                       isCurved: true,
                       gradient: LinearGradient(
@@ -558,11 +553,7 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
           children: [
             Row(
               children: [
-                Icon(
-                  Icons.auto_graph,
-                  color: Colors.purple,
-                  size: 24,
-                ),
+                Icon(Icons.auto_graph, color: Colors.purple, size: 24),
                 const SizedBox(width: 8),
                 Text(
                   'Dự đoán SOC AI',
@@ -573,15 +564,15 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
               ],
             ),
             const SizedBox(height: 16),
-            
+
             Text(
               'Sử dụng AI model để dự đoán trạng thái pin trong 24 giờ tiếp theo',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.grey[600],
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
             ),
             const SizedBox(height: 16),
-            
+
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
@@ -605,7 +596,9 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
     try {
       final result = await BatteryStateService.predictSOC(
         vehicleId: widget.vehicle.vehicleId,
-        currentBattery: _currentBatteryState?.percentage ?? widget.vehicle.currentBattery.toDouble(),
+        currentBattery:
+            _currentBatteryState?.percentage ??
+            widget.vehicle.currentBattery.toDouble(),
         temperature: _currentBatteryState?.temp ?? 25.0,
         voltage: 48.0, // Default voltage
         current: 15.0, // Default current
@@ -626,15 +619,26 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('SOC dự đoán (24h): ${result['predictedSOC']?.toStringAsFixed(1) ?? 'N/A'}%'),
+                Text(
+                  'SOC dự đoán (24h): ${result['predictedSOC']?.toStringAsFixed(1) ?? 'N/A'}%',
+                ),
                 const SizedBox(height: 8),
-                Text('Độ tin cậy: ${result['confidence']?.toStringAsFixed(1) ?? 'N/A'}%'),
+                Text(
+                  'Độ tin cậy: ${result['confidence']?.toStringAsFixed(1) ?? 'N/A'}%',
+                ),
                 const SizedBox(height: 8),
-                Text('Sức khỏe pin: ${result['batteryHealth']?.toStringAsFixed(1) ?? 'N/A'}%'),
+                Text(
+                  'Sức khỏe pin: ${result['batteryHealth']?.toStringAsFixed(1) ?? 'N/A'}%',
+                ),
                 if (result['recommendations'] != null) ...[
                   const SizedBox(height: 16),
-                  const Text('Khuyến nghị:', style: TextStyle(fontWeight: FontWeight.bold)),
-                  ...List<String>.from(result['recommendations']).map((rec) => Text('• $rec')),
+                  const Text(
+                    'Khuyến nghị:',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  ...List<String>.from(
+                    result['recommendations'],
+                  ).map((rec) => Text('• $rec')),
                 ],
               ],
             ),

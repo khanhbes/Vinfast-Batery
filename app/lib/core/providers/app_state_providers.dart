@@ -13,14 +13,14 @@ class AppRefreshCoordinator {
   Future<void> refreshAll() async {
     // 1. Sync models từ server
     await NotificationCenterService().syncModels(force: true);
-    
+
     // 2. TODO: Refetch các providers khác
     // - vehicle provider
     // - profile provider
     // - log provider
     // - maintenance provider
     // - trip provider
-    
+
     // 3. Thông báo refresh hoàn thành
     ref.read(lastRefreshTimeProvider.notifier).state = DateTime.now();
   }
