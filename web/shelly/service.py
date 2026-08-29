@@ -26,7 +26,7 @@ class SmartChargeService:
         self.predictor = predictor
         self.sleep = sleeper
         self.clock = clock
-        self.max_minutes = int(os.environ.get("SMART_CHARGE_MAX_MINUTES", "360"))
+        self.max_minutes = int(os.environ.get("SMART_CHARGE_MAX_MINUTES", "420"))
 
     def capabilities(self, uid: str) -> dict:
         binding = self.binding(uid)
@@ -86,7 +86,7 @@ class SmartChargeService:
         )))
         minutes = int(round(seconds / 60))
         if minutes <= 0 or minutes > self.max_minutes:
-            raise SmartChargeError("unsafeDuration", "ETA phải lớn hơn 0 và không vượt quá 6 giờ")
+            raise SmartChargeError("unsafeDuration", "ETA phải lớn hơn 0 và không vượt quá 7 giờ")
         now = self.clock()
         source = str(result.get("modelSource") or "physics_fallback")
         runtime_health = str(result.get("runtimeHealth") or ("loaded" if source == "ai_model" else "fallback"))
@@ -276,8 +276,8 @@ class SmartChargeService:
         if not binding:
             raise SmartChargeError("notConfigured", "Shelly chưa được kết nối", 404)
         duration_seconds = int(duration_seconds)
-        if duration_seconds < 5 or duration_seconds > self.max_minutes * 60:
-            raise SmartChargeError("unsafeDuration", "Safety timer phải từ 5 giây đến 6 giờ")
+        if duration_seconds < 5 or duration_seconds >= self.max_minutes * 60:
+            raise SmartChargeError("unsafeDuration", "Safety timer phải từ 5 giây đến 7 giờ")
         if not idempotency_key or len(idempotency_key) > 160:
             raise SmartChargeError("invalidIdempotencyKey", "Thiếu Idempotency-Key")
         existing = self.repository.get_by_idempotency(uid, idempotency_key)

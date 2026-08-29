@@ -1,19 +1,12 @@
-import {
-  BatteryCharging, Zap, UserRound, Box, ChevronRight, CheckCircle2, AlertCircle, Package,
-  Gauge, Award, Navigation, BellRing, MapPin, HeartPulse, Stethoscope, Clock, Sparkles,
-  XCircle,
-} from 'lucide-react';
+import { ChevronRight, Package, Clock, Sparkles } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ACCENT_CLASSES, ModelTypeMeta, formatDate } from './types';
-
-const ICONS: Record<string, any> = {
-  BatteryCharging, Zap, UserRound, Gauge, Award, Navigation,
-  BellRing, MapPin, HeartPulse, Stethoscope,
-};
+import { LIGHT_ACCENT_CLASSES, ModelTypeMeta, formatDate } from './types';
+import { getModelAvailability, getActiveVersion } from './modelAvailability';
+import { getModelIcon } from './modelIcons';
 
 const STATUS_BADGE: Record<string, { bg: string; text: string; label: string; icon: any }> = {
-  ready: { bg: 'bg-green-100', text: 'text-green-700', label: 'Đã triển khai', icon: CheckCircle2 },
+  ready: { bg: 'bg-green-100', text: 'text-green-700', label: 'Đã triển khai', icon: Sparkles },
   in_progress: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Đang làm', icon: Sparkles },
   planned: { bg: 'bg-slate-100', text: 'text-slate-600', label: 'Lên kế hoạch', icon: Clock },
 };
@@ -24,82 +17,12 @@ interface Props {
   onSelect: () => void;
 }
 
-function getActiveVersion(meta: ModelTypeMeta) {
-  return (
-    meta.runtimeStatus.activeVersion ||
-    meta.runtimeStatus.deploymentVersion ||
-    meta.deploymentVersion ||
-    meta.activeVersion ||
-    null
-  );
-}
-
-function isDeployed(meta: ModelTypeMeta) {
-  return (
-    meta.deploymentStatus === 'deployed' ||
-    meta.runtimeStatus.deploymentStatus === 'deployed' ||
-    Boolean(getActiveVersion(meta))
-  );
-}
-
-function getStatusDisplay(meta: ModelTypeMeta) {
-  const rt = meta.runtimeStatus;
-  const activeVersion = getActiveVersion(meta);
-
-  // 1. Fully loaded & predictable → best state
-  if (rt.isLoaded && rt.isPredictable) {
-    return {
-      icon: CheckCircle2,
-      text: 'Sẵn sàng test',
-      color: 'text-green-600',
-      bg: 'bg-green-50',
-    };
-  }
-  // 2. Loaded but predictor validation failed
-  if (rt.isLoaded && !rt.isPredictable) {
-    return {
-      icon: XCircle,
-      text: 'Có version nhưng lỗi',
-      color: 'text-red-600',
-      bg: 'bg-red-50',
-    };
-  }
-  // 3. Has a deployed/active version but not yet loaded into RAM
-  //    e.g. server just restarted and hasn't warmed up yet.
-  //    This MUST come before the versionsCount check so we never falsely
-  //    show "Có version chưa active" for a model that IS activated.
-  if (isDeployed(meta)) {
-    return {
-      icon: CheckCircle2,
-      text: activeVersion ? 'Đã kích hoạt' : 'Đã triển khai',
-      color: 'text-emerald-600',
-      bg: 'bg-emerald-50',
-    };
-  }
-  // 4. Has uploaded versions but none has been deployed yet
-  if (rt.versionsCount > 0) {
-    return {
-      icon: AlertCircle,
-      text: 'Có version chưa active',
-      color: 'text-amber-600',
-      bg: 'bg-amber-50',
-    };
-  }
-  // 5. No versions at all
-  return {
-    icon: AlertCircle,
-    text: 'Chưa có model',
-    color: 'text-slate-500',
-    bg: 'bg-slate-50',
-  };
-}
-
 export default function ModelTypeCard({ meta, selected, onSelect }: Props) {
-  const Icon = ICONS[meta.icon] || Box;
-  const c = ACCENT_CLASSES[meta.accent] || ACCENT_CLASSES.slate;
+  const Icon = getModelIcon(meta.icon);
+  const c = LIGHT_ACCENT_CLASSES[meta.accent] || LIGHT_ACCENT_CLASSES.slate;
   const rt = meta.runtimeStatus;
-  const statusDisplay = getStatusDisplay(meta);
-  const StatusIcon = statusDisplay.icon;
+  const availability = getModelAvailability(meta);
+  const StatusIcon = availability.icon;
   const sb = STATUS_BADGE[meta.status] || STATUS_BADGE.planned;
   const PhaseIcon = sb.icon;
   const activeVersion = getActiveVersion(meta);
@@ -108,7 +31,7 @@ export default function ModelTypeCard({ meta, selected, onSelect }: Props) {
     <Card
       onClick={onSelect}
       className={`cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5 ${
-        selected ? `ring-2 ${c.ring} shadow-md` : 'ring-1 ring-transparent'
+        selected ? `ring-2 ${c.ring} shadow-md border-primary/50` : 'ring-1 ring-transparent'
       } ${meta.status === 'planned' ? 'opacity-90' : ''}`}
     >
       <div className="p-5 flex flex-col h-full">
@@ -134,10 +57,10 @@ export default function ModelTypeCard({ meta, selected, onSelect }: Props) {
         <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{meta.description}</p>
 
         <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
-          <div className={`rounded-md p-2 ${statusDisplay.bg}`}>
-            <div className={`flex items-center gap-1 ${statusDisplay.color}`}>
+          <div className={`rounded-md p-2 ${availability.state === 'ready' ? 'bg-emerald-50 text-emerald-700' : availability.state === 'invalid' ? 'bg-red-50 text-red-700' : availability.state === 'uploaded_only' ? 'bg-amber-50 text-amber-700' : 'bg-slate-50 text-slate-700'}`}>
+            <div className="flex items-center gap-1 font-medium">
               <StatusIcon className="w-3 h-3" />
-              {statusDisplay.text}
+              {availability.label}
             </div>
             <div className="font-mono font-medium truncate mt-0.5 text-muted-foreground">
               {activeVersion || (rt.versionsCount > 0 ? `${rt.versionsCount} versions` : '—')}

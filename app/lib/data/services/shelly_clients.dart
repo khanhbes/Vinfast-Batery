@@ -74,14 +74,15 @@ class ShellyCloudClient {
       'on': on,
       if (on && toggleAfter != null)
         'toggle_after': max(1, toggleAfter.inSeconds),
-    });
+    }, decodeResponse: false);
   });
 
   Future<Map<String, dynamic>> _post(
     ShellyConnectionProfile profile,
     String path,
-    Map<String, dynamic> body,
-  ) async {
+    Map<String, dynamic> body, {
+    bool decodeResponse = true,
+  }) async {
     final validation = profile.validate();
     if (validation != null) {
       throw ShellyClientException(
@@ -122,7 +123,18 @@ class ShellyCloudClient {
           retryable: response.statusCode >= 500,
         );
       }
-      final decoded = jsonDecode(response.body);
+      // Shelly Cloud v2 documents HTTP 200 itself as the success signal for
+      // control commands. A successful set/switch response is therefore
+      // allowed to have an empty or non-JSON body.
+      if (!decodeResponse) return <String, dynamic>{};
+
+      var responseBody = response.body;
+      if (responseBody.isNotEmpty && responseBody.codeUnitAt(0) == 0xFEFF) {
+        responseBody = responseBody.substring(1);
+      }
+      responseBody = responseBody.trim();
+      if (responseBody.isEmpty) throw const FormatException();
+      final decoded = jsonDecode(responseBody);
       // Cloud Control v2 /devices/api/get returns a top-level JSON array of
       // Device State objects. Commands may return an object (or an empty one).
       // Keep both shapes so the recursive status parser can reach

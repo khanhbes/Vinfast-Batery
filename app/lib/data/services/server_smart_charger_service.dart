@@ -117,10 +117,20 @@ class ServerSmartChargerService {
         'targetSoc': draft.targetSoc,
         'chargingMode': draft.chargingMode,
         'estimatedCapacityWh': draft.estimatedCapacityWh,
+        // Compatibility with the currently deployed predictor contract.
+        'batteryCapacityWh': draft.estimatedCapacityWh,
       },
     );
     final minutes = (data['predictedMinutes'] as num).round();
     final stop = DateTime.parse(data['predictedStopAt'].toString());
+    final warnings = ((data['warnings'] as List?) ?? const [])
+        .map((item) => item.toString())
+        .toList();
+    if (draft.estimatedCapacityWh <= 0) {
+      warnings.add(
+        'Chưa có dung lượng pin; các chỉ số Wh/SOC sau sạc sẽ để trống.',
+      );
+    }
     return SmartChargingPlanPreview(
       draft: draft,
       predictedMinutes: minutes,
@@ -132,14 +142,12 @@ class ServerSmartChargerService {
       isImpossible: false,
       previewId: data['previewId']?.toString(),
       expiresAt: DateTime.tryParse(data['expiresAt']?.toString() ?? ''),
-      predictedDurationSeconds:
-          (data['predictedDurationSeconds'] as num?)?.round(),
+      predictedDurationSeconds: (data['predictedDurationSeconds'] as num?)
+          ?.round(),
       modelKey: data['modelKey']?.toString() ?? 'charging_time',
       modelVersion: data['modelVersion']?.toString() ?? 'unknown',
       runtimeHealth: data['runtimeHealth']?.toString() ?? 'unknown',
-      warnings: ((data['warnings'] as List?) ?? const [])
-          .map((item) => item.toString())
-          .toList(),
+      warnings: warnings,
       fallbackReason: data['fallbackReason']?.toString(),
       analyzedAt: DateTime.tryParse(data['analyzedAt']?.toString() ?? ''),
       aiChargeEligible: data['aiChargeEligible'] == true,
@@ -195,7 +203,6 @@ class ServerSmartChargerService {
     );
     return data['_null'] == true ? null : SmartChargingSession.fromJson(data);
   }
-
 
   Future<SmartChargingSession> manualOn(
     Duration duration, {

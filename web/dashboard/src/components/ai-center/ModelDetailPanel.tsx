@@ -605,7 +605,7 @@ function TestTab({
               <AlertCircle className="w-3 h-3" /> Cảnh báo
             </div>
             <ul className="text-xs text-amber-700 space-y-0.5">
-              {result.warnings.map((w, i) => (
+              {(result?.warnings || []).map((w, i) => (
                 <li key={i} className="flex items-start gap-1">
                   <span className="text-amber-500">•</span> {w}
                 </li>

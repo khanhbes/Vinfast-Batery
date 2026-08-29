@@ -15,6 +15,7 @@ void main() {
   }) => SmartChargingController(
     vehicleId: 'VF-001',
     currentSoc: 20,
+    estimatedCapacityWh: 3000,
     service: service,
     predictionAdapter: ChargingPredictionAdapter(
       predictionCall:
@@ -59,6 +60,17 @@ void main() {
     controller.dispose();
   });
 
+  test('unexpected polling error stays inside Smart Charge UI', () async {
+    final service = FakeSmartChargerService()..unexpectedFailure = true;
+    final controller = build(service);
+
+    await expectLater(controller.initialize(), completes);
+
+    expect(controller.state.phase, SmartChargingViewPhase.editing);
+    expect(controller.state.gatewayError, isNotNull);
+    controller.dispose();
+  });
+
   test('preview still works while gateway is offline', () async {
     final service = FakeSmartChargerService()..offline = true;
     final controller = build(service);
@@ -69,17 +81,20 @@ void main() {
     controller.dispose();
   });
 
-  test('AI failure sets error phase and does not silently fall back to physics', () async {
-    final controller = build(
-      FakeSmartChargerService(),
-      successfulPrediction: false,
-    );
-    await controller.createPreview();
-    expect(controller.state.phase, SmartChargingViewPhase.error);
-    expect(controller.state.preview, isNull);
-    expect(controller.state.actionError, isNotNull);
-    controller.dispose();
-  });
+  test(
+    'AI failure sets error phase and does not silently fall back to physics',
+    () async {
+      final controller = build(
+        FakeSmartChargerService(),
+        successfulPrediction: false,
+      );
+      await controller.createPreview();
+      expect(controller.state.phase, SmartChargingViewPhase.error);
+      expect(controller.state.preview, isNull);
+      expect(controller.state.actionError, isNotNull);
+      controller.dispose();
+    },
+  );
 
   test('draft mutation clears stale preview', () async {
     final controller = build(FakeSmartChargerService());
@@ -160,6 +175,7 @@ class FakeSmartChargerService extends SmartChargerService {
     : super(baseUrl: 'http://gateway', tokenProvider: _emptyToken);
 
   bool offline = false;
+  bool unexpectedFailure = false;
   bool startError = false;
   SmartChargingSession? current;
   int statusCalls = 0;
@@ -189,6 +205,7 @@ class FakeSmartChargerService extends SmartChargerService {
   @override
   Future<SmartChargerStatus> getStatus() async {
     statusCalls++;
+    if (unexpectedFailure) throw const FormatException('invalid cloud body');
     if (offline) throw const SmartChargerException('Gateway offline');
     return const SmartChargerStatus(
       online: true,
@@ -205,12 +222,14 @@ class FakeSmartChargerService extends SmartChargerService {
   @override
   Future<SmartChargingSession?> getCurrentSession() async {
     currentCalls++;
+    if (unexpectedFailure) throw const FormatException('invalid session body');
     if (offline) throw const SmartChargerException('Gateway offline');
     return current;
   }
 
   @override
   Future<List<SmartChargingSession>> getSessionHistory({int limit = 20}) async {
+    if (unexpectedFailure) throw const FormatException('invalid history body');
     if (offline) throw const SmartChargerException('Gateway offline');
     return const [];
   }

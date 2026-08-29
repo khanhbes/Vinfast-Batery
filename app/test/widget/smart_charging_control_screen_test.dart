@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vinfast_battery/data/models/smart_charger_status.dart';
 import 'package:vinfast_battery/data/models/smart_charger_capabilities.dart';
+import 'package:vinfast_battery/data/models/smart_charge_history.dart';
 import 'package:vinfast_battery/data/models/smart_charging_session.dart';
 import 'package:vinfast_battery/data/services/charging_prediction_adapter.dart';
 import 'package:vinfast_battery/data/services/smart_charger_service.dart';
@@ -186,7 +187,7 @@ void main() {
     );
     await tester.pumpWidget(app(controller));
     await tester.scrollUntilVisible(find.text('Lịch sử gần đây'), 300);
-    expect(find.text('~20% → 80%'), findsOneWidget);
+    expect(find.text('~20% → ~25%'), findsOneWidget);
     expect(find.text('Hoàn thành'), findsOneWidget);
   });
 }
@@ -205,6 +206,7 @@ HarnessController harness() {
   value.seed(
     value.state.copyWith(
       phase: SmartChargingViewPhase.editing,
+      historyStatus: SmartChargeHistoryStatus.empty,
       capabilities: const SmartChargerCapabilities(
         canReadStatus: true,
         canManualOn: true,
@@ -238,6 +240,7 @@ class HarnessController extends SmartChargingController {
     : super(
         vehicleId: 'VF-001',
         currentSoc: 20,
+        estimatedCapacityWh: 3000,
         service: WidgetFakeService(),
         predictionAdapter: ChargingPredictionAdapter(
           predictionCall:

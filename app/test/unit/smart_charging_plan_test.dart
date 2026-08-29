@@ -16,6 +16,7 @@ void main() {
     targetSoc: target,
     hardDeadlineAt: now.add(Duration(minutes: deadlineMinutes)),
     strategy: strategy,
+    estimatedCapacityWh: 3000,
   );
 
   test('strategy enum uses explicit JSON values', () {
@@ -183,8 +184,8 @@ void main() {
       draft(current: 20, target: 30),
       now: now,
     );
-    // 240 Wh / 400 W = 0.6 h = 36 minutes.
-    expect(preview.predictedMinutes, 36);
+    // 300 Wh / 400 W = 0.75 h = 45 minutes.
+    expect(preview.predictedMinutes, 45);
     expect(preview.predictionSource, 'physics_fallback');
     expect(preview.isPhysicsFallback, isTrue);
   });

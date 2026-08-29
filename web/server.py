@@ -4269,7 +4269,7 @@ def _register_smart_charge_cloud_first():
     )
     from shelly.repositories import SmartChargeRepository
     from shelly.routes import create_blueprint
-    from shelly.service import SmartChargeService
+    from shelly.service import SmartChargeError, SmartChargeService
 
     provider_name = os.environ.get('SHELLY_PROVIDER', 'integrator').strip().lower()
     try:
@@ -4287,20 +4287,34 @@ def _register_smart_charge_cloud_first():
         current = float(payload.get('currentSoc', 20))
         target = float(payload.get('targetSoc', 80))
         ambient = float(payload.get('ambientTempC', 25))
-        capacity = float(payload.get('batteryCapacityWh', 2400))
+        capacity_raw = payload.get('estimatedCapacityWh', payload.get('batteryCapacityWh'))
+        capacity = float(capacity_raw or 0)
         ai_result, ai_success = _ai_predict_charging_time(current, target, ambient)
-        heuristic = _heuristic_predict_charging_time(
-            current,
-            target,
-            float(payload.get('batteryHealth', 100)),
-            ambient,
-            payload.get('chargingMode', 'standard'),
-            capacity,
-        )
-        if ai_success:
+        heuristic = None
+        if capacity > 0:
+            heuristic = _heuristic_predict_charging_time(
+                current,
+                target,
+                float(payload.get('batteryHealth', 100)),
+                ambient,
+                payload.get('chargingMode', 'standard'),
+                capacity,
+            )
+        if ai_success and heuristic is not None:
             result, source = _guardrail_check(ai_result, heuristic, current, target)
-        else:
+        elif ai_success:
+            result, source = ai_result, 'ai_model'
+        elif heuristic is not None:
             result, source = heuristic, 'heuristic_fallback'
+        else:
+            raise SmartChargeError(
+                'predictionUnavailable',
+                'Model AI tạm thời không khả dụng và xe chưa có dữ liệu dung lượng pin.',
+                503,
+            )
+        warnings = list(result.get('warnings') or ([] if source == 'ai_model' else [f'Đang dùng nguồn dự phòng: {source}']))
+        if capacity <= 0:
+            warnings.append('Chưa có dung lượng pin; các chỉ số Wh/SOC sau sạc sẽ để trống.')
         return {
             'predictedDurationSeconds': int(round(float(result['predictedDurationSec']))),
             'predictedMinutes': float(result['predictedDurationMin']),
@@ -4309,7 +4323,7 @@ def _register_smart_charge_cloud_first():
             'modelVersion': str(result.get('modelVersion') or ('heuristic-v1' if source != 'ai_model' else 'unknown')),
             'runtimeHealth': 'loaded' if source == 'ai_model' else 'fallback',
             'confidence': result.get('confidence', 70),
-            'warnings': list(result.get('warnings') or ([] if source == 'ai_model' else [f'Đang dùng nguồn dự phòng: {source}'])),
+            'warnings': warnings,
             'fallbackReason': None if source == 'ai_model' else source,
             'analyzedAt': _utcnow(),
             'aiChargeEligible': source == 'ai_model',

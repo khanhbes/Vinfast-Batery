@@ -10,6 +10,7 @@ class VehicleModel {
   final int currentBattery; // % pin hiện tại (realtime)
   final double stateOfHealth; // SoH 0-100%
   final double defaultEfficiency; // km / 1% khi mới (VD: 1.2)
+  final double batteryCapacityWh;
   final int totalCharges;
   final int totalTrips;
   final int lastBatteryPercent;
@@ -28,6 +29,7 @@ class VehicleModel {
     this.currentBattery = 100,
     this.stateOfHealth = 100.0,
     this.defaultEfficiency = 1.2, // VinFast Feliz Neo: ~1.2 km/1%
+    this.batteryCapacityWh = 0,
     this.totalCharges = 0,
     this.totalTrips = 0,
     this.lastBatteryPercent = 100,
@@ -76,10 +78,15 @@ class VehicleModel {
       vehicleName: data['vehicleName'] ?? '',
       ownerUid: data['ownerUid'],
       currentOdo: _asInt(data['currentOdo']),
-      currentBattery:
-          _asInt(data['currentBattery'] ?? data['lastBatteryPercent'], 100),
+      currentBattery: _asInt(
+        data['currentBattery'] ?? data['lastBatteryPercent'],
+        100,
+      ),
       stateOfHealth: _asDouble(data['stateOfHealth'], 100.0),
       defaultEfficiency: _asDouble(data['defaultEfficiency'], 1.2),
+      batteryCapacityWh: _asDouble(
+        data['batteryCapacityWh'] ?? data['batteryCapacity'],
+      ),
       totalCharges: _asInt(data['totalCharges']),
       totalTrips: _asInt(data['totalTrips']),
       lastBatteryPercent: _asInt(data['lastBatteryPercent'], 100),
@@ -104,6 +111,9 @@ class VehicleModel {
       currentBattery: _asInt(data['currentBattery'], 100),
       stateOfHealth: _asDouble(data['stateOfHealth'], 100.0),
       defaultEfficiency: _asDouble(data['defaultEfficiency'], 1.2),
+      batteryCapacityWh: _asDouble(
+        data['batteryCapacityWh'] ?? data['batteryCapacity'],
+      ),
       totalCharges: _asInt(data['totalCharges']),
       totalTrips: _asInt(data['totalTrips']),
       lastBatteryPercent: _asInt(data['lastBatteryPercent'], 100),
@@ -116,8 +126,8 @@ class VehicleModel {
       specLinkedAt: data['specLinkedAt'] is DateTime
           ? data['specLinkedAt']
           : data['specLinkedAt'] != null
-              ? DateTime.tryParse(data['specLinkedAt'].toString())
-              : null,
+          ? DateTime.tryParse(data['specLinkedAt'].toString())
+          : null,
     );
   }
 
@@ -131,6 +141,7 @@ class VehicleModel {
       'currentBattery': currentBattery,
       'stateOfHealth': stateOfHealth,
       'defaultEfficiency': defaultEfficiency,
+      if (batteryCapacityWh > 0) 'batteryCapacity': batteryCapacityWh,
       'totalCharges': totalCharges,
       'totalTrips': totalTrips,
       'lastBatteryPercent': lastBatteryPercent,
@@ -153,6 +164,7 @@ class VehicleModel {
     int? currentBattery,
     double? stateOfHealth,
     double? defaultEfficiency,
+    double? batteryCapacityWh,
     int? totalCharges,
     int? totalTrips,
     int? lastBatteryPercent,
@@ -170,6 +182,7 @@ class VehicleModel {
       currentBattery: currentBattery ?? this.currentBattery,
       stateOfHealth: stateOfHealth ?? this.stateOfHealth,
       defaultEfficiency: defaultEfficiency ?? this.defaultEfficiency,
+      batteryCapacityWh: batteryCapacityWh ?? this.batteryCapacityWh,
       totalCharges: totalCharges ?? this.totalCharges,
       totalTrips: totalTrips ?? this.totalTrips,
       lastBatteryPercent: lastBatteryPercent ?? this.lastBatteryPercent,

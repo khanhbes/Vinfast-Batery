@@ -7,9 +7,11 @@ import 'package:intl/intl.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/widgets/app_popup.dart';
 import '../../core/widgets/debug_error_sheet.dart';
+import '../../data/models/smart_charge_history.dart';
 import '../../data/models/smart_charging_session.dart';
 import '../smart_charging/smart_charger_setup_hub_screen.dart';
 import 'controllers/smart_charging_controller.dart';
+import 'smart_charge_history_screen.dart';
 
 class SmartChargingControlScreen extends ConsumerStatefulWidget {
   const SmartChargingControlScreen({
@@ -54,27 +56,11 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(smartChargingControllerProvider(args));
-    final controller = ref.read(
-      smartChargingControllerProvider(args).notifier,
-    );
+    final controller = ref.read(smartChargingControllerProvider(args).notifier);
     final colors = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Smart Charge'),
-        actions: [
-          IconButton(
-            tooltip: 'Làm mới',
-            onPressed: state.refreshing ? null : controller.refresh,
-            icon: state.refreshing
-                ? const SizedBox.square(
-                    dimension: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.refresh_rounded),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Smart Charge')),
       bottomNavigationBar: state.hasActiveSession
           ? SafeArea(
               minimum: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -167,10 +153,30 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                       ),
               ),
 
-              if (state.history.isNotEmpty) ...[
-                const SizedBox(height: 32),
-                _HistorySection(sessions: state.history),
-              ],
+              const SizedBox(height: 32),
+              _HistorySection(
+                sessions: state.history,
+                status: state.historyStatus,
+                error: state.historyError,
+                syncedAt: state.historySyncedAt,
+                onRetry: controller.refresh,
+                onViewAll: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => SmartChargeHistoryScreen(
+                      controller: controller,
+                      initialItems: state.history,
+                    ),
+                  ),
+                ),
+                onOpen: (session) => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => SmartChargeSessionDetailScreen(
+                      controller: controller,
+                      session: session,
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -189,8 +195,10 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Bật sạc có giới hạn',
-                  style: Theme.of(context).textTheme.titleLarge),
+              Text(
+                'Bật sạc có giới hạn',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
               const SizedBox(height: 8),
               const Text(
                 'Ổ sạc sẽ tự động tắt khi hết thời gian, kể cả khi ứng dụng bị đóng.',
@@ -200,16 +208,14 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  for (final minutes in const [30, 60, 120, 240, 360])
+                  for (final minutes in const [30, 60, 120, 240, 360, 420])
                     ActionChip(
                       avatar: minutes == 60
                           ? const Icon(Icons.check_circle_rounded, size: 18)
                           : null,
                       label: Text(_duration(minutes)),
-                      onPressed: () => Navigator.pop(
-                        context,
-                        Duration(minutes: minutes),
-                      ),
+                      onPressed: () =>
+                          Navigator.pop(context, Duration(minutes: minutes)),
                     ),
                 ],
               ),
@@ -283,8 +289,10 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     if (confirmed != true) return;
     final ok = await controller.start(confirmed: true);
     if (ok) {
-      AppPopup.showSuccess('Đang sạc',
-          detail: 'Tự động tắt lúc ${_time(preview.effectiveStopAt)}');
+      AppPopup.showSuccess(
+        'Đang sạc',
+        detail: 'Tự động tắt lúc ${_time(preview.effectiveStopAt)}',
+      );
     } else {
       AppPopup.showError('Không thể bật sạc');
     }
@@ -388,17 +396,14 @@ class _StatusStrip extends StatelessWidget {
                   Text(
                     subtitleText,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: colors.onSurfaceVariant,
-                        ),
+                      color: colors.onSurfaceVariant,
+                    ),
                   ),
               ],
             ),
           ),
           if (!state.capabilities.readyForControl)
-            TextButton(
-              onPressed: onSetup,
-              child: const Text('CÀI ĐẶT'),
-            ),
+            TextButton(onPressed: onSetup, child: const Text('CÀI ĐẶT')),
         ],
       ),
     );
@@ -407,11 +412,7 @@ class _StatusStrip extends StatelessWidget {
 
 /// Error banner card with "Xem chi tiết" action for debug log inspection
 class _ErrorBannerCard extends StatelessWidget {
-  const _ErrorBannerCard({
-    required this.message,
-    this.detail,
-    this.onRetry,
-  });
+  const _ErrorBannerCard({required this.message, this.detail, this.onRetry});
 
   final String message;
   final String? detail;
@@ -480,9 +481,11 @@ class _PlanSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final draft = state.draft;
-    final busy = state.phase == SmartChargingViewPhase.loading ||
+    final busy =
+        state.phase == SmartChargingViewPhase.loading ||
         state.phase == SmartChargingViewPhase.starting;
-    final canStart = state.preview?.aiChargeEligible == true &&
+    final canStart =
+        state.preview?.aiChargeEligible == true &&
         state.capabilities.readyForControl &&
         state.gatewayError == null;
 
@@ -510,15 +513,14 @@ class _PlanSection extends StatelessWidget {
                     Text(
                       'Pin hiện tại',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       '~$currentPercent%',
-                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                            fontWeight: FontWeight.w900,
-                          ),
+                      style: Theme.of(context).textTheme.headlineMedium
+                          ?.copyWith(fontWeight: FontWeight.w900),
                     ),
                   ],
                 ),
@@ -529,8 +531,10 @@ class _PlanSection extends StatelessWidget {
                 icon: const Icon(Icons.edit_outlined, size: 16),
                 label: const Text('Chỉnh'),
                 style: OutlinedButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -551,18 +555,18 @@ class _PlanSection extends StatelessWidget {
             Expanded(
               child: Text(
                 'Pin muốn sạc tới',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
               ),
             ),
             const SizedBox(width: 8),
             Text(
               '${currentTarget.round()}%',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w900,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
+                fontWeight: FontWeight.w900,
+                color: Theme.of(context).colorScheme.primary,
+              ),
             ),
           ],
         ),
@@ -573,9 +577,9 @@ class _PlanSection extends StatelessWidget {
         SliderTheme(
           data: SliderTheme.of(context).copyWith(
             activeTrackColor: Theme.of(context).colorScheme.primary,
-            inactiveTrackColor: Theme.of(context)
-                .colorScheme
-                .surfaceContainerHighest,
+            inactiveTrackColor: Theme.of(
+              context,
+            ).colorScheme.surfaceContainerHighest,
             thumbColor: Theme.of(context).colorScheme.primary,
             trackHeight: 6,
           ),
@@ -595,8 +599,7 @@ class _PlanSection extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('$minTarget%',
-                  style: Theme.of(context).textTheme.bodySmall),
+              Text('$minTarget%', style: Theme.of(context).textTheme.bodySmall),
               const Text('100%', style: TextStyle(fontSize: 12)),
             ],
           ),
@@ -619,14 +622,14 @@ class _PlanSection extends StatelessWidget {
                       ),
                     ),
                     selected: currentTarget.round() == target,
-                    disabledColor: Theme.of(context)
-                        .colorScheme
-                        .surfaceContainerHighest
-                        .withOpacity(0.4),
+                    disabledColor: Theme.of(
+                      context,
+                    ).colorScheme.surfaceContainerHighest.withOpacity(0.4),
                     onSelected: currentPercent >= target
                         ? null
                         : (_) => controller.updateDraft(
-                            targetSoc: target.toDouble()),
+                            targetSoc: target.toDouble(),
+                          ),
                   ),
                 ),
               ),
@@ -701,8 +704,8 @@ class _PlanSection extends StatelessWidget {
                 ? 'Hãy hoàn tất cài đặt ổ sạc để bắt đầu sạc.'
                 : 'Dự đoán thời gian chưa khả dụng.',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.error,
-                ),
+              color: Theme.of(context).colorScheme.error,
+            ),
           ),
         ],
       ],
@@ -722,8 +725,8 @@ class _PlanSection extends StatelessWidget {
               Text(
                 '~${value.round()}%',
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 10),
               Slider(
@@ -782,8 +785,7 @@ class _PreviewCard extends StatelessWidget {
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: colors.primary.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(6),
@@ -836,28 +838,23 @@ class _PreviewRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                label,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            ),
-            Text(
-              value,
-              style: TextStyle(
-                color: emphasized
-                    ? Theme.of(context).colorScheme.primary
-                    : null,
-                fontWeight: emphasized ? FontWeight.w900 : FontWeight.w600,
-                fontSize: emphasized ? 16 : 14,
-              ),
-            ),
-          ],
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(label, style: Theme.of(context).textTheme.bodyMedium),
         ),
-      );
+        Text(
+          value,
+          style: TextStyle(
+            color: emphasized ? Theme.of(context).colorScheme.primary : null,
+            fontWeight: emphasized ? FontWeight.w900 : FontWeight.w600,
+            fontSize: emphasized ? 16 : 14,
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 /// Active Charging view when relay is ON
@@ -874,7 +871,8 @@ class _ActiveChargingView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final session = state.session;
-    final remaining = state.chargerStatus?.timerRemaining ??
+    final remaining =
+        state.chargerStatus?.timerRemaining ??
         (session != null ? session.remaining(state.now) : Duration.zero);
 
     final hh = remaining.inHours.toString().padLeft(2, '0');
@@ -885,7 +883,8 @@ class _ActiveChargingView extends StatelessWidget {
     final energyWh =
         state.chargerStatus?.energyWh ?? session?.energyUsedWh ?? 0;
 
-    final startSoc = session?.startSoc.round() ?? state.draft.currentSoc.round();
+    final startSoc =
+        session?.startSoc.round() ?? state.draft.currentSoc.round();
     final targetSoc =
         session?.targetSoc.round() ?? state.draft.targetSoc.round();
 
@@ -923,9 +922,9 @@ class _ActiveChargingView extends StatelessWidget {
         // Pin progression banner
         Text(
           '~$startSoc% → $targetSoc%',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
         ),
 
         const SizedBox(height: 16),
@@ -944,17 +943,17 @@ class _ActiveChargingView extends StatelessWidget {
               Text(
                 'Còn khoảng',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 6),
               Text(
                 '$hh:$mm:$ss',
                 key: const ValueKey('session-countdown'),
                 style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
+                  fontWeight: FontWeight.w900,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
               ),
               const SizedBox(height: 16),
               const Divider(height: 1),
@@ -993,16 +992,16 @@ class _Metric extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: 2),
-          Text(
-            value,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-          ),
-        ],
-      );
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(label, style: Theme.of(context).textTheme.bodySmall),
+      const SizedBox(height: 2),
+      Text(
+        value,
+        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+      ),
+    ],
+  );
 }
 
 /// Manual controls section
@@ -1025,9 +1024,9 @@ class _ManualControlsSection extends StatelessWidget {
       children: [
         Text(
           'Điều khiển nguồn thủ công',
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 10),
         Row(
@@ -1070,39 +1069,200 @@ class _ManualControlsSection extends StatelessWidget {
 
 /// History section showing previous charging sessions
 class _HistorySection extends StatelessWidget {
-  const _HistorySection({required this.sessions});
+  const _HistorySection({
+    required this.sessions,
+    required this.status,
+    required this.error,
+    required this.syncedAt,
+    required this.onRetry,
+    required this.onViewAll,
+    required this.onOpen,
+  });
+
   final List<SmartChargingSession> sessions;
+  final SmartChargeHistoryStatus status;
+  final String? error;
+  final DateTime? syncedAt;
+  final VoidCallback onRetry;
+  final VoidCallback onViewAll;
+  final ValueChanged<SmartChargingSession> onOpen;
 
   @override
-  Widget build(BuildContext context) => Column(
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final syncText = syncedAt == null
+        ? 'Chưa đồng bộ'
+        : 'Đồng bộ lần cuối ${DateFormat('HH:mm').format(syncedAt!.toLocal())}';
+
+    return Semantics(
+      container: true,
+      label: 'Lịch sử Smart Charge gần đây',
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Lịch sử gần đây',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Lịch sử gần đây',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Text(
+                syncText,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          for (final session in sessions.take(5))
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.history_rounded),
-              title: Text(
-                '~${session.startSoc.toStringAsFixed(0)}% → ${session.targetSoc.toStringAsFixed(0)}%',
-                style: const TextStyle(fontWeight: FontWeight.w600),
+          const SizedBox(height: 12),
+          if (status == SmartChargeHistoryStatus.loading && sessions.isEmpty)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: CircularProgressIndicator(),
               ),
-              subtitle: Text(
-                DateFormat('dd/MM HH:mm').format(session.createdAt.toLocal()),
-                style: Theme.of(context).textTheme.bodySmall,
+            )
+          else if (status == SmartChargeHistoryStatus.error && sessions.isEmpty)
+            _HistoryMessage(
+              icon: Icons.cloud_off_rounded,
+              title: 'Chưa thể đồng bộ lịch sử',
+              message: error ?? 'Dữ liệu sạc sẽ được thử đồng bộ lại.',
+              actionLabel: 'Thử lại lịch sử',
+              onAction: onRetry,
+            )
+          else if (sessions.isEmpty)
+            const _HistoryMessage(
+              icon: Icons.electric_bolt_rounded,
+              title: 'Chưa có phiên sạc',
+              message: 'Phiên Smart Charge hoàn tất sẽ xuất hiện tại đây.',
+            )
+          else ...[
+            if (status == SmartChargeHistoryStatus.stale || error != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  'Đang hiển thị dữ liệu đã lưu trên thiết bị.',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: colors.tertiary),
+                ),
               ),
-              trailing: Text(
-                session.state == ChargingSessionState.completed
-                    ? 'Hoàn thành'
-                    : 'Đã dừng',
-                style: Theme.of(context).textTheme.bodySmall,
+            for (final session in sessions.take(3))
+              _RecentSessionTile(
+                session: session,
+                onTap: () => onOpen(session),
+              ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: onViewAll,
+                icon: const Icon(Icons.history_rounded),
+                label: const Text('XEM TOÀN BỘ LỊCH SỬ'),
               ),
             ),
+          ],
         ],
-      );
+      ),
+    );
+  }
+}
+
+class _RecentSessionTile extends StatelessWidget {
+  const _RecentSessionTile({required this.session, required this.onTap});
+
+  final SmartChargingSession session;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final duration = (session.stoppedAt ?? session.updatedAt).difference(
+      session.startedAt ?? session.createdAt,
+    );
+    final isAi = session.strategy != ChargingStrategy.manualTimed;
+    final endSoc = session.estimatedSoc ?? session.targetSoc;
+    final energy = session.energyUsedWh >= 1000
+        ? '${(session.energyUsedWh / 1000).toStringAsFixed(2)} kWh'
+        : '${session.energyUsedWh.toStringAsFixed(0)} Wh';
+
+    return ListTile(
+      minVerticalPadding: 12,
+      contentPadding: EdgeInsets.zero,
+      onTap: onTap,
+      leading: CircleAvatar(
+        child: Icon(isAi ? Icons.auto_awesome_rounded : Icons.timer_rounded),
+      ),
+      title: Text(
+        '~${session.startSoc.toStringAsFixed(0)}% → ~${endSoc.toStringAsFixed(0)}%',
+        style: const TextStyle(fontWeight: FontWeight.w700),
+      ),
+      subtitle: Text(
+        '${DateFormat('dd/MM · HH:mm').format(session.createdAt.toLocal())}\n'
+        '${isAi ? 'Sạc AI' : 'Thủ công'} · $energy · ${_compactDuration(duration)}',
+      ),
+      trailing: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            session.state == ChargingSessionState.completed
+                ? 'Hoàn thành'
+                : 'Đã dừng',
+            style: Theme.of(context).textTheme.labelSmall,
+          ),
+          const Icon(Icons.chevron_right_rounded),
+        ],
+      ),
+    );
+  }
+}
+
+class _HistoryMessage extends StatelessWidget {
+  const _HistoryMessage({
+    required this.icon,
+    required this.title,
+    required this.message,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 20),
+    child: Center(
+      child: Column(
+        children: [
+          Icon(icon, size: 34, color: Theme.of(context).colorScheme.primary),
+          const SizedBox(height: 10),
+          Text(title, style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 4),
+          Text(message, textAlign: TextAlign.center),
+          if (onAction != null && actionLabel != null) ...[
+            const SizedBox(height: 8),
+            TextButton(onPressed: onAction, child: Text(actionLabel!)),
+          ],
+        ],
+      ),
+    ),
+  );
+}
+
+String _compactDuration(Duration value) {
+  final minutes = value.inMinutes.clamp(0, 7 * 60);
+  final hours = minutes ~/ 60;
+  final remaining = minutes % 60;
+  if (hours == 0) return '$remaining phút';
+  return remaining == 0 ? '$hours giờ' : '$hours giờ $remaining phút';
 }
 
 String _time(DateTime value) => DateFormat('HH:mm').format(value.toLocal());

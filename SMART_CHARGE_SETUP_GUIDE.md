@@ -62,7 +62,17 @@ Hiện public Integrator API chỉ tài liệu hóa relay ON/OFF, chưa tài li�
 4. Kiểm tra `~SOC hiện tại`. Nếu sai, bấm **Chỉnh**; đây vẫn là số ước tính.
 5. Chọn mục tiêu **80%**, **90%** hoặc **100%**.
 6. Bấm **DỰ ĐOÁN VỚI AI**. Kiểm tra thời lượng, giờ ngắt, nguồn dự đoán và confidence.
-7. Nếu cần, mở **Nâng cao** và đặt “Dừng không muộn hơn”. Không phiên nào được vượt 6 giờ.
+7. Nếu cần, mở **Nâng cao** và đặt “Dừng không muộn hơn”. Không phiên nào được vượt 7 giờ.
+
+## Lịch sử và biểu đồ sau khi sạc
+
+- Ba phiên gần nhất nằm cuối màn **Smart Charge**. Kéo xuống để làm mới; nút reload trên AppBar đã được bỏ.
+- Chọn **XEM TOÀN BỘ LỊCH SỬ** để lọc `Tất cả / Sạc AI / Thủ công`, mỗi trang 20 phiên.
+- Chạm một phiên để xem biểu đồ công suất, điện áp, dòng điện, nhiệt độ và điện năng tích lũy. Chạm/kéo trên biểu đồ để xem số liệu theo thời điểm.
+- Trong lúc relay ON, Android hiển thị notification **Đang theo dõi Smart Charge**. Đây là foreground service riêng, không ảnh hưởng Trip Tracking. Shelly vẫn tự OFF bằng timer trên thiết bị nếu app hoặc Firestore mất kết nối.
+- App lấy mẫu status 5 giây, gộp một điểm biểu đồ mỗi 30 giây và ghi một chunk mỗi 5 phút. Summary được giữ lại; telemetry chi tiết có TTL 12 tháng.
+- `~ Wh/kWh còn trong pin` và SOC có dấu `~` vì là ước tính, không phải dữ liệu BMS. Có thể nhập SOC thực tế cuối phiên trong màn chi tiết; app chỉ tính dung lượng khả dụng khi phiên dài ít nhất 20 phút, SOC tăng ít nhất 10%, coverage đạt 70% và Shelly đo energy hợp lệ.
+- Nếu hồ sơ xe chưa liên kết VinFast model/dung lượng pin, app hiển thị **Chưa có dữ liệu dung lượng pin** và không dùng giá trị mặc định.
 8. Bấm **SẠC THEO AI**, đọc cảnh báo và xác nhận SOC ước tính. Nếu model chỉ trả fallback, nút này bị khóa; hãy dùng **BẬT SẠC** và chọn timer thủ công.
 9. Chờ đến khi app hiển thị **Timer đã cài trên Shelly**. Chỉ lúc đó phiên mới là Active; có thể đóng app.
 10. Khi cần dừng sớm, bấm nút đỏ **NGẮT NGUỒN NGAY**. App chỉ báo hoàn tất sau khi đọc lại relay OFF.
