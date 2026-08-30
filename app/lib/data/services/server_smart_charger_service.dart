@@ -162,6 +162,16 @@ class ServerSmartChargerService {
       adapterVersion: data['adapterVersion']?.toString(),
       capacityConfidence: (data['capacityConfidence'] as num?)?.toDouble(),
       efficiencyConfidence: (data['efficiencyConfidence'] as num?)?.toDouble(),
+      effectiveCapacityWh: (data['effectiveCapacityWh'] as num?)?.toDouble(),
+      personalizationStage: data['personalizationStage']?.toString() ?? 'base',
+      guardrailClamped:
+          data['guardrail'] is Map &&
+          (data['guardrail'] as Map)['clamped'] == true,
+      guardrailWarnings: data['guardrail'] is Map
+          ? (((data['guardrail'] as Map)['warnings'] as List?) ?? const [])
+                .map((item) => item.toString())
+                .toList()
+          : const [],
     );
   }
 
@@ -205,12 +215,52 @@ class ServerSmartChargerService {
         .toList();
   }
 
+  Future<SmartChargeHistoryPage> historyPage({
+    int limit = 20,
+    String? cursor,
+    ChargingStrategy? strategy,
+  }) async {
+    final query = <String>[
+      'limit=$limit',
+      if (cursor != null && cursor.isNotEmpty)
+        'cursor=${Uri.encodeQueryComponent(cursor)}',
+      if (strategy != null) 'strategy=${strategy.wireValue}',
+    ].join('&');
+    final data = await _request('GET', '/api/smart-charging/history?$query');
+    return SmartChargeHistoryPage(
+      items: ((data['items'] as List?) ?? const [])
+          .whereType<Map>()
+          .map(
+            (item) =>
+                SmartChargingSession.fromJson(Map<String, dynamic>.from(item)),
+          )
+          .toList(),
+      nextCursor: data['nextCursor']?.toString(),
+    );
+  }
+
   Future<SmartChargingSession?> off([String? sessionId]) async {
     final data = await _request(
       'POST',
       sessionId == null
           ? '/api/smart-charging/off'
           : '/api/smart-charging/session/$sessionId/stop',
+    );
+    return data['_null'] == true ? null : SmartChargingSession.fromJson(data);
+  }
+
+  Future<SmartChargingSession?> stop(
+    String sessionId, {
+    required int expectedVersion,
+    String userStopReason = 'none',
+  }) async {
+    final data = await _request(
+      'POST',
+      '/api/smart-charging/session/$sessionId/stop',
+      body: {
+        'expectedVersion': expectedVersion,
+        'userStopReason': userStopReason,
+      },
     );
     return data['_null'] == true ? null : SmartChargingSession.fromJson(data);
   }
@@ -254,6 +304,13 @@ class ServerSmartChargerService {
 
   Future<void> deletePersonalProfile(String vehicleId) async =>
       _request('DELETE', '/api/smart-charging/personal-profile/$vehicleId');
+
+  Future<Map<String, dynamic>> ingestPersonalTraining(String sessionId) =>
+      _request(
+        'POST',
+        '/api/smart-charging/personal/ingest-session',
+        body: {'sessionId': sessionId},
+      );
 
   Future<List<SmartChargeTelemetryPoint>> telemetry(String sessionId) async {
     final data = await _request(

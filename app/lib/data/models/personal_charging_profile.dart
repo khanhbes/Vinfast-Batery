@@ -35,6 +35,20 @@ class PersonalChargingProfile {
     required this.active,
     this.validationMape,
     this.updatedAt,
+    this.personalizationStage = 'base',
+    this.profileVersion = 0,
+    this.trainingSegments = 0,
+    this.nominalCapacityWh,
+    this.estimatedEffectiveCapacityWh,
+    this.capacityConfidence = 0,
+    this.stateOfHealth,
+    this.globalTimeScale = 1,
+    this.globalTimeBiasMinutes = 0,
+    this.powerScale = 1,
+    this.socBands = const {},
+    this.qualityConfidence = 0,
+    this.lastTrainingError,
+    this.lastTrainedAt,
   });
 
   final String vehicleId;
@@ -45,18 +59,65 @@ class PersonalChargingProfile {
   final bool active;
   final double? validationMape;
   final DateTime? updatedAt;
+  final String personalizationStage;
+  final int profileVersion;
+  final int trainingSegments;
+  final double? nominalCapacityWh;
+  final double? estimatedEffectiveCapacityWh;
+  final double capacityConfidence;
+  final double? stateOfHealth;
+  final double globalTimeScale;
+  final double globalTimeBiasMinutes;
+  final double powerScale;
+  final Map<String, dynamic> socBands;
+  final double qualityConfidence;
+  final String? lastTrainingError;
+  final DateTime? lastTrainedAt;
 
-  factory PersonalChargingProfile.fromJson(Map<String, dynamic> json) =>
-      PersonalChargingProfile(
-        vehicleId: json['vehicleId']?.toString() ?? '',
-        consentEnabled: json['consentEnabled'] == true,
-        validSessions: (json['validSessions'] as num?)?.round() ?? 0,
-        powerSessions: (json['powerSessions'] as num?)?.round() ?? 0,
-        adapterVersion: json['adapterVersion']?.toString() ?? 'personal-v0',
-        active: json['active'] == true,
-        validationMape: (json['validationMape'] as num?)?.toDouble(),
-        updatedAt: DateTime.tryParse(json['updatedAt']?.toString() ?? ''),
-      );
+  String get friendlyStageLabel => switch (personalizationStage) {
+    'personalized' => 'Đã cá nhân hóa cho xe này',
+    'calibrating' => 'AI đang học thói quen sạc',
+    _ => 'AI đang làm quen với xe của bạn',
+  };
+
+  factory PersonalChargingProfile.fromJson(
+    Map<String, dynamic> json,
+  ) => PersonalChargingProfile(
+    vehicleId: json['vehicleId']?.toString() ?? '',
+    consentEnabled: json['consentEnabled'] == true,
+    validSessions: (json['validSessions'] as num?)?.round() ?? 0,
+    powerSessions: (json['powerSessions'] as num?)?.round() ?? 0,
+    adapterVersion: json['adapterVersion']?.toString() ?? 'personal-v0',
+    active: json['active'] == true,
+    validationMape: (json['validationMape'] as num?)?.toDouble(),
+    updatedAt: DateTime.tryParse(json['updatedAt']?.toString() ?? ''),
+    personalizationStage: json['personalizationStage']?.toString() ?? 'base',
+    profileVersion: (json['profileVersion'] as num?)?.round() ?? 0,
+    trainingSegments: (json['trainingSegments'] as num?)?.round() ?? 0,
+    nominalCapacityWh: (json['nominalCapacityWh'] as num?)?.toDouble(),
+    estimatedEffectiveCapacityWh: (json['estimatedEffectiveCapacityWh'] as num?)
+        ?.toDouble(),
+    capacityConfidence: (json['capacityConfidence'] as num?)?.toDouble() ?? 0,
+    stateOfHealth: (json['stateOfHealth'] as num?)?.toDouble(),
+    globalTimeScale:
+        ((json['correction'] as Map?)?['globalTimeScale'] as num?)
+            ?.toDouble() ??
+        1,
+    globalTimeBiasMinutes:
+        ((json['correction'] as Map?)?['globalTimeBiasMinutes'] as num?)
+            ?.toDouble() ??
+        0,
+    powerScale:
+        ((json['correction'] as Map?)?['powerScale'] as num?)?.toDouble() ?? 1,
+    socBands: json['socBands'] is Map
+        ? Map<String, dynamic>.from(json['socBands'] as Map)
+        : const {},
+    qualityConfidence:
+        ((json['quality'] as Map?)?['confidence'] as num?)?.toDouble() ?? 0,
+    lastTrainingError: (json['quality'] as Map?)?['lastTrainingError']
+        ?.toString(),
+    lastTrainedAt: DateTime.tryParse(json['lastTrainedAt']?.toString() ?? ''),
+  );
 }
 
 class SmartChargeSafetyEvent {

@@ -176,7 +176,7 @@ class BatteryStatusCard extends StatelessWidget {
                                   textBaseline: TextBaseline.alphabetic,
                                   children: [
                                     Text(
-                                      '~$estimatedRange',
+                                      '$estimatedRange dự kiến',
                                       style: const TextStyle(
                                         color: Colors.white,
                                         fontSize: 28,

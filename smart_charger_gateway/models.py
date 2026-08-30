@@ -49,6 +49,14 @@ class ChargingStopReason(str, Enum):
     RELAY_OFF = "relay_off"
     GATEWAY_RESTART_EXPIRED = "gateway_restart_expired"
     COMMAND_FAILED = "command_failed"
+    OVER_TEMPERATURE = "over_temperature"
+    BATTERY_OVER_TEMPERATURE = "battery_over_temperature"
+    OVER_VOLTAGE = "over_voltage"
+    UNDER_VOLTAGE = "under_voltage"
+    OVER_CURRENT = "over_current"
+    OVER_POWER = "over_power"
+    TELEMETRY_STALE = "telemetry_stale"
+    UNEXPECTED_RELAY_STATE = "unexpected_relay_state"
 
 
 TERMINAL_SESSION_STATES = {
@@ -119,6 +127,21 @@ class ChargingSessionPatchRequest(BaseModel):
 
 class ChargingSessionStopRequest(BaseModel):
     expected_version: int | None = Field(default=None, ge=1)
+    user_stop_reason: Literal[
+        "need_vehicle", "enough_charge", "safety_concern", "other", "none"
+    ] = "none"
+
+
+class SafetyEvent(BaseModel):
+    event_id: str
+    type: str
+    severity: Literal["warning", "critical"]
+    observed_value: float | None = None
+    threshold: float | None = None
+    timestamp: datetime
+    relay_before: bool
+    relay_after: bool | None = None
+    off_verified: bool = False
 
 
 class SmartChargingSession(BaseModel):
@@ -145,6 +168,7 @@ class SmartChargingSession(BaseModel):
     stop_reason: ChargingStopReason | None = None
     relay_verified: bool = False
     baseline_energy_wh: float | None = None
+    last_meter_energy_wh: float | None = None
     energy_used_wh: float = 0.0
     energy_quality: Literal["good", "meter_reset"] = "good"
     estimated_soc: float | None = None
@@ -153,6 +177,10 @@ class SmartChargingSession(BaseModel):
     version: int = 1
     last_error: str | None = None
     command_failures: int = 0
+    shelly_temperature_c: float | None = None
+    battery_temperature_c: float | None = None
+    safety_events: list[SafetyEvent] = Field(default_factory=list)
+    user_stop_reason: str = "none"
 
 
 class CurrentChargingSessionResponse(BaseModel):

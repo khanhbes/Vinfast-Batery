@@ -64,7 +64,29 @@ class PersonalChargingProfile:
     validation_mape: float | None = None
     adapter_version: str = "personal-v0"
     active: bool = False
+    profile_version: int = 0
+    base_model_version: str = "unknown"
+    training_segments: int = 0
+    nominal_capacity_wh: float | None = None
+    estimated_effective_capacity_wh: float | None = None
+    capacity_confidence: float = 0.0
+    state_of_health: float | None = None
+    global_time_scale: float = 1.0
+    global_time_bias_minutes: float = 0.0
+    power_scale: float = 1.0
+    soc_bands: dict[str, dict[str, float]] = field(default_factory=dict)
+    quality_confidence: float = 0.0
+    last_training_error: str | None = None
+    last_trained_at: datetime | None = None
     updated_at: datetime = field(default_factory=utcnow)
+
+    @property
+    def personalization_stage(self) -> str:
+        if self.valid_sessions >= 10:
+            return "personalized"
+        if self.valid_sessions >= 3:
+            return "calibrating"
+        return "base"
 
     def to_dict(self, *, public: bool = False) -> dict[str, Any]:
         value = {
@@ -79,6 +101,25 @@ class PersonalChargingProfile:
             "validationMape": self.validation_mape,
             "adapterVersion": self.adapter_version,
             "active": self.active,
+            "profileVersion": self.profile_version,
+            "baseModelVersion": self.base_model_version,
+            "personalizationStage": self.personalization_stage,
+            "trainingSegments": self.training_segments,
+            "nominalCapacityWh": self.nominal_capacity_wh,
+            "estimatedEffectiveCapacityWh": self.estimated_effective_capacity_wh,
+            "capacityConfidence": self.capacity_confidence,
+            "stateOfHealth": self.state_of_health,
+            "correction": {
+                "globalTimeScale": self.global_time_scale,
+                "globalTimeBiasMinutes": self.global_time_bias_minutes,
+                "powerScale": self.power_scale,
+            },
+            "socBands": self.soc_bands,
+            "quality": {
+                "confidence": self.quality_confidence,
+                "lastTrainingError": self.last_training_error,
+            },
+            "lastTrainedAt": iso(self.last_trained_at),
             "updatedAt": iso(self.updated_at),
         }
         if not public:
@@ -183,6 +224,10 @@ class ChargePreview:
     adapter_version: str | None = None
     capacity_confidence: float | None = None
     efficiency_confidence: float | None = None
+    effective_capacity_wh: float | None = None
+    personalization_stage: str = "base"
+    guardrail_clamped: bool = False
+    guardrail_warnings: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -210,6 +255,12 @@ class ChargePreview:
             "adapterVersion": self.adapter_version,
             "capacityConfidence": self.capacity_confidence,
             "efficiencyConfidence": self.efficiency_confidence,
+            "effectiveCapacityWh": self.effective_capacity_wh,
+            "personalizationStage": self.personalization_stage,
+            "guardrail": {
+                "clamped": self.guardrail_clamped,
+                "warnings": self.guardrail_warnings,
+            },
         }
 
 
@@ -241,6 +292,7 @@ class ChargingSession:
     estimated_soc: float | None = None
     baseline_energy_wh: float | None = None
     energy_used_wh: float = 0
+    energy_quality: str = "good"
     relay_verified: bool = False
     timer_verified: bool = False
     transport: str = "shelly_cloud"
@@ -256,6 +308,25 @@ class ChargingSession:
     actual_end_soc: float | None = None
     training_eligible: bool = False
     telemetry_coverage: float = 0.0
+    owner_uid: str | None = None
+    personalization_stage: str = "base"
+    base_ai_minutes: float | None = None
+    physics_minutes: float | None = None
+    personal_minutes: float | None = None
+    final_minutes: float | None = None
+    fusion_weights: dict[str, float] = field(default_factory=dict)
+    effective_capacity_wh: float | None = None
+    nominal_capacity_wh: float | None = None
+    state_of_health: float | None = None
+    shelly_temperature_c: float | None = None
+    battery_temperature_c: float | None = None
+    average_power_w: float | None = None
+    peak_power_w: float | None = None
+    average_voltage_v: float | None = None
+    average_current_a: float | None = None
+    user_stop_reason: str = "none"
+    training_state: str = "pending"
+    training_reason: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -291,7 +362,7 @@ class ChargingSession:
             "timer_verified": self.timer_verified,
             "baseline_energy_wh": self.baseline_energy_wh,
             "energy_used_wh": self.energy_used_wh,
-            "energy_quality": "good",
+            "energy_quality": self.energy_quality,
             "shadow_mode": False,
             "transport": self.transport,
             "version": self.version,
@@ -304,4 +375,23 @@ class ChargingSession:
             "actual_end_soc": self.actual_end_soc,
             "training_eligible": self.training_eligible,
             "telemetry_coverage": self.telemetry_coverage,
+            "owner_uid": self.owner_uid,
+            "personalization_stage": self.personalization_stage,
+            "base_ai_minutes": self.base_ai_minutes,
+            "physics_minutes": self.physics_minutes,
+            "personal_minutes": self.personal_minutes,
+            "final_minutes": self.final_minutes,
+            "fusion_weights": self.fusion_weights,
+            "effective_capacity_wh": self.effective_capacity_wh,
+            "nominal_capacity_wh": self.nominal_capacity_wh,
+            "state_of_health": self.state_of_health,
+            "shelly_temperature_c": self.shelly_temperature_c,
+            "battery_temperature_c": self.battery_temperature_c,
+            "average_power_w": self.average_power_w,
+            "peak_power_w": self.peak_power_w,
+            "average_voltage_v": self.average_voltage_v,
+            "average_current_a": self.average_current_a,
+            "user_stop_reason": self.user_stop_reason,
+            "personal_ai_training_state": self.training_state,
+            "personal_ai_training_reason": self.training_reason,
         }

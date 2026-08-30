@@ -19,7 +19,6 @@ import '../../data/repositories/charge_log_repository.dart';
 import '../../data/repositories/trip_log_repository.dart';
 import '../../data/repositories/maintenance_repository.dart';
 import '../../main.dart';
-import '../home/home_screen.dart';
 import 'add_manual_trip_modal.dart';
 import 'ai_capacity_card.dart';
 import 'route_prediction_card.dart';
@@ -29,6 +28,8 @@ import '../settings/guide_screen.dart';
 import '../settings/ai_functions_screen.dart';
 import '../charge_log/add_charge_log_modal.dart';
 import '../ai/smart_charging_control_screen.dart';
+import '../ai/controllers/smart_charging_controller.dart';
+import '../ai/widgets/persistent_charging_pill.dart';
 
 // =============================================================================
 // Stable Dashboard Providers (thay cho inline FutureProvider)
@@ -264,6 +265,46 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 // ── Header ──
                 _buildHeader(),
                 const SizedBox(height: 20),
+
+                vehicleAsync.when(
+                  data: (vehicle) {
+                    if (vehicle == null || vehicleId.isEmpty) {
+                      return const SizedBox.shrink();
+                    }
+                    final args = SmartChargingControllerArgs(
+                      vehicleId: vehicleId,
+                      currentSoc: vehicle.currentBattery.toDouble(),
+                    );
+                    final session = ref.watch(
+                      smartChargingControllerProvider(
+                        args,
+                      ).select((value) => value.session),
+                    );
+                    if (session == null || session.state.isTerminal) {
+                      return const SizedBox.shrink();
+                    }
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: PersistentChargingPill(
+                          session: session,
+                          now: DateTime.now(),
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => SmartChargingControlScreen(
+                                vehicleId: vehicleId,
+                                currentSoc: vehicle.currentBattery.toDouble(),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, _) => const SizedBox.shrink(),
+                ),
 
                 // ── Tracking Active Banner ──
                 if (_tripService.isTracking) _buildTripActive(),

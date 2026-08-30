@@ -36,8 +36,13 @@ abstract interface class SmartChargerRepository {
     SmartChargingSession session,
     SmartChargerStatus status,
   );
+  Future<void> saveActiveSession(SmartChargingSession session);
   Future<void> flushPendingTelemetry(String sessionId);
-  Future<SmartChargeStopResult> stop(String? sessionId, {int? expectedVersion});
+  Future<SmartChargeStopResult> stop(
+    String? sessionId, {
+    int? expectedVersion,
+    UserStopReason userStopReason = UserStopReason.none,
+  });
   Future<SmartChargingSession> rearm(Duration duration);
   Future<void> manualOff();
   Future<SmartChargingSession> manualOn(
@@ -103,7 +108,7 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
       // targetSoc/aiTarget use a relative ten-hour safety window created by
       // SmartChargerService at the moment the relay is armed. Forwarding the
       // draft's initialization-time deadline could silently shorten a fresh
-      // 7h ETA to only the time left since the screen was first opened.
+      // a long ETA to only the time left since the screen was first opened.
       hardDeadlineAt:
           preview.draft.strategy == ChargingStrategy.deadline ||
               preview.draft.strategy == ChargingStrategy.smartCombined
@@ -163,18 +168,27 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
   ) => _chargeLogs?.recordStatusSample(session, status) ?? Future.value();
 
   @override
+  Future<void> saveActiveSession(SmartChargingSession session) =>
+      _chargeLogs?.saveActiveSession(session) ?? Future.value();
+
+  @override
   Future<void> flushPendingTelemetry(String sessionId) =>
       _chargeLogs?.flushPendingTelemetry(sessionId) ?? Future.value();
   @override
-  Future<SmartChargeStopResult> stop(String? id, {int? expectedVersion}) async {
+  Future<SmartChargeStopResult> stop(
+    String? id, {
+    int? expectedVersion,
+    UserStopReason userStopReason = UserStopReason.none,
+  }) async {
     final stopped = id == null
         ? await service.turnOffAndVerify()
         : await service.stopSession(id, expectedVersion: expectedVersion);
+    final withReason = stopped?.copyWith(userStopReason: userStopReason);
     return SmartChargeStopResult(
       relayOffVerified: true,
-      session: stopped,
-      alreadyStopped: stopped == null,
-      historySyncPending: stopped != null && _chargeLogs == null,
+      session: withReason,
+      alreadyStopped: withReason == null,
+      historySyncPending: withReason != null && _chargeLogs == null,
     );
   }
 
@@ -227,17 +241,11 @@ class ServerSmartChargerRepository implements SmartChargerRepository {
     String? cursor,
     ChargingStrategy? strategy,
   }) async {
-    final items = await service.history(limit: limit);
-    final filtered = strategy == null
-        ? items
-        : items
-              .where(
-                (item) => strategy == ChargingStrategy.aiTarget
-                    ? item.strategy != ChargingStrategy.manualTimed
-                    : item.strategy == strategy,
-              )
-              .toList();
-    return SmartChargeHistoryPage(items: filtered);
+    return service.historyPage(
+      limit: limit,
+      cursor: cursor,
+      strategy: strategy,
+    );
   }
 
   @override
@@ -265,10 +273,23 @@ class ServerSmartChargerRepository implements SmartChargerRepository {
   ) => service.recordTelemetry(session.sessionId, status);
 
   @override
+  Future<void> saveActiveSession(SmartChargingSession session) async {}
+
+  @override
   Future<void> flushPendingTelemetry(String sessionId) async {}
   @override
-  Future<SmartChargeStopResult> stop(String? id, {int? expectedVersion}) async {
-    final stopped = await service.off(id);
+  Future<SmartChargeStopResult> stop(
+    String? id, {
+    int? expectedVersion,
+    UserStopReason userStopReason = UserStopReason.none,
+  }) async {
+    final stopped = id == null
+        ? await service.off()
+        : await service.stop(
+            id,
+            expectedVersion: expectedVersion ?? 1,
+            userStopReason: userStopReason.wireValue,
+          );
     return SmartChargeStopResult(
       relayOffVerified: true,
       session: stopped,
@@ -326,13 +347,19 @@ class SmartChargerRepositoryFactory {
       );
   static Future<SmartChargerRepository> create() async {
     final mode = await currentMode();
-    return mode == SmartChargerConnectionMode.serverCloud
-        ? ServerSmartChargerRepository(ServerSmartChargerService())
-        : DirectSmartChargerRepository(
-            SmartChargerService(),
-            ChargingPredictionAdapter(),
-            previewService: ServerSmartChargerService(),
-            chargeLogs: ShellyChargeLogService(),
-          );
+    if (mode == SmartChargerConnectionMode.serverCloud) {
+      return ServerSmartChargerRepository(ServerSmartChargerService());
+    }
+    final chargeLogs = ShellyChargeLogService();
+    // Retry durable telemetry/terminal buffers whenever Direct Smart Charge
+    // is opened. A previous Firestore rules/index outage must not strand a
+    // valid charging session permanently on the device.
+    await chargeLogs.flushAllPending();
+    return DirectSmartChargerRepository(
+      SmartChargerService(),
+      ChargingPredictionAdapter(),
+      previewService: ServerSmartChargerService(),
+      chargeLogs: chargeLogs,
+    );
   }
 }

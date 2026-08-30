@@ -97,7 +97,7 @@ class BatterySocSelector extends StatelessWidget {
                         right: 12,
                         child: Center(
                           child: Text(
-                            '${estimated ? '~' : ''}${value.round()}%',
+                            '${value.round()}%',
                             style: Theme.of(context).textTheme.headlineMedium
                                 ?.copyWith(
                                   fontWeight: FontWeight.w900,
@@ -215,13 +215,13 @@ class ChargingBatteryAnimation extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                'Mục tiêu ~${targetSoc.round()}%',
+                'Mục tiêu ${targetSoc.round()}%',
                 style: Theme.of(
                   context,
                 ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
               ),
               Text(
-                'Hiện tại ~${value.round()}% · Ước tính, không phải dữ liệu BMS',
+                'Pin ước tính ${value.round()}% · Không phải dữ liệu BMS',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],

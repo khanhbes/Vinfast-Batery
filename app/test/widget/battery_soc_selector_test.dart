@@ -25,6 +25,8 @@ void main() {
     expect(find.text('100%'), findsOneWidget);
     await tester.tap(find.text('80%'));
     await tester.pump();
-    expect(find.text('~80%'), findsOneWidget);
+    // The selected value is visible inside the battery and remains available
+    // as a preset action.
+    expect(find.text('80%'), findsNWidgets(2));
   });
 }

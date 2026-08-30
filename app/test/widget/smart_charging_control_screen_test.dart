@@ -194,7 +194,7 @@ void main() {
     );
     await tester.pumpWidget(app(controller));
     await tester.scrollUntilVisible(find.text('Lịch sử gần đây'), 300);
-    expect(find.text('~20% → ~25%'), findsOneWidget);
+    expect(find.text('20% → 25%'), findsOneWidget);
     expect(find.text('Hoàn thành'), findsOneWidget);
   });
 }

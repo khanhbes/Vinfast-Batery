@@ -34,6 +34,22 @@ void main() {
       expect(value.energyQuality, 'partial');
     });
 
+    test('small Shelly meter jitter is not treated as a counter reset', () {
+      final start = DateTime.utc(2026, 8, 29);
+      final value = SmartChargeEnergySummary.calculate(
+        session: _session(energyUsedWh: 0),
+        points: [
+          _point(start, 100),
+          _point(start.add(const Duration(seconds: 30)), 150),
+          _point(start.add(const Duration(seconds: 60)), 144),
+          _point(start.add(const Duration(seconds: 90)), 200),
+        ],
+      );
+
+      expect(value.gridEnergyWh, 100);
+      expect(value.energyQuality, 'good');
+    });
+
     test('publishes usable capacity only with independent qualified SOC', () {
       final start = DateTime.utc(2026, 8, 29);
       final points = List.generate(

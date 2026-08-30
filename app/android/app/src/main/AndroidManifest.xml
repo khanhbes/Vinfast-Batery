@@ -94,6 +94,13 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- Disable Impeller on x86_64 emulators (API 36+) to prevent
+             DevFS/logcat disconnect errors caused by low-memory OOM kill.
+             Skia is more stable on emulated OpenGLES with limited RAM.
+             On physical devices Impeller is still used (not overridden by build flag). -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

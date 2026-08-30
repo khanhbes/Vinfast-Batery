@@ -161,11 +161,32 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
         limit = min(50, max(1, int(request.args.get("limit", "20"))))
         return ok([item.to_dict() for item in repository.history(uid, limit)])
 
+    @bp.get("/api/smart-charging/history")
+    @authenticated
+    def history_page(uid):
+        limit = min(50, max(1, int(request.args.get("limit", "20"))))
+        cursor_raw = request.args.get("cursor", "").strip()
+        cursor = None
+        if cursor_raw:
+            try:
+                from datetime import datetime
+                cursor = datetime.fromisoformat(cursor_raw.replace("Z", "+00:00"))
+            except ValueError:
+                return jsonify({"success": False, "error": {"code": "invalidCursor", "message": "Cursor không hợp lệ"}}), 400
+        strategy = request.args.get("strategy") or None
+        items, next_cursor = repository.history_page(uid, limit, cursor, strategy)
+        return ok({"items": [item.to_dict() for item in items], "nextCursor": next_cursor})
+
     @bp.post("/api/smart-charging/off")
     @authenticated
     def off(uid):
+        body = request.get_json(silent=True) or {}
         def action():
-            session = service.stop(uid)
+            session = service.stop(
+                uid,
+                expected_version=body.get("expectedVersion"),
+                user_stop_reason=str(body.get("userStopReason") or "none"),
+            )
             return ok(session.to_dict() if session else None)
         return execute(action)
 
@@ -185,7 +206,13 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
     @bp.post("/api/smart-charging/session/<session_id>/stop")
     @authenticated
     def stop(uid, session_id):
-        return execute(lambda: ok(service.stop(uid, session_id).to_dict()))
+        body = request.get_json(silent=True) or {}
+        return execute(lambda: ok(service.stop(
+            uid,
+            session_id,
+            expected_version=body.get("expectedVersion"),
+            user_stop_reason=str(body.get("userStopReason") or "none"),
+        ).to_dict()))
 
     @bp.get("/api/smart-charging/personal-profile/<vehicle_id>")
     @authenticated
@@ -227,6 +254,14 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
     def record_telemetry(uid, session_id):
         return execute(lambda: ok(service.record_telemetry(
             uid, session_id, request.get_json(silent=True) or {},
+        )))
+
+    @bp.post("/api/smart-charging/personal/ingest-session")
+    @authenticated
+    def ingest_personal_session(uid):
+        body = request.get_json(silent=True) or {}
+        return execute(lambda: ok(service.ingest_personal_session(
+            uid, str(body.get("sessionId") or ""),
         )))
 
     return bp

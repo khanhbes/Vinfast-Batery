@@ -67,6 +67,22 @@ service cloud.firestore {
           request.resource.data.sessionId == logId;
         allow delete: if false;
       }
+
+      // Safety events are append-only client evidence tied to the canonical
+      // parent session. The backend may enrich them through the Admin SDK.
+      match /safetyEvents/{eventId} {
+        function parentLog() {
+          return get(/databases/$(database)/documents/ChargeLogs/$(logId));
+        }
+
+        allow read: if isAuth() &&
+          parentLog().data.ownerUid == request.auth.uid;
+        allow create: if isAuth() &&
+          parentLog().data.ownerUid == request.auth.uid &&
+          request.resource.data.ownerUid == request.auth.uid &&
+          request.resource.data.sessionId == logId;
+        allow update, delete: if false;
+      }
     }
 
     // ── ChargeSamples (AI training data - implicit collection) ──

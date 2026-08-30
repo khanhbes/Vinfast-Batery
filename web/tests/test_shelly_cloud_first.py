@@ -32,6 +32,7 @@ class SmartChargeServiceTests(unittest.TestCase):
         self.service = SmartChargeService(self.repo, self.provider, predictor, sleeper=lambda _: None)
         self.binding = self.provider.list_devices("user-a")[0]
         self.repo.save_binding("user-a", self.binding)
+        self.repo.register_vehicle_owner("user-a", "VF-001")
 
     def preview(self):
         return self.service.create_preview("user-a", {
@@ -146,10 +147,18 @@ class SmartChargeServiceTests(unittest.TestCase):
 
     def test_personal_data_delete_does_not_cross_owner(self):
         self.service.update_personal_consent("user-a", "VF-001", True)
-        self.service.update_personal_consent("user-b", "VF-001", True)
+        self.repo.register_vehicle_owner("user-b", "VF-B")
+        self.service.update_personal_consent("user-b", "VF-B", True)
         self.service.delete_personal_profile("user-a", "VF-001")
         self.assertIsNone(self.repo.get_personal_profile("user-a", "VF-001"))
-        self.assertIsNotNone(self.repo.get_personal_profile("user-b", "VF-001"))
+        self.assertIsNotNone(self.repo.get_personal_profile("user-b", "VF-B"))
+
+    def test_same_vehicle_id_cannot_cross_accounts(self):
+        with self.assertRaises(SmartChargeError) as caught:
+            self.service.create_preview("user-b", {
+                "vehicleId": "VF-001", "currentSoc": 20, "targetSoc": 80,
+            })
+        self.assertEqual(caught.exception.code, "vehicleForbidden")
 
     def test_safety_cutoff_requires_two_consecutive_samples(self):
         active = self.service.start("user-a", self.preview().preview_id, "safety")
@@ -234,6 +243,7 @@ class RouteContractTests(unittest.TestCase):
         self.repo = SmartChargeRepository()
         self.provider = FakeShellyProvider()
         self.service = SmartChargeService(self.repo, self.provider, predictor, sleeper=lambda _: None)
+        self.repo.register_vehicle_owner("owner", "VF-001")
         app = Flask(__name__)
         app.register_blueprint(create_blueprint(self.service, self.repo, lambda: ("owner", "owner@test", "user")))
         self.client = app.test_client()

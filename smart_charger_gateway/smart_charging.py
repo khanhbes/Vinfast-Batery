@@ -16,8 +16,10 @@ from models import (
     ChargingStopReason,
     ChargingStrategy,
     SmartChargingSession,
+    SafetyEvent,
     TERMINAL_SESSION_STATES,
 )
+from safety_monitor import SafetyMonitor
 from shelly import ShellyClient, ShellyUnavailableError
 from smart_session_store import SmartSessionStore
 
@@ -41,7 +43,10 @@ class SmartChargingConfig:
 
     @classmethod
     def from_env(cls) -> "SmartChargingConfig":
-        raw_max = os.getenv("SMART_CHARGER_MAX_SESSION_MINUTES", "").strip()
+        raw_max = os.getenv(
+            "SMART_CHARGE_MAX_SESSION_MINUTES",
+            os.getenv("SMART_CHARGER_MAX_SESSION_MINUTES", ""),
+        ).strip()
         max_minutes = int(raw_max) if raw_max.isdigit() and int(raw_max) > 0 else None
         return cls(
             enabled=env_bool("ENABLE_SMART_CHARGING", True),
@@ -76,12 +81,15 @@ class SmartChargingController:
         shelly: ShellyClient,
         config: SmartChargingConfig,
         clock: Callable[[], datetime] | None = None,
+        safety_monitor: SafetyMonitor | None = None,
     ) -> None:
         self.store = store
         self.shelly = shelly
         self.config = config
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self._command_lock = threading.RLock()
+        self.safety_monitor = safety_monitor or SafetyMonitor()
+        self._last_status_at: datetime | None = None
 
     def now(self) -> datetime:
         value = self._clock()
@@ -160,6 +168,7 @@ class SmartChargingController:
                 ) from exc
             if not before.online:
                 raise GatewayError("SHELLY_OFFLINE", "Shelly đang offline.", status_code=503, retryable=True)
+            self._last_status_at = self.now()
 
             now = self.now()
             ai_stop, deadline, effective, absolute = self._planned_times(request, now)
@@ -184,6 +193,7 @@ class SmartChargingController:
                 effective_stop_at=effective,
                 absolute_safety_stop_at=absolute,
                 baseline_energy_wh=before.energy_wh,
+                last_meter_energy_wh=before.energy_wh,
                 shadow_mode=effective_shadow,
             )
             self.store.create(session)
@@ -234,6 +244,7 @@ class SmartChargingController:
         *,
         reason: ChargingStopReason = ChargingStopReason.MANUAL,
         expected_version: int | None = None,
+        user_stop_reason: str = "none",
     ) -> SmartChargingSession:
         with self._command_lock:
             session = self.get(session_id)
@@ -296,6 +307,7 @@ class SmartChargingController:
                 "relay_verified": True,
                 "updated_at": now,
                 "version": stopping.version + 1,
+                "user_stop_reason": user_stop_reason,
             })
             return self.store.save(completed)
 
@@ -345,14 +357,23 @@ class SmartChargingController:
     ) -> SmartChargingSession:
         baseline = session.baseline_energy_wh
         if baseline is None:
-            return session.model_copy(update={"baseline_energy_wh": energy_wh})
+            return session.model_copy(update={
+                "baseline_energy_wh": energy_wh,
+                "last_meter_energy_wh": energy_wh,
+            })
         quality = session.energy_quality
-        if energy_wh < baseline:
+        previous = session.last_meter_energy_wh if session.last_meter_energy_wh is not None else baseline
+        reset_threshold = max(25.0, abs(previous) * 0.20)
+        if energy_wh < previous - reset_threshold:
             used = 0.0
             quality = "meter_reset"
             baseline = energy_wh
+        elif energy_wh < previous:
+            # Shelly may report a few Wh of counter jitter; do not classify it
+            # as a lifetime-meter reset or inflate the session delta.
+            used = session.energy_used_wh
         else:
-            used = max(0.0, energy_wh - baseline)
+            used = max(session.energy_used_wh, max(0.0, energy_wh - baseline))
         estimated_soc = None
         if session.estimated_capacity_wh:
             estimated_soc = min(100.0, session.start_soc + used / session.estimated_capacity_wh * 100)
@@ -360,6 +381,7 @@ class SmartChargingController:
             "energy_used_wh": used,
             "energy_quality": quality,
             "baseline_energy_wh": baseline,
+            "last_meter_energy_wh": energy_wh,
             "estimated_soc": estimated_soc,
         })
 
@@ -384,8 +406,12 @@ class SmartChargingController:
             try:
                 status = self.shelly.get_status()
             except ShellyUnavailableError:
+                violation = self.safety_monitor.stale(self._last_status_at, self.now())
+                if violation is not None:
+                    return self._safety_stop(session, violation)
                 return session
             now = self.now()
+            self._last_status_at = now
             session = self._update_energy(session, status.energy_wh)
             if not status.relay:
                 interrupted = session.model_copy(update={
@@ -397,6 +423,9 @@ class SmartChargingController:
                     "version": session.version + 1,
                 })
                 return self.store.save(interrupted)
+            violation = self.safety_monitor.evaluate(status)
+            if violation is not None:
+                return self._safety_stop(session, violation)
             reason = self._due_reason(session, now)
             if reason is not None:
                 if session.shadow_mode:
@@ -414,6 +443,59 @@ class SmartChargingController:
                 "version": session.version + 1,
             })
             return self.store.save(updated)
+
+    def _safety_stop(self, session: SmartChargingSession, violation) -> SmartChargingSession:
+        now = self.now()
+        try:
+            reason = ChargingStopReason(violation.kind)
+        except ValueError:
+            reason = ChargingStopReason.COMMAND_FAILED
+        event = SafetyEvent(
+            event_id=str(uuid4()),
+            type=violation.kind,
+            severity="critical",
+            observed_value=violation.observed_value,
+            threshold=violation.threshold,
+            timestamp=now,
+            relay_before=True,
+        )
+        events = [*session.safety_events, event]
+        verified = False
+        relay_after = None
+        try:
+            command = self.shelly.set_relay(False)
+            for _ in range(max(1, self.config.readback_attempts)):
+                status = self.shelly.get_status()
+                relay_after = status.relay
+                if command.success and not status.relay:
+                    verified = True
+                    break
+        except ShellyUnavailableError:
+            verified = False
+        events[-1] = event.model_copy(update={
+            "relay_after": relay_after,
+            "off_verified": verified,
+        })
+        terminal = session.model_copy(update={
+            "state": ChargingSessionState.INTERRUPTED if verified else ChargingSessionState.FAILED,
+            "stop_reason": reason,
+            "stopped_at": now,
+            "relay_verified": verified,
+            "last_error": None if verified else "Không xác minh được OFF sau sự kiện an toàn.",
+            "safety_events": events,
+            "updated_at": now,
+            "version": session.version + 1,
+        })
+        self.store.save(terminal)
+        if not verified:
+            raise GatewayError(
+                "RELAY_VERIFICATION_FAILED",
+                terminal.last_error or "Không xác minh được OFF an toàn.",
+                status_code=503,
+                retryable=True,
+                session_id=session.session_id,
+            )
+        return terminal
 
     def recover(self) -> SmartChargingSession | None:
         """Restore without ever issuing ON after a gateway restart."""
