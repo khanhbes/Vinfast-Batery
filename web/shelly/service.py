@@ -18,6 +18,8 @@ from .models import (
     utcnow,
 )
 from .providers import ProviderError
+from .charging_fusion import fuse_charging_eta
+from .personalization import evaluate_training, update_profile
 
 
 class SmartChargeError(RuntimeError):
@@ -90,17 +92,26 @@ class SmartChargeService:
         target = float(payload.get("targetSoc", -1))
         if not vehicle_id:
             raise SmartChargeError("invalidPreview", "Thiếu vehicleId")
+        vehicle = self._owned_vehicle(uid, vehicle_id)
         if not 0 <= current < target <= 100:
             raise SmartChargeError("invalidSoc", "Target SOC phải lớn hơn SOC hiện tại và không quá 100%")
-        result = self.predictor(payload)
+        trusted_payload = self._prediction_payload(payload, vehicle)
+        result = self.predictor(trusted_payload)
         global_seconds = int(round(float(
             result.get("predictedDurationSeconds")
             or float(result.get("predictedMinutes") or 0) * 60
         )))
         profile = self.repository.get_personal_profile(uid, vehicle_id)
-        candidates, fusion_reason = self._fuse_eta(payload, result, global_seconds, profile)
-        usable = [item for item in candidates if item.available and item.duration_seconds > 0 and item.weight > 0]
-        seconds = int(round(sum(item.duration_seconds * item.weight for item in usable))) if usable else global_seconds
+        model_version = str(result.get("modelVersion") or "unknown")
+        if profile and profile.consent_enabled and profile.base_model_version != model_version:
+            if profile.base_model_version != "unknown":
+                profile.quality_confidence *= 0.70
+            profile.base_model_version = model_version
+            profile.updated_at = self.clock()
+            self.repository.save_personal_profile(profile)
+        fusion = fuse_charging_eta(trusted_payload, result, global_seconds, profile)
+        candidates = fusion.candidates
+        seconds = fusion.duration_seconds
         minutes = int(round(seconds / 60))
         if minutes <= 0 or minutes > self.max_minutes:
             raise SmartChargeError("unsafeDuration", "ETA phải lớn hơn 0 và không vượt quá 10 giờ")
@@ -118,7 +129,7 @@ class SmartChargeService:
             predicted_stop_at=now + timedelta(minutes=minutes),
             model_source=source,
             model_key=str(result.get("modelKey") or "charging_time"),
-            model_version=str(result.get("modelVersion") or "unknown"),
+            model_version=model_version,
             runtime_health=runtime_health,
             confidence=float(result["confidence"]) if result.get("confidence") is not None else None,
             warnings=[str(item) for item in result.get("warnings", [])],
@@ -127,11 +138,15 @@ class SmartChargeService:
             ai_charge_eligible=eligible,
             expires_at=now + timedelta(minutes=10),
             eta_candidates=candidates,
-            fusion_reason=fusion_reason,
-            profile_version=(f"calibration-{profile.valid_sessions}" if profile and profile.consent_enabled else None),
+            fusion_reason=fusion.reason,
+            profile_version=(f"profile-v{profile.profile_version}" if profile and profile.consent_enabled else None),
             adapter_version=(profile.adapter_version if profile and profile.active else None),
             capacity_confidence=_optional_float(payload.get("capacityConfidence")),
             efficiency_confidence=_optional_float(payload.get("efficiencyConfidence")),
+            effective_capacity_wh=fusion.effective_capacity_wh,
+            personalization_stage=fusion.stage,
+            guardrail_clamped=fusion.clamped,
+            guardrail_warnings=list(fusion.warnings),
         )
         self.repository.save_preview(uid, preview)
         self.repository.append_audit(uid, "preview_created", preview_id=preview.preview_id)
@@ -161,6 +176,7 @@ class SmartChargeService:
                 "Model AI thật chưa sẵn sàng; chỉ được Bật Sạc với timer thủ công.",
                 409,
             )
+        vehicle = self._owned_vehicle(uid, preview.vehicle_id)
         if not self.provider.supports_device_timer:
             raise SmartChargeError(
                 "providerTimerUnsupported",
@@ -204,6 +220,16 @@ class SmartChargeService:
             fusion_reason=preview.fusion_reason,
             profile_version=preview.profile_version,
             adapter_version=preview.adapter_version,
+            owner_uid=uid,
+            personalization_stage=preview.personalization_stage,
+            base_ai_minutes=_candidate_minutes(preview.eta_candidates, "global_ai"),
+            physics_minutes=_candidate_minutes(preview.eta_candidates, "physics"),
+            personal_minutes=_candidate_minutes(preview.eta_candidates, "personal"),
+            final_minutes=preview.predicted_duration_seconds / 60,
+            fusion_weights={item.source: item.weight for item in preview.eta_candidates},
+            effective_capacity_wh=preview.effective_capacity_wh,
+            nominal_capacity_wh=_optional_float(vehicle.get("nominalCapacityWh")),
+            state_of_health=_optional_float(vehicle.get("stateOfHealth")),
         )
         self.repository.save_session(uid, session)
         try:
@@ -259,13 +285,25 @@ class SmartChargeService:
         except ProviderError as exc:
             raise self._provider_error(exc) from exc
 
-    def stop(self, uid: str, session_id: str | None = None) -> ChargingSession | None:
+    def stop(
+        self,
+        uid: str,
+        session_id: str | None = None,
+        *,
+        expected_version: int | None = None,
+        user_stop_reason: str = "none",
+    ) -> ChargingSession | None:
         binding = self.binding(uid)
         if not binding:
             raise SmartChargeError("notConfigured", "Shelly chưa được kết nối", 404)
         session = self.repository.current_session(uid)
         if session_id and session and session.session_id != session_id:
             raise SmartChargeError("sessionNotFound", "Không tìm thấy phiên sạc", 404)
+        if session and expected_version is not None and session.version != expected_version:
+            raise SmartChargeError("versionConflict", "Phiên sạc đã thay đổi; hãy đồng bộ lại", 409)
+        allowed_reasons = {"need_vehicle", "enough_charge", "safety_concern", "other", "none"}
+        if user_stop_reason not in allowed_reasons:
+            raise SmartChargeError("invalidStopReason", "Lý do dừng sạc không hợp lệ")
         try:
             self.provider.turn_off(binding)
             verified = None
@@ -283,6 +321,7 @@ class SmartChargeService:
             now = self.clock()
             session.state = "cancelled"
             session.stop_reason = "manual"
+            session.user_stop_reason = user_stop_reason
             session.stopped_at = now
             session.updated_at = now
             session.relay_verified = True
@@ -294,12 +333,19 @@ class SmartChargeService:
         return session
 
     def personal_profile(self, uid: str, vehicle_id: str) -> PersonalChargingProfile:
+        vehicle = self._owned_vehicle(uid, vehicle_id)
         profile = self.repository.get_personal_profile(uid, vehicle_id)
-        return profile or PersonalChargingProfile(owner_uid=uid, vehicle_id=vehicle_id)
+        return profile or PersonalChargingProfile(
+            owner_uid=uid,
+            vehicle_id=vehicle_id,
+            nominal_capacity_wh=_optional_float(vehicle.get("nominalCapacityWh")),
+            state_of_health=_optional_float(vehicle.get("stateOfHealth")),
+        )
 
     def update_personal_consent(self, uid: str, vehicle_id: str, enabled: bool) -> PersonalChargingProfile:
         if not vehicle_id.strip():
             raise SmartChargeError("invalidVehicle", "Thiếu vehicleId")
+        self._owned_vehicle(uid, vehicle_id)
         profile = self.personal_profile(uid, vehicle_id)
         profile.consent_enabled = bool(enabled)
         profile.updated_at = self.clock()
@@ -310,6 +356,7 @@ class SmartChargeService:
         return profile
 
     def delete_personal_profile(self, uid: str, vehicle_id: str) -> None:
+        self._owned_vehicle(uid, vehicle_id)
         self.repository.delete_personal_profile(uid, vehicle_id)
         self.repository.append_audit(uid, "personal_ai_deleted", vehicle_id=vehicle_id)
 
@@ -320,19 +367,38 @@ class SmartChargeService:
         if session is None:
             raise SmartChargeError("sessionNotFound", "Không tìm thấy phiên sạc", 404)
         session.actual_end_soc = float(actual_soc)
-        duration_seconds = max(0, int(((session.stopped_at or session.updated_at) - session.created_at).total_seconds()))
-        soc_gain = actual_soc - session.start_soc
-        full_target_sample = (
-            session.state == "completed" and duration_seconds >= 1200 and
-            session.telemetry_coverage >= 0.70 and session.energy_used_wh > 0 and soc_gain >= 10
-        )
-        session.training_eligible = full_target_sample
+        decision = evaluate_training(session)
+        session.training_eligible = decision.eligible
+        session.training_state = "pending" if decision.eligible else "skipped"
+        session.training_reason = decision.reason
         session.updated_at = self.clock()
         session.version += 1
         self.repository.save_session(uid, session)
         self.repository.upsert_charge_log(uid, session)
-        self._update_personal_calibration(uid, session, duration_seconds, soc_gain, full_target_sample)
+        self._update_personal_calibration(uid, session, decision)
         return session
+
+    def ingest_personal_session(self, uid: str, session_id: str) -> dict:
+        session = self.repository.get_session(uid, session_id)
+        if session is None:
+            raise SmartChargeError("sessionNotFound", "Không tìm thấy phiên sạc", 404)
+        self._owned_vehicle(uid, session.vehicle_id)
+        decision = evaluate_training(session)
+        session.training_eligible = decision.eligible
+        session.training_state = "pending" if decision.eligible else "skipped"
+        session.training_reason = decision.reason
+        if decision.eligible or decision.power_eligible:
+            self._update_personal_calibration(uid, session, decision)
+        else:
+            self.repository.save_session(uid, session)
+            self.repository.upsert_charge_log(uid, session)
+        profile = self.repository.get_personal_profile(uid, session.vehicle_id)
+        return {
+            "sessionId": session_id,
+            "state": session.training_state,
+            "reason": session.training_reason,
+            "profileVersion": profile.profile_version if profile else None,
+        }
 
     def record_telemetry(self, uid: str, session_id: str, payload: dict) -> dict:
         session = self.repository.current_session(uid)
@@ -352,8 +418,12 @@ class SmartChargeService:
             "voltageV": float(payload.get("voltageV") or 0),
             "currentA": float(payload.get("currentA") or 0),
             "temperatureC": payload.get("temperatureC"),
+            "shellyTemperatureC": payload.get("shellyTemperatureC", payload.get("temperatureC")),
+            "batteryTemperatureC": payload.get("batteryTemperatureC"),
             "energyWh": float(payload.get("energyWh") or 0),
             "estimatedSoc": session.estimated_soc,
+            "socSource": str(payload.get("socSource") or "estimated"),
+            "targetSoc": session.target_soc,
             "relay": bool(payload.get("relay")),
             "timerRemainingSeconds": int(payload.get("timerRemainingSeconds") or 0),
             "transport": str(payload.get("transport") or session.transport),
@@ -366,71 +436,67 @@ class SmartChargeService:
         expected = max(1, math.ceil(max(1, point["elapsedSeconds"]) / 30))
         session.telemetry_coverage = min(1.0, count / expected)
         session.energy_used_wh = max(0, point["energyWh"] - (session.baseline_energy_wh or point["energyWh"]))
+        session.shelly_temperature_c = _optional_float(point.get("shellyTemperatureC"))
+        session.battery_temperature_c = _optional_float(point.get("batteryTemperatureC"))
+        session.average_power_w = _running_average(session.average_power_w, point["powerAverageW"], count)
+        session.peak_power_w = max(session.peak_power_w or 0, point["powerMaximumW"])
+        session.average_voltage_v = _running_average(session.average_voltage_v, point["voltageV"], count)
+        session.average_current_a = _running_average(session.average_current_a, point["currentA"], count)
         self.repository.save_session(uid, session)
         self.repository.upsert_charge_log(uid, session)
         return {"recorded": True, "coverage": session.telemetry_coverage}
 
-    def _update_personal_calibration(self, uid: str, session: ChargingSession, duration_seconds: int, soc_gain: float, full: bool) -> None:
+    def _update_personal_calibration(self, uid: str, session: ChargingSession, decision) -> None:
         profile = self.repository.get_personal_profile(uid, session.vehicle_id)
-        if profile is None or not profile.consent_enabled or duration_seconds < 1200 or session.energy_used_wh <= 0:
+        if profile is None or not profile.consent_enabled or not (
+            decision.eligible or decision.power_eligible
+        ):
             return
-        observed_power = session.energy_used_wh / max(duration_seconds / 3600, 1 / 60)
-        profile.power_sessions += 1
-        profile.median_power_w = observed_power if profile.median_power_w is None else profile.median_power_w * 0.75 + observed_power * 0.25
-        if full:
-            actual_minutes = duration_seconds / 60
-            predicted = max(1, session.predicted_minutes)
-            observed_bias = (actual_minutes - predicted) / predicted
-            profile.eta_bias_ratio = max(-0.35, min(0.50, profile.eta_bias_ratio * 0.7 + observed_bias * 0.3))
-            profile.valid_sessions += 1
-            if soc_gain > 0:
-                capacity = session.energy_used_wh * profile.efficiency / (soc_gain / 100)
-                profile.usable_capacity_wh = capacity if profile.usable_capacity_wh is None else profile.usable_capacity_wh * 0.8 + capacity * 0.2
-            # Immediate calibration is available to fusion. Promotion to an
-            # active residual adapter is owned by the guarded batch worker.
-            if profile.validation_mape is None:
-                profile.validation_mape = abs(profile.eta_bias_ratio) * 100
-        profile.updated_at = self.clock()
+        if self.repository.training_sample_processed(uid, session.session_id):
+            return
+        profile = update_profile(profile, session, decision, self.clock())
         self.repository.save_personal_profile(profile)
         self.repository.save_training_sample(uid, session, {
-            "eligibleForTargetTraining": full,
+            "state": "trained",
+            "eligibleForTargetTraining": decision.eligible,
             "interrupted": session.state != "completed",
-            "durationSeconds": duration_seconds,
+            "durationSeconds": max(0, int(((session.stopped_at or session.updated_at) - session.created_at).total_seconds())),
             "predictedMinutes": session.predicted_minutes,
-            "socGain": soc_gain,
+            "socGain": decision.actual_soc_gain,
             "energyWh": session.energy_used_wh,
             "telemetryCoverage": session.telemetry_coverage,
+            "qualityScore": decision.quality_score,
+            "coveredSocBands": list(decision.covered_bands),
+            "targetReached": session.actual_end_soc is not None and session.actual_end_soc >= session.target_soc,
         })
-        if full and profile.valid_sessions >= 5:
+        session.training_state = "trained" if decision.eligible else "power_only"
+        session.training_reason = (
+            "partial_curve" if decision.eligible and session.state != "completed"
+            else "completed_curve" if decision.eligible
+            else "power_and_energy_only"
+        )
+        self.repository.save_session(uid, session)
+        self.repository.upsert_charge_log(uid, session)
+        if decision.eligible and profile.valid_sessions >= 5:
             self.repository.enqueue_personal_training(uid, session.vehicle_id, session.session_id)
 
-    def _fuse_eta(self, payload: dict, result: dict, global_seconds: int, profile: PersonalChargingProfile | None) -> tuple[list[EtaCandidate], str]:
-        health = str(result.get("runtimeHealth") or "unknown")
-        confidence = float(result.get("confidence") or 50)
-        global_weight = max(0.15, min(0.75, confidence / 100 * (1.0 if health == "loaded" else 0.45)))
-        raw: list[tuple[str, int, float, float, str | None]] = [
-            ("global_ai", global_seconds, global_weight, confidence, None),
-        ]
-        capacity = _optional_float(payload.get("estimatedCapacityWh") or payload.get("batteryCapacityWh"))
-        power = _optional_float(payload.get("chargingPowerW"))
-        if power is None and profile and profile.consent_enabled:
-            power = profile.median_power_w
-        efficiency = (profile.efficiency if profile and profile.consent_enabled else _optional_float(payload.get("chargingEfficiency"))) or 0.90
-        delta = float(payload.get("targetSoc", 0)) - float(payload.get("currentSoc", 0))
-        if capacity and capacity > 0 and power and power > 0 and delta > 0:
-            physics_seconds = int(round(capacity * delta / 100 / (power * efficiency) * 3600))
-            cap_conf = (_optional_float(payload.get("capacityConfidence")) or 55) / 100
-            power_conf = 0.78 if profile and profile.power_sessions >= 2 else 0.55
-            raw.append(("physics", physics_seconds, min(0.55, cap_conf * power_conf), cap_conf * 100, "capacity_and_power"))
-        if profile and profile.consent_enabled and profile.valid_sessions > 0:
-            personal_seconds = int(round(global_seconds * (1 + profile.eta_bias_ratio)))
-            sample_factor = min(1.0, profile.valid_sessions / 5)
-            mape_factor = max(0.15, 1 - (profile.validation_mape or 35) / 100)
-            raw.append(("personal", personal_seconds, 0.65 * sample_factor * mape_factor, mape_factor * 100, profile.adapter_version))
-        total = sum(max(0, item[2]) for item in raw) or 1
-        candidates = [EtaCandidate(item[0], max(1, item[1]), item[2] / total, item[3], True, item[4]) for item in raw]
-        reason = " + ".join(item.source for item in candidates)
-        return candidates, reason
+    def _owned_vehicle(self, uid: str, vehicle_id: str) -> dict:
+        vehicle = self.repository.vehicle_for_owner(uid, vehicle_id)
+        if vehicle is None:
+            raise SmartChargeError("vehicleForbidden", "Xe không thuộc tài khoản này", 403)
+        return vehicle
+
+    def _prediction_payload(self, payload: dict, vehicle: dict) -> dict:
+        result = dict(payload)
+        # Identity and capacity provenance come from the owned vehicle record,
+        # never from ownerUid supplied by a client.
+        result.pop("ownerUid", None)
+        for key in ("nominalCapacityWh", "stateOfHealth", "vinfastModelId"):
+            if vehicle.get(key) is not None:
+                result[key] = vehicle[key]
+        if result.get("estimatedCapacityWh") in (None, 0) and vehicle.get("nominalCapacityWh"):
+            result["estimatedCapacityWh"] = vehicle["nominalCapacityWh"]
+        return result
 
     def _apply_safety(self, uid: str, binding: DeviceBinding, status) -> None:
         if not status.relay:
@@ -481,6 +547,7 @@ class SmartChargeService:
         binding = self.binding(uid)
         if not binding:
             raise SmartChargeError("notConfigured", "Shelly chưa được kết nối", 404)
+        vehicle = self._owned_vehicle(uid, vehicle_id) if vehicle_id != "manual" else {}
         duration_seconds = int(duration_seconds)
         if duration_seconds < 5 or duration_seconds > self.max_minutes * 60:
             raise SmartChargeError("unsafeDuration", "Safety timer phải từ 5 giây đến 10 giờ")
@@ -521,6 +588,9 @@ class SmartChargeService:
             idempotency_key=idempotency_key,
             estimated_soc=max(0, min(100, float(current_soc))),
             baseline_energy_wh=before.energy_wh,
+            owner_uid=uid,
+            nominal_capacity_wh=_optional_float(vehicle.get("nominalCapacityWh")),
+            state_of_health=_optional_float(vehicle.get("stateOfHealth")),
         )
         self.repository.save_session(uid, session)
         try:
@@ -621,3 +691,14 @@ def _optional_float(value) -> float | None:
         return parsed if math.isfinite(parsed) else None
     except (TypeError, ValueError):
         return None
+
+
+def _candidate_minutes(candidates: list[EtaCandidate], source: str) -> float | None:
+    match = next((item for item in candidates if item.source == source and item.available), None)
+    return match.duration_seconds / 60 if match else None
+
+
+def _running_average(previous: float | None, value: float, count: int) -> float:
+    if count <= 1 or previous is None:
+        return float(value)
+    return previous + (float(value) - previous) / count

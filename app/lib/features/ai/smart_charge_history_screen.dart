@@ -284,7 +284,7 @@ class _HistoryRow extends StatelessWidget {
           padding: const EdgeInsets.only(top: 5),
           child: Text(
             '${DateFormat('dd/MM · HH:mm').format(session.createdAt.toLocal())}  ·  '
-            '~${session.startSoc.toStringAsFixed(0)} → Mục tiêu ~${session.targetSoc.toStringAsFixed(0)}%  ·  '
+            '${session.startSoc.toStringAsFixed(0)} → Mục tiêu ${session.targetSoc.toStringAsFixed(0)}%  ·  '
             '${!session.state.isTerminal ? '${_duration(session.remaining())} còn lại' : _duration(duration)}',
           ),
         ),
@@ -373,7 +373,7 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
               child: Chip(
                 avatar: const Icon(Icons.bolt_rounded, size: 18),
                 label: Text(
-                  'ĐANG SẠC · Mục tiêu ~${widget.session.targetSoc.round()}%',
+                  'ĐANG SẠC · Mục tiêu ${widget.session.targetSoc.round()}%',
                 ),
               ),
             ),
@@ -410,7 +410,7 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            '~ Ước tính, không phải dữ liệu BMS. Dung lượng khả dụng chỉ hiện khi phiên đủ chất lượng.',
+            'Các chỉ số pin là ước tính, không phải dữ liệu BMS. Dung lượng khả dụng chỉ hiện khi phiên đủ chất lượng.',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: Theme.of(context).colorScheme.tertiary,
             ),
@@ -426,19 +426,21 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
       ('Điện từ lưới', summary == null ? '—' : _energy(summary.gridEnergyWh)),
       (
         'Ước tính vào pin',
-        summary == null ? '—' : '~${_energy(summary.estimatedStoredWh)}',
+        summary == null
+            ? '—'
+            : '${_energy(summary.estimatedStoredWh)} ước tính',
       ),
       (
         'Còn trong pin',
         summary?.estimatedRemainingWh == null
             ? '—'
-            : '~${_energy(summary!.estimatedRemainingWh!)}',
+            : '${_energy(summary!.estimatedRemainingWh!)} ước tính',
       ),
       (
         'Dung lượng khả dụng',
         summary?.estimatedUsableCapacityWh == null
             ? 'Cần xác nhận SOC'
-            : '~${_energy(summary!.estimatedUsableCapacityWh!)}',
+            : '${_energy(summary!.estimatedUsableCapacityWh!)} ước tính',
       ),
     ];
     return Wrap(

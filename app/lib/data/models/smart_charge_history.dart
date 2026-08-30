@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'smart_charger_status.dart';
 import 'smart_charging_session.dart';
 
@@ -156,20 +158,28 @@ class SmartChargeEnergySummary {
       var positiveDelta = 0.0;
       var resetDetected = false;
       for (var index = 1; index < sorted.length; index++) {
-        final delta = sorted[index].energyWh - sorted[index - 1].energyWh;
+        final previous = sorted[index - 1].energyWh;
+        final delta = sorted[index].energyWh - previous;
         if (delta >= 0) {
           positiveDelta += delta;
-        } else {
+        } else if (delta < -max(25.0, previous.abs() * 0.20)) {
+          // Shelly readings can jitter backwards by a few Wh. Only a large
+          // drop relative to the previous total is a real counter reset.
           resetDetected = true;
         }
       }
-      if (gridWh <= 0 || resetDetected) gridWh = positiveDelta;
+      if (resetDetected) {
+        gridWh = positiveDelta;
+      } else if (gridWh <= 0) {
+        gridWh = max(0, sorted.last.energyWh - sorted.first.energyWh);
+      }
       if (resetDetected) quality = 'partial';
     }
     if (gridWh < 0) gridWh = 0;
 
     final storedWh = gridWh * 0.90;
-    final capacity = session.estimatedCapacityWh ?? 0;
+    final capacity =
+        session.effectiveCapacityWh ?? session.estimatedCapacityWh ?? 0;
     final estimatedEndSoc = capacity > 0
         ? (session.startSoc + storedWh / capacity * 100)
               .clamp(0, 100)
@@ -195,6 +205,7 @@ class SmartChargeEnergySummary {
             independentGain >= 10 &&
             coverage >= 0.70 &&
             gridWh > 0 &&
+            quality != 'partial' &&
             duration >= const Duration(minutes: 20)
         ? storedWh / (independentGain / 100)
         : null;

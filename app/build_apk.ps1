@@ -21,7 +21,7 @@ param(
     [string]$ReleaseNotes = '',         # Ghi chú phiên bản, có thể truyền khi chạy
     [switch]$ForceUpdate,                # Đánh dấu bản này là bắt buộc cập nhật
     [int]$MinSupportedBuild = 0          # 0 = giữ policy hiện tại; >0 = cập nhật build tối thiểu
-)
+) 
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'

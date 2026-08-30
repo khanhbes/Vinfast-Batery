@@ -37,6 +37,13 @@ def reconcile_once(service, uid: str):
         session.relay_verified = True
         session.version += 1
         service.repository.save_session(uid, session)
+        service.repository.upsert_charge_log(uid, session)
+        try:
+            service.ingest_personal_session(uid, session.session_id)
+        except Exception:
+            # Terminal state and OFF verification are never rolled back by a
+            # training pipeline failure. The job can be retried independently.
+            pass
     return session
 
 
@@ -44,6 +51,7 @@ def run_forever(service, user_ids, interval_seconds: int = 15):
     while True:
         for uid in user_ids():
             reconcile_once(service, uid)
+        process_personal_training_jobs_once(service)
         time.sleep(interval_seconds)
 
 
@@ -82,13 +90,55 @@ def train_personal_adapter_once(service, uid: str, vehicle_id: str):
     candidate_mape = statistics.mean(candidate_errors)
     current_mape = profile.validation_mape if profile.active and profile.validation_mape is not None else float("inf")
     if candidate_mape + 0.25 >= current_mape or candidate_mape > 35:
+        profile.last_training_error = "candidate_did_not_improve"
+        profile.last_trained_at = utcnow()
+        profile.updated_at = profile.last_trained_at
+        service.repository.save_personal_profile(profile)
         service.repository.append_audit(uid, "personal_adapter_rejected", vehicle_id=vehicle_id, candidate_mape=candidate_mape)
         return profile
     profile.eta_bias_ratio = candidate_bias
+    profile.global_time_scale = 1.0 + candidate_bias
     profile.validation_mape = candidate_mape
     profile.adapter_version = f"personal-v{profile.valid_sessions}-{int(time.time())}"
     profile.active = True
-    profile.updated_at = utcnow()
+    profile.profile_version += 1
+    profile.last_training_error = None
+    profile.last_trained_at = utcnow()
+    profile.updated_at = profile.last_trained_at
     service.repository.save_personal_profile(profile)
     service.repository.append_audit(uid, "personal_adapter_promoted", vehicle_id=vehicle_id, adapter_version=profile.adapter_version, validation_mape=candidate_mape)
     return profile
+
+
+def process_personal_training_jobs_once(service, limit: int = 20) -> int:
+    """Processes owner/vehicle-scoped pending jobs with explicit outcomes."""
+    db = service.repository.db
+    if not db:
+        return 0
+    jobs = (db.collection("personalChargingTrainingJobs")
+            .where("state", "==", "pending").limit(limit).stream())
+    processed = 0
+    for job in jobs:
+        data = job.to_dict() or {}
+        uid = str(data.get("ownerUid") or "")
+        vehicle_id = str(data.get("vehicleId") or "")
+        if not uid or not vehicle_id:
+            job.reference.set({"state": "failed", "error": "missing_owner_or_vehicle", "updatedAt": utcnow()}, merge=True)
+            continue
+        job.reference.set({"state": "processing", "updatedAt": utcnow()}, merge=True)
+        try:
+            profile = train_personal_adapter_once(service, uid, vehicle_id)
+            job.reference.set({
+                "state": "completed",
+                "adapterVersion": profile.adapter_version if profile else None,
+                "profileVersion": profile.profile_version if profile else None,
+                "updatedAt": utcnow(),
+            }, merge=True)
+            processed += 1
+        except Exception as error:
+            job.reference.set({
+                "state": "failed",
+                "error": type(error).__name__,
+                "updatedAt": utcnow(),
+            }, merge=True)
+    return processed

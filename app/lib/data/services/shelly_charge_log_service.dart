@@ -28,6 +28,26 @@ class ShellyChargeLogService {
   final Map<String, List<SmartChargeRawStatusSample>> _raw = {};
   final Map<String, List<SmartChargeTelemetryPoint>> _pending = {};
 
+  /// Creates the canonical ChargeLog as soon as the device timer is verified.
+  /// The terminal writer later merges into this exact document, so an active
+  /// session never becomes a second history row.
+  Future<void> saveActiveSession(SmartChargingSession session) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+    await _firestore.collection('ChargeLogs').doc(session.sessionId).set({
+      ..._basePayload(session, uid),
+      'status': 'active',
+      'sessionState': session.state.wireValue,
+      'endTime': null,
+      'actualStopAt': null,
+      'gridEnergyWh': session.energyUsedWh,
+      'energyWh': session.energyUsedWh,
+      'estimatedEndSoc': session.estimatedSoc,
+      'smartChargingSession': session.toJson(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
   Future<void> saveTerminalSession(SmartChargingSession session) async {
     if (!session.state.isTerminal) return;
     // Queue first so an auth/network failure can never lose a terminal session.
@@ -53,6 +73,8 @@ class ShellyChargeLogService {
           (summary.estimatedEndSoc ?? session.estimatedSoc ?? session.targetSoc)
               .round(),
       'stopReason': session.stopReason?.wireValue,
+      'status': 'terminal',
+      'sessionState': session.state.wireValue,
       'gridEnergyWh': summary.gridEnergyWh,
       'energyWh': summary.gridEnergyWh,
       'estimatedStoredWh': summary.estimatedStoredWh,
@@ -91,6 +113,21 @@ class ShellyChargeLogService {
         'runtimeHealth': session.runtimeHealth,
         'predictionWarnings': session.predictionWarnings,
         'fallbackReason': session.fallbackReason,
+        'profileVersion': session.profileVersion,
+        'adapterVersion': session.adapterVersion,
+        'personalizationStage': session.personalizationStage,
+        'baseAiMinutes': session.baseAiMinutes,
+        'physicsMinutes': session.physicsMinutes,
+        'personalMinutes': session.personalMinutes,
+        'finalEtaMinutes': session.finalMinutes,
+        'fusionWeights': session.fusionWeights,
+        'effectiveCapacityWh': session.effectiveCapacityWh,
+        'nominalCapacityWh': session.nominalCapacityWh,
+        'stateOfHealth': session.stateOfHealth,
+        'userStopReason': session.userStopReason.wireValue,
+        'trainingEligibility': session.trainingEligible,
+        'trainingExclusionReason': session.trainingReason,
+        'energyQuality': session.energyQuality,
         'strategy': session.strategy.wireValue,
         'timerVerified': session.timerVerified,
         'relayVerified': session.relayVerified,
@@ -143,7 +180,32 @@ class ShellyChargeLogService {
     final pending = _pending.putIfAbsent(session.sessionId, () => []);
     pending.add(point);
     await _persistPending(session.sessionId, pending);
+    await _updateLiveSummary(session, latest, point);
     if (pending.length >= 10) await flushPendingTelemetry(session.sessionId);
+  }
+
+  Future<void> _updateLiveSummary(
+    SmartChargingSession session,
+    SmartChargerStatus status,
+    SmartChargeTelemetryPoint point,
+  ) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+    await _firestore.collection('ChargeLogs').doc(session.sessionId).set({
+      ..._basePayload(session, uid),
+      'status': 'active',
+      'sessionState': session.state.wireValue,
+      'gridEnergyWh': session.energyUsedWh,
+      'energyWh': session.energyUsedWh,
+      'estimatedEndSoc': point.estimatedSoc,
+      'latestPowerW': status.powerW,
+      'latestVoltageV': status.voltageV,
+      'latestCurrentA': status.currentA,
+      'latestTemperatureC': status.shellyTemperatureC,
+      'timerRemainingSeconds': status.timerRemaining?.inSeconds,
+      'smartChargingSession': session.toJson(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
   double? _estimatedSoc(SmartChargingSession session, double energyWh) {
@@ -219,33 +281,109 @@ class ShellyChargeLogService {
   }) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return const SmartChargeHistoryPage(items: []);
-    Query<Map<String, dynamic>> query = _firestore
+    final cursorTime = cursor == null ? null : DateTime.tryParse(cursor);
+    try {
+      Query<Map<String, dynamic>> query = _firestore
+          .collection('ChargeLogs')
+          .where('ownerUid', isEqualTo: uid)
+          .where('source', isEqualTo: _source)
+          .where('isDeleted', isEqualTo: false);
+      if (strategy == ChargingStrategy.aiTarget) {
+        query = query.where(
+          'strategy',
+          whereIn: const [
+            'ai_target',
+            'target_soc',
+            'deadline',
+            'smart_combined',
+          ],
+        );
+      } else if (strategy != null) {
+        query = query.where('strategy', isEqualTo: strategy.wireValue);
+      }
+      query = query.orderBy('startTime', descending: true);
+      if (cursorTime != null) {
+        query = query.startAfter([Timestamp.fromDate(cursorTime)]);
+      }
+      final snapshot = await query.limit(limit).get();
+      return _historyPageFromDocuments(
+        snapshot.docs,
+        limit: limit,
+        hasMore: snapshot.docs.length == limit,
+      );
+    } on FirebaseException catch (error) {
+      // A newly-added composite index may take several minutes to become
+      // available (or may not have been deployed yet). History must remain
+      // usable, so fall back to the security-rule-compatible equality query
+      // and perform source/strategy/order/pagination locally.
+      if (error.code != 'failed-precondition') rethrow;
+      return _getHistoryPageWithoutCompositeIndex(
+        uid: uid,
+        limit: limit,
+        cursorTime: cursorTime,
+        strategy: strategy,
+      );
+    }
+  }
+
+  Future<SmartChargeHistoryPage> _getHistoryPageWithoutCompositeIndex({
+    required String uid,
+    required int limit,
+    required DateTime? cursorTime,
+    required ChargingStrategy? strategy,
+  }) async {
+    final snapshot = await _firestore
         .collection('ChargeLogs')
         .where('ownerUid', isEqualTo: uid)
-        .where('source', isEqualTo: _source)
-        .where('isDeleted', isEqualTo: false);
+        .where('isDeleted', isEqualTo: false)
+        .limit(200)
+        .get();
+    final documents =
+        snapshot.docs.where((document) {
+          final data = document.data();
+          if (data['source'] != _source || !_matchesStrategy(data, strategy)) {
+            return false;
+          }
+          final startTime = (data['startTime'] as Timestamp?)?.toDate();
+          return cursorTime == null ||
+              (startTime != null && startTime.isBefore(cursorTime));
+        }).toList()..sort((left, right) {
+          final leftTime = (left.data()['startTime'] as Timestamp?)?.toDate();
+          final rightTime = (right.data()['startTime'] as Timestamp?)?.toDate();
+          if (leftTime == null) return 1;
+          if (rightTime == null) return -1;
+          return rightTime.compareTo(leftTime);
+        });
+    final selected = documents.take(limit).toList();
+    return _historyPageFromDocuments(
+      selected,
+      limit: limit,
+      hasMore: documents.length > selected.length,
+    );
+  }
+
+  bool _matchesStrategy(Map<String, dynamic> data, ChargingStrategy? strategy) {
+    if (strategy == null) return true;
+    final value = data['strategy'];
     if (strategy == ChargingStrategy.aiTarget) {
-      query = query.where(
-        'strategy',
-        whereIn: const [
-          'ai_target',
-          'target_soc',
-          'deadline',
-          'smart_combined',
-        ],
-      );
-    } else if (strategy != null) {
-      query = query.where('strategy', isEqualTo: strategy.wireValue);
+      return const {
+        'ai_target',
+        'target_soc',
+        'deadline',
+        'smart_combined',
+      }.contains(value);
     }
-    query = query.orderBy('startTime', descending: true);
-    final cursorTime = cursor == null ? null : DateTime.tryParse(cursor);
-    if (cursorTime != null) {
-      query = query.startAfter([Timestamp.fromDate(cursorTime)]);
-    }
-    final snapshot = await query.limit(limit).get();
+    return value == strategy.wireValue;
+  }
+
+  SmartChargeHistoryPage _historyPageFromDocuments(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> documents, {
+    required int limit,
+    required bool hasMore,
+  }) {
     final sessions = <SmartChargingSession>[];
     var skipped = 0;
-    for (final document in snapshot.docs) {
+    for (final document in documents) {
       final raw = document.data()['smartChargingSession'];
       if (raw is! Map) {
         skipped++;
@@ -259,9 +397,9 @@ class ShellyChargeLogService {
         skipped++;
       }
     }
-    final next = snapshot.docs.length < limit || snapshot.docs.isEmpty
+    final next = !hasMore || documents.isEmpty
         ? null
-        : ((snapshot.docs.last.data()['startTime'] as Timestamp?)
+        : ((documents.last.data()['startTime'] as Timestamp?)
               ?.toDate()
               .toUtc()
               .toIso8601String());

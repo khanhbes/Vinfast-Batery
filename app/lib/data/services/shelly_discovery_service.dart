@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:multicast_dns/multicast_dns.dart';
 
@@ -10,7 +11,22 @@ class ShellyDiscoveryService {
   Future<List<DiscoveredShellyDevice>> discover({
     Duration timeout = const Duration(seconds: 5),
   }) async {
-    final client = MDnsClient();
+    final client = MDnsClient(
+      rawDatagramSocketFactory:
+          (
+            dynamic host,
+            int port, {
+            bool? reuseAddress,
+            bool? reusePort,
+            int? ttl,
+          }) => RawDatagramSocket.bind(
+            host,
+            port,
+            reuseAddress: true,
+            reusePort: false,
+            ttl: ttl ?? 1,
+          ),
+    );
     final devices = <String, DiscoveredShellyDevice>{};
     try {
       await client.start();
@@ -58,10 +74,12 @@ class ShellyDiscoveryService {
           if (device.isPlugSGen3) devices[id] = device;
         }
       }
-    } on TimeoutException {
-      // A quiet LAN is a valid empty discovery result.
+    } catch (_) {
+      // Gracefully handle timeout or platform mDNS/multicast restrictions
     } finally {
-      client.stop();
+      try {
+        client.stop();
+      } catch (_) {}
     }
     return devices.values.toList(growable: false);
   }

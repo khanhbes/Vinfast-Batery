@@ -222,6 +222,7 @@ def stop_smart_session(
     return smart_controller.stop(
         session_id,
         expected_version=request.expected_version if request else None,
+        user_stop_reason=request.user_stop_reason if request else "none",
     )
 
 

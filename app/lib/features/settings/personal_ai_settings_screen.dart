@@ -136,14 +136,13 @@ class _PersonalAiSettingsState extends State<PersonalAiSettingsScreen> {
             const Divider(),
             _row(
               'Trạng thái',
-              profile?.active == true
-                  ? 'Đang cá nhân hóa'
-                  : 'Đang thu thập mẫu',
+              profile?.friendlyStageLabel ?? 'AI đang làm quen với xe của bạn',
             ),
             _row(
               'Phiên đủ điều kiện',
-              '${profile?.validSessions ?? 0}/5 tối thiểu',
+              '${profile?.validSessions ?? 0} · học sâu từ 5 phiên',
             ),
+            _row('Đoạn SOC đã học', '${profile?.trainingSegments ?? 0}'),
             _row('Phiên học công suất', '${profile?.powerSessions ?? 0}'),
             _row('Adapter', profile?.adapterVersion ?? 'Chưa có'),
             _row(
@@ -152,6 +151,26 @@ class _PersonalAiSettingsState extends State<PersonalAiSettingsScreen> {
                   ? 'Chưa đủ dữ liệu'
                   : '${profile!.validationMape!.toStringAsFixed(1)}%',
             ),
+            if (profile?.estimatedEffectiveCapacityWh != null)
+              _row(
+                'Dung lượng hiệu dụng ước tính',
+                '${profile!.estimatedEffectiveCapacityWh!.round()} Wh',
+              ),
+            if (profile?.lastTrainedAt != null)
+              _row(
+                'Cập nhật gần nhất',
+                profile!.lastTrainedAt!.toLocal().toString().substring(0, 16),
+              ),
+            if (profile?.lastTrainingError != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                'Lần học gần nhất chưa thành công; app vẫn giữ adapter tốt trước đó.',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
             OutlinedButton.icon(
               onPressed: _busy ? null : _delete,

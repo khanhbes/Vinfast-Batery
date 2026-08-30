@@ -50,7 +50,15 @@ enum ChargingStopReason {
   relayOff('relay_off'),
   safetyCutoff('safety_cutoff'),
   gatewayRestartExpired('gateway_restart_expired'),
-  commandFailed('command_failed');
+  commandFailed('command_failed'),
+  overTemperature('over_temperature'),
+  batteryOverTemperature('battery_over_temperature'),
+  overVoltage('over_voltage'),
+  underVoltage('under_voltage'),
+  overCurrent('over_current'),
+  overPower('over_power'),
+  telemetryStale('telemetry_stale'),
+  unexpectedRelayState('unexpected_relay_state');
 
   const ChargingStopReason(this.wireValue);
   final String wireValue;
@@ -62,6 +70,20 @@ enum ChargingStopReason {
       orElse: () => throw const FormatException('Invalid stop reason.'),
     );
   }
+}
+
+enum UserStopReason {
+  needVehicle('need_vehicle'),
+  enoughCharge('enough_charge'),
+  safetyConcern('safety_concern'),
+  other('other'),
+  none('none');
+
+  const UserStopReason(this.wireValue);
+  final String wireValue;
+
+  static UserStopReason fromJson(Object? value) =>
+      values.firstWhere((item) => item.wireValue == value, orElse: () => none);
 }
 
 class SmartChargingPlanDraft {
@@ -131,6 +153,10 @@ class SmartChargingPlanPreview {
     this.adapterVersion,
     this.capacityConfidence,
     this.efficiencyConfidence,
+    this.effectiveCapacityWh,
+    this.personalizationStage = 'base',
+    this.guardrailClamped = false,
+    this.guardrailWarnings = const [],
   });
 
   final SmartChargingPlanDraft draft;
@@ -156,6 +182,16 @@ class SmartChargingPlanPreview {
   final String? adapterVersion;
   final double? capacityConfidence;
   final double? efficiencyConfidence;
+  final double? effectiveCapacityWh;
+  final String personalizationStage;
+  final bool guardrailClamped;
+  final List<String> guardrailWarnings;
+
+  String get personalizationLabel => switch (personalizationStage) {
+    'personalized' => 'Đã cá nhân hóa cho xe này',
+    'calibrating' => 'AI đang học thói quen sạc',
+    _ => 'AI đang làm quen với xe của bạn',
+  };
 
   /// Present for server-generated previews. It prevents clients from changing
   /// the prediction between preview and Start.
@@ -373,6 +409,25 @@ class SmartChargingSession {
     this.actualEndSoc,
     this.trainingEligible = false,
     this.telemetryCoverage = 0,
+    this.ownerUid,
+    this.personalizationStage = 'base',
+    this.baseAiMinutes,
+    this.physicsMinutes,
+    this.personalMinutes,
+    this.finalMinutes,
+    this.fusionWeights = const {},
+    this.effectiveCapacityWh,
+    this.nominalCapacityWh,
+    this.stateOfHealth,
+    this.shellyTemperatureC,
+    this.batteryTemperatureC,
+    this.averagePowerW,
+    this.peakPowerW,
+    this.averageVoltageV,
+    this.averageCurrentA,
+    this.userStopReason = UserStopReason.none,
+    this.trainingState = 'pending',
+    this.trainingReason,
   });
 
   final String sessionId;
@@ -422,6 +477,25 @@ class SmartChargingSession {
   final double? actualEndSoc;
   final bool trainingEligible;
   final double telemetryCoverage;
+  final String? ownerUid;
+  final String personalizationStage;
+  final double? baseAiMinutes;
+  final double? physicsMinutes;
+  final double? personalMinutes;
+  final double? finalMinutes;
+  final Map<String, double> fusionWeights;
+  final double? effectiveCapacityWh;
+  final double? nominalCapacityWh;
+  final double? stateOfHealth;
+  final double? shellyTemperatureC;
+  final double? batteryTemperatureC;
+  final double? averagePowerW;
+  final double? peakPowerW;
+  final double? averageVoltageV;
+  final double? averageCurrentA;
+  final UserStopReason userStopReason;
+  final String trainingState;
+  final String? trainingReason;
 
   Duration remaining([DateTime? now]) {
     final value = effectiveStopAt.difference(now ?? DateTime.now());
@@ -511,6 +585,30 @@ class SmartChargingSession {
       actualEndSoc: (json['actual_end_soc'] as num?)?.toDouble(),
       trainingEligible: json['training_eligible'] == true,
       telemetryCoverage: (json['telemetry_coverage'] as num?)?.toDouble() ?? 0,
+      ownerUid: json['owner_uid']?.toString(),
+      personalizationStage: json['personalization_stage']?.toString() ?? 'base',
+      baseAiMinutes: (json['base_ai_minutes'] as num?)?.toDouble(),
+      physicsMinutes: (json['physics_minutes'] as num?)?.toDouble(),
+      personalMinutes: (json['personal_minutes'] as num?)?.toDouble(),
+      finalMinutes: (json['final_minutes'] as num?)?.toDouble(),
+      fusionWeights: json['fusion_weights'] is Map
+          ? Map<String, dynamic>.from(
+              json['fusion_weights'] as Map,
+            ).map((key, value) => MapEntry(key, (value as num).toDouble()))
+          : const {},
+      effectiveCapacityWh: (json['effective_capacity_wh'] as num?)?.toDouble(),
+      nominalCapacityWh: (json['nominal_capacity_wh'] as num?)?.toDouble(),
+      stateOfHealth: (json['state_of_health'] as num?)?.toDouble(),
+      shellyTemperatureC: (json['shelly_temperature_c'] as num?)?.toDouble(),
+      batteryTemperatureC: (json['battery_temperature_c'] as num?)?.toDouble(),
+      averagePowerW: (json['average_power_w'] as num?)?.toDouble(),
+      peakPowerW: (json['peak_power_w'] as num?)?.toDouble(),
+      averageVoltageV: (json['average_voltage_v'] as num?)?.toDouble(),
+      averageCurrentA: (json['average_current_a'] as num?)?.toDouble(),
+      userStopReason: UserStopReason.fromJson(json['user_stop_reason']),
+      trainingState:
+          json['personal_ai_training_state']?.toString() ?? 'pending',
+      trainingReason: json['personal_ai_training_reason']?.toString(),
     );
   }
 
@@ -589,6 +687,27 @@ class SmartChargingSession {
     if (actualEndSoc != null) 'actual_end_soc': actualEndSoc,
     'training_eligible': trainingEligible,
     'telemetry_coverage': telemetryCoverage,
+    if (ownerUid != null) 'owner_uid': ownerUid,
+    'personalization_stage': personalizationStage,
+    if (baseAiMinutes != null) 'base_ai_minutes': baseAiMinutes,
+    if (physicsMinutes != null) 'physics_minutes': physicsMinutes,
+    if (personalMinutes != null) 'personal_minutes': personalMinutes,
+    if (finalMinutes != null) 'final_minutes': finalMinutes,
+    'fusion_weights': fusionWeights,
+    if (effectiveCapacityWh != null)
+      'effective_capacity_wh': effectiveCapacityWh,
+    if (nominalCapacityWh != null) 'nominal_capacity_wh': nominalCapacityWh,
+    if (stateOfHealth != null) 'state_of_health': stateOfHealth,
+    if (shellyTemperatureC != null) 'shelly_temperature_c': shellyTemperatureC,
+    if (batteryTemperatureC != null)
+      'battery_temperature_c': batteryTemperatureC,
+    if (averagePowerW != null) 'average_power_w': averagePowerW,
+    if (peakPowerW != null) 'peak_power_w': peakPowerW,
+    if (averageVoltageV != null) 'average_voltage_v': averageVoltageV,
+    if (averageCurrentA != null) 'average_current_a': averageCurrentA,
+    'user_stop_reason': userStopReason.wireValue,
+    'personal_ai_training_state': trainingState,
+    if (trainingReason != null) 'personal_ai_training_reason': trainingReason,
   };
 
   SmartChargingSession copyWith({
@@ -606,6 +725,9 @@ class SmartChargingSession {
     String? lastError,
     String? transport,
     bool? timerVerified,
+    UserStopReason? userStopReason,
+    String? trainingState,
+    String? trainingReason,
   }) => SmartChargingSession(
     sessionId: sessionId,
     vehicleId: vehicleId,
@@ -654,5 +776,24 @@ class SmartChargingSession {
     actualEndSoc: actualEndSoc,
     trainingEligible: trainingEligible,
     telemetryCoverage: telemetryCoverage,
+    ownerUid: ownerUid,
+    personalizationStage: personalizationStage,
+    baseAiMinutes: baseAiMinutes,
+    physicsMinutes: physicsMinutes,
+    personalMinutes: personalMinutes,
+    finalMinutes: finalMinutes,
+    fusionWeights: fusionWeights,
+    effectiveCapacityWh: effectiveCapacityWh,
+    nominalCapacityWh: nominalCapacityWh,
+    stateOfHealth: stateOfHealth,
+    shellyTemperatureC: shellyTemperatureC,
+    batteryTemperatureC: batteryTemperatureC,
+    averagePowerW: averagePowerW,
+    peakPowerW: peakPowerW,
+    averageVoltageV: averageVoltageV,
+    averageCurrentA: averageCurrentA,
+    userStopReason: userStopReason ?? this.userStopReason,
+    trainingState: trainingState ?? this.trainingState,
+    trainingReason: trainingReason ?? this.trainingReason,
   );
 }

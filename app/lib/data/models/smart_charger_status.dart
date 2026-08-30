@@ -18,7 +18,9 @@ class SmartChargerStatus {
     this.timerRemaining,
     this.transport,
     this.deviceName,
-  });
+    double? shellyTemperatureC,
+    this.batteryTemperatureC,
+  }) : shellyTemperatureC = shellyTemperatureC ?? temperatureC;
 
   final bool online;
   final bool relay;
@@ -27,6 +29,8 @@ class SmartChargerStatus {
   final double currentA;
   final double frequencyHz;
   final double? temperatureC;
+  final double? shellyTemperatureC;
+  final double? batteryTemperatureC;
   final double energyWh;
   final Duration? timerRemaining;
   final ShellyTransport? transport;
@@ -46,8 +50,24 @@ class SmartChargerStatus {
       currentA: _asDouble(json['current_a']),
       frequencyHz: _asDouble(json['frequency_hz']),
       temperatureC: json['temperature_c'] == null
-          ? null
+          ? (json['shelly_temperature_c'] == null
+                ? null
+                : _asDouble(json['shelly_temperature_c']))
           : _asDouble(json['temperature_c']),
+      shellyTemperatureC:
+          json['shelly_temperature_c'] == null &&
+              json['shellyTemperatureC'] == null
+          ? null
+          : _asDouble(
+              json['shelly_temperature_c'] ?? json['shellyTemperatureC'],
+            ),
+      batteryTemperatureC:
+          json['battery_temperature_c'] == null &&
+              json['batteryTemperatureC'] == null
+          ? null
+          : _asDouble(
+              json['battery_temperature_c'] ?? json['batteryTemperatureC'],
+            ),
       energyWh: _asDouble(json['energy_wh']),
       timerRemaining: json['timer_remaining'] == null
           ? null

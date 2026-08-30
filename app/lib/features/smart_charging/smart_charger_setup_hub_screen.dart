@@ -163,13 +163,14 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
   }
 
   Future<void> _scan() async {
-    final permission = await Permission.nearbyWifiDevices.request();
-    if (permission.isPermanentlyDenied) {
-      AppPopup.showError('Quyền Wi-Fi lân cận bị tắt');
-      return;
-    }
+    if (busy) return;
     setState(() => busy = true);
     try {
+      final permission = await Permission.nearbyWifiDevices.request();
+      if (permission.isPermanentlyDenied) {
+        AppPopup.showError('Quyền Wi-Fi lân cận bị tắt');
+        return;
+      }
       devices = await direct.discoverDevices();
       AppPopup.showInfo(
         devices.isEmpty
@@ -178,6 +179,13 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
         detail: devices.isEmpty
             ? 'Bạn vẫn có thể nhập IP riêng hoặc hostname .local.'
             : null,
+      );
+    } catch (e) {
+      devices = const [];
+      AppPopup.showInfo(
+        'Không tìm thấy Plug S Gen3',
+        detail:
+            'Bạn có thể nhập trực tiếp địa chỉ IP hoặc hostname .local của thiết bị.',
       );
     } finally {
       if (mounted) setState(() => busy = false);

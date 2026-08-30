@@ -36,6 +36,10 @@ class FakeShelly:
         self.fail_set = False
         self.fail_read = False
         self.read_failures = 0
+        self.power_w = 500.0
+        self.voltage_v = 230.0
+        self.current_a = 2.2
+        self.temperature_c = 35.0
 
     def get_status(self):
         if self.read_failures > 0:
@@ -46,9 +50,10 @@ class FakeShelly:
         return ChargerStatus(
             online=self.online,
             relay=self.relay,
-            power_w=500 if self.relay else 0,
-            voltage_v=230,
-            current_a=2.2 if self.relay else 0,
+            power_w=self.power_w if self.relay else 0,
+            voltage_v=self.voltage_v,
+            current_a=self.current_a if self.relay else 0,
+            temperature_c=self.temperature_c,
             energy_wh=self.energy_wh,
         )
 
@@ -256,6 +261,40 @@ def test_meter_reset_never_creates_negative_energy(tmp_path):
     shelly.energy_wh = 20
     result = ctrl.tick()
     assert result.energy_used_wh == 10
+
+
+def test_small_meter_jitter_is_not_a_counter_reset(tmp_path):
+    ctrl, shelly, clock = controller(tmp_path)
+    ctrl.start(request(clock), "key")
+    shelly.energy_wh = 200
+    assert ctrl.tick().energy_used_wh == 100
+    shelly.energy_wh = 198
+    result = ctrl.tick()
+    assert result.energy_used_wh == 100
+    assert result.energy_quality == "good"
+
+
+def test_over_temperature_auto_off_after_two_samples(tmp_path):
+    ctrl, shelly, clock = controller(tmp_path)
+    ctrl.start(request(clock), "key")
+    shelly.temperature_c = 76
+    first = ctrl.tick()
+    assert first.state == ChargingSessionState.ACTIVE
+    terminal = ctrl.tick()
+    assert terminal.state == ChargingSessionState.INTERRUPTED
+    assert terminal.stop_reason == ChargingStopReason.OVER_TEMPERATURE
+    assert terminal.safety_events[-1].off_verified is True
+    assert shelly.relay is False
+
+
+def test_over_voltage_auto_off_is_audited(tmp_path):
+    ctrl, shelly, clock = controller(tmp_path)
+    ctrl.start(request(clock), "key")
+    shelly.voltage_v = 260
+    ctrl.tick()
+    terminal = ctrl.tick()
+    assert terminal.stop_reason == ChargingStopReason.OVER_VOLTAGE
+    assert terminal.safety_events[-1].observed_value == 260
 
 
 def test_shadow_mode_records_cutoff_without_turning_off(tmp_path):

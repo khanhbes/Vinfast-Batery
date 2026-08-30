@@ -44,6 +44,24 @@ class SmartChargerConnectionTest {
   final bool powerMeterAvailable;
 }
 
+class SmartChargeDirectSafetyPolicy {
+  const SmartChargeDirectSafetyPolicy({
+    this.cutoffCurrentA = 11.5,
+    this.cutoffPowerW = 2450,
+    this.cutoffShellyTemperatureC = 75,
+    this.cutoffVoltageMinV = 190,
+    this.cutoffVoltageMaxV = 255,
+    this.consecutiveSamples = 2,
+  });
+
+  final double cutoffCurrentA;
+  final double cutoffPowerW;
+  final double cutoffShellyTemperatureC;
+  final double cutoffVoltageMinV;
+  final double cutoffVoltageMaxV;
+  final int consecutiveSamples;
+}
+
 class SmartChargerService {
   SmartChargerService({
     http.Client? client,
@@ -54,6 +72,8 @@ class SmartChargerService {
     Future<SharedPreferences> Function()? preferences,
     DateTime Function()? clock,
     Future<void> Function(Duration)? delay,
+    SmartChargeDirectSafetyPolicy safetyPolicy =
+        const SmartChargeDirectSafetyPolicy(),
     @Deprecated('Gateway base URL is no longer used.') String? baseUrl,
     @Deprecated('Gateway bearer token is no longer used.')
     Future<String?> Function()? tokenProvider,
@@ -63,7 +83,8 @@ class SmartChargerService {
        _discovery = discovery ?? const ShellyDiscoveryService(),
        _preferences = preferences ?? SharedPreferences.getInstance,
        _clock = clock ?? DateTime.now,
-       _delay = delay ?? Future<void>.delayed;
+       _delay = delay ?? Future<void>.delayed,
+       _safetyPolicy = safetyPolicy;
 
   static const _activeSessionKey = 'smart_charger.active_shelly_session.v1';
   static const maxSessionDuration = Duration(hours: 10);
@@ -74,6 +95,7 @@ class SmartChargerService {
   final Future<SharedPreferences> Function() _preferences;
   final DateTime Function() _clock;
   final Future<void> Function(Duration) _delay;
+  final SmartChargeDirectSafetyPolicy _safetyPolicy;
   ShellyTransport? _lastTransport;
   int _criticalSafetySamples = 0;
 
@@ -193,13 +215,16 @@ class SmartChargerService {
       return;
     }
     final critical =
-        status.currentA >= 11.5 ||
-        status.powerW >= 2450 ||
-        (status.temperatureC != null && status.temperatureC! >= 75) ||
+        status.currentA >= _safetyPolicy.cutoffCurrentA ||
+        status.powerW >= _safetyPolicy.cutoffPowerW ||
+        (status.shellyTemperatureC != null &&
+            status.shellyTemperatureC! >=
+                _safetyPolicy.cutoffShellyTemperatureC) ||
         (status.voltageV > 0 &&
-            (status.voltageV < 190 || status.voltageV > 255));
+            (status.voltageV < _safetyPolicy.cutoffVoltageMinV ||
+                status.voltageV > _safetyPolicy.cutoffVoltageMaxV));
     _criticalSafetySamples = critical ? _criticalSafetySamples + 1 : 0;
-    if (_criticalSafetySamples < 2) return;
+    if (_criticalSafetySamples < _safetyPolicy.consecutiveSamples) return;
     await _bestEffortOff(profile);
     final verified = await _getStatus(profile);
     if (verified.relay) {
