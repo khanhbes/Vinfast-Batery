@@ -4,7 +4,6 @@ import 'dart:ui';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/smart_charger_status.dart';
 import '../models/smart_charging_session.dart';
@@ -20,6 +19,8 @@ class SmartChargeTelemetryForegroundService {
 
   static const _serviceId = 24071;
   static const _route = '/';
+  static const _sessionIdKey = 'smartChargeSessionId';
+  static const _sessionPayloadKey = 'smartChargeSessionPayload';
   static final _statusController =
       StreamController<SmartChargerStatus>.broadcast();
   static bool _initialized = false;
@@ -59,8 +60,16 @@ class SmartChargeTelemetryForegroundService {
   static Future<void> start(SmartChargingSession session) async {
     initialize();
     await FlutterForegroundTask.saveData(
-      key: 'smartChargeSessionId',
+      key: _sessionIdKey,
       value: session.sessionId,
+    );
+    // The task isolate cannot depend on the UI controller or a Firestore
+    // session query during startup. Persist a self-contained, non-secret
+    // snapshot alongside the id so it can continue telemetry after the app
+    // is backgrounded or killed.
+    await FlutterForegroundTask.saveData(
+      key: _sessionPayloadKey,
+      value: jsonEncode(session.toJson()),
     );
     await FlutterForegroundTask.saveData(
       key: 'smartChargeSafetyStopAt',
@@ -107,7 +116,7 @@ void smartChargeTelemetryStartCallback() {
 }
 
 class _SmartChargeTelemetryTaskHandler extends TaskHandler {
-  static const _activeSessionKey = 'smart_charger.active_shelly_session.v1';
+  static const _sessionPayloadKey = 'smartChargeSessionPayload';
   SmartChargerService? _charger;
   ShellyChargeLogService? _logs;
   bool _polling = false;
@@ -133,8 +142,8 @@ class _SmartChargeTelemetryTaskHandler extends TaskHandler {
       final charger = _charger;
       final logs = _logs;
       if (charger == null || logs == null) return;
-      final encoded = (await SharedPreferences.getInstance()).getString(
-        _activeSessionKey,
+      final encoded = await FlutterForegroundTask.getData<String>(
+        key: _sessionPayloadKey,
       );
       final session = encoded == null
           ? null
@@ -146,7 +155,7 @@ class _SmartChargeTelemetryTaskHandler extends TaskHandler {
         return;
       }
 
-      // Never monitor beyond the immutable 7-hour safety boundary. The OFF
+      // Never monitor beyond the immutable 10-hour safety boundary. The OFF
       // command is idempotent and verified by the direct service.
       if (!timestamp.isBefore(session.absoluteSafetyStopAt)) {
         await charger.turnOffAndVerify();

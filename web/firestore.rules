@@ -9,8 +9,14 @@ service cloud.firestore {
     function isOwner(ownerUid) {
       return isAuth() && request.auth.uid == ownerUid;
     }
+    function activeVehicleLimit(uid) {
+      let configured = get(/databases/$(database)/documents/users/$(uid)).data.maxActiveVehicles;
+      return configured is int && configured >= 1 && configured <= 10 ? configured : 2;
+    }
     function notDeleted() {
-      return resource.data.isDeleted != true;
+      return resource.data.isDeleted != true &&
+        resource.data.isArchived != true &&
+        resource.data.archivedAt == null;
     }
     // True if the authenticated user owns the Vehicles/{vehicleId} document.
     // Used as a legacy fallback for child docs that may not yet carry ownerUid.
@@ -18,7 +24,10 @@ service cloud.firestore {
       return isAuth()
         && vehicleId is string
         && exists(/databases/$(database)/documents/Vehicles/$(vehicleId))
-        && get(/databases/$(database)/documents/Vehicles/$(vehicleId)).data.ownerUid == request.auth.uid;
+        && get(/databases/$(database)/documents/Vehicles/$(vehicleId)).data.ownerUid == request.auth.uid
+        && get(/databases/$(database)/documents/Vehicles/$(vehicleId)).data.isDeleted != true
+        && get(/databases/$(database)/documents/Vehicles/$(vehicleId)).data.isArchived != true
+        && get(/databases/$(database)/documents/Vehicles/$(vehicleId)).data.archivedAt == null;
     }
     // Read access if the doc has ownerUid matching the user, OR (legacy)
     // ownerUid is missing but vehicleId resolves to a Vehicle the user owns.
@@ -31,28 +40,82 @@ service cloud.firestore {
     function canCreateOwned() {
       return isAuth() && request.resource.data.ownerUid == request.auth.uid;
     }
+    function containsNoChargerSecrets() {
+      return !('cloudAuthKey' in request.resource.data) &&
+        !('cloud_auth_key' in request.resource.data) &&
+        !('localPassword' in request.resource.data) &&
+        !('local_password' in request.resource.data) &&
+        !('authorizationKey' in request.resource.data);
+    }
 
     // ── Users (profile sync từ app) ──
     match /users/{uid} {
-      allow read, update: if isAuth() && request.auth.uid == uid;
+      allow read: if isAuth() && request.auth.uid == uid;
+      allow update: if isAuth() && request.auth.uid == uid &&
+        (!('vehicles' in request.resource.data) ||
+         request.resource.data.vehicles.size() <= activeVehicleLimit(uid));
       allow create: if isAuth() && request.auth.uid == uid;
       allow delete: if false;
+
+      match /vehicleChargerBindings/{vehicleId} {
+        allow read: if isAuth() && request.auth.uid == uid && ownsVehicleId(vehicleId);
+        allow write: if isAuth() && request.auth.uid == uid &&
+          ownsVehicleId(vehicleId) && containsNoChargerSecrets();
+      }
+      match /shellyDevices/{deviceId} {
+        allow read: if isAuth() && request.auth.uid == uid;
+        // Device discovery, verification and revocation are authoritative
+        // backend operations. A client must not be able to self-assert a
+        // verified Shelly/capability and bypass the API safety gate.
+        allow write: if false;
+      }
+      match /smartChargingSessions/{sessionId} {
+        allow read: if isAuth() && request.auth.uid == uid;
+        // Runtime sessions are created/reconciled by the authenticated API
+        // (Admin SDK). The app reads this legacy collection only during the
+        // migration window and cannot forge an active session here.
+        allow create, update: if false;
+      }
+      match /chargingTrainingSamples/{sampleId} {
+        // Training samples are written by the authenticated API/backend only;
+        // the app submits them through Smart Charge endpoints.
+        allow read: if isAuth() && request.auth.uid == uid;
+        allow write: if false;
+      }
+      match /personalProfileVersions/{vehicleId} {
+        allow read: if isAuth() && request.auth.uid == uid;
+        allow write: if false;
+      }
+      match /personalProfileVersionHistory/{versionId} {
+        allow read: if isAuth() && request.auth.uid == uid;
+        allow write: if false;
+      }
     }
 
     // ── Vehicles ──
     match /Vehicles/{vehicleId} {
       allow read: if isAuth() && isOwner(resource.data.ownerUid);
       allow create: if isAuth() && request.resource.data.ownerUid == request.auth.uid;
-      allow update: if isAuth() && isOwner(resource.data.ownerUid);
-      allow delete: if isAuth() && isOwner(resource.data.ownerUid);
+      allow update: if isAuth() && isOwner(resource.data.ownerUid) &&
+        request.resource.data.ownerUid == request.auth.uid;
+      // Vehicles are archived via isDeleted/archivedAt; physical deletion is
+      // prohibited so histories and AI profiles remain recoverable.
+      allow delete: if false;
     }
 
     // ── ChargeLogs ──
     match /ChargeLogs/{logId} {
       allow read: if canReadOwned() && notDeleted();
       allow create: if canCreateOwned();
-      allow update: if isAuth() && isOwner(resource.data.ownerUid);
-      allow delete: if false;
+      allow update: if isAuth() && isOwner(resource.data.ownerUid) &&
+        request.resource.data.ownerUid == request.auth.uid;
+      // Privacy erase is an explicit, owner-confirmed terminal-session action
+      // in the app. It must be possible in Direct mode without granting a
+      // user the ability to erase an active charging record.
+      allow delete: if isAuth() && isOwner(resource.data.ownerUid) &&
+        (!('sessionState' in resource.data) ||
+         (resource.data.sessionState != 'arming' &&
+          resource.data.sessionState != 'active'));
 
       match /smartChargeTelemetry/{chunkId} {
         function parentLog() {
@@ -65,7 +128,11 @@ service cloud.firestore {
           parentLog().data.ownerUid == request.auth.uid &&
           request.resource.data.ownerUid == request.auth.uid &&
           request.resource.data.sessionId == logId;
-        allow delete: if false;
+        allow delete: if isAuth() &&
+          parentLog().data.ownerUid == request.auth.uid &&
+          (!('sessionState' in parentLog().data) ||
+           (parentLog().data.sessionState != 'arming' &&
+            parentLog().data.sessionState != 'active'));
       }
 
       // Safety events are append-only client evidence tied to the canonical
@@ -90,7 +157,8 @@ service cloud.firestore {
     match /ChargeSamples/{sampleId} {
       allow read: if canReadOwned() && notDeleted();
       allow create: if canCreateOwned();
-      allow update: if isAuth() && isOwner(resource.data.ownerUid);
+      allow update: if isAuth() && isOwner(resource.data.ownerUid) &&
+        request.resource.data.ownerUid == request.auth.uid;
       allow delete: if false;
     }
 

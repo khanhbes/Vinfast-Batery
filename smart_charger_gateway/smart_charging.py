@@ -18,6 +18,7 @@ from models import (
     SmartChargingSession,
     SafetyEvent,
     TERMINAL_SESSION_STATES,
+    MAX_SMART_CHARGE_MINUTES,
 )
 from safety_monitor import SafetyMonitor
 from shelly import ShellyClient, ShellyUnavailableError
@@ -47,7 +48,14 @@ class SmartChargingConfig:
             "SMART_CHARGE_MAX_SESSION_MINUTES",
             os.getenv("SMART_CHARGER_MAX_SESSION_MINUTES", ""),
         ).strip()
-        max_minutes = int(raw_max) if raw_max.isdigit() and int(raw_max) > 0 else None
+        configured = int(raw_max) if raw_max.isdigit() and int(raw_max) > 0 else None
+        # Configuration may tighten this limit, but can never widen the
+        # ten-hour safety invariant shared with the Cloud-first service.
+        max_minutes = (
+            min(configured, MAX_SMART_CHARGE_MINUTES)
+            if configured is not None
+            else None
+        )
         return cls(
             enabled=env_bool("ENABLE_SMART_CHARGING", True),
             automatic_cutoff=env_bool("ENABLE_AUTOMATIC_CUTOFF", False),

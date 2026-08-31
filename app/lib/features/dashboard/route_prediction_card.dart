@@ -5,11 +5,9 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/providers/app_providers.dart';
 import '../../data/models/trip_log_model.dart';
-import '../../data/models/vehicle_model.dart';
 import '../../data/repositories/ai_insights_repository.dart';
 import '../../data/services/route_prediction_service.dart';
 import '../../data/repositories/trip_log_repository.dart';
-import '../home/home_screen.dart';
 
 /// Card dự báo tiêu hao pin lộ trình (dùng Firestore AI insight + on-device)
 class RoutePredictionCard extends ConsumerStatefulWidget {
@@ -297,7 +295,18 @@ class _RoutePredictionCardState extends ConsumerState<RoutePredictionCard> {
     final vehicleId = ref.read(selectedVehicleIdProvider);
     final vehicleAsync = await ref.read(vehicleProvider(vehicleId).future);
     if (vehicleAsync == null) return;
-    final vehicle = vehicleAsync as VehicleModel;
+    final vehicle = vehicleAsync;
+    if (!vehicle.hasEfficiencyData) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Chưa có dữ liệu hiệu suất xe để dự đoán quãng đường.'),
+            backgroundColor: AppColors.warning,
+          ),
+        );
+      }
+      return;
+    }
 
     setState(() => _loading = true);
 
@@ -320,10 +329,10 @@ class _RoutePredictionCardState extends ConsumerState<RoutePredictionCard> {
     // Predict using on-device + insight data
     final result = RoutePredictionService.predict(
       distanceKm: distance,
-      currentBattery: vehicle.currentBattery ?? 0,
+      currentBattery: vehicle.currentBattery,
       payload: _payload,
       trips: trips,
-      defaultEfficiency: vehicle.defaultEfficiency ?? 0.15,
+      defaultEfficiency: vehicle.defaultEfficiency,
       insight: insight,
     );
 

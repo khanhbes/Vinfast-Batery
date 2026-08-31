@@ -53,6 +53,7 @@ ENV/
 smart_charger_gateway/.venv/
 smart_charger_gateway/__pycache__/
 smart_charger_gateway/.pytest_cache/
+smart_charger_gateway/.pytest-temp/
 smart_charger_gateway/state/*.json
 smart_charger_gateway/state/*.sqlite3
 smart_charger_gateway/state/*.sqlite3-shm

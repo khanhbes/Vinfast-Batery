@@ -203,10 +203,12 @@ class SmartChargingPlanPreview {
     required int predictedMinutes,
     required String source,
     double? confidence,
+    int? predictedDurationSeconds,
     DateTime? now,
   }) {
     final reference = now ?? DateTime.now();
-    final aiStop = reference.add(Duration(minutes: predictedMinutes));
+    final durationSeconds = predictedDurationSeconds ?? predictedMinutes * 60;
+    final aiStop = reference.add(Duration(seconds: durationSeconds));
     final effective = switch (draft.strategy) {
       ChargingStrategy.targetSoc =>
         aiStop.isBefore(draft.hardDeadlineAt) ? aiStop : draft.hardDeadlineAt,
@@ -226,7 +228,7 @@ class SmartChargingPlanPreview {
       predictionConfidence: confidence,
       isPhysicsFallback: source == 'physics_fallback',
       isImpossible: impossible,
-      predictedDurationSeconds: predictedMinutes * 60,
+      predictedDurationSeconds: durationSeconds,
       runtimeHealth: source == 'ai_model' ? 'loaded' : 'fallback',
       modelVersion: source == 'ai_model' ? 'unknown' : 'heuristic-v1',
       fallbackReason: source == 'ai_model' ? null : source,

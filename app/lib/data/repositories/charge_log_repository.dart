@@ -38,12 +38,19 @@ class ChargeLogRepository {
   /// để UI fallback nhẹ thay vì hang spinner mãi.
   Future<VehicleModel?> getVehicle(String vehicleId) async {
     if (vehicleId.isEmpty) return null;
+    if (_uid == null) return null;
     try {
       final doc = await _vehiclesRef
           .doc(vehicleId)
           .get()
           .timeout(_kFirestoreReadTimeout);
       if (!doc.exists) return null;
+      final data = doc.data() as Map<String, dynamic>?;
+      final uid = _uid;
+      if (uid != null && data?['ownerUid'] != uid) {
+        debugPrint('[ChargeLogRepo] getVehicle($vehicleId) ownership mismatch');
+        return null;
+      }
       return VehicleModel.fromFirestore(doc);
     } on FirebaseException catch (e) {
       // Bad selectedVehicleId (xe đã bị xoá / không thuộc user) → null thay vì throw.
@@ -68,16 +75,16 @@ class ChargeLogRepository {
   /// User phải tự thêm xe qua Garage.
   Future<List<VehicleModel>> getAllVehicles() async {
     final uid = _uid;
-    Query query = _vehiclesRef;
-    if (uid != null) {
-      query = query.where('ownerUid', isEqualTo: uid);
-    }
+    if (uid == null) return [];
+    Query query = _vehiclesRef.where('ownerUid', isEqualTo: uid);
     try {
       final snapshot = await query.get().timeout(_kFirestoreReadTimeout);
       return snapshot.docs
           .where((doc) {
             final data = doc.data() as Map<String, dynamic>?;
-            return data?['isDeleted'] != true;
+            return data?['isDeleted'] != true &&
+                data?['isArchived'] != true &&
+                data?['archivedAt'] == null;
           })
           .map((doc) => VehicleModel.fromFirestore(doc))
           .toList();
@@ -95,6 +102,7 @@ class ChargeLogRepository {
     required String vehicleName,
     String avatarColor = '#00C853',
   }) async {
+    if (_uid == null) throw StateError('Bạn cần đăng nhập để thêm xe.');
     final docRef = _vehiclesRef.doc(vehicleId);
     final existing = await docRef.get();
     if (existing.exists) {
@@ -114,51 +122,75 @@ class ChargeLogRepository {
     });
   }
 
-  /// Xóa xe và toàn bộ dữ liệu liên quan (ChargeLogs, TripLogs, MaintenanceTasks)
+  /// Archive a vehicle without deleting its logs, trips or maintenance data.
+  /// Restoration is explicit and handled by AuthService.restoreVehicle.
   Future<void> deleteVehicle(String vehicleId) async {
-    // Lấy tất cả documents liên quan
-    final chargeLogs = await _chargeLogsRef
-        .where('vehicleId', isEqualTo: vehicleId)
-        .get();
-    final tripLogs = await _firestore
-        .collection('TripLogs')
-        .where('vehicleId', isEqualTo: vehicleId)
-        .get();
-    final maintenanceTasks = await _firestore
-        .collection('MaintenanceTasks')
-        .where('vehicleId', isEqualTo: vehicleId)
-        .get();
-
-    final batch = _firestore.batch();
-
-    for (final doc in chargeLogs.docs) {
-      batch.delete(doc.reference);
+    if (_uid == null) throw StateError('Bạn cần đăng nhập.');
+    final vehicle = await _vehiclesRef.doc(vehicleId).get();
+    final ownerUid = (vehicle.data() as Map<String, dynamic>?)?['ownerUid'];
+    if (!vehicle.exists || ownerUid != _uid) {
+      throw StateError('Không có quyền thay đổi xe này.');
     }
-    for (final doc in tripLogs.docs) {
-      batch.delete(doc.reference);
+    // Archiving must not race an active charger session. Keep the guard here
+    // as well as in AuthService because older callers still use this method.
+    final sessionsRef = _firestore
+        .collection('users')
+        .doc(_uid)
+        .collection('smartChargingSessions');
+    try {
+      final active = await sessionsRef
+          .where('vehicleId', isEqualTo: vehicleId)
+          .where('state', whereIn: const ['arming', 'active'])
+          .limit(1)
+          .get();
+      if (active.docs.isNotEmpty) {
+        throw StateError(
+          'Không thể lưu trữ xe khi đang có phiên sạc hoạt động',
+        );
+      }
+    } catch (error) {
+      if (error is StateError) rethrow;
+      final sessions = await sessionsRef
+          .where('vehicleId', isEqualTo: vehicleId)
+          .get();
+      if (sessions.docs.any((doc) {
+        final state = doc.data()['state'];
+        return state == 'arming' || state == 'active';
+      })) {
+        throw StateError(
+          'Không thể lưu trữ xe khi đang có phiên sạc hoạt động',
+        );
+      }
     }
-    for (final doc in maintenanceTasks.docs) {
-      batch.delete(doc.reference);
-    }
-
-    // Xóa document xe
-    batch.delete(_vehiclesRef.doc(vehicleId));
-
-    await batch.commit();
+    await _vehiclesRef.doc(vehicleId).update({
+      'isDeleted': true,
+      'archivedAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
   // ── Charge Log CRUD ───────────────────────────────────────────────────────
 
   /// Lấy danh sách charge logs theo vehicleId, sắp xếp mới nhất trước (index-safe)
   Future<List<ChargeLogModel>> getChargeLogs(String vehicleId) async {
+    final uid = _uid;
+    if (uid == null || vehicleId.isEmpty) return [];
     final docs = await FirestoreSafeQuery.orderedQuery(
       collection: _chargeLogsRef,
       whereField: 'vehicleId',
       whereValue: vehicleId,
       orderByField: 'startTime',
       descending: true,
+      additionalWhere: {'ownerUid': uid},
     );
-    return docs.map((doc) => ChargeLogModel.fromFirestore(doc)).toList();
+    return docs
+        .where((doc) {
+          final data =
+              (doc.data() as Map<String, dynamic>?) ?? <String, dynamic>{};
+          return data['isDeleted'] != true && data['hiddenByUserAt'] == null;
+        })
+        .map((doc) => ChargeLogModel.fromFirestore(doc))
+        .toList();
   }
 
   /// Lưu charge log mới + cập nhật ODO xe bằng Firestore Transaction
@@ -171,6 +203,7 @@ class ChargeLogRepository {
     required String vehicleId,
     required int newOdo,
   }) async {
+    if (_uid == null) throw StateError('Bạn cần đăng nhập để lưu phiên sạc.');
     await _firestore.runTransaction((transaction) async {
       // Đọc document xe hiện tại
       final vehicleDocRef = _vehiclesRef.doc(vehicleId);
@@ -178,6 +211,11 @@ class ChargeLogRepository {
 
       if (!vehicleSnapshot.exists) {
         throw Exception('Không tìm thấy xe với ID: $vehicleId');
+      }
+      final ownerUid =
+          (vehicleSnapshot.data() as Map<String, dynamic>?)?['ownerUid'];
+      if (_uid != null && ownerUid != _uid) {
+        throw Exception('Không có quyền cập nhật xe này');
       }
 
       final currentVehicle = VehicleModel.fromFirestore(vehicleSnapshot);
@@ -206,9 +244,38 @@ class ChargeLogRepository {
     });
   }
 
-  /// Xóa một charge log
+  /// Hide a charge log from normal history; privacy erase is a separate flow.
   Future<void> deleteChargeLog(String logId) async {
-    await _chargeLogsRef.doc(logId).delete();
+    if (_uid == null) throw StateError('Bạn cần đăng nhập.');
+    final existing = await _chargeLogsRef.doc(logId).get();
+    if (!existing.exists) return;
+    final ownerUid = (existing.data() as Map<String, dynamic>?)?['ownerUid'];
+    if (_uid != null && ownerUid != _uid) {
+      throw Exception('Không có quyền thay đổi phiên sạc này');
+    }
+    await _chargeLogsRef.doc(logId).set({
+      'hiddenByUserAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  /// Irreversible privacy erase. Call only from an explicit privacy-confirmed flow.
+  /// Normal history deletion must use [deleteChargeLog] (hide/archive semantics).
+  Future<void> eraseChargeLog(String logId) async {
+    if (_uid == null) throw StateError('Bạn cần đăng nhập.');
+    final ref = _chargeLogsRef.doc(logId);
+    final existing = await ref.get();
+    final ownerUid = (existing.data() as Map<String, dynamic>?)?['ownerUid'];
+    if (_uid != null && ownerUid != _uid) {
+      throw Exception('Không có quyền xóa phiên sạc này');
+    }
+    final telemetry = await ref.collection('smartChargeTelemetry').get();
+    final batch = _firestore.batch();
+    for (final doc in telemetry.docs) {
+      batch.delete(doc.reference);
+    }
+    batch.delete(ref);
+    await batch.commit();
   }
 
   // ── Statistics ────────────────────────────────────────────────────────────

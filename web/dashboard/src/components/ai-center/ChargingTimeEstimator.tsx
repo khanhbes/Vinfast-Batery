@@ -56,7 +56,6 @@ export default function ChargingTimeEstimator() {
         batteryHealth,
         temperature,
         chargerType,
-        batteryCapacityWh: 2400,
       });
       setResult(res?.data ?? null);
     } catch (e: any) {
@@ -97,13 +96,13 @@ export default function ChargingTimeEstimator() {
           <div className="p-2 rounded-lg bg-blue-500/10">
             <Timer className="w-5 h-5 text-blue-400" />
           </div>
-          Dự đoán thời gian sạc pin
+          Smart Charge
           <Badge variant="secondary" className="text-[10px] font-mono ml-auto">
             AI Charge Time ETA
           </Badge>
         </CardTitle>
         <CardDescription>
-          AI dự đoán thời gian sạc dựa trên mô phỏng đường cong CC-CV, SoH và điều kiện môi trường
+          Dự đoán thời gian sạc bằng AI, kết hợp SoH và điều kiện môi trường
         </CardDescription>
       </CardHeader>
 
@@ -252,7 +251,7 @@ export default function ChargingTimeEstimator() {
           ) : (
             <Timer className="w-5 h-5" />
           )}
-          {loading ? 'Đang tính toán...' : 'Dự đoán thời gian sạc'}
+          {loading ? 'Đang tính toán...' : 'Dự đoán với AI'}
         </Button>
 
         {/* ── Error ── */}

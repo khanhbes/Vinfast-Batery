@@ -968,12 +968,18 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
     final vehicle = vehicleId.isEmpty
         ? null
         : ref.read(vehicleProvider(vehicleId)).value;
+    if (vehicle == null || vehicleId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Hãy chọn một xe trước khi mở Smart Charge.')),
+      );
+      return;
+    }
     Navigator.push(
       context,
       AppMotion.pageRoute(
         SmartChargingControlScreen(
           vehicleId: vehicleId,
-          currentSoc: (vehicle?.currentBattery ?? 20).toDouble(),
+          currentSoc: vehicle.currentBattery.toDouble(),
         ),
       ),
     );

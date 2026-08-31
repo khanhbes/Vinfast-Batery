@@ -3,6 +3,7 @@ from datetime import timedelta
 from shelly.charging_fusion import fuse_charging_eta
 from shelly.models import ChargingSession, PersonalChargingProfile, utcnow
 from shelly.personalization import evaluate_training, update_profile
+from shelly.service import SmartChargeService
 
 
 def _session(state="interrupted"):
@@ -31,6 +32,16 @@ def test_effective_capacity_uses_nominal_and_soh():
     )
     assert result.effective_capacity_wh == 2160
     assert {item.source for item in result.candidates} == {"global_ai", "physics"}
+
+
+def test_unverified_onboarding_soh_is_not_sent_to_prediction():
+    service = SmartChargeService.__new__(SmartChargeService)
+    payload = service._prediction_payload(
+        {"currentSoc": 20, "targetSoc": 80, "stateOfHealth": 100},
+        {"stateOfHealth": 100, "hasSohData": False, "nominalCapacityWh": 2400},
+    )
+    assert "stateOfHealth" not in payload
+    assert payload["nominalCapacityWh"] == 2400
 
 
 def test_personal_stage_weights_grow_only_with_quality():

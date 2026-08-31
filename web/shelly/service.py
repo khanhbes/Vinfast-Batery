@@ -5,6 +5,7 @@ import secrets
 import time
 import uuid
 import math
+from copy import deepcopy
 from datetime import datetime, timedelta
 
 from .models import (
@@ -20,6 +21,7 @@ from .models import (
 from .providers import ProviderError
 from .charging_fusion import fuse_charging_eta
 from .personalization import evaluate_training, update_profile
+from .personal_model_registry import PersonalModelRegistry
 
 
 class SmartChargeError(RuntimeError):
@@ -32,19 +34,30 @@ class SmartChargeError(RuntimeError):
 
 
 class SmartChargeService:
-    def __init__(self, repository, provider, predictor, sleeper=time.sleep, clock=utcnow):
+    def __init__(self, repository, provider, predictor, sleeper=time.sleep, clock=utcnow,
+                 model_registry=None):
         self.repository = repository
         self.provider = provider
         self.predictor = predictor
         self.sleep = sleeper
         self.clock = clock
-        self.max_minutes = int(os.environ.get("SMART_CHARGE_MAX_MINUTES", "600"))
+        self.model_registry = model_registry or PersonalModelRegistry(
+            getattr(repository, "db", None)
+        )
+        # The ten-hour limit is a hard safety boundary, not merely a default.
+        # Clamp deployment configuration so an accidental environment value
+        # can never permit a longer device timer or deadline.
+        try:
+            configured_max = int(os.environ.get("SMART_CHARGE_MAX_MINUTES", "600"))
+        except (TypeError, ValueError):
+            configured_max = 600
+        self.max_minutes = max(1, min(configured_max, 600))
         self.safety_policy = SmartChargeSafetyPolicy()
-        self._unsafe_samples: dict[str, int] = {}
+        self._unsafe_samples: dict[tuple[str, str], int] = {}
         self._last_telemetry_at: dict[str, datetime] = {}
 
-    def capabilities(self, uid: str) -> dict:
-        binding = self.binding(uid)
+    def capabilities(self, uid: str, vehicle_id: str | None = None) -> dict:
+        binding = self.binding(uid, vehicle_id)
         status = bool(getattr(self.provider, "supports_status", False))
         manual_off = bool(getattr(self.provider, "supports_manual_off", False))
         manual_on = bool(getattr(self.provider, "supports_manual_on", False))
@@ -69,8 +82,11 @@ class SmartChargeService:
             "provider": self.provider.name,
         }
 
-    def binding(self, uid: str) -> DeviceBinding | None:
-        binding = self.repository.get_binding(uid)
+    def binding(self, uid: str, vehicle_id: str | None = None) -> DeviceBinding | None:
+        # Migrate the unambiguous V3 single-device shape before resolving a
+        # vehicle-scoped request. Ambiguous accounts remain unbound.
+        self.repository.migrate_single_vehicle_binding(uid)
+        binding = self.repository.get_binding(uid, vehicle_id)
         if binding is None and self.provider.name == "legacy":
             device_id = os.environ.get("SHELLY_LEGACY_DEVICE_ID", "").strip()
             if device_id:
@@ -112,8 +128,10 @@ class SmartChargeService:
         fusion = fuse_charging_eta(trusted_payload, result, global_seconds, profile)
         candidates = fusion.candidates
         seconds = fusion.duration_seconds
+        if seconds <= 0 or seconds > self.max_minutes * 60:
+            raise SmartChargeError("unsafeDuration", "ETA phải lớn hơn 0 và không vượt quá 10 giờ")
         minutes = int(round(seconds / 60))
-        if minutes <= 0 or minutes > self.max_minutes:
+        if minutes <= 0:
             raise SmartChargeError("unsafeDuration", "ETA phải lớn hơn 0 và không vượt quá 10 giờ")
         now = self.clock()
         source = str(result.get("modelSource") or "physics_fallback")
@@ -126,7 +144,7 @@ class SmartChargeService:
             target_soc=target,
             predicted_minutes=minutes,
             predicted_duration_seconds=seconds,
-            predicted_stop_at=now + timedelta(minutes=minutes),
+            predicted_stop_at=now + timedelta(seconds=seconds),
             model_source=source,
             model_key=str(result.get("modelKey") or "charging_time"),
             model_version=model_version,
@@ -158,18 +176,18 @@ class SmartChargeService:
         existing = self.repository.get_by_idempotency(uid, idempotency_key)
         if existing:
             return existing
-        binding = self.binding(uid)
-        if not binding:
-            raise SmartChargeError("notConfigured", "Shelly chưa được kết nối", 409)
-        if binding.connection_mode != "server_cloud":
-            raise SmartChargeError("wrongConnectionMode", "Thiết bị đang dùng Advanced Direct", 409)
-        active = self.repository.current_session(uid)
-        if active:
-            raise SmartChargeError("activeSessionConflict", "Đang có một phiên sạc hoạt động", 409)
         preview = self.repository.get_preview(uid, preview_id)
         now = self.clock()
         if not preview or preview.expires_at <= now:
             raise SmartChargeError("previewExpired", "Dự đoán đã hết hạn; hãy dự đoán lại", 409)
+        binding = self.binding(uid, preview.vehicle_id)
+        if not binding:
+            raise SmartChargeError("notConfigured", "Shelly chưa được kết nối", 409)
+        if binding.connection_mode != "server_cloud":
+            raise SmartChargeError("wrongConnectionMode", "Thiết bị đang dùng Advanced Direct", 409)
+        active = self.repository.current_session(uid, device_id=binding.device_id)
+        if active:
+            raise SmartChargeError("activeSessionConflict", "Đang có một phiên sạc hoạt động", 409)
         if not preview.ai_charge_eligible:
             raise SmartChargeError(
                 "aiPredictionUnavailable",
@@ -189,7 +207,16 @@ class SmartChargeService:
             raise self._provider_error(exc) from exc
         if not status.online:
             raise SmartChargeError("deviceOffline", "Shelly đang Offline", 409, True)
-        duration = preview.predicted_minutes * 60
+        # Preserve the canonical server-side duration (seconds) from the
+        # preview. Reconstructing it from rounded minutes caused the device
+        # timer to drift from the ETA shown to the user.
+        duration = int(preview.predicted_duration_seconds or 0)
+        if duration <= 0 or duration > self.max_minutes * 60:
+            raise SmartChargeError(
+                "unsafeDuration",
+                "ETA phải lớn hơn 0 và không vượt quá 10 giờ",
+                400,
+            )
         session = ChargingSession(
             session_id=str(uuid.uuid4()),
             device_id=binding.device_id,
@@ -230,7 +257,10 @@ class SmartChargeService:
             effective_capacity_wh=preview.effective_capacity_wh,
             nominal_capacity_wh=_optional_float(vehicle.get("nominalCapacityWh")),
             state_of_health=_optional_float(vehicle.get("stateOfHealth")),
+            safety_policy_version=self.safety_policy.version,
         )
+        if not self.repository.claim_device_session(uid, session.device_id, session.session_id):
+            raise SmartChargeError("activeSessionConflict", "Shelly đang được dùng bởi một phiên khác", 409)
         self.repository.save_session(uid, session)
         try:
             self.provider.turn_on_with_timer(binding, duration)
@@ -273,14 +303,14 @@ class SmartChargeService:
             self.repository.append_audit(uid, "session_start_failed", session_id=session.session_id, error=exc.code)
             raise self._provider_error(exc) from exc
 
-    def status(self, uid: str):
-        binding = self.binding(uid)
+    def status(self, uid: str, vehicle_id: str | None = None):
+        binding = self.binding(uid, vehicle_id)
         if not binding:
             raise SmartChargeError("notConfigured", "Shelly chưa được kết nối", 404)
         try:
             status = self.provider.get_status(binding)
             self._apply_safety(uid, binding, status)
-            self._reconcile_with_status(uid, status)
+            self._reconcile_with_status(uid, status, vehicle_id)
             return status
         except ProviderError as exc:
             raise self._provider_error(exc) from exc
@@ -292,13 +322,24 @@ class SmartChargeService:
         *,
         expected_version: int | None = None,
         user_stop_reason: str = "none",
+        vehicle_id: str | None = None,
     ) -> ChargingSession | None:
-        binding = self.binding(uid)
+        # An explicit session id must resolve that exact session. Using the
+        # account-wide first active session breaks when two physical Shellys
+        # charge different vehicles concurrently.
+        session = (
+            self.repository.get_session(uid, session_id)
+            if session_id
+            else self.repository.current_session(uid, vehicle_id=vehicle_id)
+        )
+        if session_id and (session is None or session.state not in ("arming", "active")):
+            raise SmartChargeError("sessionNotFound", "Không tìm thấy phiên sạc", 404)
+        binding = self.binding(
+            uid,
+            session.vehicle_id if session else vehicle_id,
+        )
         if not binding:
             raise SmartChargeError("notConfigured", "Shelly chưa được kết nối", 404)
-        session = self.repository.current_session(uid)
-        if session_id and session and session.session_id != session_id:
-            raise SmartChargeError("sessionNotFound", "Không tìm thấy phiên sạc", 404)
         if session and expected_version is not None and session.version != expected_version:
             raise SmartChargeError("versionConflict", "Phiên sạc đã thay đổi; hãy đồng bộ lại", 409)
         allowed_reasons = {"need_vehicle", "enough_charge", "safety_concern", "other", "none"}
@@ -360,6 +401,43 @@ class SmartChargeService:
         self.repository.delete_personal_profile(uid, vehicle_id)
         self.repository.append_audit(uid, "personal_ai_deleted", vehicle_id=vehicle_id)
 
+    def privacy_erase_session(self, uid: str, session_id: str, confirmation: str) -> None:
+        """Irreversible erase guarded by an explicit session-id confirmation."""
+        if not session_id or confirmation.strip() != session_id:
+            raise SmartChargeError(
+                "eraseConfirmationRequired",
+                "Nhập đúng mã phiên để xác nhận xóa vĩnh viễn.",
+                400,
+            )
+        session = self.repository.get_session(uid, session_id)
+        if session is None:
+            raise SmartChargeError("sessionNotFound", "Không tìm thấy phiên sạc", 404)
+        if session.state in ("arming", "active"):
+            raise SmartChargeError(
+                "activeSessionProtected",
+                "Không thể xóa phiên đang sạc; hãy tắt và xác minh OFF trước.",
+                409,
+            )
+        if not self.repository.erase_session(uid, session_id):
+            raise SmartChargeError("eraseFailed", "Không thể xóa dữ liệu phiên", 503)
+        self.repository.append_audit(uid, "smart_charge_privacy_erased", session_id=session_id)
+
+    def hide_session(self, uid: str, session_id: str):
+        session = self.repository.get_session(uid, session_id)
+        if session is None:
+            raise SmartChargeError("sessionNotFound", "Không tìm thấy phiên sạc", 404)
+        if session.state in ("arming", "active"):
+            raise SmartChargeError(
+                "activeSessionProtected",
+                "Không thể ẩn phiên đang sạc; hãy tắt và xác minh OFF trước.",
+                409,
+            )
+        hidden = self.repository.hide_session(uid, session_id)
+        if hidden is None:
+            raise SmartChargeError("hideFailed", "Không thể ẩn phiên sạc", 503)
+        self.repository.append_audit(uid, "smart_charge_history_hidden", session_id=session_id)
+        return hidden
+
     def confirm_actual_soc(self, uid: str, session_id: str, actual_soc: float) -> ChargingSession:
         if not 0 <= actual_soc <= 100:
             raise SmartChargeError("invalidSoc", "SOC thực tế phải từ 0–100%")
@@ -401,8 +479,11 @@ class SmartChargeService:
         }
 
     def record_telemetry(self, uid: str, session_id: str, payload: dict) -> dict:
-        session = self.repository.current_session(uid)
-        if session is None or session.session_id != session_id:
+        # Resolve the requested session explicitly. Using the account-wide
+        # first active session drops telemetry when two distinct Shellys are
+        # charging different vehicles concurrently.
+        session = self.repository.get_session(uid, session_id)
+        if session is None or session.state not in ("arming", "active"):
             raise SmartChargeError("sessionNotFound", "Không tìm thấy phiên sạc đang hoạt động", 404)
         now = self.clock()
         last = self._last_telemetry_at.get(session_id)
@@ -452,12 +533,15 @@ class SmartChargeService:
             decision.eligible or decision.power_eligible
         ):
             return
-        if self.repository.training_sample_processed(uid, session.session_id):
+        if self.repository.training_sample_processed(
+            uid, session.session_id, session.vehicle_id
+        ):
             return
-        profile = update_profile(profile, session, decision, self.clock())
-        self.repository.save_personal_profile(profile)
-        self.repository.save_training_sample(uid, session, {
-            "state": "trained",
+        # Build the next calibration on a copy.  The currently promoted
+        # profile remains untouched until the candidate has passed validation.
+        calibrated = update_profile(deepcopy(profile), session, decision, self.clock())
+        sample = {
+            "state": "candidate",
             "eligibleForTargetTraining": decision.eligible,
             "interrupted": session.state != "completed",
             "durationSeconds": max(0, int(((session.stopped_at or session.updated_at) - session.created_at).total_seconds())),
@@ -468,16 +552,52 @@ class SmartChargeService:
             "qualityScore": decision.quality_score,
             "coveredSocBands": list(decision.covered_bands),
             "targetReached": session.actual_end_soc is not None and session.actual_end_soc >= session.target_soc,
-        })
-        session.training_state = "trained" if decision.eligible else "power_only"
-        session.training_reason = (
-            "partial_curve" if decision.eligible and session.state != "completed"
-            else "completed_curve" if decision.eligible
-            else "power_and_energy_only"
-        )
+        }
+        if decision.eligible:
+            rows = self.repository.training_samples(uid, session.vehicle_id)
+            # The current sample is not persisted yet, so include it in the
+            # held-out validation set explicitly and keep provenance immutable.
+            rows = [*rows, {**sample, "sessionId": session.session_id}]
+            _candidate_profile, candidate = self.model_registry.build_candidate(
+                calibrated,
+                uid,
+                session.vehicle_id,
+                rows,
+                session.model_version,
+                source_session_id=session.session_id,
+            )
+            promotion = self.model_registry.promote_or_reject(
+                _candidate_profile, candidate
+            )
+            if promotion.status == "promoted":
+                profile = calibrated
+                profile.profile_version = promotion.candidate.profile_version
+                profile.adapter_version = f"personal-v{profile.profile_version}"
+                profile.active = profile.valid_sessions >= 3
+                profile.base_model_version = session.model_version
+                self.repository.save_personal_profile(profile)
+                sample["state"] = "trained"
+                sample["trainingDecision"] = "promoted"
+                session.training_state = "trained"
+                session.training_reason = (
+                    "partial_curve" if session.state != "completed" else "completed_curve"
+                )
+            else:
+                sample["state"] = "rejected"
+                sample["trainingDecision"] = promotion.reason
+                session.training_state = "rejected"
+                session.training_reason = promotion.reason
+        else:
+            # Power/energy-only calibration is allowed without an end-SOC
+            # target label, but it must never promote an ETA model.
+            self.repository.save_personal_profile(calibrated)
+            sample["state"] = "power_only"
+            session.training_state = "power_only"
+            session.training_reason = "power_and_energy_only"
+        self.repository.save_training_sample(uid, session, sample)
         self.repository.save_session(uid, session)
         self.repository.upsert_charge_log(uid, session)
-        if decision.eligible and profile.valid_sessions >= 5:
+        if decision.eligible and session.training_state == "trained" and profile.valid_sessions >= 5:
             self.repository.enqueue_personal_training(uid, session.vehicle_id, session.session_id)
 
     def _owned_vehicle(self, uid: str, vehicle_id: str) -> dict:
@@ -494,13 +614,19 @@ class SmartChargeService:
         for key in ("nominalCapacityWh", "stateOfHealth", "vinfastModelId"):
             if vehicle.get(key) is not None:
                 result[key] = vehicle[key]
+        # Onboarding stores placeholder SoH (100%) so the vehicle can be
+        # created immediately.  Do not let that unverified value influence
+        # physics ETA or personal calibration; legacy records without the
+        # provenance flag retain their historical behavior.
+        if vehicle.get("hasSohData") is False:
+            result.pop("stateOfHealth", None)
         if result.get("estimatedCapacityWh") in (None, 0) and vehicle.get("nominalCapacityWh"):
             result["estimatedCapacityWh"] = vehicle["nominalCapacityWh"]
         return result
 
     def _apply_safety(self, uid: str, binding: DeviceBinding, status) -> None:
         if not status.relay:
-            self._unsafe_samples.pop(uid, None)
+            self._unsafe_samples.pop((uid, binding.device_id), None)
             return
         p = self.safety_policy
         violations: list[tuple[str, float, str]] = []
@@ -512,9 +638,12 @@ class SmartChargeService:
             violations.append(("over_temperature", status.temperature_c, "Nhiệt độ vượt ngưỡng an toàn"))
         if status.voltage_v and not p.cutoff_voltage_min_v <= status.voltage_v <= p.cutoff_voltage_max_v:
             violations.append(("unsafe_voltage", status.voltage_v, "Điện áp ngoài ngưỡng an toàn"))
-        count = self._unsafe_samples.get(uid, 0) + 1 if violations else 0
-        self._unsafe_samples[uid] = count
-        session = self.repository.current_session(uid)
+        safety_key = (uid, binding.device_id)
+        count = self._unsafe_samples.get(safety_key, 0) + 1 if violations else 0
+        self._unsafe_samples[safety_key] = count
+        # Attach safety events to the session using this physical relay. An
+        # account may have multiple vehicles charging concurrently.
+        session = self.repository.current_session(uid, device_id=binding.device_id)
         if not session or not violations:
             return
         kind, value, message = violations[0]
@@ -544,7 +673,7 @@ class SmartChargeService:
         current_soc: float = 0,
     ) -> ChargingSession:
         """Manual ON is permitted only with a device-side safety timer."""
-        binding = self.binding(uid)
+        binding = self.binding(uid, vehicle_id if vehicle_id != "manual" else None)
         if not binding:
             raise SmartChargeError("notConfigured", "Shelly chưa được kết nối", 404)
         vehicle = self._owned_vehicle(uid, vehicle_id) if vehicle_id != "manual" else {}
@@ -556,7 +685,7 @@ class SmartChargeService:
         existing = self.repository.get_by_idempotency(uid, idempotency_key)
         if existing:
             return existing
-        if self.repository.current_session(uid):
+        if self.repository.current_session(uid, device_id=binding.device_id):
             raise SmartChargeError("activeSessionConflict", "Đang có một phiên sạc hoạt động", 409)
         if not self.provider.supports_device_timer:
             raise SmartChargeError("providerTimerUnsupported", "Provider chưa hỗ trợ timer trên thiết bị", 503)
@@ -591,7 +720,10 @@ class SmartChargeService:
             owner_uid=uid,
             nominal_capacity_wh=_optional_float(vehicle.get("nominalCapacityWh")),
             state_of_health=_optional_float(vehicle.get("stateOfHealth")),
+            safety_policy_version=self.safety_policy.version,
         )
+        if not self.repository.claim_device_session(uid, session.device_id, session.session_id):
+            raise SmartChargeError("activeSessionConflict", "Shelly đang được dùng bởi một phiên khác", 409)
         self.repository.save_session(uid, session)
         try:
             self.provider.turn_on_with_timer(binding, duration_seconds)
@@ -622,27 +754,27 @@ class SmartChargeService:
             self.repository.upsert_charge_log(uid, session)
             raise self._provider_error(exc) from exc
 
-    def current(self, uid: str) -> ChargingSession | None:
-        session = self.repository.current_session(uid)
+    def current(self, uid: str, vehicle_id: str | None = None) -> ChargingSession | None:
+        session = self.repository.current_session(uid, vehicle_id=vehicle_id)
         if not session:
             return None
-        binding = self.binding(uid)
+        binding = self.binding(uid, session.vehicle_id)
         if not binding:
             return session
         try:
             status = self.provider.get_status(binding)
         except ProviderError:
             return session
-        return self._reconcile_with_status(uid, status) or self.repository.current_session(uid)
+        return self._reconcile_with_status(uid, status, vehicle_id) or self.repository.current_session(uid, vehicle_id=vehicle_id)
 
-    def _reconcile_with_status(self, uid: str, status) -> ChargingSession | None:
-        session = self.repository.current_session(uid)
+    def _reconcile_with_status(self, uid: str, status, vehicle_id: str | None = None) -> ChargingSession | None:
+        session = self.repository.current_session(uid, vehicle_id=vehicle_id)
         if not session:
             return None
         now = self.clock()
         if status.relay:
             if status.timer_remaining <= 0:
-                binding = self.binding(uid)
+                binding = self.binding(uid, session.vehicle_id)
                 try:
                     if binding:
                         self.provider.turn_off(binding)

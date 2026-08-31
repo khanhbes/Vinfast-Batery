@@ -59,6 +59,10 @@ class ShellyConnectionProfile {
     return null;
   }
 
+  /// Serializes the complete profile for encrypted FlutterSecureStorage only.
+  ///
+  /// Do not use this payload for diagnostics, Firestore, analytics or logs:
+  /// it intentionally contains the Cloud key and optional LAN password.
   Map<String, dynamic> toJson() => {
     'cloudHost': cloudHost,
     'cloudAuthKey': cloudAuthKey,
@@ -69,6 +73,21 @@ class ShellyConnectionProfile {
     if (lanAddress != null) 'lanAddress': lanAddress,
     'localUsername': localUsername,
     if (localPassword != null) 'localPassword': localPassword,
+  };
+
+  /// Safe representation for diagnostics/UI and any non-secure persistence.
+  /// Secrets are deliberately omitted rather than masked, so they cannot be
+  /// accidentally re-used by a downstream caller.
+  Map<String, dynamic> toRedactedJson() => {
+    'cloudHost': cloudHost,
+    'deviceId': deviceId,
+    'deviceName': deviceName,
+    'model': model,
+    if (firmware != null) 'firmware': firmware,
+    if (lanAddress != null) 'lanAddress': lanAddress,
+    'localUsername': localUsername,
+    'hasCloudAuthKey': cloudAuthKey.trim().isNotEmpty,
+    'hasLocalPassword': localPassword?.isNotEmpty == true,
   };
 
   factory ShellyConnectionProfile.fromJson(Map<String, dynamic> json) =>

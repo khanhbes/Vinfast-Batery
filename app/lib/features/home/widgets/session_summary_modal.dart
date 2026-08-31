@@ -150,8 +150,9 @@ class SessionSummaryModal extends StatelessWidget {
                     child: _StatItem(
                       icon: Icons.navigation_rounded,
                       label: 'Quãng đường',
-                      value:
-                          '${summary.distance?.toStringAsFixed(1) ?? "0"} km',
+                      value: summary.distance == null
+                          ? '—'
+                          : '${summary.distance!.toStringAsFixed(1)} km',
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -159,7 +160,9 @@ class SessionSummaryModal extends StatelessWidget {
                     child: _StatItem(
                       icon: Icons.bolt_rounded,
                       label: 'Tiêu thụ',
-                      value: '${summary.energyConsumed ?? 0}%',
+                      value: summary.energyConsumed == null
+                          ? '—'
+                          : '${summary.energyConsumed}%',
                     ),
                   ),
                 ] else ...[
@@ -167,7 +170,9 @@ class SessionSummaryModal extends StatelessWidget {
                     child: _StatItem(
                       icon: Icons.bolt_rounded,
                       label: 'Đã sạc',
-                      value: '${summary.energyGained ?? 0}%',
+                      value: summary.energyGained == null
+                          ? '—'
+                          : '${summary.energyGained}%',
                     ),
                   ),
                   const SizedBox(width: 16),

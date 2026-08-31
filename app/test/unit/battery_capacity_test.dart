@@ -234,4 +234,33 @@ void main() {
     });
     expect(vehicle.batteryCapacityWh, 3500);
   });
+
+  test('VehicleModel marks missing health/telemetry fields as unverified', () {
+    final vehicle = VehicleModel.fromMap({
+      'vehicleId': 'VF-missing',
+      'currentOdo': 0,
+    });
+    expect(vehicle.hasBatteryData, isFalse);
+    expect(vehicle.hasSohData, isFalse);
+    expect(vehicle.hasEfficiencyData, isFalse);
+    expect(vehicle.hasOdoData, isTrue);
+  });
+
+  test('explicit provenance overrides onboarding defaults', () {
+    final vehicle = VehicleModel.fromMap({
+      'vehicleId': 'VF-new',
+      'currentBattery': 100,
+      'stateOfHealth': 100,
+      'currentOdo': 0,
+      'defaultEfficiency': 1.2,
+      'hasBatteryData': false,
+      'hasSohData': false,
+      'hasEfficiencyData': true,
+      'hasOdoData': false,
+    });
+    expect(vehicle.hasBatteryData, isFalse);
+    expect(vehicle.hasSohData, isFalse);
+    expect(vehicle.hasEfficiencyData, isTrue);
+    expect(vehicle.hasOdoData, isFalse);
+  });
 }

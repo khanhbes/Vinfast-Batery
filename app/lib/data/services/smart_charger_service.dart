@@ -13,6 +13,7 @@ import '../models/personal_charging_profile.dart';
 import 'shelly_clients.dart';
 import 'shelly_discovery_service.dart';
 import 'smart_charger_credentials_service.dart';
+import '../../core/constants/app_constants.dart';
 
 class SmartChargerException implements Exception {
   const SmartChargerException(
@@ -87,7 +88,7 @@ class SmartChargerService {
        _safetyPolicy = safetyPolicy;
 
   static const _activeSessionKey = 'smart_charger.active_shelly_session.v1';
-  static const maxSessionDuration = Duration(hours: 10);
+  static const maxSessionDuration = Duration(minutes: AppConstants.smartChargeMaxMinutes);
   final SmartChargerCredentialsService _credentials;
   final ShellyCloudClient _cloud;
   final ShellyLanClient _lan;
@@ -597,7 +598,9 @@ class SmartChargerService {
         currentSoc: currentSoc,
         targetSoc: currentSoc,
         duration: duration,
-        estimatedCapacityWh: 1,
+        // Manual timed charging has no SOC target; do not inject a fake
+        // capacity that would make the live SOC/energy estimate look real.
+        estimatedCapacityWh: 0,
         predictionSource: 'manual_timer',
       ),
       strategy: ChargingStrategy.manualTimed,
@@ -643,6 +646,21 @@ class SmartChargerService {
   );
 
   Future<SmartChargingSession?> getCurrentSession() => reconcileActiveSession();
+
+  Future<SmartChargingSession?> getCurrentSessionForVehicle(String? vehicleId) async {
+    // Check identity before reconciliation.  Reconcile may clear/terminalize
+    // the persisted active session when the relay is already OFF; doing that
+    // while another vehicle is selected would make vehicle A's session appear
+    // to disappear when the user merely browses vehicle B.
+    final persisted = await _readActive();
+    if (persisted == null) return null;
+    if (vehicleId != null &&
+        vehicleId.isNotEmpty &&
+        persisted.vehicleId != vehicleId) {
+      return null;
+    }
+    return reconcileActiveSession();
+  }
   Future<List<SmartChargingSession>> getSessionHistory({
     int limit = 20,
   }) async => const [];

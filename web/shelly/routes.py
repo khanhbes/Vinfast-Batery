@@ -100,24 +100,38 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
     @bp.get("/api/shelly/device")
     @authenticated
     def device(uid):
-        binding = service.binding(uid)
+        # Vehicle-scoped lookup is important when one account owns multiple
+        # Shelly devices.  Keep the unscoped form for legacy callers, but
+        # never silently return another vehicle's explicit binding.
+        binding = service.binding(uid, request.args.get("vehicleId") or None)
         return ok(binding.to_dict() if binding else None)
 
     @bp.get("/api/shelly/capabilities")
     @authenticated
     def capabilities(uid):
-        return ok(service.capabilities(uid))
+        return ok(service.capabilities(uid, request.args.get("vehicleId") or None))
 
     @bp.post("/api/shelly/devices/<device_id>/select")
     @authenticated
     def select_device(uid, device_id):
+        body = request.get_json(silent=True) or {}
+        vehicle_id = str(body.get("vehicleId") or request.args.get("vehicleId") or "").strip() or None
+        shared = bool(body.get("shared", False))
+        if vehicle_id and repository.vehicle_for_owner(uid, vehicle_id) is None:
+            return jsonify({
+                "success": False,
+                "error": {
+                    "code": "vehicleForbidden",
+                    "message": "Xe không thuộc tài khoản này",
+                },
+            }), 403
         match = next((item for item in repository.list_bindings(uid) if item.device_id == device_id and item.revoked_at is None), None)
         if not match:
             return jsonify({"success": False, "error": {"code": "deviceNotFound", "message": "Thiết bị không thuộc tài khoản này"}}), 404
-        # Single-device v1: revoke the other bindings; never moves ownership.
-        for item in repository.list_bindings(uid):
-            if item.device_id != device_id and item.revoked_at is None:
-                repository.revoke_binding(uid, item.device_id, utcnow())
+        # V4 keeps multiple physical devices and explicit vehicle bindings.
+        match.vehicle_id = vehicle_id
+        match.shared = shared
+        repository.save_binding(uid, match)
         repository.append_audit(uid, "device_selected", device_id=device_id)
         return ok(match.to_dict())
 
@@ -146,20 +160,31 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
     @bp.get("/api/smart-charging/status")
     @authenticated
     def status(uid):
-        return execute(lambda: ok(service.status(uid).to_dict()))
+        return execute(lambda: ok(service.status(uid, request.args.get("vehicleId") or None).to_dict()))
 
     @bp.get("/api/smart-charging/session/current")
     @authenticated
     def current(uid):
-        session = service.current(uid)
+        session = service.current(uid, request.args.get("vehicleId") or None)
         active = bool(session and session.state in ("arming", "active"))
         return ok(session.to_dict() if session else None, active=active)
+
+    @bp.get("/api/smart-charging/sessions/active")
+    @authenticated
+    def active_sessions(uid):
+        return ok([item.to_dict() for item in repository.active_sessions(uid)])
 
     @bp.get("/api/smart-charging/sessions")
     @authenticated
     def history(uid):
         limit = min(50, max(1, int(request.args.get("limit", "20"))))
-        return ok([item.to_dict() for item in repository.history(uid, limit)])
+        vehicle_id = request.args.get("vehicleId") or None
+        strategy = request.args.get("strategy") or None
+        # Apply all filters inside the repository before limiting. The old
+        # limit*3 client-side approximation could hide valid records when a
+        # user had many sessions on another vehicle.
+        items, _ = repository.history_page(uid, limit, None, strategy, vehicle_id)
+        return ok([item.to_dict() for item in items])
 
     @bp.get("/api/smart-charging/history")
     @authenticated
@@ -174,8 +199,12 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
             except ValueError:
                 return jsonify({"success": False, "error": {"code": "invalidCursor", "message": "Cursor không hợp lệ"}}), 400
         strategy = request.args.get("strategy") or None
-        items, next_cursor = repository.history_page(uid, limit, cursor, strategy)
-        return ok({"items": [item.to_dict() for item in items], "nextCursor": next_cursor})
+        vehicle_id = request.args.get("vehicleId") or None
+        items, next_cursor = repository.history_page(uid, limit, cursor, strategy, vehicle_id)
+        return ok(
+            {"items": [item.to_dict() for item in items], "nextCursor": next_cursor},
+            diagnostics={"skippedLegacyDocuments": repository.last_history_skipped},
+        )
 
     @bp.post("/api/smart-charging/off")
     @authenticated
@@ -186,6 +215,7 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
                 uid,
                 expected_version=body.get("expectedVersion"),
                 user_stop_reason=str(body.get("userStopReason") or "none"),
+                vehicle_id=str(body.get("vehicleId") or request.args.get("vehicleId") or "").strip() or None,
             )
             return ok(session.to_dict() if session else None)
         return execute(action)
@@ -248,6 +278,22 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
     def telemetry(uid, session_id):
         # Repository verifies the ChargeLog owner before returning Firestore data.
         return ok(repository.telemetry(uid, session_id))
+
+    @bp.delete("/api/smart-charging/sessions/<session_id>/privacy-erase")
+    @authenticated
+    def privacy_erase(uid, session_id):
+        body = request.get_json(silent=True) or {}
+        def action():
+            service.privacy_erase_session(
+                uid, session_id, str(body.get("confirmation") or "")
+            )
+            return ok({"erased": True})
+        return execute(action)
+
+    @bp.post("/api/smart-charging/sessions/<session_id>/hide")
+    @authenticated
+    def hide_session(uid, session_id):
+        return execute(lambda: ok(service.hide_session(uid, session_id).to_dict()))
 
     @bp.post("/api/smart-charging/sessions/<session_id>/telemetry")
     @authenticated

@@ -20,6 +20,14 @@ class VehicleModel {
   final String? vinfastModelName;
   final int? specVersion;
   final DateTime? specLinkedAt;
+  final bool isArchived;
+  final DateTime? archivedAt;
+  // Provenance flags distinguish real persisted telemetry/spec values from
+  // constructor defaults used by legacy callers and demo objects.
+  final bool hasBatteryData;
+  final bool hasSohData;
+  final bool hasEfficiencyData;
+  final bool hasOdoData;
 
   VehicleModel({
     required this.vehicleId,
@@ -38,6 +46,12 @@ class VehicleModel {
     this.vinfastModelName,
     this.specVersion,
     this.specLinkedAt,
+    this.isArchived = false,
+    this.archivedAt,
+    this.hasBatteryData = true,
+    this.hasSohData = true,
+    this.hasEfficiencyData = true,
+    this.hasOdoData = true,
   });
 
   /// Convert Firestore document to model
@@ -90,6 +104,19 @@ class VehicleModel {
       totalCharges: _asInt(data['totalCharges']),
       totalTrips: _asInt(data['totalTrips']),
       lastBatteryPercent: _asInt(data['lastBatteryPercent'], 100),
+      hasBatteryData: data['hasBatteryData'] is bool
+          ? data['hasBatteryData'] as bool
+          : data.containsKey('currentBattery') ||
+                data.containsKey('lastBatteryPercent'),
+      hasSohData: data['hasSohData'] is bool
+          ? data['hasSohData'] as bool
+          : data.containsKey('stateOfHealth'),
+      hasEfficiencyData: data['hasEfficiencyData'] is bool
+          ? data['hasEfficiencyData'] as bool
+          : data.containsKey('defaultEfficiency'),
+      hasOdoData: data['hasOdoData'] is bool
+          ? data['hasOdoData'] as bool
+          : data.containsKey('currentOdo'),
       avatarColor: data['avatarColor'],
       vinfastModelId: data['vinfastModelId'],
       vinfastModelName: data['vinfastModelName'],
@@ -98,6 +125,10 @@ class VehicleModel {
           : _asInt(data['specVersion']),
       specLinkedAt: data['specLinkedAt'] != null
           ? (data['specLinkedAt'] as Timestamp).toDate()
+          : null,
+      isArchived: data['isDeleted'] == true || data['archivedAt'] != null,
+      archivedAt: data['archivedAt'] is Timestamp
+          ? (data['archivedAt'] as Timestamp).toDate()
           : null,
     );
   }
@@ -117,6 +148,19 @@ class VehicleModel {
       totalCharges: _asInt(data['totalCharges']),
       totalTrips: _asInt(data['totalTrips']),
       lastBatteryPercent: _asInt(data['lastBatteryPercent'], 100),
+      hasBatteryData: data['hasBatteryData'] is bool
+          ? data['hasBatteryData'] as bool
+          : data.containsKey('currentBattery') ||
+                data.containsKey('lastBatteryPercent'),
+      hasSohData: data['hasSohData'] is bool
+          ? data['hasSohData'] as bool
+          : data.containsKey('stateOfHealth'),
+      hasEfficiencyData: data['hasEfficiencyData'] is bool
+          ? data['hasEfficiencyData'] as bool
+          : data.containsKey('defaultEfficiency'),
+      hasOdoData: data['hasOdoData'] is bool
+          ? data['hasOdoData'] as bool
+          : data.containsKey('currentOdo'),
       avatarColor: data['avatarColor'],
       vinfastModelId: data['vinfastModelId'],
       vinfastModelName: data['vinfastModelName'],
@@ -128,6 +172,8 @@ class VehicleModel {
           : data['specLinkedAt'] != null
           ? DateTime.tryParse(data['specLinkedAt'].toString())
           : null,
+      isArchived: data['isDeleted'] == true || data['archivedAt'] != null,
+      archivedAt: data['archivedAt'] is DateTime ? data['archivedAt'] : null,
     );
   }
 
@@ -145,6 +191,10 @@ class VehicleModel {
       'totalCharges': totalCharges,
       'totalTrips': totalTrips,
       'lastBatteryPercent': lastBatteryPercent,
+      'hasBatteryData': hasBatteryData,
+      'hasSohData': hasSohData,
+      'hasEfficiencyData': hasEfficiencyData,
+      'hasOdoData': hasOdoData,
       'avatarColor': avatarColor,
       'vinfastModelId': vinfastModelId,
       'vinfastModelName': vinfastModelName,
@@ -152,6 +202,8 @@ class VehicleModel {
       'specLinkedAt': specLinkedAt != null
           ? Timestamp.fromDate(specLinkedAt!)
           : null,
+      'isDeleted': isArchived,
+      if (archivedAt != null) 'archivedAt': Timestamp.fromDate(archivedAt!),
       'updatedAt': FieldValue.serverTimestamp(),
     };
   }
@@ -173,6 +225,12 @@ class VehicleModel {
     String? vinfastModelName,
     int? specVersion,
     DateTime? specLinkedAt,
+    bool? isArchived,
+    DateTime? archivedAt,
+    bool? hasBatteryData,
+    bool? hasSohData,
+    bool? hasEfficiencyData,
+    bool? hasOdoData,
   }) {
     return VehicleModel(
       vehicleId: vehicleId ?? this.vehicleId,
@@ -191,6 +249,12 @@ class VehicleModel {
       vinfastModelName: vinfastModelName ?? this.vinfastModelName,
       specVersion: specVersion ?? this.specVersion,
       specLinkedAt: specLinkedAt ?? this.specLinkedAt,
+      isArchived: isArchived ?? this.isArchived,
+      archivedAt: archivedAt ?? this.archivedAt,
+      hasBatteryData: hasBatteryData ?? this.hasBatteryData,
+      hasSohData: hasSohData ?? this.hasSohData,
+      hasEfficiencyData: hasEfficiencyData ?? this.hasEfficiencyData,
+      hasOdoData: hasOdoData ?? this.hasOdoData,
     );
   }
 }

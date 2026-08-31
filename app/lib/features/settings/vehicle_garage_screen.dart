@@ -26,6 +26,7 @@ class VehicleGarageScreen extends ConsumerStatefulWidget {
 class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
   List<Map<String, dynamic>> _vehicles = [];
   bool _isLoading = true;
+  bool _showArchived = false;
 
   @override
   void initState() {
@@ -36,14 +37,29 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
   Future<void> _loadVehicles() async {
     setState(() => _isLoading = true);
     try {
-      final vehicles = await AuthService().getUserVehicles();
-      if (mounted)
+      final vehicles = await AuthService().getUserVehicles(
+        includeArchived: true,
+      );
+      if (mounted) {
         setState(() {
           _vehicles = vehicles;
           _isLoading = false;
         });
+      }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _restoreVehicle(String vehicleId) async {
+    final result = await AuthService().restoreVehicle(vehicleId);
+    if (!mounted) return;
+    if (result['success'] == true) {
+      AppPopup.showSuccess('Đã khôi phục xe');
+      await _loadVehicles();
+      ref.invalidate(allVehiclesProvider);
+    } else {
+      AppPopup.showError(result['error'] ?? 'Khôi phục thất bại');
     }
   }
 
@@ -73,11 +89,11 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
         backgroundColor: AppColors.card,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text(
-          'Xóa xe',
+          'Lưu trữ xe',
           style: TextStyle(color: AppColors.textPrimary),
         ),
         content: const Text(
-          'Bạn có chắc chắn muốn xóa xe này? Thao tác không thể hoàn tác.',
+          'Xe sẽ được ẩn khỏi danh sách sử dụng. Lịch sử sạc và dữ liệu AI vẫn được giữ lại để khôi phục.',
           style: TextStyle(color: AppColors.textSecondary),
         ),
         actions: [
@@ -97,7 +113,7 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
-            child: const Text('Xóa'),
+            child: const Text('Lưu trữ'),
           ),
         ],
       ),
@@ -106,11 +122,11 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
     if (confirmed == true) {
       final result = await AuthService().deleteVehicle(vehicleId);
       if (result['success'] == true) {
-        AppPopup.showSuccess('Đã xóa xe');
+        AppPopup.showSuccess('Đã lưu trữ xe');
         _loadVehicles();
         ref.invalidate(allVehiclesProvider);
       } else {
-        AppPopup.showError(result['error'] ?? 'Xóa thất bại');
+        AppPopup.showError(result['error'] ?? 'Lưu trữ thất bại');
       }
     }
   }
@@ -139,13 +155,22 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
           ),
         ),
         actions: [
+          IconButton(
+            tooltip: _showArchived ? 'Xem xe đang dùng' : 'Xem xe đã lưu trữ',
+            icon: Icon(
+              _showArchived ? Icons.directions_car : Icons.archive_outlined,
+            ),
+            onPressed: () => setState(() => _showArchived = !_showArchived),
+          ),
           GestureDetector(
-            onTap: _showAddVehicleSheet,
+            onTap: _showArchived ? null : _showAddVehicleSheet,
             child: Container(
               margin: const EdgeInsets.only(right: 16),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: AppColors.primary,
+                color: _showArchived
+                    ? AppColors.surfaceVariant
+                    : AppColors.primary,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
@@ -153,14 +178,18 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
                 children: [
                   Icon(
                     Icons.add_rounded,
-                    color: AppColors.background,
+                    color: _showArchived
+                        ? AppColors.textTertiary
+                        : AppColors.background,
                     size: 18,
                   ),
                   const SizedBox(width: 4),
                   Text(
                     'Thêm xe',
                     style: TextStyle(
-                      color: AppColors.background,
+                      color: _showArchived
+                          ? AppColors.textTertiary
+                          : AppColors.background,
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
                     ),
@@ -175,11 +204,17 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
           ? const Center(
               child: CircularProgressIndicator(color: AppColors.primary),
             )
-          : _vehicles.isEmpty
+          : _visibleVehicles.isEmpty
           ? _buildEmptyState()
           : _buildVehicleList(),
     );
   }
+
+  List<Map<String, dynamic>> get _visibleVehicles => _vehicles.where((vehicle) {
+    final archived =
+        vehicle['isArchived'] == true || vehicle['archivedAt'] != null;
+    return _showArchived ? archived : !archived;
+  }).toList();
 
   Widget _buildEmptyState() {
     return Center(
@@ -234,25 +269,37 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
   Widget _buildVehicleList() {
     return ListView.separated(
       padding: const EdgeInsets.all(20),
-      itemCount: _vehicles.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemCount: _visibleVehicles.length,
+      separatorBuilder: (_, index) => const SizedBox(height: 12),
       itemBuilder: (ctx, i) {
-        final v = _vehicles[i];
+        final v = _visibleVehicles[i];
+        final archived = v['isArchived'] == true || v['archivedAt'] != null;
         final isSelected =
             ref.watch(selectedVehicleIdProvider) == (v['id'] ?? v['vehicleId']);
 
         return _VehicleCard(
               model: v['model'] ?? v['vehicleName'] ?? 'Xe không tên',
-              year: v['year'] ?? 2024,
-              battery: (v['batteryCapacity'] ?? 0).toDouble(),
-              soh: (v['stateOfHealth'] ?? 100).toDouble(),
-              odo: (v['currentOdo'] ?? 0).toDouble(),
+              year: v['year'] is num ? (v['year'] as num).toInt() : null,
+              battery: v['batteryCapacity'] is num
+                  ? (v['batteryCapacity'] as num).toDouble()
+                  : null,
+              soh: v['stateOfHealth'] is num
+                  ? (v['stateOfHealth'] as num).toDouble()
+                  : null,
+              odo: v['currentOdo'] is num
+                  ? (v['currentOdo'] as num).toDouble()
+                  : null,
               isSelected: isSelected,
-              onTap: () {
-                final id = v['id'] ?? v['vehicleId'] ?? '';
-                ref.read(selectedVehicleIdProvider.notifier).state = id;
-              },
-              onDelete: () => _deleteVehicle(v['id'] ?? v['vehicleId'] ?? ''),
+              onTap: archived
+                  ? () {}
+                  : () {
+                      final id = v['id'] ?? v['vehicleId'] ?? '';
+                      ref.read(selectedVehicleIdProvider.notifier).state = id;
+                    },
+              onDelete: archived
+                  ? () => _restoreVehicle(v['id'] ?? v['vehicleId'] ?? '')
+                  : () => _deleteVehicle(v['id'] ?? v['vehicleId'] ?? ''),
+              isArchived: archived,
               onViewSpec: () {
                 Navigator.push(
                   context,
@@ -279,11 +326,12 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
 
 class _VehicleCard extends StatelessWidget {
   final String model;
-  final int year;
-  final double battery;
-  final double soh;
-  final double odo;
+  final int? year;
+  final double? battery;
+  final double? soh;
+  final double? odo;
   final bool isSelected;
+  final bool isArchived;
   final VoidCallback onTap;
   final VoidCallback onDelete;
   final VoidCallback onViewSpec;
@@ -295,6 +343,7 @@ class _VehicleCard extends StatelessWidget {
     required this.soh,
     required this.odo,
     required this.isSelected,
+    this.isArchived = false,
     required this.onTap,
     required this.onDelete,
     required this.onViewSpec,
@@ -361,7 +410,8 @@ class _VehicleCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Năm $year • ${battery.toInt()} Wh',
+                        '${year == null ? 'Năm —' : 'Năm $year'} • '
+                        '${battery == null || battery! <= 0 ? 'Pin —' : '${battery!.toInt()} Wh'}',
                         style: TextStyle(
                           color: AppColors.textSecondary,
                           fontSize: 12,
@@ -370,7 +420,25 @@ class _VehicleCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (isSelected)
+                if (isArchived)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.warning.withAlpha(30),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Text(
+                      'ĐÃ LƯU TRỮ',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  )
+                else if (isSelected)
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 10,
@@ -395,9 +463,17 @@ class _VehicleCard extends StatelessWidget {
             // Stats row
             Row(
               children: [
-                _buildMiniStat('SoH', '${soh.toInt()}%', AppColors.success),
+                _buildMiniStat(
+                  'SoH',
+                  soh == null ? '—' : '${soh!.toInt()}%',
+                  soh == null ? AppColors.textSecondary : AppColors.success,
+                ),
                 const SizedBox(width: 16),
-                _buildMiniStat('ODO', '${odo.toInt()} km', AppColors.primary),
+                _buildMiniStat(
+                  'ODO',
+                  odo == null ? '—' : '${odo!.toInt()} km',
+                  AppColors.primary,
+                ),
                 const Spacer(),
                 // Action buttons
                 GestureDetector(
@@ -425,8 +501,10 @@ class _VehicleCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
-                      Icons.delete_outline_rounded,
-                      color: AppColors.error,
+                      isArchived
+                          ? Icons.unarchive_outlined
+                          : Icons.archive_outlined,
+                      color: isArchived ? AppColors.primary : AppColors.error,
                       size: 18,
                     ),
                   ),
@@ -690,7 +768,7 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       itemCount: DateTime.now().year - 2020 + 1,
-                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      separatorBuilder: (_, index) => const SizedBox(width: 8),
                       itemBuilder: (ctx, i) {
                         final year = 2020 + i;
                         final selected = year == _selectedYear;
@@ -743,7 +821,7 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
                 : ListView.separated(
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
                     itemCount: _filteredSpecs.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    separatorBuilder: (_, index) => const SizedBox(height: 10),
                     itemBuilder: (ctx, i) {
                       final spec = _filteredSpecs[i];
                       return _SpecCard(

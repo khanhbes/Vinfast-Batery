@@ -12,6 +12,8 @@ param(
     [switch]$AllAbi,    # Build split cho cả 3 ABI: arm64-v8a, armeabi-v7a, x86_64
     [switch]$NoBump,    # Không tăng version (build lại cùng version)
     [switch]$NoDeploy,  # Không upload APK lên VPS sau build
+    [switch]$Offline,   # Dùng pub cache/lock hiện có, không gọi pub.dev
+    [switch]$SkipChecks, # Chỉ dùng khi toolchain Flutter bị kẹt; không dùng cho deploy
     [string]$ApiUrl    = 'https://api.evbattery.live',
     [string]$VpsIp     = '167.71.207.121',
     [string]$VpsUser   = 'root',
@@ -46,6 +48,71 @@ if ($pubspec -match 'version:\s*(\d+)\.(\d+)\.(\d+)\+(\d+)') {
 
 $oldVersion = "$major.$minor.$patch+$build"
 Write-Host "Version hien tai: $oldVersion" -ForegroundColor Yellow
+$oldPubspecContent = $pubspec
+$oldConstContent = $null
+$script:versionChanged = $false
+
+# Resolve Flutter explicitly.  Build agents and fresh Windows terminals often
+# have Android Studio/JDK configured but omit Flutter from PATH; invoking a
+# bare `flutter` then exits before Gradle and leaves no useful diagnostic.
+$flutterCommand = Get-Command flutter -ErrorAction SilentlyContinue
+if ($null -eq $flutterCommand) {
+    $flutterCandidates = @('C:\flutter\bin\flutter.bat')
+    if (-not [string]::IsNullOrWhiteSpace($env:FLUTTER_ROOT)) {
+        $flutterCandidates = @(
+            (Join-Path $env:FLUTTER_ROOT 'bin\flutter.bat'),
+            $flutterCandidates
+        )
+    }
+    if (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+        $flutterCandidates += Join-Path $env:LOCALAPPDATA 'flutter\bin\flutter.bat'
+    }
+    foreach ($candidate in $flutterCandidates) {
+        if (-not [string]::IsNullOrWhiteSpace($candidate) -and (Test-Path $candidate)) {
+            $flutterBin = Split-Path -Parent $candidate
+            $env:Path = "$flutterBin;$env:Path"
+            $flutterCommand = Get-Command flutter -ErrorAction SilentlyContinue
+            if ($null -eq $flutterCommand) {
+                # Windows command discovery may not refresh for .bat files;
+                # retain the resolved executable for the wrapper below.
+                $flutterCommand = Get-Item $candidate
+            }
+            Write-Host "  Su dung Flutter tu: $candidate" -ForegroundColor DarkGray
+            break
+        }
+    }
+}
+if ($null -eq $flutterCommand) {
+    throw 'Khong tim thay Flutter. Dat FLUTTER_ROOT hoac cai Flutter tai C:\flutter.'
+}
+$flutterExe = if ($flutterCommand.PSObject.Properties.Name -contains 'Source' -and $flutterCommand.Source) {
+    $flutterCommand.Source
+} else {
+    $flutterCommand.FullName
+}
+function Invoke-Flutter {
+    & $flutterExe @args
+    if ($LASTEXITCODE -ne 0) { throw "Flutter command that bai (exit $LASTEXITCODE): $($args -join ' ')" }
+}
+
+# Ctrl-C/terminating errors can arrive while Gradle is running. Keep version
+# metadata transactional so an interrupted build never leaves a phantom
+# release advertised to the updater.
+function Restore-VersionMetadata {
+    if (-not $script:versionChanged) { return }
+    Set-Content 'pubspec.yaml' -Value $oldPubspecContent -NoNewline
+    if ($null -ne $oldConstContent -and (Test-Path $constFile)) {
+        Set-Content $constFile -Value $oldConstContent -NoNewline
+    }
+    $script:versionChanged = $false
+    Write-Host "Da rollback version do build bi ngat/that bai." -ForegroundColor Yellow
+}
+
+trap {
+    Write-Host "BUILD ERROR: $_" -ForegroundColor Red
+    Restore-VersionMetadata
+    exit 1
+}
 
 # ── 2. Preflight trước khi chạm vào version ──
 # Một build lỗi không được quảng bá version mới. Analyze và tests luôn chạy
@@ -53,28 +120,123 @@ Write-Host "Version hien tai: $oldVersion" -ForegroundColor Yellow
 if ($ApiUrl -notmatch '^https://') {
     throw 'Release API bat buoc dung HTTPS. Hay truyen -ApiUrl https://...'
 }
-try {
-    # Windows PowerShell 5.1 may invoke the retired IE HTML parser and throw a
-    # misleading NullReferenceException even when the HTTPS response is 200.
-    $health = Invoke-WebRequest -UseBasicParsing -Uri "$ApiUrl/api/health" -Method GET -TimeoutSec 15 -ErrorAction Stop
-    if ([int]$health.StatusCode -lt 200 -or [int]$health.StatusCode -ge 400) {
-        throw "API health tra HTTP $($health.StatusCode)"
+if ($NoDeploy) {
+    Write-Host "[CHECK] Bo qua release health (-NoDeploy); van chay analyze/test/build." -ForegroundColor DarkGray
+} else {
+  $healthOk = $false
+  $healthError = $null
+  for ($attempt = 1; $attempt -le 3 -and -not $healthOk; $attempt++) {
+    try {
+        # Invoke-RestMethod avoids the retired IE parser in Windows PowerShell
+        # 5.1 and is retried because the production endpoint can briefly flap
+        # during deploy/instance wake-up.
+        $health = Invoke-RestMethod -Uri "$ApiUrl/api/health" -Method GET -TimeoutSec 15 -ErrorAction Stop
+        if ($null -eq $health -or $health.status -ne 'ok') {
+            throw "API health khong tra status=ok"
+        }
+        $healthOk = $true
+    } catch {
+        $healthError = $_
+        if ($attempt -lt 3) { Start-Sleep -Seconds 2 }
     }
-} catch {
-    throw "Release API HTTPS chua san sang: $ApiUrl/api/health — $_"
+  }
+  if (-not $healthOk) {
+    # On some Windows installations powershell.exe 5.1 has a different TLS/
+    # proxy stack than the installed pwsh 7 used by the developer toolchain.
+    # Use it as a compatibility probe before failing the release gate.
+    $pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
+    if ($null -ne $pwsh) {
+        $safeHealthUrl = ("$ApiUrl/api/health").Replace("'", "''")
+        & $pwsh.Source -NoProfile -NonInteractive -Command `
+            "try { `$r=Invoke-RestMethod -Uri '$safeHealthUrl' -TimeoutSec 15 -ErrorAction Stop; if (`$null -eq `$r -or `$r.status -ne 'ok') { exit 2 } } catch { exit 1 }"
+        if ($LASTEXITCODE -eq 0) { $healthOk = $true }
+    }
+  }
+  if (-not $healthOk) {
+    throw "Release API HTTPS chua san sang: $ApiUrl/api/health — $healthError"
+  }
 }
 
 Write-Host "`n[CHECK] Dong bo dependencies..." -ForegroundColor Cyan
-flutter pub get
+$LASTEXITCODE = 0
+if ($NoDeploy -and (Test-Path '.dart_tool\package_config.json')) {
+    Write-Host "  Pub da resolve; dung package_config local (-NoDeploy)" -ForegroundColor DarkGray
+} elseif ($Offline -or $NoDeploy) {
+    Write-Host "  Pub offline (cache/lock local)" -ForegroundColor DarkGray
+    Invoke-Flutter pub get --offline
+} else {
+    Invoke-Flutter pub get
+}
 if ($LASTEXITCODE -ne 0) { throw 'flutter pub get that bai.' }
 
-Write-Host "[CHECK] Flutter analyze..." -ForegroundColor Cyan
-flutter analyze --no-pub --no-fatal-warnings --no-fatal-infos
-if ($LASTEXITCODE -ne 0) { throw 'flutter analyze that bai; version chua bi thay doi.' }
+if ($SkipChecks) {
+    if (-not $NoDeploy) { throw '-SkipChecks chi duoc phep khi dung -NoDeploy.' }
+    Write-Host "[CHECK] Bo qua analyze/test theo yeu cau (-SkipChecks)." -ForegroundColor Yellow
+} else {
+    Write-Host "[CHECK] Flutter analyze..." -ForegroundColor Cyan
+    Invoke-Flutter analyze --no-pub --no-fatal-warnings --no-fatal-infos
+    if ($LASTEXITCODE -ne 0) { throw 'flutter analyze that bai; version chua bi thay doi.' }
 
-Write-Host "[CHECK] Flutter tests..." -ForegroundColor Cyan
-flutter test --no-pub
-if ($LASTEXITCODE -ne 0) { throw 'flutter test that bai; version chua bi thay doi.' }
+    Write-Host "[CHECK] Flutter tests..." -ForegroundColor Cyan
+    Invoke-Flutter test --no-pub
+    if ($LASTEXITCODE -ne 0) { throw 'flutter test that bai; version chua bi thay doi.' }
+}
+
+# Fail fast with an actionable message instead of letting Gradle hang or
+# silently leave a bumped version when Java is unavailable. Android Studio's
+# bundled JBR is a valid JDK 17 for Flutter builds, so discover it first.
+$javaCommand = Get-Command java -ErrorAction SilentlyContinue
+# Prefer a real JDK installation over a PATH shim (Android Studio's
+# javapath entry can be present even when it is not executable). Resolve
+# JAVA_HOME first whenever the caller did not explicitly provide one.
+if ([string]::IsNullOrWhiteSpace($env:JAVA_HOME)) {
+    $javaCandidates = @(
+        (Join-Path ${env:ProgramFiles} 'Android\Android Studio\jbr'),
+        (Join-Path ${env:ProgramFiles} 'Java\jdk-17'),
+        (Join-Path ${env:ProgramFiles} 'Eclipse Adoptium\jdk-17*')
+    )
+    foreach ($candidate in $javaCandidates) {
+        $resolved = Get-Item $candidate -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($null -ne $resolved -and (Test-Path (Join-Path $resolved.FullName 'bin\java.exe'))) {
+            $env:JAVA_HOME = $resolved.FullName
+            $env:Path = "$(Join-Path $env:JAVA_HOME 'bin');$env:Path"
+            $javaCommand = Get-Command java -ErrorAction SilentlyContinue
+            Write-Host "  Su dung JDK tu: $env:JAVA_HOME" -ForegroundColor DarkGray
+            break
+        }
+    }
+}
+if ($null -eq $javaCommand -and [string]::IsNullOrWhiteSpace($env:JAVA_HOME)) {
+    throw 'Khong tim thay Java/JAVA_HOME. Cai JDK 17 va dat JAVA_HOME truoc khi build APK.'
+}
+if (-not [string]::IsNullOrWhiteSpace($env:JAVA_HOME) -and
+    -not (Test-Path (Join-Path $env:JAVA_HOME 'bin\java.exe'))) {
+    throw "JAVA_HOME khong hop le: $env:JAVA_HOME. Can JDK 17 co bin\java.exe."
+}
+$javaExePath = if (-not [string]::IsNullOrWhiteSpace($env:JAVA_HOME)) {
+    Join-Path $env:JAVA_HOME 'bin\java.exe'
+} elseif ($null -ne $javaCommand) {
+    $javaCommand.Source
+} else {
+    $null
+}
+if ($javaExePath) {
+    $javaReady = $false
+    try {
+        # Use Start-Process so PowerShell's native stderr/exit-code handling
+        # cannot mistake the JBR `-version` diagnostic output for failure.
+        # The resolved absolute path also avoids stale javapath shims.
+        $javaProbe = Start-Process -FilePath $javaExePath -ArgumentList '-version' `
+            -WindowStyle Hidden -Wait -PassThru -RedirectStandardError "$env:TEMP\vinfast-java-probe.err"
+        $javaReady = ($javaProbe.ExitCode -eq 0)
+        Remove-Item -LiteralPath "$env:TEMP\vinfast-java-probe.err" -Force -ErrorAction SilentlyContinue
+    } catch {
+        $javaReady = $false
+    }
+    if (-not $javaReady) {
+        throw "Java khong the chay duoc tu JAVA_HOME; cai lai JDK 17 truoc khi build APK."
+    }
+}
 
 # ── 3. Tăng patch + build number (nếu không có -NoBump) ──
 if (-not $NoBump) {
@@ -93,15 +255,17 @@ Set-Content 'pubspec.yaml' -Value $pubspec -NoNewline
 $constFile = 'lib\core\constants\app_constants.dart'
 if (Test-Path $constFile) {
     $constContent = Get-Content $constFile -Raw
+    $oldConstContent = $constContent
     $constContent = $constContent -replace "appVersion\s*=\s*'[^']+'", "appVersion = '$newSemver'"
     Set-Content $constFile -Value $constContent -NoNewline
 }
+$script:versionChanged = $true
 Write-Host "Da cap nhat pubspec.yaml va app_constants.dart" -ForegroundColor Green
 
 # ── 6. Flutter clean (CHỈ khi -Clean được truyền) ──
 if ($Clean) {
     Write-Host "`n[CLEAN] Dang chay flutter clean..." -ForegroundColor Yellow
-    flutter clean
+    Invoke-Flutter clean
     Write-Host "[CLEAN] Xong." -ForegroundColor Yellow
 } else {
     Write-Host "`n[TIP] Bo qua flutter clean de dung cache (dung -Clean neu build loi)" -ForegroundColor DarkGray
@@ -114,17 +278,20 @@ Write-Host "`n[SKIP] Dependencies da duoc kiem tra trong preflight." -Foreground
 # ── 7. Build APK ──
 if ($Fat) {
     Write-Host "`nDang build fat APK (release)..." -ForegroundColor Cyan
-    flutter build apk --release --no-pub --dart-define=APP_API_BASE_URL=$ApiUrl
+    Invoke-Flutter build apk --release --no-pub --dart-define=APP_API_BASE_URL=$ApiUrl
 } elseif ($AllAbi) {
     Write-Host "`nDang build APK split 3 ABI (release)..." -ForegroundColor Cyan
-    flutter build apk --release --split-per-abi --no-pub --dart-define=APP_API_BASE_URL=$ApiUrl
+    Invoke-Flutter build apk --release --split-per-abi --no-pub --dart-define=APP_API_BASE_URL=$ApiUrl
 } else {
     Write-Host "`nDang build APK arm64-v8a only (release)..." -ForegroundColor Cyan
-    flutter build apk --release --split-per-abi --target-platform android-arm64 --no-pub --dart-define=APP_API_BASE_URL=$ApiUrl
+    Invoke-Flutter build apk --release --split-per-abi --target-platform android-arm64 --no-pub --dart-define=APP_API_BASE_URL=$ApiUrl
 }
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "`nBuild THAT BAI!" -ForegroundColor Red
+    Set-Content 'pubspec.yaml' -Value $oldPubspecContent -NoNewline
+    if ($null -ne $oldConstContent) { Set-Content $constFile -Value $oldConstContent -NoNewline }
+    Write-Host "Da rollback version vi build that bai." -ForegroundColor Yellow
     exit 1
 }
 
@@ -172,8 +339,12 @@ if ($Fat) {
 
 if ($copied -eq 0) {
     Write-Host "Khong tim thay file APK nao!" -ForegroundColor Red
+    Set-Content 'pubspec.yaml' -Value $oldPubspecContent -NoNewline
+    if ($null -ne $oldConstContent) { Set-Content $constFile -Value $oldConstContent -NoNewline }
+    Write-Host "Da rollback version vi khong co artifact." -ForegroundColor Yellow
     exit 1
 }
+$script:versionChanged = $false
 
 # ── 9. Thời gian build ──
 $elapsed = [math]::Round(((Get-Date) - $buildStart).TotalMinutes, 1)

@@ -1,5 +1,6 @@
 import '../../core/services/api_service.dart';
 import '../../core/services/app_error_reporter.dart';
+import '../../core/constants/app_constants.dart';
 import '../models/smart_charging_session.dart';
 
 typedef ChargingPredictionCall =
@@ -37,7 +38,7 @@ class ChargingPredictionAdapter {
     this.efficiency = 0.9,
     this.strictAi = true,
     this.allowPhysicsFallback = false,
-  }) : _predictionCall = predictionCall ?? ApiService().predictChargingTime;
+  }) : _predictionCall = predictionCall ?? ApiService().previewSmartCharge;
 
   final ChargingPredictionCall _predictionCall;
   final double standardPowerW;
@@ -81,7 +82,7 @@ class ChargingPredictionAdapter {
           exc,
           StackTrace.current,
           source: 'SmartChargePrediction',
-          endpoint: '/api/ai/predict-charging-time',
+          endpoint: '/api/smart-charging/preview',
           statusCode: statusCode,
           debugCode: debugCode,
           debugDetail: debugDetail,
@@ -102,7 +103,17 @@ class ChargingPredictionAdapter {
       }
 
       final data = Map<String, dynamic>.from(rawData);
-      final duration = data['predictedDurationMin'] ?? data['estimatedMinutes'];
+      // V4 canonical contract is seconds + rounded display minutes. Accept
+      // the legacy minute fields as a compatibility fallback, but never
+      // reject a valid V4 response merely because minutes were omitted.
+      final durationSecondsValue =
+          (data['predictedDurationSeconds'] as num?)?.round() ??
+          (data['predictedDurationSec'] as num?)?.round();
+      final duration =
+          data['predictedMinutes'] ??
+          data['predictedDurationMin'] ??
+          data['estimatedMinutes'] ??
+          (durationSecondsValue == null ? null : durationSecondsValue / 60);
       final minutes = (duration as num?)?.round() ?? 0;
       if (minutes <= 0) {
         throw SmartChargePredictionException(
@@ -113,11 +124,23 @@ class ChargingPredictionAdapter {
 
       final confidenceValue = data['confidence'];
       final source = data['modelSource']?.toString() ?? 'ai_model';
+      // The server is authoritative for eligibility.  Older deployments did
+      // not include the boolean and used `ai_model` as the source marker;
+      // retain that compatibility rule without misclassifying a
+      // personalized/adapter source as a physics fallback.
+      final eligibilityValue = data['aiChargeEligible'];
+      final aiChargeEligible = eligibilityValue is bool
+          ? eligibilityValue
+          : source == 'ai_model';
+      final durationSeconds =
+          durationSecondsValue ??
+          minutes * 60;
       final base = SmartChargingPlanPreview.fromPrediction(
         draft: draft,
         predictedMinutes: minutes,
         source: source,
         confidence: confidenceValue is num ? confidenceValue.toDouble() : null,
+        predictedDurationSeconds: durationSeconds,
         now: reference,
       );
 
@@ -128,22 +151,26 @@ class ChargingPredictionAdapter {
         effectiveStopAt: base.effectiveStopAt,
         predictionSource: source,
         predictionConfidence: base.predictionConfidence,
-        isPhysicsFallback: source != 'ai_model',
+        isPhysicsFallback: !aiChargeEligible ||
+            source == 'physics_fallback' ||
+            source == 'heuristic',
         isImpossible: base.isImpossible,
         warning: base.warning,
-        predictedDurationSeconds:
-            (data['predictedDurationSec'] as num?)?.round() ?? minutes * 60,
+        predictedDurationSeconds: durationSeconds,
         modelKey: 'charging_time',
         modelVersion: data['modelVersion']?.toString() ?? 'unknown',
-        runtimeHealth: source == 'ai_model' ? 'loaded' : 'fallback',
+        runtimeHealth: data['runtimeHealth']?.toString() ??
+            (aiChargeEligible ? 'loaded' : 'fallback'),
         warnings: ((data['warnings'] as List?) ?? const [])
             .map((item) => item.toString())
             .toList(),
-        fallbackReason: source == 'ai_model' ? null : source,
+        fallbackReason: aiChargeEligible
+            ? null
+            : (data['fallbackReason']?.toString() ?? source),
         analyzedAt:
             DateTime.tryParse(data['analyzedAt']?.toString() ?? '') ??
             reference,
-        aiChargeEligible: source == 'ai_model',
+        aiChargeEligible: aiChargeEligible,
       );
     } on SmartChargePredictionException {
       rethrow;
@@ -152,7 +179,7 @@ class ChargingPredictionAdapter {
         e,
         stack,
         source: 'SmartChargePrediction',
-        endpoint: '/api/ai/predict-charging-time',
+        endpoint: '/api/smart-charging/preview',
         debugCode: 'PREDICTION_EXCEPTION',
       );
       if (allowPhysicsFallback) {
@@ -182,7 +209,7 @@ class ChargingPredictionAdapter {
     final requiredWh = capacityWh * (draft.targetSoc - draft.currentSoc) / 100;
     final minutes = ((requiredWh / (powerW * efficiency)) * 60).ceil().clamp(
       1,
-      1440,
+      AppConstants.smartChargeMaxMinutes,
     );
     return SmartChargingPlanPreview.fromPrediction(
       draft: draft,

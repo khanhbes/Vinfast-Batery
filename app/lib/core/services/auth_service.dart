@@ -4,9 +4,23 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'session_service.dart';
 import 'sync_service.dart';
+import 'vehicle_policy.dart';
 
 /// AuthService - Xử lý đăng ký/đăng nhập đồng bộ với Web Dashboard
 class AuthService {
+  /// Product limit is server-configurable in V4; this is the safe client
+  /// default used before the remote policy is available.
+  /// Safe local default; backend/remote config may lower or raise this
+  /// within the product guardrail without requiring an APK update.
+  static VehiclePolicy vehiclePolicy = const VehiclePolicy();
+  static int get maxVehiclesPerAccount => vehiclePolicy.maxVehiclesPerAccount;
+
+  static void configureVehicleLimit(int value) {
+    if (value >= 1 && value <= 10) {
+      vehiclePolicy = VehiclePolicy(maxVehiclesPerAccount: value);
+    }
+  }
+
   static final AuthService _instance = AuthService._internal();
   factory AuthService() => _instance;
   AuthService._internal();
@@ -138,6 +152,7 @@ class AuthService {
 
       // 2. Đảm bảo user doc tồn tại trước khi update
       await _ensureUserDoc(user);
+      await loadVehiclePolicy();
 
       // 3. Cập nhật last login (safe vì đã ensure doc)
       await _firestore.collection('users').doc(user.uid).update({
@@ -214,6 +229,7 @@ class AuthService {
       if (user == null) return null;
 
       await _ensureUserDoc(user);
+      await loadVehiclePolicy();
       await _session.setLastLoginEmail(credentials.email);
       await _session.markAuthenticated();
       _syncService.startAutoSync();
@@ -294,20 +310,14 @@ class AuthService {
       // Đảm bảo user doc tồn tại trước (set merge)
       await _ensureUserDoc(user);
 
-      // Tạo vehicle ref
+      // Vehicle creation is guarded by a transaction. The query is repeated
+      // after acquiring the user-document read lock, so concurrent devices
+      // cannot both observe the same free slot and exceed the configured
+      // active-vehicle limit.
       final vehicleRef = _firestore.collection('Vehicles').doc();
       final vehicleId = vehicleRef.id;
-
-      // Dùng WriteBatch: tạo xe + update user atomically
-      final batch = _firestore.batch();
-
-      // 1. Tạo vehicle document — chuẩn hóa kiểu số:
-      //    - Field hiển thị int (currentOdo, currentBattery, lastBatteryPercent,
-      //      year, totalCharges, totalTrips) → ép int qua `.round()` để
-      //      `VehicleModel.fromFirestore` không crash `double is not int`.
-      //    - Field tính toán cần độ chính xác (batteryCapacity, stateOfHealth,
-      //      defaultEfficiency) → giữ double.
-      batch.set(vehicleRef, {
+      final userRef = _firestore.collection('users').doc(user.uid);
+      final vehicleData = {
         'vehicleId': vehicleId,
         'vehicleName': '$model $year',
         'ownerUid': user.uid,
@@ -319,6 +329,12 @@ class AuthService {
         'currentOdo': currentOdo.round(),
         'defaultEfficiency': defaultEfficiency,
         'lastBatteryPercent': currentBattery.round(),
+        // Values below are onboarding defaults, not verified telemetry. They
+        // become true only after the user/device supplies real measurements.
+        'hasBatteryData': false,
+        'hasSohData': false,
+        'hasEfficiencyData': true,
+        'hasOdoData': false,
         'isDeleted': false,
         'totalCharges': 0,
         'totalTrips': 0,
@@ -327,16 +343,46 @@ class AuthService {
         'source': 'flutter_app',
         'syncedToWeb': false,
         'needsSync': true,
-      });
+      };
 
-      // 2. Upsert user profile (merge: true nên safe khi doc mới tạo)
-      final userRef = _firestore.collection('users').doc(user.uid);
-      batch.set(userRef, {
-        'vehicles': FieldValue.arrayUnion([vehicleId]),
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      await batch.commit();
+      try {
+        await _firestore.runTransaction((transaction) async {
+          // Reading and updating the user profile in the same transaction
+          // serializes vehicle writes for this account.  The array/count is
+          // the write-side ledger, so two devices cannot both consume the
+          // last active-vehicle slot after observing the same query result.
+          final userSnapshot = await transaction.get(userRef);
+          final userData = userSnapshot.data() ?? <String, dynamic>{};
+          final listedVehicles =
+              (userData['vehicles'] as List<dynamic>?)
+                  ?.whereType<String>()
+                  .toSet() ??
+              <String>{};
+          final storedCount = userData['activeVehicleCount'];
+          final activeVehicleCount = storedCount is num
+              ? storedCount.toInt()
+              : listedVehicles.length;
+          if (activeVehicleCount >= maxVehiclesPerAccount) {
+            throw StateError('vehicleLimitReached');
+          }
+          transaction.set(vehicleRef, vehicleData);
+          transaction.set(userRef, {
+            'vehicles': FieldValue.arrayUnion([vehicleId]),
+            'activeVehicleCount': activeVehicleCount + 1,
+            'updatedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+        });
+      } on StateError catch (error) {
+        if (error.message == 'vehicleLimitReached') {
+          return {
+            'success': false,
+            'error':
+                'Bạn đã đạt giới hạn $maxVehiclesPerAccount xe đang hoạt động',
+            'code': 'vehicleLimitReached',
+          };
+        }
+        rethrow;
+      }
 
       // 3. Đồng bộ với web
       final syncResult = await _syncService.syncVehicleToWeb(vehicleId);
@@ -352,7 +398,8 @@ class AuthService {
     }
   }
 
-  /// Xóa xe
+  /// Archives a vehicle so its charging history and audit trail remain
+  /// recoverable. Kept under the old method name for installed callers.
   Future<Map<String, dynamic>> deleteVehicle(String vehicleId) async {
     try {
       final user = _auth.currentUser;
@@ -374,17 +421,147 @@ class AuthService {
         return {'success': false, 'error': 'Not authorized'};
       }
 
-      // Xóa vehicle
-      await _firestore.collection('Vehicles').doc(vehicleId).delete();
+      // Never archive a vehicle while its charger session is arming/active.
+      // The session owns the device safety timer; changing the vehicle
+      // context here would make subsequent reconciliation ambiguous.
+      try {
+        final activeSessions = await _firestore
+            .collection('users')
+            .doc(user.uid)
+            .collection('smartChargingSessions')
+            .where('vehicleId', isEqualTo: vehicleId)
+            .where('state', whereIn: const ['arming', 'active'])
+            .limit(1)
+            .get();
+        if (activeSessions.docs.isNotEmpty) {
+          return {
+            'success': false,
+            'error': 'Không thể lưu trữ xe khi đang có phiên sạc hoạt động',
+            'code': 'activeChargingSession',
+          };
+        }
+      } catch (_) {
+        // If the optional composite index is unavailable, do a narrower
+        // ownership-scoped read and enforce the same guard client-side.
+        final sessions = await _firestore
+            .collection('users')
+            .doc(user.uid)
+            .collection('smartChargingSessions')
+            .where('vehicleId', isEqualTo: vehicleId)
+            .get();
+        final hasActive = sessions.docs.any((doc) {
+          final state = doc.data()['state'];
+          return state == 'arming' || state == 'active';
+        });
+        if (hasActive) {
+          return {
+            'success': false,
+            'error': 'Không thể lưu trữ xe khi đang có phiên sạc hoạt động',
+            'code': 'activeChargingSession',
+          };
+        }
+      }
 
-      // Cập nhật user
-      await _firestore.collection('users').doc(user.uid).update({
-        'vehicles': FieldValue.arrayRemove([vehicleId]),
+      final vehicleRef = _firestore.collection('Vehicles').doc(vehicleId);
+      final userRef = _firestore.collection('users').doc(user.uid);
+      await _firestore.runTransaction((transaction) async {
+        final vehicleSnapshot = await transaction.get(vehicleRef);
+        final userSnapshot = await transaction.get(userRef);
+        final current = vehicleSnapshot.data() ?? <String, dynamic>{};
+        if (current['ownerUid'] != user.uid) {
+          throw StateError('vehicleNotAuthorized');
+        }
+        final userData = userSnapshot.data() ?? <String, dynamic>{};
+        final listedVehicles =
+            (userData['vehicles'] as List<dynamic>?)
+                ?.whereType<String>()
+                .toSet() ??
+            <String>{};
+        final storedCount = userData['activeVehicleCount'];
+        final activeCount = storedCount is num
+            ? storedCount.toInt()
+            : listedVehicles.length;
+        final alreadyArchived =
+            current['isArchived'] == true || current['archivedAt'] != null;
+        transaction.set(vehicleRef, {
+          'isArchived': true,
+          'archivedAt': FieldValue.serverTimestamp(),
+          'archivedBy': user.uid,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        transaction.set(userRef, {
+          'vehicles': FieldValue.arrayRemove([vehicleId]),
+          'activeVehicleCount': alreadyArchived
+              ? activeCount
+              : (activeCount - 1).clamp(0, 100),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
       });
-
-      return {'success': true, 'message': 'Vehicle deleted'};
+      return {'success': true, 'message': 'Vehicle archived', 'archived': true};
+    } on StateError catch (error) {
+      if (error.message == 'vehicleNotAuthorized') {
+        return {'success': false, 'error': 'Not authorized'};
+      }
+      return {'success': false, 'error': error.message};
     } catch (e) {
       return {'success': false, 'error': 'Failed to delete vehicle: $e'};
+    }
+  }
+
+  Future<Map<String, dynamic>> restoreVehicle(String vehicleId) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) return {'success': false, 'error': 'Not logged in'};
+      final ref = _firestore.collection('Vehicles').doc(vehicleId);
+      final userRef = _firestore.collection('users').doc(user.uid);
+      try {
+        await _firestore.runTransaction((transaction) async {
+          final snap = await transaction.get(ref);
+          if (!snap.exists || snap.data()?['ownerUid'] != user.uid) {
+            throw StateError('vehicleNotAuthorized');
+          }
+          final userSnapshot = await transaction.get(userRef);
+          final userData = userSnapshot.data() ?? <String, dynamic>{};
+          final listedVehicles =
+              (userData['vehicles'] as List<dynamic>?)
+                  ?.whereType<String>()
+                  .toSet() ??
+              <String>{};
+          final storedCount = userData['activeVehicleCount'];
+          final activeVehicleCount = storedCount is num
+              ? storedCount.toInt()
+              : listedVehicles.length;
+          if (activeVehicleCount >= maxVehiclesPerAccount) {
+            throw StateError('vehicleLimitReached');
+          }
+          transaction.set(ref, {
+            'isArchived': false,
+            'archivedAt': FieldValue.delete(),
+            'archivedBy': FieldValue.delete(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+          transaction.set(userRef, {
+            'vehicles': FieldValue.arrayUnion([vehicleId]),
+            'activeVehicleCount': activeVehicleCount + 1,
+            'updatedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+        });
+      } on StateError catch (error) {
+        if (error.message == 'vehicleLimitReached') {
+          return {
+            'success': false,
+            'error': 'Đã đạt giới hạn xe hoạt động',
+            'code': 'vehicleLimitReached',
+          };
+        }
+        if (error.message == 'vehicleNotAuthorized') {
+          return {'success': false, 'error': 'Not authorized'};
+        }
+        rethrow;
+      }
+      return {'success': true, 'message': 'Vehicle restored'};
+    } catch (e) {
+      return {'success': false, 'error': 'Failed to restore vehicle: $e'};
     }
   }
 
@@ -426,7 +603,9 @@ class AuthService {
   /// Lấy danh sách xe của user.
   /// Nếu composite index (ownerUid + createdAt) chưa deploy thì
   /// fallback query chỉ theo ownerUid và sort ở client.
-  Future<List<Map<String, dynamic>>> getUserVehicles() async {
+  Future<List<Map<String, dynamic>>> getUserVehicles({
+    bool includeArchived = false,
+  }) async {
     try {
       final user = _auth.currentUser;
       if (user == null) return [];
@@ -452,11 +631,19 @@ class AuthService {
         docs = snapshot.docs;
       }
 
-      final vehicles = docs.map((doc) {
-        final data = doc.data();
-        data['id'] = doc.id;
-        return data;
-      }).toList();
+      final vehicles = docs
+          .where((doc) {
+            final data = doc.data();
+            if (data['isDeleted'] == true) return false;
+            if (includeArchived) return true;
+            return data['isArchived'] != true && data['archivedAt'] == null;
+          })
+          .map((doc) {
+            final data = doc.data();
+            data['id'] = doc.id;
+            return data;
+          })
+          .toList();
 
       // Client-side sort (mới nhất trước)
       vehicles.sort((a, b) {
@@ -478,6 +665,20 @@ class AuthService {
   /// Kiểm tra đăng nhập status — Firebase Auth là source of truth.
   Future<bool> isLoggedIn() async {
     return _auth.currentUser != null;
+  }
+
+  /// Loads the server-configured active-vehicle limit. Invalid or unavailable
+  /// values leave the safe local default unchanged.
+  Future<void> loadVehiclePolicy() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+    try {
+      final snapshot = await _firestore.collection('users').doc(user.uid).get();
+      final configured = snapshot.data()?['maxActiveVehicles'];
+      if (configured is num) configureVehicleLimit(configured.round());
+    } catch (_) {
+      // Policy fetch is best effort; creation remains guarded by the default.
+    }
   }
 
   /// Lấy thông tin user hiện tại

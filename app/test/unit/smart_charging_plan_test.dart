@@ -155,6 +155,33 @@ void main() {
     expect(preview.predictionConfidence, 91);
   });
 
+  test('server eligibility keeps personalized AI eligible', () async {
+    final adapter = ChargingPredictionAdapter(
+      predictionCall:
+          ({
+            required vehicleId,
+            required currentBattery,
+            required targetBattery,
+            ambientTempC,
+            bool strictAi = false,
+          }) async => {
+            'success': true,
+            'data': {
+              'predictedDurationSeconds': 2700,
+              'modelSource': 'personal_adapter',
+              'runtimeHealth': 'loaded',
+              'aiChargeEligible': true,
+              'modelVersion': 'charging_time-v4',
+            },
+          },
+    );
+    final preview = await adapter.predict(draft(), now: now);
+    expect(preview.aiChargeEligible, isTrue);
+    expect(preview.isPhysicsFallback, isFalse);
+    expect(preview.runtimeHealth, 'loaded');
+    expect(preview.fallbackReason, isNull);
+  });
+
   test(
     'API failure in strict AI mode throws SmartChargePredictionException',
     () async {

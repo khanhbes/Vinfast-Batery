@@ -694,7 +694,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 icon: Icons.bolt_rounded,
                 label: 'Bắt đầu sạc',
                 color: AppColors.primaryGreen,
-                onTap: () => _showChargeTargetDialog(vehicleAsync, vehicleId),
+                onTap: () => _openSmartCharge(vehicleAsync, vehicleId),
               ),
             ),
           ],
@@ -1218,7 +1218,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       case QuickAction.startTrip:
         _startTrip(vehicleAsync, vehicleId);
       case QuickAction.startCharge:
-        _showChargeTargetDialog(vehicleAsync, vehicleId);
+        _openSmartCharge(vehicleAsync, vehicleId);
       case QuickAction.manualTrip:
         final vehicle = vehicleAsync.value;
         if (vehicle == null) return;
@@ -1332,41 +1332,31 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     String vehicleId, {
     int targetPercent = 80,
   }) async {
-    final vehicle = vehicleAsync.value;
-    if (vehicle == null) return;
-
-    try {
-      // Tính adaptive charge rate từ lịch sử (fallback 0.38 nếu chưa có log)
-      double adaptiveRate = 0.38;
-      try {
-        final repo = ref.read(chargeLogRepositoryProvider);
-        final logs = await repo.getChargeLogs(vehicleId);
-        if (logs.isNotEmpty) {
-          final calculatedRate = BatteryLogicService.avgChargeRate(logs);
-          if (calculatedRate > 0) {
-            adaptiveRate = calculatedRate;
-          }
-        }
-      } catch (_) {}
-
-      await _chargeService.startCharging(
-        vehicleId: vehicleId,
-        currentBattery: vehicle.currentBattery,
-        currentOdo: vehicle.currentOdo,
-        chargeRatePerMin: adaptiveRate,
-        targetBatteryPercent: targetPercent,
-      );
-
-      final bgOk = await BackgroundServiceConfig.safeStartForTrip();
-      if (bgOk) BackgroundServiceConfig.sendCommand('startCharge');
-
-      setState(() {});
-      AppPopup.showSuccess('Đã bắt đầu phiên sạc');
-    } catch (e) {
-      AppPopup.showError('Không thể bắt đầu sạc: $e');
-    }
+    // Keep the old private callback source-compatible, but route every
+    // Dashboard entry through Smart Charge's timer/readback safety gate.
+    _openSmartCharge(vehicleAsync, vehicleId);
   }
 
+  /// Dashboard is only an entry point; Smart Charge owns prediction,
+  /// Shelly timer arming and session reconciliation. Keeping this navigation
+  /// centralized prevents the legacy ChargeTrackingService flow from issuing
+  /// an untimed relay ON command.
+  void _openSmartCharge(AsyncValue vehicleAsync, String vehicleId) {
+    final vehicle = vehicleAsync.value;
+    if (vehicle == null || vehicleId.trim().isEmpty) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SmartChargingControlScreen(
+          vehicleId: vehicleId,
+          currentSoc: vehicle.currentBattery.toDouble(),
+        ),
+      ),
+    );
+  }
+
+  // Retained only for compatibility with saved/legacy callers. New entry
+  // points use [_openSmartCharge] directly.
+  // ignore: unused_element
   void _showChargeTargetDialog(AsyncValue vehicleAsync, String vehicleId) {
     int selectedTarget = 80;
     showDialog(

@@ -1,5 +1,5 @@
-import 'dart:math';
 import 'dart:async';
+import 'dart:math';
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -14,10 +14,14 @@ class SmartChargeHistoryScreen extends StatefulWidget {
     super.key,
     required this.controller,
     this.initialItems = const [],
+    this.initialSessionId,
+    this.onPendingTargetConsumed,
   });
 
   final SmartChargingController controller;
   final List<SmartChargingSession> initialItems;
+  final String? initialSessionId;
+  final VoidCallback? onPendingTargetConsumed;
 
   @override
   State<SmartChargeHistoryScreen> createState() => _HistoryScreenState();
@@ -28,9 +32,11 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
   ChargingStrategy? _filter;
   String? _cursor;
   String? _error;
+  bool _allVehicles = false;
   bool _loading = true;
   bool _loadingMore = false;
   Timer? _liveTimer;
+  bool _openedPending = false;
 
   @override
   void initState() {
@@ -53,6 +59,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
         _loading = true;
         _error = null;
       });
+      _openPendingIfAvailable();
     } else {
       setState(() => _loadingMore = true);
     }
@@ -60,6 +67,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
       final page = await widget.controller.getHistoryPage(
         cursor: reset ? null : _cursor,
         strategy: _filter,
+        allVehicles: _allVehicles,
       );
       if (!mounted) return;
       setState(() {
@@ -77,6 +85,24 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
         });
       }
     }
+  }
+
+  void _openPendingIfAvailable() {
+    final target = widget.initialSessionId;
+    if (_openedPending || target == null || !mounted) return;
+    final session = _items.where((item) => item.sessionId == target).firstOrNull;
+    if (session == null) return;
+    _openedPending = true;
+    widget.onPendingTargetConsumed?.call();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => SmartChargeSessionDetailScreen(
+          controller: widget.controller,
+          session: session,
+        ),
+      ));
+    });
   }
 
   @override
@@ -109,7 +135,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
                 ),
               SliverList.separated(
                 itemCount: _items.length,
-                separatorBuilder: (_, __) =>
+                separatorBuilder: (_, _) =>
                     const Divider(height: 1, indent: 16, endIndent: 16),
                 itemBuilder: (context, index) => _HistoryRow(
                   session: _items[index],
@@ -121,6 +147,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
                       ),
                     ),
                   ),
+                  onHide: () => _hide(_items[index]),
                 ),
               ),
               SliverToBoxAdapter(
@@ -152,22 +179,38 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
     );
   }
 
-  Widget _filters() => SegmentedButton<ChargingStrategy?>(
-    showSelectedIcon: false,
-    segments: const [
-      ButtonSegment(value: null, label: Text('Tất cả')),
-      ButtonSegment(value: ChargingStrategy.aiTarget, label: Text('Sạc AI')),
-      ButtonSegment(
-        value: ChargingStrategy.manualTimed,
-        label: Text('Thủ công'),
+  Widget _filters() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      SegmentedButton<bool>(
+        showSelectedIcon: false,
+        segments: const [
+          ButtonSegment(value: false, label: Text('Xe này')),
+          ButtonSegment(value: true, label: Text('Tất cả xe')),
+        ],
+        selected: {_allVehicles},
+        onSelectionChanged: (value) {
+          _allVehicles = value.first;
+          _cursor = null;
+          _load(reset: true);
+        },
+      ),
+      const SizedBox(height: 8),
+      SegmentedButton<ChargingStrategy?>(
+        showSelectedIcon: false,
+        segments: const [
+          ButtonSegment(value: null, label: Text('Tất cả')),
+          ButtonSegment(value: ChargingStrategy.aiTarget, label: Text('Sạc AI')),
+          ButtonSegment(value: ChargingStrategy.manualTimed, label: Text('Thủ công')),
+        ],
+        selected: {_filter},
+        onSelectionChanged: (value) {
+          _filter = value.first;
+          _cursor = null;
+          _load(reset: true);
+        },
       ),
     ],
-    selected: {_filter},
-    onSelectionChanged: (value) {
-      _filter = value.first;
-      _cursor = null;
-      _load(reset: true);
-    },
   );
 
   Widget _errorState() => ListView(
@@ -188,6 +231,47 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
       ),
     ],
   );
+
+  Future<void> _hide(SmartChargingSession session) async {
+    if (!session.state.isTerminal) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Ẩn phiên sạc?'),
+        content: const Text(
+          'Phiên sẽ được ẩn khỏi lịch sử thường. Dữ liệu gốc vẫn được giữ lại.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('HỦY'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('ẨN PHIÊN'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await widget.controller.hideSession(session.sessionId);
+      if (mounted) {
+        setState(
+          () => _items.removeWhere((item) => item.sessionId == session.sessionId),
+        );
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đã ẩn phiên khỏi lịch sử.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Không thể ẩn phiên: $error')),
+        );
+      }
+    }
+  }
 }
 
 class _EmptyHistory extends StatelessWidget {
@@ -234,9 +318,14 @@ class _StaleNotice extends StatelessWidget {
 }
 
 class _HistoryRow extends StatelessWidget {
-  const _HistoryRow({required this.session, required this.onTap});
+  const _HistoryRow({
+    required this.session,
+    required this.onTap,
+    required this.onHide,
+  });
   final SmartChargingSession session;
   final VoidCallback onTap;
+  final VoidCallback onHide;
 
   @override
   Widget build(BuildContext context) {
@@ -289,6 +378,7 @@ class _HistoryRow extends StatelessWidget {
           ),
         ),
         trailing: const Icon(Icons.chevron_right_rounded),
+        onLongPress: session.state.isTerminal ? onHide : null,
       ),
     );
   }
@@ -409,6 +499,15 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
             label: const Text('XÁC NHẬN SOC THỰC TẾ KHI KẾT THÚC'),
           ),
           const SizedBox(height: 8),
+          TextButton.icon(
+            onPressed: widget.session.state.isTerminal ? _privacyErase : null,
+            icon: const Icon(Icons.delete_forever_outlined),
+            label: const Text('XÓA VĨNH VIỄN DỮ LIỆU PHIÊN'),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+          ),
+          const SizedBox(height: 8),
           Text(
             'Các chỉ số pin là ước tính, không phải dữ liệu BMS. Dung lượng khả dụng chỉ hiện khi phiên đủ chất lượng.',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -485,8 +584,9 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
   );
 
   Widget _chart() {
-    if (_points == null)
+    if (_points == null) {
       return const Center(child: CircularProgressIndicator());
+    }
     if (_error != null) return Center(child: Text(_error!));
     if (_points!.isEmpty) {
       return const Center(child: Text('Phiên này chưa có telemetry chi tiết.'));
@@ -669,10 +769,57 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
       );
       if (mounted) setState(() => _summary = summary);
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('$error')));
+      }
+    }
+  }
+
+  Future<void> _privacyErase() async {
+    final input = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Xóa vĩnh viễn phiên sạc?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Thao tác này xóa summary, telemetry và không thể hoàn tác.'),
+            const SizedBox(height: 12),
+            SelectableText(widget.session.sessionId,
+                style: const TextStyle(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            TextField(
+              controller: input,
+              decoration: const InputDecoration(labelText: 'Nhập mã phiên để xác nhận'),
+              autofocus: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('HỦY')),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, input.text.trim() == widget.session.sessionId),
+            child: const Text('XÓA VĨNH VIỄN'),
+          ),
+        ],
+      ),
+    );
+    final code = input.text.trim();
+    input.dispose();
+    if (confirmed != true || !mounted) return;
+    try {
+      await widget.controller.privacyEraseSession(widget.session.sessionId, code);
+      if (mounted) Navigator.of(context).pop();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Không thể xóa dữ liệu: $error')),
+        );
+      }
     }
   }
 }

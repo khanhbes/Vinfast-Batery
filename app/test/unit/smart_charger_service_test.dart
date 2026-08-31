@@ -39,6 +39,20 @@ void main() {
       expect(isAllowedLanAddress('example.com'), isFalse);
     });
 
+    test('redacted profile never exposes Shelly secrets', () {
+      final redacted = const ShellyConnectionProfile(
+        cloudHost: 'https://shelly-123-eu.shelly.cloud',
+        cloudAuthKey: 'secret-key',
+        deviceId: 'aabbccddeeff',
+        lanAddress: '192.168.1.50',
+        localPassword: 'local-secret',
+      ).toRedactedJson();
+      expect(redacted, isNot(contains('secret-key')));
+      expect(redacted, isNot(contains('local-secret')));
+      expect(redacted['hasCloudAuthKey'], isTrue);
+      expect(redacted['hasLocalPassword'], isTrue);
+    });
+
     test('mDNS candidate only accepts Plug S generation 3', () {
       expect(
         const DiscoveredShellyDevice(

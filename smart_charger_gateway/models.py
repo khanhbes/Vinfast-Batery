@@ -7,6 +7,11 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 
+# V4 safety invariant: all legacy gateway entry points are bounded to ten
+# hours, matching the Cloud-first Shelly service.
+MAX_SMART_CHARGE_MINUTES = 600
+
+
 class ChargerStatus(BaseModel):
     online: bool
     relay: bool
@@ -73,7 +78,7 @@ class ChargingSessionRequest(BaseModel):
     vehicle_id: str = Field(min_length=1)
     start_soc: float = Field(ge=0, le=100)
     target_soc: float = Field(ge=0, le=100)
-    predicted_minutes: int = Field(ge=1, le=720)
+    predicted_minutes: int = Field(ge=1, le=MAX_SMART_CHARGE_MINUTES)
     started_at: datetime
     predicted_full_at: datetime
     charging_mode: Literal["standard", "fast"] = "standard"
@@ -100,7 +105,7 @@ class AutomaticChargingSessionRequest(BaseModel):
     vehicle_id: str = Field(min_length=1)
     start_soc: float = Field(ge=0, le=100)
     target_soc: float = Field(gt=0, le=100)
-    predicted_minutes: int = Field(ge=1, le=1440)
+    predicted_minutes: int = Field(ge=1, le=MAX_SMART_CHARGE_MINUTES)
     strategy: ChargingStrategy = ChargingStrategy.SMART_COMBINED
     hard_deadline_at: datetime
     predicted_full_at: datetime | None = None
@@ -121,7 +126,9 @@ class ChargingSessionPatchRequest(BaseModel):
     expected_version: int = Field(ge=1)
     hard_deadline_at: datetime | None = None
     target_soc: float | None = Field(default=None, gt=0, le=100)
-    predicted_minutes: int | None = Field(default=None, ge=1, le=1440)
+    predicted_minutes: int | None = Field(
+        default=None, ge=1, le=MAX_SMART_CHARGE_MINUTES
+    )
     acknowledge_extension: bool = False
 
 

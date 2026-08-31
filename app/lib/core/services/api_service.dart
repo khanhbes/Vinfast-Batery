@@ -307,6 +307,25 @@ class ApiService {
     });
   }
 
+  /// Canonical Smart Charge preview contract. The server owns model
+  /// selection, personal-profile fusion and safety validation; the app never
+  /// runs a charging-time model locally.
+  Future<Map<String, dynamic>> previewSmartCharge({
+    required String vehicleId,
+    required int currentBattery,
+    required int targetBattery,
+    double? ambientTempC,
+    bool strictAi = true,
+  }) async {
+    return _post('/api/smart-charging/preview', {
+      'vehicleId': vehicleId,
+      'currentSoc': currentBattery,
+      'targetSoc': targetBattery,
+      'ambientTempC': ambientTempC ?? 25.0,
+      'strictAi': strictAi,
+    });
+  }
+
   /// Get AI Center charging_time model status
   Future<Map<String, dynamic>> getChargingModelStatus() async {
     return get('/api/ai/charging-model-status');
