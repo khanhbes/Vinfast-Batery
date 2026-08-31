@@ -52,46 +52,42 @@ $oldPubspecContent = $pubspec
 $oldConstContent = $null
 $script:versionChanged = $false
 
-# Resolve Flutter explicitly.  Build agents and fresh Windows terminals often
-# have Android Studio/JDK configured but omit Flutter from PATH; invoking a
-# bare `flutter` then exits before Gradle and leaves no useful diagnostic.
-$flutterCommand = Get-Command flutter -ErrorAction SilentlyContinue
-if ($null -eq $flutterCommand) {
-    $flutterCandidates = @('C:\flutter\bin\flutter.bat')
-    if (-not [string]::IsNullOrWhiteSpace($env:FLUTTER_ROOT)) {
-        $flutterCandidates = @(
-            (Join-Path $env:FLUTTER_ROOT 'bin\flutter.bat'),
-            $flutterCandidates
-        )
-    }
-    if (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
-        $flutterCandidates += Join-Path $env:LOCALAPPDATA 'flutter\bin\flutter.bat'
-    }
-    foreach ($candidate in $flutterCandidates) {
-        if (-not [string]::IsNullOrWhiteSpace($candidate) -and (Test-Path $candidate)) {
-            $flutterBin = Split-Path -Parent $candidate
-            $env:Path = "$flutterBin;$env:Path"
-            $flutterCommand = Get-Command flutter -ErrorAction SilentlyContinue
-            if ($null -eq $flutterCommand) {
-                # Windows command discovery may not refresh for .bat files;
-                # retain the resolved executable for the wrapper below.
-                $flutterCommand = Get-Item $candidate
-            }
-            Write-Host "  Su dung Flutter tu: $candidate" -ForegroundColor DarkGray
-            break
-        }
+# Resolve the SDK itself instead of a PATH/WindowsApps shim. On some Windows
+# installations `Get-Command flutter` resolves to an inaccessible alias and
+# fails before Flutter can print a diagnostic. Calling flutter_tools.snapshot
+# through the SDK's dart.exe is the same tool entry point without that shim.
+$flutterRoots = @()
+if (-not [string]::IsNullOrWhiteSpace($env:FLUTTER_ROOT)) {
+    $flutterRoots += $env:FLUTTER_ROOT
+}
+$flutterRoots += 'C:\flutter'
+if (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+    $flutterRoots += Join-Path $env:LOCALAPPDATA 'flutter'
+}
+
+$flutterDart = $null
+$flutterSnapshot = $null
+foreach ($root in $flutterRoots) {
+    if ([string]::IsNullOrWhiteSpace($root)) { continue }
+    $dartCandidate = Join-Path $root 'bin\cache\dart-sdk\bin\dart.exe'
+    $snapshotCandidate = Join-Path $root 'bin\cache\flutter_tools.snapshot'
+    if ((Test-Path $dartCandidate) -and (Test-Path $snapshotCandidate)) {
+        $flutterDart = (Get-Item $dartCandidate).FullName
+        $flutterSnapshot = (Get-Item $snapshotCandidate).FullName
+        $env:FLUTTER_ROOT = (Get-Item $root).FullName
+        $env:Path = "$(Join-Path $env:FLUTTER_ROOT 'bin');$env:Path"
+        Write-Host "  Su dung Flutter SDK: $env:FLUTTER_ROOT" -ForegroundColor DarkGray
+        break
     }
 }
-if ($null -eq $flutterCommand) {
-    throw 'Khong tim thay Flutter. Dat FLUTTER_ROOT hoac cai Flutter tai C:\flutter.'
+if ($null -eq $flutterDart -or $null -eq $flutterSnapshot) {
+    throw 'Khong tim thay Flutter SDK day du. Dat FLUTTER_ROOT hoac cai Flutter tai C:\flutter.'
 }
-$flutterExe = if ($flutterCommand.PSObject.Properties.Name -contains 'Source' -and $flutterCommand.Source) {
-    $flutterCommand.Source
-} else {
-    $flutterCommand.FullName
-}
+
+$env:CI = 'true'
+$env:FLUTTER_SUPPRESS_ANALYTICS = 'true'
 function Invoke-Flutter {
-    & $flutterExe @args
+    & $flutterDart $flutterSnapshot @args
     if ($LASTEXITCODE -ne 0) { throw "Flutter command that bai (exit $LASTEXITCODE): $($args -join ' ')" }
 }
 

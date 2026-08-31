@@ -27,6 +27,7 @@ class ChargeScreen extends ConsumerWidget {
           : SmartChargingControlScreen(
               vehicleId: vehicleId,
               currentSoc: value.currentBattery.toDouble(),
+              embedded: true,
             ),
     );
   }

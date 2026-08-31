@@ -12,6 +12,7 @@ import '../../data/services/server_smart_charger_service.dart';
 import '../../data/services/smart_charger_credentials_service.dart';
 import '../../data/services/smart_charger_service.dart';
 import '../../data/services/vehicle_charger_binding_service.dart';
+import '../../data/services/smart_charge_preferences_service.dart';
 import '../../core/services/session_service.dart';
 
 class SmartChargerSetupHubScreen extends StatefulWidget {
@@ -26,11 +27,13 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
   final direct = SmartChargerService();
   final server = ServerSmartChargerService();
   final vehicleBindings = VehicleChargerBindingService();
+  final chargePreferences = SmartChargePreferencesService();
   final host = TextEditingController();
   final cloudKey = TextEditingController();
   final deviceId = TextEditingController();
   final lan = TextEditingController();
   final password = TextEditingController();
+  final tariff = TextEditingController();
 
   SmartChargerConnectionMode mode = SmartChargerConnectionMode.serverCloud;
   SmartChargerBinding? binding;
@@ -64,6 +67,10 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
     final draft = await credentials.readDraft();
     final profile = draft ?? active;
     verification = await credentials.readVerification();
+    final preferences = await chargePreferences.load();
+    if (preferences.tariffVndPerKwh != null) {
+      tariff.text = preferences.tariffVndPerKwh!.toStringAsFixed(0);
+    }
     if (profile != null) {
       host.text = profile.cloudHost;
       cloudKey.text = profile.cloudAuthKey;
@@ -74,7 +81,9 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
     if (mode == SmartChargerConnectionMode.serverCloud) {
       try {
         binding = await server.getBinding(vehicleId: selectedVehicleId);
-        capabilities = await server.getCapabilities(vehicleId: selectedVehicleId);
+        capabilities = await server.getCapabilities(
+          vehicleId: selectedVehicleId,
+        );
       } on SmartChargerException {
         capabilities = SmartChargerCapabilities.unavailable;
       }
@@ -129,7 +138,9 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
     if (next == SmartChargerConnectionMode.serverCloud) {
       try {
         binding = await server.getBinding(vehicleId: selectedVehicleId);
-        capabilities = await server.getCapabilities(vehicleId: selectedVehicleId);
+        capabilities = await server.getCapabilities(
+          vehicleId: selectedVehicleId,
+        );
       } on SmartChargerException {
         capabilities = SmartChargerCapabilities.unavailable;
       }
@@ -147,7 +158,9 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
     setState(() => busy = true);
     try {
       binding = await server.getBinding(vehicleId: selectedVehicleId);
-      if (binding != null && selectedVehicleId != null && selectedVehicleId!.isNotEmpty) {
+      if (binding != null &&
+          selectedVehicleId != null &&
+          selectedVehicleId!.isNotEmpty) {
         binding = await server.selectDevice(
           binding!.deviceId,
           vehicleId: selectedVehicleId!,
@@ -346,11 +359,38 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
     AppPopup.showSuccess('Đã xóa cấu hình Shelly');
   }
 
+  Future<void> _saveTariff() async {
+    final normalized = tariff.text
+        .trim()
+        .replaceAll('.', '')
+        .replaceAll(',', '');
+    final value = normalized.isEmpty ? null : double.tryParse(normalized);
+    if (normalized.isNotEmpty && value == null) {
+      AppPopup.showError('Giá điện chưa hợp lệ');
+      return;
+    }
+    setState(() => busy = true);
+    try {
+      await chargePreferences.saveTariff(value);
+      AppPopup.showSuccess(
+        value == null ? 'Đã xóa giá điện' : 'Đã lưu giá điện',
+        detail: value == null
+            ? 'Chi phí sẽ không được ước tính cho phiên mới.'
+            : '${NumberFormat.decimalPattern('vi_VN').format(value)} VND/kWh · áp dụng cho phiên mới',
+      );
+    } on Object catch (error) {
+      AppPopup.showError('Không thể lưu giá điện', detail: '$error');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
   @override
   void dispose() {
     for (final controller in [host, cloudKey, deviceId, lan, password]) {
       controller.dispose();
     }
+    tariff.dispose();
     super.dispose();
   }
 
@@ -378,6 +418,40 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
             mode: mode,
             capabilities: capabilities,
             verification: verification,
+          ),
+          const SizedBox(height: 20),
+          Text('Chi phí sạc', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 6),
+          Text(
+            'Giá điện được lưu theo tài khoản. Mỗi phiên mới giữ một snapshot để lịch sử không đổi khi bạn cập nhật giá.',
+            style: TextStyle(color: colors.onSurfaceVariant),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: tariff,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: false,
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Giá điện',
+                    hintText: 'Ví dụ: 2800',
+                    suffixText: 'VND/kWh',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              SizedBox(
+                height: 56,
+                child: FilledButton(
+                  onPressed: busy ? null : _saveTariff,
+                  child: const Text('LƯU GIÁ'),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 20),
           SegmentedButton<SmartChargerConnectionMode>(

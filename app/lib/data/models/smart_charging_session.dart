@@ -427,6 +427,9 @@ class SmartChargingSession {
     this.peakPowerW,
     this.averageVoltageV,
     this.averageCurrentA,
+    this.tariffVndPerKwhSnapshot,
+    this.estimatedCostVnd,
+    this.costQuality = 'unavailable',
     this.userStopReason = UserStopReason.none,
     this.trainingState = 'pending',
     this.trainingReason,
@@ -495,6 +498,9 @@ class SmartChargingSession {
   final double? peakPowerW;
   final double? averageVoltageV;
   final double? averageCurrentA;
+  final double? tariffVndPerKwhSnapshot;
+  final double? estimatedCostVnd;
+  final String costQuality;
   final UserStopReason userStopReason;
   final String trainingState;
   final String? trainingReason;
@@ -607,6 +613,17 @@ class SmartChargingSession {
       peakPowerW: (json['peak_power_w'] as num?)?.toDouble(),
       averageVoltageV: (json['average_voltage_v'] as num?)?.toDouble(),
       averageCurrentA: (json['average_current_a'] as num?)?.toDouble(),
+      tariffVndPerKwhSnapshot:
+          ((json['tariff_vnd_per_kwh_snapshot'] ??
+                      json['tariffVndPerKwhSnapshot'])
+                  as num?)
+              ?.toDouble(),
+      estimatedCostVnd:
+          ((json['estimated_cost_vnd'] ?? json['estimatedCostVnd']) as num?)
+              ?.toDouble(),
+      costQuality:
+          (json['cost_quality'] ?? json['costQuality'])?.toString() ??
+          'unavailable',
       userStopReason: UserStopReason.fromJson(json['user_stop_reason']),
       trainingState:
           json['personal_ai_training_state']?.toString() ?? 'pending',
@@ -707,6 +724,10 @@ class SmartChargingSession {
     if (peakPowerW != null) 'peak_power_w': peakPowerW,
     if (averageVoltageV != null) 'average_voltage_v': averageVoltageV,
     if (averageCurrentA != null) 'average_current_a': averageCurrentA,
+    if (tariffVndPerKwhSnapshot != null)
+      'tariff_vnd_per_kwh_snapshot': tariffVndPerKwhSnapshot,
+    if (estimatedCostVnd != null) 'estimated_cost_vnd': estimatedCostVnd,
+    'cost_quality': costQuality,
     'user_stop_reason': userStopReason.wireValue,
     'personal_ai_training_state': trainingState,
     if (trainingReason != null) 'personal_ai_training_reason': trainingReason,
@@ -730,6 +751,9 @@ class SmartChargingSession {
     UserStopReason? userStopReason,
     String? trainingState,
     String? trainingReason,
+    double? tariffVndPerKwhSnapshot,
+    double? estimatedCostVnd,
+    String? costQuality,
   }) => SmartChargingSession(
     sessionId: sessionId,
     vehicleId: vehicleId,
@@ -794,6 +818,10 @@ class SmartChargingSession {
     peakPowerW: peakPowerW,
     averageVoltageV: averageVoltageV,
     averageCurrentA: averageCurrentA,
+    tariffVndPerKwhSnapshot:
+        tariffVndPerKwhSnapshot ?? this.tariffVndPerKwhSnapshot,
+    estimatedCostVnd: estimatedCostVnd ?? this.estimatedCostVnd,
+    costQuality: costQuality ?? this.costQuality,
     userStopReason: userStopReason ?? this.userStopReason,
     trainingState: trainingState ?? this.trainingState,
     trainingReason: trainingReason ?? this.trainingReason,

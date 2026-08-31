@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'app_motion.dart';
+import 'cockpit_design_system.dart';
 
 /// Page transitions áp dụng cho mọi platform — đồng bộ với `AppMotion`.
 const PageTransitionsTheme _kAppPageTransitions = PageTransitionsTheme(
@@ -24,7 +25,10 @@ class AppTheme {
   // ═══════════════════════════════════════════════════════════════
   // LIGHT THEME
   // ═══════════════════════════════════════════════════════════════
-  static ThemeData get lightTheme => _buildLightTheme();
+  /// Light is retained as a compatibility entry point. The product now ships
+  /// a single dark cockpit visual system, so legacy light/system preferences
+  /// resolve to the regular dark theme.
+  static ThemeData get lightTheme => _buildDarkTheme();
 
   static ThemeData _buildLightTheme() {
     return ThemeData(
@@ -48,7 +52,7 @@ class AppTheme {
         onError: Colors.white,
         outline: AppColorsLight.border,
       ),
-      textTheme: GoogleFonts.interTextTheme(
+      textTheme: GoogleFonts.plusJakartaSansTextTheme(
         TextTheme(
           displayLarge: TextStyle(
             color: AppColorsLight.textPrimary,
@@ -237,7 +241,7 @@ class AppTheme {
         onError: Color(0xFF690005),
         outline: AppColorsDark.borderLight,
       ),
-      textTheme: GoogleFonts.interTextTheme(
+      textTheme: GoogleFonts.plusJakartaSansTextTheme(
         const TextTheme(
           displayLarge: TextStyle(
             color: AppColorsDark.textPrimary,
@@ -401,6 +405,17 @@ class AppTheme {
       pageTransitionsTheme: _kAppPageTransitions,
     );
   }
+
+  static ThemeData get amoledTheme => _buildDarkTheme().copyWith(
+    scaffoldBackgroundColor: Colors.black,
+    colorScheme: _buildDarkTheme().colorScheme.copyWith(
+      surface: Colors.black,
+      surfaceContainerLowest: Colors.black,
+    ),
+    appBarTheme: _buildDarkTheme().appBarTheme.copyWith(
+      backgroundColor: Colors.black,
+    ),
+  );
 }
 
 // ═════════════════════════════════════════════════════════════════
@@ -451,36 +466,36 @@ class AppColorsDark {
   AppColorsDark._();
 
   // Primary palette (VinFast-inspired)
-  static const Color primary = Color(0xFF4DA3FF);
-  static const Color primaryContainer = Color(0xFF003B70);
-  static const Color onPrimaryContainer = Color(0xFFDCEEFF);
-  static const Color secondary = Color(0xFF00D9C0);
-  static const Color accent = Color(0xFFFF6B6B);
+  static const Color primary = CockpitColors.emerald;
+  static const Color primaryContainer = Color(0xFF123A2D);
+  static const Color onPrimaryContainer = Color(0xFFD1FAE5);
+  static const Color secondary = CockpitColors.emeraldStrong;
+  static const Color accent = CockpitColors.danger;
 
   // Background & Surface
-  static const Color background = Color(0xFF07111F);
-  static const Color surface = Color(0xFF101B2C);
-  static const Color surfaceVariant = Color(0xFF18263A);
-  static const Color card = Color(0xFF101B2C);
-  static const Color cardElevated = Color(0xFF18263A);
+  static const Color background = CockpitColors.background;
+  static const Color surface = CockpitColors.shell;
+  static const Color surfaceVariant = CockpitColors.elevated;
+  static const Color card = CockpitColors.surface;
+  static const Color cardElevated = CockpitColors.elevated;
 
   // Text
-  static const Color textPrimary = Color(0xFFF8FAFC);
-  static const Color textSecondary = Color(0xFFC0CAD8);
-  static const Color textTertiary = Color(0xFF94A3B8);
-  static const Color textHint = Color(0xFF8290A3);
+  static const Color textPrimary = CockpitColors.text;
+  static const Color textSecondary = CockpitColors.muted;
+  static const Color textTertiary = CockpitColors.dim;
+  static const Color textHint = CockpitColors.dim;
   static const Color textInverse = Color(0xFF000000);
 
   // Semantic
-  static const Color success = Color(0xFF00D9C0);
-  static const Color warning = Color(0xFFFFA726);
-  static const Color error = Color(0xFFFF5252);
-  static const Color info = Color(0xFF448AFF);
+  static const Color success = CockpitColors.emerald;
+  static const Color warning = CockpitColors.amber;
+  static const Color error = CockpitColors.danger;
+  static const Color info = CockpitColors.info;
 
   // Borders & Dividers
-  static const Color border = Color(0xFF26364B);
-  static const Color borderLight = Color(0xFF33465F);
-  static const Color divider = Color(0xFF26364B);
-  static const Color glass = Color(0xFF132237);
-  static const Color glassBorder = Color(0xFF33465F);
+  static const Color border = CockpitColors.border;
+  static const Color borderLight = CockpitColors.borderStrong;
+  static const Color divider = CockpitColors.border;
+  static const Color glass = Color(0x0FFFFFFF);
+  static const Color glassBorder = CockpitColors.borderStrong;
 }

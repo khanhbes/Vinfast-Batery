@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Theme mode options
-enum AppThemeMode { system, light, dark }
+enum AppThemeMode { system, light, dark, amoled }
 
 /// Language options
 enum AppLanguage { system, vietnamese, english }
@@ -23,7 +23,7 @@ class SettingsService extends ChangeNotifier {
 
   SharedPreferences? _prefs;
   bool _initialized = false;
-  AppThemeMode _themeMode = AppThemeMode.system;
+  AppThemeMode _themeMode = AppThemeMode.dark;
   AppLanguage _language = AppLanguage.system;
 
   bool get isInitialized => _initialized;
@@ -50,11 +50,13 @@ class SettingsService extends ChangeNotifier {
   ThemeMode getThemeModeValue() {
     switch (_themeMode) {
       case AppThemeMode.light:
-        return ThemeMode.light;
+        return ThemeMode.dark;
       case AppThemeMode.dark:
         return ThemeMode.dark;
+      case AppThemeMode.amoled:
+        return ThemeMode.dark;
       case AppThemeMode.system:
-        return ThemeMode.system;
+        return ThemeMode.dark;
     }
   }
 
@@ -63,9 +65,10 @@ class SettingsService extends ChangeNotifier {
     _themeMode = mode;
     notifyListeners();
     final value = switch (mode) {
-      AppThemeMode.light => 'light',
+      AppThemeMode.light => 'dark',
       AppThemeMode.dark => 'dark',
-      AppThemeMode.system => 'system',
+      AppThemeMode.amoled => 'amoled',
+      AppThemeMode.system => 'dark',
     };
     try {
       await _prefs?.setString(_themeKey, value);
@@ -109,12 +112,12 @@ class SettingsService extends ChangeNotifier {
 
   static AppThemeMode _decodeThemeMode(String? raw) {
     switch (raw) {
-      case 'light':
-        return AppThemeMode.light;
+      case 'amoled':
+        return AppThemeMode.amoled;
       case 'dark':
         return AppThemeMode.dark;
       default:
-        return AppThemeMode.system;
+        return AppThemeMode.dark;
     }
   }
 

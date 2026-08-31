@@ -1,7 +1,7 @@
 name: vinfast_battery
 description: "VinFast Battery - Quản lý pin xe máy điện VinFast"
 publish_to: 'none'
-version: 1.0.82+83
+version: 1.0.85+86
 
 environment:
   sdk: ^3.11.0
@@ -61,6 +61,7 @@ dependencies:
 
   # Share CSV files via system share sheet
   share_plus: ^10.1.4
+  pdf: ^3.11.3
 
   # App version info + update
   package_info_plus: ^8.3.0

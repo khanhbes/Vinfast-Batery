@@ -94,24 +94,17 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
       child: Column(
         children: [
           _buildThemeOption(
-            icon: Icons.brightness_auto,
-            title: 'Theo hệ thống',
-            subtitle: 'Tự động theo cài đặt hệ thống',
-            value: AppThemeMode.system,
-          ),
-          Divider(height: 1, color: AppColors.border),
-          _buildThemeOption(
-            icon: Icons.light_mode,
-            title: 'Sáng',
-            subtitle: 'Giao diện sáng',
-            value: AppThemeMode.light,
-          ),
-          Divider(height: 1, color: AppColors.border),
-          _buildThemeOption(
             icon: Icons.dark_mode,
-            title: 'Tối',
-            subtitle: 'Giao diện tối',
+            title: 'Dark Cockpit',
+            subtitle: 'Nền gần đen, cân bằng độ tương phản',
             value: AppThemeMode.dark,
+          ),
+          Divider(height: 1, color: AppColors.border),
+          _buildThemeOption(
+            icon: Icons.brightness_2_rounded,
+            title: 'AMOLED',
+            subtitle: 'Nền đen tuyệt đối, tiết kiệm pin màn hình OLED',
+            value: AppThemeMode.amoled,
           ),
         ],
       ),

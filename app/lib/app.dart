@@ -46,8 +46,10 @@ class _VinFastBatteryAppState extends State<VinFastBatteryApp> {
         if (vehicleId.isNotEmpty && sessionId.isNotEmpty) {
           try {
             final container = ProviderScope.containerOf(context, listen: false);
-            container.read(pendingSmartChargeTargetProvider.notifier).state =
-                (vehicleId: vehicleId, sessionId: sessionId);
+            container.read(pendingSmartChargeTargetProvider.notifier).state = (
+              vehicleId: vehicleId,
+              sessionId: sessionId,
+            );
           } on Object {
             // If the shell is not mounted yet, history still remains the safe
             // destination instead of silently selecting another vehicle.
@@ -64,31 +66,36 @@ class _VinFastBatteryAppState extends State<VinFastBatteryApp> {
     // mỗi khi user đổi cài đặt — không yêu cầu restart.
     return AnimatedBuilder(
       animation: _settings,
-      builder: (context, _) => MaterialApp(
-        title: 'VinFast Battery',
-        debugShowCheckedModeBanner: false,
+      builder: (context, _) {
+        final selectedTheme = _settings.getThemeMode() == AppThemeMode.amoled
+            ? AppTheme.amoledTheme
+            : AppTheme.darkTheme;
+        return MaterialApp(
+          title: 'VinFast Battery',
+          debugShowCheckedModeBanner: false,
 
-        // Theme support (Light/Dark/System per PLAN1)
-        theme: AppTheme.lightTheme,
-        darkTheme: AppTheme.darkTheme,
-        themeMode: _settings.getThemeModeValue(),
+          // Theme support (Light/Dark/System per PLAN1)
+          theme: selectedTheme,
+          darkTheme: selectedTheme,
+          themeMode: ThemeMode.dark,
 
-        // Localization support (Vietnamese/English per PLAN1)
-        locale: _settings.getLocale(),
-        supportedLocales: const [Locale('vi'), Locale('en')],
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
+          // Localization support (Vietnamese/English per PLAN1)
+          locale: _settings.getLocale(),
+          supportedLocales: const [Locale('vi'), Locale('en')],
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
 
-        scaffoldMessengerKey: AppPopup.messengerKey,
-        navigatorKey: AppPopup.navigatorKey,
-        builder: (context, child) =>
-            InternetConnectionNotice(child: child ?? const SizedBox.shrink()),
-        home: const AuthGate(),
-      ),
+          scaffoldMessengerKey: AppPopup.messengerKey,
+          navigatorKey: AppPopup.navigatorKey,
+          builder: (context, child) =>
+              InternetConnectionNotice(child: child ?? const SizedBox.shrink()),
+          home: const AuthGate(),
+        );
+      },
     );
   }
 }

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/cockpit_design_system.dart';
+
 class ChargingBatteryAnimationV3 extends StatefulWidget {
   const ChargingBatteryAnimationV3({
     super.key,
@@ -17,16 +19,38 @@ class ChargingBatteryAnimationV3 extends StatefulWidget {
       _ChargingBatteryAnimationV3State();
 }
 
-class _ChargingBatteryAnimationV3State
-    extends State<ChargingBatteryAnimationV3> {
+class _ChargingBatteryAnimationV3State extends State<ChargingBatteryAnimationV3>
+    with SingleTickerProviderStateMixin {
   late double _beginSoc;
   late double _endSoc;
+  late final AnimationController _energyWave;
 
   @override
   void initState() {
     super.initState();
     _beginSoc = widget.currentSoc.clamp(0, 100).toDouble();
     _endSoc = _beginSoc;
+    _energyWave = AnimationController(
+      vsync: this,
+      duration: CockpitMotion.energyWave,
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (CockpitMotion.enabled(context)) {
+      if (!_energyWave.isAnimating) _energyWave.repeat();
+    } else {
+      _energyWave.stop();
+      _energyWave.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _energyWave.dispose();
+    super.dispose();
   }
 
   @override
@@ -88,12 +112,36 @@ class _ChargingBatteryAnimationV3State
                     right: 20,
                     child: Padding(
                       padding: const EdgeInsets.all(8),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(20),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          widthFactor: value / 100,
-                          child: Container(color: colors.primary),
+                      child: AnimatedBuilder(
+                        animation: _energyWave,
+                        builder: (context, _) => ClipRRect(
+                          borderRadius: BorderRadius.circular(20),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            widthFactor: value / 100,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment(
+                                    -1.8 + (_energyWave.value * 2.8),
+                                    0,
+                                  ),
+                                  end: Alignment(
+                                    -.2 + (_energyWave.value * 2.8),
+                                    0,
+                                  ),
+                                  colors: [
+                                    colors.primary,
+                                    CockpitColors.emerald,
+                                    Colors.white.withValues(alpha: .62),
+                                    CockpitColors.emeraldStrong,
+                                    colors.primary,
+                                  ],
+                                  stops: const [0, .30, .50, .70, 1],
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),

@@ -28,7 +28,7 @@ void main() {
     expect(find.text('90%'), findsOneWidget);
     expect(find.text('100%'), findsWidgets);
     expect(find.byKey(const ValueKey('create-plan-button')), findsOneWidget);
-    expect(find.text('TÍNH THỜI GIAN SẠC'), findsOneWidget);
+    expect(find.text('DỰ ĐOÁN VỚI AI'), findsOneWidget);
   });
 
   testWidgets('fits 320dp width without overflow', (tester) async {
@@ -52,6 +52,33 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('manual ON offers immediate and timed safe choices', (
+    tester,
+  ) async {
+    await tester.pumpWidget(app(harness()));
+
+    await tester.tap(find.text('Sạc hẹn giờ'));
+    await tester.pumpAndSettle();
+
+    final manualOn = find.byKey(const ValueKey('manual-on-button'));
+    await tester.ensureVisible(manualOn);
+    await tester.pumpAndSettle();
+    await tester.tap(manualOn);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Bật sạc'), findsOneWidget);
+    expect(find.byKey(const ValueKey('manual-on-now')), findsOneWidget);
+    expect(find.text('Tự ngắt sau 1 giờ'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('manual-on-custom-duration')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('4 giờ'));
+    await tester.pump();
+    expect(find.text('BẬT & TỰ NGẮT SAU 4 GIỜ'), findsOneWidget);
+  });
+
   testWidgets('creates clean preview with duration and stop time', (
     tester,
   ) async {
@@ -69,7 +96,7 @@ void main() {
     expect(find.text('Thời gian dự kiến'), findsOneWidget);
     expect(find.text('Dự kiến dừng lúc'), findsOneWidget);
     expect(find.text('1 giờ 0 phút'), findsOneWidget);
-    expect(find.text('BẮT ĐẦU SẠC'), findsOneWidget);
+    expect(find.text('SẠC THEO AI'), findsOneWidget);
   });
 
   testWidgets('requires estimated SOC acknowledgement before start', (

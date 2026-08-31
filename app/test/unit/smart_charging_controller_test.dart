@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vinfast_battery/data/models/smart_charger_status.dart';
 import 'package:vinfast_battery/data/models/smart_charger_capabilities.dart';
 import 'package:vinfast_battery/data/models/smart_charging_session.dart';
@@ -7,6 +8,8 @@ import 'package:vinfast_battery/data/services/smart_charger_service.dart';
 import 'package:vinfast_battery/features/ai/controllers/smart_charging_controller.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  SharedPreferences.setMockInitialValues({});
   final now = DateTime.parse('2030-01-01T03:00:00Z');
 
   SmartChargingController build(
@@ -246,6 +249,11 @@ class FakeSmartChargerService extends SmartChargerService {
     if (offline) throw const SmartChargerException('Gateway offline');
     return current;
   }
+
+  @override
+  Future<SmartChargingSession?> getCurrentSessionForVehicle(
+    String? vehicleId,
+  ) => getCurrentSession();
 
   @override
   Future<List<SmartChargingSession>> getSessionHistory({int limit = 20}) async {
