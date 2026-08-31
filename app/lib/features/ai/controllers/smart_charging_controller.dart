@@ -6,12 +6,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../data/models/smart_charger_status.dart';
 import '../../../data/models/smart_charge_history.dart';
+import '../../../data/models/smart_charge_cost.dart';
 import '../../../data/models/smart_charger_capabilities.dart';
 import '../../../data/models/smart_charging_session.dart';
 import '../../../data/repositories/charge_log_repository.dart';
 import '../../../data/services/charging_prediction_adapter.dart';
 import '../../../data/services/smart_charger_service.dart';
 import '../../../data/services/smart_charge_telemetry_foreground_service.dart';
+import '../../../data/services/smart_charge_preferences_service.dart';
+import '../../../data/services/smart_charge_report_service.dart';
 import '../../../data/services/shelly_charge_log_service.dart';
 import '../../../data/services/notification_service.dart';
 import '../../../data/repositories/smart_charger_repository.dart';
@@ -66,6 +69,9 @@ class SmartChargingUiState {
     this.refreshing = false,
     this.capabilities = SmartChargerCapabilities.unavailable,
     this.connectionState = const ChargingConnectionState(),
+    this.preferences,
+    this.livePowerSamples = const [],
+    this.statusSyncedAt,
   });
 
   final SmartChargingViewPhase phase;
@@ -89,6 +95,9 @@ class SmartChargingUiState {
   final bool refreshing;
   final SmartChargerCapabilities capabilities;
   final ChargingConnectionState connectionState;
+  final SmartChargePreferences? preferences;
+  final List<double> livePowerSamples;
+  final DateTime? statusSyncedAt;
   final DateTime now;
 
   /// Pure hardware-derived charger status for UI representation
@@ -139,6 +148,9 @@ class SmartChargingUiState {
     bool? refreshing,
     SmartChargerCapabilities? capabilities,
     ChargingConnectionState? connectionState,
+    Object? preferences = _unset,
+    List<double>? livePowerSamples,
+    Object? statusSyncedAt = _unset,
     DateTime? now,
   }) => SmartChargingUiState(
     phase: phase ?? this.phase,
@@ -176,6 +188,13 @@ class SmartChargingUiState {
     refreshing: refreshing ?? this.refreshing,
     capabilities: capabilities ?? this.capabilities,
     connectionState: connectionState ?? this.connectionState,
+    preferences: identical(preferences, _unset)
+        ? this.preferences
+        : preferences as SmartChargePreferences?,
+    livePowerSamples: livePowerSamples ?? this.livePowerSamples,
+    statusSyncedAt: identical(statusSyncedAt, _unset)
+        ? this.statusSyncedAt
+        : statusSyncedAt as DateTime?,
     now: now ?? this.now,
   );
 }
@@ -203,6 +222,8 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     Future<void> Function()? reminderCanceller,
     ConnectionCoordinator? connectionCoordinator,
     ChargingTrainingSyncService? trainingSyncService,
+    SmartChargePreferencesService? preferencesService,
+    SmartChargeReportService? reportService,
     bool autoInitialize = true,
   }) : _repository =
            repository ??
@@ -221,6 +242,9 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
            connectionCoordinator ?? ConnectionCoordinator(),
        _trainingSyncService =
            trainingSyncService ?? ChargingTrainingSyncService(),
+       _preferencesService =
+           preferencesService ?? SmartChargePreferencesService(),
+       _reportService = reportService ?? SmartChargeReportService(),
        super(
          SmartChargingUiState(
            phase: SmartChargingViewPhase.loading,
@@ -248,6 +272,11 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
   final Future<void> Function()? _reminderCanceller;
   final ConnectionCoordinator _connectionCoordinator;
   final ChargingTrainingSyncService _trainingSyncService;
+  final SmartChargePreferencesService _preferencesService;
+  final SmartChargeReportService _reportService;
+
+  /// Read-only snapshot for screens that are not mounted through Provider.
+  SmartChargingUiState get currentUiState => state;
   Timer? _statusTimer;
   Timer? _sessionTimer;
   Timer? _countdownTimer;
@@ -273,6 +302,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       });
       unawaited(_trainingSyncService.flush().catchError((_) => 0));
       await _attachForegroundMonitor();
+      await _loadPreferences();
       await _loadLastTargetSoc();
       await _loadVehicleCapacity();
       await Future.wait([
@@ -305,6 +335,11 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         _startPolling();
       }
     }
+  }
+
+  Future<void> _loadPreferences() async {
+    final value = await _preferencesService.load();
+    if (!_disposed) state = state.copyWith(preferences: value);
   }
 
   Future<void> _loadLastTargetSoc() async {
@@ -379,6 +414,8 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
             state = state.copyWith(
               chargerStatus: status,
               session: _sessionWithStatus(state.session, status),
+              livePowerSamples: _appendPower(status.powerW),
+              statusSyncedAt: _clock(),
               gatewayError: null,
               safetyWarning: _safetyWarning(status),
             );
@@ -489,6 +526,8 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         state = state.copyWith(
           chargerStatus: status,
           session: _sessionWithStatus(state.session, status),
+          livePowerSamples: _appendPower(status.powerW),
+          statusSyncedAt: _clock(),
           gatewayError: null,
           safetyWarning: _safetyWarning(status),
         );
@@ -568,6 +607,41 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     return session.copyWith(
       energyUsedWh: energy,
       estimatedSoc: estimatedSoc?.toDouble(),
+      tariffVndPerKwhSnapshot:
+          session.tariffVndPerKwhSnapshot ?? state.preferences?.tariffVndPerKwh,
+      estimatedCostVnd: _costFor(
+        energy,
+        session.tariffVndPerKwhSnapshot ?? state.preferences?.tariffVndPerKwh,
+      ),
+      costQuality:
+          (session.tariffVndPerKwhSnapshot ??
+                  state.preferences?.tariffVndPerKwh) ==
+              null
+          ? 'unavailable'
+          : 'provisional',
+    );
+  }
+
+  List<double> _appendPower(double powerW) {
+    final samples = [...state.livePowerSamples, max(0.0, powerW)];
+    if (samples.length > 180) samples.removeRange(0, samples.length - 180);
+    return samples;
+  }
+
+  double? _costFor(double energyWh, double? tariff) =>
+      tariff == null || tariff <= 0 ? null : max(0, energyWh) / 1000 * tariff;
+
+  SmartChargingSession _attachCostSnapshot(SmartChargingSession session) {
+    final tariff =
+        session.tariffVndPerKwhSnapshot ?? state.preferences?.tariffVndPerKwh;
+    return session.copyWith(
+      tariffVndPerKwhSnapshot: tariff,
+      estimatedCostVnd: _costFor(session.energyUsedWh, tariff),
+      costQuality: tariff == null
+          ? 'unavailable'
+          : session.state.isTerminal
+          ? 'final'
+          : 'provisional',
     );
   }
 
@@ -820,11 +894,9 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       // model, even when the general catalog sync is throttled. The preview
       // endpoint remains authoritative; this best-effort refresh only keeps
       // local model metadata/version indicators current.
-      try {
-        await ModelSyncService().sync(force: true);
-      } catch (_) {
-        // A metadata refresh outage must not prevent a server-side preview.
-      }
+      // Do not put catalog I/O on the prediction's critical path. The preview
+      // API below is authoritative and already returns the active version.
+      unawaited(ModelSyncService().sync(force: true));
       final preview = await _repository!.preview(draft);
       if (_disposed) return;
       final predictedSeconds =
@@ -982,7 +1054,9 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     _idempotencyKey ??=
         '${preview.draft.vehicleId}-${_clock().toUtc().microsecondsSinceEpoch}';
     try {
-      final session = await _repository!.start(preview, _idempotencyKey!);
+      final session = _attachCostSnapshot(
+        await _repository!.start(preview, _idempotencyKey!),
+      );
       if (_disposed) return false;
 
       // Status readback
@@ -1103,7 +1177,9 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         return false;
       }
 
-      final stopped = result.session;
+      final stopped = result.session == null
+          ? null
+          : _attachCostSnapshot(result.session!);
       if (!result.relayOffVerified) {
         state = state.copyWith(
           phase: SmartChargingViewPhase.active,
@@ -1172,11 +1248,13 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     final key =
         'manual-${state.draft.vehicleId}-${_clock().toUtc().microsecondsSinceEpoch}';
     try {
-      final session = await _repository!.manualOn(
-        duration,
-        key,
-        vehicleId: state.draft.vehicleId,
-        currentSoc: state.draft.currentSoc,
+      final session = _attachCostSnapshot(
+        await _repository!.manualOn(
+          duration,
+          key,
+          vehicleId: state.draft.vehicleId,
+          currentSoc: state.draft.currentSoc,
+        ),
       );
       if (_disposed) return false;
       state = state.copyWith(
@@ -1278,6 +1356,28 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
   ) async {
     _repository ??= await SmartChargerRepositoryFactory.create();
     return _repository!.confirmActualEndSoc(session, soc);
+  }
+
+  Future<SmartChargePreferences> saveTariff(double? tariffVndPerKwh) async {
+    final value = await _preferencesService.saveTariff(tariffVndPerKwh);
+    if (!_disposed) state = state.copyWith(preferences: value);
+    return value;
+  }
+
+  Future<ChargeReportResult> exportHistory(ChargeReportRequest request) async {
+    _repository ??= await SmartChargerRepositoryFactory.create();
+    final sessions = <SmartChargingSession>[];
+    String? cursor;
+    do {
+      final page = await _repository!.getHistoryPage(
+        limit: 100,
+        cursor: cursor,
+        vehicleId: request.allVehicles ? null : request.vehicleId,
+      );
+      sessions.addAll(page.items);
+      cursor = page.nextCursor;
+    } while (cursor != null && sessions.length < 2000);
+    return _reportService.export(request: request, sessions: sessions);
   }
 
   @override

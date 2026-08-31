@@ -11,39 +11,39 @@ class AppColors {
 
   // ── Brand / Primary (Material 3 tonal) ───────────────
   // primary: pale blue (on-dark readable)
-  static const Color primary = Color(0xFFD1E4FF); // #d1e4ff
-  static const Color primaryContainer = Color(0xFF00497D); // #00497d
-  static const Color onPrimaryContainer = Color(0xFFD1E4FF);
-  static const Color vinfastBlue = Color(0xFF008DFF); // accent / legacy
+  static const Color primary = Color(0xFF34D399);
+  static const Color primaryContainer = Color(0xFF123A2D);
+  static const Color onPrimaryContainer = Color(0xFFD1FAE5);
+  static const Color vinfastBlue = Color(0xFF34D399);
   static const Color vinfastRed = Color(0xFFE31B23);
 
   // Legacy aliases (để không break code cũ)
   static const Color primaryGreen = vinfastBlue;
-  static const Color accentGreen = Color(0xFF0099FF);
-  static const Color lightGreen = Color(0xFF4DB8FF);
+  static const Color accentGreen = Color(0xFF10B981);
+  static const Color lightGreen = Color(0xFF6EE7B7);
 
   // ── Surfaces (Material 3 dark) ───────────────────────
-  static const Color background = Color(0xFF1A1C1E); // #1a1c1e
-  static const Color surface = Color(0xFF1A1C1E);
-  static const Color surfaceVariant = Color(0xFF43474E); // #43474e
-  static const Color surfaceLight = Color(0xFF2A2D31);
-  static const Color card = Color(0xFF21252B);
-  static const Color cardElevated = Color(0xFF282C33);
+  static const Color background = Color(0xFF050505);
+  static const Color surface = Color(0xFF0C0C0C);
+  static const Color surfaceVariant = Color(0xFF171A20);
+  static const Color surfaceLight = Color(0xFF171A20);
+  static const Color card = Color(0xFF101216);
+  static const Color cardElevated = Color(0xFF171A20);
 
   // ── Borders ───────────────────────────────────────────
-  static const Color border = Color(0xFF2E3238);
-  static const Color borderLight = Color(0xFF3A3F47);
+  static const Color border = Color(0x14FFFFFF);
+  static const Color borderLight = Color(0x24FFFFFF);
 
   // ── Text ──────────────────────────────────────────────
-  static const Color textPrimary = Color(0xFFE2E8F0);
-  static const Color textSecondary = Color(0xFFAAB4BE);
-  static const Color textTertiary = Color(0xFF888888);
-  static const Color textHint = Color(0xFF555C66);
+  static const Color textPrimary = Color(0xFFF8FAFC);
+  static const Color textSecondary = Color(0xFF94A3B8);
+  static const Color textTertiary = Color(0xFF64748B);
+  static const Color textHint = Color(0xFF64748B);
 
   // ── Status (PLAN1 spec) ───────────────────────────────
-  static const Color success = Color(0xFF4ADE80); // #4ade80
+  static const Color success = Color(0xFF34D399);
   static const Color warning = Color(0xFFFBBF24); // #fbbf24
-  static const Color error = Color(0xFFFFB4AB); // #ffb4ab
+  static const Color error = Color(0xFFF87171);
   static const Color errorDark = Color(0xFFD50000);
   static const Color info = Color(0xFF448AFF);
 
@@ -55,11 +55,11 @@ class AppColors {
   static const Color blueBg = Color(0x1A00497D);
 
   // ── Chart Colors ──────────────────────────────────────
-  static const Color chartLine1 = Color(0xFFD1E4FF);
-  static const Color chartLine2 = Color(0xFF4ADE80);
-  static const Color chartLine3 = Color(0xFFFFB4AB);
-  static const Color chartFill1 = Color(0x4DD1E4FF);
-  static const Color chartFill2 = Color(0x334ADE80);
+  static const Color chartLine1 = Color(0xFF34D399);
+  static const Color chartLine2 = Color(0xFF60A5FA);
+  static const Color chartLine3 = Color(0xFFF87171);
+  static const Color chartFill1 = Color(0x4D34D399);
+  static const Color chartFill2 = Color(0x3334D399);
 
   // ── Battery Levels ────────────────────────────────────
   static const Color batteryFull = Color(0xFF4ADE80);

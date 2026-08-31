@@ -260,8 +260,12 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
 }
 
 class ServerSmartChargerRepository implements SmartChargerRepository {
-  ServerSmartChargerRepository(this.service);
+  ServerSmartChargerRepository(
+    this.service, {
+    ShellyChargeLogService? chargeLogs,
+  }) : _chargeLogs = chargeLogs;
   final ServerSmartChargerService service;
+  final ShellyChargeLogService? _chargeLogs;
   @override
   bool get calibrationIsServerOwned => true;
   @override
@@ -291,6 +295,21 @@ class ServerSmartChargerRepository implements SmartChargerRepository {
     ChargingStrategy? strategy,
     String? vehicleId,
   }) async {
+    final chargeLogs = _chargeLogs;
+    if (chargeLogs != null) {
+      try {
+        // ChargeLogs is the shared canonical history for Direct and Easy.
+        // It also preserves restored partial sessions that predate the API.
+        return await chargeLogs.getHistoryPage(
+          limit: limit,
+          cursor: cursor,
+          strategy: strategy,
+          vehicleId: vehicleId,
+        );
+      } on Object {
+        // A temporary Firestore issue must not remove server-owned history.
+      }
+    }
     return service.historyPage(
       limit: limit,
       cursor: cursor,
@@ -324,10 +343,12 @@ class ServerSmartChargerRepository implements SmartChargerRepository {
   ) => service.recordTelemetry(session.sessionId, status);
 
   @override
-  Future<void> saveActiveSession(SmartChargingSession session) async {}
+  Future<void> saveActiveSession(SmartChargingSession session) =>
+      _chargeLogs?.saveActiveSession(session) ?? Future.value();
 
   @override
-  Future<void> flushPendingTelemetry(String sessionId) async {}
+  Future<void> flushPendingTelemetry(String sessionId) =>
+      _chargeLogs?.flushPendingTelemetry(sessionId) ?? Future.value();
   @override
   Future<void> hideSession(String sessionId) => service.hideSession(sessionId);
   @override
@@ -406,7 +427,12 @@ class SmartChargerRepositoryFactory {
   static Future<SmartChargerRepository> create() async {
     final mode = await currentMode();
     if (mode == SmartChargerConnectionMode.serverCloud) {
-      return ServerSmartChargerRepository(ServerSmartChargerService());
+      final chargeLogs = ShellyChargeLogService();
+      await chargeLogs.flushAllPending();
+      return ServerSmartChargerRepository(
+        ServerSmartChargerService(),
+        chargeLogs: chargeLogs,
+      );
     }
     final chargeLogs = ShellyChargeLogService();
     // Retry durable telemetry/terminal buffers whenever Direct Smart Charge

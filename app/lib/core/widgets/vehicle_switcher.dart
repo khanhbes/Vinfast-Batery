@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/app_providers.dart';
 import '../services/session_service.dart';
+import '../theme/cockpit_design_system.dart';
 
 /// Compact, global vehicle selector used by the V4 shell.
 /// Changing it only changes context; it never deletes or mutates a vehicle.
@@ -85,13 +86,34 @@ class VehicleSwitcher extends ConsumerWidget {
           child: Semantics(
             button: true,
             label: 'Xe đang chọn: ${current.vehicleName}. Nhấn để đổi xe',
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 40),
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: .05),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: CockpitColors.border),
+              ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.directions_car_filled_rounded, size: 18),
-                  const SizedBox(width: 5),
+                  Container(
+                    width: 26,
+                    height: 26,
+                    decoration: BoxDecoration(
+                      color: CockpitColors.emerald.withValues(alpha: .14),
+                      borderRadius: BorderRadius.circular(9),
+                      border: Border.all(
+                        color: CockpitColors.emerald.withValues(alpha: .25),
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.bolt_rounded,
+                      size: 15,
+                      color: CockpitColors.emerald,
+                    ),
+                  ),
+                  const SizedBox(width: 7),
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 120),
                     child: Text(
@@ -103,7 +125,11 @@ class VehicleSwitcher extends ConsumerWidget {
                       ),
                     ),
                   ),
-                  const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
+                  const Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    size: 18,
+                    color: CockpitColors.muted,
+                  ),
                 ],
               ),
             ),

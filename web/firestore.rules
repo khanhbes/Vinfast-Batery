@@ -62,6 +62,18 @@ service cloud.firestore {
         allow write: if isAuth() && request.auth.uid == uid &&
           ownsVehicleId(vehicleId) && containsNoChargerSecrets();
       }
+      match /smartChargePreferences/{preferenceId} {
+        allow read: if isAuth() && request.auth.uid == uid;
+        allow create, update: if isAuth() && request.auth.uid == uid &&
+          request.resource.data.ownerUid == uid &&
+          containsNoChargerSecrets() &&
+          (!('tariffVndPerKwh' in request.resource.data) ||
+           request.resource.data.tariffVndPerKwh == null ||
+           (request.resource.data.tariffVndPerKwh is number &&
+            request.resource.data.tariffVndPerKwh > 0 &&
+            request.resource.data.tariffVndPerKwh <= 100000));
+        allow delete: if isAuth() && request.auth.uid == uid;
+      }
       match /shellyDevices/{deviceId} {
         allow read: if isAuth() && request.auth.uid == uid;
         // Device discovery, verification and revocation are authoritative

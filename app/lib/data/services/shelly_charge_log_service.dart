@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/smart_charge_history.dart';
+import '../models/smart_charge_cost.dart';
 import '../models/smart_charger_status.dart';
 import '../models/smart_charging_session.dart';
 
@@ -34,6 +35,11 @@ class ShellyChargeLogService {
   Future<void> saveActiveSession(SmartChargingSession session) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
+    final cost = SmartChargeCostSnapshot.calculate(
+      gridEnergyWh: session.energyUsedWh,
+      tariffVndPerKwh: session.tariffVndPerKwhSnapshot,
+      terminal: false,
+    );
     await _firestore.collection('ChargeLogs').doc(session.sessionId).set({
       ..._basePayload(session, uid),
       'status': 'active',
@@ -42,6 +48,9 @@ class ShellyChargeLogService {
       'actualStopAt': null,
       'gridEnergyWh': session.energyUsedWh,
       'energyWh': session.energyUsedWh,
+      'tariffVndPerKwhSnapshot': cost.tariffVndPerKwh,
+      'estimatedCostVnd': cost.costVnd,
+      'costQuality': cost.quality.wireValue,
       'estimatedEndSoc': session.estimatedSoc,
       'smartChargingSession': session.toJson(),
       'updatedAt': FieldValue.serverTimestamp(),
@@ -63,6 +72,15 @@ class ShellyChargeLogService {
       session: session,
       points: points,
     );
+    final cost = SmartChargeCostSnapshot.calculate(
+      gridEnergyWh: summary.gridEnergyWh,
+      tariffVndPerKwh: session.tariffVndPerKwhSnapshot,
+      terminal: true,
+    );
+    final finalSession = session.copyWith(
+      estimatedCostVnd: cost.costVnd,
+      costQuality: cost.quality.wireValue,
+    );
     await _firestore.collection('ChargeLogs').doc(session.sessionId).set({
       ..._basePayload(session, uid),
       'endTime': Timestamp.fromDate(session.stoppedAt ?? session.updatedAt),
@@ -78,6 +96,9 @@ class ShellyChargeLogService {
       'gridEnergyWh': summary.gridEnergyWh,
       'energyWh': summary.gridEnergyWh,
       'estimatedStoredWh': summary.estimatedStoredWh,
+      'tariffVndPerKwhSnapshot': cost.tariffVndPerKwh,
+      'estimatedCostVnd': cost.costVnd,
+      'costQuality': cost.quality.wireValue,
       'estimatedRemainingWh': summary.estimatedRemainingWh,
       'estimatedEndSoc': summary.estimatedEndSoc,
       'averagePowerW': summary.averagePowerW,
@@ -88,7 +109,7 @@ class ShellyChargeLogService {
       'telemetrySampleCount': summary.sampleCount,
       'telemetryCoverageRatio': summary.coverageRatio,
       'energyQuality': summary.energyQuality,
-      'smartChargingSession': session.toJson(),
+      'smartChargingSession': finalSession.toJson(),
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
     await _removeQueuedTerminalSession(session.sessionId);
@@ -107,7 +128,10 @@ class ShellyChargeLogService {
 
   /// Irreversible privacy erase. A typed session id is required and the
   /// parent owner is checked before deleting the summary and telemetry.
-  Future<void> privacyEraseSession(String sessionId, String confirmation) async {
+  Future<void> privacyEraseSession(
+    String sessionId,
+    String confirmation,
+  ) async {
     if (confirmation.trim() != sessionId) {
       throw ArgumentError('Mã xác nhận phiên không khớp.');
     }
@@ -121,9 +145,9 @@ class ShellyChargeLogService {
     }
     final rawSession = data['smartChargingSession'];
     if (rawSession is Map &&
-        !SmartChargingSession.fromJson(Map<String, dynamic>.from(rawSession))
-            .state
-            .isTerminal) {
+        !SmartChargingSession.fromJson(
+          Map<String, dynamic>.from(rawSession),
+        ).state.isTerminal) {
       throw StateError('Hãy tắt và xác minh OFF trước khi xóa.');
     }
     final telemetry = await parent.collection('smartChargeTelemetry').get();
@@ -176,6 +200,9 @@ class ShellyChargeLogService {
         'timerVerified': session.timerVerified,
         'relayVerified': session.relayVerified,
         'estimatedCapacityWh': session.estimatedCapacityWh,
+        'tariffVndPerKwhSnapshot': session.tariffVndPerKwhSnapshot,
+        'estimatedCostVnd': session.estimatedCostVnd,
+        'costQuality': session.costQuality,
         'socEstimated': true,
         'isDeleted': false,
         'createdAt': FieldValue.serverTimestamp(),
@@ -235,12 +262,20 @@ class ShellyChargeLogService {
   ) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
+    final cost = SmartChargeCostSnapshot.calculate(
+      gridEnergyWh: session.energyUsedWh,
+      tariffVndPerKwh: session.tariffVndPerKwhSnapshot,
+      terminal: false,
+    );
     await _firestore.collection('ChargeLogs').doc(session.sessionId).set({
       ..._basePayload(session, uid),
       'status': 'active',
       'sessionState': session.state.wireValue,
       'gridEnergyWh': session.energyUsedWh,
       'energyWh': session.energyUsedWh,
+      'tariffVndPerKwhSnapshot': cost.tariffVndPerKwh,
+      'estimatedCostVnd': cost.costVnd,
+      'costQuality': cost.quality.wireValue,
       'estimatedEndSoc': point.estimatedSoc,
       'latestPowerW': status.powerW,
       'latestVoltageV': status.voltageV,
@@ -390,13 +425,15 @@ class ShellyChargeLogService {
         .get();
     final documents =
         snapshot.docs.where((document) {
-      final data = document.data();
+          final data = document.data();
           if (data['source'] != _source ||
               data['hiddenByUserAt'] != null ||
               !_matchesStrategy(data, strategy)) {
             return false;
           }
-          if (vehicleId != null && vehicleId.isNotEmpty && data['vehicleId'] != vehicleId) {
+          if (vehicleId != null &&
+              vehicleId.isNotEmpty &&
+              data['vehicleId'] != vehicleId) {
             return false;
           }
           final startTime = (data['startTime'] as Timestamp?)?.toDate();
@@ -481,12 +518,15 @@ class ShellyChargeLogService {
       return parsed ?? fallback;
     }
 
-    final created = date(data['startTime'] ?? data['createdAt'], DateTime.now());
+    final created = date(
+      data['startTime'] ?? data['createdAt'],
+      DateTime.now(),
+    );
     final durationSeconds =
         (data['predictedDurationSeconds'] as num?)?.round() ??
         (((data['finalEtaMinutes'] ?? data['predictedMinutes']) as num?)
-                ?.round() ??
-            1) *
+                    ?.round() ??
+                1) *
             60;
     final planned = date(
       data['plannedStopAt'],
@@ -510,13 +550,14 @@ class ShellyChargeLogService {
       state = stopped == null ? 'active' : 'completed';
     }
     final strategy = (data['strategy'] ?? 'ai_target').toString();
-    final strategyValue = const {
-      'target_soc',
-      'deadline',
-      'smart_combined',
-      'ai_target',
-      'manual_timed',
-    }.contains(strategy)
+    final strategyValue =
+        const {
+          'target_soc',
+          'deadline',
+          'smart_combined',
+          'ai_target',
+          'manual_timed',
+        }.contains(strategy)
         ? strategy
         : 'ai_target';
     final startSoc = (data['startBatteryPercent'] ?? data['startSoc']) as num?;
@@ -534,13 +575,20 @@ class ShellyChargeLogService {
       'prediction_source': data['predictionSource']?.toString() ?? 'unknown',
       'prediction_confidence': data['predictionConfidence'],
       'created_at': created.toIso8601String(),
-      'updated_at': date(data['updatedAt'] ?? stopped, created).toIso8601String(),
+      'updated_at': date(
+        data['updatedAt'] ?? stopped,
+        created,
+      ).toIso8601String(),
       'started_at': created.toIso8601String(),
       'stopped_at': stopped?.toIso8601String(),
       'ai_stop_at': planned.toIso8601String(),
-      'hard_deadline_at': created.add(const Duration(hours: 10)).toIso8601String(),
+      'hard_deadline_at': created
+          .add(const Duration(hours: 10))
+          .toIso8601String(),
       'effective_stop_at': planned.toIso8601String(),
-      'absolute_safety_stop_at': created.add(const Duration(hours: 10)).toIso8601String(),
+      'absolute_safety_stop_at': created
+          .add(const Duration(hours: 10))
+          .toIso8601String(),
       'shadow_mode': false,
       'version': (data['version'] as num?)?.round() ?? 1,
       'device_id': data['shellyDeviceId'] ?? data['deviceId'],
@@ -556,7 +604,8 @@ class ShellyChargeLogService {
       'user_stop_reason': data['userStopReason']?.toString() ?? 'none',
       'telemetry_coverage': data['telemetryCoverageRatio'] ?? 0,
       'owner_uid': data['ownerUid'],
-      'personalization_stage': data['personalizationStage']?.toString() ?? 'base',
+      'personalization_stage':
+          data['personalizationStage']?.toString() ?? 'base',
       'base_ai_minutes': data['baseAiMinutes'],
       'physics_minutes': data['physicsMinutes'],
       'personal_minutes': data['personalMinutes'],
@@ -569,7 +618,11 @@ class ShellyChargeLogService {
       'peak_power_w': data['peakPowerW'],
       'average_voltage_v': data['averageVoltageV'],
       'average_current_a': data['averageCurrentA'],
-      'personal_ai_training_state': data['personalAiTrainingState'] ?? 'pending',
+      'tariff_vnd_per_kwh_snapshot': data['tariffVndPerKwhSnapshot'],
+      'estimated_cost_vnd': data['estimatedCostVnd'],
+      'cost_quality': data['costQuality']?.toString() ?? 'unavailable',
+      'personal_ai_training_state':
+          data['personalAiTrainingState'] ?? 'pending',
       'personal_ai_training_reason': data['personalAiTrainingReason'],
     });
   }

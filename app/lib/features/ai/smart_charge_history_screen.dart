@@ -6,7 +6,11 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../data/models/smart_charge_history.dart';
+import '../../data/models/smart_charge_cost.dart';
 import '../../data/models/smart_charging_session.dart';
+import '../../core/widgets/app_popup.dart';
+import 'widgets/smart_charge_cockpit_theme.dart';
+import '../../core/theme/cockpit_design_system.dart';
 import 'controllers/smart_charging_controller.dart';
 
 class SmartChargeHistoryScreen extends StatefulWidget {
@@ -16,12 +20,14 @@ class SmartChargeHistoryScreen extends StatefulWidget {
     this.initialItems = const [],
     this.initialSessionId,
     this.onPendingTargetConsumed,
+    this.embedded = false,
   });
 
   final SmartChargingController controller;
   final List<SmartChargingSession> initialItems;
   final String? initialSessionId;
   final VoidCallback? onPendingTargetConsumed;
+  final bool embedded;
 
   @override
   State<SmartChargeHistoryScreen> createState() => _HistoryScreenState();
@@ -30,13 +36,47 @@ class SmartChargeHistoryScreen extends StatefulWidget {
 class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
   late List<SmartChargingSession> _items = [...widget.initialItems];
   ChargingStrategy? _filter;
+  SmartChargeHistorySessionFilter _statusFilter =
+      SmartChargeHistorySessionFilter.all;
+  DateTime _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month);
+  DateTimeRange? _customRange;
   String? _cursor;
   String? _error;
   bool _allVehicles = false;
   bool _loading = true;
   bool _loadingMore = false;
+  int _visibleCount = 20;
   Timer? _liveTimer;
   bool _openedPending = false;
+
+  DateTime get _monthEnd => DateTime(
+    _selectedMonth.month == 12 ? _selectedMonth.year + 1 : _selectedMonth.year,
+    _selectedMonth.month == 12 ? 1 : _selectedMonth.month + 1,
+  );
+
+  DateTime get _rangeStart => _customRange?.start ?? _selectedMonth;
+  DateTime get _rangeEnd => _customRange == null
+      ? _monthEnd
+      : DateTime(
+          _customRange!.end.year,
+          _customRange!.end.month,
+          _customRange!.end.day + 1,
+        );
+
+  List<SmartChargingSession> get _filteredItems => _items.where((session) {
+    if (!session.state.isTerminal) return false;
+    return SmartChargeHistoryQuery(
+      vehicleId: session.vehicleId,
+      allVehicles: true,
+      strategy: _filter,
+      status: _statusFilter,
+      from: _rangeStart,
+      to: _rangeEnd,
+    ).matches(session);
+  }).toList();
+
+  SmartChargingSession? get _activeSession =>
+      _items.where((item) => !item.state.isTerminal).firstOrNull;
 
   @override
   void initState() {
@@ -58,6 +98,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
       setState(() {
         _loading = true;
         _error = null;
+        _visibleCount = 20;
       });
       _openPendingIfAvailable();
     } else {
@@ -65,6 +106,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
     }
     try {
       final page = await widget.controller.getHistoryPage(
+        limit: 100,
         cursor: reset ? null : _cursor,
         strategy: _filter,
         allVehicles: _allVehicles,
@@ -90,90 +132,143 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
   void _openPendingIfAvailable() {
     final target = widget.initialSessionId;
     if (_openedPending || target == null || !mounted) return;
-    final session = _items.where((item) => item.sessionId == target).firstOrNull;
+    final session = _items
+        .where((item) => item.sessionId == target)
+        .firstOrNull;
     if (session == null) return;
     _openedPending = true;
     widget.onPendingTargetConsumed?.call();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => SmartChargeSessionDetailScreen(
-          controller: widget.controller,
-          session: session,
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => SmartChargeSessionDetailScreen(
+            controller: widget.controller,
+            session: session,
+          ),
         ),
-      ));
+      );
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Lịch sử Smart Charge')),
-      body: RefreshIndicator(
-        onRefresh: () => _load(reset: true),
-        child: CustomScrollView(
-          slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              sliver: SliverToBoxAdapter(child: _filters()),
-            ),
-            if (_loading && _items.isEmpty)
-              const SliverFillRemaining(
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (_error != null && _items.isEmpty)
-              SliverFillRemaining(child: _errorState())
-            else if (_items.isEmpty)
-              const SliverFillRemaining(child: _EmptyHistory())
-            else ...[
-              if (_error != null)
-                SliverToBoxAdapter(
-                  child: _StaleNotice(
-                    message: _error!,
-                    onRetry: () => _load(reset: true),
-                  ),
+    final visible = _filteredItems;
+    final shown = visible.take(_visibleCount).toList();
+    final summary = SmartChargeHistorySummary.calculate(
+      visible,
+      from: _rangeStart,
+      to: _rangeEnd,
+    );
+    return SmartChargeCockpitTheme(
+      child: Scaffold(
+        appBar: widget.embedded
+            ? null
+            : AppBar(title: const Text('Lịch sử Smart Charge')),
+        body: RefreshIndicator(
+          onRefresh: () => _load(reset: true),
+          child: CustomScrollView(
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+                sliver: SliverToBoxAdapter(
+                  child: _HistoryHeader(onExport: _export),
                 ),
-              SliverList.separated(
-                itemCount: _items.length,
-                separatorBuilder: (_, _) =>
-                    const Divider(height: 1, indent: 16, endIndent: 16),
-                itemBuilder: (context, index) => _HistoryRow(
-                  session: _items[index],
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => SmartChargeSessionDetailScreen(
-                        controller: widget.controller,
-                        session: _items[index],
-                      ),
+              ),
+              if (_activeSession != null)
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 2, 16, 10),
+                  sliver: SliverToBoxAdapter(
+                    child: _ActiveHistoryCard(
+                      session: _activeSession!,
+                      powerW: widget
+                          .controller
+                          .currentUiState
+                          .chargerStatus
+                          ?.powerW,
+                      onTap: () => _openDetail(_activeSession!),
                     ),
                   ),
-                  onHide: () => _hide(_items[index]),
+                ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 2, 16, 10),
+                sliver: SliverToBoxAdapter(
+                  child: _MonthlySummary(
+                    month: _selectedMonth,
+                    range: _customRange,
+                    summary: summary,
+                    onPrevious: _customRange == null
+                        ? () => _changeMonth(-1)
+                        : null,
+                    onNext:
+                        _customRange != null ||
+                            _monthEnd.isAfter(DateTime.now())
+                        ? null
+                        : () => _changeMonth(1),
+                  ),
                 ),
               ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: _cursor == null
-                      ? const Center(
-                          child: Text('Đã hiển thị toàn bộ phiên sạc'),
-                        )
-                      : OutlinedButton(
-                          onPressed: _loadingMore
-                              ? null
-                              : () => _load(reset: false),
-                          child: _loadingMore
-                              ? const SizedBox.square(
-                                  dimension: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Text('TẢI THÊM'),
-                        ),
-                ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 2, 16, 12),
+                sliver: SliverToBoxAdapter(child: _filters()),
               ),
+              if (_loading && _items.isEmpty)
+                const SliverFillRemaining(
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (_error != null && _items.isEmpty)
+                SliverFillRemaining(child: _errorState())
+              else if (visible.isEmpty && _activeSession == null)
+                const SliverFillRemaining(child: _EmptyHistory())
+              else ...[
+                if (_error != null)
+                  SliverToBoxAdapter(
+                    child: _StaleNotice(
+                      message: _error!,
+                      onRetry: () => _load(reset: true),
+                    ),
+                  ),
+                SliverList.separated(
+                  itemCount: shown.length,
+                  separatorBuilder: (_, _) =>
+                      const Divider(height: 1, indent: 16, endIndent: 16),
+                  itemBuilder: (context, index) => _HistoryRow(
+                    session: shown[index],
+                    onTap: () => _openDetail(shown[index]),
+                    onHide: () => _hide(shown[index]),
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: _cursor == null && shown.length >= visible.length
+                        ? const Center(
+                            child: Text('Đã hiển thị toàn bộ phiên sạc'),
+                          )
+                        : OutlinedButton(
+                            onPressed: _loadingMore
+                                ? null
+                                : () {
+                                    if (shown.length < visible.length) {
+                                      setState(() => _visibleCount += 20);
+                                    } else {
+                                      _load(reset: false);
+                                    }
+                                  },
+                            child: _loadingMore
+                                ? const SizedBox.square(
+                                    dimension: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Text('TẢI THÊM'),
+                          ),
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -196,22 +291,201 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
         },
       ),
       const SizedBox(height: 8),
-      SegmentedButton<ChargingStrategy?>(
-        showSelectedIcon: false,
-        segments: const [
-          ButtonSegment(value: null, label: Text('Tất cả')),
-          ButtonSegment(value: ChargingStrategy.aiTarget, label: Text('Sạc AI')),
-          ButtonSegment(value: ChargingStrategy.manualTimed, label: Text('Thủ công')),
+      Row(
+        children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: _pickDateRange,
+              icon: const Icon(Icons.date_range_rounded),
+              label: Text(
+                _customRange == null
+                    ? 'CHỌN KHOẢNG NGÀY'
+                    : '${DateFormat('dd/MM').format(_customRange!.start)} – ${DateFormat('dd/MM/yyyy').format(_customRange!.end)}',
+              ),
+            ),
+          ),
+          if (_customRange != null) ...[
+            const SizedBox(width: 8),
+            IconButton(
+              tooltip: 'Trở về tháng hiện tại',
+              onPressed: () => setState(() {
+                _customRange = null;
+                _visibleCount = 20;
+              }),
+              icon: const Icon(Icons.close_rounded),
+            ),
+          ],
         ],
-        selected: {_filter},
-        onSelectionChanged: (value) {
-          _filter = value.first;
-          _cursor = null;
-          _load(reset: true);
-        },
+      ),
+      const SizedBox(height: 8),
+      SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            _filterChip('Tất cả', _filter == null, () => _setStrategy(null)),
+            _filterChip(
+              'Sạc AI',
+              _filter == ChargingStrategy.aiTarget,
+              () => _setStrategy(ChargingStrategy.aiTarget),
+            ),
+            _filterChip(
+              'Thủ công',
+              _filter == ChargingStrategy.manualTimed,
+              () => _setStrategy(ChargingStrategy.manualTimed),
+            ),
+            _filterChip(
+              'Hoàn thành',
+              _statusFilter == SmartChargeHistorySessionFilter.completed,
+              () => _setStatus(SmartChargeHistorySessionFilter.completed),
+            ),
+            _filterChip(
+              'Dừng sớm',
+              _statusFilter == SmartChargeHistorySessionFilter.stoppedEarly,
+              () => _setStatus(SmartChargeHistorySessionFilter.stoppedEarly),
+            ),
+            _filterChip(
+              'Partial',
+              _statusFilter == SmartChargeHistorySessionFilter.partial,
+              () => _setStatus(SmartChargeHistorySessionFilter.partial),
+            ),
+          ],
+        ),
       ),
     ],
   );
+
+  Widget _filterChip(String label, bool selected, VoidCallback onTap) =>
+      Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: ChoiceChip(
+          label: Text(label),
+          selected: selected,
+          onSelected: (_) => onTap(),
+        ),
+      );
+
+  void _setStrategy(ChargingStrategy? value) => setState(() {
+    _filter = value;
+    _visibleCount = 20;
+    if (value != null) _statusFilter = SmartChargeHistorySessionFilter.all;
+  });
+
+  void _setStatus(SmartChargeHistorySessionFilter value) => setState(() {
+    _visibleCount = 20;
+    _statusFilter = _statusFilter == value
+        ? SmartChargeHistorySessionFilter.all
+        : value;
+  });
+
+  void _changeMonth(int delta) => setState(() {
+    _customRange = null;
+    _visibleCount = 20;
+    _selectedMonth = DateTime(
+      _selectedMonth.year,
+      _selectedMonth.month + delta,
+    );
+  });
+
+  Future<void> _pickDateRange() async {
+    final now = DateTime.now();
+    final selected = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 10),
+      lastDate: now,
+      initialDateRange: _customRange,
+      helpText: 'Chọn khoảng lịch sử sạc',
+      saveText: 'ÁP DỤNG',
+    );
+    if (selected == null || !mounted) return;
+    if (selected.duration.inDays > 366) {
+      AppPopup.showWarning(
+        'Khoảng thời gian quá dài',
+        detail: 'Mỗi lần xem hoặc xuất báo cáo tối đa 12 tháng.',
+      );
+      return;
+    }
+    setState(() {
+      _customRange = selected;
+      _visibleCount = 20;
+    });
+  }
+
+  void _openDetail(SmartChargingSession session) => showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    backgroundColor: Colors.transparent,
+    barrierColor: Colors.black.withValues(alpha: .72),
+    builder: (_) => FractionallySizedBox(
+      heightFactor: .96,
+      child: ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        child: SmartChargeSessionDetailScreen(
+          controller: widget.controller,
+          session: session,
+        ),
+      ),
+    ),
+  );
+
+  Future<void> _export() async {
+    final format = await showModalBottomSheet<ChargeReportFormat>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Xuất báo cáo',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '${_customRange == null ? DateFormat('MM/yyyy').format(_selectedMonth) : '${DateFormat('dd/MM/yyyy').format(_customRange!.start)} – ${DateFormat('dd/MM/yyyy').format(_customRange!.end)}'} · ${_allVehicles ? 'Tất cả xe' : 'Xe đang chọn'}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 18),
+              FilledButton.icon(
+                onPressed: () => Navigator.pop(context, ChargeReportFormat.pdf),
+                icon: const Icon(Icons.picture_as_pdf_rounded),
+                label: const Text('XUẤT PDF'),
+              ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: () => Navigator.pop(context, ChargeReportFormat.csv),
+                icon: const Icon(Icons.table_view_rounded),
+                label: const Text('XUẤT CSV'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (format == null) return;
+    try {
+      final result = await widget.controller.exportHistory(
+        ChargeReportRequest(
+          format: format,
+          from: _rangeStart,
+          to: _rangeEnd,
+          allVehicles: _allVehicles,
+          vehicleId: _allVehicles
+              ? null
+              : widget.controller.currentUiState.draft.vehicleId,
+        ),
+      );
+      AppPopup.showSuccess(
+        'Đã tạo báo cáo',
+        detail: '${result.sessionCount} phiên · đã mở bảng chia sẻ Android.',
+      );
+    } on Object catch (error) {
+      AppPopup.showError('Không thể xuất báo cáo', detail: '$error');
+    }
+  }
 
   Widget _errorState() => ListView(
     children: [
@@ -258,7 +532,8 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
       await widget.controller.hideSession(session.sessionId);
       if (mounted) {
         setState(
-          () => _items.removeWhere((item) => item.sessionId == session.sessionId),
+          () =>
+              _items.removeWhere((item) => item.sessionId == session.sessionId),
         );
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Đã ẩn phiên khỏi lịch sử.')),
@@ -266,11 +541,274 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Không thể ẩn phiên: $error')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Không thể ẩn phiên: $error')));
       }
     }
+  }
+}
+
+class _HistoryHeader extends StatelessWidget {
+  const _HistoryHeader({required this.onExport});
+  final VoidCallback onExport;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Lịch sử sạc điện',
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              'Phiên sạc, điện năng và chi phí đã đo.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: SmartChargeCockpitColors.muted,
+              ),
+            ),
+          ],
+        ),
+      ),
+      OutlinedButton.icon(
+        onPressed: onExport,
+        icon: const Icon(Icons.ios_share_rounded, size: 18),
+        label: const Text('Xuất'),
+      ),
+    ],
+  );
+}
+
+class _ActiveHistoryCard extends StatelessWidget {
+  const _ActiveHistoryCard({
+    required this.session,
+    required this.onTap,
+    this.powerW,
+  });
+  final SmartChargingSession session;
+  final VoidCallback onTap;
+  final double? powerW;
+
+  @override
+  Widget build(BuildContext context) {
+    final cost = session.estimatedCostVnd == null
+        ? 'Chưa đặt giá điện'
+        : '${NumberFormat.decimalPattern('vi_VN').format(session.estimatedCostVnd)} đ tạm tính';
+    return Semantics(
+      button: true,
+      label: 'Phiên đang sạc, mở chi tiết realtime',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(24),
+        child: CockpitPanel(
+          highlight: true,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.bolt_rounded,
+                    color: SmartChargeCockpitColors.verified,
+                  ),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'ĐANG SẠC',
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                  Text(
+                    _duration(session.remaining()),
+                    style: const TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '~${(session.estimatedSoc ?? session.startSoc).round()}% → Mục tiêu ~${session.targetSoc.round()}%',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                '${powerW == null ? '— W' : '${powerW!.toStringAsFixed(0)} W'} · ${_energy(session.energyUsedWh)} · $cost',
+                style: const TextStyle(color: SmartChargeCockpitColors.muted),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MonthlySummary extends StatelessWidget {
+  const _MonthlySummary({
+    required this.month,
+    required this.range,
+    required this.summary,
+    this.onPrevious,
+    this.onNext,
+  });
+  final DateTime month;
+  final DateTimeRange? range;
+  final SmartChargeHistorySummary summary;
+  final VoidCallback? onPrevious;
+  final VoidCallback? onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    final recent = <SmartChargeDailyEnergy>[];
+    final now = DateTime.now();
+    for (var offset = 6; offset >= 0; offset--) {
+      final day = DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).subtract(Duration(days: offset));
+      recent.add(
+        summary.daily.firstWhere(
+          (item) => item.day == day,
+          orElse: () => SmartChargeDailyEnergy(day, 0, 0),
+        ),
+      );
+    }
+    return CockpitPanel(
+      child: Column(
+        children: [
+          Row(
+            children: [
+              IconButton(
+                onPressed: onPrevious,
+                icon: const Icon(Icons.chevron_left_rounded),
+              ),
+              Expanded(
+                child: Text(
+                  range == null
+                      ? 'TỔNG KẾT THÁNG ${DateFormat('MM/yyyy').format(month)}'
+                      : 'TỔNG KẾT ${DateFormat('dd/MM').format(range!.start)} – ${DateFormat('dd/MM/yyyy').format(range!.end)}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: SmartChargeCockpitColors.verified,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 12,
+                    letterSpacing: .5,
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: onNext,
+                icon: const Icon(Icons.chevron_right_rounded),
+              ),
+            ],
+          ),
+          const Divider(),
+          Wrap(
+            spacing: 24,
+            runSpacing: 16,
+            children: [
+              _SummaryKpi('Điện nạp', _energy(summary.totalGridEnergyWh)),
+              _SummaryKpi(
+                'Tổng tiền',
+                summary.totalCostVnd <= 0
+                    ? '—'
+                    : '${NumberFormat.compact(locale: 'vi').format(summary.totalCostVnd)} đ',
+              ),
+              _SummaryKpi('Thời gian', _duration(summary.totalDuration)),
+              _SummaryKpi('Phiên', '${summary.completedSessions}'),
+            ],
+          ),
+          const SizedBox(height: 18),
+          SizedBox(height: 72, child: _SevenDayBars(days: recent)),
+        ],
+      ),
+    );
+  }
+}
+
+class _SummaryKpi extends StatelessWidget {
+  const _SummaryKpi(this.label, this.value);
+  final String label;
+  final String value;
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 116,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: SmartChargeCockpitColors.muted,
+            fontSize: 11,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          value,
+          style: CockpitTypography.numbers(
+            fontSize: 16,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _SevenDayBars extends StatelessWidget {
+  const _SevenDayBars({required this.days});
+  final List<SmartChargeDailyEnergy> days;
+  @override
+  Widget build(BuildContext context) {
+    final maximum = days.fold<double>(
+      1,
+      (value, item) => max(value, item.energyWh),
+    );
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        for (final day in days)
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.bottomCenter,
+                    child: FractionallySizedBox(
+                      heightFactor: max(.06, day.energyWh / maximum),
+                      child: Container(
+                        width: 16,
+                        decoration: BoxDecoration(
+                          color: SmartChargeCockpitColors.verified,
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  DateFormat('E', 'vi').format(day.day),
+                  style: const TextStyle(
+                    fontSize: 9,
+                    color: SmartChargeCockpitColors.muted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
   }
 }
 
@@ -332,6 +870,14 @@ class _HistoryRow extends StatelessWidget {
     final duration = (session.stoppedAt ?? session.updatedAt).difference(
       session.startedAt ?? session.createdAt,
     );
+    final cost = session.estimatedCostVnd == null
+        ? '—'
+        : '${NumberFormat.decimalPattern('vi_VN').format(session.estimatedCostVnd)} đ';
+    final status = session.energyQuality == 'partial'
+        ? 'Partial'
+        : session.state == ChargingSessionState.completed
+        ? 'Hoàn thành'
+        : 'Đã dừng';
     return Semantics(
       button: true,
       label:
@@ -374,7 +920,7 @@ class _HistoryRow extends StatelessWidget {
           child: Text(
             '${DateFormat('dd/MM · HH:mm').format(session.createdAt.toLocal())}  ·  '
             '${session.startSoc.toStringAsFixed(0)} → Mục tiêu ${session.targetSoc.toStringAsFixed(0)}%  ·  '
-            '${!session.state.isTerminal ? '${_duration(session.remaining())} còn lại' : _duration(duration)}',
+            '${!session.state.isTerminal ? '${_duration(session.remaining())} còn lại' : _duration(duration)} · $cost · $status',
           ),
         ),
         trailing: const Icon(Icons.chevron_right_rounded),
@@ -385,6 +931,81 @@ class _HistoryRow extends StatelessWidget {
 }
 
 enum _ChartMetric { power, voltage, current, temperature, energy }
+
+class _SocProgressHeader extends StatelessWidget {
+  const _SocProgressHeader({required this.session});
+  final SmartChargingSession session;
+
+  @override
+  Widget build(BuildContext context) {
+    final end =
+        session.actualEndSoc ?? session.estimatedSoc ?? session.targetSoc;
+    final confirmed = session.actualEndSoc != null;
+    return CockpitPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'MỨC PIN TRONG PHIÊN',
+            style: TextStyle(
+              color: SmartChargeCockpitColors.muted,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: .5,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Text(
+                '~${session.startSoc.round()}%',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const Expanded(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 14),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Divider(
+                          color: SmartChargeCockpitColors.verified,
+                        ),
+                      ),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        color: SmartChargeCockpitColors.verified,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Text(
+                '${confirmed ? '' : '~'}${end.round()}%',
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  color: SmartChargeCockpitColors.verified,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            confirmed
+                ? 'SOC cuối do người dùng xác nhận'
+                : 'Ước tính, không phải dữ liệu BMS',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: confirmed
+                  ? SmartChargeCockpitColors.verified
+                  : SmartChargeCockpitColors.warning,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class SmartChargeSessionDetailScreen extends StatefulWidget {
   const SmartChargeSessionDetailScreen({
@@ -400,6 +1021,7 @@ class SmartChargeSessionDetailScreen extends StatefulWidget {
 }
 
 class _DetailState extends State<SmartChargeSessionDetailScreen> {
+  late SmartChargingSession _session;
   List<SmartChargeTelemetryPoint>? _points;
   SmartChargeEnergySummary? _summary;
   String? _error;
@@ -409,8 +1031,9 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
   @override
   void initState() {
     super.initState();
+    _session = widget.session;
     _load();
-    if (!widget.session.state.isTerminal) {
+    if (!_session.state.isTerminal) {
       _liveTimer = Timer.periodic(const Duration(seconds: 5), (_) => _load());
     }
   }
@@ -423,17 +1046,21 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
 
   Future<void> _load() async {
     try {
-      final points = await widget.controller.getTelemetry(
-        widget.session.sessionId,
-      );
+      final points = await widget.controller.getTelemetry(_session.sessionId);
       if (!mounted) return;
       setState(() {
+        final live = widget.controller.currentUiState.session;
+        if (live?.sessionId == _session.sessionId) _session = live!;
         _points = points;
         _summary = SmartChargeEnergySummary.calculate(
-          session: widget.session,
+          session: _session,
           points: points,
         );
       });
+      if (_session.state.isTerminal) {
+        _liveTimer?.cancel();
+        _liveTimer = null;
+      }
     } catch (_) {
       if (mounted) setState(() => _error = 'Không thể tải dữ liệu biểu đồ.');
     }
@@ -441,80 +1068,91 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final duration = (widget.session.stoppedAt ?? widget.session.updatedAt)
-        .difference(widget.session.startedAt ?? widget.session.createdAt);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Chi tiết phiên sạc')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-        children: [
-          Text(
-            widget.session.strategy == ChargingStrategy.manualTimed
-                ? 'Sạc thủ công'
-                : 'Sạc theo AI',
-            style: Theme.of(
-              context,
-            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
-          ),
-          if (!widget.session.state.isTerminal) ...[
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Chip(
-                avatar: const Icon(Icons.bolt_rounded, size: 18),
-                label: Text(
-                  'ĐANG SẠC · Mục tiêu ${widget.session.targetSoc.round()}%',
+    final duration = (_session.stoppedAt ?? _session.updatedAt).difference(
+      _session.startedAt ?? _session.createdAt,
+    );
+    return SmartChargeCockpitTheme(
+      child: Scaffold(
+        appBar: AppBar(title: const Text('Chi tiết phiên sạc')),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+          children: [
+            Text(
+              _session.strategy == ChargingStrategy.manualTimed
+                  ? 'Sạc thủ công'
+                  : 'Sạc theo AI',
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            if (!_session.state.isTerminal) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Chip(
+                  avatar: const Icon(Icons.bolt_rounded, size: 18),
+                  label: Text(
+                    'ĐANG SẠC · Mục tiêu ~${_session.targetSoc.round()}%',
+                  ),
                 ),
+              ),
+            ],
+            const SizedBox(height: 6),
+            Text(
+              '${DateFormat('dd/MM/yyyy · HH:mm').format(_session.createdAt.toLocal())}  ·  ${_duration(duration)}',
+            ),
+            const SizedBox(height: 16),
+            _SocProgressHeader(session: _session),
+            const SizedBox(height: 20),
+            _kpis(),
+            const SizedBox(height: 24),
+            Text(
+              'Diễn biến phiên sạc',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Chạm và kéo trên biểu đồ để xem từng thời điểm.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            _metricSelector(),
+            const SizedBox(height: 14),
+            SizedBox(height: 250, child: _chart()),
+            const SizedBox(height: 24),
+            _technicalSummary(),
+            const SizedBox(height: 20),
+            OutlinedButton.icon(
+              onPressed: _session.state.isTerminal ? _confirmSoc : null,
+              icon: const Icon(Icons.battery_saver_rounded),
+              label: const Text('XÁC NHẬN SOC THỰC TẾ KHI KẾT THÚC'),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _session.state.isTerminal ? _hideSession : null,
+              icon: const Icon(Icons.visibility_off_outlined),
+              label: const Text('ẨN PHIÊN KHỎI LỊCH SỬ'),
+            ),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: _session.state.isTerminal ? _privacyErase : null,
+              icon: const Icon(Icons.delete_forever_outlined),
+              label: const Text('XÓA VĨNH VIỄN DỮ LIỆU PHIÊN'),
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Các chỉ số pin là ước tính, không phải dữ liệu BMS. Dung lượng khả dụng chỉ hiện khi phiên đủ chất lượng.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.tertiary,
               ),
             ),
           ],
-          const SizedBox(height: 6),
-          Text(
-            '${DateFormat('dd/MM/yyyy · HH:mm').format(widget.session.createdAt.toLocal())}  ·  ${_duration(duration)}',
-          ),
-          const SizedBox(height: 20),
-          _kpis(),
-          const SizedBox(height: 24),
-          Text(
-            'Diễn biến phiên sạc',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Chạm và kéo trên biểu đồ để xem từng thời điểm.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: 12),
-          _metricSelector(),
-          const SizedBox(height: 14),
-          SizedBox(height: 250, child: _chart()),
-          const SizedBox(height: 24),
-          _technicalSummary(),
-          const SizedBox(height: 20),
-          OutlinedButton.icon(
-            onPressed: _confirmSoc,
-            icon: const Icon(Icons.battery_saver_rounded),
-            label: const Text('XÁC NHẬN SOC THỰC TẾ KHI KẾT THÚC'),
-          ),
-          const SizedBox(height: 8),
-          TextButton.icon(
-            onPressed: widget.session.state.isTerminal ? _privacyErase : null,
-            icon: const Icon(Icons.delete_forever_outlined),
-            label: const Text('XÓA VĨNH VIỄN DỮ LIỆU PHIÊN'),
-            style: TextButton.styleFrom(
-              foregroundColor: Theme.of(context).colorScheme.error,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Các chỉ số pin là ước tính, không phải dữ liệu BMS. Dung lượng khả dụng chỉ hiện khi phiên đủ chất lượng.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.tertiary,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -540,6 +1178,18 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
         summary?.estimatedUsableCapacityWh == null
             ? 'Cần xác nhận SOC'
             : '${_energy(summary!.estimatedUsableCapacityWh!)} ước tính',
+      ),
+      (
+        'Chi phí phiên',
+        _session.estimatedCostVnd == null
+            ? 'Chưa đặt giá điện'
+            : '${NumberFormat.decimalPattern('vi_VN').format(_session.estimatedCostVnd)} đ',
+      ),
+      (
+        'Độ phủ dữ liệu',
+        summary == null
+            ? '—'
+            : '${(summary.coverageRatio * 100).round()}% · ${summary.energyQuality}',
       ),
     ];
     return Wrap(
@@ -591,16 +1241,38 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
     if (_points!.isEmpty) {
       return const Center(child: Text('Phiên này chưa có telemetry chi tiết.'));
     }
+    final source = _downsample(_points!, 500);
     double read(SmartChargeTelemetryPoint point) => switch (_metric) {
       _ChartMetric.power => point.powerAverageW,
       _ChartMetric.voltage => point.voltageV,
       _ChartMetric.current => point.currentA,
       _ChartMetric.temperature => point.temperatureC ?? 0,
-      _ChartMetric.energy => point.energyWh - _points!.first.energyWh,
+      _ChartMetric.energy => point.energyWh - source.first.energyWh,
     };
-    final spots = _points!
-        .map((point) => FlSpot(point.elapsedSeconds / 60, max(0, read(point))))
-        .toList();
+    final segments = <List<SmartChargeTelemetryPoint>>[];
+    for (final point in source) {
+      if (segments.isEmpty ||
+          point.timestamp.difference(segments.last.last.timestamp) >
+              const Duration(seconds: 75)) {
+        segments.add([point]);
+      } else {
+        segments.last.add(point);
+      }
+    }
+    final transportMarkers = <double>{};
+    final rearmMarkers = <double>{};
+    for (var index = 1; index < source.length; index++) {
+      if (source[index].transport != source[index - 1].transport) {
+        transportMarkers.add(source[index].elapsedSeconds / 60);
+      }
+      final previousTimer = source[index - 1].timerRemainingSeconds;
+      final currentTimer = source[index].timerRemainingSeconds;
+      if (previousTimer != null &&
+          currentTimer != null &&
+          currentTimer > previousTimer + 90) {
+        rearmMarkers.add(source[index].elapsedSeconds / 60);
+      }
+    }
     final color = Theme.of(context).colorScheme.primary;
     return AnimatedSwitcher(
       duration: MediaQuery.disableAnimationsOf(context)
@@ -638,7 +1310,7 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
               getTooltipItems: (items) => items
                   .map(
                     (item) => LineTooltipItem(
-                      item.y.toStringAsFixed(1),
+                      '${item.x.toStringAsFixed(1)} phút\n${item.y.toStringAsFixed(1)} ${_metricUnit(_metric)}',
                       const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
@@ -648,23 +1320,87 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
                   .toList(),
             ),
           ),
-          lineBarsData: [
-            LineChartBarData(
-              spots: spots,
-              isCurved: true,
-              curveSmoothness: 0.25,
-              color: color,
-              barWidth: 3,
-              dotData: const FlDotData(show: false),
-              belowBarData: BarAreaData(
-                show: true,
-                color: color.withValues(alpha: 0.14),
+          extraLinesData: ExtraLinesData(
+            verticalLines: [
+              VerticalLine(
+                x: 0,
+                color: SmartChargeCockpitColors.verified,
+                strokeWidth: 1.5,
               ),
-            ),
+              for (final minute in rearmMarkers)
+                VerticalLine(
+                  x: minute,
+                  color: SmartChargeCockpitColors.warning,
+                  strokeWidth: 1.5,
+                  dashArray: const [5, 4],
+                ),
+              for (final event in _session.safetyEvents)
+                if (event.createdAt != null)
+                  VerticalLine(
+                    x:
+                        event.createdAt!
+                            .difference(
+                              _session.startedAt ?? _session.createdAt,
+                            )
+                            .inSeconds /
+                        60,
+                    color: SmartChargeCockpitColors.warning,
+                    strokeWidth: 1.5,
+                    dashArray: const [4, 4],
+                  ),
+              if (_session.state.isTerminal)
+                VerticalLine(
+                  x: source.last.elapsedSeconds / 60,
+                  color:
+                      _session.stopReason == ChargingStopReason.manual ||
+                          _session.userStopReason != UserStopReason.none
+                      ? SmartChargeCockpitColors.danger
+                      : SmartChargeCockpitColors.verified,
+                  strokeWidth: 2,
+                ),
+            ],
+          ),
+          lineBarsData: [
+            for (final segment in segments)
+              LineChartBarData(
+                spots: segment
+                    .map(
+                      (point) => FlSpot(
+                        point.elapsedSeconds / 60,
+                        max(0, read(point)),
+                      ),
+                    )
+                    .toList(),
+                isCurved: true,
+                curveSmoothness: 0.25,
+                color: color,
+                barWidth: 3,
+                dotData: FlDotData(
+                  show: true,
+                  checkToShowDot: (spot, _) =>
+                      transportMarkers.contains(spot.x),
+                ),
+                belowBarData: BarAreaData(
+                  show: true,
+                  color: color.withValues(alpha: 0.14),
+                ),
+              ),
           ],
         ),
       ),
     );
+  }
+
+  List<SmartChargeTelemetryPoint> _downsample(
+    List<SmartChargeTelemetryPoint> points,
+    int maximum,
+  ) {
+    if (points.length <= maximum) return points;
+    final step = points.length / maximum;
+    return [
+      for (var index = 0.0; index < points.length; index += step)
+        points[min(points.length - 1, index.floor())],
+    ];
   }
 
   Widget _technicalSummary() {
@@ -694,18 +1430,12 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
             ? '—'
             : '${(s.coverageRatio * 100).round()}% · ${s.sampleCount} điểm',
       ),
-      (
-        'Dừng sạc',
-        widget.session.stopReason?.wireValue ?? widget.session.state.wireValue,
-      ),
+      ('Dừng sạc', _session.stopReason?.wireValue ?? _session.state.wireValue),
       (
         'Thiết bị / kết nối',
-        '${widget.session.deviceId ?? 'Shelly'} · ${widget.session.transport ?? '—'}',
+        '${_session.deviceId ?? 'Shelly'} · ${_session.transport ?? '—'}',
       ),
-      (
-        'Model AI',
-        '${widget.session.modelVersion} · ${widget.session.predictionSource}',
-      ),
+      ('Model AI', '${_session.modelVersion} · ${_session.predictionSource}'),
     ];
     return Column(
       children: [
@@ -764,7 +1494,7 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
     if (value == null) return;
     try {
       final summary = await widget.controller.confirmActualEndSoc(
-        widget.session,
+        _session,
         value,
       );
       if (mounted) setState(() => _summary = summary);
@@ -787,22 +1517,34 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Thao tác này xóa summary, telemetry và không thể hoàn tác.'),
+            const Text(
+              'Thao tác này xóa summary, telemetry và không thể hoàn tác.',
+            ),
             const SizedBox(height: 12),
-            SelectableText(widget.session.sessionId,
-                style: const TextStyle(fontWeight: FontWeight.w700)),
+            SelectableText(
+              _session.sessionId,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: 8),
             TextField(
               controller: input,
-              decoration: const InputDecoration(labelText: 'Nhập mã phiên để xác nhận'),
+              decoration: const InputDecoration(
+                labelText: 'Nhập mã phiên để xác nhận',
+              ),
               autofocus: true,
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('HỦY')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('HỦY'),
+          ),
           FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, input.text.trim() == widget.session.sessionId),
+            onPressed: () => Navigator.pop(
+              dialogContext,
+              input.text.trim() == _session.sessionId,
+            ),
             child: const Text('XÓA VĨNH VIỄN'),
           ),
         ],
@@ -812,7 +1554,7 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
     input.dispose();
     if (confirmed != true || !mounted) return;
     try {
-      await widget.controller.privacyEraseSession(widget.session.sessionId, code);
+      await widget.controller.privacyEraseSession(_session.sessionId, code);
       if (mounted) Navigator.of(context).pop();
     } catch (error) {
       if (mounted) {
@@ -822,11 +1564,50 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
       }
     }
   }
+
+  Future<void> _hideSession() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Ẩn phiên sạc?'),
+        content: const Text(
+          'Phiên sẽ biến mất khỏi danh sách thường nhưng dữ liệu gốc vẫn được giữ.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('HỦY'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('ẨN PHIÊN'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await widget.controller.hideSession(_session.sessionId);
+      if (mounted) Navigator.of(context).pop();
+    } on Object catch (error) {
+      if (mounted) {
+        AppPopup.showError('Không thể ẩn phiên', detail: '$error');
+      }
+    }
+  }
 }
 
 String _energy(double wh) => wh >= 1000
     ? '${(wh / 1000).toStringAsFixed(2)} kWh'
     : '${wh.toStringAsFixed(0)} Wh';
+
+String _metricUnit(_ChartMetric metric) => switch (metric) {
+  _ChartMetric.power => 'W',
+  _ChartMetric.voltage => 'V',
+  _ChartMetric.current => 'A',
+  _ChartMetric.temperature => '°C',
+  _ChartMetric.energy => 'Wh',
+};
 
 String _duration(Duration value) {
   final hours = value.inHours;

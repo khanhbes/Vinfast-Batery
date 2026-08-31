@@ -6,6 +6,7 @@ import '../core/providers/app_providers.dart';
 import '../core/services/notification_center_service.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_motion.dart';
+import '../core/theme/cockpit_design_system.dart';
 import '../core/widgets/vehicle_switcher.dart';
 import '../core/widgets/global_charging_pill.dart';
 import '../features/ai/smart_charge_history_screen.dart';
@@ -60,20 +61,19 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
     ref.watch(vehicleContextRestoreProvider);
     final currentIndex = ref.watch(currentTabProvider);
 
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    // Keep system chrome legible in both V4 light and dark themes.
+    const energyMode = true;
     SystemChrome.setSystemUIOverlayStyle(
-      SystemUiOverlayStyle(
+      const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
-        systemNavigationBarColor: theme.scaffoldBackgroundColor,
-        systemNavigationBarIconBrightness:
-            isDark ? Brightness.light : Brightness.dark,
+        statusBarIconBrightness: Brightness.light,
+        systemNavigationBarColor: CockpitColors.shell,
+        systemNavigationBarIconBrightness: Brightness.light,
+        systemNavigationBarDividerColor: CockpitColors.border,
       ),
     );
 
     return Scaffold(
+      backgroundColor: CockpitColors.background,
       appBar: _buildUnifiedAppBar(context, currentIndex),
       body: Stack(
         children: [
@@ -83,13 +83,13 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          color: theme.scaffoldBackgroundColor.withValues(alpha: 0.95),
+          color: CockpitColors.shell.withValues(alpha: 0.98),
           border: const Border(
             top: BorderSide(color: AppColors.glassBorder, width: 0.5),
           ),
           boxShadow: [
             BoxShadow(
-              color: AppColors.primary.withValues(alpha: 0.05),
+              color: CockpitColors.emerald.withValues(alpha: 0.05),
               blurRadius: 20,
               offset: const Offset(0, -4),
             ),
@@ -105,24 +105,28 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
                   icon: Icons.dashboard_rounded,
                   label: 'Tổng quan',
                   isSelected: currentIndex == 0,
+                  energyMode: energyMode,
                   onTap: () => ref.read(currentTabProvider.notifier).state = 0,
                 ),
                 _NavItem(
                   icon: Icons.bolt_rounded,
                   label: 'Sạc',
                   isSelected: currentIndex == 1,
+                  energyMode: energyMode,
                   onTap: () => ref.read(currentTabProvider.notifier).state = 1,
                 ),
                 _NavItem(
                   icon: Icons.history_rounded,
                   label: 'Lịch sử',
                   isSelected: currentIndex == 2,
+                  energyMode: energyMode,
                   onTap: () => ref.read(currentTabProvider.notifier).state = 2,
                 ),
                 _NavItem(
                   icon: Icons.more_horiz_rounded,
                   label: 'Khác',
                   isSelected: currentIndex == 3,
+                  energyMode: energyMode,
                   onTap: () => ref.read(currentTabProvider.notifier).state = 3,
                 ),
               ],
@@ -138,21 +142,16 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
     BuildContext context,
     int currentIndex,
   ) {
-    final tabTitles = [
-      'Tổng quan',
-      'Smart Charge',
-      'Lịch sử sạc',
-      'Khác',
-    ];
-    final theme = Theme.of(context);
+    final tabTitles = ['Tổng quan', 'Smart Charge', 'Lịch sử sạc', 'Khác'];
+    const energyMode = true;
 
     return AppBar(
-      backgroundColor: theme.scaffoldBackgroundColor,
+      backgroundColor: CockpitColors.shell,
       elevation: 0,
       title: Text(
         tabTitles[currentIndex],
         style: TextStyle(
-          color: theme.colorScheme.onSurface,
+          color: CockpitColors.text,
           fontSize: 18,
           fontWeight: FontWeight.w700,
         ),
@@ -166,6 +165,7 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
             final unreadCount = snapshot.data ?? 0;
             return _NotificationBell(
               unreadCount: unreadCount,
+              energyMode: energyMode,
               onTap: () => _openNotificationCenter(context),
             );
           },
@@ -191,7 +191,9 @@ class _SelectedHistory extends ConsumerWidget {
     final selectedId = ref.watch(selectedVehicleIdProvider);
     final pending = ref.watch(pendingSmartChargeTargetProvider);
     final id = pending?.vehicleId ?? selectedId;
-    if (id.isEmpty) return const Center(child: Text('Hãy chọn xe để xem lịch sử sạc'));
+    if (id.isEmpty) {
+      return const Center(child: Text('Hãy chọn xe để xem lịch sử sạc'));
+    }
     final vehicle = ref.watch(vehicleProvider(id));
     return vehicle.when(
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -202,14 +204,19 @@ class _SelectedHistory extends ConsumerWidget {
           currentSoc: (value?.currentBattery ?? 0).toDouble(),
         );
         final state = ref.watch(smartChargingControllerProvider(args));
-        final controller = ref.read(smartChargingControllerProvider(args).notifier);
+        final controller = ref.read(
+          smartChargingControllerProvider(args).notifier,
+        );
         return SmartChargeHistoryScreen(
           controller: controller,
           initialItems: state.history,
+          embedded: true,
           initialSessionId: pending?.sessionId,
           onPendingTargetConsumed: pending == null
               ? null
-              : () => ref.read(pendingSmartChargeTargetProvider.notifier).state = null,
+              : () =>
+                    ref.read(pendingSmartChargeTargetProvider.notifier).state =
+                        null,
         );
       },
     );
@@ -240,12 +247,14 @@ class _NavItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool isSelected;
+  final bool energyMode;
   final VoidCallback onTap;
 
   const _NavItem({
     required this.icon,
     required this.label,
     required this.isSelected,
+    required this.energyMode,
     required this.onTap,
   });
 
@@ -254,6 +263,8 @@ class _NavItem extends StatelessWidget {
     final duration = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
         : AppMotion.base;
+    const accent = CockpitColors.emerald;
+    const muted = CockpitColors.muted;
     return Semantics(
       button: true,
       selected: isSelected,
@@ -273,9 +284,14 @@ class _NavItem extends StatelessWidget {
             ),
             decoration: BoxDecoration(
               color: isSelected
-                  ? AppColors.primaryContainer.withValues(alpha: 0.35)
+                  ? accent.withValues(alpha: 0.14)
                   : Colors.transparent,
               borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isSelected
+                    ? accent.withValues(alpha: .30)
+                    : Colors.transparent,
+              ),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -285,15 +301,13 @@ class _NavItem extends StatelessWidget {
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? AppColors.primary.withValues(alpha: 0.12)
+                        ? accent.withValues(alpha: 0.12)
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
                     icon,
-                    color: isSelected
-                        ? AppColors.primary
-                        : AppColors.textTertiary,
+                    color: isSelected ? accent : muted,
                     size: 22,
                   ),
                 ),
@@ -301,9 +315,7 @@ class _NavItem extends StatelessWidget {
                 Text(
                   label,
                   style: TextStyle(
-                    color: isSelected
-                        ? AppColors.primary
-                        : AppColors.textTertiary,
+                    color: isSelected ? accent : muted,
                     fontSize: 10,
                     fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                     letterSpacing: 0.5,
@@ -321,9 +333,14 @@ class _NavItem extends StatelessWidget {
 /// Notification bell icon with unread badge
 class _NotificationBell extends StatelessWidget {
   final int unreadCount;
+  final bool energyMode;
   final VoidCallback onTap;
 
-  const _NotificationBell({required this.unreadCount, required this.onTap});
+  const _NotificationBell({
+    required this.unreadCount,
+    required this.energyMode,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -331,11 +348,11 @@ class _NotificationBell extends StatelessWidget {
       button: true,
       label: unreadCount > 0 ? 'Thông báo, $unreadCount chưa đọc' : 'Thông báo',
       child: Material(
-        color: AppColors.cardBackground,
-        borderRadius: BorderRadius.circular(12),
+        color: CockpitColors.elevated,
+        borderRadius: BorderRadius.circular(16),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           child: SizedBox(
             width: 48,
             height: 48,
@@ -345,8 +362,8 @@ class _NotificationBell extends StatelessWidget {
                 Icon(
                   Icons.notifications_outlined,
                   color: unreadCount > 0
-                      ? AppColors.primary
-                      : AppColors.textSecondary,
+                      ? CockpitColors.emerald
+                      : CockpitColors.muted,
                   size: 22,
                 ),
                 if (unreadCount > 0)
@@ -356,10 +373,10 @@ class _NotificationBell extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.all(2),
                       decoration: BoxDecoration(
-                        color: AppColors.error,
+                        color: CockpitColors.emerald,
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: AppColors.cardBackground,
+                          color: CockpitColors.elevated,
                           width: 1.5,
                         ),
                       ),

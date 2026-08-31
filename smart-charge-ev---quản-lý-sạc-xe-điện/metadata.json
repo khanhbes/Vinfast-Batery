@@ -1,0 +1,6 @@
+{
+  "name": "Smart Charge EV - Quản lý sạc xe điện",
+  "description": "Ứng dụng Android quản lý phiên sạc xe điện thông minh, dự đoán thời gian sạc chính xác, điều khiển bật tắt từ xa và theo dõi lịch sử sạc chi tiết.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
