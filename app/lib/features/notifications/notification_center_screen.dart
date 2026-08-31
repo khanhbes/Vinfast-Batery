@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/notification_center_service.dart';
+import '../../core/providers/app_providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/models/user_notification.dart';
 import '../../navigation/app_navigation.dart';
@@ -243,7 +244,17 @@ class _NotificationCenterScreenState
   void _navigateToTarget(String target) {
     // Close sheet, switch the root tab, then close notification center.
     Navigator.pop(context); // pop detail sheet
-    if (target.startsWith('/ai/')) {
+    // Do not silently mutate the global selected vehicle from a notification
+    // deep-link. The target vehicle/session remains explicit in the URL and
+    // the user can switch context deliberately from the app shell.
+    if (target.startsWith('/smart-charge') || target.startsWith('/ai/')) {
+      final uri = Uri.tryParse(target);
+      final vehicleId = uri?.queryParameters['vehicleId'];
+      final sessionId = uri?.queryParameters['sessionId'];
+      if (vehicleId != null && vehicleId.isNotEmpty && sessionId != null && sessionId.isNotEmpty) {
+        ref.read(pendingSmartChargeTargetProvider.notifier).state =
+            (vehicleId: vehicleId, sessionId: sessionId);
+      }
       AppNavigation.navigateToTab(context, 1);
       if (Navigator.canPop(context)) Navigator.pop(context);
     } else if (target == '/ai') {

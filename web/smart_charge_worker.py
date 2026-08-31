@@ -10,13 +10,28 @@ import statistics
 
 from shelly.models import utcnow
 from shelly.providers import ProviderError
+from shelly.personal_model_registry import PersonalModelRegistry, validate_candidate
 
 
 def reconcile_once(service, uid: str):
-    session = service.repository.current_session(uid)
-    binding = service.binding(uid)
-    if not session or not binding:
+    # V4 accounts may have independent sessions for multiple vehicles. Never
+    # reconcile an arbitrary account-level "first" session or use another
+    # vehicle's binding as a fallback.
+    sessions = service.repository.active_sessions(uid)
+    if not sessions:
         return None
+    reconciled = []
+    for session in sessions:
+        binding = service.binding(uid, session.vehicle_id)
+        if not binding:
+            reconciled.append(session)
+            continue
+        reconciled.append(_reconcile_session(service, uid, session, binding))
+    # Legacy callers expect one session; all sessions were still processed.
+    return reconciled[0] if reconciled else None
+
+
+def _reconcile_session(service, uid: str, session, binding):
     try:
         status = service.provider.get_status(binding)
     except ProviderError:
@@ -76,37 +91,32 @@ def train_personal_adapter_once(service, uid: str, vehicle_id: str):
     usable.sort(key=lambda row: str(row.get("updatedAt") or ""))
     split = max(3, int(len(usable) * 0.8))
     train, validation = usable[:split], usable[split:] or usable[-1:]
-    biases = [
-        (float(row["durationSeconds"]) / 60 - float(row["predictedMinutes"])) /
-        float(row["predictedMinutes"])
-        for row in train
-    ]
-    candidate_bias = max(-0.35, min(0.50, statistics.median(biases)))
-    candidate_errors = [
-        abs(float(row["durationSeconds"]) / 60 - float(row["predictedMinutes"]) * (1 + candidate_bias)) /
-        (float(row["durationSeconds"]) / 60) * 100
-        for row in validation
-    ]
-    candidate_mape = statistics.mean(candidate_errors)
-    current_mape = profile.validation_mape if profile.active and profile.validation_mape is not None else float("inf")
-    if candidate_mape + 0.25 >= current_mape or candidate_mape > 35:
-        profile.last_training_error = "candidate_did_not_improve"
-        profile.last_trained_at = utcnow()
-        profile.updated_at = profile.last_trained_at
-        service.repository.save_personal_profile(profile)
-        service.repository.append_audit(uid, "personal_adapter_rejected", vehicle_id=vehicle_id, candidate_mape=candidate_mape)
-        return profile
-    profile.eta_bias_ratio = candidate_bias
-    profile.global_time_scale = 1.0 + candidate_bias
-    profile.validation_mape = candidate_mape
-    profile.adapter_version = f"personal-v{profile.valid_sessions}-{int(time.time())}"
-    profile.active = True
-    profile.profile_version += 1
-    profile.last_training_error = None
+    registry = getattr(service, "personal_model_registry", None)
+    if registry is None:
+        registry = PersonalModelRegistry(db)
+        service.personal_model_registry = registry
+    # Candidate is built from the promoted profile and never mutates it until
+    # validation succeeds. Use the recent held-out slice for the decision.
+    candidate_profile, candidate = registry.build_candidate(
+        profile, uid, vehicle_id, train, profile.base_model_version,
+    )
+    validation_result = validate_candidate(candidate_profile, validation)
+    decision = registry.promote_or_reject(candidate_profile, candidate, validation_result)
     profile.last_trained_at = utcnow()
     profile.updated_at = profile.last_trained_at
+    if decision.status == "promoted":
+        profile.global_time_scale = candidate_profile.global_time_scale
+        profile.eta_bias_ratio = candidate_profile.eta_bias_ratio
+        profile.validation_mape = validation_result.mape
+        profile.adapter_version = f"personal-v{decision.candidate.profile_version}"
+        profile.active = True
+        profile.profile_version = decision.candidate.profile_version
+        profile.last_training_error = None
+        service.repository.append_audit(uid, "personal_adapter_promoted", vehicle_id=vehicle_id, adapter_version=profile.adapter_version, validation_mape=validation_result.mape)
+    else:
+        profile.last_training_error = decision.reason
+        service.repository.append_audit(uid, "personal_adapter_rejected", vehicle_id=vehicle_id, candidate_mape=validation_result.mape, reason=decision.reason)
     service.repository.save_personal_profile(profile)
-    service.repository.append_audit(uid, "personal_adapter_promoted", vehicle_id=vehicle_id, adapter_version=profile.adapter_version, validation_mape=candidate_mape)
     return profile
 
 

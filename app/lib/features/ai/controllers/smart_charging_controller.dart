@@ -19,6 +19,7 @@ import '../../../data/repositories/vehicle_spec_repository.dart';
 import '../../../core/services/notification_center_service.dart';
 import '../../../core/services/app_error_reporter.dart';
 import '../../../core/services/connection_coordinator.dart';
+import '../../../core/services/model_sync_service.dart';
 import '../../../data/services/charging_training_sync_service.dart';
 
 typedef SmartChargingNotificationSink =
@@ -26,7 +27,12 @@ typedef SmartChargingNotificationSink =
 typedef SmartChargingLogSink =
     Future<void> Function(SmartChargingSession session);
 typedef SmartChargingReminderScheduler =
-    Future<void> Function(DateTime scheduledAt, int targetPercent);
+    Future<void> Function(
+      DateTime scheduledAt,
+      int targetPercent, {
+      String? vehicleId,
+      String? sessionId,
+    });
 
 enum SmartChargingViewPhase {
   loading,
@@ -68,6 +74,10 @@ class SmartChargingUiState {
   final SmartChargingSession? session;
   final SmartChargerStatus? chargerStatus;
   final List<SmartChargingSession> history;
+
+  /// Hardware/transport error. `gatewayError` is retained as a wire-compatible
+  /// legacy alias for older consumers; new UI should use this name.
+  String? get chargerError => gatewayError;
   final String? gatewayError;
   final String? sessionError;
   final String? historyError;
@@ -86,7 +96,7 @@ class SmartChargingUiState {
     if (phase == SmartChargingViewPhase.loading || refreshing) {
       return ChargerDisplayState.connecting;
     }
-    if (gatewayError != null && chargerStatus == null) {
+    if (chargerError != null && chargerStatus == null) {
       return ChargerDisplayState.error;
     }
     final status = chargerStatus;
@@ -173,7 +183,11 @@ class SmartChargingUiState {
 const _unset = Object();
 
 class SmartChargingController extends StateNotifier<SmartChargingUiState> {
-  static const String lastTargetSocKey = 'smart_charge_last_target_soc';
+  static const String lastTargetSocKeyPrefix = 'smart_charge_last_target_soc_';
+  static const String legacyLastTargetSocKey = 'smart_charge_last_target_soc';
+
+  String get _lastTargetSocKey =>
+      '$lastTargetSocKeyPrefix${state.draft.vehicleId}';
 
   SmartChargingController({
     required String vehicleId,
@@ -296,7 +310,9 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
   Future<void> _loadLastTargetSoc() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final savedTarget = prefs.getDouble(lastTargetSocKey);
+      final savedTarget =
+          prefs.getDouble(_lastTargetSocKey) ??
+          prefs.getDouble(legacyLastTargetSocKey);
       if (savedTarget != null && !_disposed) {
         final current = state.draft.currentSoc;
         final target = max(savedTarget, current + 1).clamp(1, 100).toDouble();
@@ -452,12 +468,22 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     if (!_disposed) state = state.copyWith(refreshing: false);
   }
 
+  /// Retry only the history stream. A history outage must not interrupt
+  /// Shelly status polling or relay actions.
+  Future<void> retryHistory() => _refreshHistory();
+
+  /// Retry only active-session reconciliation. This keeps a session problem
+  /// separate from charger connectivity and history state.
+  Future<void> retrySession() => _refreshSession();
+
   Future<void> _refreshStatus() async {
     if (_foregroundPolling) return;
     if (_statusRequestRunning || _disposed) return;
     _statusRequestRunning = true;
     try {
-      final status = await _repository!.status();
+      final status = await _repository!.status(
+        vehicleId: state.draft.vehicleId,
+      );
       _connectionCoordinator.markStatusSuccess(shellyReachable: status.online);
       if (!_disposed) {
         state = state.copyWith(
@@ -547,7 +573,9 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
 
   Future<void> _refreshCapabilities() async {
     try {
-      final value = await _repository!.capabilities();
+      final value = await _repository!.capabilities(
+        vehicleId: state.draft.vehicleId,
+      );
       if (!_disposed) state = state.copyWith(capabilities: value);
     } on SmartChargerException {
       if (!_disposed) {
@@ -577,7 +605,9 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     if (_sessionRequestRunning || _disposed) return;
     _sessionRequestRunning = true;
     try {
-      final current = await _repository!.current();
+      final current = await _repository!.current(
+        vehicleId: state.draft.vehicleId,
+      );
       _connectionCoordinator.markSessionSuccess();
       if (_disposed) return;
       final previousSession = state.session;
@@ -739,7 +769,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         Future(() async {
           try {
             final p = await SharedPreferences.getInstance();
-            await p.setDouble(lastTargetSocKey, targetSoc);
+            await p.setDouble(_lastTargetSocKey, targetSoc);
           } catch (_) {}
         }),
       );
@@ -786,9 +816,20 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       actionError: null,
     );
     try {
+      // Smart Charge previews must observe the server's currently active
+      // model, even when the general catalog sync is throttled. The preview
+      // endpoint remains authoritative; this best-effort refresh only keeps
+      // local model metadata/version indicators current.
+      try {
+        await ModelSyncService().sync(force: true);
+      } catch (_) {
+        // A metadata refresh outage must not prevent a server-side preview.
+      }
       final preview = await _repository!.preview(draft);
       if (_disposed) return;
-      if (preview.predictedMinutes > 600) {
+      final predictedSeconds =
+          preview.predictedDurationSeconds ?? preview.predictedMinutes * 60;
+      if (predictedSeconds > SmartChargerService.maxSessionDuration.inSeconds) {
         state = state.copyWith(
           preview: null,
           phase: SmartChargingViewPhase.error,
@@ -947,7 +988,9 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       // Status readback
       SmartChargerStatus? currentStatus;
       try {
-        currentStatus = await _repository!.status();
+        currentStatus = await _repository!.status(
+          vehicleId: state.draft.vehicleId,
+        );
       } catch (_) {}
 
       if (currentStatus != null &&
@@ -994,6 +1037,8 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
           scheduler(
             session.effectiveStopAt,
             session.targetSoc.round(),
+            vehicleId: session.vehicleId,
+            sessionId: session.sessionId,
           ).catchError((_) {}),
         );
       }
@@ -1045,7 +1090,9 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       // Readback to verify relay OFF
       SmartChargerStatus? currentStatus;
       try {
-        currentStatus = await _repository!.status();
+        currentStatus = await _repository!.status(
+          vehicleId: state.draft.vehicleId,
+        );
       } catch (_) {}
 
       if (currentStatus != null && currentStatus.relay) {
@@ -1177,7 +1224,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
 
   Future<bool> manualOff() async {
     try {
-      await _repository!.manualOff();
+      await _repository!.manualOff(vehicleId: state.draft.vehicleId);
       await _stopForegroundMonitor();
       await Future.wait([_refreshStatus(), _refreshSession()]);
       return true;
@@ -1196,18 +1243,33 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     int limit = 20,
     String? cursor,
     ChargingStrategy? strategy,
+    bool allVehicles = false,
   }) async {
     _repository ??= await SmartChargerRepositoryFactory.create();
     return _repository!.getHistoryPage(
       limit: limit,
       cursor: cursor,
       strategy: strategy,
+      vehicleId: allVehicles ? null : state.draft.vehicleId,
     );
   }
 
   Future<List<SmartChargeTelemetryPoint>> getTelemetry(String sessionId) async {
     _repository ??= await SmartChargerRepositoryFactory.create();
     return _repository!.getTelemetry(sessionId);
+  }
+
+  Future<void> hideSession(String sessionId) async {
+    _repository ??= await SmartChargerRepositoryFactory.create();
+    await _repository!.hideSession(sessionId);
+  }
+
+  Future<void> privacyEraseSession(
+    String sessionId,
+    String confirmation,
+  ) async {
+    _repository ??= await SmartChargerRepositoryFactory.create();
+    await _repository!.privacyEraseSession(sessionId, confirmation);
   }
 
   Future<SmartChargeEnergySummary> confirmActualEndSoc(
@@ -1262,12 +1324,14 @@ final smartChargingControllerProvider = StateNotifierProvider.autoDispose
         notificationSink: (session) async {
           await NotificationCenterService().notifySmartChargingState(
             sessionId: session.sessionId,
+            vehicleId: session.vehicleId,
             state: session.state.wireValue,
             targetPercent: session.targetSoc.round(),
           );
           if (session.state == ChargingSessionState.failed) {
             await NotificationService().notifySmartChargeUnsafe(
               sessionId: session.sessionId,
+              vehicleId: session.vehicleId,
               message:
                   session.lastError ??
                   'Không thể xác minh đã tắt sạc. Hãy kiểm tra ổ sạc trực tiếp.',
@@ -1275,17 +1339,21 @@ final smartChargingControllerProvider = StateNotifierProvider.autoDispose
           } else if (session.state.isTerminal && session.relayVerified) {
             await NotificationService().notifySmartChargeRelayOff(
               sessionId: session.sessionId,
+              vehicleId: session.vehicleId,
               interrupted: session.state != ChargingSessionState.completed,
             );
           }
         },
         logSink: ShellyChargeLogService().saveTerminalSession,
-        reminderScheduler: (scheduledAt, targetPercent) async {
-          await NotificationService().scheduleChargeReminder(
-            scheduledAt,
-            targetPercent,
-          );
-        },
+        reminderScheduler:
+            (scheduledAt, targetPercent, {vehicleId, sessionId}) async {
+              await NotificationService().scheduleChargeReminder(
+                scheduledAt,
+                targetPercent,
+                vehicleId: vehicleId,
+                sessionId: sessionId,
+              );
+            },
         reminderCanceller: () => NotificationService().cancelChargeReminder(),
       ),
     );

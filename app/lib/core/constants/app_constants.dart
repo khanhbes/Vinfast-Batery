@@ -12,7 +12,7 @@ class AppConstants {
     'APP_API_BASE_URL',
     defaultValue: 'https://api.evbattery.live',
   );
-  static const String appVersion = '1.0.80';
+  static const String appVersion = '1.0.82';
 
   // Firestore Collection Names
   static const String vehiclesCollection = 'Vehicles';
@@ -24,10 +24,13 @@ class AppConstants {
   static const int batteryMin = 0;
   static const int batteryMax = 100;
   static const int maxOdoDigits = 7;
+  /// Absolute device-side Smart Charge safety window.
+  static const int smartChargeMaxMinutes = 600;
 
   // Defaults
-  static const String defaultVehicleId = 'VF-OPES-001';
-  static const double defaultBatteryCapacityWh = 2400.0;
+  // Capacity must come from the selected vehicle/model record. A fabricated
+  // default would make Smart Charge publish misleading Wh/SOC estimates.
+  static const double? defaultBatteryCapacityWh = null;
 
   // VinFast Feliz 2025 specs
   static const double defaultEfficiency = 1.35; // km per 1% battery

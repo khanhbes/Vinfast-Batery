@@ -6,10 +6,13 @@ import '../../core/widgets/app_popup.dart';
 import '../../data/models/shelly_connection.dart';
 import '../../data/models/smart_charger_binding.dart';
 import '../../data/models/smart_charger_capabilities.dart';
+import '../../data/models/vehicle_charger_binding.dart';
 import '../../data/repositories/smart_charger_repository.dart';
 import '../../data/services/server_smart_charger_service.dart';
 import '../../data/services/smart_charger_credentials_service.dart';
 import '../../data/services/smart_charger_service.dart';
+import '../../data/services/vehicle_charger_binding_service.dart';
+import '../../core/services/session_service.dart';
 
 class SmartChargerSetupHubScreen extends StatefulWidget {
   const SmartChargerSetupHubScreen({super.key});
@@ -22,6 +25,7 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
   final credentials = SmartChargerCredentialsService();
   final direct = SmartChargerService();
   final server = ServerSmartChargerService();
+  final vehicleBindings = VehicleChargerBindingService();
   final host = TextEditingController();
   final cloudKey = TextEditingController();
   final deviceId = TextEditingController();
@@ -37,6 +41,7 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
   bool busy = true;
   bool obscure = true;
   bool dirty = false;
+  String? selectedVehicleId;
 
   @override
   void initState() {
@@ -53,6 +58,7 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
   }
 
   Future<void> _load() async {
+    selectedVehicleId = await SessionService().getSelectedVehicleId();
     mode = await SmartChargerRepositoryFactory.currentMode();
     final active = await credentials.readProfile();
     final draft = await credentials.readDraft();
@@ -67,19 +73,20 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
     }
     if (mode == SmartChargerConnectionMode.serverCloud) {
       try {
-        binding = await server.getBinding();
-        capabilities = await server.getCapabilities();
+        binding = await server.getBinding(vehicleId: selectedVehicleId);
+        capabilities = await server.getCapabilities(vehicleId: selectedVehicleId);
       } on SmartChargerException {
         capabilities = SmartChargerCapabilities.unavailable;
       }
     } else {
       capabilities = await direct.capabilities();
     }
-    if (mounted)
+    if (mounted) {
       setState(() {
         busy = false;
         dirty = draft != null;
       });
+    }
   }
 
   ShellyConnectionProfile get profile => ShellyConnectionProfile(
@@ -93,7 +100,7 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
   Future<bool> _guardInactive() async {
     try {
       final repository = await SmartChargerRepositoryFactory.create();
-      final session = await repository.current();
+      final session = await repository.current(vehicleId: selectedVehicleId);
       if (session != null && !session.state.isTerminal) {
         AppPopup.showWarning(
           'Đang có phiên sạc',
@@ -121,25 +128,32 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
     mode = next;
     if (next == SmartChargerConnectionMode.serverCloud) {
       try {
-        binding = await server.getBinding();
-        capabilities = await server.getCapabilities();
+        binding = await server.getBinding(vehicleId: selectedVehicleId);
+        capabilities = await server.getCapabilities(vehicleId: selectedVehicleId);
       } on SmartChargerException {
         capabilities = SmartChargerCapabilities.unavailable;
       }
     } else {
       capabilities = await direct.capabilities();
     }
-    if (mounted)
+    if (mounted) {
       setState(() {
         busy = false;
       });
+    }
   }
 
   Future<void> _testEasy() async {
     setState(() => busy = true);
     try {
-      binding = await server.getBinding();
-      capabilities = await server.getCapabilities();
+      binding = await server.getBinding(vehicleId: selectedVehicleId);
+      if (binding != null && selectedVehicleId != null && selectedVehicleId!.isNotEmpty) {
+        binding = await server.selectDevice(
+          binding!.deviceId,
+          vehicleId: selectedVehicleId!,
+        );
+      }
+      capabilities = await server.getCapabilities(vehicleId: selectedVehicleId);
       if (capabilities.readyForControl) {
         await SmartChargerRepositoryFactory.setMode(
           SmartChargerConnectionMode.serverCloud,
@@ -241,6 +255,14 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
         lastVerifiedAt: DateTime.now(),
       );
       await credentials.saveProfile(profile);
+      if (selectedVehicleId != null && selectedVehicleId!.isNotEmpty) {
+        await vehicleBindings.save(
+          VehicleChargerBinding(
+            vehicleId: selectedVehicleId!,
+            deviceId: profile.deviceId,
+          ),
+        );
+      }
       await credentials.saveVerification(verified);
       verification = verified;
       await credentials.clearDraft();

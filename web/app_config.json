@@ -1,11 +1,11 @@
 {
-  "latestBuild": 78,
-  "minSupportedBuild": 50,
-  "apkUrl": "/apk/VinFastBattery_latest.apk",
-  "releaseNotes": "Build 78 — 30/08/2026 01:08",
-  "forceUpdate": false,
   "features": {},
-  "latestVersion": "1.0.77",
   "releaseChannel": "apk",
-  "remindLaterHours": 6
+  "remindLaterHours": 6,
+  "forceUpdate": false,
+  "latestBuild": 83,
+  "minSupportedBuild": 50,
+  "latestVersion": "1.0.82",
+  "apkUrl": "/apk/VinFastBattery_latest.apk",
+  "releaseNotes": "Build 83 — 31/08/2026 12:06"
 }

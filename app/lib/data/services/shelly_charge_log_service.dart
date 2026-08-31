@@ -94,6 +94,50 @@ class ShellyChargeLogService {
     await _removeQueuedTerminalSession(session.sessionId);
   }
 
+  /// Reversible history action. The canonical ChargeLog remains available for
+  /// recovery/privacy erase; only normal history queries hide it.
+  Future<void> hideSession(String sessionId) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) throw StateError('Cần đăng nhập để ẩn phiên sạc.');
+    await _firestore.collection('ChargeLogs').doc(sessionId).update({
+      'hiddenByUserAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Irreversible privacy erase. A typed session id is required and the
+  /// parent owner is checked before deleting the summary and telemetry.
+  Future<void> privacyEraseSession(String sessionId, String confirmation) async {
+    if (confirmation.trim() != sessionId) {
+      throw ArgumentError('Mã xác nhận phiên không khớp.');
+    }
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) throw StateError('Cần đăng nhập để xóa dữ liệu.');
+    final parent = _firestore.collection('ChargeLogs').doc(sessionId);
+    final snapshot = await parent.get();
+    final data = snapshot.data();
+    if (!snapshot.exists || data == null || data['ownerUid'] != uid) {
+      throw StateError('Không tìm thấy phiên sạc thuộc tài khoản này.');
+    }
+    final rawSession = data['smartChargingSession'];
+    if (rawSession is Map &&
+        !SmartChargingSession.fromJson(Map<String, dynamic>.from(rawSession))
+            .state
+            .isTerminal) {
+      throw StateError('Hãy tắt và xác minh OFF trước khi xóa.');
+    }
+    final telemetry = await parent.collection('smartChargeTelemetry').get();
+    final batch = _firestore.batch();
+    for (final document in telemetry.docs) {
+      batch.delete(document.reference);
+    }
+    batch.delete(parent);
+    await batch.commit();
+    _raw.remove(sessionId);
+    _pending.remove(sessionId);
+    await _removeQueuedTerminalSession(sessionId);
+  }
+
   Map<String, Object?> _basePayload(SmartChargingSession session, String uid) =>
       {
         'sessionId': session.sessionId,
@@ -278,6 +322,7 @@ class ShellyChargeLogService {
     int limit = 20,
     String? cursor,
     ChargingStrategy? strategy,
+    String? vehicleId,
   }) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return const SmartChargeHistoryPage(items: []);
@@ -288,6 +333,9 @@ class ShellyChargeLogService {
           .where('ownerUid', isEqualTo: uid)
           .where('source', isEqualTo: _source)
           .where('isDeleted', isEqualTo: false);
+      if (vehicleId != null && vehicleId.isNotEmpty) {
+        query = query.where('vehicleId', isEqualTo: vehicleId);
+      }
       if (strategy == ChargingStrategy.aiTarget) {
         query = query.where(
           'strategy',
@@ -322,6 +370,7 @@ class ShellyChargeLogService {
         limit: limit,
         cursorTime: cursorTime,
         strategy: strategy,
+        vehicleId: vehicleId,
       );
     }
   }
@@ -331,6 +380,7 @@ class ShellyChargeLogService {
     required int limit,
     required DateTime? cursorTime,
     required ChargingStrategy? strategy,
+    required String? vehicleId,
   }) async {
     final snapshot = await _firestore
         .collection('ChargeLogs')
@@ -340,8 +390,13 @@ class ShellyChargeLogService {
         .get();
     final documents =
         snapshot.docs.where((document) {
-          final data = document.data();
-          if (data['source'] != _source || !_matchesStrategy(data, strategy)) {
+      final data = document.data();
+          if (data['source'] != _source ||
+              data['hiddenByUserAt'] != null ||
+              !_matchesStrategy(data, strategy)) {
+            return false;
+          }
+          if (vehicleId != null && vehicleId.isNotEmpty && data['vehicleId'] != vehicleId) {
             return false;
           }
           final startTime = (data['startTime'] as Timestamp?)?.toDate();
@@ -384,15 +439,17 @@ class ShellyChargeLogService {
     final sessions = <SmartChargingSession>[];
     var skipped = 0;
     for (final document in documents) {
-      final raw = document.data()['smartChargingSession'];
-      if (raw is! Map) {
+      if (document.data()['hiddenByUserAt'] != null) {
         skipped++;
         continue;
       }
       try {
-        sessions.add(
-          SmartChargingSession.fromJson(Map<String, dynamic>.from(raw)),
-        );
+        final data = document.data();
+        final raw = data['smartChargingSession'];
+        final session = raw is Map
+            ? SmartChargingSession.fromJson(Map<String, dynamic>.from(raw))
+            : _legacySessionFromChargeLog(data, document.id);
+        sessions.add(session);
       } on Object {
         skipped++;
       }
@@ -408,6 +465,113 @@ class ShellyChargeLogService {
       nextCursor: next,
       skippedLegacyDocuments: skipped,
     );
+  }
+
+  /// Restored/legacy ChargeLogs may contain only the durable summary rather
+  /// than the embedded snake_case runtime session. Keep those records visible
+  /// in Direct mode instead of silently dropping the user's history.
+  SmartChargingSession _legacySessionFromChargeLog(
+    Map<String, dynamic> data,
+    String documentId,
+  ) {
+    DateTime date(Object? value, DateTime fallback) {
+      if (value is Timestamp) return value.toDate();
+      if (value is DateTime) return value;
+      final parsed = DateTime.tryParse(value?.toString() ?? '');
+      return parsed ?? fallback;
+    }
+
+    final created = date(data['startTime'] ?? data['createdAt'], DateTime.now());
+    final durationSeconds =
+        (data['predictedDurationSeconds'] as num?)?.round() ??
+        (((data['finalEtaMinutes'] ?? data['predictedMinutes']) as num?)
+                ?.round() ??
+            1) *
+            60;
+    final planned = date(
+      data['plannedStopAt'],
+      created.add(Duration(seconds: durationSeconds)),
+    );
+    final stopped = data['actualStopAt'] == null && data['endTime'] == null
+        ? null
+        : date(data['actualStopAt'] ?? data['endTime'], planned);
+    var state = (data['sessionState'] ?? data['status'])?.toString();
+    if (state == 'terminal') state = 'completed';
+    if (!const {
+      'arming',
+      'starting',
+      'active',
+      'stopping',
+      'completed',
+      'cancelled',
+      'interrupted',
+      'failed',
+    }.contains(state)) {
+      state = stopped == null ? 'active' : 'completed';
+    }
+    final strategy = (data['strategy'] ?? 'ai_target').toString();
+    final strategyValue = const {
+      'target_soc',
+      'deadline',
+      'smart_combined',
+      'ai_target',
+      'manual_timed',
+    }.contains(strategy)
+        ? strategy
+        : 'ai_target';
+    final startSoc = (data['startBatteryPercent'] ?? data['startSoc']) as num?;
+    final targetSoc =
+        (data['targetBatteryPercent'] ?? data['targetSoc'] ?? startSoc) as num?;
+    return SmartChargingSession.fromJson({
+      'session_id': data['sessionId']?.toString() ?? documentId,
+      'vehicle_id': data['vehicleId']?.toString() ?? '',
+      'state': state,
+      'strategy': strategyValue,
+      'start_soc': startSoc?.toDouble() ?? 0,
+      'target_soc': targetSoc?.toDouble() ?? 0,
+      'predicted_minutes': (durationSeconds / 60).ceil(),
+      'predicted_duration_seconds': durationSeconds,
+      'prediction_source': data['predictionSource']?.toString() ?? 'unknown',
+      'prediction_confidence': data['predictionConfidence'],
+      'created_at': created.toIso8601String(),
+      'updated_at': date(data['updatedAt'] ?? stopped, created).toIso8601String(),
+      'started_at': created.toIso8601String(),
+      'stopped_at': stopped?.toIso8601String(),
+      'ai_stop_at': planned.toIso8601String(),
+      'hard_deadline_at': created.add(const Duration(hours: 10)).toIso8601String(),
+      'effective_stop_at': planned.toIso8601String(),
+      'absolute_safety_stop_at': created.add(const Duration(hours: 10)).toIso8601String(),
+      'shadow_mode': false,
+      'version': (data['version'] as num?)?.round() ?? 1,
+      'device_id': data['shellyDeviceId'] ?? data['deviceId'],
+      'transport': data['controlTransport'] ?? data['transport'],
+      'relay_verified': data['relayVerified'] == true,
+      'energy_used_wh': (data['gridEnergyWh'] ?? data['energyWh'] ?? 0),
+      'energy_quality': data['energyQuality']?.toString() ?? 'partial',
+      'estimated_soc': data['estimatedEndSoc'],
+      'model_key': data['modelKey']?.toString() ?? 'charging_time',
+      'model_version': data['modelVersion']?.toString() ?? 'unknown',
+      'runtime_health': data['runtimeHealth']?.toString() ?? 'unknown',
+      'timer_verified': data['timerVerified'] == true,
+      'user_stop_reason': data['userStopReason']?.toString() ?? 'none',
+      'telemetry_coverage': data['telemetryCoverageRatio'] ?? 0,
+      'owner_uid': data['ownerUid'],
+      'personalization_stage': data['personalizationStage']?.toString() ?? 'base',
+      'base_ai_minutes': data['baseAiMinutes'],
+      'physics_minutes': data['physicsMinutes'],
+      'personal_minutes': data['personalMinutes'],
+      'final_minutes': data['finalEtaMinutes'],
+      'fusion_weights': data['fusionWeights'] ?? const {},
+      'effective_capacity_wh': data['effectiveCapacityWh'],
+      'nominal_capacity_wh': data['nominalCapacityWh'],
+      'state_of_health': data['stateOfHealth'],
+      'average_power_w': data['averagePowerW'],
+      'peak_power_w': data['peakPowerW'],
+      'average_voltage_v': data['averageVoltageV'],
+      'average_current_a': data['averageCurrentA'],
+      'personal_ai_training_state': data['personalAiTrainingState'] ?? 'pending',
+      'personal_ai_training_reason': data['personalAiTrainingReason'],
+    });
   }
 
   Future<List<SmartChargingSession>> loadTerminalSessions({

@@ -140,22 +140,8 @@ class _PersonalAiSettingsState extends State<PersonalAiSettingsScreen> {
             ),
             _row(
               'Phiên đủ điều kiện',
-              '${profile?.validSessions ?? 0} · học sâu từ 5 phiên',
+              '${profile?.validSessions ?? 0} phiên đã được dùng để học',
             ),
-            _row('Đoạn SOC đã học', '${profile?.trainingSegments ?? 0}'),
-            _row('Phiên học công suất', '${profile?.powerSessions ?? 0}'),
-            _row('Adapter', profile?.adapterVersion ?? 'Chưa có'),
-            _row(
-              'Sai số validation',
-              profile?.validationMape == null
-                  ? 'Chưa đủ dữ liệu'
-                  : '${profile!.validationMape!.toStringAsFixed(1)}%',
-            ),
-            if (profile?.estimatedEffectiveCapacityWh != null)
-              _row(
-                'Dung lượng hiệu dụng ước tính',
-                '${profile!.estimatedEffectiveCapacityWh!.round()} Wh',
-              ),
             if (profile?.lastTrainedAt != null)
               _row(
                 'Cập nhật gần nhất',

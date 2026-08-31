@@ -106,6 +106,17 @@ def test_requires_configured_safety_limit(tmp_path):
     assert raised.value.code == "SAFETY_LIMIT_NOT_CONFIGURED"
 
 
+def test_request_cannot_exceed_ten_hour_safety_limit():
+    clock = lambda: datetime.now(timezone.utc)
+    with pytest.raises(ValueError):
+        request(clock, minutes=601)
+
+
+def test_environment_cannot_widen_ten_hour_limit(monkeypatch):
+    monkeypatch.setenv("SMART_CHARGE_MAX_SESSION_MINUTES", "1440")
+    assert SmartChargingConfig.from_env().max_session_minutes == 600
+
+
 def test_requires_estimated_soc_acknowledgement(tmp_path):
     ctrl, _, clock = controller(tmp_path)
     payload = request(clock).model_copy(update={"acknowledge_estimated_soc": False})

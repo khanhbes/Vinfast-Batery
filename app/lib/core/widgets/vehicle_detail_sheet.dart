@@ -76,11 +76,12 @@ class _VehicleDetailSheetState extends ConsumerState<VehicleDetailSheet> {
         trips: trips,
         insight: insight,
       );
-      if (mounted)
+      if (mounted) {
         setState(() {
           _capacityResult = result;
           _loadingCapacity = false;
         });
+      }
     } catch (_) {
       if (mounted) setState(() => _loadingCapacity = false);
     }
@@ -201,9 +202,11 @@ class _VehicleDetailSheetState extends ConsumerState<VehicleDetailSheet> {
               children: [
                 _buildStatTile(
                   Icons.battery_std_rounded,
-                  '${v.lastBatteryPercent}%',
+                  v.hasBatteryData ? '${v.lastBatteryPercent}%' : '—',
                   'Pin hiện tại',
-                  v.lastBatteryPercent > 50
+                  !v.hasBatteryData
+                      ? AppColors.textSecondary
+                      : v.lastBatteryPercent > 50
                       ? AppColors.primary
                       : v.lastBatteryPercent > 20
                       ? AppColors.warning
@@ -212,7 +215,7 @@ class _VehicleDetailSheetState extends ConsumerState<VehicleDetailSheet> {
                 const SizedBox(width: 10),
                 _buildStatTile(
                   Icons.speed_rounded,
-                  '${v.currentOdo} km',
+                  v.hasOdoData ? '${v.currentOdo} km' : '—',
                   'ODO',
                   AppColors.info,
                 ),

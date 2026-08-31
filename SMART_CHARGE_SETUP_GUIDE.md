@@ -63,6 +63,9 @@ Hiện public Integrator API chỉ tài liệu hóa relay ON/OFF, chưa tài li�
 5. Chọn mục tiêu **80%**, **90%** hoặc **100%**.
 6. Bấm **DỰ ĐOÁN VỚI AI**. Kiểm tra thời lượng, giờ ngắt, nguồn dự đoán và confidence.
 7. Nếu cần, mở **Nâng cao** và đặt “Dừng không muộn hơn”. Không phiên nào được vượt 10 giờ.
+8. Bấm **SẠC THEO AI**, đọc cảnh báo và xác nhận SOC ước tính. Nếu model chỉ trả fallback, nút này bị khóa; hãy dùng **BẬT SẠC** và chọn timer thủ công.
+9. Chờ đến khi app hiển thị **Timer đã cài trên Shelly**. Chỉ lúc đó phiên mới là Active; có thể đóng app.
+10. Khi cần dừng sớm, bấm nút đỏ **NGẮT NGUỒN NGAY**. App chỉ báo hoàn tất sau khi đọc lại relay OFF.
 
 ## Lịch sử và biểu đồ sau khi sạc
 
@@ -73,9 +76,6 @@ Hiện public Integrator API chỉ tài liệu hóa relay ON/OFF, chưa tài li�
 - App lấy mẫu status 5 giây, gộp một điểm biểu đồ mỗi 30 giây và ghi một chunk mỗi 5 phút. Summary được giữ lại; telemetry chi tiết có TTL 12 tháng.
 - Năng lượng còn trong pin và SOC được ghi rõ là **ước tính, không phải dữ liệu BMS**. Có thể nhập SOC thực tế cuối phiên trong màn chi tiết; app chỉ tính dung lượng khả dụng khi phiên dài ít nhất 20 phút, SOC tăng ít nhất 10%, coverage đạt 70% và Shelly đo energy hợp lệ.
 - Nếu hồ sơ xe chưa liên kết VinFast model/dung lượng pin, app hiển thị **Chưa có dữ liệu dung lượng pin** và không dùng giá trị mặc định.
-8. Bấm **SẠC THEO AI**, đọc cảnh báo và xác nhận SOC ước tính. Nếu model chỉ trả fallback, nút này bị khóa; hãy dùng **BẬT SẠC** và chọn timer thủ công.
-9. Chờ đến khi app hiển thị **Timer đã cài trên Shelly**. Chỉ lúc đó phiên mới là Active; có thể đóng app.
-10. Khi cần dừng sớm, bấm nút đỏ **NGẮT NGUỒN NGAY**. App chỉ báo hoàn tất sau khi đọc lại relay OFF.
 
 Nếu app báo không xác minh được timer/relay, rút tải hoặc tắt Shelly vật lý ngay. Không bấm Start lặp lại liên tục.
 
@@ -105,14 +105,21 @@ Script chạy `pub get`, analyze và toàn bộ test **trước khi tăng versio
 2. Mở **Cài đặt → AI cá nhân**.
 3. Bật **Cho phép AI học từ phiên sạc**. Profile được tách riêng theo tài khoản và xe; hai tài khoản có cùng mã xe không dùng chung dữ liệu.
 4. Sau mỗi phiên, mở chi tiết lịch sử và nhập SOC thực tế cuối phiên nếu có. SOC này là tùy chọn, nhưng cần thiết để một phiên trở thành mẫu học mục tiêu đầy đủ.
-5. Màn hình hiển thị số phiên hợp lệ, số phiên học công suất, adapter đang chạy và MAPE validation. Batch adapter bắt đầu từ 5 phiên hợp lệ và chỉ được kích hoạt nếu tốt hơn bản đang chạy.
+5. Màn hình hiển thị giai đoạn thân thiện: **AI đang làm quen với xe → AI đang học thói quen sạc → Đã cá nhân hóa**. Chi tiết kỹ thuật chỉ dành cho diagnostics.
 6. Có thể tắt consent hoặc dùng **Xóa model & dữ liệu cá nhân**. Lịch sử sạc vẫn được giữ, nhưng profile và training sample của xe bị xóa.
 
 Phiên đầy đủ cần kéo dài ít nhất 20 phút, telemetry phủ tối thiểu 70%, energy hợp lệ, SOC tăng ít nhất 10 điểm và SOC cuối do người dùng xác nhận. Phiên bị dừng giữa chừng chỉ có thể học công suất/hiệu suất, không được dùng làm nhãn “đạt mục tiêu”.
 
+## Nhiều xe và binding Shelly
+
+- Mỗi tài khoản có thể có tối đa số xe theo policy server (mặc định 2). Xóa xe trong Garage là **Lưu trữ**, không xóa lịch sử.
+- Vehicle Switcher ở thanh trên cùng đổi context của nội dung; phiên đang sạc vẫn khóa với xe và Shelly ban đầu.
+- Có thể dùng một Shelly cho nhiều xe ở chế độ shared, nhưng một Shelly vật lý không thể chạy hai phiên cùng lúc.
+- Lịch sử mặc định là xe đang chọn; chọn **Tất cả xe** để xem các xe thuộc cùng tài khoản.
+
 ## Cách đọc ETA
 
-Preview Smart Charge có thể hiển thị ba nguồn: AI toàn cục, dung lượng/công suất thực và AI cá nhân. ETA cuối là trung bình thích nghi theo confidence, chất lượng dung lượng, độ ổn định công suất, số mẫu cá nhân và MAPE. Không có dung lượng/công suất đáng tin thì app không tự đặt giá trị giả và chỉ dùng nguồn còn hợp lệ.
+Preview Smart Charge có thể hiển thị ba nguồn: AI toàn cục, dung lượng/công suất thực và AI cá nhân. ETA cuối là trung bình thích nghi theo độ tin cậy, chất lượng dung lượng, độ ổn định công suất, số phiên học và độ chính xác đã kiểm chứng. Không có dung lượng/công suất đáng tin thì app không tự đặt giá trị giả và chỉ dùng nguồn còn hợp lệ.
 
 Sau 60 giây và tối thiểu 6 mẫu công suất ổn định, app có thể hiệu chỉnh timer nếu ETA lệch ít nhất 3 phút. Timer Shelly luôn là nguồn sự thật và không bao giờ vượt 10 giờ. `hardDeadlineAt` chỉ giới hạn timer khi người dùng chủ động chọn “Dừng không muộn hơn”.
 

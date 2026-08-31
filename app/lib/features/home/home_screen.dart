@@ -122,7 +122,14 @@ class HomeScreen extends ConsumerWidget {
                   child: vehicleAsync.when(
                     data: (vehicle) => vehicle == null
                         ? const SizedBox.shrink()
-                        : RangePredictionCard(vehicle: vehicle),
+                        : vehicle.hasBatteryData &&
+                              vehicle.hasSohData &&
+                              vehicle.hasEfficiencyData
+                        ? RangePredictionCard(vehicle: vehicle)
+                        : const _MissingVehicleDataCard(
+                            message:
+                                'Cần thêm dữ liệu pin để dự đoán quãng đường',
+                          ),
                     loading: () => const SizedBox.shrink(),
                     error: (_, __) => const SizedBox.shrink(),
                   ),
@@ -147,12 +154,14 @@ class HomeScreen extends ConsumerWidget {
                   padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
                   child: vehicleAsync.when(
                     data: (vehicle) => _BatteryHealthCard(
-                      soh: vehicle?.stateOfHealth ?? 96,
+                      soh: vehicle?.hasSohData == true
+                          ? vehicle?.stateOfHealth
+                          : null,
                       vehicleId: vehicle?.vehicleId ?? '',
                     ),
                     loading: () => const _BatteryHealthShimmer(),
                     error: (_, __) =>
-                        const _BatteryHealthCard(soh: 96, vehicleId: ''),
+                        const _BatteryHealthCard(soh: null, vehicleId: ''),
                   ),
                 ),
               ),
@@ -181,10 +190,12 @@ class HomeScreen extends ConsumerWidget {
                   padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
                   child: vehicleAsync.when(
                     data: (vehicle) => _buildEfficiencyCard(
-                      efficiency: vehicle?.stateOfHealth ?? 88.0,
+                      efficiency: vehicle?.hasSohData == true
+                          ? vehicle?.stateOfHealth
+                          : null,
                     ),
                     loading: () => _buildEfficiencyCardShimmer(),
-                    error: (_, __) => _buildEfficiencyCard(efficiency: 88.0),
+                    error: (_, __) => _buildEfficiencyCard(efficiency: null),
                   ),
                 ),
               ),
@@ -195,10 +206,12 @@ class HomeScreen extends ConsumerWidget {
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                   child: vehicleAsync.when(
                     data: (vehicle) => _buildAchievementCard(
-                      efficiency: vehicle?.stateOfHealth ?? 88.0,
+                      efficiency: vehicle?.hasSohData == true
+                          ? vehicle?.stateOfHealth
+                          : null,
                     ),
                     loading: () => _buildAchievementCardShimmer(),
-                    error: (_, __) => _buildAchievementCard(efficiency: 88.0),
+                    error: (_, __) => _buildAchievementCard(efficiency: null),
                   ),
                 ),
               ),
@@ -216,7 +229,8 @@ class HomeScreen extends ConsumerWidget {
   }
 
   // Efficiency Card Widget
-  Widget _buildEfficiencyCard({required double efficiency}) {
+  Widget _buildEfficiencyCard({required double? efficiency}) {
+    final hasData = efficiency != null && efficiency.isFinite;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -253,7 +267,7 @@ class HomeScreen extends ConsumerWidget {
                 ),
               ),
               Text(
-                '${efficiency.toInt()}%',
+                hasData ? '${(efficiency ?? 0).toInt()}%' : 'Cần thêm dữ liệu',
                 style: const TextStyle(
                   color: AppColors.success,
                   fontSize: 20,
@@ -266,7 +280,7 @@ class HomeScreen extends ConsumerWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
-              value: efficiency / 100,
+              value: hasData ? ((efficiency ?? 0) / 100).clamp(0.0, 1.0) : 0,
               backgroundColor: AppColors.surfaceVariant,
               valueColor: const AlwaysStoppedAnimation<Color>(
                 AppColors.success,
@@ -280,7 +294,9 @@ class HomeScreen extends ConsumerWidget {
   }
 
   // Achievement Card Widget
-  Widget _buildAchievementCard({required double efficiency}) {
+  Widget _buildAchievementCard({required double? efficiency}) {
+    final score = efficiency ?? 0;
+    final hasData = efficiency != null && efficiency.isFinite;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -324,19 +340,19 @@ class HomeScreen extends ConsumerWidget {
               _buildAchievementItem(
                 icon: Icons.local_florist_rounded,
                 label: 'Eco Master',
-                achieved: efficiency >= 85,
+                achieved: hasData && score >= 85,
               ),
               const SizedBox(width: 12),
               _buildAchievementItem(
                 icon: Icons.bolt,
                 label: 'Energy Saver',
-                achieved: efficiency >= 75,
+                achieved: hasData && score >= 75,
               ),
               const SizedBox(width: 12),
               _buildAchievementItem(
                 icon: Icons.star_rounded,
                 label: 'Top Driver',
-                achieved: efficiency >= 90,
+                achieved: hasData && score >= 90,
               ),
             ],
           ),
@@ -616,16 +632,23 @@ class _StatCardsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final percent = vehicle?.lastBatteryPercent ?? 78;
-    final range = ((percent * (vehicle?.defaultEfficiency ?? 0.8))).toInt();
-    final odo = vehicle?.currentOdo ?? 1245;
+    final percent = vehicle?.hasBatteryData == true
+        ? vehicle?.lastBatteryPercent
+        : null;
+    final efficiency = vehicle?.hasEfficiencyData == true
+        ? vehicle?.defaultEfficiency
+        : null;
+    final range = percent != null && efficiency != null && efficiency > 0
+        ? (percent * efficiency).toInt().toString()
+        : '—';
+    final odo = vehicle?.hasOdoData == true ? vehicle?.currentOdo : null;
 
     return Row(
       children: [
         Expanded(
           child: _StatCard(
             icon: Icons.bolt_outlined,
-            value: '$percent%',
+            value: percent == null ? '—' : '$percent%',
             label: 'CHARGE',
             isHighlighted: false,
           ),
@@ -634,7 +657,7 @@ class _StatCardsRow extends StatelessWidget {
         Expanded(
           child: _StatCard(
             icon: Icons.near_me_outlined,
-            value: '$range',
+            value: range,
             label: 'RANGE KM',
             isHighlighted: true,
           ),
@@ -643,7 +666,7 @@ class _StatCardsRow extends StatelessWidget {
         Expanded(
           child: _StatCard(
             icon: Icons.access_time_outlined,
-            value: '$odo',
+            value: odo == null ? '—' : '$odo',
             label: 'ODO KM',
             isHighlighted: false,
           ),
@@ -734,7 +757,7 @@ class _StatCardsRowShimmer extends StatelessWidget {
 }
 
 class _BatteryHealthCard extends StatefulWidget {
-  final double soh;
+  final double? soh;
   final String vehicleId;
 
   const _BatteryHealthCard({required this.soh, required this.vehicleId});
@@ -809,7 +832,9 @@ class _BatteryHealthCardState extends State<_BatteryHealthCard>
 
   @override
   Widget build(BuildContext context) {
-    final isHealthy = widget.soh >= 90;
+    final hasData = widget.soh != null && widget.soh!.isFinite;
+    final score = widget.soh ?? 0;
+    final isHealthy = hasData && score >= 90;
 
     return GestureDetector(
       onTapDown: (_) => _controller.forward(),
@@ -859,7 +884,7 @@ class _BatteryHealthCardState extends State<_BatteryHealthCard>
                     ),
                   ),
                   Text(
-                    '${widget.soh.toInt()}%',
+                    hasData ? '${score.toInt()}%' : '—',
                     style: const TextStyle(
                       color: AppColors.textPrimary,
                       fontSize: 20,
@@ -872,7 +897,7 @@ class _BatteryHealthCardState extends State<_BatteryHealthCard>
               ClipRRect(
                 borderRadius: BorderRadius.circular(4),
                 child: LinearProgressIndicator(
-                  value: widget.soh / 100,
+                  value: hasData ? (score / 100).clamp(0.0, 1.0) : 0,
                   backgroundColor: AppColors.surfaceVariant,
                   valueColor: AlwaysStoppedAnimation<Color>(
                     isHealthy ? AppColors.success : AppColors.warning,
@@ -882,11 +907,17 @@ class _BatteryHealthCardState extends State<_BatteryHealthCard>
               ),
               const SizedBox(height: 12),
               Text(
-                isHealthy
+                !hasData
+                    ? 'Cần thêm dữ liệu xe'
+                    : isHealthy
                     ? 'Excellent condition'
                     : 'Consider maintenance check',
                 style: TextStyle(
-                  color: isHealthy ? AppColors.success : AppColors.warning,
+                  color: !hasData
+                      ? AppColors.textSecondary
+                      : isHealthy
+                      ? AppColors.success
+                      : AppColors.warning,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
@@ -1547,6 +1578,40 @@ class _NoVehicleBanner extends StatelessWidget {
               style: TextStyle(
                 color: AppColors.textPrimary,
                 fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MissingVehicleDataCard extends StatelessWidget {
+  final String message;
+
+  const _MissingVehicleDataCard({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.warning.withValues(alpha: .35)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline_rounded, color: AppColors.warning),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                color: AppColors.textPrimary,
                 fontWeight: FontWeight.w600,
               ),
             ),

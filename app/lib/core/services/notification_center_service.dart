@@ -153,7 +153,7 @@ class NotificationCenterService {
         'scheduledAt': scheduledAt.toIso8601String(),
         'exact': exact,
       },
-      actionTarget: '/ai/charging_time',
+      actionTarget: '/smart-charge',
     );
   }
 
@@ -167,12 +167,13 @@ class NotificationCenterService {
       payload: {
         if (scheduledAt != null) 'scheduledAt': scheduledAt.toIso8601String(),
       },
-      actionTarget: '/ai/charging_time',
+      actionTarget: '/smart-charge',
     );
   }
 
   Future<void> notifySmartChargingState({
     required String sessionId,
+    required String vehicleId,
     required String state,
     required int targetPercent,
   }) async {
@@ -200,10 +201,12 @@ class NotificationCenterService {
       message: message,
       payload: {
         'sessionId': sessionId,
+        'vehicleId': vehicleId,
         'state': state,
         'targetPercent': targetPercent,
       },
-      actionTarget: '/ai/charging_time',
+      actionTarget:
+          '/smart-charge?vehicleId=${Uri.encodeQueryComponent(vehicleId)}&sessionId=${Uri.encodeQueryComponent(sessionId)}',
     );
   }
 
@@ -241,7 +244,9 @@ class NotificationCenterService {
         'modelName': modelName,
         'version': version,
       },
-      actionTarget: '/ai/$modelKey',
+      actionTarget: modelKey == 'charging_time'
+          ? '/smart-charge'
+          : '/ai/$modelKey',
     );
   }
 

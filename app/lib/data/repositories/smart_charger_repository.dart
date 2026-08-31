@@ -13,19 +13,20 @@ import '../services/shelly_charge_log_service.dart';
 
 abstract interface class SmartChargerRepository {
   bool get calibrationIsServerOwned;
-  Future<SmartChargerBinding?> binding();
-  Future<SmartChargerCapabilities> capabilities();
-  Future<SmartChargerStatus> status();
+  Future<SmartChargerBinding?> binding({String? vehicleId});
+  Future<SmartChargerCapabilities> capabilities({String? vehicleId});
+  Future<SmartChargerStatus> status({String? vehicleId});
   Future<SmartChargingPlanPreview> preview(SmartChargingPlanDraft draft);
   Future<SmartChargingSession> start(
     SmartChargingPlanPreview preview,
     String idempotencyKey,
   );
-  Future<SmartChargingSession?> current();
+  Future<SmartChargingSession?> current({String? vehicleId});
   Future<SmartChargeHistoryPage> getHistoryPage({
     int limit = 20,
     String? cursor,
     ChargingStrategy? strategy,
+    String? vehicleId,
   });
   Future<List<SmartChargeTelemetryPoint>> getTelemetry(String sessionId);
   Future<SmartChargeEnergySummary> confirmActualEndSoc(
@@ -38,13 +39,15 @@ abstract interface class SmartChargerRepository {
   );
   Future<void> saveActiveSession(SmartChargingSession session);
   Future<void> flushPendingTelemetry(String sessionId);
+  Future<void> hideSession(String sessionId);
+  Future<void> privacyEraseSession(String sessionId, String confirmation);
   Future<SmartChargeStopResult> stop(
     String? sessionId, {
     int? expectedVersion,
     UserStopReason userStopReason = UserStopReason.none,
   });
   Future<SmartChargingSession> rearm(Duration duration);
-  Future<void> manualOff();
+  Future<void> manualOff({String? vehicleId});
   Future<SmartChargingSession> manualOn(
     Duration duration,
     String idempotencyKey, {
@@ -69,7 +72,7 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
   bool get calibrationIsServerOwned => false;
 
   @override
-  Future<SmartChargerBinding?> binding() async {
+  Future<SmartChargerBinding?> binding({String? vehicleId}) async {
     if (!await service.isConfiguredSecurely()) return null;
     return const SmartChargerBinding(
       deviceId: 'local-secure-profile',
@@ -82,10 +85,11 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
   }
 
   @override
-  Future<SmartChargerCapabilities> capabilities() => service.capabilities();
+  Future<SmartChargerCapabilities> capabilities({String? vehicleId}) =>
+      service.capabilities();
 
   @override
-  Future<SmartChargerStatus> status() => service.getStatus();
+  Future<SmartChargerStatus> status({String? vehicleId}) => service.getStatus();
   @override
   Future<SmartChargingPlanPreview> preview(SmartChargingPlanDraft draft) =>
       _previewService?.createPreview(draft) ?? predictor.predict(draft);
@@ -131,21 +135,51 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
     idempotencyKey: key,
   );
   @override
-  Future<SmartChargingSession?> current() => service.getCurrentSession();
+  Future<SmartChargingSession?> current({String? vehicleId}) async {
+    // Check identity before reconciliation so merely browsing another
+    // vehicle cannot terminalize or clear the active session.
+    return service.getCurrentSessionForVehicle(vehicleId);
+  }
+
   @override
   Future<SmartChargeHistoryPage> getHistoryPage({
     int limit = 20,
     String? cursor,
     ChargingStrategy? strategy,
+    String? vehicleId,
   }) async =>
       _chargeLogs?.getHistoryPage(
         limit: limit,
         cursor: cursor,
         strategy: strategy,
+        vehicleId: vehicleId,
       ) ??
-      SmartChargeHistoryPage(
-        items: await service.getSessionHistory(limit: limit),
+      _filteredLocalHistory(
+        limit: limit,
+        strategy: strategy,
+        vehicleId: vehicleId,
       );
+
+  Future<SmartChargeHistoryPage> _filteredLocalHistory({
+    required int limit,
+    ChargingStrategy? strategy,
+    String? vehicleId,
+  }) async {
+    final all = await service.getSessionHistory(limit: 100);
+    final filtered = all
+        .where((item) {
+          if (vehicleId != null &&
+              vehicleId.isNotEmpty &&
+              item.vehicleId != vehicleId) {
+            return false;
+          }
+          if (strategy != null && item.strategy != strategy) return false;
+          return true;
+        })
+        .take(limit)
+        .toList();
+    return SmartChargeHistoryPage(items: filtered);
+  }
 
   @override
   Future<List<SmartChargeTelemetryPoint>> getTelemetry(String sessionId) =>
@@ -175,6 +209,14 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
   Future<void> flushPendingTelemetry(String sessionId) =>
       _chargeLogs?.flushPendingTelemetry(sessionId) ?? Future.value();
   @override
+  Future<void> hideSession(String sessionId) =>
+      _chargeLogs?.hideSession(sessionId) ??
+      Future.error(StateError('Charge log service is unavailable.'));
+  @override
+  Future<void> privacyEraseSession(String sessionId, String confirmation) =>
+      _chargeLogs?.privacyEraseSession(sessionId, confirmation) ??
+      Future.error(StateError('Charge log service is unavailable.'));
+  @override
   Future<SmartChargeStopResult> stop(
     String? id, {
     int? expectedVersion,
@@ -185,7 +227,10 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
         : await service.stopSession(id, expectedVersion: expectedVersion);
     final withReason = stopped?.copyWith(userStopReason: userStopReason);
     return SmartChargeStopResult(
-      relayOffVerified: true,
+      // SmartChargerService only returns after an OFF readback. Preserve that
+      // invariant in the public result instead of claiming success merely
+      // because the command request completed.
+      relayOffVerified: withReason == null || withReason.relayVerified,
       session: withReason,
       alreadyStopped: withReason == null,
       historySyncPending: withReason != null && _chargeLogs == null,
@@ -196,7 +241,7 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
   Future<SmartChargingSession> rearm(Duration duration) =>
       service.rearmTimer(duration);
   @override
-  Future<void> manualOff() async {
+  Future<void> manualOff({String? vehicleId}) async {
     await service.turnOff();
   }
 
@@ -220,11 +265,14 @@ class ServerSmartChargerRepository implements SmartChargerRepository {
   @override
   bool get calibrationIsServerOwned => true;
   @override
-  Future<SmartChargerBinding?> binding() => service.getBinding();
+  Future<SmartChargerBinding?> binding({String? vehicleId}) =>
+      service.getBinding(vehicleId: vehicleId);
   @override
-  Future<SmartChargerCapabilities> capabilities() => service.getCapabilities();
+  Future<SmartChargerCapabilities> capabilities({String? vehicleId}) =>
+      service.getCapabilities(vehicleId: vehicleId);
   @override
-  Future<SmartChargerStatus> status() => service.getStatus();
+  Future<SmartChargerStatus> status({String? vehicleId}) =>
+      service.getStatus(vehicleId: vehicleId);
   @override
   Future<SmartChargingPlanPreview> preview(SmartChargingPlanDraft draft) =>
       service.createPreview(draft);
@@ -234,17 +282,20 @@ class ServerSmartChargerRepository implements SmartChargerRepository {
     String key,
   ) => service.start(preview, key);
   @override
-  Future<SmartChargingSession?> current() => service.current();
+  Future<SmartChargingSession?> current({String? vehicleId}) =>
+      service.current(vehicleId: vehicleId);
   @override
   Future<SmartChargeHistoryPage> getHistoryPage({
     int limit = 20,
     String? cursor,
     ChargingStrategy? strategy,
+    String? vehicleId,
   }) async {
     return service.historyPage(
       limit: limit,
       cursor: cursor,
       strategy: strategy,
+      vehicleId: vehicleId,
     );
   }
 
@@ -278,6 +329,11 @@ class ServerSmartChargerRepository implements SmartChargerRepository {
   @override
   Future<void> flushPendingTelemetry(String sessionId) async {}
   @override
+  Future<void> hideSession(String sessionId) => service.hideSession(sessionId);
+  @override
+  Future<void> privacyEraseSession(String sessionId, String confirmation) =>
+      service.privacyEraseSession(sessionId, confirmation);
+  @override
   Future<SmartChargeStopResult> stop(
     String? id, {
     int? expectedVersion,
@@ -291,7 +347,9 @@ class ServerSmartChargerRepository implements SmartChargerRepository {
             userStopReason: userStopReason.wireValue,
           );
     return SmartChargeStopResult(
-      relayOffVerified: true,
+      // The server must persist relay verification on the terminal session;
+      // an already-stopped (null) response is safe by definition.
+      relayOffVerified: stopped == null || stopped.relayVerified,
       session: stopped,
       alreadyStopped: stopped == null,
     );
@@ -304,8 +362,8 @@ class ServerSmartChargerRepository implements SmartChargerRepository {
         code: 'serverOwned',
       );
   @override
-  Future<void> manualOff() async {
-    await service.off();
+  Future<void> manualOff({String? vehicleId}) async {
+    await service.off(vehicleId: vehicleId);
   }
 
   @override

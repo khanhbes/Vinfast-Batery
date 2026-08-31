@@ -129,6 +129,7 @@ class PersonalChargingProfile:
 
 @dataclass(frozen=True)
 class SmartChargeSafetyPolicy:
+    version: str = "v4-default"
     warning_current_a: float = 10.5
     warning_power_w: float = 2300
     warning_temperature_c: float = 65
@@ -178,6 +179,8 @@ class DeviceBinding:
     revoked_at: datetime | None = None
     created_at: datetime = field(default_factory=utcnow)
     updated_at: datetime = field(default_factory=utcnow)
+    vehicle_id: str | None = None
+    shared: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -196,6 +199,8 @@ class DeviceBinding:
             "revokedAt": iso(self.revoked_at),
             "createdAt": iso(self.created_at),
             "updatedAt": iso(self.updated_at),
+            "vehicleId": self.vehicle_id,
+            "shared": self.shared,
         }
 
 
@@ -327,6 +332,10 @@ class ChargingSession:
     user_stop_reason: str = "none"
     training_state: str = "pending"
     training_reason: str | None = None
+    safety_policy_version: str = "v4-default"
+    # Normal history removal is reversible soft-hide; privacy erase is a
+    # separate explicit destructive operation.
+    hidden_at: datetime | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -394,4 +403,6 @@ class ChargingSession:
             "user_stop_reason": self.user_stop_reason,
             "personal_ai_training_state": self.training_state,
             "personal_ai_training_reason": self.training_reason,
+            "hidden_at": iso(self.hidden_at),
+            "safety_policy_version": self.safety_policy_version,
         }

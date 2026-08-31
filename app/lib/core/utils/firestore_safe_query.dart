@@ -13,20 +13,25 @@ class FirestoreSafeQuery {
     required String orderByField,
     bool descending = true,
     int? limit,
+    Map<String, Object>? additionalWhere,
   }) async {
     try {
-      Query query = collection
-          .where(whereField, isEqualTo: whereValue)
-          .orderBy(orderByField, descending: descending);
+      Query query = collection.where(whereField, isEqualTo: whereValue);
+      additionalWhere?.forEach((field, value) {
+        query = query.where(field, isEqualTo: value);
+      });
+      query = query.orderBy(orderByField, descending: descending);
       if (limit != null) query = query.limit(limit);
       final snapshot = await query.get();
       return snapshot.docs;
     } catch (e) {
       if (_isIndexError(e)) {
         // Fallback: query không orderBy, sort ở client
-        final snapshot = await collection
-            .where(whereField, isEqualTo: whereValue)
-            .get();
+        Query fallback = collection.where(whereField, isEqualTo: whereValue);
+        additionalWhere?.forEach((field, value) {
+          fallback = fallback.where(field, isEqualTo: value);
+        });
+        final snapshot = await fallback.get();
         final docs = snapshot.docs.toList();
         docs.sort((a, b) {
           final aVal = _getTimestamp(a, orderByField);

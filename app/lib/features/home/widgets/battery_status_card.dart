@@ -17,8 +17,10 @@ class BatteryStatusCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final percent = vehicle.lastBatteryPercent;
-    final estimatedRange = (percent * vehicle.defaultEfficiency)
-        .toStringAsFixed(0);
+    final hasRangeData = vehicle.hasBatteryData && vehicle.hasEfficiencyData;
+    final estimatedRange = hasRangeData
+        ? (percent * vehicle.defaultEfficiency).toStringAsFixed(0)
+        : '—';
 
     return Column(
       children: [
@@ -218,7 +220,9 @@ class BatteryStatusCard extends StatelessWidget {
               child: _QuickStat(
                 icon: Icons.thermostat_rounded,
                 label: 'Nhiệt độ',
-                value: '32°C',
+                // Temperature is not part of the vehicle profile. Do not
+                // present a hard-coded value as live telemetry.
+                value: '—',
                 color: AppColors.warning,
               ),
             ),
@@ -227,7 +231,9 @@ class BatteryStatusCard extends StatelessWidget {
               child: _QuickStat(
                 icon: Icons.shield_rounded,
                 label: 'Sức khỏe',
-                value: '${vehicle.stateOfHealth.toStringAsFixed(0)}%',
+                value: vehicle.hasSohData
+                    ? '${vehicle.stateOfHealth.toStringAsFixed(0)}%'
+                    : '—',
                 color: AppColors.success,
               ),
             ),
@@ -236,7 +242,7 @@ class BatteryStatusCard extends StatelessWidget {
               child: _QuickStat(
                 icon: Icons.speed_rounded,
                 label: 'ODO',
-                value: '${vehicle.currentOdo} km',
+                value: vehicle.hasOdoData ? '${vehicle.currentOdo} km' : '—',
                 color: AppColors.info,
               ),
             ),

@@ -67,15 +67,36 @@ class ServerSmartChargerService {
     return data is Map ? Map<String, dynamic>.from(data) : {'items': data};
   }
 
-  Future<SmartChargerBinding?> getBinding() async {
-    final data = await _request('GET', '/api/shelly/device');
+  Future<SmartChargerBinding?> getBinding({String? vehicleId}) async {
+    final suffix = vehicleId == null || vehicleId.isEmpty
+        ? ''
+        : '?vehicleId=${Uri.encodeQueryComponent(vehicleId)}';
+    final data = await _request('GET', '/api/shelly/device$suffix');
     return data['_null'] == true ? null : SmartChargerBinding.fromJson(data);
   }
 
-  Future<SmartChargerCapabilities> getCapabilities() async =>
-      SmartChargerCapabilities.fromJson(
-        await _request('GET', '/api/shelly/capabilities'),
-      );
+  /// Associate an already-owned physical Shelly with the selected vehicle.
+  /// The server validates vehicle ownership; no credentials are sent here.
+  Future<SmartChargerBinding> selectDevice(
+    String deviceId, {
+    required String vehicleId,
+    bool shared = false,
+  }) async => SmartChargerBinding.fromJson(
+    await _request(
+      'POST',
+      '/api/shelly/devices/${Uri.encodeComponent(deviceId)}/select',
+      body: {'vehicleId': vehicleId, 'shared': shared},
+    ),
+  );
+
+  Future<SmartChargerCapabilities> getCapabilities({String? vehicleId}) async {
+    final suffix = vehicleId == null || vehicleId.isEmpty
+        ? ''
+        : '?vehicleId=${Uri.encodeQueryComponent(vehicleId)}';
+    return SmartChargerCapabilities.fromJson(
+      await _request('GET', '/api/shelly/capabilities$suffix'),
+    );
+  }
 
   Future<Map<String, dynamic>> startConsent() =>
       _request('POST', '/api/shelly/consent/start');
@@ -83,12 +104,15 @@ class ServerSmartChargerService {
   Future<void> revokeBinding() async =>
       _request('DELETE', '/api/shelly/device');
 
-  Future<SmartChargerStatus> getStatus() async {
-    final raw = await _request('GET', '/api/smart-charging/status');
+  Future<SmartChargerStatus> getStatus({String? vehicleId}) async {
+    final raw = await _request(
+      'GET',
+      '/api/smart-charging/status${vehicleId == null || vehicleId.isEmpty ? '' : '?vehicleId=${Uri.encodeQueryComponent(vehicleId)}'}',
+    );
     final status = SmartChargerStatus.fromJson(raw);
     SmartChargerBinding? selected;
     try {
-      selected = await getBinding();
+      selected = await getBinding(vehicleId: vehicleId);
     } on SmartChargerException {
       // Telemetry remains useful even if binding metadata refresh fails.
     }
@@ -196,9 +220,22 @@ class ServerSmartChargerService {
     );
   }
 
-  Future<SmartChargingSession?> current() async {
-    final data = await _request('GET', '/api/smart-charging/session/current');
+  Future<SmartChargingSession?> current({String? vehicleId}) async {
+    final data = await _request(
+      'GET',
+      '/api/smart-charging/session/current${vehicleId == null || vehicleId.isEmpty ? '' : '?vehicleId=${Uri.encodeQueryComponent(vehicleId)}'}',
+    );
     return data['_null'] == true ? null : SmartChargingSession.fromJson(data);
+  }
+
+  /// V4 global view used by the dashboard/persistent charging pill. It does
+  /// not change the selected vehicle context.
+  Future<List<SmartChargingSession>> activeSessions() async {
+    final data = await _request('GET', '/api/smart-charging/sessions/active');
+    return ((data['items'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((item) => SmartChargingSession.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
   }
 
   Future<List<SmartChargingSession>> history({int limit = 20}) async {
@@ -219,12 +256,15 @@ class ServerSmartChargerService {
     int limit = 20,
     String? cursor,
     ChargingStrategy? strategy,
+    String? vehicleId,
   }) async {
     final query = <String>[
       'limit=$limit',
       if (cursor != null && cursor.isNotEmpty)
         'cursor=${Uri.encodeQueryComponent(cursor)}',
       if (strategy != null) 'strategy=${strategy.wireValue}',
+      if (vehicleId != null && vehicleId.isNotEmpty)
+        'vehicleId=${Uri.encodeQueryComponent(vehicleId)}',
     ].join('&');
     final data = await _request('GET', '/api/smart-charging/history?$query');
     return SmartChargeHistoryPage(
@@ -239,11 +279,14 @@ class ServerSmartChargerService {
     );
   }
 
-  Future<SmartChargingSession?> off([String? sessionId]) async {
+  Future<SmartChargingSession?> off({String? sessionId, String? vehicleId}) async {
+    final query = sessionId == null && vehicleId != null && vehicleId.isNotEmpty
+        ? '?vehicleId=${Uri.encodeQueryComponent(vehicleId)}'
+        : '';
     final data = await _request(
       'POST',
       sessionId == null
-          ? '/api/smart-charging/off'
+          ? '/api/smart-charging/off$query'
           : '/api/smart-charging/session/$sessionId/stop',
     );
     return data['_null'] == true ? null : SmartChargingSession.fromJson(data);
@@ -304,6 +347,19 @@ class ServerSmartChargerService {
 
   Future<void> deletePersonalProfile(String vehicleId) async =>
       _request('DELETE', '/api/smart-charging/personal-profile/$vehicleId');
+
+  Future<void> hideSession(String sessionId) async => _request(
+    'POST',
+    '/api/smart-charging/sessions/$sessionId/hide',
+  );
+
+  Future<void> privacyEraseSession(String sessionId, String confirmation) async {
+    await _request(
+      'DELETE',
+      '/api/smart-charging/sessions/$sessionId/privacy-erase',
+      body: {'confirmation': confirmation},
+    );
+  }
 
   Future<Map<String, dynamic>> ingestPersonalTraining(String sessionId) =>
       _request(

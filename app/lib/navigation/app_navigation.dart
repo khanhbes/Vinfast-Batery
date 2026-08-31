@@ -6,12 +6,14 @@ import '../core/providers/app_providers.dart';
 import '../core/services/notification_center_service.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_motion.dart';
-import '../features/ai/ai_models_screen.dart';
-import '../features/home/home_screen.dart';
-import '../features/maintenance/maintenance_screen.dart';
+import '../core/widgets/vehicle_switcher.dart';
+import '../core/widgets/global_charging_pill.dart';
+import '../features/ai/smart_charge_history_screen.dart';
+import '../features/ai/controllers/smart_charging_controller.dart';
 import '../features/notifications/notification_center_screen.dart';
-import '../features/settings/settings_screen.dart';
-import '../features/trip_planner/trip_planner_wrapper.dart';
+import '../features/overview/overview_screen.dart';
+import '../features/charge/charge_screen.dart';
+import '../features/more/more_screen.dart';
 
 /// Unified App Navigation — PLAN1 sync
 /// - Unified AppBar với notification bell
@@ -23,10 +25,10 @@ class AppNavigation extends ConsumerStatefulWidget {
   @override
   ConsumerState<AppNavigation> createState() => _AppNavigationState();
 
-  /// Navigate to specific tab (0: Home, 1: AI, 2: Trip, 3: Service, 4: Settings)
+  /// Navigate to V4 tab (0: Overview, 1: Charge, 2: History, 3: More).
   /// Dùng context để truy cập Riverpod
   static void navigateToTab(BuildContext context, int index) {
-    if (index >= 0 && index < 5) {
+    if (index >= 0 && index < 4) {
       // Sử dụng ProviderScope container để update state
       ProviderScope.containerOf(
         context,
@@ -44,34 +46,44 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
   void initState() {
     super.initState();
     _screens = [
-      _RefreshableTab(child: const HomeScreen()), // Tab 0: Home
-      _RefreshableTab(child: const AiModelsScreen()), // Tab 1: AI
-      _RefreshableTab(child: const TripPlannerWrapper()), // Tab 2: Trip
-      _RefreshableTab(child: const MaintenanceScreen()), // Tab 3: Service
-      _RefreshableTab(child: const SettingsScreen()), // Tab 4: Settings
+      _RefreshableTab(child: const OverviewScreen()), // Tab 0: Overview
+      _RefreshableTab(child: const ChargeScreen()), // Tab 1: Charge
+      _RefreshableTab(child: const _SelectedHistory()), // Tab 2: History
+      _RefreshableTab(child: const MoreScreen()), // Tab 3: More
     ];
   }
 
   @override
   Widget build(BuildContext context) {
+    // Restore the last selected vehicle once at the app shell boundary so all
+    // tabs share the same vehicle context before rendering scoped data.
+    ref.watch(vehicleContextRestoreProvider);
     final currentIndex = ref.watch(currentTabProvider);
 
-    // Set system UI
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    // Keep system chrome legible in both V4 light and dark themes.
     SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
+      SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
-        systemNavigationBarColor: AppColors.background,
-        systemNavigationBarIconBrightness: Brightness.light,
+        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+        systemNavigationBarColor: theme.scaffoldBackgroundColor,
+        systemNavigationBarIconBrightness:
+            isDark ? Brightness.light : Brightness.dark,
       ),
     );
 
     return Scaffold(
-      appBar: _buildUnifiedAppBar(currentIndex),
-      body: IndexedStack(index: currentIndex, children: _screens),
+      appBar: _buildUnifiedAppBar(context, currentIndex),
+      body: Stack(
+        children: [
+          IndexedStack(index: currentIndex, children: _screens),
+          const GlobalChargingPill(),
+        ],
+      ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          color: AppColors.background.withValues(alpha: 0.95),
+          color: theme.scaffoldBackgroundColor.withValues(alpha: 0.95),
           border: const Border(
             top: BorderSide(color: AppColors.glassBorder, width: 0.5),
           ),
@@ -90,34 +102,28 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _NavItem(
-                  icon: Icons.home_rounded,
-                  label: 'Home',
+                  icon: Icons.dashboard_rounded,
+                  label: 'Tổng quan',
                   isSelected: currentIndex == 0,
                   onTap: () => ref.read(currentTabProvider.notifier).state = 0,
                 ),
                 _NavItem(
-                  icon: Icons.psychology_rounded,
-                  label: 'AI',
+                  icon: Icons.bolt_rounded,
+                  label: 'Sạc',
                   isSelected: currentIndex == 1,
                   onTap: () => ref.read(currentTabProvider.notifier).state = 1,
                 ),
                 _NavItem(
-                  icon: Icons.map_rounded,
-                  label: 'Trip',
+                  icon: Icons.history_rounded,
+                  label: 'Lịch sử',
                   isSelected: currentIndex == 2,
                   onTap: () => ref.read(currentTabProvider.notifier).state = 2,
                 ),
                 _NavItem(
-                  icon: Icons.build_rounded,
-                  label: 'Service',
+                  icon: Icons.more_horiz_rounded,
+                  label: 'Khác',
                   isSelected: currentIndex == 3,
                   onTap: () => ref.read(currentTabProvider.notifier).state = 3,
-                ),
-                _NavItem(
-                  icon: Icons.settings_rounded,
-                  label: 'Settings',
-                  isSelected: currentIndex == 4,
-                  onTap: () => ref.read(currentTabProvider.notifier).state = 4,
                 ),
               ],
             ),
@@ -128,27 +134,31 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
   }
 
   /// Unified AppBar cho tất cả tabs — PLAN1
-  PreferredSizeWidget _buildUnifiedAppBar(int currentIndex) {
+  PreferredSizeWidget _buildUnifiedAppBar(
+    BuildContext context,
+    int currentIndex,
+  ) {
     final tabTitles = [
-      'VinFast Battery',
-      'AI Models',
-      'Trip Planner',
-      'Service',
-      'Settings',
+      'Tổng quan',
+      'Smart Charge',
+      'Lịch sử sạc',
+      'Khác',
     ];
+    final theme = Theme.of(context);
 
     return AppBar(
-      backgroundColor: AppColors.background,
+      backgroundColor: theme.scaffoldBackgroundColor,
       elevation: 0,
       title: Text(
         tabTitles[currentIndex],
-        style: const TextStyle(
-          color: AppColors.textPrimary,
+        style: TextStyle(
+          color: theme.colorScheme.onSurface,
           fontSize: 18,
           fontWeight: FontWeight.w700,
         ),
       ),
       actions: [
+        const VehicleSwitcher(),
         // Notification bell with badge
         StreamBuilder<int>(
           stream: NotificationCenterService().watchUnreadCount(),
@@ -169,6 +179,39 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const NotificationCenterScreen()),
+    );
+  }
+}
+
+class _SelectedHistory extends ConsumerWidget {
+  const _SelectedHistory();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selectedId = ref.watch(selectedVehicleIdProvider);
+    final pending = ref.watch(pendingSmartChargeTargetProvider);
+    final id = pending?.vehicleId ?? selectedId;
+    if (id.isEmpty) return const Center(child: Text('Hãy chọn xe để xem lịch sử sạc'));
+    final vehicle = ref.watch(vehicleProvider(id));
+    return vehicle.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text('Không thể tải lịch sử: $e')),
+      data: (value) {
+        final args = SmartChargingControllerArgs(
+          vehicleId: id,
+          currentSoc: (value?.currentBattery ?? 0).toDouble(),
+        );
+        final state = ref.watch(smartChargingControllerProvider(args));
+        final controller = ref.read(smartChargingControllerProvider(args).notifier);
+        return SmartChargeHistoryScreen(
+          controller: controller,
+          initialItems: state.history,
+          initialSessionId: pending?.sessionId,
+          onPendingTargetConsumed: pending == null
+              ? null
+              : () => ref.read(pendingSmartChargeTargetProvider.notifier).state = null,
+        );
+      },
     );
   }
 }

@@ -180,6 +180,34 @@ class ConnectionCoordinator {
         '$_snapshotPrefix$sessionId',
       );
 
+  /// Returns locally persisted active-session snapshots for the shell pill.
+  /// Snapshots contain no credentials and allow an active vehicle to remain
+  /// visible after the user switches context to another vehicle.
+  Future<List<ActiveChargingSnapshot>> loadSnapshots() async {
+    final prefs = await SharedPreferences.getInstance();
+    final result = <ActiveChargingSnapshot>[];
+    for (final key in prefs.getKeys().where((key) => key.startsWith(_snapshotPrefix))) {
+      final values = prefs.getStringList(key);
+      if (values == null || values.length < 6) continue;
+      final stopAt = DateTime.tryParse(values[2]);
+      final target = double.tryParse(values[1]);
+      final soc = double.tryParse(values[3]);
+      final energy = double.tryParse(values[4]);
+      final relay = values[5].toLowerCase() == 'true';
+      if (stopAt == null || target == null || soc == null || energy == null) continue;
+      result.add(ActiveChargingSnapshot(
+        sessionId: key.substring(_snapshotPrefix.length),
+        vehicleId: values[0],
+        targetSoc: target,
+        effectiveStopAt: stopAt,
+        lastEstimatedSoc: soc,
+        lastSessionEnergyWh: energy,
+        lastKnownRelay: relay,
+      ));
+    }
+    return result;
+  }
+
   void _onNetwork(ConnectivityResult result) {
     final online = result != ConnectivityResult.none;
     _emit(

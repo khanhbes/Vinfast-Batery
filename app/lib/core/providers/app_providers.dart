@@ -1,4 +1,7 @@
 export 'app_state_providers.dart';
+export 'vehicle_context_provider.dart';
+export 'feature_availability_provider.dart';
+export 'vehicle_providers.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/charge_log_model.dart';
@@ -6,22 +9,17 @@ import '../../data/models/vehicle_model.dart';
 import '../../data/repositories/charge_log_repository.dart';
 import '../services/session_service.dart';
 
+/// One-shot notification deep-link. It is consumed by the history tab without
+/// mutating the user's globally selected vehicle.
+final pendingSmartChargeTargetProvider = StateProvider<({String vehicleId, String sessionId})?>((ref) => null);
+
 // =============================================================================
 // Shared Providers for the app
 // =============================================================================
 
 /// Selected vehicle ID
-final selectedVehicleIdProvider = StateProvider<String>((ref) => '');
-
-/// Restore vehicle ID from secure session storage (with prefs fallback)
 final restoreVehicleIdProvider = FutureProvider<String>((ref) async {
   return await SessionService().getSelectedVehicleId() ?? '';
-});
-
-/// Get vehicle by ID
-final vehicleProvider = FutureProvider.family<VehicleModel?, String>((ref, id) {
-  if (id.isEmpty) return Future.value(null);
-  return ref.watch(chargeLogRepositoryProvider).getVehicle(id);
 });
 
 /// Get all vehicles

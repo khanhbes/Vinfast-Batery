@@ -115,12 +115,20 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
               ],
 
               // Error notification banners with debug view action
-              if (state.gatewayError != null) ...[
+              if (state.chargerError != null) ...[
                 const SizedBox(height: 12),
                 _ErrorBannerCard(
                   message: 'Không kết nối được ổ sạc.',
-                  detail: state.gatewayError,
+                  detail: state.chargerError,
                   onRetry: controller.refresh,
+                ),
+              ],
+              if (state.sessionError != null) ...[
+                const SizedBox(height: 12),
+                _ErrorBannerCard(
+                  message: 'Không thể đồng bộ phiên sạc.',
+                  detail: state.sessionError,
+                  onRetry: controller.retrySession,
                 ),
               ],
               if (state.actionError != null) ...[
@@ -172,7 +180,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                 status: state.historyStatus,
                 error: state.historyError,
                 syncedAt: state.historySyncedAt,
-                onRetry: controller.refresh,
+                onRetry: controller.retryHistory,
                 onViewAll: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
                     builder: (_) => SmartChargeHistoryScreen(

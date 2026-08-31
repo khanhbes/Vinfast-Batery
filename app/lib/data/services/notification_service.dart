@@ -167,6 +167,7 @@ class NotificationService {
 
   Future<void> notifySmartChargeRelayOff({
     required String sessionId,
+    String? vehicleId,
     bool interrupted = false,
   }) async {
     await initialize();
@@ -177,12 +178,13 @@ class NotificationService {
           ? 'Relay đã tắt trước giờ dự kiến. Mở Smart Charge để kiểm tra.'
           : 'App đã đọc lại thiết bị và xác nhận nguồn sạc đã ngắt.',
       NotificationDetails(android: _smartChargeDetails()),
-      payload: 'smart_charge/session/$sessionId',
+      payload: _smartChargeSessionPayload(vehicleId, sessionId),
     );
   }
 
   Future<void> notifySmartChargeUnsafe({
     required String sessionId,
+    String? vehicleId,
     required String message,
   }) async {
     await initialize();
@@ -191,8 +193,16 @@ class NotificationService {
       'Cảnh báo an toàn Smart Charge',
       message,
       NotificationDetails(android: _smartChargeDetails()),
-      payload: 'smart_charge/session/$sessionId',
+      payload: _smartChargeSessionPayload(vehicleId, sessionId),
     );
+  }
+
+  String _smartChargeSessionPayload(String? vehicleId, String sessionId) {
+    final safeSession = Uri.encodeComponent(sessionId);
+    final safeVehicle = vehicleId == null || vehicleId.isEmpty
+        ? ''
+        : '${Uri.encodeComponent(vehicleId)}/';
+    return 'smart_charge/session/$safeVehicle$safeSession';
   }
 
   // ── Charge Notifications ──
@@ -308,6 +318,7 @@ class NotificationService {
   Future<bool> scheduleChargeReminder(
     DateTime reminderTime,
     int targetPercent,
+    {String? vehicleId, String? sessionId}
   ) async {
     await initialize(); // idempotent
     if (!await _hasNotificationPermission()) {
@@ -356,10 +367,21 @@ class NotificationService {
       androidScheduleMode: androidMode,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
-      payload: 'smart_charge/current?target=$targetPercent',
+      payload: _smartChargeReminderPayload(vehicleId, sessionId, targetPercent),
     );
     // true = exact, false = inexact
     return exactGranted;
+  }
+
+  String _smartChargeReminderPayload(
+    String? vehicleId,
+    String? sessionId,
+    int targetPercent,
+  ) {
+    if (vehicleId == null || vehicleId.isEmpty || sessionId == null || sessionId.isEmpty) {
+      return 'smart_charge/current?target=$targetPercent';
+    }
+    return 'smart_charge/session/${Uri.encodeComponent(vehicleId)}/${Uri.encodeComponent(sessionId)}';
   }
 
   /// Cancel scheduled charging reminder
