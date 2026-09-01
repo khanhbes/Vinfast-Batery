@@ -3,6 +3,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../data/models/shelly_connection.dart';
+import '../../data/services/server_smart_charger_service.dart';
 import '../../data/services/smart_charger_credentials_service.dart';
 import '../../data/services/smart_charger_service.dart';
 
@@ -35,14 +36,22 @@ class _ShellySetupScreenState extends State<ShellySetupScreen> {
   }
 
   Future<void> _load() async {
+    setState(() => _busy = true);
     final profile = await _credentials.readProfile();
-    if (profile == null || !mounted) return;
-    _host.text = profile.cloudHost;
-    _key.text = profile.cloudAuthKey;
-    _deviceId.text = profile.deviceId;
-    _lan.text = profile.lanAddress ?? '';
-    _password.text = profile.localPassword ?? '';
-    setState(() => _connectionVerified = true);
+    if (!mounted) return;
+    if (profile != null) {
+      _host.text = profile.cloudHost;
+      _key.text = profile.cloudAuthKey;
+      _deviceId.text = profile.deviceId;
+      _lan.text = profile.lanAddress ?? '';
+      _password.text = profile.localPassword ?? '';
+      setState(() {
+        _connectionVerified = true;
+        _busy = false;
+      });
+    } else {
+      setState(() => _busy = false);
+    }
   }
 
   ShellyConnectionProfile get _profile => ShellyConnectionProfile(
@@ -88,9 +97,14 @@ class _ShellySetupScreenState extends State<ShellySetupScreen> {
     if (error != null) throw ArgumentError(error);
     final result = await _service.testConnection(profile: _profile);
     await _credentials.saveProfile(_profile);
+    try {
+      await ServerSmartChargerService().registerShellyDevice(_profile);
+    } catch (e) {
+      debugPrint('⚠️ Sync Shelly to server failed: $e');
+    }
     setState(() => _connectionVerified = true);
     final route = result.lanStatus == null ? 'Cloud' : 'Cloud + LAN';
-    return 'Đã xác minh $route, Device ID và power meter.';
+    return 'Đã xác minh $route, Device ID và đã đồng bộ với tài khoản.';
   }
 
   Future<String> _safeBoot() async {

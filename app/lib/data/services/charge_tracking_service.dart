@@ -336,12 +336,17 @@ class ChargeTrackingService {
       return;
     }
     _lastSampleSyncAt = now;
+    final uid = _ownerUid ?? FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      debugPrint('⚠ Skip ChargeSamples write: ownerUid is null');
+      return;
+    }
     try {
       await FirebaseFirestore.instance.collection('ChargeSamples').add({
         'sessionId': _chargeSessionId,
         'event': event,
         'vehicleId': _vehicleId,
-        if (_ownerUid != null) 'ownerUid': _ownerUid,
+        'ownerUid': uid,
         'timestamp': now.toUtc().toIso8601String(),
         'batteryPercent': _currentBattery,
         'targetBatteryPercent': _targetBattery,

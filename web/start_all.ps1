@@ -112,12 +112,12 @@ Write-Host "🧠 AI Server        → http://127.0.0.1:8001  (PID $($aiProc.Id))
 $apiCmd = "cd /d `"$root`" && set `"AI_SERVER_URL=http://127.0.0.1:8001`" && set `"AI_SERVER_INTERNAL_TOKEN=$aiToken`" && "
 
 # Admin bootstrap for local dev:
-# - Nếu chưa set ADMIN_EMAILS thì mặc định "*" (mọi user đăng nhập đều là admin)
-# - Muốn siết quyền: set biến môi trường ADMIN_EMAILS="email1,email2"
+# - Nếu chưa set ADMIN_EMAILS thì chỉ bootstrap owner của dự án là admin.
+# - Muốn thêm developer: set biến môi trường ADMIN_EMAILS="email1,email2"
 $adminEmails = $env:ADMIN_EMAILS
 if ([string]::IsNullOrWhiteSpace($adminEmails)) {
-    $adminEmails = "*"
-    Write-Host "🛡 ADMIN_EMAILS chưa cấu hình -> dùng local bootstrap ADMIN_EMAILS=* (mọi tài khoản đăng nhập là admin)." -ForegroundColor Yellow
+    $adminEmails = "khanhnhim21102004@gmail.com"
+    Write-Host "🛡 ADMIN_EMAILS chưa cấu hình -> chỉ bootstrap owner admin." -ForegroundColor Yellow
 } else {
     Write-Host "🛡 ADMIN_EMAILS=$adminEmails" -ForegroundColor DarkGreen
 }

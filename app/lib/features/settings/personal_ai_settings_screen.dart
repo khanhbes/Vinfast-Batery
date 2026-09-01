@@ -142,6 +142,14 @@ class _PersonalAiSettingsState extends State<PersonalAiSettingsScreen> {
               'Phiên đủ điều kiện',
               '${profile?.validSessions ?? 0} phiên đã được dùng để học',
             ),
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text(
+                'Sau khi đủ ít nhất 5 phiên, backend sẽ fine-tune và gửi kết quả '
+                'vào Trung tâm thông báo. Model cũ vẫn được giữ nếu bản mới kém hơn.',
+                style: TextStyle(fontSize: 12, height: 1.4),
+              ),
+            ),
             if (profile?.lastTrainedAt != null)
               _row(
                 'Cập nhật gần nhất',

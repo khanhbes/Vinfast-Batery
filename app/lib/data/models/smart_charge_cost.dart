@@ -24,6 +24,7 @@ class SmartChargePreferences {
   const SmartChargePreferences({
     this.ownerUid,
     this.tariffVndPerKwh,
+    this.chargePowerW = 400.0,
     required this.updatedAt,
   });
 
@@ -34,20 +35,27 @@ class SmartChargePreferences {
 
   final String? ownerUid;
   final double? tariffVndPerKwh;
+  final double? chargePowerW;
   final DateTime updatedAt;
 
   bool get hasTariff => tariffVndPerKwh != null && tariffVndPerKwh! > 0;
+  bool get hasChargePower => chargePowerW != null && chargePowerW! > 0;
 
   SmartChargePreferences copyWith({
     String? ownerUid,
     double? tariffVndPerKwh,
+    double? chargePowerW,
     bool clearTariff = false,
+    bool clearChargePower = false,
     DateTime? updatedAt,
   }) => SmartChargePreferences(
     ownerUid: ownerUid ?? this.ownerUid,
     tariffVndPerKwh: clearTariff
         ? null
         : tariffVndPerKwh ?? this.tariffVndPerKwh,
+    chargePowerW: clearChargePower
+        ? null
+        : chargePowerW ?? this.chargePowerW,
     updatedAt: updatedAt ?? this.updatedAt,
   );
 
@@ -55,6 +63,7 @@ class SmartChargePreferences {
       SmartChargePreferences(
         ownerUid: json['ownerUid']?.toString(),
         tariffVndPerKwh: (json['tariffVndPerKwh'] as num?)?.toDouble(),
+        chargePowerW: (json['chargePowerW'] as num?)?.toDouble() ?? 400.0,
         updatedAt:
             DateTime.tryParse(json['updatedAt']?.toString() ?? '') ??
             DateTime.fromMillisecondsSinceEpoch(0),
@@ -63,6 +72,7 @@ class SmartChargePreferences {
   Map<String, dynamic> toJson() => {
     if (ownerUid != null) 'ownerUid': ownerUid,
     if (tariffVndPerKwh != null) 'tariffVndPerKwh': tariffVndPerKwh,
+    if (chargePowerW != null) 'chargePowerW': chargePowerW,
     'updatedAt': updatedAt.toUtc().toIso8601String(),
   };
 }

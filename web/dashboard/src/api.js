@@ -78,6 +78,16 @@ async function apiFetch(path, options = {}) {
 // ── Auth ──
 export const authMe = () => apiFetch('/api/auth/me')
 
+// ── Smart Charger encrypted profile vault ──
+export const shellyProfiles = (vehicleId = '') =>
+  apiFetch(`/api/shelly/profiles${vehicleId ? `?vehicleId=${encodeURIComponent(vehicleId)}` : ''}`)
+export const saveShellyProfile = (deviceId, profile) =>
+  apiFetch(`/api/shelly/profiles/${encodeURIComponent(deviceId)}`, {
+    method: 'PUT', body: JSON.stringify(profile),
+  })
+export const revokeShellyProfile = (deviceId) =>
+  apiFetch(`/api/shelly/profiles/${encodeURIComponent(deviceId)}`, { method: 'DELETE' })
+
 // ── Admin CRUD ──
 export const adminList = (entity, params = {}) => {
   const qs = new URLSearchParams(params).toString()

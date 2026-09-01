@@ -410,16 +410,21 @@ class SmartChargeService:
                 400,
             )
         session = self.repository.get_session(uid, session_id)
-        if session is None:
-            raise SmartChargeError("sessionNotFound", "Không tìm thấy phiên sạc", 404)
-        if session.state in ("arming", "active"):
+        # Restored/legacy terminal summaries may only exist in ChargeLogs.
+        # The repository performs the authoritative owner + terminal checks
+        # against that document, so do not reject those records here.
+        if session is not None and session.state in ("arming", "active"):
             raise SmartChargeError(
                 "activeSessionProtected",
                 "Không thể xóa phiên đang sạc; hãy tắt và xác minh OFF trước.",
                 409,
             )
         if not self.repository.erase_session(uid, session_id):
-            raise SmartChargeError("eraseFailed", "Không thể xóa dữ liệu phiên", 503)
+            raise SmartChargeError(
+                "sessionNotFound",
+                "Không tìm thấy phiên sạc thuộc tài khoản này hoặc phiên vẫn đang hoạt động.",
+                404,
+            )
         self.repository.append_audit(uid, "smart_charge_privacy_erased", session_id=session_id)
 
     def hide_session(self, uid: str, session_id: str):

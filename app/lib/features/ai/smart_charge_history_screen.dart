@@ -43,7 +43,6 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
   String? _cursor;
   String? _error;
   bool _allVehicles = false;
-  bool _loading = true;
   bool _loadingMore = false;
   int _visibleCount = 20;
   Timer? _liveTimer;
@@ -96,7 +95,6 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
   Future<void> _load({required bool reset}) async {
     if (reset) {
       setState(() {
-        _loading = true;
         _error = null;
         _visibleCount = 20;
       });
@@ -122,7 +120,6 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
     } finally {
       if (mounted) {
         setState(() {
-          _loading = false;
           _loadingMore = false;
         });
       }
@@ -212,11 +209,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 2, 16, 12),
                 sliver: SliverToBoxAdapter(child: _filters()),
               ),
-              if (_loading && _items.isEmpty)
-                const SliverFillRemaining(
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (_error != null && _items.isEmpty)
+              if (_error != null && _items.isEmpty)
                 SliverFillRemaining(child: _errorState())
               else if (visible.isEmpty && _activeSession == null)
                 const SliverFillRemaining(child: _EmptyHistory())

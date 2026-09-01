@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:convert';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
@@ -20,6 +21,38 @@ class ServerSmartChargerService {
 
   final http.Client _client;
   final FirebaseAuth _auth;
+
+  /// Metadata returned by the server vault resolver. Secrets are populated
+  /// only after [restoreDirectProfile] succeeds over authenticated HTTPS.
+  Future<Map<String, dynamic>?> resolveDirectProfile({String? vehicleId}) async {
+    final data = await _request(
+      'POST',
+      '/api/shelly/profiles/resolve',
+      body: {if (vehicleId != null && vehicleId.isNotEmpty) 'vehicleId': vehicleId},
+    );
+    final profile = data['profile'];
+    return profile is Map ? Map<String, dynamic>.from(profile) : null;
+  }
+
+  Future<List<Map<String, dynamic>>> listDirectProfiles({String? vehicleId}) async {
+    final suffix = vehicleId == null || vehicleId.isEmpty
+        ? ''
+        : '?vehicleId=${Uri.encodeQueryComponent(vehicleId)}';
+    final data = await _request('GET', '/api/shelly/profiles$suffix');
+    return ((data['items'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
+  Future<ShellyConnectionProfile?> restoreDirectProfile(String deviceId) async {
+    final data = await _request(
+      'POST',
+      '/api/shelly/profiles/${Uri.encodeComponent(deviceId)}/restore',
+    );
+    if (data['_null'] == true || data.isEmpty) return null;
+    return ShellyConnectionProfile.fromJson(data);
+  }
 
   Future<Map<String, dynamic>> _request(
     String method,
@@ -100,6 +133,51 @@ class ServerSmartChargerService {
 
   Future<Map<String, dynamic>> startConsent() =>
       _request('POST', '/api/shelly/consent/start');
+
+  /// Register/sync Shelly device credentials with user account on the backend server.
+  Future<Map<String, dynamic>> registerShellyDevice(
+    ShellyConnectionProfile profile, {
+    String? vehicleId,
+    int? expectedRevision,
+    Map<String, dynamic>? verification,
+  }) => _request(
+    'PUT',
+    '/api/shelly/profiles/${Uri.encodeComponent(profile.deviceId)}',
+    body: {
+      ...profile.toJson(),
+      if (vehicleId != null && vehicleId.isNotEmpty) 'vehicleId': vehicleId,
+      if (expectedRevision != null) 'expectedRevision': expectedRevision,
+      if (verification != null) 'verification': verification,
+      'source': 'android',
+    },
+  );
+
+  /// Retrieve registered Shelly connection profile for the current user from backend.
+  Future<ShellyConnectionProfile?> fetchRegisteredProfile() async {
+    try {
+      final metadata = await resolveDirectProfile();
+      if (metadata == null) return null;
+      return restoreDirectProfile(metadata['deviceId']?.toString() ?? '');
+    } on Object {
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>> verifyDirectProfile(
+    String deviceId,
+    Map<String, dynamic> verification,
+  ) => _request(
+    'POST',
+    '/api/shelly/profiles/${Uri.encodeComponent(deviceId)}/verify',
+    body: verification,
+  );
+
+  Future<void> revokeDirectProfile(String deviceId) async {
+    await _request(
+      'DELETE',
+      '/api/shelly/profiles/${Uri.encodeComponent(deviceId)}',
+    );
+  }
 
   Future<void> revokeBinding() async =>
       _request('DELETE', '/api/shelly/device');
@@ -234,7 +312,10 @@ class ServerSmartChargerService {
     final data = await _request('GET', '/api/smart-charging/sessions/active');
     return ((data['items'] as List?) ?? const [])
         .whereType<Map>()
-        .map((item) => SmartChargingSession.fromJson(Map<String, dynamic>.from(item)))
+        .map(
+          (item) =>
+              SmartChargingSession.fromJson(Map<String, dynamic>.from(item)),
+        )
         .toList();
   }
 
@@ -279,7 +360,10 @@ class ServerSmartChargerService {
     );
   }
 
-  Future<SmartChargingSession?> off({String? sessionId, String? vehicleId}) async {
+  Future<SmartChargingSession?> off({
+    String? sessionId,
+    String? vehicleId,
+  }) async {
     final query = sessionId == null && vehicleId != null && vehicleId.isNotEmpty
         ? '?vehicleId=${Uri.encodeQueryComponent(vehicleId)}'
         : '';
@@ -348,16 +432,53 @@ class ServerSmartChargerService {
   Future<void> deletePersonalProfile(String vehicleId) async =>
       _request('DELETE', '/api/smart-charging/personal-profile/$vehicleId');
 
-  Future<void> hideSession(String sessionId) async => _request(
-    'POST',
-    '/api/smart-charging/sessions/$sessionId/hide',
-  );
+  Future<void> hideSession(String sessionId) async =>
+      _request('POST', '/api/smart-charging/sessions/$sessionId/hide');
 
-  Future<void> privacyEraseSession(String sessionId, String confirmation) async {
+  Future<void> privacyEraseSession(
+    String sessionId,
+    String confirmation,
+  ) async {
     await _request(
       'DELETE',
       '/api/smart-charging/sessions/$sessionId/privacy-erase',
       body: {'confirmation': confirmation},
+    );
+  }
+
+  Future<bool> developerTrainingAccess() async {
+    try {
+      final data = await _request(
+        'GET',
+        '/api/smart-charging/developer/training-access',
+      );
+      return data['canEditTrainingData'] == true;
+    } on SmartChargerException catch (error) {
+      if (error.statusCode == 403 || error.code == 'developerRequired') {
+        return false;
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> reviewTrainingSample({
+    required String sessionId,
+    required String vehicleId,
+    required bool trainingExcluded,
+    required String developerNote,
+    double? durationSecondsOverride,
+    double? predictedMinutesOverride,
+  }) async {
+    await _request(
+      'PATCH',
+      '/api/smart-charging/developer/training-samples/${Uri.encodeComponent(sessionId)}',
+      body: {
+        'vehicleId': vehicleId,
+        'trainingExcluded': trainingExcluded,
+        'developerNote': developerNote,
+        'durationSecondsOverride': durationSecondsOverride,
+        'predictedMinutesOverride': predictedMinutesOverride,
+      },
     );
   }
 

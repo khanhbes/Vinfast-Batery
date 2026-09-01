@@ -16,6 +16,7 @@ import '../../core/services/auth_service.dart';
 import '../../core/services/sync_service.dart';
 import '../../core/services/settings_service.dart';
 import '../../core/widgets/app_popup.dart';
+import '../auth/auth_gate.dart';
 import '../notifications/notification_center_screen.dart';
 import '../smart_charging/smart_charger_setup_hub_screen.dart';
 import 'appearance_settings_screen.dart';
@@ -23,6 +24,7 @@ import 'profile_screen.dart';
 import 'vehicle_garage_screen.dart';
 import 'guide_screen.dart';
 import 'personal_ai_settings_screen.dart';
+import 'personal_ai_training_data_screen.dart';
 
 // =============================================================================
 // Settings Screen V5 — PLAN #4, #5, #7
@@ -226,7 +228,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     if (result['success'] == true) {
       ref.read(selectedVehicleIdProvider.notifier).state = '';
-      AppPopup.showSuccess('Đã đăng xuất');
+      ref.read(currentTabProvider.notifier).state = 0;
+
+      // FirebaseAuth.authStateChanges normally makes the root AuthGate show
+      // LoginScreen. Replace the complete navigator stack as well so logout
+      // is immediate even if a nested page is still transitioning, and the
+      // Back button can never return to account data.
+      Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+        MaterialPageRoute<void>(builder: (_) => const AuthGate()),
+        (_) => false,
+      );
     } else {
       AppPopup.showError(result['error'] ?? 'Đăng xuất thất bại');
     }
@@ -425,6 +436,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   subtitle: 'Thông tin build và trạng thái kết nối an toàn',
                   onTap: _showDeveloperSheet,
                 ),
+                CockpitSettingsRow(
+                  icon: Icons.dataset_outlined,
+                  title: 'Dữ liệu fine-tune AI',
+                  subtitle: 'Xem mẫu học gốc của xe đang chọn',
+                  onTap: _openTrainingData,
+                ),
               ]),
             ],
 
@@ -495,6 +512,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => PersonalAiSettingsScreen(vehicleId: vehicleId),
+      ),
+    );
+  }
+
+  void _openTrainingData() {
+    final vehicleId = ref.read(selectedVehicleIdProvider);
+    if (vehicleId.isEmpty) {
+      AppPopup.showWarning('Hãy chọn xe trước khi xem dữ liệu fine-tune');
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PersonalAiTrainingDataScreen(vehicleId: vehicleId),
       ),
     );
   }

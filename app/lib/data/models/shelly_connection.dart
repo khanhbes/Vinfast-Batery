@@ -35,19 +35,20 @@ class ShellyConnectionProfile {
   final String localUsername;
   final String? localPassword;
 
-  Uri? get cloudUri => Uri.tryParse(cloudHost.trim());
+  Uri? get cloudUri {
+    var raw = cloudHost.trim();
+    if (raw.isEmpty) return null;
+    if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
+      raw = 'https://$raw';
+    }
+    return Uri.tryParse(raw);
+  }
   bool get hasLan => lanAddress?.trim().isNotEmpty == true;
 
   String? validate() {
     final uri = cloudUri;
-    if (uri == null ||
-        uri.scheme.toLowerCase() != 'https' ||
-        uri.host.isEmpty ||
-        (uri.path.isNotEmpty && uri.path != '/') ||
-        uri.hasQuery ||
-        uri.hasFragment ||
-        !(uri.host == 'shelly.cloud' || uri.host.endsWith('.shelly.cloud'))) {
-      return 'Server URI phải là HTTPS shelly.cloud và không chứa path/query.';
+    if (uri == null || uri.host.isEmpty) {
+      return 'Server URI không hợp lệ.';
     }
     if (cloudAuthKey.trim().isEmpty) {
       return 'Cloud Authorization Key còn trống.';

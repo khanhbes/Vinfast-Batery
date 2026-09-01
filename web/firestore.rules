@@ -264,5 +264,11 @@ service cloud.firestore {
       allow update: if isAuth() && resource.data.userId == request.auth.uid;
       allow delete: if isAuth() && resource.data.userId == request.auth.uid;
     }
+
+    // Direct Shelly secrets are encrypted by the API and stored only here.
+    // There is intentionally no client read/write path, even for the owner.
+    match /ShellyCredentialVault/{credentialId} {
+      allow read, write: if false;
+    }
   }
 }

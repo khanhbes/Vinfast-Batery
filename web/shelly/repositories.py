@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 import hashlib
+from urllib.parse import urlparse
 from datetime import datetime, timezone, timedelta
 
 from .models import (
@@ -12,6 +13,7 @@ from .models import (
     PersonalChargingProfile,
     SmartChargeSafetyEvent,
 )
+from .profile_vault import ProfileVaultError, ShellyProfileVault
 
 
 class SmartChargeRepository:
@@ -39,6 +41,13 @@ class SmartChargeRepository:
         # accounts. Firestore leases below cover multi-process deployments.
         self._device_leases: dict[str, tuple[str, str, datetime]] = {}
         self._last_history_skipped = 0
+        self._profile_vault = ShellyProfileVault()
+        self._synced_profiles: dict[tuple[str, str], dict] = {}
+        self._profile_vault_records: dict[tuple[str, str], dict] = {}
+
+    @property
+    def profile_vault_configured(self) -> bool:
+        return self._profile_vault.configured
 
     @property
     def last_history_skipped(self) -> int:
@@ -212,6 +221,260 @@ class SmartChargeRepository:
             binding.revoked_at = when
             binding.updated_at = when
             self.save_binding(uid, binding)
+
+    # ── Direct profile sync vault ─────────────────────────────────────
+    # The users/{uid}/shellyDevices document deliberately holds metadata only.
+    # Raw Cloud/LAN credentials are encrypted in ShellyCredentialVault, which
+    # has no client Firestore rule and is available through authenticated API
+    # restore only.
+
+    @staticmethod
+    def _profile_metadata(profile: dict, *, revision: int, now: datetime) -> dict:
+        verification = profile.get("verification") if isinstance(profile.get("verification"), dict) else {}
+        return {
+            "deviceId": str(profile.get("deviceId") or "").strip(),
+            "displayName": str(profile.get("deviceName") or "Shelly sạc xe").strip(),
+            "model": str(profile.get("model") or "S3PL-00112EU").strip(),
+            "firmware": str(profile.get("firmware") or "").strip(),
+            "vehicleId": str(profile.get("vehicleId") or "").strip() or None,
+            "connectionMode": "advanced_direct",
+            "provider": "direct_cloud_lan",
+            "revision": revision,
+            "source": str(profile.get("source") or "android").strip() or "android",
+            "credentialRef": "vault",
+            "hasCredentialVault": True,
+            "cloudVerified": verification.get("cloudVerified") is True,
+            "lanVerified": verification.get("lanVerified") is True,
+            "powerMeterVerified": verification.get("powerMeterVerified") is True,
+            "safeBootVerified": verification.get("safeBootVerified") is True,
+            "noLoadTestVerified": verification.get("noLoadTestVerified") is True,
+            "verificationFingerprint": str(profile.get("verificationFingerprint") or ""),
+            "verifiedAt": profile.get("verifiedAt") or now,
+            "updatedAt": now,
+            "revokedAt": None,
+        }
+
+    @staticmethod
+    def _profile_secrets(profile: dict) -> dict:
+        return {
+            "cloudHost": str(profile.get("cloudHost") or "").strip(),
+            "cloudAuthKey": str(profile.get("cloudAuthKey") or "").strip(),
+            "lanAddress": str(profile.get("lanAddress") or "").strip(),
+            "localUsername": str(profile.get("localUsername") or "admin").strip() or "admin",
+            "localPassword": str(profile.get("localPassword") or ""),
+        }
+
+    @staticmethod
+    def _valid_cloud_host(value: str) -> bool:
+        parsed = urlparse(value)
+        return bool(
+            parsed.scheme == "https"
+            and parsed.hostname
+            and (parsed.hostname == "shelly.cloud" or parsed.hostname.endswith(".shelly.cloud"))
+            and parsed.path in ("", "/")
+            and not parsed.params
+            and not parsed.query
+            and not parsed.fragment
+        )
+
+    @staticmethod
+    def _profile_is_verified(metadata: dict) -> bool:
+        return bool(
+            metadata.get("cloudVerified")
+            and metadata.get("powerMeterVerified")
+            and metadata.get("safeBootVerified")
+            and metadata.get("noLoadTestVerified")
+        )
+
+    def _profile_doc(self, uid: str, device_id: str):
+        return self.db.collection("users").document(uid).collection("shellyDevices").document(device_id)
+
+    def list_synced_profiles(self, uid: str, vehicle_id: str | None = None) -> list[dict]:
+        values: list[dict] = []
+        if self.db:
+            for snapshot in self.db.collection("users").document(uid).collection("shellyDevices").stream():
+                data = snapshot.to_dict() or {}
+                if data.get("connectionMode") != "advanced_direct":
+                    continue
+                if data.get("revokedAt") is not None:
+                    continue
+                if vehicle_id and data.get("vehicleId") not in (vehicle_id, None, ""):
+                    continue
+                value = dict(data)
+                value.setdefault("deviceId", snapshot.id)
+                values.append(value)
+        else:
+            with self._lock:
+                values = [
+                    dict(value) for (owner, _device), value in self._synced_profiles.items()
+                    if owner == uid and value.get("revokedAt") is None and
+                    (not vehicle_id or value.get("vehicleId") in (vehicle_id, None, ""))
+                ]
+        values.sort(key=lambda value: (self._profile_is_verified(value), value.get("revision", 0), str(value.get("updatedAt") or "")), reverse=True)
+        return values
+
+    def migrate_legacy_profile_secrets(self, uid: str) -> int:
+        """Move pre-vault secrets out of legacy device metadata once.
+
+        The migration only runs with a configured vault and never reports the
+        secret values. Documents missing a key remain metadata-only.
+        """
+        if not self.db or not self._profile_vault.configured:
+            return 0
+        migrated = 0
+        for snapshot in self.db.collection("users").document(uid).collection("shellyDevices").stream():
+            data = snapshot.to_dict() or {}
+            key = str(data.get("cloudAuthKey") or data.get("authKey") or data.get("apiKey") or "").strip()
+            host = str(data.get("cloudHost") or data.get("host") or data.get("server") or "").strip()
+            if not key or not host:
+                if data.get("connectionMode") == "advanced_direct" and not data.get("hasCredentialVault"):
+                    snapshot.reference.set({"metadataOnly": True}, merge=True)
+                continue
+            profile = {
+                "deviceId": str(data.get("deviceId") or snapshot.id),
+                "deviceName": data.get("displayName") or data.get("deviceName") or data.get("name"),
+                "model": data.get("model"), "vehicleId": data.get("vehicleId"),
+                "cloudHost": host, "cloudAuthKey": key,
+                "lanAddress": data.get("lanAddress") or data.get("ip"),
+                "localUsername": data.get("localUsername") or "admin",
+                "localPassword": data.get("localPassword") or "",
+                "source": "legacy_migration",
+                "verification": {
+                    "cloudVerified": data.get("cloudVerified") is True,
+                    "lanVerified": data.get("lanVerified") is True,
+                    "powerMeterVerified": data.get("powerMeterVerified") is True,
+                    "safeBootVerified": data.get("safeBootVerified") is True,
+                    "noLoadTestVerified": data.get("noLoadTestVerified") is True,
+                },
+            }
+            try:
+                self.save_synced_profile(uid, profile, expected_revision=int(data.get("revision") or 0))
+                from firebase_admin import firestore as admin_firestore
+                snapshot.reference.set({
+                    "cloudAuthKey": admin_firestore.DELETE_FIELD,
+                    "authKey": admin_firestore.DELETE_FIELD,
+                    "apiKey": admin_firestore.DELETE_FIELD,
+                    "localPassword": admin_firestore.DELETE_FIELD,
+                    "host": admin_firestore.DELETE_FIELD,
+                    "server": admin_firestore.DELETE_FIELD,
+                    "ip": admin_firestore.DELETE_FIELD,
+                    "metadataOnly": False,
+                }, merge=True)
+                migrated += 1
+            except (ProfileVaultError, ValueError, PermissionError, RuntimeError):
+                # Leave the document untouched if it cannot be migrated.
+                continue
+        return migrated
+
+    def save_synced_profile(self, uid: str, profile: dict, expected_revision: int | None = None) -> dict:
+        if not self._profile_vault.configured:
+            raise ProfileVaultError("Server chưa cấu hình SHELLY_PROFILE_MASTER_KEY")
+        device_id = str(profile.get("deviceId") or "").strip()
+        secrets = self._profile_secrets(profile)
+        if not device_id or not secrets["cloudHost"] or not secrets["cloudAuthKey"]:
+            raise ValueError("Thiếu Device ID, Cloud host hoặc Authorization Cloud Key")
+        if not self._valid_cloud_host(secrets["cloudHost"]):
+            raise ValueError("Cloud host phải dùng HTTPS và thuộc miền shelly.cloud")
+        vehicle_id = str(profile.get("vehicleId") or "").strip()
+        if vehicle_id and self.vehicle_for_owner(uid, vehicle_id) is None:
+            raise PermissionError("Xe không thuộc tài khoản này")
+        old: dict = {}
+        if self.db:
+            snapshot = self._profile_doc(uid, device_id).get()
+            old = snapshot.to_dict() or {} if snapshot.exists else {}
+        else:
+            with self._lock:
+                old = dict(self._synced_profiles.get((uid, device_id), {}))
+        old_revision = int(old.get("revision") or 0)
+        if expected_revision is not None and expected_revision != old_revision:
+            raise RuntimeError("profileRevisionConflict")
+        now = datetime.now(timezone.utc)
+        metadata = self._profile_metadata(profile, revision=old_revision + 1, now=now)
+        encrypted = self._profile_vault.encrypt(uid, device_id, secrets)
+        vault_data = {
+            "ownerUid": uid,
+            "deviceId": device_id,
+            "revision": metadata["revision"],
+            "updatedAt": now,
+            **encrypted,
+        }
+        if self.db:
+            self.db.collection("ShellyCredentialVault").document(
+                self._profile_vault.document_id(uid, device_id)
+            ).set(vault_data, merge=True)
+            self._profile_doc(uid, device_id).set(metadata, merge=True)
+        with self._lock:
+            self._synced_profiles[(uid, device_id)] = dict(metadata)
+            self._profile_vault_records[(uid, device_id)] = dict(vault_data)
+        self.append_audit(uid, "shelly_profile_saved", device_id=device_id, vehicle_id=vehicle_id, revision=metadata["revision"])
+        return metadata
+
+    def restore_synced_profile(self, uid: str, device_id: str) -> dict | None:
+        profiles = [item for item in self.list_synced_profiles(uid) if item.get("deviceId") == device_id]
+        if not profiles:
+            return None
+        metadata = profiles[0]
+        if self.db:
+            snapshot = self.db.collection("ShellyCredentialVault").document(
+                self._profile_vault.document_id(uid, device_id)
+            ).get()
+            if not snapshot.exists:
+                return None
+            vault = snapshot.to_dict() or {}
+        else:
+            with self._lock:
+                vault = dict(self._profile_vault_records.get((uid, device_id), {}))
+            if not vault:
+                return None
+        if vault.get("ownerUid") != uid:
+            return None
+        secrets = self._profile_vault.decrypt(uid, device_id, vault)
+        self.append_audit(uid, "shelly_profile_restored", device_id=device_id, revision=metadata.get("revision"))
+        return {**metadata, **secrets}
+
+    def resolve_synced_profile(self, uid: str, vehicle_id: str | None = None) -> dict | None:
+        profiles = self.list_synced_profiles(uid, vehicle_id)
+        return profiles[0] if profiles else None
+
+    def verify_synced_profile(self, uid: str, device_id: str, verification: dict) -> dict | None:
+        profiles = [item for item in self.list_synced_profiles(uid) if item.get("deviceId") == device_id]
+        if not profiles:
+            return None
+        current = profiles[0]
+        revision = int(current.get("revision") or 0) + 1
+        now = datetime.now(timezone.utc)
+        update = {
+            "revision": revision,
+            "cloudVerified": verification.get("cloudVerified") is True,
+            "lanVerified": verification.get("lanVerified") is True,
+            "powerMeterVerified": verification.get("powerMeterVerified") is True,
+            "safeBootVerified": verification.get("safeBootVerified") is True,
+            "noLoadTestVerified": verification.get("noLoadTestVerified") is True,
+            "verificationFingerprint": str(verification.get("verificationFingerprint") or ""),
+            "verifiedAt": now,
+            "updatedAt": now,
+        }
+        if self.db:
+            self._profile_doc(uid, device_id).set(update, merge=True)
+        with self._lock:
+            self._synced_profiles[(uid, device_id)] = {**current, **update}
+        return {**current, **update}
+
+    def revoke_synced_profile(self, uid: str, device_id: str) -> bool:
+        profiles = [item for item in self.list_synced_profiles(uid) if item.get("deviceId") == device_id]
+        if not profiles:
+            return False
+        now = datetime.now(timezone.utc)
+        if self.db:
+            self._profile_doc(uid, device_id).set({"revokedAt": now, "updatedAt": now}, merge=True)
+            self.db.collection("ShellyCredentialVault").document(
+                self._profile_vault.document_id(uid, device_id)
+            ).delete()
+        with self._lock:
+            self._synced_profiles.pop((uid, device_id), None)
+            self._profile_vault_records.pop((uid, device_id), None)
+        self.append_audit(uid, "shelly_profile_revoked", device_id=device_id)
+        return True
 
     def save_preview(self, uid: str, preview: ChargePreview) -> None:
         with self._lock:
@@ -401,22 +664,48 @@ class SmartChargeRepository:
     def erase_session(self, uid: str, session_id: str) -> bool:
         """Privacy erase a terminal session and its raw telemetry only."""
         session = self.get_session(uid, session_id)
-        if session is None or session.state in ("arming", "active"):
+        log_data: dict = {}
+        log = None
+        if self.db:
+            log = self.db.collection("ChargeLogs").document(session_id)
+            snapshot = log.get()
+            if snapshot.exists:
+                log_data = snapshot.to_dict() or {}
+                if log_data.get("ownerUid") != uid:
+                    return False
+        if session is None and not log_data:
             return False
+        state = session.state if session is not None else str(
+            log_data.get("sessionState") or log_data.get("status") or ""
+        )
+        if state in ("arming", "active"):
+            return False
+        vehicle_id = session.vehicle_id if session is not None else str(
+            log_data.get("vehicleId") or ""
+        )
         with self._lock:
             self._sessions.get(uid, {}).pop(session_id, None)
             self._telemetry.pop((uid, session_id), None)
-            self._idempotency.pop((uid, session.idempotency_key), None)
+            if session is not None:
+                self._idempotency.pop((uid, session.idempotency_key), None)
+            if vehicle_id:
+                self._training_samples.get((uid, vehicle_id), {}).pop(
+                    session_id, None
+                )
+                self._processed_training_sessions.discard(
+                    (uid, vehicle_id, session_id)
+                )
         if not self.db:
             return True
         nested = (self.db.collection("users").document(uid)
                   .collection("smartChargingSessions").document(session_id))
         nested.delete()
-        log = self.db.collection("ChargeLogs").document(session_id)
         for child in log.collection("smartChargeTelemetry").stream():
             child.reference.delete()
         for child in log.collection("safetyEvents").stream():
             child.reference.delete()
+        (self.db.collection("users").document(uid)
+         .collection("chargingTrainingSamples").document(session_id).delete())
         log.delete()
         return True
 
@@ -725,18 +1014,67 @@ class SmartChargeRepository:
                 data = snapshot.to_dict() or {}
                 if data.get("ownerUid") != uid or data.get("vehicleId") != vehicle_id:
                     continue
+                # Developers can exclude a bad label through Firebase Admin
+                # without mutating the immutable raw measurement.
+                if data.get("trainingExcluded") is True:
+                    continue
                 values.append(data)
             with self._lock:
-                bucket = self._training_samples.setdefault((uid, vehicle_id), {})
+                # Firestore is authoritative here. Rebuild the bucket so an
+                # Admin-side trainingExcluded change takes effect without a
+                # worker restart.
+                bucket: dict[str, dict] = {}
                 for value in values:
                     session_id = str(value.get("sessionId") or "")
                     if session_id:
-                        bucket.setdefault(session_id, value)
+                        bucket[session_id] = value
+                self._training_samples[(uid, vehicle_id)] = bucket
                 return list(bucket.values())
         except Exception:
             # Training is an optional background task; never block charging on
             # a temporary Firestore read failure.
             return cached
+
+    def review_training_sample(
+        self,
+        uid: str,
+        vehicle_id: str,
+        session_id: str,
+        *,
+        training_excluded: bool,
+        developer_note: str,
+        duration_seconds_override: float | None,
+        predicted_minutes_override: float | None,
+        reviewed_by: str | None,
+    ) -> dict | None:
+        """Apply a tightly scoped developer training override.
+
+        Raw device measurements remain immutable. Overrides are recorded next
+        to the sample and only used by the training worker, preserving an
+        auditable original record.
+        """
+        if not self.db:
+            return None
+        ref = (self.db.collection("users").document(uid)
+               .collection("chargingTrainingSamples").document(session_id))
+        snapshot = ref.get()
+        if not snapshot.exists:
+            return None
+        data = snapshot.to_dict() or {}
+        if data.get("ownerUid") != uid or data.get("vehicleId") != vehicle_id:
+            return None
+        update = {
+            "trainingExcluded": bool(training_excluded),
+            "developerNote": developer_note[:500],
+            "trainingDurationSecondsOverride": duration_seconds_override,
+            "trainingPredictedMinutesOverride": predicted_minutes_override,
+            "trainingReviewedAt": datetime.now(timezone.utc),
+            "trainingReviewedBy": reviewed_by or uid,
+        }
+        ref.set(update, merge=True)
+        with self._lock:
+            self._training_samples.pop((uid, vehicle_id), None)
+        return {**data, **update}
 
     def training_sample_processed(
         self, uid: str, session_id: str, vehicle_id: str | None = None

@@ -12,11 +12,18 @@ import '../../data/models/smart_charging_session.dart';
 import '../smart_charging/smart_charger_setup_hub_screen.dart';
 import 'controllers/smart_charging_controller.dart';
 import 'smart_charge_history_screen.dart';
+import 'widgets/active_charging_card_v2.dart';
+import 'widgets/ai_charge_button.dart';
+import 'widgets/battery_visualizer_v2.dart';
+import 'widgets/charge_mode_switcher_v2.dart';
 import 'widgets/charging_battery_animation.dart';
-import 'widgets/charging_connection_banner.dart';
 import 'widgets/horizontal_battery_target_selector.dart';
+import 'widgets/prediction_card_v2.dart';
+import 'widgets/recent_sessions_section_v2.dart';
+import 'widgets/start_charge_confirmation_sheet.dart';
 import 'widgets/stop_charging_confirmation_sheet.dart';
 import 'widgets/smart_charge_cockpit_theme.dart';
+import 'widgets/timed_charging_section_v2.dart';
 
 class SmartChargingControlScreen extends ConsumerStatefulWidget {
   const SmartChargingControlScreen({
@@ -37,6 +44,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     with WidgetsBindingObserver {
   late final SmartChargingControllerArgs args;
   bool _aiMode = true;
+  bool _initialNoticesScheduled = false;
 
   @override
   void initState() {
@@ -66,6 +74,17 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     final state = ref.watch(smartChargingControllerProvider(args));
     final controller = ref.read(smartChargingControllerProvider(args).notifier);
     final colors = Theme.of(context).colorScheme;
+
+    ref.listen<SmartChargingUiState>(
+      smartChargingControllerProvider(args),
+      (previous, next) => _showStateNotices(previous, next),
+    );
+    if (!_initialNoticesScheduled) {
+      _initialNoticesScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showStateNotices(null, state);
+      });
+    }
 
     return SmartChargeCockpitTheme(
       child: Scaffold(
@@ -107,8 +126,8 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
               children: [
-                // Charger hardware connection status strip
-                _StatusStrip(
+                // ── Premium header matching reference ──
+                _SmartChargeHeader(
                   state: state,
                   onSetup: () => Navigator.of(context)
                       .push(
@@ -118,43 +137,6 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                       )
                       .then((_) => controller.refresh()),
                 ),
-                if (!state.connectionState.fullyConnected) ...[
-                  const SizedBox(height: 12),
-                  ChargingConnectionBanner(
-                    state: state.connectionState,
-                    onRetry: controller.refresh,
-                  ),
-                ],
-
-                // Error notification banners with debug view action
-                if (state.chargerError != null) ...[
-                  const SizedBox(height: 12),
-                  _ErrorBannerCard(
-                    message: 'Không kết nối được ổ sạc.',
-                    detail: state.chargerError,
-                    onRetry: controller.refresh,
-                  ),
-                ],
-                if (state.sessionError != null) ...[
-                  const SizedBox(height: 12),
-                  _ErrorBannerCard(
-                    message: 'Không thể đồng bộ phiên sạc.',
-                    detail: state.sessionError,
-                    onRetry: controller.retrySession,
-                  ),
-                ],
-                if (state.actionError != null) ...[
-                  const SizedBox(height: 12),
-                  _ErrorBannerCard(
-                    message: state.actionError!,
-                    detail: state.actionError,
-                  ),
-                ],
-                if (state.safetyWarning != null) ...[
-                  const SizedBox(height: 12),
-                  _SafetyWarning(message: state.safetyWarning!),
-                ],
-
                 const SizedBox(height: 20),
 
                 AnimatedSwitcher(
@@ -162,18 +144,14 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                       ? Duration.zero
                       : const Duration(milliseconds: 220),
                   child: state.hasActiveSession
-                      ? _ActiveChargingView(
-                          key: const ValueKey('active-session'),
-                          state: state,
-                          onStop: () =>
-                              _stopWithConfirmation(state, controller),
-                        )
+                      ? _buildActiveChargingV2(state, controller)
                       : Column(
                           key: const ValueKey('plan-workspace'),
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _ChargeModeSwitch(
-                              aiMode: _aiMode,
+                            // V2: Premium mode switcher
+                            ChargeModeSwitcherV2(
+                              isAiMode: _aiMode,
                               onChanged: (value) =>
                                   setState(() => _aiMode = value),
                             ),
@@ -200,17 +178,18 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                                     ),
                                   ),
                               child: _aiMode
-                                  ? _PlanSection(
-                                      key: const ValueKey('ai-mode'),
-                                      state: state,
-                                      controller: controller,
-                                      onStart: () =>
-                                          _aiStart(state, controller),
-                                    )
-                                  : _ManualControlsSection(
+                                  ? _buildAiPlanV2(context, state, controller)
+                                  : TimedChargingSectionV2(
                                       key: const ValueKey('timed-mode'),
-                                      state: state,
-                                      onOn: () => _manualOn(controller),
+                                      readyForControl:
+                                          state.capabilities.readyForControl &&
+                                          state.phase !=
+                                              SmartChargingViewPhase.starting,
+                                      onStart: (duration) => _startTimedCharge(
+                                        state,
+                                        controller,
+                                        duration,
+                                      ),
                                       onOff: () => _emergencyOff(controller),
                                     ),
                             ),
@@ -219,12 +198,10 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                 ),
 
                 const SizedBox(height: 32),
-                _HistorySection(
+                // V2: Premium recent sessions section
+                RecentSessionsSectionV2(
                   sessions: state.history,
-                  status: state.historyStatus,
-                  error: state.historyError,
                   syncedAt: state.historySyncedAt,
-                  onRetry: controller.retryHistory,
                   onViewAll: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => SmartChargeHistoryScreen(
@@ -259,6 +236,255 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
         ),
       ),
     );
+  }
+
+  void _showStateNotices(
+    SmartChargingUiState? previous,
+    SmartChargingUiState next,
+  ) {
+    if (next.chargerError != null &&
+        previous?.chargerError != next.chargerError) {
+      _showFloatingDetail('Kết nối Shelly chưa ổn định', next.chargerError!);
+    }
+    if (next.sessionError != null &&
+        previous?.sessionError != next.sessionError) {
+      _showFloatingDetail('Chưa đồng bộ được phiên sạc', next.sessionError!);
+    }
+    if (next.actionError != null && previous?.actionError != next.actionError) {
+      _showFloatingDetail('Thao tác chưa hoàn tất', next.actionError!);
+    }
+    if (next.safetyWarning != null &&
+        previous?.safetyWarning != next.safetyWarning) {
+      _showFloatingDetail(
+        'Cảnh báo an toàn sạc',
+        next.safetyWarning!,
+        persistent: true,
+      );
+    }
+    if (!next.connectionState.fullyConnected &&
+        previous?.connectionState.fullyConnected != false) {
+      final detail = !next.connectionState.internetAvailable
+          ? (next.connectionState.shellyReachable
+                ? 'Mất Internet; timer Shelly vẫn bảo vệ phiên sạc.'
+                : 'Mất kết nối Internet và chưa liên lạc được Shelly.')
+          : 'Một dịch vụ đồng bộ đang gián đoạn; app giữ dữ liệu gần nhất.';
+      _showFloatingDetail('Kết nối bị gián đoạn', detail);
+    }
+  }
+
+  void _showFloatingDetail(
+    String title,
+    String detail, {
+    bool persistent = false,
+  }) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      AppPopup.showWarning(
+        title,
+        detail: detail,
+        actionLabel: 'CHI TIẾT',
+        persistent: persistent,
+        action: () =>
+            DebugErrorSheet.show(context, error: detail, source: 'SmartCharge'),
+      );
+    });
+  }
+
+  Future<void> _startTimedCharge(
+    SmartChargingUiState state,
+    SmartChargingController controller,
+    Duration duration,
+  ) async {
+    final stopAt = state.now.add(duration);
+    final confirmed = await StartChargeConfirmationSheet.show(
+      context,
+      currentSoc: state.draft.currentSoc.round(),
+      targetSoc: state.draft.targetSoc.round(),
+      estimatedMinutes: duration.inMinutes,
+      stopTime: _time(stopAt),
+      isAiMode: false,
+    );
+    if (confirmed != true || !mounted) return;
+
+    final ok = await controller.manualOn(duration);
+    if (!mounted) return;
+    if (ok) {
+      AppPopup.showSuccess(
+        'Đã bắt đầu sạc',
+        detail: 'Shelly sẽ tự ngắt sau ${_duration(duration.inMinutes)}.',
+      );
+    }
+  }
+
+  // ── V2 AI Plan Section ──
+  Widget _buildAiPlanV2(
+    BuildContext context,
+    SmartChargingUiState state,
+    SmartChargingController controller,
+  ) {
+    final draft = state.draft;
+    final busy =
+        state.phase == SmartChargingViewPhase.loading ||
+        state.phase == SmartChargingViewPhase.starting;
+    final canStart =
+        state.preview?.aiChargeEligible == true &&
+        state.capabilities.readyForControl &&
+        state.connectionState.shellyReachable;
+    final currentTarget = draft.targetSoc.clamp(
+      (draft.currentSoc.ceil() + 1).clamp(1, 99).toDouble(),
+      100.0,
+    );
+    final energyWh = draft.estimatedCapacityWh > 0
+        ? draft.estimatedCapacityWh * (currentTarget - draft.currentSoc) / 100
+        : null;
+    final costVnd =
+        energyWh == null || state.preferences?.tariffVndPerKwh == null
+        ? null
+        : energyWh / .90 / 1000 * state.preferences!.tariffVndPerKwh!;
+
+    return Column(
+      key: const ValueKey('ai-mode-v2'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // V2: Premium battery visualizer
+        BatteryVisualizerV2(
+          key: const ValueKey('target-battery-selector'),
+          currentPercent: draft.currentSoc,
+          targetPercent: currentTarget,
+          isCharging: false,
+          onTargetChanged: (value) => controller.updateDraft(targetSoc: value),
+          onCurrentChanged: (value) =>
+              controller.updateDraft(currentSoc: value),
+        ),
+
+        const SizedBox(height: 16),
+
+        // V2: Prediction card
+        AnimatedSize(
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 180),
+          child: state.preview == null
+              ? const SizedBox.shrink(key: ValueKey('no-plan-preview'))
+              : PredictionCardV2(
+                  key: const ValueKey('plan-preview'),
+                  durationMinutes: state.preview!.predictedMinutes,
+                  stopTime: _time(state.preview!.effectiveStopAt),
+                  fromSoc: draft.currentSoc.round(),
+                  toSoc: currentTarget.round(),
+                  personalizationLabel: state.preview!.personalizationLabel,
+                  energyWh: energyWh,
+                  costVnd: costVnd,
+                  warnings: state.preview!.warnings,
+                ),
+        ),
+
+        const SizedBox(height: 20),
+
+        // V2: AI Charge button
+        Center(
+          child: AIChargeButton(
+            key: state.preview == null
+                ? const ValueKey('create-plan-button')
+                : const ValueKey('confirm-plan-button'),
+            isAiMode: true,
+            enabled: !busy,
+            onPressed: state.preview == null
+                ? controller.createPreview
+                : canStart
+                ? () => _aiStartV2(state, controller)
+                : controller.createPreview,
+          ),
+        ),
+
+        // V2: Caption under button
+        const SizedBox(height: 8),
+        Center(
+          child: Text(
+            state.preview == null
+                ? 'DỰ ĐOÁN VỚI AI'
+                : canStart
+                ? 'SẠC THEO AI'
+                : state.preview!.aiChargeEligible
+                ? 'Hoàn tất cài đặt ổ sạc'
+                : 'Chưa khả dụng',
+            style: TextStyle(
+              color: state.preview != null && !canStart
+                  ? CockpitColors.amber
+                  : CockpitColors.muted,
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.8,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── V2 Active Charging View ──
+  Widget _buildActiveChargingV2(
+    SmartChargingUiState state,
+    SmartChargingController controller,
+  ) {
+    final session = state.session;
+    final status = state.chargerStatus;
+    final remaining =
+        status?.timerRemaining ??
+        (session != null ? session.remaining(state.now) : Duration.zero);
+    final startSoc =
+        session?.startSoc.round() ?? state.draft.currentSoc.round();
+    final targetSoc =
+        session?.targetSoc.round() ?? state.draft.targetSoc.round();
+    final estimatedSoc = session?.estimatedSoc ?? startSoc.toDouble();
+    final stopAt = session?.effectiveStopAt ?? state.now;
+
+    return ActiveChargingCardV2(
+      key: const ValueKey('active-session-v2'),
+      currentPercent: estimatedSoc,
+      targetPercent: targetSoc.toDouble(),
+      remaining: remaining,
+      completionTime: _time(stopAt),
+      sessionEnergyWh: session?.energyUsedWh ?? 0,
+      powerW: status?.powerW ?? 0,
+      voltageV: status?.voltageV ?? 0,
+      currentA: status?.currentA ?? 0,
+      temperatureC: status?.temperatureC,
+      timerVerified:
+          session?.timerVerified == true || status?.timerRemaining != null,
+      estimatedSoc: estimatedSoc,
+      onStop: () => _stopWithConfirmation(state, controller),
+    );
+  }
+
+  // ── V2 AI Start with premium confirmation sheet ──
+  Future<void> _aiStartV2(
+    SmartChargingUiState state,
+    SmartChargingController controller,
+  ) async {
+    final preview = state.preview;
+    if (preview == null) return;
+
+    final confirmed = await StartChargeConfirmationSheet.show(
+      context,
+      currentSoc: state.draft.currentSoc.round(),
+      targetSoc: state.draft.targetSoc.round(),
+      estimatedMinutes: preview.predictedMinutes,
+      stopTime: _time(preview.effectiveStopAt),
+      isAiMode: true,
+      personalizationLabel: preview.personalizationLabel,
+    );
+
+    if (confirmed != true) return;
+    final ok = await controller.start(confirmed: true);
+    if (ok) {
+      AppPopup.showSuccess(
+        'Đang sạc',
+        detail: 'Tự động tắt lúc ${_time(preview.effectiveStopAt)}',
+      );
+    } else {
+      AppPopup.showError('Không thể bật sạc', userInitiated: true);
+    }
   }
 
   Future<void> _manualOn(SmartChargingController controller) async {
@@ -392,7 +618,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
         detail: 'Hẹn giờ ${_duration(duration.inMinutes)}.',
       );
     } else {
-      AppPopup.showError('Không thể bật sạc');
+      AppPopup.showError('Không thể bật sạc', userInitiated: true);
     }
   }
 
@@ -454,7 +680,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
         detail: 'Tự động tắt lúc ${_time(preview.effectiveStopAt)}',
       );
     } else {
-      AppPopup.showError('Không thể bật sạc');
+      AppPopup.showError('Không thể bật sạc', userInitiated: true);
     }
   }
 
@@ -491,6 +717,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
       AppPopup.showError(
         'Chưa xác nhận được ổ sạc đã tắt',
         detail: 'Hãy kiểm tra ổ sạc trực tiếp.',
+        userInitiated: true,
       );
     }
   }
@@ -600,229 +827,414 @@ class _ModeOption extends StatelessWidget {
   );
 }
 
-/// Status strip displaying simplified hardware charger state
-class _StatusStrip extends StatelessWidget {
-  const _StatusStrip({required this.state, required this.onSetup});
+/// Premium header matching the EV cockpit reference:
+/// ⚡ Smart Charge [AI POWERED]  ⏰ 14:13
+/// VinFast Feliz 2025 · 35% pin
+/// ● Bộ sạc đã kết nối
+///
+/// Animated: dot pulse, lightning glow/rotation, badge shimmer, slide-in.
+class _SmartChargeHeader extends StatefulWidget {
+  const _SmartChargeHeader({required this.state, required this.onSetup});
   final SmartChargingUiState state;
   final VoidCallback onSetup;
 
   @override
+  State<_SmartChargeHeader> createState() => _SmartChargeHeaderState();
+}
+
+class _SmartChargeHeaderState extends State<_SmartChargeHeader>
+    with TickerProviderStateMixin {
+  late AnimationController _dotPulseController;
+  late AnimationController _boltGlowController;
+  late AnimationController _shimmerController;
+  late AnimationController _slideInController;
+
+  @override
+  void initState() {
+    super.initState();
+    // Breathing dot pulse
+    _dotPulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat(reverse: true);
+    // Lightning icon subtle glow breathing
+    _boltGlowController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    )..repeat(reverse: true);
+    // Shimmer sweep across AI POWERED badge
+    _shimmerController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2800),
+    )..repeat();
+    // Entry slide-in (one-shot)
+    _slideInController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    )..forward();
+  }
+
+  @override
+  void dispose() {
+    _dotPulseController.dispose();
+    _boltGlowController.dispose();
+    _shimmerController.dispose();
+    _slideInController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    final state = widget.state;
+    final soc = state.draft.currentSoc.round();
+    final now = DateFormat('HH:mm').format(state.now.toLocal());
     final displayState = state.displayState;
-    final status = state.chargerStatus;
+    final reducedMotion = MediaQuery.disableAnimationsOf(context);
 
-    Color iconColor;
-    IconData iconData;
-    String titleText;
-    String? subtitleText;
-
+    // Connection status
+    final Color dotColor;
+    final String statusText;
     switch (displayState) {
       case ChargerDisplayState.charging:
-        iconColor = Colors.greenAccent.shade400;
-        iconData = Icons.bolt_rounded;
-        titleText = status?.timerRemaining != null
-            ? 'Đang sạc an toàn'
-            : 'Đang sạc · chưa xác minh timer';
-        final power = status?.powerW ?? 0;
-        subtitleText = power > 0
-            ? '${status?.transport?.name.toUpperCase() ?? 'SHELLY'} · ${power.toStringAsFixed(0)} W'
-            : status?.transport?.name.toUpperCase() ?? 'Đang nhận điện';
+        dotColor = CockpitColors.emerald;
+        statusText = 'Đang sạc';
         break;
       case ChargerDisplayState.off:
-        iconColor = Colors.grey.shade400;
-        iconData = Icons.power_off_rounded;
-        titleText = 'Đã tắt sạc';
-        subtitleText = status?.transport == null
-            ? 'Sẵn sàng kích hoạt sạc'
-            : '${status!.transport!.name.toUpperCase()} · relay đã xác minh OFF';
+        dotColor = CockpitColors.emerald;
+        statusText = 'Bộ sạc đã kết nối';
         break;
       case ChargerDisplayState.connecting:
-        iconColor = Colors.orangeAccent;
-        iconData = Icons.sync_rounded;
-        titleText = 'Đang kết nối...';
-        subtitleText = null;
+        dotColor = CockpitColors.amber;
+        statusText = 'Đang kết nối...';
         break;
       case ChargerDisplayState.offline:
-        iconColor = Colors.redAccent;
-        iconData = Icons.cloud_off_rounded;
-        titleText = 'Mất kết nối';
-        subtitleText = 'Không tìm thấy ổ sạc';
+        dotColor = CockpitColors.danger;
+        statusText = 'Mất kết nối ổ sạc';
         break;
       case ChargerDisplayState.error:
-        iconColor = Colors.redAccent;
-        iconData = Icons.error_outline_rounded;
-        titleText = 'Lỗi kết nối';
-        subtitleText = 'Không thể đồng bộ với ổ sạc';
+        dotColor = CockpitColors.danger;
+        statusText = 'Lỗi kết nối';
         break;
     }
 
-    return CockpitPanel(
-      highlight: displayState == ChargerDisplayState.charging,
-      child: Column(
-        children: [
-          Row(
+    // Slide-in animation wrapper
+    Widget slideIn({required Widget child, double delay = 0.0}) {
+      if (reducedMotion) return child;
+      final curved = CurvedAnimation(
+        parent: _slideInController,
+        curve: Interval(delay, (delay + 0.6).clamp(0, 1), curve: Curves.easeOutCubic),
+      );
+      return FadeTransition(
+        opacity: curved,
+        child: SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(-0.08, 0),
+            end: Offset.zero,
+          ).animate(curved),
+          child: child,
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Main header row ──
+        slideIn(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: iconColor.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(iconData, color: iconColor, size: 22),
-              ),
-              const SizedBox(width: 14),
+              // Lightning bolt icon with animated glow
+              reducedMotion
+                  ? _buildBoltIcon(1.0)
+                  : AnimatedBuilder(
+                      animation: _boltGlowController,
+                      builder: (context, _) =>
+                          _buildBoltIcon(_boltGlowController.value),
+                    ),
+              const SizedBox(width: 12),
+
+              // Title + subtitle
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      titleText,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                      ),
-                    ),
-                    if (subtitleText != null)
-                      Text(
-                        subtitleText,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: colors.onSurfaceVariant,
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 5,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          'Smart Charge',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: CockpitColors.text,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w900,
+                          ),
                         ),
-                      ),
+                        // AI POWERED badge with shimmer
+                        reducedMotion
+                            ? _buildBadgeStatic()
+                            : AnimatedBuilder(
+                                animation: _shimmerController,
+                                builder: (context, _) => _buildBadgeShimmer(),
+                              ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 2,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          state.draft.vehicleId.isNotEmpty
+                              ? state.draft.vehicleId
+                              : 'VinFast',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: CockpitColors.muted,
+                            fontSize: 13,
+                          ),
+                        ),
+                        Text(
+                          '·',
+                          style: TextStyle(
+                            color: CockpitColors.dim,
+                            fontSize: 13,
+                          ),
+                        ),
+                        Text(
+                          '$soc% pin',
+                          style: TextStyle(
+                            color: CockpitColors.emerald,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
-              if (!state.capabilities.readyForControl)
-                TextButton(onPressed: onSetup, child: const Text('CÀI ĐẶT')),
             ],
           ),
-          const SizedBox(height: 14),
-          const Divider(height: 1),
-          const SizedBox(height: 12),
-          Row(
+        ),
+
+        const SizedBox(height: 12),
+
+        // ── Connection status strip with animated dot ──
+        slideIn(
+          delay: 0.25,
+          child: Row(
             children: [
-              Icon(
-                status?.timerRemaining != null
-                    ? Icons.verified_user_rounded
-                    : Icons.shield_outlined,
-                size: 16,
-                color: status?.timerRemaining != null
-                    ? SmartChargeCockpitColors.verified
-                    : SmartChargeCockpitColors.muted,
-              ),
-              const SizedBox(width: 7),
+              // Animated pulsing dot
+              reducedMotion
+                  ? _buildDotStatic(dotColor)
+                  : AnimatedBuilder(
+                      animation: _dotPulseController,
+                      builder: (context, _) =>
+                          _buildDotAnimated(dotColor, _dotPulseController.value),
+                    ),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  status?.timerRemaining != null
-                      ? 'Timer đã cài trên Shelly'
-                      : 'Không có timer đang hoạt động',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colors.onSurfaceVariant,
+                  statusText,
+                  style: TextStyle(color: CockpitColors.muted, fontSize: 13),
+                ),
+              ),
+              if (!state.capabilities.readyForControl)
+                InkWell(
+                  onTap: widget.onSetup,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    child: Text(
+                      'CÀI ĐẶT',
+                      style: TextStyle(
+                        color: CockpitColors.emerald,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: .05),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: CockpitColors.border),
+                ),
+                child: Text(
+                  now,
+                  style: CockpitTypography.numbers(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
-              Text(
-                state.statusSyncedAt == null
-                    ? 'Chưa đồng bộ'
-                    : 'Đọc lúc ${DateFormat('HH:mm:ss').format(state.statusSyncedAt!.toLocal())}',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: colors.onSurfaceVariant,
-                ),
-              ),
             ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Error banner card with "Xem chi tiết" action for debug log inspection
-class _ErrorBannerCard extends StatelessWidget {
-  const _ErrorBannerCard({required this.message, this.detail, this.onRetry});
-
-  final String message;
-  final String? detail;
-  final VoidCallback? onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: colors.errorContainer.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: colors.error.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.warning_amber_rounded, color: colors.error, size: 22),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              message,
-              style: TextStyle(
-                color: colors.onErrorContainer,
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          TextButton(
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              minimumSize: const Size(0, 32),
-            ),
-            onPressed: () => DebugErrorSheet.show(
-              context,
-              error: detail ?? message,
-              source: 'SmartCharge',
-            ),
-            child: const Text('Xem chi tiết', style: TextStyle(fontSize: 12)),
-          ),
-          if (onRetry != null)
-            IconButton(
-              icon: const Icon(Icons.refresh_rounded, size: 18),
-              tooltip: 'Thử lại',
-              onPressed: onRetry,
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SafetyWarning extends StatelessWidget {
-  const _SafetyWarning({required this.message});
-  final String message;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(
-      color: Theme.of(context).colorScheme.tertiaryContainer,
-      borderRadius: AppRadii.md,
-    ),
-    child: Row(
-      children: [
-        Icon(
-          Icons.thermostat_rounded,
-          color: Theme.of(context).colorScheme.onTertiaryContainer,
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            message,
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onTertiaryContainer,
-            ),
           ),
         ),
       ],
-    ),
-  );
+    );
+  }
+
+  // ── Lightning bolt icon with breathing glow ──
+  Widget _buildBoltIcon(double glowValue) {
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: CockpitColors.emerald.withValues(alpha: .10 + glowValue * .10),
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: CockpitColors.emerald.withValues(alpha: .20 + glowValue * .15),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: CockpitColors.emerald.withValues(alpha: .08 + glowValue * .18),
+            blurRadius: 12 + glowValue * 8,
+            spreadRadius: glowValue * 3,
+          ),
+        ],
+      ),
+      child: Icon(
+        Icons.bolt_rounded,
+        color: CockpitColors.emerald.withValues(alpha: .80 + glowValue * .20),
+        size: 24,
+      ),
+    );
+  }
+
+  // ── AI POWERED badge — static fallback ──
+  Widget _buildBadgeStatic() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: CockpitColors.emerald.withValues(alpha: .12),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: CockpitColors.emerald.withValues(alpha: .30),
+        ),
+      ),
+      child: Text(
+        'AI POWERED',
+        style: TextStyle(
+          color: CockpitColors.emerald,
+          fontSize: 9,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 1,
+        ),
+      ),
+    );
+  }
+
+  // ── AI POWERED badge — shimmer sweep ──
+  Widget _buildBadgeShimmer() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: CockpitColors.emerald.withValues(alpha: .12),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: CockpitColors.emerald.withValues(alpha: .30),
+          ),
+        ),
+        child: ShaderMask(
+          shaderCallback: (bounds) {
+            final shimmerPos = _shimmerController.value * 3.0 - 1.0;
+            return LinearGradient(
+              begin: Alignment(shimmerPos - 0.3, 0),
+              end: Alignment(shimmerPos + 0.3, 0),
+              colors: [
+                CockpitColors.emerald,
+                const Color(0xFF86EFAC), // lighter emerald
+                CockpitColors.emerald,
+              ],
+              stops: const [0.0, 0.5, 1.0],
+            ).createShader(bounds);
+          },
+          blendMode: BlendMode.srcIn,
+          child: Text(
+            'AI POWERED',
+            style: TextStyle(
+              color: CockpitColors.emerald,
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Connection dot — static fallback ──
+  Widget _buildDotStatic(Color dotColor) {
+    return Container(
+      width: 8,
+      height: 8,
+      decoration: BoxDecoration(
+        color: dotColor,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(color: dotColor.withValues(alpha: .5), blurRadius: 6),
+        ],
+      ),
+    );
+  }
+
+  // ── Connection dot — animated breathing pulse ──
+  Widget _buildDotAnimated(Color dotColor, double pulseValue) {
+    return SizedBox(
+      width: 16,
+      height: 16,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Outer pulse ring
+          Container(
+            width: 8 + pulseValue * 8,
+            height: 8 + pulseValue * 8,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: dotColor.withValues(alpha: .20 + pulseValue * .15),
+                width: 1,
+              ),
+            ),
+          ),
+          // Core dot
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: dotColor,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: dotColor.withValues(alpha: .40 + pulseValue * .30),
+                  blurRadius: 4 + pulseValue * 6,
+                  spreadRadius: pulseValue * 2,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Target battery planning workspace
@@ -1024,61 +1436,61 @@ class _PlanSection extends StatelessWidget {
                   ? FilledButton(
                       key: const ValueKey('create-plan-button'),
                       onPressed: busy ? null : controller.createPreview,
-                    style: FilledButton.styleFrom(
-                      shape: const CircleBorder(),
-                      padding: const EdgeInsets.all(8),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: busy
-                        ? const CircularProgressIndicator(strokeWidth: 2)
-                        : const Column(
-                            mainAxisSize: MainAxisSize.min,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.auto_awesome_rounded, size: 22),
-                              SizedBox(height: 4),
-                              FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text(
-                                  'DỰ ĐOÁN VỚI AI',
-                                  maxLines: 1,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 10,
+                      style: FilledButton.styleFrom(
+                        shape: const CircleBorder(),
+                        padding: const EdgeInsets.all(8),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: busy
+                          ? const CircularProgressIndicator(strokeWidth: 2)
+                          : const Column(
+                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.auto_awesome_rounded, size: 22),
+                                SizedBox(height: 4),
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    'DỰ ĐOÁN VỚI AI',
+                                    maxLines: 1,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 10,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
                             ),
                     )
                   : FilledButton(
                       key: const ValueKey('confirm-plan-button'),
                       onPressed: busy || !canStart ? null : onStart,
-                    style: FilledButton.styleFrom(
-                      shape: const CircleBorder(),
-                      padding: const EdgeInsets.all(8),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: const Column(
-                      mainAxisSize: MainAxisSize.min,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.bolt_rounded, size: 24),
-                        SizedBox(height: 4),
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            'SẠC THEO AI',
-                            maxLines: 1,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 10,
+                      style: FilledButton.styleFrom(
+                        shape: const CircleBorder(),
+                        padding: const EdgeInsets.all(8),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Column(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.bolt_rounded, size: 24),
+                          SizedBox(height: 4),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'SẠC THEO AI',
+                              maxLines: 1,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 10,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
                       ),
                     ),
             ),

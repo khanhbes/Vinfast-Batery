@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/widgets/app_popup.dart';
 import '../../data/models/shelly_connection.dart';
@@ -34,6 +35,7 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
   final lan = TextEditingController();
   final password = TextEditingController();
   final tariff = TextEditingController();
+  final chargePower = TextEditingController(text: '400');
 
   SmartChargerConnectionMode mode = SmartChargerConnectionMode.serverCloud;
   SmartChargerBinding? binding;
@@ -49,7 +51,7 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
   @override
   void initState() {
     super.initState();
-    for (final controller in [host, cloudKey, deviceId, lan, password]) {
+    for (final controller in [host, cloudKey, deviceId, lan, password, chargePower]) {
       controller.addListener(_changed);
     }
     _load();
@@ -63,13 +65,19 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
   Future<void> _load() async {
     selectedVehicleId = await SessionService().getSelectedVehicleId();
     mode = await SmartChargerRepositoryFactory.currentMode();
-    final active = await credentials.readProfile();
+    var active = await credentials.readProfile(vehicleId: selectedVehicleId);
+    active ??= await credentials.restoreFromCloud(vehicleId: selectedVehicleId);
     final draft = await credentials.readDraft();
     final profile = draft ?? active;
     verification = await credentials.readVerification();
     final preferences = await chargePreferences.load();
     if (preferences.tariffVndPerKwh != null) {
       tariff.text = preferences.tariffVndPerKwh!.toStringAsFixed(0);
+    }
+    if (preferences.chargePowerW != null) {
+      chargePower.text = preferences.chargePowerW!.toStringAsFixed(0);
+    } else {
+      chargePower.text = '400';
     }
     if (profile != null) {
       host.text = profile.cloudHost;
@@ -155,37 +163,113 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
   }
 
   Future<void> _testEasy() async {
+    if (!await _guardInactive()) return;
     setState(() => busy = true);
     try {
-      binding = await server.getBinding(vehicleId: selectedVehicleId);
-      if (binding != null &&
-          selectedVehicleId != null &&
-          selectedVehicleId!.isNotEmpty) {
-        binding = await server.selectDevice(
-          binding!.deviceId,
-          vehicleId: selectedVehicleId!,
+      final metadata = await server.resolveDirectProfile(
+        vehicleId: selectedVehicleId,
+      );
+      if (metadata == null) {
+        AppPopup.showInfo(
+          'Không tìm thấy cấu hình trên server',
+          detail: 'Bạn có thể nhập Direct một lần rồi lưu cấu hình mã hóa cho tài khoản.',
         );
+        return;
       }
-      capabilities = await server.getCapabilities(vehicleId: selectedVehicleId);
-      if (capabilities.readyForControl) {
-        await SmartChargerRepositoryFactory.setMode(
-          SmartChargerConnectionMode.serverCloud,
-        );
-        AppPopup.showSuccess(
-          'Easy đã kết nối',
-          detail: 'Timer, status và OFF đã được xác minh.',
-        );
-      } else {
+      final device = metadata['deviceId']?.toString() ?? '';
+      final remote = device.isEmpty ? null : await server.restoreDirectProfile(device);
+      if (remote == null) {
+        AppPopup.showWarning('Không thể tải cấu hình', detail: 'Cấu hình trên server không có credential vault hợp lệ.');
+        return;
+      }
+      final verified = metadata['cloudVerified'] == true &&
+          metadata['powerMeterVerified'] == true &&
+          metadata['safeBootVerified'] == true &&
+          metadata['noLoadTestVerified'] == true;
+      if (!verified) {
+        await credentials.saveDraft(remote);
+        host.text = remote.cloudHost;
+        cloudKey.text = remote.cloudAuthKey;
+        deviceId.text = remote.deviceId;
+        lan.text = remote.lanAddress ?? '';
+        password.text = remote.localPassword ?? '';
         AppPopup.showWarning(
-          'Easy chưa khả dụng để điều khiển',
-          detail:
-              'Tài khoản chưa có Shelly Integrator license/capability timer. Hãy dùng Direct Cloud + LAN.',
+          'Có cấu hình mới, đang chờ xác minh',
+          detail: 'Đã tải vào draft; hãy chạy Lưu & kiểm tra kết nối trước khi điều khiển.',
         );
+        return;
       }
+      final probe = await direct.testConnection(profile: remote);
+      if (probe.cloudStatus == null && probe.lanStatus == null) {
+        AppPopup.showWarning('Đã tải cấu hình nhưng chưa kết nối được', detail: 'Giữ cấu hình cũ và thử lại khi có Internet hoặc cùng Wi-Fi Shelly.');
+        return;
+      }
+      await credentials.saveProfile(remote);
+      verification = SmartChargerVerificationState(
+        cloudVerified: metadata['cloudVerified'] == true,
+        lanVerified: metadata['lanVerified'] == true,
+        powerMeterVerified: metadata['powerMeterVerified'] == true,
+        safeBootVerified: metadata['safeBootVerified'] == true,
+        noLoadTestVerified: metadata['noLoadTestVerified'] == true,
+        lastVerifiedAt: DateTime.tryParse(metadata['verifiedAt']?.toString() ?? ''),
+      );
+      await credentials.saveVerification(verification);
+      await SmartChargerRepositoryFactory.setMode(
+        SmartChargerConnectionMode.advancedDirect,
+      );
+      mode = SmartChargerConnectionMode.advancedDirect;
+      capabilities = await direct.capabilities();
+      host.text = remote.cloudHost;
+      cloudKey.text = remote.cloudAuthKey;
+      deviceId.text = remote.deviceId;
+      lan.text = remote.lanAddress ?? '';
+      password.text = remote.localPassword ?? '';
+      AppPopup.showSuccess(
+        'Đã đồng bộ Smart Charger',
+        detail: 'Đang điều khiển Direct Cloud + LAN bằng cấu hình đã xác minh.',
+      );
     } on SmartChargerException catch (error) {
-      AppPopup.showWarning('Easy chưa sẵn sàng', detail: error.message);
+      AppPopup.showWarning('Server tạm thời không khả dụng', detail: error.message);
     } finally {
       if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> _offerServerBackup(
+    ShellyConnectionProfile value,
+    SmartChargerVerificationState state,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    final optedIn = prefs.getBool('smartChargerEncryptedBackup') ?? false;
+    var shouldUpload = optedIn;
+    if (!optedIn && mounted) {
+      shouldUpload = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Lưu cấu hình theo tài khoản?'),
+              content: const Text(
+                'Cloud key và mật khẩu LAN sẽ được mã hóa trên server để tự khôi phục khi đổi điện thoại. Firestore chỉ nhận metadata.',
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('KHÔNG LƯU')),
+                FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('LƯU MÃ HÓA')),
+              ],
+            ),
+          ) ??
+          false;
+      await prefs.setBool('smartChargerEncryptedBackup', shouldUpload);
+    }
+    if (!shouldUpload) return;
+    try {
+      await server.registerShellyDevice(
+        value,
+        vehicleId: selectedVehicleId,
+        verification: state.toJson(),
+      );
+    } on SmartChargerException catch (error) {
+      // Local verified control remains safe even when the optional backup is
+      // unavailable; never roll it back because of a sync failure.
+      AppPopup.showWarning('Đã lưu trên điện thoại, chưa đồng bộ server', detail: error.message);
     }
   }
 
@@ -277,6 +361,7 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
         );
       }
       await credentials.saveVerification(verified);
+      await _offerServerBackup(profile, verified);
       verification = verified;
       await credentials.clearDraft();
       await SmartChargerRepositoryFactory.setMode(
@@ -327,26 +412,33 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
 
   Future<void> _delete() async {
     if (!await _guardInactive() || !mounted) return;
-    final yes = await showDialog<bool>(
+    final scope = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Xóa cấu hình Shelly?'),
         content: const Text(
-          'Cloud key và mật khẩu local sẽ bị xóa khỏi Secure Storage.',
+          'Bạn có thể chỉ xóa trên điện thoại hoặc thu hồi cấu hình mã hóa khỏi mọi thiết bị.',
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Hủy'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Hủy')),
+          TextButton(onPressed: () => Navigator.pop(context, 'local'), child: const Text('CHỈ ĐIỆN THOẠI')),
           FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Xóa'),
+            onPressed: () => Navigator.pop(context, 'everywhere'),
+            child: const Text('THU HỒI MỌI NƠI'),
           ),
         ],
       ),
     );
-    if (yes != true) return;
+    if (scope == null) return;
+    final savedDeviceId = deviceId.text.trim();
+    if (scope == 'everywhere' && savedDeviceId.isNotEmpty) {
+      try {
+        await server.revokeDirectProfile(savedDeviceId);
+      } on SmartChargerException catch (error) {
+        AppPopup.showError('Không thể thu hồi cấu hình server', detail: error.message);
+        return;
+      }
+    }
     await credentials.clearProfile();
     host.clear();
     cloudKey.clear();
@@ -356,7 +448,7 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
     verification = SmartChargerVerificationState.unverified;
     capabilities = SmartChargerCapabilities.unavailable;
     if (mounted) setState(() {});
-    AppPopup.showSuccess('Đã xóa cấu hình Shelly');
+    AppPopup.showSuccess(scope == 'everywhere' ? 'Đã thu hồi cấu hình Shelly' : 'Đã xóa cấu hình khỏi điện thoại');
   }
 
   Future<void> _saveTariff() async {
@@ -379,7 +471,31 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
             : '${NumberFormat.decimalPattern('vi_VN').format(value)} VND/kWh · áp dụng cho phiên mới',
       );
     } on Object catch (error) {
-      AppPopup.showError('Không thể lưu giá điện', detail: '$error');
+      AppPopup.showError('Không thể lưu giá điện', detail: '$error', userInitiated: true);
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> _saveChargePower() async {
+    final normalized = chargePower.text
+        .trim()
+        .replaceAll('.', '')
+        .replaceAll(',', '');
+    final value = normalized.isEmpty ? 400.0 : double.tryParse(normalized);
+    if (normalized.isNotEmpty && value == null) {
+      AppPopup.showError('Công suất sạc chưa hợp lệ', userInitiated: true);
+      return;
+    }
+    setState(() => busy = true);
+    try {
+      await chargePreferences.saveChargePower(value);
+      AppPopup.showSuccess(
+        'Đã lưu công suất sạc',
+        detail: '${(value ?? 400).toStringAsFixed(0)} W · áp dụng cho phiên sạc và dự đoán thời gian',
+      );
+    } on Object catch (error) {
+      AppPopup.showError('Không thể lưu công suất sạc', detail: '$error', userInitiated: true);
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -387,7 +503,7 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
 
   @override
   void dispose() {
-    for (final controller in [host, cloudKey, deviceId, lan, password]) {
+    for (final controller in [host, cloudKey, deviceId, lan, password, chargePower]) {
       controller.dispose();
     }
     tariff.dispose();
@@ -420,10 +536,10 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
             verification: verification,
           ),
           const SizedBox(height: 20),
-          Text('Chi phí sạc', style: Theme.of(context).textTheme.titleLarge),
+          Text('Chi phí & Cấu hình sạc', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 6),
           Text(
-            'Giá điện được lưu theo tài khoản. Mỗi phiên mới giữ một snapshot để lịch sử không đổi khi bạn cập nhật giá.',
+            'Giá điện và công suất bộ sạc được lưu theo tài khoản, áp dụng cho tính toán chi phí và dự đoán thời gian sạc.',
             style: TextStyle(color: colors.onSurfaceVariant),
           ),
           const SizedBox(height: 12),
@@ -453,12 +569,39 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: chargePower,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: false,
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Công suất sạc tiêu chuẩn',
+                    hintText: 'Mặc định: 400',
+                    suffixText: 'W',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              SizedBox(
+                height: 56,
+                child: FilledButton(
+                  onPressed: busy ? null : _saveChargePower,
+                  child: const Text('LƯU CÔNG SUẤT'),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 20),
           SegmentedButton<SmartChargerConnectionMode>(
             segments: const [
               ButtonSegment(
                 value: SmartChargerConnectionMode.serverCloud,
-                label: Text('Easy / Server'),
+                label: Text('Tự động / Server'),
                 icon: Icon(Icons.cloud_rounded),
               ),
               ButtonSegment(
@@ -475,13 +618,11 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
           const SizedBox(height: 20),
           if (mode == SmartChargerConnectionMode.serverCloud) ...[
             Text(
-              'Easy / Server',
+              'Tự động / Server',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 6),
-            const Text(
-              'Easy cần Shelly Integrator license và chỉ mở điều khiển khi backend xác minh timer, status và OFF.',
-            ),
+            const Text('Tìm cấu hình Shelly đã mã hóa theo tài khoản và xe, rồi điều khiển trực tiếp bằng Cloud + LAN.'),
             if (binding != null)
               Padding(
                 padding: const EdgeInsets.only(top: 12),
@@ -490,8 +631,8 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
             const SizedBox(height: 14),
             FilledButton.icon(
               onPressed: busy ? null : _testEasy,
-              icon: const Icon(Icons.fact_check_rounded),
-              label: const Text('KIỂM TRA EASY'),
+              icon: const Icon(Icons.cloud_sync_rounded),
+              label: const Text('QUÉT LẠI TỪ SERVER'),
             ),
           ] else ...[
             Text(
@@ -500,7 +641,7 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
             ),
             const SizedBox(height: 6),
             Text(
-              'Cloud key chỉ lưu trong Android Secure Storage và không đồng bộ lên server.',
+              'Cloud key chỉ nằm trong Secure Storage hoặc vault mã hóa theo tài khoản; không bao giờ lưu dạng thô trên Firestore.',
               style: TextStyle(color: colors.tertiary),
             ),
             const SizedBox(height: 16),

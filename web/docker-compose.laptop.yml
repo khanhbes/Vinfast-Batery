@@ -1,0 +1,20 @@
+# Local laptop override. Use this together with docker-compose.yml:
+# docker compose --env-file .env.laptop -f docker-compose.yml -f docker-compose.laptop.yml up -d --build ai api cloudflared
+#
+# The API is only exposed to this laptop. Cloudflare Tunnel makes the public
+# HTTPS connection outbound-only; do not expose port 5000 on the router.
+services:
+  api:
+    ports:
+      - "127.0.0.1:5000:5000"
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: vinfast_cloudflared
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:?Set_CLOUDFLARE_TUNNEL_TOKEN_in_.env.laptop}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - vinfast_net

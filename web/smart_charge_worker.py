@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import time
 import statistics
+import hashlib
 
 from shelly.models import utcnow
 from shelly.providers import ProviderError
@@ -85,7 +86,22 @@ def train_personal_adapter_once(service, uid: str, vehicle_id: str):
             .where("vehicleId", "==", vehicle_id)
             .where("eligibleForTargetTraining", "==", True).stream())
     rows = [doc.to_dict() or {} for doc in docs]
-    usable = [row for row in rows if float(row.get("predictedMinutes") or 0) > 0 and float(row.get("durationSeconds") or 0) > 0]
+    usable = []
+    for raw in rows:
+        if raw.get("trainingExcluded") is True:
+            continue
+        row = dict(raw)
+        # Developer corrections change only the training view, never the raw
+        # sample recorded at the end of the physical charging session.
+        if row.get("trainingDurationSecondsOverride") is not None:
+            row["durationSeconds"] = row["trainingDurationSecondsOverride"]
+        if row.get("trainingPredictedMinutesOverride") is not None:
+            row["predictedMinutes"] = row["trainingPredictedMinutesOverride"]
+        if float(row.get("predictedMinutes") or 0) <= 0:
+            continue
+        if float(row.get("durationSeconds") or 0) <= 0:
+            continue
+        usable.append(row)
     if len(usable) < 5:
         return profile
     usable.sort(key=lambda row: str(row.get("updatedAt") or ""))
@@ -137,6 +153,9 @@ def process_personal_training_jobs_once(service, limit: int = 20) -> int:
             continue
         job.reference.set({"state": "processing", "updatedAt": utcnow()}, merge=True)
         try:
+            before = service.repository.get_personal_profile(uid, vehicle_id)
+            before_trained_at = before.last_trained_at if before else None
+            before_version = before.profile_version if before else 0
             profile = train_personal_adapter_once(service, uid, vehicle_id)
             job.reference.set({
                 "state": "completed",
@@ -144,6 +163,19 @@ def process_personal_training_jobs_once(service, limit: int = 20) -> int:
                 "profileVersion": profile.profile_version if profile else None,
                 "updatedAt": utcnow(),
             }, merge=True)
+            # Only notify after a real training attempt. Jobs completed while
+            # fewer than five valid samples exist are ingestion bookkeeping,
+            # not a finished fine-tune.
+            if profile and profile.last_trained_at != before_trained_at:
+                promoted = profile.profile_version > before_version
+                _notify_personal_training_result(
+                    db,
+                    uid=uid,
+                    vehicle_id=vehicle_id,
+                    training_id=str(data.get("triggerSessionId") or job.id),
+                    profile=profile,
+                    promoted=promoted,
+                )
             processed += 1
         except Exception as error:
             job.reference.set({
@@ -152,3 +184,43 @@ def process_personal_training_jobs_once(service, limit: int = 20) -> int:
                 "updatedAt": utcnow(),
             }, merge=True)
     return processed
+
+
+def _notify_personal_training_result(
+    db, *, uid: str, vehicle_id: str, training_id: str, profile, promoted: bool
+) -> None:
+    """Write one durable, idempotent Notification Center item per job."""
+    notification_key = hashlib.sha256(
+        f"personal-ai:{uid}:{vehicle_id}:{training_id}".encode("utf-8")
+    ).hexdigest()
+    if promoted:
+        title = "AI cá nhân đã được cập nhật"
+        message = (
+            f"Mô hình cho xe {vehicle_id} đã học xong và chuyển sang "
+            f"{profile.adapter_version or 'phiên bản mới'}."
+        )
+        notification_type = "modelUpdated"
+        outcome = "promoted"
+    else:
+        title = "Đã kiểm tra bản fine-tune mới"
+        message = (
+            "Bản mới chưa cải thiện độ chính xác nên ứng dụng tiếp tục dùng "
+            "mô hình cá nhân hiện tại."
+        )
+        notification_type = "system"
+        outcome = "kept_current"
+    db.collection("UserNotifications").document(notification_key).set({
+        "userId": uid,
+        "type": notification_type,
+        "title": title,
+        "message": message,
+        "status": "unread",
+        "createdAt": utcnow(),
+        "payload": {
+            "vehicleId": vehicle_id,
+            "adapterVersion": profile.adapter_version,
+            "profileVersion": profile.profile_version,
+            "outcome": outcome,
+        },
+        "actionTarget": "/settings/personal-ai",
+    }, merge=True)
