@@ -39,6 +39,7 @@ class SmartChargePreferencesService {
       final value = SmartChargePreferences(
         ownerUid: uid,
         tariffVndPerKwh: (data['tariffVndPerKwh'] as num?)?.toDouble(),
+        chargePowerW: (data['chargePowerW'] as num?)?.toDouble() ?? 400.0,
         updatedAt: updatedAt is Timestamp
             ? updatedAt.toDate()
             : DateTime.tryParse(updatedAt?.toString() ?? '') ?? DateTime.now(),
@@ -65,9 +66,11 @@ class SmartChargePreferencesService {
     if (firestore == null) {
       throw StateError('Firebase chưa sẵn sàng để lưu giá điện.');
     }
-    final value = SmartChargePreferences(
+    final current = await load();
+    final value = current.copyWith(
       ownerUid: uid,
       tariffVndPerKwh: tariffVndPerKwh,
+      clearTariff: tariffVndPerKwh == null,
       updatedAt: DateTime.now(),
     );
     await firestore
@@ -78,6 +81,40 @@ class SmartChargePreferencesService {
         .set({
           'ownerUid': uid,
           'tariffVndPerKwh': tariffVndPerKwh,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+    await _writeCache(value);
+    return value;
+  }
+
+  Future<SmartChargePreferences> saveChargePower(double? chargePowerW) async {
+    if (chargePowerW != null && (chargePowerW <= 0 || chargePowerW > 10000)) {
+      throw ArgumentError.value(
+        chargePowerW,
+        'chargePowerW',
+        'Công suất sạc phải lớn hơn 0 và không quá 10.000 W.',
+      );
+    }
+    final uid = _firebaseAuth?.currentUser?.uid;
+    if (uid == null) throw StateError('Cần đăng nhập để lưu cấu hình sạc.');
+    final firestore = _firebaseFirestore;
+    if (firestore == null) {
+      throw StateError('Firebase chưa sẵn sàng để lưu cấu hình sạc.');
+    }
+    final current = await load();
+    final value = current.copyWith(
+      ownerUid: uid,
+      chargePowerW: chargePowerW ?? 400.0,
+      updatedAt: DateTime.now(),
+    );
+    await firestore
+        .collection('users')
+        .doc(uid)
+        .collection('smartChargePreferences')
+        .doc('current')
+        .set({
+          'ownerUid': uid,
+          'chargePowerW': chargePowerW ?? 400.0,
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
     await _writeCache(value);

@@ -7,6 +7,7 @@ import '../core/services/notification_center_service.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_motion.dart';
 import '../core/theme/cockpit_design_system.dart';
+import '../core/widgets/app_popup.dart';
 import '../core/widgets/vehicle_switcher.dart';
 import '../core/widgets/global_charging_pill.dart';
 import '../features/ai/smart_charge_history_screen.dart';
@@ -48,8 +49,10 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
     super.initState();
     _screens = [
       _RefreshableTab(child: const OverviewScreen()), // Tab 0: Overview
-      _RefreshableTab(child: const ChargeScreen()), // Tab 1: Charge
-      _RefreshableTab(child: const _SelectedHistory()), // Tab 2: History
+      // Charge and History own their refresh indicators. Wrapping them here
+      // created two simultaneous pull-to-refresh spinners.
+      const ChargeScreen(), // Tab 1: Charge
+      const _SelectedHistory(), // Tab 2: History
       _RefreshableTab(child: const MoreScreen()), // Tab 3: More
     ];
   }
@@ -106,28 +109,40 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
                   label: 'Tổng quan',
                   isSelected: currentIndex == 0,
                   energyMode: energyMode,
-                  onTap: () => ref.read(currentTabProvider.notifier).state = 0,
+                  onTap: () {
+                    AppPopup.clearShownErrors();
+                    ref.read(currentTabProvider.notifier).state = 0;
+                  },
                 ),
                 _NavItem(
                   icon: Icons.bolt_rounded,
                   label: 'Sạc',
                   isSelected: currentIndex == 1,
                   energyMode: energyMode,
-                  onTap: () => ref.read(currentTabProvider.notifier).state = 1,
+                  onTap: () {
+                    AppPopup.clearShownErrors();
+                    ref.read(currentTabProvider.notifier).state = 1;
+                  },
                 ),
                 _NavItem(
                   icon: Icons.history_rounded,
                   label: 'Lịch sử',
                   isSelected: currentIndex == 2,
                   energyMode: energyMode,
-                  onTap: () => ref.read(currentTabProvider.notifier).state = 2,
+                  onTap: () {
+                    AppPopup.clearShownErrors();
+                    ref.read(currentTabProvider.notifier).state = 2;
+                  },
                 ),
                 _NavItem(
                   icon: Icons.more_horiz_rounded,
                   label: 'Khác',
                   isSelected: currentIndex == 3,
                   energyMode: energyMode,
-                  onTap: () => ref.read(currentTabProvider.notifier).state = 3,
+                  onTap: () {
+                    AppPopup.clearShownErrors();
+                    ref.read(currentTabProvider.notifier).state = 3;
+                  },
                 ),
               ],
             ),
@@ -142,20 +157,26 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
     BuildContext context,
     int currentIndex,
   ) {
-    final tabTitles = ['Tổng quan', 'Smart Charge', 'Lịch sử sạc', 'Khác'];
+    final tabTitles = ['Tổng quan', '', 'Lịch sử sạc', 'Khác'];
     const energyMode = true;
 
     return AppBar(
       backgroundColor: CockpitColors.shell,
       elevation: 0,
-      title: Text(
-        tabTitles[currentIndex],
-        style: TextStyle(
-          color: CockpitColors.text,
-          fontSize: 18,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
+      // The Charge workspace already has its own contextual heading. Keeping
+      // another "Smart Charge" here caused truncation beside the vehicle pill.
+      title: currentIndex == 1
+          ? null
+          : Text(
+              tabTitles[currentIndex],
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: CockpitColors.text,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
       actions: [
         const VehicleSwitcher(),
         // Notification bell with badge

@@ -1,9 +1,11 @@
 import 'dart:convert';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../models/shelly_connection.dart';
+import 'server_smart_charger_service.dart';
 
 class SmartChargerCredentialsService {
   SmartChargerCredentialsService({FlutterSecureStorage? storage})
@@ -18,18 +20,78 @@ class SmartChargerCredentialsService {
   static const _verificationKey = 'smart_charger.verification.v1';
   static const _legacyTokenKey = 'smart_charger.api_token';
   final FlutterSecureStorage _storage;
+  static DateTime? _lastServerSyncAt;
 
-  Future<ShellyConnectionProfile?> readProfile() async {
+  Future<ShellyConnectionProfile?> readProfile({String? vehicleId}) async {
     try {
       final raw = await _storage.read(key: _profileKey);
-      if (raw == null || raw.isEmpty) return null;
-      return ShellyConnectionProfile.fromJson(
-        Map<String, dynamic>.from(jsonDecode(raw) as Map),
-      );
+      if (raw != null && raw.isNotEmpty) {
+        return ShellyConnectionProfile.fromJson(
+          Map<String, dynamic>.from(jsonDecode(raw) as Map),
+        );
+      }
+      return await restoreFromCloud(vehicleId: vehicleId);
     } catch (error) {
       debugPrint('[SmartChargerCredentials] read failed: $error');
+      return await restoreFromCloud(vehicleId: vehicleId);
+    }
+  }
+
+  /// Khôi phục cấu hình Shelly đã lưu theo tài khoản khi đổi điện thoại.
+  /// Resolve a profile through the authenticated API vault. Firestore is not
+  /// queried for secrets: it only stores server-managed metadata.
+  Future<ShellyConnectionProfile?> restoreFromCloud({
+    String? vehicleId,
+    bool force = false,
+  }) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return null;
+    final last = _lastServerSyncAt;
+    if (!force && last != null && DateTime.now().difference(last) < const Duration(minutes: 5)) {
       return null;
     }
+    _lastServerSyncAt = DateTime.now();
+
+    try {
+      final server = ServerSmartChargerService();
+      final metadata = await server.resolveDirectProfile(vehicleId: vehicleId);
+      if (metadata == null) return null;
+      final deviceId = metadata['deviceId']?.toString() ?? '';
+      if (deviceId.isEmpty) return null;
+      final serverProfile = await server.restoreDirectProfile(deviceId);
+      if (serverProfile != null) {
+        final verified = metadata['cloudVerified'] == true &&
+            metadata['powerMeterVerified'] == true &&
+            metadata['safeBootVerified'] == true &&
+            metadata['noLoadTestVerified'] == true;
+        if (verified) {
+          await saveProfile(serverProfile);
+          await saveVerification(
+            SmartChargerVerificationState(
+              cloudVerified: metadata['cloudVerified'] == true,
+              lanVerified: metadata['lanVerified'] == true,
+              powerMeterVerified: metadata['powerMeterVerified'] == true,
+              safeBootVerified: metadata['safeBootVerified'] == true,
+              noLoadTestVerified: metadata['noLoadTestVerified'] == true,
+              lastVerifiedAt: DateTime.tryParse(
+                metadata['verifiedAt']?.toString() ?? '',
+              ),
+            ),
+          );
+        } else {
+          // A remote draft is useful for recovery but must not replace a
+          // proven active controller until the Android safety test succeeds.
+          await saveDraft(serverProfile);
+        }
+        debugPrint(
+          '[SmartChargerCredentials] Restored encrypted Shelly profile from server API',
+        );
+        return serverProfile;
+      }
+    } catch (e) {
+      debugPrint('[SmartChargerCredentials] Restore from server error: $e');
+    }
+    return null;
   }
 
   Future<void> saveProfile(ShellyConnectionProfile profile) async {

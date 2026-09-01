@@ -6,9 +6,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/app_providers.dart';
 import '../services/session_service.dart';
 import '../theme/cockpit_design_system.dart';
+import 'vehicle_picker_sheet.dart';
 
 /// Compact, global vehicle selector used by the V4 shell.
-/// Changing it only changes context; it never deletes or mutates a vehicle.
+/// Tapping opens the premium VehiclePickerSheet bottom sheet
+/// with full vehicle specs (capacity, range, battery type).
 class VehicleSwitcher extends ConsumerWidget {
   const VehicleSwitcher({super.key});
 
@@ -48,41 +50,8 @@ class VehicleSwitcher extends ConsumerWidget {
             unawaited(SessionService().setSelectedVehicleId(current.vehicleId));
           });
         }
-        return PopupMenuButton<String>(
-          tooltip: 'Đổi xe',
-          onSelected: (id) {
-            ref.read(selectedVehicleIdProvider.notifier).state = id;
-            // Persist context immediately so the same vehicle is restored on
-            // the next foreground/login without touching charging sessions.
-            unawaited(SessionService().setSelectedVehicleId(id));
-          },
-          itemBuilder: (_) => [
-            for (final vehicle in active)
-              PopupMenuItem<String>(
-                value: vehicle.vehicleId,
-                child: Semantics(
-                  selected: vehicle.vehicleId == current.vehicleId,
-                  label: 'Chọn ${vehicle.vehicleName}',
-                  child: Row(
-                    children: [
-                      Icon(
-                        vehicle.vehicleId == current.vehicleId
-                            ? Icons.radio_button_checked
-                            : Icons.radio_button_off,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          vehicle.vehicleName,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-          ],
+        return GestureDetector(
+          onTap: () => VehiclePickerSheet.show(context, ref),
           child: Semantics(
             button: true,
             label: 'Xe đang chọn: ${current.vehicleName}. Nhấn để đổi xe',
@@ -97,6 +66,7 @@ class VehicleSwitcher extends ConsumerWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Lightning icon with subtle glow
                   Container(
                     width: 26,
                     height: 26,
@@ -106,6 +76,12 @@ class VehicleSwitcher extends ConsumerWidget {
                       border: Border.all(
                         color: CockpitColors.emerald.withValues(alpha: .25),
                       ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: CockpitColors.emerald.withValues(alpha: .12),
+                          blurRadius: 6,
+                        ),
+                      ],
                     ),
                     child: const Icon(
                       Icons.bolt_rounded,

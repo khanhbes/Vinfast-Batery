@@ -7,10 +7,12 @@ import 'package:vinfast_battery/data/models/smart_charge_history.dart';
 import 'package:vinfast_battery/data/models/smart_charging_session.dart';
 import 'package:vinfast_battery/data/services/charging_prediction_adapter.dart';
 import 'package:vinfast_battery/data/services/smart_charger_service.dart';
+import 'package:vinfast_battery/core/widgets/app_popup.dart';
 import 'package:vinfast_battery/features/ai/controllers/smart_charging_controller.dart';
 import 'package:vinfast_battery/features/ai/smart_charging_control_screen.dart';
 
 void main() {
+  tearDown(AppPopup.dismiss);
   testWidgets('renders user-friendly terminology and target slider', (
     tester,
   ) async {
@@ -18,8 +20,8 @@ void main() {
     await tester.pumpWidget(app(controller));
 
     // Phase 8, 9 & 10 assertions
-    expect(find.text('Pin hiện tại'), findsOneWidget);
-    expect(find.text('Pin muốn sạc tới'), findsOneWidget);
+    expect(find.text('Mức pin hiện tại'), findsOneWidget);
+    expect(find.text('MỤC TIÊU SẠC'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('target-battery-selector')),
       findsOneWidget,
@@ -52,31 +54,79 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('timed mode fits 320dp at 200 percent text scale', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+        child: app(harness()),
+      ),
+    );
+    await tester.tap(find.text('Sạc hẹn giờ'));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('manual ON offers immediate and timed safe choices', (
     tester,
   ) async {
-    await tester.pumpWidget(app(harness()));
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final controller = harness();
+    await tester.pumpWidget(app(controller));
 
     await tester.tap(find.text('Sạc hẹn giờ'));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
 
-    final manualOn = find.byKey(const ValueKey('manual-on-button'));
-    await tester.ensureVisible(manualOn);
-    await tester.pumpAndSettle();
-    await tester.tap(manualOn);
-    await tester.pumpAndSettle();
+    expect(find.text('Ngay lập tức'), findsOneWidget);
+    expect(find.text('10 giờ'), findsNothing);
+    expect(find.text('Sạc nhanh'), findsNothing);
+    expect(find.text('Tiêu chuẩn'), findsNothing);
+    expect(find.text('Khuyến dùng'), findsNothing);
 
-    expect(find.text('Bật sạc'), findsOneWidget);
-    expect(find.byKey(const ValueKey('manual-on-now')), findsOneWidget);
-    expect(find.text('Tự ngắt sau 1 giờ'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('manual-on-custom-duration')),
-      findsOneWidget,
-    );
-
-    await tester.tap(find.text('4 giờ'));
+    final immediate = find.byKey(const ValueKey('timed-preset--1'));
+    await tester.ensureVisible(immediate);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(immediate);
     await tester.pump();
-    expect(find.text('BẬT & TỰ NGẮT SAU 4 GIỜ'), findsOneWidget);
+    expect(find.text('Bắt đầu ngay · tự ngắt sau 6 giờ'), findsOneWidget);
+
+    final manualOn = find.byKey(const ValueKey('timed-charge-start-button'));
+    await tester.ensureVisible(manualOn);
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(manualOn);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.text('Xác nhận bắt đầu sạc'), findsOneWidget);
+    expect(find.text('Sạc hẹn giờ'), findsWidgets);
+    expect(find.text('6 giờ 0 phút'), findsOneWidget);
+    final disabled = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'BẮT ĐẦU SẠC'),
+    );
+    expect(disabled.onPressed, isNull);
+
+    final acknowledgement = find.byType(Checkbox);
+    await tester.ensureVisible(acknowledgement);
+    await tester.pump();
+    await tester.tap(acknowledgement);
+    await tester.pump();
+    final startButton = find.widgetWithText(FilledButton, 'BẮT ĐẦU SẠC');
+    await tester.ensureVisible(startButton);
+    await tester.pump();
+    await tester.tap(startButton);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(controller.lastManualDuration, const Duration(hours: 6));
+    AppPopup.dismiss();
+    await tester.pump();
   });
 
   testWidgets('creates clean preview with duration and stop time', (
@@ -93,8 +143,8 @@ void main() {
     await tester.pump();
 
     expect(find.byKey(const ValueKey('plan-preview')), findsOneWidget);
-    expect(find.text('Thời gian dự kiến'), findsOneWidget);
-    expect(find.text('Dự kiến dừng lúc'), findsOneWidget);
+    expect(find.text('Kế hoạch sạc'), findsOneWidget);
+    expect(find.textContaining('Dự kiến dừng lúc'), findsOneWidget);
     expect(find.text('1 giờ 0 phút'), findsOneWidget);
     expect(find.text('SẠC THEO AI'), findsOneWidget);
   });
@@ -102,6 +152,10 @@ void main() {
   testWidgets('requires estimated SOC acknowledgement before start', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final controller = harness();
     await tester.pumpWidget(app(controller));
 
@@ -115,24 +169,28 @@ void main() {
     await tester.ensureVisible(confirmButton);
     await tester.pump();
     await tester.tap(confirmButton);
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.text('Xác nhận bắt đầu sạc'), findsOneWidget);
     final startButton = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Bắt đầu sạc'),
+      find.widgetWithText(FilledButton, 'BẮT ĐẦU SẠC'),
     );
     expect(startButton.onPressed, isNull);
 
-    await tester.tap(find.byType(CheckboxListTile));
+    final acknowledgement = find.byType(Checkbox);
+    await tester.ensureVisible(acknowledgement);
+    await tester.pump();
+    await tester.tap(acknowledgement);
     await tester.pump();
 
     final enabled = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Bắt đầu sạc'),
+      find.widgetWithText(FilledButton, 'BẮT ĐẦU SẠC'),
     );
     expect(enabled.onPressed, isNotNull);
   });
 
-  testWidgets('Shelly error displays error banner with details view', (
+  testWidgets('Shelly error floats with details and close actions', (
     tester,
   ) async {
     final controller = harness();
@@ -140,9 +198,15 @@ void main() {
       controller.state.copyWith(gatewayError: 'Không thể kết nối ổ sạc'),
     );
     await tester.pumpWidget(app(controller));
+    await tester.pump();
+    await tester.pump();
 
-    expect(find.text('Không kết nối được ổ sạc.'), findsOneWidget);
-    expect(find.text('Xem chi tiết'), findsOneWidget);
+    expect(find.text('Kết nối Shelly chưa ổn định'), findsOneWidget);
+    expect(find.text('CHI TIẾT'), findsOneWidget);
+    expect(find.byTooltip('Đóng thông báo'), findsOneWidget);
+    expect(find.text('Không kết nối được ổ sạc.'), findsNothing);
+    await tester.tap(find.byTooltip('Đóng thông báo'));
+    await tester.pump();
   });
 
   testWidgets('active session displays live countdown and stop button', (
@@ -193,7 +257,7 @@ void main() {
       ),
     );
     await tester.pumpWidget(app(controller));
-    expect(find.text('Mất kết nối'), findsOneWidget);
+    expect(find.text('Mất kết nối ổ sạc'), findsOneWidget);
 
     // Test online relay off state
     controller.seed(
@@ -211,7 +275,7 @@ void main() {
       ),
     );
     await tester.pumpWidget(app(controller));
-    expect(find.text('Đã tắt sạc'), findsOneWidget);
+    expect(find.text('Bộ sạc đã kết nối'), findsOneWidget);
   });
 
   testWidgets('history is visible and cleanly formatted', (tester) async {
@@ -221,7 +285,8 @@ void main() {
     );
     await tester.pumpWidget(app(controller));
     await tester.scrollUntilVisible(find.text('Lịch sử gần đây'), 300);
-    expect(find.text('20% → 25%'), findsOneWidget);
+    expect(find.text('20%'), findsWidgets);
+    expect(find.text('25%'), findsOneWidget);
     expect(find.text('Hoàn thành'), findsOneWidget);
   });
 }
@@ -230,8 +295,10 @@ Widget app(HarnessController controller) => ProviderScope(
   overrides: [
     smartChargingControllerProvider.overrideWith((ref, args) => controller),
   ],
-  child: const MaterialApp(
-    home: SmartChargingControlScreen(vehicleId: 'VF-001', currentSoc: 20),
+  child: MaterialApp(
+    navigatorKey: AppPopup.navigatorKey,
+    scaffoldMessengerKey: AppPopup.messengerKey,
+    home: const SmartChargingControlScreen(vehicleId: 'VF-001', currentSoc: 20),
   ),
 );
 
@@ -296,6 +363,14 @@ class HarnessController extends SmartChargingController {
         clock: _clock,
         autoInitialize: false,
       );
+
+  Duration? lastManualDuration;
+
+  @override
+  Future<bool> manualOn(Duration duration) async {
+    lastManualDuration = duration;
+    return true;
+  }
 
   void seed(SmartChargingUiState value) => state = value;
 }

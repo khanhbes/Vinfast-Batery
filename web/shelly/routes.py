@@ -6,9 +6,12 @@ from datetime import timedelta
 from functools import wraps
 from urllib.parse import quote
 
-from flask import Blueprint, jsonify, request
+import requests
+
+from flask import Blueprint, after_this_request, jsonify, request
 
 from .models import DeviceBinding, utcnow
+from .profile_vault import ProfileVaultError
 from .service import SmartChargeError
 
 
@@ -24,6 +27,18 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
             return handler(uid, *args, **kwargs)
         return wrapped
 
+    def developer(handler):
+        """Admin-only developer tools; local Developer Mode is not authority."""
+        @wraps(handler)
+        def wrapped(*args, **kwargs):
+            uid, _email, role = auth_resolver()
+            if not uid:
+                return jsonify({"success": False, "error": {"code": "unauthorized", "message": "Cần đăng nhập"}}), 401
+            if role != "admin":
+                return jsonify({"success": False, "error": {"code": "developerRequired", "message": "Cần quyền developer để sửa dữ liệu fine-tune"}}), 403
+            return handler(uid, *args, **kwargs)
+        return wrapped
+
     def ok(data=None, **extra):
         return jsonify({"success": True, "data": data, **extra})
 
@@ -35,6 +50,47 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
                 "success": False,
                 "error": {"code": exc.code, "message": exc.message, "retryable": exc.retryable},
             }), exc.status
+
+    def profile_error(error):
+        message = str(error)
+        if isinstance(error, PermissionError):
+            return jsonify({"success": False, "error": {"code": "vehicleForbidden", "message": message}}), 403
+        if isinstance(error, RuntimeError) and message == "profileRevisionConflict":
+            return jsonify({"success": False, "error": {"code": "profileRevisionConflict", "message": "Cấu hình đã được cập nhật trên thiết bị khác. Hãy quét lại."}}), 409
+        if isinstance(error, ProfileVaultError):
+            return jsonify({"success": False, "error": {"code": "profileVaultUnavailable", "message": message}}), 503
+        return jsonify({"success": False, "error": {"code": "invalidProfile", "message": message or "Cấu hình Shelly không hợp lệ"}}), 400
+
+    def no_store():
+        @after_this_request
+        def add_no_store(response):
+            response.headers["Cache-Control"] = "no-store, private"
+            response.headers["Pragma"] = "no-cache"
+            return response
+
+    def verify_web_cloud_profile(body):
+        """Validate web-entered credentials before they reach the vault."""
+        if body.get("source") != "web":
+            return None
+        host = str(body.get("cloudHost") or "").rstrip("/")
+        try:
+            response = requests.post(
+                f"{host}/v2/devices/api/get",
+                params={"auth_key": str(body.get("cloudAuthKey") or "")},
+                json={"ids": [str(body.get("deviceId") or "")], "select": ["status"]},
+                timeout=5,
+            )
+        except requests.RequestException:
+            return "Không thể xác minh Shelly Cloud từ web server"
+        if response.status_code in (401, 403):
+            return "Authorization Cloud Key không hợp lệ hoặc đã bị thu hồi"
+        if response.status_code == 429:
+            return "Shelly Cloud đang giới hạn tần suất; hãy thử lại sau"
+        if not 200 <= response.status_code < 300:
+            return "Shelly Cloud không xác minh được thiết bị này"
+        verification = body.get("verification") if isinstance(body.get("verification"), dict) else {}
+        body["verification"] = {**verification, "cloudVerified": True}
+        return None
 
     @bp.post("/api/shelly/consent/start")
     @authenticated
@@ -60,6 +116,80 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
         callback_url = f"{callback}?state={quote(state)}"
         url = f"https://my.shelly.cloud/integrator.html?itg={quote(tag)}&cb={quote(callback_url, safe='')}"
         return ok({"authorizationUrl": url, "expiresIn": 600})
+
+    @bp.get("/api/shelly/profiles")
+    @authenticated
+    def profiles(uid):
+        repository.migrate_legacy_profile_secrets(uid)
+        return ok({"items": repository.list_synced_profiles(uid, request.args.get("vehicleId") or None)})
+
+    @bp.post("/api/shelly/profiles/resolve")
+    @authenticated
+    def resolve_profile(uid):
+        body = request.get_json(silent=True) or {}
+        repository.migrate_legacy_profile_secrets(uid)
+        profile = repository.resolve_synced_profile(uid, str(body.get("vehicleId") or "").strip() or None)
+        return ok({"profile": profile} if profile else None)
+
+    @bp.put("/api/shelly/profiles/<device_id>")
+    @authenticated
+    def save_profile(uid, device_id):
+        body = request.get_json(silent=True) or {}
+        body["deviceId"] = device_id
+        cloud_error = verify_web_cloud_profile(body)
+        if cloud_error:
+            return jsonify({"success": False, "error": {"code": "cloudVerificationFailed", "message": cloud_error}}), 422
+        expected = body.get("expectedRevision")
+        try:
+            metadata = repository.save_synced_profile(
+                uid, body, int(expected) if expected is not None else None
+            )
+        except (ProfileVaultError, PermissionError, RuntimeError, ValueError) as error:
+            return profile_error(error)
+        # Direct profiles are also bindings so the rest of the account sees
+        # the chosen device, but never contain credential fields.
+        repository.save_binding(uid, DeviceBinding(
+            device_id=device_id,
+            display_name=str(metadata.get("displayName") or "Shelly sạc xe"),
+            model=str(metadata.get("model") or "S3PL-00112EU"),
+            generation=3,
+            provider="direct_cloud_lan",
+            connection_mode="advanced_direct",
+            online=bool(metadata.get("cloudVerified")),
+            power_meter_verified=bool(metadata.get("powerMeterVerified")),
+            safe_boot_verified=bool(metadata.get("safeBootVerified")),
+            no_load_test_verified=bool(metadata.get("noLoadTestVerified")),
+            last_verified_at=metadata.get("verifiedAt"),
+            vehicle_id=metadata.get("vehicleId"),
+        ))
+        return ok(metadata)
+
+    @bp.post("/api/shelly/profiles/<device_id>/restore")
+    @authenticated
+    def restore_profile(uid, device_id):
+        no_store()
+        try:
+            profile = repository.restore_synced_profile(uid, device_id)
+        except ProfileVaultError as error:
+            return profile_error(error)
+        return ok(profile)
+
+    @bp.post("/api/shelly/profiles/<device_id>/verify")
+    @authenticated
+    def verify_profile(uid, device_id):
+        body = request.get_json(silent=True) or {}
+        profile = repository.verify_synced_profile(uid, device_id, body)
+        if profile is None:
+            return jsonify({"success": False, "error": {"code": "profileNotFound", "message": "Không tìm thấy cấu hình Shelly"}}), 404
+        return ok(profile)
+
+    @bp.delete("/api/shelly/profiles/<device_id>")
+    @authenticated
+    def revoke_profile(uid, device_id):
+        if not repository.revoke_synced_profile(uid, device_id):
+            return ok({"revoked": False})
+        repository.revoke_binding(uid, device_id, utcnow())
+        return ok({"revoked": True})
 
     @bp.post("/api/shelly/consent/callback")
     def consent_callback():
@@ -309,5 +439,60 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
         return execute(lambda: ok(service.ingest_personal_session(
             uid, str(body.get("sessionId") or ""),
         )))
+
+    @bp.get("/api/smart-charging/developer/training-access")
+    @developer
+    def developer_training_access(uid):
+        return ok({"canEditTrainingData": True})
+
+    @bp.patch("/api/smart-charging/developer/training-samples/<session_id>")
+    @developer
+    def review_training_sample(uid, session_id):
+        body = request.get_json(silent=True) or {}
+        vehicle_id = str(body.get("vehicleId") or "").strip()
+        if not vehicle_id:
+            return jsonify({"success": False, "error": {"code": "invalidVehicle", "message": "Thiếu vehicleId"}}), 400
+        note = str(body.get("developerNote") or "").strip()
+        if len(note) > 500:
+            return jsonify({"success": False, "error": {"code": "noteTooLong", "message": "Ghi chú tối đa 500 ký tự"}}), 400
+
+        def optional_number(key, minimum, maximum):
+            value = body.get(key)
+            if value is None or value == "":
+                return None
+            try:
+                number = float(value)
+            except (TypeError, ValueError) as exc:
+                raise SmartChargeError(
+                    "invalidTrainingOverride", f"{key} phải là số hợp lệ", 400
+                ) from exc
+            if not minimum <= number <= maximum:
+                raise SmartChargeError("invalidTrainingOverride", f"{key} phải từ {minimum} đến {maximum}", 400)
+            return number
+
+        def action():
+            updated = repository.review_training_sample(
+                uid,
+                vehicle_id,
+                session_id,
+                training_excluded=bool(body.get("trainingExcluded", False)),
+                developer_note=note,
+                duration_seconds_override=optional_number("durationSecondsOverride", 60, 36000),
+                predicted_minutes_override=optional_number("predictedMinutesOverride", 1, 600),
+                reviewed_by=uid,
+            )
+            if updated is None:
+                raise SmartChargeError("trainingSampleNotFound", "Không tìm thấy mẫu thuộc xe/tài khoản này", 404)
+            repository.append_audit(
+                uid,
+                "personal_training_sample_reviewed",
+                vehicle_id=vehicle_id,
+                session_id=session_id,
+                training_excluded=bool(body.get("trainingExcluded", False)),
+                override_duration=updated.get("trainingDurationSecondsOverride"),
+                override_prediction=updated.get("trainingPredictedMinutesOverride"),
+            )
+            return ok(updated)
+        return execute(action)
 
     return bp

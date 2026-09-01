@@ -1,7 +1,64 @@
-import { Settings as SettingsIcon, AlertTriangle, Wrench, Database, Shield, HelpCircle } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Settings as SettingsIcon, AlertTriangle, Wrench, Database, Shield, HelpCircle, PlugZap } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { shellyProfiles, saveShellyProfile, revokeShellyProfile } from '@/api';
+
+function SmartChargerVaultCard() {
+  const [profiles, setProfiles] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
+  const [form, setForm] = useState({ vehicleId: '', deviceId: '', cloudHost: '', cloudAuthKey: '', lanAddress: '', localUsername: 'admin', localPassword: '' });
+
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      const result = await shellyProfiles(form.vehicleId);
+      setProfiles(result?.data?.items || []);
+    } catch {
+      setMessage('Không thể tải cấu hình Smart Charger.');
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { refresh(); }, []);
+
+  const update = (key: string, value: string) => setForm(current => ({ ...current, [key]: value }));
+  const save = async () => {
+    if (!form.deviceId || !form.cloudHost || !form.cloudAuthKey) {
+      setMessage('Nhập Device ID, Cloud host và Authorization Cloud Key.');
+      return;
+    }
+    setLoading(true);
+    try {
+      await saveShellyProfile(form.deviceId, { ...form, source: 'web' });
+      setMessage('Đã lưu cấu hình mã hóa. Android sẽ kiểm tra LAN/no-load trước khi kích hoạt.');
+      setForm(current => ({ ...current, cloudAuthKey: '', localPassword: '' }));
+      await refresh();
+    } catch {
+      setMessage('Không thể lưu cấu hình. Kiểm tra vault server và quyền tài khoản.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return <Card className="border-border/50 bg-surface/50 backdrop-blur-sm md:col-span-2 lg:col-span-3">
+    <CardHeader>
+      <div className="flex items-center gap-3"><div className="p-2 bg-emerald-100 rounded-lg"><PlugZap className="w-5 h-5 text-emerald-600" /></div><div><CardTitle className="text-lg">Smart Charger</CardTitle><CardDescription>Vault mã hóa cấu hình Shelly theo tài khoản và xe</CardDescription></div></div>
+    </CardHeader>
+    <CardContent className="space-y-4">
+      <p className="text-sm text-muted-foreground">Cloud key và mật khẩu LAN chỉ dùng để ghi vào vault mã hóa; chúng không được hiển thị lại hoặc lưu trong Firestore metadata.</p>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {[['vehicleId', 'Vehicle ID'], ['deviceId', 'Shelly Device ID'], ['cloudHost', 'Shelly Cloud host'], ['lanAddress', 'LAN IP / .local'], ['localUsername', 'Local username']].map(([key, label]) => <input key={key} value={(form as any)[key]} onChange={e => update(key, e.target.value)} placeholder={label} className="rounded-md border bg-background px-3 py-2 text-sm" />)}
+        <input value={form.cloudAuthKey} onChange={e => update('cloudAuthKey', e.target.value)} placeholder="Authorization Cloud Key" type="password" autoComplete="new-password" className="rounded-md border bg-background px-3 py-2 text-sm" />
+        <input value={form.localPassword} onChange={e => update('localPassword', e.target.value)} placeholder="Mật khẩu LAN (nếu có)" type="password" autoComplete="new-password" className="rounded-md border bg-background px-3 py-2 text-sm" />
+      </div>
+      <div className="flex flex-wrap gap-2"><Button onClick={save} disabled={loading}>Lưu mã hóa</Button><Button variant="outline" onClick={refresh} disabled={loading}>Quét lại</Button>{message && <span className="text-sm text-muted-foreground self-center">{message}</span>}</div>
+      <div className="space-y-2">{profiles.length === 0 ? <p className="text-sm text-muted-foreground">Chưa có Shelly đã lưu cho tài khoản/xe này.</p> : profiles.map(profile => <div key={profile.deviceId} className="flex items-center justify-between rounded-md border p-3 text-sm"><span>{profile.displayName || 'Shelly'} · {profile.deviceId} · rev {profile.revision}</span><div className="flex gap-2 items-center"><Badge variant="outline">{profile.noLoadTestVerified ? 'Đã xác minh' : 'Chờ xác minh'}</Badge><Button variant="outline" size="sm" onClick={async () => { await revokeShellyProfile(profile.deviceId); await refresh(); }}>Thu hồi</Button></div></div>)}</div>
+    </CardContent>
+  </Card>;
+}
 
 export default function Settings() {
   return (
@@ -16,6 +73,7 @@ export default function Settings() {
 
       {/* Settings Categories */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <SmartChargerVaultCard />
         {/* General Settings */}
         <Card className="border-border/50 bg-surface/50 backdrop-blur-sm">
           <CardHeader>

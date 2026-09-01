@@ -35,7 +35,9 @@ services:
     environment:
       AI_SERVER_URL: http://ai:8001
       AI_SERVER_INTERNAL_TOKEN: ${AI_SERVER_INTERNAL_TOKEN:-dev-local-token}
-      ADMIN_EMAILS: ${ADMIN_EMAILS:-*}
+      # Secure bootstrap: only the project owner is admin when the deploy
+      # environment has not provided an explicit ADMIN_EMAILS allow-list.
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-khanhnhim21102004@gmail.com}
       DEV_ADMIN_KEY: ${DEV_ADMIN_KEY:-dev-local-token}
       FIREBASE_CREDENTIALS_JSON: ${FIREBASE_CREDENTIALS_JSON:-}
       SHELLY_PROVIDER: ${SHELLY_PROVIDER:-integrator}
@@ -45,6 +47,7 @@ services:
       SHELLY_LEGACY_DEVICE_NAME: ${SHELLY_LEGACY_DEVICE_NAME:-Shelly sạc xe}
       SHELLY_INTEGRATOR_TAG: ${SHELLY_INTEGRATOR_TAG:-}
       SHELLY_CONSENT_CALLBACK_URL: ${SHELLY_CONSENT_CALLBACK_URL:-}
+      SHELLY_PROFILE_MASTER_KEY: ${SHELLY_PROFILE_MASTER_KEY:-}
       SMART_CHARGE_MAX_MINUTES: ${SMART_CHARGE_MAX_MINUTES:-600}
     volumes:
       - models_data:/app/models

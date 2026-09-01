@@ -15,6 +15,8 @@ import '../../core/theme/app_colors.dart';
 import '../../data/repositories/vehicle_spec_repository.dart';
 import '../../data/services/maintenance_reminder_service.dart';
 import '../../data/services/vehicle_model_link_service.dart';
+import '../../data/services/smart_charger_credentials_service.dart';
+import '../../data/repositories/smart_charger_repository.dart';
 import '../../main.dart' show firebaseInitErrorProvider;
 import '../../navigation/app_navigation.dart';
 import 'login_screen.dart';
@@ -313,17 +315,20 @@ class _AuthenticatedRoot extends ConsumerStatefulWidget {
   ConsumerState<_AuthenticatedRoot> createState() => _AuthenticatedRootState();
 }
 
-class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot> {
+class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
+    with WidgetsBindingObserver {
   @override
   void dispose() {
     // Khi logout / unmount: gỡ lifecycle observer của AppUpdateService.
     AppUpdateService().stopObservingLifecycle();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // Initialize notification center and sync models
       await NotificationCenterService().initialize();
@@ -332,6 +337,29 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot> {
       // Authenticated bootstrap (di chuyển từ main.dart — chạy SAU khi auth sẵn sàng)
       await _runAuthenticatedBootstrap();
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    // Five-minute cooldown is enforced inside the credentials service.
+    // ignore: discarded_futures
+    _syncSmartChargerOnForeground();
+  }
+
+  Future<void> _syncSmartChargerOnForeground() async {
+    try {
+      final vehicleId = ref.read(selectedVehicleIdProvider);
+      final credentials = SmartChargerCredentialsService();
+      final restored = await credentials.restoreFromCloud(vehicleId: vehicleId);
+      if (restored != null && (await credentials.readVerification()).readyForControl) {
+        await SmartChargerRepositoryFactory.setMode(
+          SmartChargerConnectionMode.advancedDirect,
+        );
+      }
+    } catch (_) {
+      // Offline foreground resume keeps the previously safe local profile.
+    }
   }
 
   /// Thực hiện các tác vụ cần user authenticated:
@@ -344,6 +372,23 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot> {
     final selectedVehicleId = await SessionService().getSelectedVehicleId();
     if (mounted && selectedVehicleId != null && selectedVehicleId.isNotEmpty) {
       ref.read(selectedVehicleIdProvider.notifier).state = selectedVehicleId;
+    }
+
+    // Restore a previously verified Direct Shelly profile after login. The
+    // server returns credentials only through the Firebase-authenticated
+    // vault endpoint; an unavailable server never clears local credentials.
+    try {
+      final credentials = SmartChargerCredentialsService();
+      final restored = await credentials.restoreFromCloud(
+        vehicleId: selectedVehicleId,
+      );
+      if (restored != null && (await credentials.readVerification()).readyForControl) {
+        await SmartChargerRepositoryFactory.setMode(
+          SmartChargerConnectionMode.advancedDirect,
+        );
+      }
+    } catch (e) {
+      debugPrint('[AuthBootstrap] Smart Charger profile sync error: $e');
     }
 
     try {
@@ -402,6 +447,10 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot> {
       if (prev == next) return;
       // ignore: discarded_futures
       SessionService().setSelectedVehicleId(next);
+      if (next.isNotEmpty) {
+        // ignore: discarded_futures
+        _syncSmartChargerOnForeground();
+      }
     });
     return const AppNavigation();
   }

@@ -213,9 +213,34 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
       _chargeLogs?.hideSession(sessionId) ??
       Future.error(StateError('Charge log service is unavailable.'));
   @override
-  Future<void> privacyEraseSession(String sessionId, String confirmation) =>
-      _chargeLogs?.privacyEraseSession(sessionId, confirmation) ??
-      Future.error(StateError('Charge log service is unavailable.'));
+  Future<void> privacyEraseSession(
+    String sessionId,
+    String confirmation,
+  ) async {
+    // Privacy erase is authoritative on the authenticated backend. Admin SDK
+    // can remove terminal legacy documents and every nested collection without
+    // exposing broad Firestore delete permissions to the mobile client.
+    final remote = _previewService;
+    if (remote != null) {
+      try {
+        await remote.privacyEraseSession(sessionId, confirmation);
+        return;
+      } on SmartChargerException catch (error) {
+        final mayUseDirectFallback =
+            error.retryable ||
+            error.statusCode == 404 ||
+            error.code == 'sessionNotFound';
+        if (!mayUseDirectFallback) rethrow;
+      } on Object {
+        // Offline Direct mode may still use owner-scoped Firestore rules.
+      }
+    }
+    final logs = _chargeLogs;
+    if (logs == null) {
+      throw StateError('Charge log service is unavailable.');
+    }
+    await logs.privacyEraseSession(sessionId, confirmation);
+  }
   @override
   Future<SmartChargeStopResult> stop(
     String? id, {

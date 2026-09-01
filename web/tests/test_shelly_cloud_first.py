@@ -1,4 +1,5 @@
 import os
+import base64
 import os
 import unittest
 from datetime import timedelta
@@ -386,6 +387,29 @@ class RouteContractTests(unittest.TestCase):
         self.assertTrue(response.get_json()["data"]["completed"])
         self.assertIsNotNone(self.repo.get_binding("owner"))
 
+    def test_encrypted_direct_profile_restore_is_owner_scoped(self):
+        key = base64.urlsafe_b64encode(b"a" * 32).decode().rstrip("=")
+        with patch.dict(os.environ, {"SHELLY_PROFILE_MASTER_KEY": key}):
+            repo = SmartChargeRepository()
+            repo.register_vehicle_owner("owner", "VF-001")
+            service = SmartChargeService(repo, FakeShellyProvider(), predictor, sleeper=lambda _: None)
+            app = Flask(__name__)
+            app.register_blueprint(create_blueprint(service, repo, lambda: ("owner", "owner@test", "user")))
+            client = app.test_client()
+            saved = client.put("/api/shelly/profiles/plug-1", json={
+                "vehicleId": "VF-001", "cloudHost": "https://shelly-eu.shelly.cloud",
+                "cloudAuthKey": "secret-key", "lanAddress": "192.168.1.4",
+                "verification": {"cloudVerified": True, "powerMeterVerified": True,
+                                 "safeBootVerified": True, "noLoadTestVerified": True},
+            })
+            self.assertEqual(saved.status_code, 200)
+            listed = client.get("/api/shelly/profiles?vehicleId=VF-001").get_json()["data"]["items"]
+            self.assertNotIn("cloudAuthKey", listed[0])
+            restored = client.post("/api/shelly/profiles/plug-1/restore")
+            self.assertEqual(restored.status_code, 200)
+            self.assertEqual(restored.get_json()["data"]["cloudAuthKey"], "secret-key")
+            self.assertEqual(restored.headers["Cache-Control"], "no-store, private")
+
     def test_preview_and_idempotent_start_contract(self):
         self.client.post("/api/shelly/consent/start")
         preview = self.client.post("/api/smart-charging/preview", json={
@@ -459,6 +483,23 @@ class RouteContractTests(unittest.TestCase):
         self.assertTrue(response.get_json()["data"]["consentEnabled"])
         other_repo = self.repo.get_personal_profile("someone-else", "VF-001")
         self.assertIsNone(other_repo)
+
+    def test_training_data_edit_requires_server_developer_role(self):
+        denied = self.client.get("/api/smart-charging/developer/training-access")
+        self.assertEqual(denied.status_code, 403)
+        self.assertEqual(denied.get_json()["error"]["code"], "developerRequired")
+
+        app = Flask(__name__)
+        app.register_blueprint(
+            create_blueprint(
+                self.service,
+                self.repo,
+                lambda: ("owner", "owner@test", "admin"),
+            )
+        )
+        allowed = app.test_client().get("/api/smart-charging/developer/training-access")
+        self.assertEqual(allowed.status_code, 200)
+        self.assertTrue(allowed.get_json()["data"]["canEditTrainingData"])
 
     def test_privacy_erase_route_returns_safe_errors_and_erases_terminal(self):
         self.client.post("/api/shelly/consent/start")

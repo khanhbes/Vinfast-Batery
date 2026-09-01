@@ -59,6 +59,7 @@ smart_charger_gateway/state/*.sqlite3
 smart_charger_gateway/state/*.sqlite3-shm
 smart_charger_gateway/state/*.sqlite3-wal
 smart_charger_gateway/.env
+web/.env.laptop
 
 # Symbolication related
 app.*.symbols

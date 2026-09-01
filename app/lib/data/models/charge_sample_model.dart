@@ -111,6 +111,7 @@ class ChargeSampleModel {
       if (longitude != null) 'longitude': longitude,
       if (eligibleForTraining != null)
         'eligibleForTraining': eligibleForTraining,
+      'isDeleted': false,
       'createdAt': createdAt != null
           ? Timestamp.fromDate(createdAt!)
           : FieldValue.serverTimestamp(),
