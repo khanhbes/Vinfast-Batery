@@ -1,20 +1,23 @@
-# Local laptop override. Use this together with docker-compose.yml:
-# docker compose --env-file .env.laptop -f docker-compose.yml -f docker-compose.laptop.yml up -d --build ai api cloudflared
+# Local laptop override. Run with docker-compose.yml:
+# docker compose --env-file .env.laptop -f docker-compose.yml -f docker-compose.laptop.yml up -d --build ai api dashboard laptop_gateway
 #
-# The API is only exposed to this laptop. Cloudflare Tunnel makes the public
-# HTTPS connection outbound-only; do not expose port 5000 on the router.
+# Only loopback ports are exposed by Docker. Tailscale Funnel is the sole public
+# HTTPS entrypoint and is configured separately on Windows.
 services:
   api:
     ports:
       - "127.0.0.1:5000:5000"
 
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: vinfast_cloudflared
-    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:?Set_CLOUDFLARE_TUNNEL_TOKEN_in_.env.laptop}
+  laptop_gateway:
+    image: caddy:2.10-alpine
+    container_name: vinfast_laptop_gateway
     restart: unless-stopped
     depends_on:
-      api:
+      dashboard:
         condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      - ./Caddyfile.laptop:/etc/caddy/Caddyfile:ro
     networks:
       - vinfast_net

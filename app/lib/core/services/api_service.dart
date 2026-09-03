@@ -277,7 +277,7 @@ class ApiService {
 
   /// Predict charging time using AI Center model
   ///
-  /// Response format per PLAN1.md:
+  /// Response format for the synchronized backend API:
   /// {
   ///   'predictedDurationSec': double,
   ///   'predictedDurationMin': double,

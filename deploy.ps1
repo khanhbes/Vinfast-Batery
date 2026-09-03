@@ -1,219 +1,132 @@
-﻿<#
-  deploy.ps1 — Tự động deploy VinFast Battery lên VPS
-  Chạy: .\deploy.ps1
-  Chỉ api:       .\deploy.ps1 -Service api
-  Chỉ ai:        .\deploy.ps1 -Service ai
-  Chỉ dashboard: .\deploy.ps1 -Service dashboard
+<#
+  deploy.ps1 — Deploy VinFast Battery trên laptop qua Docker + Tailscale Funnel.
+
+  Chạy toàn bộ:          .\deploy.ps1
+  Chỉ API:                .\deploy.ps1 -Service api
+  Chỉ AI:                 .\deploy.ps1 -Service ai
+  Chỉ Dashboard:          .\deploy.ps1 -Service dashboard
+  Không build image:      .\deploy.ps1 -SkipBuild
+  Không thay Funnel:      .\deploy.ps1 -SkipFunnel
+
+  Không dùng SSH, VPS hay DigitalOcean. Public HTTPS được cung cấp bởi
+  Tailscale Funnel, còn Docker chỉ lắng nghe 127.0.0.1:8080.
 #>
+[CmdletBinding()]
 param(
-    [string]$Service = "all",              # api | ai | dashboard | all
-    [string]$VpsIp   = "167.71.207.121",
-    [string]$VpsUser = "root",
-    [string]$VpsPath = "/opt/vinfast",
-    [string]$KeyFile = "$env:USERPROFILE\.ssh\id_ed25519"
+    [ValidateSet('api', 'ai', 'dashboard', 'all')]
+    [string]$Service = 'all',
+    [string]$PublicUrl = 'https://khanhbes.tailaafca5.ts.net',
+    [switch]$SkipBuild,
+    [switch]$SkipFunnel
 )
 
-$ErrorActionPreference = "Stop"
-$WebSrc = Join-Path $PSScriptRoot "web"
-$ZIP    = "$env:TEMP\vinfast_deploy.zip"
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
 
-# ── Màu sắc ──────────────────────────────────────────────────────
-function Info($msg)    { Write-Host $msg -ForegroundColor Cyan }
-function Ok($msg)      { Write-Host "  ✅ $msg" -ForegroundColor Green }
-function Warn($msg)    { Write-Host "  ⚠ $msg" -ForegroundColor Yellow }
-function Step($msg)    { Write-Host "`n▶ $msg" -ForegroundColor White }
+$rootDir = $PSScriptRoot
+$webDir = Join-Path $rootDir 'web'
+$envFile = Join-Path $webDir '.env.laptop'
+$composeArgs = @('--env-file', '.env.laptop', '-f', 'docker-compose.yml', '-f', 'docker-compose.laptop.yml')
 
-function Join-ServiceList([string[]]$Services) {
-    return ($Services | Where-Object { $_ } | Select-Object -Unique) -join ' '
+function Write-Step([string]$Message) {
+    Write-Host "`n▶ $Message" -ForegroundColor Cyan
 }
 
-function Get-DeployPlan([string]$RequestedService) {
-    switch ($RequestedService) {
-        'all' {
-            return @{
-                BuildServices = @('ai', 'api', 'dashboard')
-                UpServices    = @('ai', 'api', 'dashboard', 'caddy')
-                HealthTargets = @('vinfast_ai', 'vinfast_api', 'vinfast_caddy')
-            }
-        }
-        'ai' {
-            return @{
-                BuildServices = @('ai', 'api')
-                UpServices    = @('ai', 'api', 'dashboard', 'caddy')
-                HealthTargets = @('vinfast_ai', 'vinfast_api', 'vinfast_caddy')
-            }
-        }
-        'api' {
-            return @{
-                BuildServices = @('api')
-                UpServices    = @('api', 'dashboard', 'caddy')
-                HealthTargets = @('vinfast_api', 'vinfast_caddy')
-            }
-        }
-        'dashboard' {
-            return @{
-                BuildServices = @('dashboard')
-                UpServices    = @('api', 'dashboard', 'caddy')
-                HealthTargets = @('vinfast_api', 'vinfast_caddy')
-            }
-        }
-        default {
-            throw "Service '$RequestedService' không hợp lệ. Dùng: api | ai | dashboard | all"
-        }
-    }
+function Write-Ok([string]$Message) {
+    Write-Host "  OK  $Message" -ForegroundColor Green
 }
 
-# ── BƯỚC 0: Khởi động ssh-agent và add key (nhập passphrase 1 lần) ──
-Step "Kiểm tra ssh-agent..."
-
-$agentRunning = $false
-try {
-    $result = ssh-add -l 2>&1
-    if ($LASTEXITCODE -eq 0) {
-        $agentRunning = $true
-        Ok "ssh-agent đã có key sẵn sàng"
-    }
-} catch {}
-
-if (-not $agentRunning) {
-    Info "Khởi động ssh-agent..."
-    $agentOutput = ssh-agent -s 2>&1
-    foreach ($line in $agentOutput) {
-        if ($line -match 'SSH_AUTH_SOCK=([^;]+)') {
-            $env:SSH_AUTH_SOCK = $Matches[1]
-        }
-        if ($line -match 'SSH_AGENT_PID=(\d+)') {
-            $env:SSH_AGENT_PID = $Matches[1]
-        }
-    }
-    # Start-Service nếu dùng OpenSSH agent của Windows
-    try { Start-Service ssh-agent -ErrorAction SilentlyContinue } catch {}
-
-    Info "Thêm SSH key — bạn sẽ nhập passphrase 1 lần duy nhất:"
-    ssh-add $KeyFile
+function Invoke-Compose([string[]]$Arguments) {
+    & docker compose @composeArgs @Arguments
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "❌ Không thể add SSH key. Kiểm tra lại passphrase." -ForegroundColor Red
-        exit 1
+        throw "Docker Compose that bai: $($Arguments -join ' ')"
     }
-    Ok "Key đã được add vào agent"
 }
 
-# ── BƯỚC 1: Nén thư mục web ──────────────────────────────────────
-Step "Nén source code web/..."
-if (Test-Path $ZIP) { Remove-Item $ZIP -Force }
-
-Add-Type -AssemblyName System.IO.Compression.FileSystem
-$zipArchive = [System.IO.Compression.ZipFile]::Open($ZIP, 'Create')
-Get-ChildItem -Path $WebSrc -Recurse -File | Where-Object {
-    $_.FullName -notmatch '\\.venv\\|\\node_modules\\|\\__pycache__\\|\\.git\\|\\\.mypy_cache\\|\.pyc$|\.log$|\.zip$' -or $_.FullName -match 'dashboard\\dist'
-} | ForEach-Object {
-    $entry = $_.FullName.Substring($WebSrc.Length + 1).Replace('\', '/')
-    [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zipArchive, $_.FullName, $entry) | Out-Null
+function Test-Health([string]$Url, [int]$Attempts = 15) {
+    $lastError = $null
+    for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+        try {
+            $result = Invoke-RestMethod -Uri $Url -Method GET -TimeoutSec 15 -ErrorAction Stop
+            if ($result.status -eq 'ok') { return $result }
+            $lastError = "status=$($result.status)"
+        } catch {
+            $lastError = $_.Exception.Message
+        }
+        if ($attempt -lt $Attempts) { Start-Sleep -Seconds 2 }
+    }
+    throw "Health check that bai: $Url — $lastError"
 }
-$zipArchive.Dispose()
-$sizeMB = [math]::Round((Get-Item $ZIP).Length / 1MB, 1)
-Ok "Đã nén: $sizeMB MB"
 
-# ── BƯỚC 2: Upload lên VPS ────────────────────────────────────────
-Step "Upload lên VPS $VpsIp..."
-scp -i $KeyFile -o StrictHostKeyChecking=accept-new `
-    $ZIP "${VpsUser}@${VpsIp}:${VpsPath}/vinfast_web.zip"
+if (-not (Test-Path -LiteralPath $webDir)) {
+    throw "Khong tim thay thu muc web: $webDir"
+}
+if (-not (Test-Path -LiteralPath $envFile)) {
+    throw "Khong tim thay web/.env.laptop. Tao file nay theo web/.env.laptop.example truoc."
+}
+
+Write-Step 'Kiem tra Docker Desktop'
+& docker info *> $null
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "❌ Upload thất bại!" -ForegroundColor Red; exit 1
+    throw 'Docker Desktop chua chay. Hay mo Docker Desktop va cho trang thai Engine running.'
 }
-Ok "Upload xong"
+Write-Ok 'Docker Engine dang san sang'
 
-# ── BƯỚC 3: SSH vào VPS, giải nén + rebuild ──────────────────────
-Step "Rebuild service '$Service' trên VPS..."
-
-$plan = Get-DeployPlan $Service
-$buildServices = Join-ServiceList $plan.BuildServices
-$upServices = Join-ServiceList $plan.UpServices
-$healthTargets = Join-ServiceList $plan.HealthTargets
-
-$remoteScript = @"
-set -e
-cd $VpsPath
-if command -v ufw >/dev/null 2>&1 && ufw status | grep -q 'Status: active'; then
-  ufw allow 443/tcp >/dev/null
-  ufw allow 443/udp >/dev/null
-fi
-echo '--- Giai nen ---'
-rm -rf web_tmp && mkdir -p web_tmp
-unzip -o vinfast_web.zip -d web_tmp/ 2>&1 | grep -v '^Archive\|^inflating\|^extracting' || true
-ls web_tmp/
-cp -rf web_tmp/. web/
-rm -rf web_tmp
-cd web
-echo '--- Build ---'
-docker compose --env-file .env build $buildServices 2>&1 | tail -10
-echo '--- Restart ---'
-docker compose --env-file .env up -d $upServices
-echo '--- Status ---'
-docker compose ps
-echo '--- Verify containers ---'
-for name in $healthTargets; do
-  status=""
-  for attempt in 1 2 3 4 5 6 7 8 9 10; do
-    status=`$(docker inspect --format '{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "`$name" 2>/dev/null || true)
-    if echo "`$status" | grep -Eq '^running\|(healthy|none)$'; then
-      break
-    fi
-    sleep 3
-  done
-  echo "`$name => `$status"
-  if ! echo "`$status" | grep -Eq '^running\|(healthy|none)$'; then
-    echo "Deployment check failed for `$name"
-    exit 1
-  fi
-done
-
-dashboard_status=`$(docker inspect --format '{{.State.Status}}' vinfast_dashboard 2>/dev/null || true)
-echo "vinfast_dashboard => `$dashboard_status"
-if [ "`$dashboard_status" != "running" ]; then
-  echo "Deployment check failed for vinfast_dashboard"
-  exit 1
-fi
-
-echo '--- Verify HTTPS /api/health ---'
-for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
-  if curl -fsS https://api.evbattery.live/api/health > /tmp/vinfast_api_health.json; then
-    cat /tmp/vinfast_api_health.json
-    break
-  fi
-  sleep 3
-done
-if [ ! -s /tmp/vinfast_api_health.json ]; then
-  echo 'Deployment check failed: /api/health is not reachable through dashboard nginx'
-  exit 1
-fi
-"@
-
-# Gửi script qua stdin để PowerShell/SSH không làm hỏng dấu nháy trong Bash.
-# Truyền cả khối script như một command argument có thể khiến VPS chạy xong
-# deploy nhưng fail ở bước verify với "unexpected EOF".
-$remoteScript | ssh -i $KeyFile -o ServerAliveInterval=30 -o ServerAliveCountMax=20 `
-    "${VpsUser}@${VpsIp}" bash -s
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "❌ Deploy thất bại trên VPS!" -ForegroundColor Red; exit 1
-}
-
-# ── BƯỚC 4: Health check ─────────────────────────────────────────
-Step "Kiểm tra API..."
-Start-Sleep -Seconds 5
+Push-Location $webDir
 try {
-    $res = Invoke-WebRequest -Uri "https://api.evbattery.live/api/health" -TimeoutSec 15 -UseBasicParsing
-    $json = $res.Content | ConvertFrom-Json
-    Ok "API OK (HTTP $($res.StatusCode)) — version: $($json.version)"
-} catch {
-    Warn "API chưa phản hồi ngay — container đang khởi động, thử lại sau 30s"
-}
+    $buildServices = switch ($Service) {
+        'api' { @('api') }
+        'ai' { @('ai') }
+        'dashboard' { @('dashboard') }
+        default { @('ai', 'api', 'dashboard') }
+    }
 
-# ── Kết quả ──────────────────────────────────────────────────────
-Write-Host ""
-Info "============================================"
-Info "  ✅ Deploy '$Service' hoàn tất!"
-Info "  🌐 Dashboard: https://api.evbattery.live"
-Info "  🔌 API:       https://api.evbattery.live/api/health"
-Info "============================================"
+    if (-not $SkipBuild) {
+        # Build sequentially: laptop has limited Docker memory and concurrent
+        # pip/npm builds can make BuildKit terminate unexpectedly.
+        foreach ($buildService in $buildServices) {
+            Write-Step "Build image $buildService"
+            Invoke-Compose @('build', $buildService)
+        }
+    } else {
+        Write-Host "`n[SKIP] Bo qua build image theo -SkipBuild" -ForegroundColor DarkGray
+    }
+
+    $upServices = switch ($Service) {
+        'api' { @('api', 'dashboard', 'laptop_gateway') }
+        'ai' { @('ai', 'api', 'dashboard', 'laptop_gateway') }
+        'dashboard' { @('dashboard', 'laptop_gateway') }
+        default { @('ai', 'api', 'dashboard', 'laptop_gateway') }
+    }
+
+    Write-Step "Khoi dong $($upServices -join ', ')"
+    Invoke-Compose (@('up', '-d', '--force-recreate') + $upServices)
+
+    Write-Step 'Kiem tra API local'
+    $localHealth = Test-Health 'http://127.0.0.1:8080/api/health'
+    Write-Ok "API local OK — Firebase: $($localHealth.firebaseConnected)"
+
+    if (-not $SkipFunnel) {
+        Write-Step 'Dam bao Tailscale Funnel dang bat'
+        & tailscale funnel --bg 8080
+        if ($LASTEXITCODE -ne 0) {
+            throw 'Khong the bat Tailscale Funnel. Mo PowerShell Run as Administrator, sau do chay: tailscale funnel --bg 8080'
+        }
+        Write-Ok 'Tailscale Funnel dang proxy 127.0.0.1:8080'
+    }
+
+    Write-Step 'Kiem tra API public HTTPS'
+    $publicHealth = Test-Health "$($PublicUrl.TrimEnd('/'))/api/health"
+    Write-Ok "API public OK — version: $($publicHealth.version), Firebase: $($publicHealth.firebaseConnected)"
+
+    Write-Step 'Trang thai containers'
+    Invoke-Compose @('ps')
+
+    Write-Host "`n============================================" -ForegroundColor Green
+    Write-Host '  Deploy laptop hoan tat' -ForegroundColor Green
+    Write-Host "  Dashboard: $PublicUrl" -ForegroundColor Green
+    Write-Host "  API:       $($PublicUrl.TrimEnd('/'))/api/health" -ForegroundColor Green
+    Write-Host '============================================' -ForegroundColor Green
+} finally {
+    Pop-Location
+}

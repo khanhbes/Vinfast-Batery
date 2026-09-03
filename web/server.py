@@ -241,18 +241,27 @@ def _find_service_account_path() -> str | None:
 
 def _load_firebase_cred_from_env():
     """
-    Load Firebase credential từ env var FIREBASE_CREDENTIALS_JSON (base64 encoded).
-    Dùng cho Docker deployment — không cần mount file .json vào container.
-    Tạo bằng: base64 -w 0 serviceAccountKey.json   (Linux/Mac)
-    PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes("key.json"))
+    Load Firebase credential from FIREBASE_CREDENTIALS_JSON.
+
+    Docker deployments historically used a Base64-encoded service-account JSON,
+    but Docker Compose also supports a compact raw JSON value in an ignored env
+    file. Accept both forms so a valid local setup never silently falls back to
+    in-memory storage after a server migration.
+
+    Base64 remains convenient for CI; neither representation is logged.
     """
     import base64, json as _json, tempfile
     raw = os.environ.get('FIREBASE_CREDENTIALS_JSON', '').strip()
     if not raw:
         return None
     try:
-        decoded = base64.b64decode(raw).decode('utf-8')
-        data = _json.loads(decoded)
+        if raw.startswith('{'):
+            data = _json.loads(raw)
+        else:
+            decoded = base64.b64decode(raw, validate=True).decode('utf-8')
+            data = _json.loads(decoded)
+        if not isinstance(data, dict) or not data.get('project_id'):
+            raise ValueError('service account JSON không có project_id')
         tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
         _json.dump(data, tmp)
         tmp.close()

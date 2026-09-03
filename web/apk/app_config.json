@@ -1,0 +1,11 @@
+{
+  "latestVersion": "1.1.3",
+  "latestBuild": 113,
+  "forceUpdate": false,
+  "minSupportedBuild": 1,
+  "releaseChannel": "apk",
+  "remindLaterHours": 6,
+  "apkUrl": "/apk/VinFastBattery_latest.apk",
+  "releaseNotes": "Build 113 — 03/09/2026 19:40",
+  "features": {}
+}
