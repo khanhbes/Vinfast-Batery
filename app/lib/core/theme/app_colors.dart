@@ -5,7 +5,7 @@ export 'app_theme.dart' show AppColorsLight, AppColorsDark;
 
 /// Bảng màu thiết kế VinFast Battery App — Design System V4
 /// Material 3 dark theme — VinFast Feliz Neo companion app
-/// Ref: vinfast-battery-app + PLAN1.md UI/UX Sync
+/// Ref: current VinFast Battery UI/UX synchronization.
 class AppColors {
   AppColors._();
 

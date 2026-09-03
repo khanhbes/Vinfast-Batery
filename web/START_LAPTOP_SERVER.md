@@ -1,17 +1,20 @@
-# Chạy VinFast Battery Server trên laptop Windows
+# Chạy VinFast Battery Server trên laptop Windows với Tailscale Funnel
 
-Tài liệu này chạy API Flask, AI runtime và vault Shelly ngay trên laptop. Nó
-không thay đổi timer của Shelly: timer sau khi được arm vẫn nằm trên thiết bị.
+Tài liệu này chạy Dashboard, Flask API, AI runtime và vault Shelly trên laptop.
+Tailscale Funnel công bố HTTPS từ laptop ra Internet mà không cần VPS, IP tĩnh,
+Cloudflare hay mở port modem. Timer Shelly sau khi được arm vẫn nằm trên thiết bị.
 
 ## Điều kiện
 
 - Docker Desktop đang chạy và dùng Linux containers.
-- Laptop có Internet, không sleep trong lúc cần AI/sync.
-- Bạn sở hữu domain `evbattery.live` và có thể đưa DNS của domain vào Cloudflare.
+- Tailscale đã đăng nhập trên laptop, MagicDNS và HTTPS certificates đã bật.
+- Funnel được cấp quyền cho tailnet.
+- Laptop có Internet, không sleep trong lúc cần web/API/AI.
 - Firebase service account của đúng Firebase project.
 
-Cloudflare Tunnel là kết nối đi ra ngoài, vì vậy không mở port modem, không
-forward port 5000 và không dùng IP công khai của laptop.
+Public URL có dạng `https://<ten-may>.<tailnet>.ts.net`. Tailscale Funnel không
+hỗ trợ custom domain, do đó app phải được build với URL Tailscale thay vì
+`api.evbattery.live`.
 
 ## 1. Tạo file secret local
 
@@ -38,74 +41,71 @@ Tải Firebase service account JSON từ Firebase Console > Project settings >
 Service accounts > Generate new private key. Minify JSON thành một dòng và đặt
 vào `FIREBASE_CREDENTIALS_JSON`. File JSON này và `.env.laptop` là bí mật.
 
-## 2. Tạo Cloudflare Tunnel
-
-1. Đăng nhập Cloudflare, thêm zone `evbattery.live` và đổi nameserver tại nơi
-   bạn mua domain sang hai nameserver Cloudflare cung cấp.
-2. Mở **Zero Trust** > **Networks** > **Tunnels** > **Create a tunnel**.
-3. Đặt tên `vinfast-laptop`, chọn Docker, sao chép tunnel token vào
-   `CLOUDFLARE_TUNNEL_TOKEN` trong `.env.laptop`.
-4. Trong tunnel vừa tạo, thêm Public Hostname:
-   - Hostname: `api.evbattery.live`
-   - Service type: `HTTP`
-   - URL: `http://api:5000`
-
-Tên `api` là tên service Docker nội bộ, không phải `localhost`. Không bật
-Cloudflare Access cho hostname API vì app Android dùng Firebase Bearer token;
-Access sẽ chặn app trước khi API có thể xác thực token.
-
-## 3. Chạy server
-
-Từ thư mục `web`:
+## 2. Chạy full stack local
 
 ```powershell
-docker compose --env-file .env.laptop -f docker-compose.yml -f docker-compose.laptop.yml up -d --build ai api cloudflared
+docker compose --env-file .env.laptop -f docker-compose.yml -f docker-compose.laptop.yml up -d --build ai api dashboard laptop_gateway
 ```
 
-Kiểm tra local:
+Kiểm tra gateway local:
 
 ```powershell
-Invoke-WebRequest http://127.0.0.1:5000/api/health -UseBasicParsing
+Invoke-WebRequest http://127.0.0.1:8080/api/health -UseBasicParsing
 docker compose --env-file .env.laptop -f docker-compose.yml -f docker-compose.laptop.yml ps
-docker compose --env-file .env.laptop -f docker-compose.yml -f docker-compose.laptop.yml logs --tail=100 cloudflared
 ```
 
-Khi tunnel báo `Connected`, kiểm tra public:
+`laptop_gateway` phục vụ Dashboard ở `/` và proxy mọi `/api/*` sang Flask.
+Không mở cổng Docker ra mạng LAN/Internet.
+
+## 3. Bật Tailscale Funnel
+
+Mở PowerShell **Run as Administrator**:
 
 ```powershell
-Invoke-WebRequest https://api.evbattery.live/api/health -UseBasicParsing
+tailscale funnel --bg 8080
+tailscale funnel status
 ```
 
-Sau đó app giữ base URL `https://api.evbattery.live`; không cần build APK lại
-chỉ để đổi IP server.
+Lệnh đầu có thể mở trình duyệt để bạn xác nhận quyền Funnel. Sau khi thành
+công, Tailscale in public URL, ví dụ:
 
-## Vận hành hằng ngày
+```text
+https://khanhbes.tailaafca5.ts.net
+```
 
-Khởi động Docker Desktop rồi chạy lại lệnh `up` ở trên. Dừng server:
+Kiểm tra URL này trong trình duyệt và kiểm tra API:
 
 ```powershell
-docker compose --env-file .env.laptop -f docker-compose.yml -f docker-compose.laptop.yml stop ai api cloudflared
+Invoke-WebRequest https://khanhbes.tailaafca5.ts.net/api/health -UseBasicParsing
 ```
 
-Laptop tắt, sleep, mất mạng hoặc Docker Desktop dừng thì API/AI/server-sync sẽ
+## 4. Vận hành hằng ngày
+
+Docker containers tự restart khi Docker Desktop chạy. Funnel chạy nền với
+`--bg` và tự phục hồi sau reboot/Tailscale restart. Dừng server:
+
+```powershell
+docker compose --env-file .env.laptop -f docker-compose.yml -f docker-compose.laptop.yml stop ai api dashboard laptop_gateway
+```
+
+Laptop tắt, sleep, mất mạng hoặc Docker Desktop dừng thì web/API/AI/server-sync
 không dùng được. Smart Charge đã xác minh timer Shelly vẫn tự tắt đúng hẹn.
 
 ## Khôi phục và an toàn
 
 - Sao lưu `.env.laptop` trong password manager/USB mã hóa. Mất
   `SHELLY_PROFILE_MASTER_KEY` sẽ không giải mã được profile Shelly đã lưu.
-- Không commit `.env.laptop`, Firebase JSON hoặc tunnel token.
+- Không commit `.env.laptop` hoặc Firebase JSON.
 - Không đặt Cloud key Shelly trong Firestore. Vault local chỉ trả secret sau
   khi API xác minh Firebase UID.
-- Nếu cần đổi laptop, chuyển `.env.laptop` một cách mã hóa rồi khởi động cùng
+- Khi đổi laptop, chuyển `.env.laptop` bằng kênh mã hóa rồi khởi động cùng
   source/Docker; hoặc nhập lại profile Shelly trên điện thoại.
 
 ## Sự cố nhanh
 
-- `cloudflared` không connected: kiểm tra Internet outbound TCP 443 và UDP/TCP
-  7844, token tunnel và Public Hostname.
-- Health local lỗi: xem `logs api` và `logs ai`; AI phải healthy trước API.
-- Health public 1016/502: tunnel chưa connected hoặc service trong Cloudflare
-  không phải `http://api:5000`.
+- Funnel không public: chạy `tailscale funnel status`; kiểm tra MagicDNS, HTTPS
+  certificates và quyền Funnel.
+- Health local lỗi: xem `logs api`, `logs ai`, `logs dashboard` và
+  `logs laptop_gateway`; AI phải healthy trước API.
 - App báo unauthorized: kiểm tra service account JSON là của Firebase project
   đang dùng bởi app.

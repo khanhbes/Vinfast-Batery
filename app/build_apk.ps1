@@ -11,15 +11,11 @@ param(
     [switch]$Fat,       # Build fat APK (tất cả ABI trong 1 file)
     [switch]$AllAbi,    # Build split cho cả 3 ABI: arm64-v8a, armeabi-v7a, x86_64
     [switch]$NoBump,    # Không tăng version (build lại cùng version)
-    [switch]$NoDeploy,  # Không upload APK lên VPS sau build
+    [switch]$NoDeploy,  # Không publish APK lên laptop server sau build
     [switch]$Offline,   # Dùng pub cache/lock hiện có, không gọi pub.dev
     [switch]$SkipChecks, # Chỉ dùng khi toolchain Flutter bị kẹt; không dùng cho deploy
-    [string]$ApiUrl    = 'https://api.evbattery.live',
-    [string]$VpsIp     = '167.71.207.121',
-    [string]$VpsUser   = 'root',
-    [string]$VpsPath   = '/opt/vinfast/web',
-    [string]$KeyFile   = "$env:USERPROFILE\.ssh\id_ed25519",
-    [string]$AdminKey  = $env:VINFAST_ADMIN_KEY, # Nếu trống, cập nhật config an toàn qua SSH
+    [string]$ApiUrl    = 'https://khanhbes.tailaafca5.ts.net',
+    [string]$AdminKey  = $env:VINFAST_ADMIN_KEY, # Nếu trống, đọc DEV_ADMIN_KEY từ web/.env.laptop
     [string]$ReleaseNotes = '',         # Ghi chú phiên bản, có thể truyền khi chạy
     [switch]$ForceUpdate,                # Đánh dấu bản này là bắt buộc cập nhật
     [int]$MinSupportedBuild = 0          # 0 = giữ policy hiện tại; >0 = cập nhật build tối thiểu
@@ -30,6 +26,7 @@ $ErrorActionPreference = 'Stop'
 
 $projectDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $projectDir
+$laptopWebDir = Join-Path (Split-Path -Parent $projectDir) 'web'
 
 Write-Host "`n=== VinFast Battery — Build APK ===" -ForegroundColor Cyan
 $buildStart = Get-Date
@@ -349,9 +346,9 @@ Write-Host "APK nam tai: $releaseDir`n" -ForegroundColor Yellow
 Write-Host "[HUONG DAN] Cai dat len thiet bi:" -ForegroundColor DarkGray
 Write-Host "  adb install releases\VinFastBattery_v$newSemver.apk" -ForegroundColor DarkGray
 
-# ── 10. Upload APK lên VPS + cập nhật app_config.json ──
+# ── 10. Publish APK through the local laptop server + update app_config ──
 if (-not $NoDeploy) {
-    Write-Host "`n--- Auto-deploy APK len VPS ---" -ForegroundColor Cyan
+    Write-Host "`n--- Auto-publish APK len laptop server ---" -ForegroundColor Cyan
 
     # Tìm APK vừa build (ưu tiên arm64)
     $apkToDeploy = $null
@@ -359,21 +356,37 @@ if (-not $NoDeploy) {
     if (Test-Path $arm64Apk) { $apkToDeploy = $arm64Apk }
 
     if ($apkToDeploy) {
-        $remoteApkDir  = "$VpsPath/apk"
         $remoteApkName = "VinFastBattery_latest.apk"
-        $remoteApkPath = "$remoteApkDir/$remoteApkName"
 
         try {
-            # Tạo thư mục trên VPS nếu chưa có
-            ssh -i $KeyFile -o BatchMode=yes -o StrictHostKeyChecking=accept-new `
-                "${VpsUser}@${VpsIp}" "mkdir -p $remoteApkDir" 2>$null
+            # apk_data is a bind volume to web/apk on this laptop. Copying here
+            # lets the running API publish /api/app/download without SSH/VPS.
+            $localApkDir = Join-Path $laptopWebDir 'apk'
+            if (-not (Test-Path $localApkDir)) {
+                New-Item -ItemType Directory -Path $localApkDir -Force | Out-Null
+            }
+            $publishedApk = Join-Path $localApkDir $remoteApkName
+            Write-Host "  Publish APK locally ($([math]::Round((Get-Item $apkToDeploy).Length/1MB,1)) MB)..." -ForegroundColor Gray
+            Copy-Item -LiteralPath $apkToDeploy -Destination $publishedApk -Force
 
-            # Upload APK
-            Write-Host "  Upload APK ($([math]::Round((Get-Item $apkToDeploy).Length/1MB,1)) MB)..." -ForegroundColor Gray
-            scp -i $KeyFile -q $apkToDeploy "${VpsUser}@${VpsIp}:${remoteApkPath}"
+            # Read the local API admin key from the ignored laptop environment
+            # only when the caller has not supplied VINFAST_ADMIN_KEY.
+            if ([string]::IsNullOrWhiteSpace($AdminKey)) {
+                $laptopEnvFile = Join-Path $laptopWebDir '.env.laptop'
+                if (Test-Path $laptopEnvFile) {
+                    $devAdminLine = Get-Content -LiteralPath $laptopEnvFile |
+                        Where-Object { $_ -match '^DEV_ADMIN_KEY=' } |
+                        Select-Object -First 1
+                    if ($devAdminLine) {
+                        $AdminKey = ($devAdminLine -replace '^DEV_ADMIN_KEY=', '').Trim()
+                    }
+                }
+            }
+            if ([string]::IsNullOrWhiteSpace($AdminKey)) {
+                throw 'Khong tim thay VINFAST_ADMIN_KEY hay DEV_ADMIN_KEY trong web/.env.laptop.'
+            }
 
-            # Cập nhật app_config.json. Ưu tiên Admin API; nếu máy build chưa
-            # cấu hình VINFAST_ADMIN_KEY thì dùng chính SSH đã upload APK.
+            # Update the public metadata through the running local API.
             $apkRelUrl = "/apk/$remoteApkName"
             $notes = if ($ReleaseNotes) { $ReleaseNotes } else { "Build $build — $([datetime]::Now.ToString('dd/MM/yyyy HH:mm'))" }
             $config = @{}
@@ -413,35 +426,15 @@ if (-not $NoDeploy) {
             if (-not $config.ContainsKey('features')) { $config['features'] = @{} }
             $configBody = $config | ConvertTo-Json -Depth 10 -Compress
 
-            if (-not [string]::IsNullOrWhiteSpace($AdminKey)) {
-                $configResp = Invoke-RestMethod `
-                    -Uri "$ApiUrl/api/app/config" `
-                    -Method POST `
-                    -Headers @{ 'Content-Type' = 'application/json'; 'X-Admin-Key' = $AdminKey } `
-                    -Body $configBody `
-                    -TimeoutSec 15 `
-                    -ErrorAction Stop
-                if (-not $configResp.success) {
-                    throw "Admin API khong cap nhat duoc app config: $($configResp.error)"
-                }
-            } else {
-                $tempConfigFile = Join-Path $projectDir '.app_config.deploy.json'
-                $remoteTempConfig = "$remoteApkDir/app_config.json.tmp-$build"
-                try {
-                    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-                    [System.IO.File]::WriteAllText(
-                        $tempConfigFile,
-                        ($config | ConvertTo-Json -Depth 10),
-                        $utf8NoBom
-                    )
-                    scp -i $KeyFile -q $tempConfigFile "${VpsUser}@${VpsIp}:${remoteTempConfig}"
-                    ssh -i $KeyFile -o BatchMode=yes `
-                        "${VpsUser}@${VpsIp}" "mv $remoteTempConfig $remoteApkDir/app_config.json"
-                } finally {
-                    if (Test-Path $tempConfigFile) {
-                        Remove-Item -LiteralPath $tempConfigFile -Force
-                    }
-                }
+            $configResp = Invoke-RestMethod `
+                -Uri "$ApiUrl/api/app/config" `
+                -Method POST `
+                -Headers @{ 'Content-Type' = 'application/json'; 'X-Admin-Key' = $AdminKey } `
+                -Body $configBody `
+                -TimeoutSec 15 `
+                -ErrorAction Stop
+            if (-not $configResp.success) {
+                throw "Admin API khong cap nhat duoc app config: $($configResp.error)"
             }
 
             # Xác nhận public endpoint đã quảng bá đúng build vừa upload.
@@ -487,5 +480,5 @@ if (-not $NoDeploy) {
         throw "Khong tim thay APK de auto-deploy."
     }
 } else {
-    Write-Host "`n[SKIP] Bo qua deploy VPS (-NoDeploy)" -ForegroundColor DarkGray
+    Write-Host "`n[SKIP] Bo qua publish APK (-NoDeploy)" -ForegroundColor DarkGray
 }

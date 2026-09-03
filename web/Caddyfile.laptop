@@ -1,0 +1,10 @@
+# TLS is terminated by Tailscale Funnel. This gateway is deliberately HTTP-only
+# and reachable only on 127.0.0.1:8080 from the Windows host.
+:80 {
+    encode zstd gzip
+
+    @api path /api/*
+    reverse_proxy @api api:5000
+
+    reverse_proxy dashboard:80
+}

@@ -15,6 +15,11 @@ COPY server.py .
 COPY ai_server/ ./ai_server/
 COPY shelly/ ./shelly/
 
+# Fail the build if OneDrive/Docker BuildKit provides an offline or empty
+# placeholder instead of the actual API source.  Without this guard Python
+# exits cleanly and Docker keeps restarting an apparently healthy image.
+RUN test -s /app/server.py
+
 RUN mkdir -p /app/models
 
 EXPOSE 5000

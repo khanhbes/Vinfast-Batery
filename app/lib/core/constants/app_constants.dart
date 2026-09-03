@@ -6,13 +6,13 @@ class AppConstants {
 
   // API Base URL — truyền qua --dart-define=APP_API_BASE_URL=https://...
   // Fallback: 10.0.2.2 cho Android emulator, localhost cho iOS simulator
-  /// API Base URL — PLAN1: production default là api.evbattery.live
+  /// API Base URL — laptop server published through Tailscale Funnel.
   /// Chỉ dùng localhost/emulator khi build dev với --dart-define
   static const String apiBaseUrl = String.fromEnvironment(
     'APP_API_BASE_URL',
-    defaultValue: 'https://api.evbattery.live',
+    defaultValue: 'https://khanhbes.tailaafca5.ts.net',
   );
-  static const String appVersion = '1.1.1';
+  static const String appVersion = '1.1.3';
 
   // Firestore Collection Names
   static const String vehiclesCollection = 'Vehicles';
