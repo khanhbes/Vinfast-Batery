@@ -23,6 +23,7 @@ from models import (
     ChargingSessionStopRequest,
     CurrentChargingSessionResponse,
     SmartChargingSession,
+    ActualSocUpdateRequest,
 )
 from session_store import SessionStore
 from shelly import ShellyClient, ShellyUnavailableError
@@ -57,7 +58,7 @@ async def _scheduler(stop_event: asyncio.Event) -> None:
         except Exception:  # A failed tick must never kill the scheduler.
             logger.exception("[Scheduler] tick failed")
         try:
-            await asyncio.wait_for(stop_event.wait(), timeout=1.0)
+            await asyncio.wait_for(stop_event.wait(), timeout=10.0)
         except TimeoutError:
             pass
 
@@ -229,3 +230,18 @@ def stop_smart_session(
 @app.get("/api/charging/sessions", response_model=ChargingSessionHistoryResponse, dependencies=[Depends(require_bearer)])
 def charging_sessions(limit: int = Query(default=20, ge=1, le=100)) -> ChargingSessionHistoryResponse:
     return ChargingSessionHistoryResponse(sessions=smart_controller.store.list(limit))
+
+
+@app.get("/api/charging/session/{session_id}/telemetry", dependencies=[Depends(require_bearer)])
+def get_session_telemetry(session_id: str) -> list[dict]:
+    smart_controller.get(session_id)
+    return smart_controller.telemetry_writer.read_all(session_id)
+
+
+@app.post("/api/charging/session/{session_id}/actual-soc", response_model=SmartChargingSession, dependencies=[Depends(require_bearer)])
+def update_actual_soc(session_id: str, request: ActualSocUpdateRequest) -> SmartChargingSession:
+    return smart_controller.update_actual_end_soc(
+        session_id=session_id,
+        actual_soc=request.actual_end_soc,
+        source=request.source,
+    )

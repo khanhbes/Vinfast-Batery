@@ -190,10 +190,16 @@ class SmartChargingSession(BaseModel):
     user_stop_reason: str = "none"
     hardware_timeout_seconds: int | None = None
     telemetry_samples: list[dict] = Field(default_factory=list)
+    telemetry_samples_count: int = 0
     actual_end_soc: float | None = None
+    actual_end_soc_source: str | None = None
     wh_per_soc_percent: float | None = None
     training_eligible: bool = False
 
+
+class ActualSocUpdateRequest(BaseModel):
+    actual_end_soc: float = Field(ge=0, le=100)
+    source: Literal["user_confirmed", "auto_estimated"] = "user_confirmed"
 
 
 class CurrentChargingSessionResponse(BaseModel):

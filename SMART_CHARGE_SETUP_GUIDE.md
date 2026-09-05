@@ -90,13 +90,19 @@ Nếu app báo không xác minh được timer/relay, rút tải hoặc tắt Sh
 
 ## 5. Build và auto-update APK
 
-Từ thư mục `app`:
+Từ thư mục gốc của repo:
 
 ```powershell
-.\build_apk.ps1
+.\build_app.ps1
 ```
 
-Script chạy `pub get`, analyze và toàn bộ test **trước khi tăng version**; sau đó build APK arm64, upload `VinFastBattery_latest.apk`, cập nhật `app_config.json` và xác minh endpoint download. API release bắt buộc HTTPS, mặc định là `https://api.evbattery.live`. Dùng `-NoDeploy` nếu chỉ muốn build local; dùng `-NoBump` nếu không muốn tăng version. Smart Charge không còn dùng `SMART_CHARGER_API_BASE_URL`; API chung lấy từ `APP_API_BASE_URL`.
+Script chạy `pub get`, analyze và toàn bộ test **trước khi tăng version**; sau đó build APK arm64, sao chép `VinFastBattery_latest.apk` sang web server local. API release bắt buộc HTTPS, mặc định là `https://khanhbes.tailaafca5.ts.net`. Smart Charge không còn dùng `SMART_CHARGER_API_BASE_URL`; API chung lấy từ `APP_API_BASE_URL`.
+
+## Runtime hiện tại
+
+Hệ thống vận hành trên laptop với Docker và Tailscale Funnel. Dùng `deploy_web.ps1`
+ở root để build/khởi động stack local; không dùng VPS hoặc SSH. `smart_charger_gateway/`
+là gateway legacy/diagnostic, không phải runtime dependency của app/web stack chính.
 # AI cá nhân, ETA fusion và lịch sử realtime
 
 ## Bật AI cá nhân

@@ -23,6 +23,9 @@ from models import (
 from safety_monitor import SafetyMonitor
 from shelly import ShellyClient, ShellyUnavailableError
 from smart_session_store import SmartSessionStore
+from telemetry_writer import TelemetryWriter
+from firestore_sync import FirestoreSessionSync
+from graduation_policy import GraduationPolicy
 
 logger = logging.getLogger("SmartChargerGateway")
 
@@ -90,6 +93,9 @@ class SmartChargingController:
         config: SmartChargingConfig,
         clock: Callable[[], datetime] | None = None,
         safety_monitor: SafetyMonitor | None = None,
+        telemetry_writer: TelemetryWriter | None = None,
+        firestore_sync: FirestoreSessionSync | None = None,
+        graduation_policy: GraduationPolicy | None = None,
     ) -> None:
         self.store = store
         self.shelly = shelly
@@ -97,6 +103,9 @@ class SmartChargingController:
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self._command_lock = threading.RLock()
         self.safety_monitor = safety_monitor or SafetyMonitor()
+        self.telemetry_writer = telemetry_writer or TelemetryWriter()
+        self.firestore_sync = firestore_sync or FirestoreSessionSync()
+        self.graduation_policy = graduation_policy or GraduationPolicy()
         self._last_status_at: datetime | None = None
 
     def now(self) -> datetime:
@@ -180,7 +189,11 @@ class SmartChargingController:
 
             now = self.now()
             ai_stop, deadline, effective, absolute = self._planned_times(request, now)
-            effective_shadow = self.config.shadow_mode or not self.config.automatic_cutoff
+            if self.config.shadow_mode:
+                vehicle_shadow = self.graduation_policy.should_use_shadow_mode(request.vehicle_id) if self.graduation_policy else True
+                effective_shadow = vehicle_shadow or not self.config.automatic_cutoff
+            else:
+                effective_shadow = not self.config.automatic_cutoff
             hardware_timeout_seconds = max(60, int((effective - now).total_seconds()) + 60)
             session = SmartChargingSession(
                 session_id=str(uuid4()),
@@ -249,6 +262,42 @@ class SmartChargingController:
         if session is None:
             raise GatewayError("SESSION_NOT_FOUND", "Không tìm thấy phiên sạc.", status_code=404)
         return session
+
+    def update_actual_end_soc(
+        self,
+        session_id: str,
+        actual_soc: float,
+        source: str = "user_confirmed",
+    ) -> SmartChargingSession:
+        with self._command_lock:
+            session = self.get(session_id)
+            delta_soc = actual_soc - session.start_soc
+            wh_per_soc = None
+            if delta_soc > 0 and session.energy_used_wh > 0:
+                wh_per_soc = round(session.energy_used_wh / delta_soc, 2)
+
+            training_eligible = (
+                session.state == ChargingSessionState.COMPLETED
+                and session.energy_quality == "good"
+                and session.energy_used_wh > 0
+                and delta_soc >= 10.0
+            )
+
+            updated = session.model_copy(update={
+                "actual_end_soc": round(actual_soc, 1),
+                "actual_end_soc_source": source,
+                "wh_per_soc_percent": wh_per_soc,
+                "training_eligible": training_eligible,
+                "updated_at": self.now(),
+                "version": session.version + 1,
+            })
+            saved = self.store.save(updated)
+            if self.firestore_sync:
+                try:
+                    self.firestore_sync.sync_session(saved)
+                except Exception as e:
+                    logger.warning("Failed to sync actual SOC to Firestore: %s", e)
+            return saved
 
     def stop(
         self,
@@ -333,7 +382,21 @@ class SmartChargingController:
                 "wh_per_soc_percent": wh_per_soc,
                 "training_eligible": training_eligible,
             })
-            return self.store.save(completed)
+            saved = self.store.save(completed)
+            if self.graduation_policy and terminal_state == ChargingSessionState.COMPLETED:
+                actual_duration_min = (saved.stopped_at - (saved.started_at or saved.created_at)).total_seconds() / 60.0
+                self.graduation_policy.record_session_completed(
+                    saved.vehicle_id,
+                    saved.predicted_minutes,
+                    actual_duration_min,
+                )
+            if self.firestore_sync:
+                try:
+                    all_samples = self.telemetry_writer.read_all(saved.session_id)
+                    self.firestore_sync.sync_session(saved, all_samples)
+                except Exception as e:
+                    logger.warning("Firestore session sync failed: %s", e)
+            return saved
 
 
     def patch(
@@ -446,12 +509,15 @@ class SmartChargingController:
                 "v": round(status.voltage_v, 2),
                 "a": round(status.current_a, 2),
                 "p": round(status.power_w, 2),
+                "freq": round(status.frequency_hz, 2),
+                "relay": status.relay,
                 "e_wh": round(session.energy_used_wh, 2),
                 "temp_shelly": status.temperature_c,
                 "temp_bat": session.battery_temperature_c,
                 "est_soc": round(session.estimated_soc, 1) if session.estimated_soc is not None else None,
             }
-            samples = [*session.telemetry_samples[-999:], sample]
+            total_samples = self.telemetry_writer.append(session.session_id, sample)
+            samples = [*session.telemetry_samples[-99:], sample]
 
             if not status.relay:
                 interrupted = session.model_copy(update={
@@ -461,10 +527,20 @@ class SmartChargingController:
                     "relay_verified": True,
                     "shelly_temperature_c": status.temperature_c,
                     "telemetry_samples": samples,
+                    "telemetry_samples_count": total_samples,
                     "updated_at": now,
                     "version": session.version + 1,
                 })
-                return self.store.save(interrupted)
+                saved = self.store.save(interrupted)
+                if self.graduation_policy:
+                    self.graduation_policy.record_safety_event(session.vehicle_id, "relay_off")
+                if self.firestore_sync:
+                    try:
+                        all_samples = self.telemetry_writer.read_all(saved.session_id)
+                        self.firestore_sync.sync_session(saved, all_samples)
+                    except Exception as e:
+                        logger.warning("Firestore session sync failed: %s", e)
+                return saved
             violation = self.safety_monitor.evaluate(status, battery_temperature_c=session.battery_temperature_c)
             if violation is not None:
                 return self._safety_stop(session, violation)
@@ -533,7 +609,15 @@ class SmartChargingController:
             "updated_at": now,
             "version": session.version + 1,
         })
-        self.store.save(terminal)
+        saved = self.store.save(terminal)
+        if self.graduation_policy:
+            self.graduation_policy.record_safety_event(session.vehicle_id, reason.value)
+        if self.firestore_sync:
+            try:
+                all_samples = self.telemetry_writer.read_all(saved.session_id)
+                self.firestore_sync.sync_session(saved, all_samples)
+            except Exception as e:
+                logger.warning("Firestore session sync failed: %s", e)
         if not verified:
             raise GatewayError(
                 "RELAY_VERIFICATION_FAILED",
@@ -592,9 +676,18 @@ def default_database_path() -> Path:
     return Path(raw) if raw else Path(__file__).resolve().parent / "state" / "smart_charging.sqlite3"
 
 
-def build_smart_controller(shelly: ShellyClient | None = None) -> SmartChargingController:
+def build_smart_controller(
+    shelly: ShellyClient | None = None,
+    store: SmartSessionStore | None = None,
+    telemetry_writer: TelemetryWriter | None = None,
+    firestore_sync: FirestoreSessionSync | None = None,
+    graduation_policy: GraduationPolicy | None = None,
+) -> SmartChargingController:
     return SmartChargingController(
-        SmartSessionStore(default_database_path()),
+        store or SmartSessionStore(default_database_path()),
         shelly or ShellyClient(),
         SmartChargingConfig.from_env(),
+        telemetry_writer=telemetry_writer,
+        firestore_sync=firestore_sync,
+        graduation_policy=graduation_policy,
     )

@@ -47,8 +47,8 @@ class ShellyConnectionProfile {
 
   String? validate() {
     final uri = cloudUri;
-    if (uri == null || uri.host.isEmpty) {
-      return 'Server URI không hợp lệ.';
+    if (uri == null || uri.host.isEmpty || uri.scheme != 'https' || !uri.host.toLowerCase().endsWith('shelly.cloud')) {
+      return 'Server URI phải dùng HTTPS và thuộc tên miền shelly.cloud.';
     }
     if (cloudAuthKey.trim().isEmpty) {
       return 'Cloud Authorization Key còn trống.';
@@ -112,6 +112,11 @@ class DiscoveredShellyDevice {
     required this.model,
     this.name,
     this.generation,
+    this.firmware,
+    this.authEnabled = false,
+    this.currentPowerW,
+    this.relayState,
+    this.temperatureC,
   });
 
   final String id;
@@ -119,11 +124,42 @@ class DiscoveredShellyDevice {
   final String model;
   final String? name;
   final int? generation;
+  final String? firmware;
+  final bool authEnabled;
+  final double? currentPowerW;
+  final bool? relayState;
+  final double? temperatureC;
 
   bool get isPlugSGen3 {
     final value = model.toLowerCase();
     return generation == 3 &&
         (value.contains('plugs') || value == 's3pl-00112eu');
+  }
+
+  DiscoveredShellyDevice copyWith({
+    String? id,
+    String? address,
+    String? model,
+    String? name,
+    int? generation,
+    String? firmware,
+    bool? authEnabled,
+    double? currentPowerW,
+    bool? relayState,
+    double? temperatureC,
+  }) {
+    return DiscoveredShellyDevice(
+      id: id ?? this.id,
+      address: address ?? this.address,
+      model: model ?? this.model,
+      name: name ?? this.name,
+      generation: generation ?? this.generation,
+      firmware: firmware ?? this.firmware,
+      authEnabled: authEnabled ?? this.authEnabled,
+      currentPowerW: currentPowerW ?? this.currentPowerW,
+      relayState: relayState ?? this.relayState,
+      temperatureC: temperatureC ?? this.temperatureC,
+    );
   }
 }
 

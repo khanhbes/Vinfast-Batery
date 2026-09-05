@@ -460,10 +460,8 @@ Xem mẫu tại `web/.env.docker.example` và `web/.env.laptop.example`.
 - `web/START_LAPTOP_SERVER.md`: Docker và Tailscale Funnel trên Windows.
 - `web/SHELLY_PROFILE_VAULT_SETUP.md`: vault mã hóa profile Shelly.
 - `SMART_CHARGE_SETUP_GUIDE.md`: hướng dẫn Smart Charge.
-- `SMART_CHARGER_SHELLY_SETUP.md`: cấu hình Shelly.
-- `PERSONAL_AI_TRAINING_DATA_GUIDE.md`: dữ liệu huấn luyện AI cá nhân.
-- `README_SYNC_INTEGRATION.md`: tích hợp và đồng bộ.
-- `AI.md`: ghi chú kỹ thuật AI.
+- `web/AI_LIFECYCLE.md`: lifecycle model, Personal AI, canary và drift.
+- `web/TELEMETRY_SCHEMA.md`: schema telemetry, đồng bộ Flutter/Web và nguồn dữ liệu.
 - `smart_charger_gateway/README.md`: gateway legacy/diagnostic.
 
 ## Trạng thái dự án
