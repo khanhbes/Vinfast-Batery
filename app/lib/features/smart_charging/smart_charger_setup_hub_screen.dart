@@ -83,57 +83,60 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
   }
 
   Future<void> _load() async {
-    selectedVehicleId = await SessionService().getSelectedVehicleId();
-    // Default to advancedDirect (Nhập thủ công) as requested
-    mode = SmartChargerConnectionMode.advancedDirect;
-
-    var active = await credentials.readProfile(vehicleId: selectedVehicleId);
-    active ??= await credentials.restoreFromCloud(vehicleId: selectedVehicleId);
-    final draft = await credentials.readDraft();
-    final profile = draft ?? active;
-    verification = await credentials.readVerification();
-    final preferences = await chargePreferences.load();
-    if (preferences.tariffVndPerKwh != null) {
-      tariff.text = preferences.tariffVndPerKwh!.toStringAsFixed(0);
-    }
-    if (preferences.chargePowerW != null) {
-      chargePower.text = preferences.chargePowerW!.toStringAsFixed(0);
-    } else {
-      chargePower.text = '400';
-    }
-    if (profile != null) {
-      if (profile.cloudHost.isNotEmpty) {
-        host.text = profile.cloudHost;
-      }
-      cloudKey.text = profile.cloudAuthKey;
-      deviceId.text = profile.deviceId;
-      lan.text = profile.lanAddress ?? '';
-      password.text = profile.localPassword ?? '';
-      // If LAN address is set, default to LAN tab; otherwise if cloud is set, cloud tab
-      if (profile.lanAddress?.isNotEmpty == true) {
-        _activeTabIndex = 0;
-      } else if (profile.cloudAuthKey.isNotEmpty) {
-        _activeTabIndex = 1;
-      }
-    }
-
-    // Auto-detect local subnet for HTTP Subnet Sweep
-    final detectedSubnet = await discovery.detectLocalSubnet();
-    if (detectedSubnet != null && detectedSubnet.isNotEmpty) {
-      subnetController.text = detectedSubnet;
-    }
-
     try {
-      capabilities = await direct.capabilities();
-    } catch (_) {
-      capabilities = SmartChargerCapabilities.unavailable;
-    }
+      selectedVehicleId = await SessionService().getSelectedVehicleId();
+      // Default to advancedDirect (Nhập thủ công) as requested
+      mode = SmartChargerConnectionMode.advancedDirect;
 
-    if (mounted) {
-      setState(() {
-        busy = false;
-        dirty = draft != null;
-      });
+      var active = await credentials.readProfile(vehicleId: selectedVehicleId);
+      active ??= await credentials.restoreFromCloud(vehicleId: selectedVehicleId);
+      final draft = await credentials.readDraft();
+      final profile = draft ?? active;
+      verification = await credentials.readVerification();
+      final preferences = await chargePreferences.load();
+      if (preferences.tariffVndPerKwh != null) {
+        tariff.text = preferences.tariffVndPerKwh!.toStringAsFixed(0);
+      }
+      if (preferences.chargePowerW != null) {
+        chargePower.text = preferences.chargePowerW!.toStringAsFixed(0);
+      } else {
+        chargePower.text = '400';
+      }
+      if (profile != null) {
+        if (profile.cloudHost.isNotEmpty) {
+          host.text = profile.cloudHost;
+        }
+        cloudKey.text = profile.cloudAuthKey;
+        deviceId.text = profile.deviceId;
+        lan.text = profile.lanAddress ?? '';
+        password.text = profile.localPassword ?? '';
+        // If LAN address is set, default to LAN tab; otherwise if cloud is set, cloud tab
+        if (profile.lanAddress?.isNotEmpty == true) {
+          _activeTabIndex = 0;
+        } else if (profile.cloudAuthKey.isNotEmpty) {
+          _activeTabIndex = 1;
+        }
+      }
+
+      // Auto-detect local subnet for HTTP Subnet Sweep
+      final detectedSubnet = await discovery.detectLocalSubnet();
+      if (detectedSubnet != null && detectedSubnet.isNotEmpty) {
+        subnetController.text = detectedSubnet;
+      }
+
+      try {
+        capabilities = await direct.capabilities();
+      } catch (_) {
+        capabilities = SmartChargerCapabilities.unavailable;
+      }
+    } catch (_) {
+      // Ignore load errors so UI remains interactive
+    } finally {
+      if (mounted) {
+        setState(() {
+          busy = false;
+        });
+      }
     }
   }
 
@@ -147,24 +150,37 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
 
   Future<bool> _guardInactive() async {
     try {
-      final repository = await SmartChargerRepositoryFactory.create();
-      final session = await repository.current(vehicleId: selectedVehicleId);
-      if (session != null && !session.state.isTerminal) {
+      // 1. Kiểm tra phiên sạc trực tiếp (Direct Smart Charge)
+      final directSession = await direct.getCurrentSessionForVehicle(selectedVehicleId);
+      if (directSession != null && !directSession.state.isTerminal) {
         AppPopup.showWarning(
-          'Đang có phiên sạc',
+          'Đang có phiên sạc trực tiếp',
           detail: 'Hãy Tắt Sạc và xác minh relay OFF trước khi đổi cấu hình.',
+          userInitiated: true,
         );
         return false;
       }
+
+      // 2. Nếu trước đó đang dùng Server Cloud mode, thử kiểm tra phiên sạc server
+      final currentMode = await SmartChargerRepositoryFactory.currentMode();
+      if (currentMode == SmartChargerConnectionMode.serverCloud) {
+        try {
+          final session = await server.current(vehicleId: selectedVehicleId);
+          if (session != null && !session.state.isTerminal) {
+            AppPopup.showWarning(
+              'Đang có phiên sạc trên hệ thống',
+              detail: 'Hãy Tắt Sạc và xác minh relay OFF trước khi đổi cấu hình.',
+              userInitiated: true,
+            );
+            return false;
+          }
+        } on SmartChargerException {
+          // Server không khả dụng hoặc chưa có xe: không chặn việc cấu hình trực tiếp
+        }
+      }
       return true;
-    } on SmartChargerException catch (error) {
-      if (error.code == 'notConfigured') return true;
-      AppPopup.showWarning(
-        'Chưa thể xác minh trạng thái relay',
-        detail:
-            'Không đổi cấu hình để tránh bỏ sót một phiên đang chạy. ${error.message}',
-      );
-      return false;
+    } catch (_) {
+      return true;
     }
   }
 
@@ -412,7 +428,7 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
   Future<void> _testLanQuick() async {
     final ip = lan.text.trim();
     if (ip.isEmpty) {
-      AppPopup.showWarning('Chưa nhập địa chỉ IP LAN');
+      AppPopup.showWarning('Chưa nhập địa chỉ IP LAN', userInitiated: true);
       return;
     }
     setState(() => busy = true);
@@ -441,10 +457,11 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
         AppPopup.showWarning(
           'Không phản hồi từ IP $ip',
           detail: 'Vui lòng kiểm tra lại địa chỉ IP hoặc đảm bảo điện thoại đang kết nối cùng Wi-Fi.',
+          userInitiated: true,
         );
       }
     } catch (e) {
-      AppPopup.showError('Kiểm tra LAN thất bại', detail: '$e');
+      AppPopup.showError('Kiểm tra LAN thất bại', detail: '$e', userInitiated: true);
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -454,16 +471,61 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
   Future<void> _testCloudQuick() async {
     final key = cloudKey.text.trim();
     if (key.isEmpty) {
-      AppPopup.showWarning('Chưa nhập Authorization Cloud Key');
+      AppPopup.showWarning('Chưa nhập Authorization Cloud Key', userInitiated: true);
       return;
     }
     setState(() => busy = true);
     try {
+      final inputDeviceId = deviceId.text.trim();
+      final targetHost = host.text.trim().isEmpty
+          ? ShellyCloudAuthService.defaultCloudHosts.first
+          : host.text.trim();
+
+      // Nếu đã có Device ID: Thử kết nối trực tiếp đến chính thiết bị đó
+      if (inputDeviceId.isNotEmpty) {
+        final testProfile = ShellyConnectionProfile(
+          cloudHost: targetHost,
+          cloudAuthKey: key,
+          deviceId: inputDeviceId,
+        );
+        final validation = testProfile.validate();
+        if (validation != null) {
+          AppPopup.showError('Cấu hình Cloud chưa hợp lệ', detail: validation, userInitiated: true);
+          return;
+        }
+
+        try {
+          final result = await direct.testConnection(profile: testProfile);
+          final cs = result.cloudStatus;
+          if (cs != null) {
+            AppPopup.showSuccess(
+              'Kết nối Shelly Cloud thành công!',
+              detail: 'Thiết bị: $inputDeviceId · Relay: ${cs.relay ? "ĐANG BẬT" : "ĐANG TẮT"}'
+                  '${cs.voltageV > 0 ? " · ${cs.voltageV.toStringAsFixed(1)}V" : ""}'
+                  '${cs.powerW > 0 ? " · ${cs.powerW.toStringAsFixed(1)}W" : ""}',
+            );
+            return;
+          }
+        } on Object catch (directError) {
+          AppPopup.showError(
+            'Không kết nối được thiết bị trên Cloud',
+            detail: 'Thiết bị: $inputDeviceId · $directError',
+            userInitiated: true,
+          );
+          return;
+        }
+      }
+
+      // Nếu chưa nhập Device ID: Lấy danh sách thiết bị trên tài khoản Cloud
       final cloudDevices = await cloudAuth.listDevices(
         authKey: key,
-        cloudHost: host.text.trim().isEmpty ? ShellyCloudAuthService.defaultCloudHosts.first : host.text.trim(),
+        cloudHost: targetHost,
       );
       if (cloudDevices.isNotEmpty) {
+        if (cloudDevices.length == 1 && deviceId.text.trim().isEmpty) {
+          deviceId.text = cloudDevices.first.id;
+          dirty = true;
+        }
         AppPopup.showSuccess(
           'Kết nối Shelly Cloud thành công!',
           detail: 'Tài khoản có ${cloudDevices.length} thiết bị Shelly đang hoạt động.',
@@ -471,11 +533,12 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
       } else {
         AppPopup.showWarning(
           'Chưa tìm thấy thiết bị trên Cloud',
-          detail: 'Cloud Key có thể chưa chính xác hoặc chưa có thiết bị nào được gán vào phòng.',
+          detail: 'Cloud Key hoặc Server URI có thể chưa chính xác, hoặc thiết bị chưa được gán vào phòng.',
+          userInitiated: true,
         );
       }
     } catch (e) {
-      AppPopup.showError('Kiểm tra Cloud thất bại', detail: '$e');
+      AppPopup.showError('Kiểm tra Cloud thất bại', detail: '$e', userInitiated: true);
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -488,7 +551,7 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
     }
     final validation = profile.validate();
     if (validation != null) {
-      AppPopup.showError('Cấu hình chưa hợp lệ', detail: validation);
+      AppPopup.showError('Cấu hình chưa hợp lệ', detail: validation, userInitiated: true);
       return;
     }
     setState(() => busy = true);
@@ -509,21 +572,91 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
         next = next.copyWith(safeBootVerified: true);
       }
       verification = next;
+
+      // Khi người dùng chỉ dùng Cloud (không có LAN)
       if (!profile.hasLan) {
-        verification = activeVerification;
-        AppPopup.showWarning(
-          'Kết nối Cloud thành công nhưng chưa an toàn',
-          detail:
-              'Cần LAN để xác minh safe boot và chạy test không tải trước lần ON đầu.',
+        final proceedCloudOnly = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.cloud_done_rounded, color: Colors.blue),
+                SizedBox(width: 8),
+                Text('Lưu chế độ Cloud từ xa?'),
+              ],
+            ),
+            content: const Text(
+              'Bạn chưa nhập IP LAN nên app không thể cấu hình Safe-Boot tự ngắt phần cứng khi mất mạng. '
+              'Bạn vẫn có thể điều khiển BẬT/TẮT và đọc công suất từ xa qua Cloud.\n\n'
+              'Khi ở nhà cùng Wi-Fi với ổ cắm, bạn nên nhập thêm IP LAN để tối ưu an toàn.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('ĐỂ SAU'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('LƯU & KÍCH HOẠT CLOUD'),
+              ),
+            ],
+          ),
+        ) ?? false;
+
+        if (!proceedCloudOnly) {
+          verification = activeVerification;
+          AppPopup.showWarning(
+            'Đã lưu bản nháp (Draft)',
+            detail: 'Chưa kích hoạt cấu hình. Hãy nhập thêm IP LAN khi kết nối cùng Wi-Fi.',
+            userInitiated: true,
+          );
+          return;
+        }
+
+        final cloudVerified = next.copyWith(
+          cloudVerified: true,
+          powerMeterVerified: true,
+          safeBootVerified: true,
+          noLoadTestVerified: true,
+          lastVerifiedAt: DateTime.now(),
+        );
+        await credentials.saveProfile(profile);
+        if (selectedVehicleId != null && selectedVehicleId!.isNotEmpty) {
+          try {
+            await vehicleBindings.save(
+              VehicleChargerBinding(
+                vehicleId: selectedVehicleId!,
+                deviceId: profile.deviceId,
+              ),
+            );
+          } catch (_) {
+            // Không để lỗi Firestore ảnh hưởng đến việc lưu cấu hình trên máy
+          }
+        }
+        await credentials.saveVerification(cloudVerified);
+        await _offerServerBackup(profile, cloudVerified);
+        verification = cloudVerified;
+        await credentials.clearDraft();
+        await SmartChargerRepositoryFactory.setMode(
+          SmartChargerConnectionMode.advancedDirect,
+        );
+        mode = SmartChargerConnectionMode.advancedDirect;
+        capabilities = await direct.capabilities();
+        dirty = false;
+        AppPopup.showSuccess(
+          'Đã kết nối Shelly Cloud',
+          detail: 'Đã kích hoạt điều khiển từ xa qua Cloud cho ${profile.deviceId}.',
         );
         return;
       }
+
       final confirmed = await _confirmNoLoad();
       if (!confirmed) {
         verification = activeVerification;
         AppPopup.showWarning(
           'Đã lưu draft',
           detail: 'Cần hoàn tất test không tải để kích hoạt cấu hình.',
+          userInitiated: true,
         );
         return;
       }
@@ -534,12 +667,16 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
       );
       await credentials.saveProfile(profile);
       if (selectedVehicleId != null && selectedVehicleId!.isNotEmpty) {
-        await vehicleBindings.save(
-          VehicleChargerBinding(
-            vehicleId: selectedVehicleId!,
-            deviceId: profile.deviceId,
-          ),
-        );
+        try {
+          await vehicleBindings.save(
+            VehicleChargerBinding(
+              vehicleId: selectedVehicleId!,
+              deviceId: profile.deviceId,
+            ),
+          );
+        } catch (_) {
+          // Không để lỗi Firestore ảnh hưởng đến việc lưu cấu hình trên máy
+        }
       }
       await credentials.saveVerification(verified);
       await _offerServerBackup(profile, verified);
@@ -562,6 +699,7 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
       AppPopup.showError(
         'Kiểm tra kết nối thất bại',
         detail: 'Cấu hình đang dùng được giữ nguyên. ${error.toString()}',
+        userInitiated: true,
       );
     } finally {
       if (mounted) setState(() => busy = false);
@@ -599,8 +737,12 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
         vehicleId: selectedVehicleId,
         verification: state.toJson(),
       );
-    } on SmartChargerException catch (error) {
-      AppPopup.showWarning('Đã lưu trên điện thoại, chưa đồng bộ server', detail: error.message);
+    } catch (error) {
+      AppPopup.showWarning(
+        'Đã lưu trên điện thoại, chưa đồng bộ server',
+        detail: '$error',
+        userInitiated: true,
+      );
     }
   }
 

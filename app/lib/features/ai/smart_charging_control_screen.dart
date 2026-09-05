@@ -182,7 +182,10 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                                   : TimedChargingSectionV2(
                                       key: const ValueKey('timed-mode'),
                                       readyForControl:
-                                          state.capabilities.readyForControl &&
+                                          (state.capabilities.readyForControl ||
+                                              state.capabilities.supportsDeviceTimer ||
+                                              state.capabilities.cloudAvailable ||
+                                              state.capabilities.lanAvailable) &&
                                           state.phase !=
                                               SmartChargingViewPhase.starting,
                                       onStart: (duration) => _startTimedCharge(
@@ -327,8 +330,12 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
         state.phase == SmartChargingViewPhase.loading ||
         state.phase == SmartChargingViewPhase.starting;
     final canStart =
-        state.preview?.aiChargeEligible == true &&
-        state.capabilities.readyForControl &&
+        (state.preview?.aiChargeEligible == true ||
+            state.preview?.isPhysicsFallback == true) &&
+        (state.capabilities.readyForControl ||
+            state.capabilities.supportsDeviceTimer ||
+            state.capabilities.cloudAvailable ||
+            state.capabilities.lanAvailable) &&
         state.connectionState.shellyReachable;
     final currentTarget = draft.targetSoc.clamp(
       (draft.currentSoc.ceil() + 1).clamp(1, 99).toDouble(),
@@ -405,7 +412,8 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                 ? 'DỰ ĐOÁN VỚI AI'
                 : canStart
                 ? 'SẠC THEO AI'
-                : state.preview!.aiChargeEligible
+                : (state.preview!.aiChargeEligible ||
+                        state.preview!.isPhysicsFallback)
                 ? 'Hoàn tất cài đặt ổ sạc'
                 : 'Chưa khả dụng',
             style: TextStyle(

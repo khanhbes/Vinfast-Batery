@@ -78,41 +78,68 @@ class ShellyCloudAuthService {
     }
 
     for (final host in hostsToTry) {
-      try {
-        final uri = Uri.parse('$host/v2/devices/list');
-        final response = await _client.post(
-          uri,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: jsonEncode({
-            'auth_key': trimmedKey,
-          }),
-        ).timeout(timeout);
+      // Try /interface/device/list first, then fallback to /device/all_status
+      final endpoints = [
+        '$host/interface/device/list?auth_key=$trimmedKey',
+        '$host/device/all_status?auth_key=$trimmedKey',
+      ];
 
-        if (response.statusCode == 200) {
-          final data = jsonDecode(response.body);
-          if (data is Map<String, dynamic>) {
-            final devicesRaw = data['devices'];
-            if (devicesRaw is List) {
-              return devicesRaw
-                  .whereType<Map<String, dynamic>>()
-                  .map((d) => ShellyCloudDevice.fromJson(d, defaultServer: host))
-                  .toList();
-            } else if (devicesRaw is Map<String, dynamic>) {
-              return devicesRaw.values
-                  .whereType<Map<String, dynamic>>()
-                  .map((d) => ShellyCloudDevice.fromJson(d, defaultServer: host))
-                  .toList();
+      for (final endpointUrl in endpoints) {
+        try {
+          final uri = Uri.parse(endpointUrl);
+          final response = await _client.post(
+            uri,
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: {
+              'auth_key': trimmedKey,
+            },
+          ).timeout(timeout);
+
+          if (response.statusCode == 200) {
+            final data = jsonDecode(response.body);
+            if (data is Map) {
+              final container = (data['data'] is Map) ? data['data'] as Map : data;
+              final devicesRaw = container['devices'] ?? container['devices_status'];
+
+              if (devicesRaw is List) {
+                return devicesRaw
+                    .whereType<Map>()
+                    .map((d) => ShellyCloudDevice.fromJson(Map<String, dynamic>.from(d), defaultServer: host))
+                    .toList();
+              } else if (devicesRaw is Map) {
+                return devicesRaw.entries.map((entry) {
+                  final key = entry.key.toString();
+                  final val = entry.value;
+                  if (val is Map) {
+                    final map = Map<String, dynamic>.from(val);
+                    map.putIfAbsent('id', () => key);
+                    return ShellyCloudDevice.fromJson(map, defaultServer: host);
+                  }
+                  return ShellyCloudDevice(
+                    id: key,
+                    name: key,
+                    type: '',
+                    cloudAuthKey: trimmedKey,
+                    serverUri: host,
+                  );
+                }).toList();
+              }
             }
           }
+        } on TimeoutException {
+          continue;
+        } on SocketException {
+          continue;
+        } on http.ClientException {
+          continue;
+        } on FormatException {
+          continue;
+        } catch (e) {
+          if (e.runtimeType.toString().contains('TestFailure')) rethrow;
+          continue;
         }
-      } on TimeoutException {
-        continue;
-      } on SocketException {
-        continue;
-      } catch (_) {
-        continue;
       }
     }
 

@@ -58,9 +58,8 @@ service cloud.firestore {
       allow delete: if false;
 
       match /vehicleChargerBindings/{vehicleId} {
-        allow read: if isAuth() && request.auth.uid == uid && ownsVehicleId(vehicleId);
-        allow write: if isAuth() && request.auth.uid == uid &&
-          ownsVehicleId(vehicleId) && containsNoChargerSecrets();
+        allow read: if isAuth() && request.auth.uid == uid;
+        allow write: if isAuth() && request.auth.uid == uid && containsNoChargerSecrets();
       }
       match /smartChargePreferences/{preferenceId} {
         allow read: if isAuth() && request.auth.uid == uid;

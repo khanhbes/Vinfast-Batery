@@ -23,6 +23,7 @@ import '../../../core/services/notification_center_service.dart';
 import '../../../core/services/app_error_reporter.dart';
 import '../../../core/services/connection_coordinator.dart';
 import '../../../core/services/model_sync_service.dart';
+import '../../../core/services/auth_service.dart';
 import '../../../data/services/charging_training_sync_service.dart';
 
 typedef SmartChargingNotificationSink =
@@ -380,6 +381,33 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         final spec = await VehicleSpecRepository().getSpec(modelId);
         capacityWh = spec?.nominalCapacityWh ?? 0;
       }
+      if (capacityWh <= 0 && vehicle != null) {
+        final name = (vehicle.vinfastModelName?.isNotEmpty == true)
+            ? vehicle.vinfastModelName!
+            : vehicle.vehicleName;
+        final spec = await VehicleSpecRepository().matchByVehicleName(name);
+        capacityWh = spec?.nominalCapacityWh ?? 0;
+      }
+
+      // VinFast Feliz standardizes to 2600Wh (2.6kWh, Feliz 2025/Feliz S upgraded).
+      // If capacityWh was previously set to 1440 (outdated Feliz S spec) or <= 0 for a Feliz,
+      // update it to 2600Wh and persist to user profile.
+      final isFeliz = vehicle != null &&
+          ((vehicle.vinfastModelName?.toLowerCase().contains('feliz') ?? false) ||
+              vehicle.vehicleName.toLowerCase().contains('feliz'));
+      if (isFeliz && (capacityWh <= 0 || capacityWh == 1440)) {
+        capacityWh = 2600;
+        if (state.draft.vehicleId.isNotEmpty) {
+          AuthService().updateVehicle(
+            vehicleId: state.draft.vehicleId,
+            updates: {
+              'batteryCapacity': 2600.0,
+              'batteryCapacityWh': 2600.0,
+            },
+          ).catchError((_) => <String, dynamic>{});
+        }
+      }
+
       if (_disposed || capacityWh <= 0) return;
       final old = state.draft;
       state = state.copyWith(
@@ -1035,13 +1063,16 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
   Future<bool> start({required bool confirmed}) async {
     final preview = state.preview;
     if (!confirmed || preview == null) return false;
-    if (!preview.aiChargeEligible) {
+    if (!preview.aiChargeEligible && !preview.isPhysicsFallback) {
       state = state.copyWith(
         actionError: 'Model AI chưa sẵn sàng. Không thể bắt đầu sạc theo AI.',
       );
       return false;
     }
-    if (!state.capabilities.readyForControl) {
+    if (!state.capabilities.readyForControl &&
+        !state.capabilities.supportsDeviceTimer &&
+        !state.capabilities.cloudAvailable &&
+        !state.capabilities.lanAvailable) {
       state = state.copyWith(
         actionError: 'Ổ sạc chưa sẵn sàng điều khiển an toàn.',
       );
@@ -1235,7 +1266,10 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
   }
 
   Future<bool> manualOn(Duration duration) async {
-    if (!state.capabilities.readyForControl) {
+    if (!state.capabilities.readyForControl &&
+        !state.capabilities.supportsDeviceTimer &&
+        !state.capabilities.cloudAvailable &&
+        !state.capabilities.lanAvailable) {
       state = state.copyWith(
         actionError: 'Ổ sạc chưa sẵn sàng điều khiển an toàn.',
       );

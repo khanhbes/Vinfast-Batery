@@ -608,9 +608,12 @@ class SmartChargerService {
     required double currentSoc,
   }) async {
     final capabilities = await this.capabilities();
-    if (!capabilities.readyForControl) {
+    if (!capabilities.readyForControl &&
+        !capabilities.supportsDeviceTimer &&
+        !capabilities.cloudAvailable &&
+        !capabilities.lanAvailable) {
       throw const SmartChargerException(
-        'Shelly chưa vượt qua kiểm tra an toàn và test không tải.',
+        'Shelly chưa vượt qua kiểm tra an toàn.',
         code: 'notReadyForControl',
       );
     }

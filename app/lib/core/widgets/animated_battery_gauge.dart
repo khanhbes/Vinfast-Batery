@@ -181,24 +181,26 @@ class _GaugeFillPainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = (size.width - 24) / 2;
 
-    // Gradient stroke
-    final paint = Paint()
-      ..shader = SweepGradient(
-        startAngle: math.pi * 0.75,
-        endAngle: math.pi * 0.75 + math.pi * 1.5 * value,
-        colors: [color.withValues(alpha: 0.6), color],
-      ).createShader(Rect.fromCircle(center: center, radius: radius))
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 12
-      ..strokeCap = StrokeCap.round;
+    if (value > 0.001) {
+      // Gradient stroke
+      final paint = Paint()
+        ..shader = SweepGradient(
+          startAngle: math.pi * 0.75,
+          endAngle: math.pi * 0.75 + math.pi * 1.5 * value,
+          colors: [color.withValues(alpha: 0.6), color],
+        ).createShader(Rect.fromCircle(center: center, radius: radius))
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 12
+        ..strokeCap = StrokeCap.round;
 
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      math.pi * 0.75,
-      math.pi * 1.5 * value,
-      false,
-      paint,
-    );
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        math.pi * 0.75,
+        math.pi * 1.5 * value,
+        false,
+        paint,
+      );
+    }
 
     // Glow at tip
     if (value > 0.01) {

@@ -91,8 +91,16 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
   @override
   Future<SmartChargerStatus> status({String? vehicleId}) => service.getStatus();
   @override
-  Future<SmartChargingPlanPreview> preview(SmartChargingPlanDraft draft) =>
-      _previewService?.createPreview(draft) ?? predictor.predict(draft);
+  Future<SmartChargingPlanPreview> preview(SmartChargingPlanDraft draft) async {
+    if (_previewService != null) {
+      try {
+        return await _previewService!.createPreview(draft);
+      } catch (_) {
+        // Remote server preview failed; fall back to local predictor
+      }
+    }
+    return predictor.predict(draft);
+  }
   @override
   Future<SmartChargingSession> start(
     SmartChargingPlanPreview preview,
@@ -466,7 +474,7 @@ class SmartChargerRepositoryFactory {
     await chargeLogs.flushAllPending();
     return DirectSmartChargerRepository(
       SmartChargerService(),
-      ChargingPredictionAdapter(),
+      ChargingPredictionAdapter(allowPhysicsFallback: true),
       previewService: ServerSmartChargerService(),
       chargeLogs: chargeLogs,
     );

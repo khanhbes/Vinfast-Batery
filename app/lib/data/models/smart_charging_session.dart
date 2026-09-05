@@ -205,6 +205,7 @@ class SmartChargingPlanPreview {
     double? confidence,
     int? predictedDurationSeconds,
     DateTime? now,
+    bool? aiChargeEligible,
   }) {
     final reference = now ?? DateTime.now();
     final durationSeconds = predictedDurationSeconds ?? predictedMinutes * 60;
@@ -232,7 +233,7 @@ class SmartChargingPlanPreview {
       runtimeHealth: source == 'ai_model' ? 'loaded' : 'fallback',
       modelVersion: source == 'ai_model' ? 'unknown' : 'heuristic-v1',
       fallbackReason: source == 'ai_model' ? null : source,
-      aiChargeEligible: source == 'ai_model',
+      aiChargeEligible: aiChargeEligible ?? (source == 'ai_model' || source == 'physics_fallback'),
       analyzedAt: reference,
       warning: impossible
           ? 'Không đủ thời gian để đạt mức pin muốn sạc trước hạn dừng.'
