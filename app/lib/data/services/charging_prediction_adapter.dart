@@ -2,6 +2,7 @@ import '../../core/services/api_service.dart';
 import '../../core/services/app_error_reporter.dart';
 import '../../core/constants/app_constants.dart';
 import '../models/smart_charging_session.dart';
+import 'charging_tflite_runner.dart';
 
 typedef ChargingPredictionCall =
     Future<Map<String, dynamic>> Function({
@@ -33,19 +34,23 @@ class SmartChargePredictionException implements Exception {
 class ChargingPredictionAdapter {
   ChargingPredictionAdapter({
     ChargingPredictionCall? predictionCall,
+    ChargingTfliteRunner? tfliteRunner,
     this.standardPowerW = 400,
     this.fastPowerW = 1000,
     this.efficiency = 0.9,
     this.strictAi = true,
     this.allowPhysicsFallback = false,
-  }) : _predictionCall = predictionCall ?? ApiService().previewSmartCharge;
+  })  : _predictionCall = predictionCall ?? ApiService().previewSmartCharge,
+        _tfliteRunner = tfliteRunner ?? ChargingTfliteRunner();
 
   final ChargingPredictionCall _predictionCall;
+  final ChargingTfliteRunner _tfliteRunner;
   final double standardPowerW;
   final double fastPowerW;
   final double efficiency;
   final bool strictAi;
   final bool allowPhysicsFallback;
+
 
   Future<SmartChargingPlanPreview> predict(
     SmartChargingPlanDraft draft, {
@@ -64,6 +69,11 @@ class ChargingPredictionAdapter {
       );
 
       if (response['success'] != true) {
+        final tfliteResult = await _tryTfliteFallback(draft, reference);
+        if (tfliteResult != null) {
+          return tfliteResult;
+        }
+
         final errorMsg =
             response['error']?.toString() ??
             'Không thể tính thời gian sạc từ AI model.';
@@ -93,6 +103,7 @@ class ChargingPredictionAdapter {
         }
         throw exc;
       }
+
 
       final rawData = response['data'];
       if (rawData is! Map) {
@@ -175,6 +186,11 @@ class ChargingPredictionAdapter {
     } on SmartChargePredictionException {
       rethrow;
     } catch (e, stack) {
+      final tfliteResult = await _tryTfliteFallback(draft, reference);
+      if (tfliteResult != null) {
+        return tfliteResult;
+      }
+
       AppErrorReporter.report(
         e,
         stack,
@@ -191,6 +207,52 @@ class ChargingPredictionAdapter {
       );
     }
   }
+
+  Future<SmartChargingPlanPreview?> _tryTfliteFallback(
+    SmartChargingPlanDraft draft,
+    DateTime now,
+  ) async {
+    if (!_tfliteRunner.hasLocalModel()) return null;
+    try {
+      final seconds = await _tfliteRunner.predictDurationSeconds(
+        startSoc: draft.currentSoc,
+        targetSoc: draft.targetSoc,
+        nominalCapacityWh: draft.estimatedCapacityWh,
+      );
+      if (seconds == null || seconds <= 0) return null;
+      final minutes = (seconds / 60).round();
+      final base = SmartChargingPlanPreview.fromPrediction(
+        draft: draft,
+        predictedMinutes: minutes,
+        source: 'tflite',
+        confidence: 85.0,
+        predictedDurationSeconds: seconds,
+        now: now,
+      );
+      return SmartChargingPlanPreview(
+        draft: base.draft,
+        predictedMinutes: base.predictedMinutes,
+        aiStopAt: base.aiStopAt,
+        effectiveStopAt: base.effectiveStopAt,
+        predictionSource: 'tflite',
+        predictionConfidence: 85.0,
+        isPhysicsFallback: false,
+        isImpossible: base.isImpossible,
+        warning: null,
+        predictedDurationSeconds: seconds,
+        modelKey: 'charging_time',
+        modelVersion: _tfliteRunner.getLocalVersion(),
+        runtimeHealth: 'loaded',
+        warnings: const [],
+        fallbackReason: null,
+        analyzedAt: now,
+        aiChargeEligible: true,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
 
   SmartChargingPlanPreview physicsFallback(
     SmartChargingPlanDraft draft, {

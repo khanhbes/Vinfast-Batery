@@ -34,7 +34,7 @@ if [ "$dashboard_status" != "running" ]; then
 fi
 
 for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
-  if curl -fsS https://api.evbattery.live/api/health > /tmp/vinfast_api_health.json; then
+  if curl -fsS https://khanhbes.tailaafca5.ts.net/api/health > /tmp/vinfast_api_health.json; then
     cat /tmp/vinfast_api_health.json
     break
   fi

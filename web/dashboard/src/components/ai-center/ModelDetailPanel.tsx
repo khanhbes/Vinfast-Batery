@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   RefreshCw, Upload, Trash2, PlayCircle, CheckCircle2, AlertCircle,
-  History, FlaskConical, BarChart3, Loader2, Copy, PackageX, PowerOff, TrendingUp,
+  History, FlaskConical, BarChart3, Loader2, Copy, PackageX, PowerOff, TrendingUp, Brain,
 } from 'lucide-react';
+
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -143,6 +144,34 @@ export default function ModelDetailPanel({ meta, onAfterChange }: Props) {
     }
   };
 
+  const [fineTuning, setFineTuning] = useState(false);
+
+  const onFineTune = async () => {
+    if (!confirm('Bắt đầu fine-tune mô hình Smart Charge từ các phiên sạc thực tế?')) return;
+    try {
+      setFineTuning(true);
+      setMessage({ type: 'info', text: 'Đang trích xuất dataset và huấn luyện mô hình...' });
+      const res = await fetch('/api/ai/models/charging_time/fine-tune', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Fine-tune thất bại');
+      }
+      setMessage({
+        type: 'ok',
+        text: `Đã fine-tune thành công version ${data.data.version}! MAPE: ${data.data.metrics.mape}% (Độ chính xác: ${data.data.metrics.accuracyPct}%)`,
+      });
+      await reload();
+      onAfterChange();
+    } catch (e: any) {
+      setMessage({ type: 'err', text: `Lỗi fine-tune: ${e?.message}` });
+    } finally {
+      setFineTuning(false);
+    }
+  };
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-start justify-between gap-4 border-b">
@@ -160,6 +189,18 @@ export default function ModelDetailPanel({ meta, onAfterChange }: Props) {
           <CardDescription className="mt-1">{meta.description}</CardDescription>
         </div>
         <div className="flex gap-2">
+          {meta.key === 'charging_time' && (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={onFineTune}
+              disabled={fineTuning}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white"
+            >
+              <Brain className={`w-4 h-4 mr-1 ${fineTuning ? 'animate-spin' : ''}`} />
+              {fineTuning ? 'Đang train...' : 'Fine-tune AI'}
+            </Button>
+          )}
           {activeVersion && (
             <Button variant="outline" size="sm" onClick={onDeactivate} className="text-amber-600 hover:text-amber-700">
               <PowerOff className="w-4 h-4 mr-1" />
@@ -176,6 +217,7 @@ export default function ModelDetailPanel({ meta, onAfterChange }: Props) {
           </Button>
         </div>
       </CardHeader>
+
 
       {/* Use case banner */}
       {(meta.useCase || meta.outputDescription) && (

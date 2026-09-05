@@ -60,7 +60,7 @@ export default function UserManagement() {
       if (auth.currentUser) {
         const currentUser: ExtendedUser = {
           id: auth.currentUser.uid,
-          email: auth.currentUser.email || 'admin@vinfast.com',
+          email: auth.currentUser.email || '(không có email)',
           displayName: auth.currentUser.displayName || 'Admin User',
           role: 'admin',
           createdAt: new Date().toISOString(),

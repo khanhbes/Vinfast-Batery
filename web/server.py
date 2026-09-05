@@ -10,6 +10,7 @@ import io
 import csv
 import uuid
 import json
+from telemetry_schema import TelemetryValidationError, normalize_telemetry
 import math
 import random
 import functools
@@ -19,6 +20,9 @@ from datetime import datetime, timedelta, timezone
 from flask import Flask, request, jsonify, Response, redirect, send_file
 from flask_cors import CORS
 from werkzeug.exceptions import HTTPException
+
+_RUNTIME_ENV = os.environ.get('APP_ENV', os.environ.get('FLASK_ENV', 'development')).strip().lower()
+_IS_PRODUCTION = _RUNTIME_ENV in ('prod', 'production')
 
 try:
     import joblib
@@ -210,6 +214,11 @@ def _find_service_account_path() -> str | None:
     """
     root = os.path.dirname(os.path.abspath(__file__))
     env_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS', '').strip()
+    # Production must use an explicitly supplied credential path or the
+    # FIREBASE_CREDENTIALS_JSON environment variable; never auto-discover a
+    # key file that happens to be present in the application directory.
+    if _IS_PRODUCTION and not env_path:
+        return None
     candidates = []
     if env_path:
         candidates.append(env_path)
@@ -298,12 +307,22 @@ except Exception as e:
     print('  → Sử dụng in-memory fallback')
     print('  → Docker: set FIREBASE_CREDENTIALS_JSON=<base64 của file key.json>')
     print('  → Local:  đặt file serviceAccountKey.json cạnh server.py')
+    if _IS_PRODUCTION:
+        raise RuntimeError(
+            'Firebase Admin SDK bắt buộc phải khởi tạo thành công trong production'
+        ) from e
 
 # ═══════════════════════════════════════════════════════════════
 # FLASK APP
 # ═══════════════════════════════════════════════════════════════
 app = Flask(__name__)
-CORS(app)
+_cors_origins_raw = os.environ.get('CORS_ORIGINS', '').strip()
+if _IS_PRODUCTION and not _cors_origins_raw:
+    raise RuntimeError('CORS_ORIGINS phải được cấu hình trong môi trường production')
+_cors_origins = [origin.strip() for origin in _cors_origins_raw.split(',') if origin.strip()]
+if _IS_PRODUCTION and '*' in _cors_origins:
+    raise RuntimeError('CORS_ORIGINS không được dùng wildcard trong production')
+CORS(app, origins=_cors_origins or '*')
 app.secret_key = os.urandom(24)
 
 
@@ -325,7 +344,15 @@ def _parse_admin_emails(raw: str) -> set[str]:
 # Admin email allowlist
 # - Có thể truyền nhiều email bằng dấu phẩy
 # - Hỗ trợ wildcard "*" cho môi trường local/dev
-ADMIN_EMAILS = _parse_admin_emails(os.environ.get('ADMIN_EMAILS', 'admin@vinfast.local'))
+# Never grant administrator access from a built-in/demo address. Development
+# may leave this empty and use Firebase custom claims; production must provide
+# an explicit allow-list through the environment.
+_admin_emails_raw = os.environ.get('ADMIN_EMAILS', '').strip()
+if _IS_PRODUCTION and not _admin_emails_raw:
+    raise RuntimeError('ADMIN_EMAILS phải được cấu hình trong môi trường production')
+ADMIN_EMAILS = _parse_admin_emails(_admin_emails_raw)
+if _IS_PRODUCTION and '*' in ADMIN_EMAILS:
+    raise RuntimeError('ADMIN_EMAILS=* chỉ được phép trong môi trường development')
 
 # In-memory fallback stores
 _local_profiles: dict = {}
@@ -377,7 +404,9 @@ def require_auth(f):
     return decorated
 
 
-_DEV_ADMIN_KEY = os.environ.get('DEV_ADMIN_KEY', 'dev-local-token')
+_DEV_ADMIN_KEY = os.environ.get('DEV_ADMIN_KEY', '').strip()
+if _IS_PRODUCTION and not _DEV_ADMIN_KEY:
+    raise RuntimeError('DEV_ADMIN_KEY phải được cấu hình trong môi trường production')
 
 def require_admin(f):
     """Decorator: yêu cầu quyền admin."""
@@ -501,6 +530,7 @@ def health_check():
             'POST /api/ai/analyze-patterns',
             'POST /api/ai/train-vehicle-profile',
             'GET  /api/ai/profile-status/<vehicleId>',
+            'POST /api/telemetry',
         ],
     })
 
@@ -2389,7 +2419,7 @@ def handle_unexpected_exception(err: Exception):
     request_id = str(uuid.uuid4())[:8]
     print(f'❌ API error [{request_id}] {request.method} {request.path}: {err}')
     if request.path.startswith('/api/'):
-        debug_mode = os.environ.get('FLASK_DEBUG', '1').lower() in ('1', 'true', 'yes')
+        debug_mode = os.environ.get('FLASK_DEBUG', '0').lower() in ('1', 'true', 'yes')
         return jsonify({
             'success': False,
             'error': str(err) if debug_mode else 'Lỗi hệ thống, vui lòng thử lại',
@@ -2407,7 +2437,9 @@ except Exception:
     _http = None
 
 AI_SERVER_URL = os.environ.get('AI_SERVER_URL', 'http://127.0.0.1:8001').rstrip('/')
-AI_SERVER_TOKEN = os.environ.get('AI_SERVER_INTERNAL_TOKEN', 'dev-local-token')
+AI_SERVER_TOKEN = os.environ.get('AI_SERVER_INTERNAL_TOKEN', '').strip()
+if _IS_PRODUCTION and not AI_SERVER_TOKEN:
+    raise RuntimeError('AI_SERVER_INTERNAL_TOKEN phải được cấu hình trong môi trường production')
 AI_SERVER_TIMEOUT = float(os.environ.get('AI_SERVER_TIMEOUT', '15'))
 AI_MODELS_BASE_DIR = os.environ.get(
     'AI_SERVER_MODELS_DIR',
@@ -3640,6 +3672,81 @@ def ai_charging_model_status():
             }
         }), 500
 
+# ── AI Fine-Tuning & Shadow Mode Endpoints ─────────────────────────
+
+@app.route('/api/ai/models/charging_time/fine-tune', methods=['POST'])
+def ai_fine_tune_charging_time():
+    """Trigger fine-tuning of charging_time model and export joblib + tflite."""
+    try:
+        _require_user_or_admin()
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 401
+
+    try:
+        from ai_server.fine_tune import run_fine_tuning
+        sessions = []
+        if shelly_repo and hasattr(shelly_repo, 'history'):
+            try:
+                history = shelly_repo.history('all', 100)
+                sessions = [s.to_dict() if hasattr(s, 'to_dict') else s for s in history]
+            except Exception as ex:
+                print(f"Could not read shelly history: {ex}")
+        
+        models_dir = os.path.join(os.path.dirname(__file__), 'ai_models', 'charging_time')
+        os.makedirs(models_dir, exist_ok=True)
+        
+        result = run_fine_tuning(sessions, models_dir)
+        if not result.get('success'):
+            return jsonify({'success': False, 'error': result.get('error', 'Fine-tuning failed')}), 500
+
+        version = result['version']
+        store = _model_store_for('charging_time')
+        if store:
+            try:
+                store.save_version(
+                    version=version,
+                    source_path=result['joblibPath'],
+                    metadata={
+                        'mape': result['metrics']['mape'],
+                        'rmse': result['metrics']['rmseSeconds'],
+                        'accuracyPct': result['metrics']['accuracyPct'],
+                        'realSamplesCount': result['dataset']['realSamplesCount'],
+                        'trainedAt': datetime.now(timezone.utc).isoformat(),
+                        'tflitePath': result.get('tflitePath'),
+                    }
+                )
+            except Exception as ex:
+                print(f"Could not save version in store: {ex}")
+
+        return jsonify({'success': True, 'data': result})
+    except Exception as exc:
+        print(f"Fine-tuning failed: {exc}")
+        return jsonify({'success': False, 'error': str(exc)}), 500
+
+
+@app.route('/api/smart-charge/shadow-status', methods=['GET'])
+def smart_charge_shadow_status():
+    """Return shadow mode promotion readiness evaluation."""
+    try:
+        uid = _current_user_id()
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 401
+
+    try:
+        vehicle_id = request.args.get('vehicle_id') or request.args.get('vehicleId')
+        sessions = []
+        if shelly_repo and hasattr(shelly_repo, 'history'):
+            history = shelly_repo.history(uid, 50, vehicle_id=vehicle_id)
+            sessions = [s.to_dict() if hasattr(s, 'to_dict') else s for s in history]
+        
+        from shelly.shadow_promotion import evaluate_shadow_promotion
+        evaluation = evaluate_shadow_promotion(sessions)
+        return jsonify({'success': True, 'data': evaluation})
+    except Exception as exc:
+        print(f"Failed to evaluate shadow promotion: {exc}")
+        return jsonify({'success': False, 'error': str(exc)}), 500
+
+
 # ═══════════════════════════════════════════════════════════════
 # WEB SYNC ENDPOINTS
 # ═══════════════════════════════════════════════════════════════
@@ -3655,12 +3762,14 @@ def web_sync_battery_state():
                 'error': 'Firestore not available'
             }), 503
         
-        # Store battery state
-        doc_ref = _firestore_db.collection('battery_states').add({
-            **body,
-            'syncedAt': datetime.now(timezone.utc),
-            'source': 'mobile_app'
-        })
+        try:
+            # Keep every legacy field, then add the stable v1 measurement envelope.
+            telemetry = normalize_telemetry(body, default_source='manual_entry')
+        except TelemetryValidationError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 400
+        telemetry['syncedAt'] = datetime.now(timezone.utc)
+        telemetry.setdefault('source', 'flutter_app')
+        doc_ref = _firestore_db.collection('battery_states').add(telemetry)
         
         print(f'✅ Battery state synced from mobile: {doc_ref[1].id}')
         
@@ -3678,6 +3787,25 @@ def web_sync_battery_state():
             'success': False,
             'error': str(e)
         }), 500
+
+
+@app.route('/api/telemetry', methods=['POST'])
+def ingest_telemetry():
+    """Ingest manual, Shelly, BMS or AI telemetry in battery-telemetry/v1."""
+    try:
+        uid, _email = _require_user_or_admin()
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 401
+    if not _fs():
+        return jsonify({'success': False, 'error': 'Firestore không khả dụng'}), 503
+    try:
+        telemetry = normalize_telemetry(request.get_json() or {})
+    except TelemetryValidationError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+    telemetry['ownerUid'] = uid
+    telemetry['syncedAt'] = datetime.now(timezone.utc)
+    doc_ref = _fs().collection('TelemetryPoints').add(telemetry)
+    return jsonify({'success': True, 'data': {'id': doc_ref[1].id, 'telemetry': telemetry}}), 201
 
 @app.route('/api/web/sync/trip-prediction', methods=['POST'])
 def web_sync_trip_prediction():
@@ -4043,6 +4171,13 @@ def sync_full():
             item['ownerUid'] = uid
             item['syncedAt'] = now_iso
             item.setdefault('source', 'flutter_app')
+            if key == 'telemetry':
+                try:
+                    item = normalize_telemetry(item, default_source='manual_entry')
+                except TelemetryValidationError as exc:
+                    return jsonify({'success': False, 'error': f'telemetry không hợp lệ: {exc}'}), 400
+                item['ownerUid'] = uid
+                item['syncedAt'] = now_iso
             item = _ensure_schema(item, col_name)
             doc_id = item.get(id_field) or item.get('vehicleId') or item.get('id')
             if doc_id:
@@ -4366,7 +4501,7 @@ if __name__ == '__main__':
     print('   SOC:    /api/soc/predict|status|history  (proxy → AI server)')
     print('   Models: GET/POST /api/admin/ai/models[/upload|/rollback|/<ver>]')
     print('   Trip:   /api/trip/predict|history')
-    print('   Sync:   /api/web/sync/battery-state|trip-prediction|user|vehicle|full')
+    print('   Sync:   /api/web/sync/battery-state|trip-prediction|user|vehicle|full, POST /api/telemetry')
     print('   SyncRd: GET /api/user/sync/overview')
     print('   UserAI: GET /api/user/ai/models, GET .../download, POST .../predict')
     print('   Migrate: POST /api/admin/migrate[?dry_run=true]')
@@ -4374,6 +4509,6 @@ if __name__ == '__main__':
     print(f'   AI server URL: {AI_SERVER_URL}')
     print(f'   Consumption model: {_consumption_model_status}')
     print(f'🌐 http://localhost:5000\n')
-    debug_mode = os.environ.get('FLASK_DEBUG', '1').lower() in ('1', 'true', 'yes')
+    debug_mode = os.environ.get('FLASK_DEBUG', '0').lower() in ('1', 'true', 'yes')
     use_reloader = os.environ.get('FLASK_USE_RELOADER', '0').lower() in ('1', 'true', 'yes')
     app.run(debug=debug_mode, use_reloader=use_reloader, host='0.0.0.0', port=5000)

@@ -286,6 +286,12 @@ class ModelSyncService {
     return manifest.localPath;
   }
 
+  /// Lấy thông tin manifest của model nếu có
+  LocalModelManifest? getManifest(String key) => _localManifest[key];
+
+  /// Lấy version của model local nếu có
+  String? getLocalModelVersion(String key) => _localManifest[key]?.version;
+
   /// Kiểm tra model có sẵn local không
   bool isModelAvailable(String key, {String? requiredVersion}) {
     final manifest = _localManifest[key];

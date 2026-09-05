@@ -433,9 +433,13 @@ class SmartChargingSession {
     this.userStopReason = UserStopReason.none,
     this.trainingState = 'pending',
     this.trainingReason,
+    this.whPerSocPercent,
+    this.hardwareTimeoutSeconds,
+    this.telemetrySamples = const [],
   });
 
   final String sessionId;
+
   final String vehicleId;
   final ChargingSessionState state;
   final ChargingStrategy strategy;
@@ -504,8 +508,12 @@ class SmartChargingSession {
   final UserStopReason userStopReason;
   final String trainingState;
   final String? trainingReason;
+  final double? whPerSocPercent;
+  final int? hardwareTimeoutSeconds;
+  final List<Map<String, dynamic>> telemetrySamples;
 
   Duration remaining([DateTime? now]) {
+
     final value = effectiveStopAt.difference(now ?? DateTime.now());
     return value.isNegative ? Duration.zero : value;
   }
@@ -628,8 +636,22 @@ class SmartChargingSession {
       trainingState:
           json['personal_ai_training_state']?.toString() ?? 'pending',
       trainingReason: json['personal_ai_training_reason']?.toString(),
+      whPerSocPercent:
+          ((json['wh_per_soc_percent'] ?? json['whPerSocPercent']) as num?)
+              ?.toDouble(),
+      hardwareTimeoutSeconds:
+          ((json['hardware_timeout_seconds'] ?? json['hardwareTimeoutSeconds'])
+                  as num?)
+              ?.round(),
+      telemetrySamples:
+          ((json['telemetry_samples'] ?? json['telemetrySamples']) as List?)
+              ?.whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList() ??
+          const [],
     );
   }
+
 
   Map<String, dynamic> toJson() => {
     'session_id': sessionId,
@@ -731,7 +753,12 @@ class SmartChargingSession {
     'user_stop_reason': userStopReason.wireValue,
     'personal_ai_training_state': trainingState,
     if (trainingReason != null) 'personal_ai_training_reason': trainingReason,
+    if (whPerSocPercent != null) 'wh_per_soc_percent': whPerSocPercent,
+    if (hardwareTimeoutSeconds != null)
+      'hardware_timeout_seconds': hardwareTimeoutSeconds,
+    'telemetry_samples': telemetrySamples,
   };
+
 
   SmartChargingSession copyWith({
     ChargingSessionState? state,

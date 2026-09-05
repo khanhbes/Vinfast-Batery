@@ -71,7 +71,7 @@ export default function Login() {
                   <label className="text-sm font-medium text-foreground">Email</label>
                   <Input
                     type="email"
-                    placeholder="admin@vinfast.com"
+                    placeholder="you@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
@@ -118,11 +118,6 @@ export default function Login() {
                 </Button>
               </form>
 
-              <div className="mt-6 text-center">
-                <p className="text-sm text-muted-foreground">
-                  Demo: admin@vinfast.com / admin123
-                </p>
-              </div>
             </CardContent>
           </Card>
         </div>

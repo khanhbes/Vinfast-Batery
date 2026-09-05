@@ -269,13 +269,14 @@ class SmartChargeService:
             for _ in range(10):
                 current = self.provider.get_status(binding)
                 if current.device_id == binding.device_id and current.relay and current.timer_remaining > 0:
-                    if current.temperature_c is not None and current.temperature_c >= 80:
-                        raise ProviderError("overtemperature", "Shelly quá nhiệt")
-                    if current.power_w > 2500:
-                        raise ProviderError("overpower", "Công suất vượt 2500W")
+                    if current.temperature_c is not None and current.temperature_c >= self.safety_policy.cutoff_temperature_c:
+                        raise ProviderError("overtemperature", f"Shelly quá nhiệt ({current.temperature_c}°C >= {self.safety_policy.cutoff_temperature_c}°C)")
+                    if current.power_w > self.safety_policy.cutoff_power_w:
+                        raise ProviderError("overpower", f"Công suất vượt ngưỡng ({current.power_w}W > {self.safety_policy.cutoff_power_w}W)")
                     verified = current
                     break
                 self.sleep(1)
+
             if not verified:
                 raise ProviderError("timerNotArmed", "Không xác minh được timer trên Shelly")
             session.state = "active"
@@ -450,6 +451,9 @@ class SmartChargeService:
         if session is None:
             raise SmartChargeError("sessionNotFound", "Không tìm thấy phiên sạc", 404)
         session.actual_end_soc = float(actual_soc)
+        gain = session.actual_end_soc - session.start_soc
+        if gain > 0 and session.energy_used_wh > 0:
+            session.wh_per_soc_percent = round(session.energy_used_wh / gain, 2)
         decision = evaluate_training(session)
         session.training_eligible = decision.eligible
         session.training_state = "pending" if decision.eligible else "skipped"
@@ -460,6 +464,7 @@ class SmartChargeService:
         self.repository.upsert_charge_log(uid, session)
         self._update_personal_calibration(uid, session, decision)
         return session
+
 
     def ingest_personal_session(self, uid: str, session_id: str) -> dict:
         session = self.repository.get_session(uid, session_id)
@@ -528,9 +533,22 @@ class SmartChargeService:
         session.peak_power_w = max(session.peak_power_w or 0, point["powerMaximumW"])
         session.average_voltage_v = _running_average(session.average_voltage_v, point["voltageV"], count)
         session.average_current_a = _running_average(session.average_current_a, point["currentA"], count)
+        sample = {
+            "t": int(now.timestamp()),
+            "elapsed_s": point["elapsedSeconds"],
+            "v": point["voltageV"],
+            "a": point["currentA"],
+            "p": point["powerAverageW"],
+            "e_wh": point["energyWh"],
+            "temp_shelly": point.get("shellyTemperatureC"),
+            "temp_bat": point.get("batteryTemperatureC"),
+            "est_soc": point.get("estimatedSoc"),
+        }
+        session.telemetry_samples = [*session.telemetry_samples[-999:], sample]
         self.repository.save_session(uid, session)
         self.repository.upsert_charge_log(uid, session)
         return {"recorded": True, "coverage": session.telemetry_coverage}
+
 
     def _update_personal_calibration(self, uid: str, session: ChargingSession, decision) -> None:
         profile = self.repository.get_personal_profile(uid, session.vehicle_id)
@@ -771,6 +789,44 @@ class SmartChargeService:
         except ProviderError:
             return session
         return self._reconcile_with_status(uid, status, vehicle_id) or self.repository.current_session(uid, vehicle_id=vehicle_id)
+
+    def recover(self, uid: str, vehicle_id: str | None = None) -> ChargingSession | None:
+        """Called on server startup/restart. Reads real relay state from Shelly and synchronizes database."""
+        session = self.repository.current_session(uid, vehicle_id=vehicle_id)
+        if not session:
+            return None
+        binding = self.binding(uid, session.vehicle_id)
+        if not binding:
+            return session
+        try:
+            status = self.provider.get_status(binding)
+        except ProviderError:
+            return session
+        now = self.clock()
+        if not status.relay:
+            near_planned = abs((now - session.effective_stop_at).total_seconds()) <= 120
+            session.state = "completed" if near_planned else "interrupted"
+            session.stop_reason = "planned_timer" if near_planned else "relay_off"
+            session.stopped_at = now
+            session.updated_at = now
+            session.relay_verified = True
+            session.energy_used_wh = max(0, status.energy_wh - (session.baseline_energy_wh or status.energy_wh))
+            session.version += 1
+            self.repository.save_session(uid, session)
+            self.repository.upsert_charge_log(uid, session)
+            return session
+        if status.timer_remaining <= 0 and session.state in ("arming", "active"):
+            try:
+                self.provider.turn_off(binding)
+            except ProviderError:
+                pass
+        if now >= session.absolute_safety_stop_at:
+            try:
+                self.provider.turn_off(binding)
+            except ProviderError:
+                pass
+        return session
+
 
     def _reconcile_with_status(self, uid: str, status, vehicle_id: str | None = None) -> ChargingSession | None:
         session = self.repository.current_session(uid, vehicle_id=vehicle_id)

@@ -33,6 +33,7 @@ class FakeShelly:
         self.online = True
         self.energy_wh = 100.0
         self.set_calls: list[bool] = []
+        self.auto_off_delays: list[int | None] = []
         self.fail_set = False
         self.fail_read = False
         self.read_failures = 0
@@ -57,13 +58,15 @@ class FakeShelly:
             energy_wh=self.energy_wh,
         )
 
-    def set_relay(self, on: bool):
+    def set_relay(self, on: bool, auto_off_delay_seconds: int | None = None):
         self.set_calls.append(on)
+        self.auto_off_delays.append(auto_off_delay_seconds)
         previous = self.relay
         if self.fail_set:
             raise ShellyUnavailableError("set failed")
         self.relay = on
         return ChargerCommandResponse(success=True, relay=on, previous_state=previous)
+
 
 
 def request(clock, strategy=ChargingStrategy.SMART_COMBINED, minutes=60, deadline_minutes=90):
@@ -411,3 +414,61 @@ def test_sqlite_restores_and_lists_newest_first(tmp_path):
     reopened = SmartSessionStore(tmp_path / "sessions.sqlite3")
     assert reopened.get(second.session_id).state == ChargingSessionState.ACTIVE
     assert [item.session_id for item in reopened.list(2)] == [second.session_id, first.session_id]
+
+
+def test_hardware_timer_passed_to_shelly(tmp_path):
+    ctrl, shelly, clock = controller(tmp_path)
+    session = ctrl.start(request(clock, minutes=30, deadline_minutes=45), "hw_timer_key")
+    assert session.hardware_timeout_seconds is not None
+    assert session.hardware_timeout_seconds > 0
+    # Shelly set_relay received the hardware auto-off delay
+    assert len(shelly.auto_off_delays) == 1
+    assert shelly.auto_off_delays[0] == session.hardware_timeout_seconds
+
+
+def test_battery_temp_safety_cutoff(tmp_path):
+    ctrl, shelly, clock = controller(tmp_path)
+    session = ctrl.start(request(clock, minutes=60), "bat_temp_key")
+    # Simulate high battery temperature reported in session
+    updated = session.model_copy(update={"battery_temperature_c": 56.0})
+    ctrl.store.save(updated)
+    
+    # Tick 1: first consecutive sample over threshold
+    ctrl.tick()
+    assert shelly.relay is True
+    # Tick 2: second consecutive sample over threshold triggers safety cutoff
+    stopped = ctrl.tick()
+    assert stopped.state == ChargingSessionState.INTERRUPTED
+    assert stopped.stop_reason == ChargingStopReason.BATTERY_OVER_TEMPERATURE
+    assert shelly.relay is False
+
+
+
+def test_telemetry_samples_and_training_eligibility(tmp_path):
+    ctrl, shelly, clock = controller(tmp_path)
+    session = ctrl.start(request(clock, minutes=40, deadline_minutes=60), "telemetry_key")
+    
+    # Advance time and tick to collect samples
+    clock.advance(minutes=25)
+    shelly.energy_wh += 500.0
+    ctrl.tick()
+    
+    current = ctrl.store.current()
+    assert len(current.telemetry_samples) >= 1
+    sample = current.telemetry_samples[-1]
+    assert "t" in sample
+    assert "v" in sample
+    assert "a" in sample
+    assert "p" in sample
+    assert "e_wh" in sample
+    
+    # Set actual_end_soc and stop session
+    with_actual = current.model_copy(update={"actual_end_soc": 80.0})
+    ctrl.store.save(with_actual)
+    completed = ctrl.stop(with_actual.session_id, reason=ChargingStopReason.TARGET_SOC)
+    
+    assert completed.state == ChargingSessionState.COMPLETED
+    assert completed.training_eligible is True
+    assert completed.wh_per_soc_percent is not None
+    assert completed.wh_per_soc_percent > 0
+

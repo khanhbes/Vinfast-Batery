@@ -206,6 +206,8 @@ VITE_FIREBASE_APP_ID=
 VITE_API_BASE_URL=http://localhost:5000
 ```
 
+Khi chạy production/container, đặt thêm APP_ENV=production, CORS_ORIGINS và các secret backend. Compose sẽ dừng ngay nếu thiếu AI_SERVER_INTERNAL_TOKEN, DEV_ADMIN_KEY, ADMIN_EMAILS, FIREBASE_CREDENTIALS_JSON hoặc Firebase Web config.
+
 Admin được xác định bằng custom claim `admin=true` hoặc email trong `ADMIN_EMAILS`. Chỉ dùng `ADMIN_EMAILS=*` trong môi trường phát triển cô lập.
 
 ## Chạy dự án trên Windows
@@ -292,6 +294,10 @@ flutter run --dart-define=APP_API_BASE_URL=http://10.0.2.2:5000
 
 ## Build APK
 
+### Cấu hình release signing
+
+Sao chép `app/android/key.properties.example` thành `app/android/key.properties` rồi điền keystore riêng. CI có thể dùng các biến `ANDROID_STORE_FILE`, `ANDROID_STORE_PASSWORD`, `ANDROID_KEY_ALIAS` và `ANDROID_KEY_PASSWORD`. File `key.properties`, `*.jks` và `*.keystore` đã được loại khỏi Git.
+
 ```powershell
 cd app
 flutter clean
@@ -310,7 +316,7 @@ flutter build apk --release --split-per-abi `
 ```
 
 > [!CAUTION]
-> `app/android/app/build.gradle.kts` hiện ký bản `release` bằng debug key. Trước khi phát hành chính thức, cần tạo keystore riêng, cấu hình signing an toàn và không commit mật khẩu/keystore.
+> Build release sẽ bị từ chối nếu chưa có release signing. Chỉ dùng `ALLOW_DEBUG_SIGNING=true` cho bản build local tạm thời; không phát hành APK được ký bằng debug key.
 
 Server phân phối APK qua `web/apk/` và metadata `web/app_config.json`. Khi phát hành, cần đồng bộ version, build number, release notes và `VinFastBattery_latest.apk`.
 
@@ -404,6 +410,7 @@ python -m pytest tests -q
 | `SHELLY_PROFILE_MASTER_KEY` | Mã hóa profile thiết bị Shelly |
 | `SMART_CHARGE_MAX_MINUTES` | Giới hạn tuyệt đối một phiên Smart Charge |
 | `SHELLY_PROVIDER` | Provider Shelly, mặc định `integrator` |
+| `CORS_ORIGINS` | Danh sách origin dashboard được phép gọi API |
 | `APP_API_BASE_URL` | URL API nhúng vào app qua `--dart-define` |
 | `VITE_API_BASE_URL` | Base URL API của dashboard |
 

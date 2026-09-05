@@ -181,6 +181,7 @@ class SmartChargingController:
             now = self.now()
             ai_stop, deadline, effective, absolute = self._planned_times(request, now)
             effective_shadow = self.config.shadow_mode or not self.config.automatic_cutoff
+            hardware_timeout_seconds = max(60, int((effective - now).total_seconds()) + 60)
             session = SmartChargingSession(
                 session_id=str(uuid4()),
                 idempotency_key=key,
@@ -203,10 +204,11 @@ class SmartChargingController:
                 baseline_energy_wh=before.energy_wh,
                 last_meter_energy_wh=before.energy_wh,
                 shadow_mode=effective_shadow,
+                hardware_timeout_seconds=hardware_timeout_seconds,
             )
             self.store.create(session)
             try:
-                command = self.shelly.set_relay(True)
+                command = self.shelly.set_relay(True, auto_off_delay_seconds=hardware_timeout_seconds)
                 readback = self.shelly.get_status()
                 if not command.success or not readback.relay:
                     raise ShellyUnavailableError("Relay ON readback failed")
@@ -235,10 +237,12 @@ class SmartChargingController:
                 "state": ChargingSessionState.ACTIVE,
                 "started_at": self.now(),
                 "relay_verified": True,
+                "hardware_timeout_seconds": hardware_timeout_seconds,
                 "updated_at": self.now(),
                 "version": session.version + 1,
             })
             return self.store.save(active_session)
+
 
     def get(self, session_id: str) -> SmartChargingSession:
         session = self.store.get(session_id)
@@ -308,6 +312,16 @@ class SmartChargingController:
                 if reason == ChargingStopReason.MANUAL
                 else ChargingSessionState.COMPLETED
             )
+            gain = (stopping.actual_end_soc - stopping.start_soc) if stopping.actual_end_soc is not None else None
+            wh_per_soc = round(stopping.energy_used_wh / gain, 2) if (gain is not None and gain > 0) else None
+            duration_s = max(0, int((now - (stopping.started_at or stopping.created_at)).total_seconds()))
+            training_eligible = (
+                terminal_state == ChargingSessionState.COMPLETED
+                and stopping.energy_quality == "good"
+                and stopping.energy_used_wh > 0
+                and duration_s >= 1200
+                and (gain is not None and gain >= 10.0)
+            )
             completed = stopping.model_copy(update={
                 "state": terminal_state,
                 "stop_reason": reason,
@@ -316,8 +330,11 @@ class SmartChargingController:
                 "updated_at": now,
                 "version": stopping.version + 1,
                 "user_stop_reason": user_stop_reason,
+                "wh_per_soc_percent": wh_per_soc,
+                "training_eligible": training_eligible,
             })
             return self.store.save(completed)
+
 
     def patch(
         self, session_id: str, request: ChargingSessionPatchRequest
@@ -421,17 +438,34 @@ class SmartChargingController:
             now = self.now()
             self._last_status_at = now
             session = self._update_energy(session, status.energy_wh)
+            
+            # Record telemetry sample for fine-tuning
+            sample = {
+                "t": int(now.timestamp()),
+                "elapsed_s": int((now - (session.started_at or session.created_at)).total_seconds()),
+                "v": round(status.voltage_v, 2),
+                "a": round(status.current_a, 2),
+                "p": round(status.power_w, 2),
+                "e_wh": round(session.energy_used_wh, 2),
+                "temp_shelly": status.temperature_c,
+                "temp_bat": session.battery_temperature_c,
+                "est_soc": round(session.estimated_soc, 1) if session.estimated_soc is not None else None,
+            }
+            samples = [*session.telemetry_samples[-999:], sample]
+
             if not status.relay:
                 interrupted = session.model_copy(update={
                     "state": ChargingSessionState.INTERRUPTED,
                     "stop_reason": ChargingStopReason.RELAY_OFF,
                     "stopped_at": now,
                     "relay_verified": True,
+                    "shelly_temperature_c": status.temperature_c,
+                    "telemetry_samples": samples,
                     "updated_at": now,
                     "version": session.version + 1,
                 })
                 return self.store.save(interrupted)
-            violation = self.safety_monitor.evaluate(status)
+            violation = self.safety_monitor.evaluate(status, battery_temperature_c=session.battery_temperature_c)
             if violation is not None:
                 return self._safety_stop(session, violation)
             reason = self._due_reason(session, now)
@@ -440,6 +474,8 @@ class SmartChargingController:
                     if session.would_have_turned_off_at is None:
                         session = session.model_copy(update={
                             "would_have_turned_off_at": now,
+                            "shelly_temperature_c": status.temperature_c,
+                            "telemetry_samples": samples,
                             "updated_at": now,
                             "version": session.version + 1,
                         })
@@ -447,9 +483,12 @@ class SmartChargingController:
                     return session
                 return self.stop(session.session_id, reason=reason)
             updated = session.model_copy(update={
+                "shelly_temperature_c": status.temperature_c,
+                "telemetry_samples": samples,
                 "updated_at": now,
                 "version": session.version + 1,
             })
+
             return self.store.save(updated)
 
     def _safety_stop(self, session: SmartChargingSession, violation) -> SmartChargingSession:

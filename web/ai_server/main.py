@@ -45,7 +45,10 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # .../web
 MODELS_BASE_DIR = os.environ.get(
     "AI_SERVER_MODELS_DIR", os.path.join(_ROOT, "models")
 )
-INTERNAL_TOKEN = os.environ.get("AI_SERVER_INTERNAL_TOKEN", "dev-local-token")
+_RUNTIME_ENV = os.environ.get("APP_ENV", os.environ.get("FLASK_ENV", "development")).strip().lower()
+INTERNAL_TOKEN = os.environ.get("AI_SERVER_INTERNAL_TOKEN", "").strip()
+if _RUNTIME_ENV in ("prod", "production") and not INTERNAL_TOKEN:
+    raise RuntimeError("AI_SERVER_INTERNAL_TOKEN phải được cấu hình trong môi trường production")
 
 
 def _find_legacy_pkl(filenames: list[str]) -> str:

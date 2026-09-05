@@ -28,7 +28,9 @@ class FakeShelly:
             energy_wh=18,
         )
 
-    def set_relay(self, on: bool) -> ChargerCommandResponse:
+    def set_relay(
+        self, on: bool, auto_off_delay_seconds: int | None = None
+    ) -> ChargerCommandResponse:
         self.set_calls.append(on)
         previous = self.relay
         self.relay = on
@@ -37,6 +39,7 @@ class FakeShelly:
             relay=on,
             previous_state=previous,
         )
+
 
 
 class UnavailableShelly(FakeShelly):

@@ -64,14 +64,14 @@ Write-Host "  VPS: $VpsIp | Service: $Service" -ForegroundColor Cyan
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host ""
 
-# ── BƯỚC 1: Tạo ZIP (loại trừ .venv, node_modules, __pycache__) ──
+# ── BƯỚC 1: Tạo ZIP (loại trừ dependency/cache cục bộ) ────────
 Write-Host "📦 Đang nén source code..." -ForegroundColor Yellow
 if (Test-Path $ZIP) { Remove-Item $ZIP -Force }
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $zipArchive = [System.IO.Compression.ZipFile]::Open($ZIP, 'Create')
-Get-ChildItem -Path $SRC -Recurse -File | Where-Object {
-    $_.FullName -notmatch '\\.venv\\|\\node_modules\\|\\__pycache__\\|\\.git\\|\\dist\\|\\.pyc$|\\.log$|\\.zip$'
+Get-ChildItem -Path $SRC -Recurse -File -Force -ErrorAction SilentlyContinue | Where-Object {
+    $_.FullName -notmatch '\\.venv\\|\\node_modules\\|\\__pycache__\\|\\.pytest_cache\\|\\.git\\|\\dist\\|\\.pyc$|\\.log$|\\.zip$'
 } | ForEach-Object {
     # Use forward slashes so Linux `unzip` extracts into proper subdirectories
     # (Windows backslashes cause "appears to use backslashes as path separators"
@@ -110,7 +110,7 @@ Write-Host ""
 Write-Host "🔍 Kiểm tra API..." -ForegroundColor Yellow
 Start-Sleep -Seconds 3
 try {
-    $res = Invoke-WebRequest -Uri "https://api.evbattery.live/api/health" -TimeoutSec 15 -UseBasicParsing
+    $res = Invoke-WebRequest -Uri "https://khanhbes.tailaafca5.ts.net/api/health" -TimeoutSec 15 -UseBasicParsing
     Write-Host "   ✅ API OK: $($res.StatusCode)" -ForegroundColor Green
 } catch {
     Write-Host "   ⚠ API chưa phản hồi (có thể đang khởi động)" -ForegroundColor Yellow
@@ -119,7 +119,7 @@ try {
 Write-Host ""
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host "  ✅ Deploy xong!" -ForegroundColor Green
-Write-Host "  🌐 Dashboard: https://api.evbattery.live" -ForegroundColor Green
-Write-Host "  🔌 API:       https://api.evbattery.live/api/health" -ForegroundColor Green
+Write-Host "  🌐 Dashboard: https://khanhbes.tailaafca5.ts.net" -ForegroundColor Green
+Write-Host "  🔌 API:       https://khanhbes.tailaafca5.ts.net/api/health" -ForegroundColor Green
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host ""
