@@ -3724,6 +3724,201 @@ def ai_fine_tune_charging_time():
         return jsonify({'success': False, 'error': str(exc)}), 500
 
 
+# ── Per-Vehicle Charging Time Adapter Endpoints ────────────────────
+
+@app.route('/api/ai/models/charging_time/fine-tune/vehicle', methods=['POST'])
+def ai_fine_tune_vehicle_charging_time():
+    """Trigger personalized fine-tuning of vehicle-specific adapter."""
+    try:
+        _require_user_or_admin()
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 401
+
+    try:
+        body = request.get_json() or {}
+        vehicle_id = body.get('vehicle_id') or body.get('vehicleId')
+        if not vehicle_id:
+            return jsonify({'success': False, 'error': 'Thiếu vehicle_id'}), 400
+
+        sessions = body.get('sessions')
+        if not isinstance(sessions, list) or not sessions:
+            sessions = []
+            if shelly_repo and hasattr(shelly_repo, 'history'):
+                try:
+                    history = shelly_repo.history(vehicle_id, 200)
+                    sessions = [s.to_dict() if hasattr(s, 'to_dict') else s for s in history]
+                except Exception as ex:
+                    print(f"Could not read vehicle shelly history: {ex}")
+
+        from ai_server.fine_tune import run_vehicle_adapter_training
+        from ai_server.lifecycle import vehicle_adapter_quality_gate
+        from ai_server.training_snapshot_service import TrainingSnapshotService
+
+        adapters_dir = os.path.join(os.path.dirname(__file__), 'ai_models', 'vehicle_adapters')
+        snapshots_dir = os.path.join(os.path.dirname(__file__), 'ai_models', 'training_snapshots')
+        os.makedirs(adapters_dir, exist_ok=True)
+        os.makedirs(snapshots_dir, exist_ok=True)
+
+        res = run_vehicle_adapter_training(
+            vehicle_id=vehicle_id,
+            sessions=sessions,
+            output_dir=adapters_dir,
+        )
+
+        adapter_data = res.get('adapter', {})
+        quality_gate = vehicle_adapter_quality_gate(adapter_data)
+
+        # Save training snapshot
+        snapshot_service = TrainingSnapshotService(storage_dir=snapshots_dir)
+        session_ids = [str(s.get('session_id') or s.get('id') or idx) for idx, s in enumerate(sessions)]
+        snapshot = snapshot_service.save_snapshot(
+            vehicle_id=vehicle_id,
+            version=adapter_data.get('adapter_version', 'v1'),
+            session_ids=session_ids,
+            adapter_weights=adapter_data,
+            metrics={
+                'validation_mape': adapter_data.get('validation_mape'),
+                'session_count': adapter_data.get('session_count'),
+                'stage': adapter_data.get('personalization_stage'),
+            },
+            feature_summary={
+                'effective_capacity_wh': adapter_data.get('effective_capacity_wh'),
+                'wh_per_soc_avg': adapter_data.get('wh_per_soc_avg'),
+            },
+        )
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'adapter': adapter_data,
+                'quality_gate': quality_gate,
+                'snapshot_version': snapshot.get('version'),
+            },
+        })
+    except Exception as exc:
+        print(f"Vehicle fine-tuning failed: {exc}")
+        return jsonify({'success': False, 'error': str(exc)}), 500
+
+
+@app.route('/api/ai/models/charging_time/adapters', methods=['GET'])
+def ai_list_vehicle_adapters():
+    """List all trained vehicle calibration adapters."""
+    try:
+        from ai_server.vehicle_adapter import VehicleAdapterTrainer
+        adapters_dir = os.path.join(os.path.dirname(__file__), 'ai_models', 'vehicle_adapters')
+        trainer = VehicleAdapterTrainer(adapters_dir=adapters_dir)
+        adapters = trainer.list_all_adapters()
+        return jsonify({'success': True, 'data': adapters})
+    except Exception as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 500
+
+
+@app.route('/api/ai/models/charging_time/adapters/<vehicle_id>', methods=['GET'])
+def ai_get_vehicle_adapter(vehicle_id):
+    """Get vehicle adapter details by vehicle_id."""
+    try:
+        from ai_server.vehicle_adapter import VehicleAdapterTrainer
+        adapters_dir = os.path.join(os.path.dirname(__file__), 'ai_models', 'vehicle_adapters')
+        trainer = VehicleAdapterTrainer(adapters_dir=adapters_dir)
+        adapter = trainer.load_adapter(vehicle_id)
+        if not adapter:
+            return jsonify({'success': False, 'error': f'Không tìm thấy adapter cho xe {vehicle_id}'}), 404
+        return jsonify({'success': True, 'data': adapter.to_dict()})
+    except Exception as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 500
+
+
+@app.route('/api/ai/models/charging_time/predict', methods=['POST'])
+def ai_predict_charging_time():
+    """Predict charging duration using global model + per-vehicle adapter calibration."""
+    try:
+        body = request.get_json() or {}
+        vehicle_id = str(body.get('vehicle_id') or body.get('vehicleId') or 'unknown')
+        start_soc = float(body.get('start_soc') or body.get('startSoc') or 0.0)
+        target_soc = float(body.get('target_soc') or body.get('targetSoc') or 100.0)
+        ambient_temp = float(body.get('ambient_temp_c') or body.get('ambientTempC') or 30.0)
+
+        if target_soc <= start_soc:
+            return jsonify({
+                'success': True,
+                'data': {
+                    'predicted_seconds': 0.0,
+                    'predicted_minutes': 0.0,
+                    'stage': 'base',
+                    'vehicle_id': vehicle_id,
+                }
+            })
+
+        delta_soc = target_soc - start_soc
+        # Baseline physics model: ~22.5% per hour with temperature factor
+        temp_dev = abs(ambient_temp - 27.0)
+        temp_factor = 1.0 + (temp_dev * 0.015)
+        base_rate = 22.5 / temp_factor
+        base_seconds = (delta_soc / base_rate) * 3600.0
+
+        # Try to apply vehicle adapter
+        from ai_server.vehicle_adapter import VehicleAdapterTrainer
+        adapters_dir = os.path.join(os.path.dirname(__file__), 'ai_models', 'vehicle_adapters')
+        trainer = VehicleAdapterTrainer(adapters_dir=adapters_dir)
+        adapter = trainer.load_adapter(vehicle_id)
+
+        if adapter:
+            adjusted_seconds = adapter.adjust_prediction(base_seconds, start_soc, target_soc)
+            stage = adapter.personalization_stage
+            adapter_version = adapter.version
+            effective_scale = adapter.global_time_scale
+        else:
+            adjusted_seconds = base_seconds
+            stage = 'base'
+            adapter_version = None
+            effective_scale = 1.0
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'predicted_seconds': round(adjusted_seconds, 1),
+                'predicted_minutes': round(adjusted_seconds / 60.0, 1),
+                'base_seconds': round(base_seconds, 1),
+                'personalization_stage': stage,
+                'adapter_version': adapter_version,
+                'effective_scale': round(effective_scale, 3),
+                'vehicle_id': vehicle_id,
+            }
+        })
+    except Exception as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 500
+
+
+@app.route('/api/ai/models/charging_time/training-readiness/<vehicle_id>', methods=['GET'])
+def ai_vehicle_training_readiness(vehicle_id):
+    """Check data sufficiency and stage readiness for a vehicle."""
+    try:
+        from ai_server.vehicle_adapter import VehicleAdapterTrainer
+        adapters_dir = os.path.join(os.path.dirname(__file__), 'ai_models', 'vehicle_adapters')
+        trainer = VehicleAdapterTrainer(adapters_dir=adapters_dir)
+        adapter = trainer.load_adapter(vehicle_id)
+
+        session_count = adapter.session_count if adapter else 0
+        data_days = adapter.data_days if adapter else 0
+        stage = adapter.personalization_stage if adapter else 'base'
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'vehicle_id': vehicle_id,
+                'session_count': session_count,
+                'data_days': data_days,
+                'stage': stage,
+                'can_calibrate': session_count >= 5,
+                'can_personalize': session_count >= 30 and data_days >= 14,
+                'sessions_to_calibrate': max(0, 5 - session_count),
+                'sessions_to_personalize': max(0, 30 - session_count),
+            }
+        })
+    except Exception as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 500
+
+
 @app.route('/api/smart-charge/shadow-status', methods=['GET'])
 def smart_charge_shadow_status():
     """Return shadow mode promotion readiness evaluation."""

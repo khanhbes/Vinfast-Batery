@@ -101,6 +101,8 @@ class ShellyChargeLogService {
       'costQuality': cost.quality.wireValue,
       'estimatedRemainingWh': summary.estimatedRemainingWh,
       'estimatedEndSoc': summary.estimatedEndSoc,
+      'actual_end_soc_auto': summary.estimatedEndSoc ?? session.estimatedSoc,
+      'actual_end_soc_source': 'auto_estimated',
       'averagePowerW': summary.averagePowerW,
       'peakPowerW': summary.peakPowerW,
       'averageVoltageV': summary.averageVoltageV,
@@ -113,6 +115,24 @@ class ShellyChargeLogService {
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
     await _removeQueuedTerminalSession(session.sessionId);
+  }
+
+  /// Updates a terminal session with user-confirmed actual end SOC.
+  Future<void> confirmActualSoc({
+    required String sessionId,
+    required double actualSoc,
+  }) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+    await _firestore.collection('ChargeLogs').doc(sessionId).set({
+      'actualEndSoc': actualSoc,
+      'actual_end_soc': actualSoc,
+      'actualEndSocSource': 'user_confirmed',
+      'actual_end_soc_source': 'user_confirmed',
+      'endBatteryPercent': actualSoc.round(),
+      'training_eligible': true,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
   }
 
   /// Reversible history action. The canonical ChargeLog remains available for

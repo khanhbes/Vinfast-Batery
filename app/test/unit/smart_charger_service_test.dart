@@ -421,7 +421,7 @@ class _FakeCredentials extends SmartChargerCredentialsService {
   _FakeCredentials(this.profile);
   final ShellyConnectionProfile profile;
   @override
-  Future<ShellyConnectionProfile?> readProfile() async => profile;
+  Future<ShellyConnectionProfile?> readProfile({String? vehicleId}) async => profile;
 }
 
 class _FakeCloud extends ShellyCloudClient {

@@ -42,6 +42,9 @@ migrate_working_dir/
 
 # Python environments and caches
 __pycache__/
+**/__pycache__/
+**/.pytest_cache/
+**/.pytest-temp/
 *.pyo
 *.pyd
 .venv/
@@ -60,6 +63,7 @@ smart_charger_gateway/state/*.sqlite3-shm
 smart_charger_gateway/state/*.sqlite3-wal
 smart_charger_gateway/.env
 web/.env.laptop
+web/models/lifecycle/*.tmp
 
 # Symbolication related
 app.*.symbols
@@ -71,6 +75,10 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# APKs are local release artifacts; publish them through GitHub Releases instead.
+/app/releases/*.apk
+/web/apk/*.apk
 
 # Firebase Admin credentials (never commit)
 serviceAccountKey.json

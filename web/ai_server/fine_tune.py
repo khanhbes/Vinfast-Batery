@@ -16,6 +16,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .lifecycle import dataset_manifest, split_by_vehicle_and_time
+
 logger = logging.getLogger("SmartChargeFineTune")
 
 # Feature schema used by charging_time
@@ -108,7 +110,7 @@ def run_fine_tuning(
     try:
         import numpy as np
         from sklearn.ensemble import GradientBoostingRegressor
-        from sklearn.metrics import mean_absolute_percentage_error, mean_squared_error, r2_score
+        from sklearn.metrics import mean_absolute_error, mean_absolute_percentage_error, mean_squared_error, r2_score
         import joblib
     except ImportError as e:
         logger.error("Missing ML libraries: %s", e)
@@ -119,13 +121,25 @@ def run_fine_tuning(
         new_version = f"charging_time_v{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
 
     # 1. Extract real session features
-    X_real: list[list[float]] = []
-    y_real: list[float] = []
-    for s in sessions:
-        extracted = extract_features_from_session(s)
-        if extracted:
-            X_real.append(extracted[0])
-            y_real.append(extracted[1])
+    eligible_sessions = []
+    extracted_by_id = {}
+    for index, session in enumerate(sessions):
+        extracted = extract_features_from_session(session)
+        if not extracted:
+            continue
+        item = dict(session)
+        item["_lifecycle_row_id"] = str(index)
+        eligible_sessions.append(item)
+        extracted_by_id[item["_lifecycle_row_id"]] = extracted
+    split_rows = split_by_vehicle_and_time(eligible_sessions) if eligible_sessions else {"train": [], "validation": [], "test": []}
+
+    def vectors(rows):
+        pairs = [extracted_by_id[row["_lifecycle_row_id"]] for row in rows if extracted_by_id.get(row.get("_lifecycle_row_id"))]
+        return [p[0] for p in pairs], [p[1] for p in pairs]
+
+    X_real, y_real = vectors(split_rows["train"])
+    X_validation, y_validation = vectors(split_rows["validation"])
+    X_test_real, y_test_real = vectors(split_rows["test"])
 
     # 2. Combine with anchor baseline data if real data is small (< 30 samples)
     X_train, y_train = generate_baseline_dataset(size=max(20, 60 - len(X_real)))
@@ -135,15 +149,20 @@ def run_fine_tuning(
     X_arr = np.array(X_train, dtype=np.float32)
     y_arr = np.array(y_train, dtype=np.float32)
 
-    # Train-test split (80-20)
-    indices = np.arange(len(X_arr))
-    np.random.seed(42)
-    np.random.shuffle(indices)
-    split = int(len(X_arr) * 0.8)
-    train_idx, test_idx = indices[:split], indices[split:]
-
-    X_tr, y_tr = X_arr[train_idx], y_arr[train_idx]
-    X_te, y_te = X_arr[test_idx], y_arr[test_idx]
+    # Evaluation is vehicle-aware and chronological when real telemetry exists.
+    # Synthetic anchors are train-only so they cannot inflate validation/test scores.
+    X_tr, y_tr = X_arr, y_arr
+    if X_test_real:
+        X_te = np.array(X_test_real, dtype=np.float32)
+        y_te = np.array(y_test_real, dtype=np.float32)
+    else:
+        # No verified future samples yet: explicit fallback only for bootstrap.
+        indices = np.arange(len(X_arr))
+        np.random.seed(42)
+        np.random.shuffle(indices)
+        split = max(1, int(len(X_arr) * 0.8))
+        X_tr, y_tr = X_arr[indices[:split]], y_arr[indices[:split]]
+        X_te, y_te = X_arr[indices[split:]], y_arr[indices[split:]]
 
     # 3. Fit GradientBoostingRegressor
     model = GradientBoostingRegressor(
@@ -156,6 +175,7 @@ def run_fine_tuning(
 
     # 4. Evaluation
     preds = model.predict(X_te)
+    mae = float(mean_absolute_error(y_te, preds))
     mape = float(mean_absolute_percentage_error(y_te, preds) * 100)
     rmse = float(math.sqrt(mean_squared_error(y_te, preds)))
     r2 = float(r2_score(y_te, preds))
@@ -204,12 +224,37 @@ def run_fine_tuning(
         "tfliteGenerated": tflite_generated,
         "metrics": {
             "mape": round(mape, 2),
+            "maeSeconds": round(mae, 1),
             "rmseSeconds": round(rmse, 1),
             "r2": round(r2, 4),
             "accuracyPct": round(max(0.0, 100.0 - mape), 1),
         },
         "dataset": {
-            "realSamplesCount": len(X_real),
+            **dataset_manifest("charging_time", eligible_sessions),
+            "realSamplesCount": len(eligible_sessions),
             "totalSamplesCount": len(X_arr),
+            "split": {"train": len(X_real), "validation": len(X_validation), "test": len(X_test_real)},
+            "evaluationMode": "vehicle_time_holdout" if X_test_real else "bootstrap_random_holdout",
         },
+    }
+
+
+def run_vehicle_adapter_training(
+    vehicle_id: str,
+    sessions: list[dict[str, Any]],
+    output_dir: str = "models/vehicle_adapters",
+    base_model_predict_fn: Any | None = None,
+) -> dict[str, Any]:
+    """Train a per-vehicle calibration adapter on historical charging sessions."""
+    from .vehicle_adapter import VehicleAdapterTrainer
+    trainer = VehicleAdapterTrainer(adapters_dir=output_dir)
+    adapter = trainer.train_adapter(
+        vehicle_id=vehicle_id,
+        sessions=sessions,
+        base_model_predict_fn=base_model_predict_fn,
+    )
+    return {
+        "success": True,
+        "vehicle_id": vehicle_id,
+        "adapter": adapter.to_dict(),
     }

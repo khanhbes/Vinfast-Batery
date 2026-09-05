@@ -10,6 +10,7 @@ import '../models/smart_charger_status.dart';
 import '../models/smart_charger_capabilities.dart';
 import '../models/smart_charging_session.dart';
 import '../models/personal_charging_profile.dart';
+import 'shelly_charge_log_service.dart';
 import 'shelly_clients.dart';
 import 'shelly_discovery_service.dart';
 import 'smart_charger_credentials_service.dart';
@@ -109,6 +110,27 @@ class SmartChargerService {
 
   Future<List<DiscoveredShellyDevice>> discoverDevices() =>
       _discovery.discover();
+
+  Future<List<DiscoveredShellyDevice>> discoverAndProbeDevices({
+    Duration discoveryTimeout = const Duration(seconds: 5),
+    Duration probeTimeout = const Duration(seconds: 3),
+  }) => _discovery.discoverAndProbe(
+    discoveryTimeout: discoveryTimeout,
+    probeTimeout: probeTimeout,
+  );
+
+  /// Confirm user-verified actual end SOC to Firestore ChargeLog
+  Future<void> confirmActualSoc({
+    required String sessionId,
+    required double actualSoc,
+    ShellyChargeLogService? chargeLogService,
+  }) async {
+    final service = chargeLogService ?? ShellyChargeLogService();
+    await service.confirmActualSoc(
+      sessionId: sessionId,
+      actualSoc: actualSoc,
+    );
+  }
 
   Future<SmartChargerConnectionTest> testConnection({
     ShellyConnectionProfile? profile,

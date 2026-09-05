@@ -49,3 +49,9 @@ phát triển), lưu vào `TelemetryPoints`. Endpoint tương thích cũ
 
 Ví dụ Shelly có thể gửi trực tiếp `powerW` và `energyWh`. Payload cũ dùng `kW`/`kWh`
 vẫn được chấp nhận và tự chuyển đổi sang đơn vị chuẩn.
+
+## Đồng bộ Flutter và dashboard
+
+Flutter gửi battery state/trip data qua API; API chuẩn hóa telemetry rồi ghi Firestore,
+dashboard đọc cùng nguồn dữ liệu. Không dùng `localhost` từ điện thoại: bản phát hành
+phải dùng URL Tailscale Funnel `https://khanhbes.tailaafca5.ts.net`.

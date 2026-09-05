@@ -264,6 +264,30 @@ class NotificationService {
     );
   }
 
+  /// Thông báo nhắc người dùng xác nhận mức pin thực tế sau khi sạc xong để fine-tune AI
+  Future<void> showChargeCompleteSocConfirm({
+    required String sessionId,
+    double? estimatedSoc,
+  }) async {
+    await initialize();
+    final socText = estimatedSoc != null ? ' (ước tính ~${estimatedSoc.toStringAsFixed(0)}%)' : '';
+    await _plugin.show(
+      1012,
+      '⚡ Phiên sạc hoàn tất$socText',
+      'Nhấn để xác nhận mức pin thực tế trên xe để AI học chuẩn xác hơn.',
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          channelSmartCharge,
+          'Smart Charge Alerts',
+          importance: Importance.high,
+          priority: Priority.high,
+          icon: '@mipmap/ic_launcher',
+        ),
+      ),
+      payload: 'confirm_soc:$sessionId',
+    );
+  }
+
   /// Notification ongoing khi đang sạc
   Future<void> showChargingOngoing(int currentPercent, String elapsed) async {
     await initialize();

@@ -17,6 +17,7 @@ import '../../data/services/maintenance_reminder_service.dart';
 import '../../data/services/vehicle_model_link_service.dart';
 import '../../data/services/smart_charger_credentials_service.dart';
 import '../../data/repositories/smart_charger_repository.dart';
+import '../../data/models/smart_charger_binding.dart';
 import '../../main.dart' show firebaseInitErrorProvider;
 import '../../navigation/app_navigation.dart';
 import 'login_screen.dart';
