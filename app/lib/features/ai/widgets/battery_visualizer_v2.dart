@@ -427,7 +427,7 @@ class _CurrentSocInput extends StatelessWidget {
           children: [
             _StepperButton(
               icon: Icons.remove_rounded,
-              onPressed: currentPercent > 1
+              onPressed: currentPercent > 0
                   ? () => onChanged((currentPercent - 1).toDouble())
                   : null,
             ),
@@ -444,10 +444,10 @@ class _CurrentSocInput extends StatelessWidget {
                   ),
                 ),
                 child: Slider(
-                  value: currentPercent.toDouble().clamp(1, 100),
-                  min: 1,
+                  value: currentPercent.toDouble().clamp(0, 100),
+                  min: 0,
                   max: 100,
-                  divisions: 99,
+                  divisions: 100,
                   onChanged: onChanged,
                 ),
               ),
@@ -709,25 +709,27 @@ class _CircularGaugePainter extends CustomPainter {
 
     // Current level arc (solid)
     final currentSweep = (currentPercent / 100) * 2 * math.pi;
-    final arcPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth + 1
-      ..strokeCap = StrokeCap.round;
+    if (currentSweep > 0.001) {
+      final arcPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth + 1
+        ..strokeCap = StrokeCap.round;
 
-    // Gradient for the current arc
-    arcPaint.shader = SweepGradient(
-      startAngle: startAngle,
-      endAngle: startAngle + currentSweep,
-      colors: const [CockpitColors.emeraldStrong, CockpitColors.emerald],
-    ).createShader(Rect.fromCircle(center: center, radius: radius));
+      // Gradient for the current arc
+      arcPaint.shader = SweepGradient(
+        startAngle: startAngle,
+        endAngle: startAngle + currentSweep,
+        colors: const [CockpitColors.emeraldStrong, CockpitColors.emerald],
+      ).createShader(Rect.fromCircle(center: center, radius: radius));
 
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      startAngle,
-      currentSweep,
-      false,
-      arcPaint,
-    );
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        startAngle,
+        currentSweep,
+        false,
+        arcPaint,
+      );
+    }
   }
 
   @override

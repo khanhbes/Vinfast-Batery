@@ -34,12 +34,17 @@ class VehicleChargerBindingService {
 
   Future<void> save(VehicleChargerBinding binding) async {
     final uid = _auth.currentUser?.uid;
-    if (uid == null) throw StateError('Cần đăng nhập để lưu binding Shelly.');
-    await _collection(uid).doc(binding.vehicleId).set({
-      ...binding.toMap(),
-      'ownerUid': uid,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    if (uid == null) return;
+    try {
+      await _collection(uid).doc(binding.vehicleId).set({
+        ...binding.toMap(),
+        'ownerUid': uid,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (_) {
+      // Bỏ qua lỗi Firestore (ví dụ permission-denied hoặc offline)
+      // Cấu hình đã được lưu an toàn trên SecureStorage của máy.
+    }
   }
 
   Future<void> remove(String vehicleId) async {

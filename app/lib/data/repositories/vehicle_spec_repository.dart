@@ -12,8 +12,8 @@ import '../models/vinfast_model_spec.dart';
 /// Thứ tự fallback: Firestore → SharedPreferences cache → local asset
 /// ========================================================================
 class VehicleSpecRepository {
-  static const _cacheKey = 'vinfast_specs_cache';
-  static const _cacheTimestampKey = 'vinfast_specs_cache_ts';
+  static const _cacheKey = 'vinfast_specs_cache_v3';
+  static const _cacheTimestampKey = 'vinfast_specs_cache_ts_v3';
   static const _cacheTtlHours = 24;
 
   final FirebaseFirestore _firestore;

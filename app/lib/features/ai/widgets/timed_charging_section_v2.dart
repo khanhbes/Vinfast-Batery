@@ -54,7 +54,7 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
   }
 
   String get _buttonLabel {
-    if (_selectedMinutes == -1) return 'Bắt đầu ngay · tự ngắt sau 6 giờ';
+    if (_selectedMinutes == -1) return 'Bắt đầu ngay · tự ngắt sau 7 giờ';
     final h = _selectedMinutes ~/ 60;
     final m = _selectedMinutes % 60;
     if (h > 0 && m > 0) return 'Sạc $h giờ $m phút';
@@ -216,7 +216,7 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
                     onTap: enabled
                         ? () {
                             final duration = _selectedMinutes == -1
-                                ? const Duration(hours: 6)
+                                ? const Duration(hours: 7)
                                 : Duration(minutes: _selectedMinutes);
                             widget.onStart(duration);
                           }

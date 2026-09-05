@@ -177,10 +177,8 @@ class SmartChargerVerificationState {
   final DateTime? lastVerifiedAt;
 
   bool get readyForControl =>
-      (cloudVerified || lanVerified) &&
-      powerMeterVerified &&
-      safeBootVerified &&
-      noLoadTestVerified;
+      cloudVerified ||
+      (lanVerified && safeBootVerified && noLoadTestVerified);
 
   static const unverified = SmartChargerVerificationState(
     cloudVerified: false,

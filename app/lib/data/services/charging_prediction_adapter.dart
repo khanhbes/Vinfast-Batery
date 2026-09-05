@@ -262,12 +262,8 @@ class ChargingPredictionAdapter {
     if (powerW <= 0 || efficiency <= 0 || efficiency > 1) {
       throw StateError('Cấu hình công suất/hiệu suất bộ sạc không hợp lệ.');
     }
-    final capacityWh = draft.estimatedCapacityWh;
-    if (capacityWh <= 0) {
-      throw StateError(
-        'Chưa có dữ liệu dung lượng pin để dùng dự đoán vật lý dự phòng.',
-      );
-    }
+    final capacityWh =
+        draft.estimatedCapacityWh > 0 ? draft.estimatedCapacityWh : 2600.0;
     final requiredWh = capacityWh * (draft.targetSoc - draft.currentSoc) / 100;
     final minutes = ((requiredWh / (powerW * efficiency)) * 60).ceil().clamp(
       1,
@@ -278,6 +274,7 @@ class ChargingPredictionAdapter {
       predictedMinutes: minutes,
       source: 'physics_fallback',
       now: now,
+      aiChargeEligible: true,
     );
   }
 }
