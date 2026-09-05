@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vinfast_battery/data/models/smart_charging_session.dart';
 import 'package:vinfast_battery/data/services/charging_prediction_adapter.dart';
+import 'package:vinfast_battery/data/services/charging_tflite_runner.dart';
 
 void main() {
   final now = DateTime.parse('2030-01-01T10:00:00+07:00');
@@ -271,12 +272,69 @@ void main() {
     );
   });
 
+  test('session parses telemetry_samples, wh_per_soc_percent and hardware_timeout_seconds', () {
+    final raw = sessionJson();
+    raw['hardware_timeout_seconds'] = 7200;
+    raw['wh_per_soc_percent'] = 28.5;
+    raw['telemetry_samples'] = [
+      {'t': '2030-01-01T03:01:00Z', 'power_w': 1800.0, 'voltage_v': 225.0, 'temp_c': 34.0, 'energy_wh': 30.0},
+    ];
+
+    final session = SmartChargingSession.fromJson(raw);
+    expect(session.hardwareTimeoutSeconds, 7200);
+    expect(session.whPerSocPercent, 28.5);
+    expect(session.telemetrySamples.length, 1);
+    expect(session.telemetrySamples.first['power_w'], 1800.0);
+
+    final serialized = session.toJson();
+    expect(serialized['hardware_timeout_seconds'], 7200);
+    expect(serialized['wh_per_soc_percent'], 28.5);
+    expect((serialized['telemetry_samples'] as List).length, 1);
+  });
+
+  test('prediction falls back to tflite when online API fails and local runner is available', () async {
+    final adapter = ChargingPredictionAdapter(
+      predictionCall: ({
+        required vehicleId,
+        required currentBattery,
+        required targetBattery,
+        ambientTempC,
+        bool strictAi = false,
+      }) async => throw Exception('Network offline'),
+      tfliteRunner: _MockTfliteRunner(),
+    );
+    final preview = await adapter.predict(
+      draft(current: 20, target: 80),
+      now: now,
+    );
+    expect(preview.predictionSource, 'tflite');
+    expect(preview.predictedMinutes, 60);
+  });
+
   test('malformed session is rejected', () {
     expect(
       () => SmartChargingSession.fromJson({'session_id': ''}),
       throwsFormatException,
     );
   });
+}
+
+class _MockTfliteRunner extends ChargingTfliteRunner {
+  @override
+  bool hasLocalModel() => true;
+
+  @override
+  String getLocalVersion() => 'tflite_test_v1';
+
+  @override
+  Future<int?> predictDurationSeconds({
+    required double startSoc,
+    required double targetSoc,
+    double ambientTempC = 30.0,
+    double? nominalCapacityWh,
+  }) async {
+    return 3600; // 60 minutes
+  }
 }
 
 Map<String, dynamic> sessionJson() => {

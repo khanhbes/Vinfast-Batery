@@ -1,4 +1,5 @@
 import os
+import time
 from typing import Any
 
 import httpx
@@ -30,6 +31,25 @@ class ShellyClient:
             raise ShellyUnavailableError("Shelly returned an invalid response")
         return data
 
+    def _rpc_with_retry(
+        self,
+        method: str,
+        params: dict[str, Any],
+        attempts: int = 3,
+        delays: list[float] | None = None,
+    ) -> dict[str, Any]:
+        if delays is None:
+            delays = [1.0, 2.0, 4.0]
+        last_exc: Exception | None = None
+        for i in range(attempts):
+            try:
+                return self._rpc(method, params)
+            except ShellyUnavailableError as exc:
+                last_exc = exc
+                if i < attempts - 1:
+                    time.sleep(delays[min(i, len(delays) - 1)])
+        raise ShellyUnavailableError(f"RPC {method} failed after {attempts} attempts") from last_exc
+
     def get_status(self) -> ChargerStatus:
         raw = self._rpc("Switch.GetStatus", {"id": 0})
         temperature = raw.get("temperature")
@@ -49,9 +69,16 @@ class ShellyClient:
             energy_wh=float(energy_wh or 0),
         )
 
-    def set_relay(self, on: bool) -> ChargerCommandResponse:
+    def set_relay(
+        self, on: bool, auto_off_delay_seconds: int | None = None
+    ) -> ChargerCommandResponse:
         previous_state = self.get_status().relay
-        self._rpc("Switch.Set", {"id": 0, "on": str(on).lower()})
+        params: dict[str, Any] = {"id": 0, "on": str(on).lower()}
+        if on and auto_off_delay_seconds is not None and auto_off_delay_seconds > 0:
+            params["auto_off"] = True
+            params["auto_off_delay"] = auto_off_delay_seconds
+
+        self._rpc_with_retry("Switch.Set", params)
         # Switch.Set returns the previous state on some firmware. Read back the
         # actual state so the gateway never claims a command succeeded blindly.
         relay = self.get_status().relay
@@ -60,3 +87,4 @@ class ShellyClient:
             relay=relay,
             previous_state=previous_state,
         )
+

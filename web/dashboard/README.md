@@ -96,8 +96,8 @@ Hệ thống quản lý pin thông minh của VinFast - Giao diện quản trị
 ## 🎯 Sử dụng
 
 ### Đăng nhập
-- **Demo account**: `admin@vinfast.com` / `admin123`
-- Hoặc tạo tài khoản mới qua Firebase Console
+- Dùng tài khoản Firebase đã được cấp quyền admin bằng custom claim `admin=true` hoặc email nằm trong `ADMIN_EMAILS`.
+- Không có tài khoản demo mặc định. Tạo tài khoản qua Firebase Console hoặc luồng đăng ký của ứng dụng.
 
 ### Navigation
 - **Sidebar menu**: Điều hướng giữa các trang

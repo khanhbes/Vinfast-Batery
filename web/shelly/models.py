@@ -332,7 +332,9 @@ class ChargingSession:
     user_stop_reason: str = "none"
     training_state: str = "pending"
     training_reason: str | None = None
-    safety_policy_version: str = "v4-default"
+    wh_per_soc_percent: float | None = None
+    hardware_timeout_seconds: int | None = None
+    telemetry_samples: list[dict[str, Any]] = field(default_factory=list)
     # Normal history removal is reversible soft-hide; privacy erase is a
     # separate explicit destructive operation.
     hidden_at: datetime | None = None
@@ -403,6 +405,10 @@ class ChargingSession:
             "user_stop_reason": self.user_stop_reason,
             "personal_ai_training_state": self.training_state,
             "personal_ai_training_reason": self.training_reason,
+            "wh_per_soc_percent": self.wh_per_soc_percent,
+            "hardware_timeout_seconds": self.hardware_timeout_seconds,
+            "telemetry_samples": self.telemetry_samples,
             "hidden_at": iso(self.hidden_at),
             "safety_policy_version": self.safety_policy_version,
         }
+

@@ -14,7 +14,7 @@ Cloudflare hay mở port modem. Timer Shelly sau khi được arm vẫn nằm tr
 
 Public URL có dạng `https://<ten-may>.<tailnet>.ts.net`. Tailscale Funnel không
 hỗ trợ custom domain, do đó app phải được build với URL Tailscale thay vì
-`api.evbattery.live`.
+URL VPS/Caddy cũ.
 
 ## 1. Tạo file secret local
 

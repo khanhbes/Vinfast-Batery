@@ -3,7 +3,7 @@
 # Admin Portal (React) → http://localhost:3000
 # Unified API  (Flask)  → http://localhost:5000
 # AI Server    (FastAPI)→ http://localhost:8001 (internal)
-# Server -> http://api.evbattery.live/
+# Public server -> https://khanhbes.tailaafca5.ts.net/
 # ═══════════════════════════════════════════════════════════════
 
 $root = $PSScriptRoot
@@ -102,14 +102,32 @@ if (-not $serviceAccountPath) {
 
 # 0) AI Server FastAPI (port 8001) — hot-swappable SOC pipeline
 $aiToken = $env:AI_SERVER_INTERNAL_TOKEN
-if ([string]::IsNullOrWhiteSpace($aiToken)) { $aiToken = "dev-local-token" }
+if ([string]::IsNullOrWhiteSpace($aiToken)) {
+    # Generate an ephemeral development-only token instead of reusing a
+    # published default. The same value is passed to Flask and FastAPI.
+    $bytes = New-Object byte[] 32
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    $rng.GetBytes($bytes)
+    $rng.Dispose()
+    $aiToken = [Convert]::ToBase64String($bytes)
+    Write-Host "🔑 AI_SERVER_INTERNAL_TOKEN chưa cấu hình -> đã tạo token tạm cho phiên này." -ForegroundColor Yellow
+}
+$devAdminKey = $env:DEV_ADMIN_KEY
+if ([string]::IsNullOrWhiteSpace($devAdminKey)) {
+    $bytes = New-Object byte[] 32
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    $rng.GetBytes($bytes)
+    $rng.Dispose()
+    $devAdminKey = [Convert]::ToBase64String($bytes)
+    Write-Host "🔑 DEV_ADMIN_KEY chưa cấu hình -> đã tạo key tạm cho phiên này." -ForegroundColor Yellow
+}
 
 $aiCmd = "cd /d `"$root`" && set `"AI_SERVER_INTERNAL_TOKEN=$aiToken`" && `"$pythonExe`" -m uvicorn ai_server.main:app --host 127.0.0.1 --port 8001"
 $aiProc = Start-Process cmd -ArgumentList "/k", $aiCmd -PassThru
 Write-Host "🧠 AI Server        → http://127.0.0.1:8001  (PID $($aiProc.Id))" -ForegroundColor Cyan
 
 # 1) Unified API (port 5000) — replaces app.py + ai_api.py
-$apiCmd = "cd /d `"$root`" && set `"AI_SERVER_URL=http://127.0.0.1:8001`" && set `"AI_SERVER_INTERNAL_TOKEN=$aiToken`" && "
+$apiCmd = "cd /d `"$root`" && set `"AI_SERVER_URL=http://127.0.0.1:8001`" && set `"AI_SERVER_INTERNAL_TOKEN=$aiToken`" && set `"CORS_ORIGINS=http://localhost:3000`" && "
 
 # Admin bootstrap for local dev:
 # - Nếu chưa set ADMIN_EMAILS thì chỉ bootstrap owner của dự án là admin.
@@ -121,7 +139,7 @@ if ([string]::IsNullOrWhiteSpace($adminEmails)) {
 } else {
     Write-Host "🛡 ADMIN_EMAILS=$adminEmails" -ForegroundColor DarkGreen
 }
-$apiCmd += "set `"ADMIN_EMAILS=$adminEmails`" && "
+$apiCmd += "set `"ADMIN_EMAILS=$adminEmails`" && set `"DEV_ADMIN_KEY=$devAdminKey`" && set `"APP_ENV=development`" && "
 
 if ($serviceAccountPath) {
     $apiCmd += "set `"GOOGLE_APPLICATION_CREDENTIALS=$serviceAccountPath`" && "

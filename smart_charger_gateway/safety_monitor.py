@@ -61,10 +61,16 @@ class SafetyMonitor:
         self._kind: str | None = None
         self._count = 0
 
-    def evaluate(self, status: ChargerStatus) -> SafetyViolation | None:
+    def evaluate(
+        self,
+        status: ChargerStatus,
+        battery_temperature_c: float | None = None,
+    ) -> SafetyViolation | None:
         t = self.thresholds
         violation = None
-        if status.temperature_c is not None and status.temperature_c >= t.max_plug_temp_c:
+        if battery_temperature_c is not None and battery_temperature_c >= t.max_battery_temp_c:
+            violation = SafetyViolation("battery_over_temperature", battery_temperature_c, t.max_battery_temp_c)
+        elif status.temperature_c is not None and status.temperature_c >= t.max_plug_temp_c:
             violation = SafetyViolation("over_temperature", status.temperature_c, t.max_plug_temp_c)
         elif status.current_a >= t.max_current_a:
             violation = SafetyViolation("over_current", status.current_a, t.max_current_a)
@@ -84,6 +90,7 @@ class SafetyMonitor:
             self._kind = violation.kind
             self._count = 1
         return violation if violation.immediate or self._count >= t.consecutive_samples else None
+
 
     def stale(self, last_status_at: datetime | None, now: datetime) -> SafetyViolation | None:
         if last_status_at is None:

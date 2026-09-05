@@ -80,3 +80,8 @@ firebase-service-account.json
 *firebase-adminsdk*.json
 *service*account*.json
 /secrets/
+
+# Android release signing material (keep outside Git)
+key.properties
+*.jks
+*.keystore

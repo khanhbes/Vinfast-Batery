@@ -188,6 +188,12 @@ class SmartChargingSession(BaseModel):
     battery_temperature_c: float | None = None
     safety_events: list[SafetyEvent] = Field(default_factory=list)
     user_stop_reason: str = "none"
+    hardware_timeout_seconds: int | None = None
+    telemetry_samples: list[dict] = Field(default_factory=list)
+    actual_end_soc: float | None = None
+    wh_per_soc_percent: float | None = None
+    training_eligible: bool = False
+
 
 
 class CurrentChargingSessionResponse(BaseModel):
