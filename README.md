@@ -1,469 +1,558 @@
-# VinFast Battery
+<p align="center">
+  <img src="app/assets/icons/app_icon.png" alt="VinFast Battery Logo" width="120" height="120" style="border-radius: 24px;" />
+</p>
 
-Hệ thống quản lý pin và sạc thông minh dành cho xe máy điện VinFast, gồm ứng dụng Android cho người dùng, cổng quản trị web, API hợp nhất, AI runtime và lớp tích hợp ổ cắm Shelly.
+<h1 align="center">⚡ VinFast Battery</h1>
 
-> [!IMPORTANT]
-> Đây là dự án phần mềm độc lập, không phải sản phẩm chính thức của VinFast. Các giá trị SOC, SoH, quãng đường còn lại và thời gian sạc do hệ thống ước tính, không thay thế dữ liệu BMS hoặc quy trình an toàn của nhà sản xuất.
+<p align="center">
+  <strong>Hệ thống quản lý pin & sạc thông minh AI cho xe máy điện VinFast</strong>
+</p>
 
-Phiên bản ứng dụng hiện tại: **1.1.3+113** · Android tối thiểu: **8.0 / API 26**
+<p align="center">
+  <img src="https://img.shields.io/badge/Flutter-3.32+-02569B?logo=flutter&logoColor=white" alt="Flutter" />
+  <img src="https://img.shields.io/badge/Dart-3.11+-0175C2?logo=dart&logoColor=white" alt="Dart" />
+  <img src="https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white" alt="Python" />
+  <img src="https://img.shields.io/badge/Firebase-Firestore-FFCA28?logo=firebase&logoColor=black" alt="Firebase" />
+  <img src="https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white" alt="Docker" />
+  <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License" />
+  <img src="https://img.shields.io/badge/Version-1.1.3-blue" alt="Version" />
+</p>
 
-## Mục lục
+<p align="center">
+  <em>Full-stack Android app + AI backend + IoT gateway — biến bộ sạc thường thành trạm sạc thông minh.</em>
+</p>
 
-- [Giới thiệu](#giới-thiệu)
-- [Tính năng chính](#tính-năng-chính)
-- [Kiến trúc hệ thống](#kiến-trúc-hệ-thống)
-- [Công nghệ sử dụng](#công-nghệ-sử-dụng)
-- [Cấu trúc mã nguồn](#cấu-trúc-mã-nguồn)
-- [Yêu cầu môi trường](#yêu-cầu-môi-trường)
-- [Cấu hình Firebase](#cấu-hình-firebase)
-- [Chạy dự án trên Windows](#chạy-dự-án-trên-windows)
-- [Chạy bằng Docker](#chạy-bằng-docker)
-- [Chạy ứng dụng Flutter](#chạy-ứng-dụng-flutter)
-- [Build APK](#build-apk)
-- [API chính](#api-chính)
-- [Dữ liệu và phân quyền](#dữ-liệu-và-phân-quyền)
-- [Kiểm thử](#kiểm-thử)
-- [Bảo mật và an toàn](#bảo-mật-và-an-toàn)
-- [Khắc phục sự cố](#khắc-phục-sự-cố)
-- [Tài liệu liên quan](#tài-liệu-liên-quan)
+---
 
-## Giới thiệu
+## 📋 Mục lục
 
-VinFast Battery hỗ trợ theo dõi tình trạng pin, quản lý nhiều xe, ghi nhận lịch sử sạc/chuyến đi, nhắc bảo dưỡng và lập kế hoạch sạc. Dữ liệu người dùng được lưu trên Firebase và phân tách bằng `ownerUid`. Backend cung cấp REST API cho ứng dụng, dashboard quản trị và các tác vụ AI.
+- [Tổng quan](#-tổng-quan)
+- [Tính năng nổi bật](#-tính-năng-nổi-bật)
+- [Kiến trúc hệ thống](#-kiến-trúc-hệ-thống)
+- [Cấu trúc dự án](#-cấu-trúc-dự-án)
+- [Yêu cầu hệ thống](#-yêu-cầu-hệ-thống)
+- [Cài đặt & Chạy](#-cài-đặt--chạy)
+  - [Mobile App (Flutter)](#1-mobile-app-flutter)
+  - [Backend Server (Python)](#2-backend-server-python)
+  - [Smart Charger Gateway](#3-smart-charger-gateway)
+  - [Admin Dashboard (React)](#4-admin-dashboard-react)
+- [Mô hình AI](#-mô-hình-ai)
+- [Tích hợp phần cứng](#-tích-hợp-phần-cứng)
+- [API Reference](#-api-reference)
+- [Testing](#-testing)
+- [Deployment](#-deployment)
+- [Đóng góp](#-đóng-góp)
+- [Giấy phép](#-giấy-phép)
 
-Hệ thống gồm sáu thành phần:
+---
 
-1. **Mobile App**: ứng dụng Flutter dành cho người sử dụng xe.
-2. **Admin Portal**: dashboard React dành cho quản trị viên.
-3. **Unified API**: Flask API xử lý xác thực, dữ liệu, đồng bộ, AI và cập nhật APK.
-4. **AI Server**: FastAPI runtime quản lý, kiểm thử, triển khai và suy luận mô hình.
-5. **Smart Charger Integration**: kết nối Shelly Cloud/LAN để theo dõi và điều khiển relay sạc.
-6. **Firebase**: Authentication và Firestore làm lớp định danh, lưu trữ và đồng bộ dữ liệu.
+## 🌟 Tổng quan
 
-## Tính năng chính
+**VinFast Battery** là hệ thống quản lý pin và sạc thông minh toàn diện, được thiết kế riêng cho hệ sinh thái xe máy điện VinFast (Feliz, Klara, Evo, Vento, Theon, Tempest, Ludo).
 
-### Ứng dụng Android
+Hệ thống kết hợp **ứng dụng di động Flutter**, **backend AI Python**, **IoT gateway** điều khiển relay Shelly, và **admin dashboard React** — tạo nên một trải nghiệm sạc thông minh hoàn chỉnh từ dự đoán thời gian sạc chính xác bằng AI đến tự động ngắt sạc khi đạt mức pin mong muốn.
 
-- Đăng ký, đăng nhập và duy trì phiên bằng Firebase Authentication.
-- Quản lý nhiều xe và chuyển nhanh ngữ cảnh xe đang sử dụng.
-- Hiển thị SOC, SoH, dung lượng, quãng đường ước tính và cảnh báo pin.
-- Ghi nhận lịch sử sạc, chi phí, hành trình và dữ liệu bảo dưỡng.
-- Theo dõi chuyến đi bằng GPS, bản đồ và dự đoán mức tiêu thụ/quãng đường.
-- Lập kế hoạch sạc theo SOC hiện tại, SOC mục tiêu, công suất và thời gian dự kiến.
-- Kết nối Shelly qua Cloud hoặc LAN, đọc trạng thái relay và điều khiển sạc.
-- Lịch sử Smart Charge, phản hồi sau phiên sạc và hồ sơ AI cá nhân theo từng xe.
-- Thông báo cục bộ, tác vụ nền, cảnh báo kết nối và nhắc bảo dưỡng.
-- Giao diện tiếng Việt/tiếng Anh và các thiết lập hiển thị.
-- Đồng bộ model AI đã triển khai và kiểm tra phiên bản ứng dụng từ server.
+### Vấn đề giải quyết
 
-### Admin Portal
+| Vấn đề | Giải pháp |
+|--------|-----------|
+| Xe máy điện VinFast không có app quản lý pin chi tiết | Dashboard theo dõi pin, lịch sử sạc, thống kê tiêu thụ |
+| Không biết bao lâu thì đầy pin | AI dự đoán thời gian sạc chính xác (± 5 phút) |
+| Sạc qua đêm gây chai pin LFP | Tự động ngắt sạc khi đạt mức tối ưu 80% |
+| Không có cách giám sát sạc từ xa | Real-time telemetry qua Shelly smart relay |
+| Mỗi xe sạc khác nhau, AI chung không chính xác | Per-vehicle AI personalization: AI học riêng cho từng xe |
 
-- Dashboard KPI về người dùng, xe, tình trạng pin và cảnh báo.
-- Quản lý người dùng và các thực thể dữ liệu hệ thống.
-- Tìm kiếm, lọc, soft delete, khôi phục và thao tác hàng loạt.
-- Import/export JSON hoặc CSV và audit log truy vết thay đổi.
-- AI Center để xem catalog, upload, validate, test, deploy, rollback hoặc vô hiệu hóa model.
-- Phòng thử nghiệm model với đầu vào động theo manifest.
-- Quản lý cấu hình phát hành APK cho ứng dụng.
+---
 
-### AI và phân tích
+## ✨ Tính năng nổi bật
 
-Các nhóm model được tổ chức theo registry/manifest và có thể thay nóng:
+### 📱 Mobile App
+- **Dashboard thông minh** — tổng quan pin, SoH, quãng đường còn lại, thống kê tiêu thụ
+- **Sạc thông minh AI** — chọn mức pin mong muốn, AI tính thời gian & tự ngắt sạc
+- **Sạc hẹn giờ** — 6 preset thời gian + chế độ sạc ngay lập tức (tự ngắt sau 7 giờ)
+- **EV Cockpit UI** — giao diện dark mode premium, circular gauge, battery track animation
+- **Garage đa xe** — quản lý nhiều xe, tự động nhận diện model từ catalog VinFast
+- **Trip planner** — lập kế hoạch chuyến đi với bản đồ, dự đoán pin tiêu thụ
+- **Lịch sử sạc** — log chi tiết mỗi phiên sạc với biểu đồ năng lượng
+- **Thống kê nâng cao** — biểu đồ FL Chart: chi phí, hiệu suất, xu hướng SoH
+- **Bảo trì xe** — nhắc nhở bảo dưỡng định kỳ, ghi lịch sử bảo trì
+- **Thông báo thông minh** — cảnh báo pin thấp, sạc hoàn tất, bất thường
 
-- Dự đoán SOC và quãng đường còn lại.
-- Ước tính thời gian sạc và suy giảm SoH.
-- Phân tích hành vi, mẫu sử dụng và phát hiện bất thường.
-- Gợi ý sạc, eco driving và eco routing.
-- Dự đoán chuyến đi và tiêu thụ năng lượng.
+### 🤖 AI & Machine Learning
+- **11 mô hình AI** — charging time, SoC estimation, SoH degradation, anomaly detection, DTE, eco-driving, trip labeling, user behavior, charging recommender, eco-routing, lifecycle
+- **Per-vehicle personalization** — online calibration qua 3 giai đoạn: Base → Calibrating → Personalized
+- **Physics fallback** — luôn có dự đoán khi server AI không khả dụng
+- **On-device TFLite** — inference trên điện thoại, không cần internet
+- **Shadow promotion** — mô hình mới chạy song song, chỉ thay thế khi tốt hơn
 
-Model có thể sử dụng scikit-learn/joblib, TensorFlow/Keras/TFLite, XGBoost hoặc ONNX Runtime tùy loại và manifest.
+### 🔌 Smart Charging
+- **Điều khiển relay Shelly** — bật/tắt sạc từ xa qua Cloud API hoặc LAN
+- **Real-time telemetry** — giám sát công suất, năng lượng, điện áp mỗi 30 giây
+- **Graduation policy** — chế độ an toàn nhiều cấp: safe boot → LAN → Cloud
+- **Safety monitor** — tự ngắt khi phát hiện bất thường (quá áp, quá dòng, quá nhiệt)
+- **Session recovery** — tự phục hồi phiên sạc khi mất kết nối
 
-### Smart Charge và Shelly
+### 🖥️ Admin Dashboard
+- **React + TypeScript + Vite** — SPA quản trị với Tailwind CSS & shadcn/ui
+- **Quản lý người dùng** — xem, tìm kiếm, theo dõi hoạt động
+- **Giám sát hệ thống** — model health, telemetry coverage, error rates
+- **AI model management** — lifecycle, training logs, A/B testing results
 
-- Ghép một bộ sạc với từng xe.
-- Ưu tiên Shelly Cloud và có thể fallback qua LAN.
-- Lưu profile Shelly đã mã hóa trong vault phía server.
-- Theo dõi telemetry, thời lượng, năng lượng và tiến độ phiên sạc.
-- Hỗ trợ bật/tắt thủ công, đặt mục tiêu và giới hạn thời gian sạc tối đa.
-- Gateway FastAPI cũ được giữ cho chẩn đoán và tương thích; app hiện không phụ thuộc gateway này trong luồng chính.
+---
 
-> [!WARNING]
-> Chỉ dùng Smart Charge sau khi đã kiểm chứng relay, công suất bộ sạc, khả năng ngắt an toàn, trạng thái sau mất mạng và giới hạn phần cứng trên xe thật. Không dùng SOC ước tính làm tín hiệu an toàn duy nhất để cắt điện.
+## 🏗 Kiến trúc hệ thống
 
-## Kiến trúc hệ thống
-
-```mermaid
-flowchart LR
-    App[Flutter Android App] -->|Auth / Firestore| Firebase[(Firebase)]
-    App -->|Firebase token / REST| API[Flask API :5000]
-    Admin[React Admin :3000] -->|Auth| Firebase
-    Admin -->|Firebase token / REST| API
-    API -->|Admin SDK| Firebase
-    API -->|Internal token| AI[FastAPI AI :8001]
-    AI --> Models[(Model registry)]
-    API -->|Cloud / LAN| Shelly[Shelly smart plug]
-    Caddy[Caddy / HTTPS] --> Admin
-    Caddy --> API
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Mobile App (Flutter)                      │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────┐ │
+│  │ Dashboard │  │Smart     │  │ Trip     │  │ Settings/Garage  │ │
+│  │ & Stats   │  │Charging  │  │ Planner  │  │ & Maintenance    │ │
+│  └─────┬─────┘  └────┬─────┘  └────┬─────┘  └────────┬────────┘ │
+│        └──────────────┼──────────────┼─────────────────┘          │
+│                       ▼                                           │
+│              ┌─────────────────┐     ┌─────────────────┐         │
+│              │ Riverpod State  │     │ TFLite On-Device │         │
+│              │ Management      │     │ ML Inference     │         │
+│              └────────┬────────┘     └─────────────────┘         │
+└───────────────────────┼─────────────────────────────────────────┘
+                        │ HTTPS / WebSocket
+                        ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Backend (Docker Compose)                       │
+│                                                                   │
+│  ┌──────────────────────┐    ┌──────────────────────────┐        │
+│  │  Flask API (server.py)│◄──►│  FastAPI AI Server       │        │
+│  │  Port 5000            │    │  Port 8001 (internal)    │        │
+│  │  • Smart Charge API   │    │  • Model Registry        │        │
+│  │  • Shelly Proxy       │    │  • Prediction Service    │        │
+│  │  • Telemetry Ingest   │    │  • Fine-tune Pipeline    │        │
+│  │  • User Management    │    │  • Vehicle Adapter       │        │
+│  └──────────┬───────────┘    └──────────────────────────┘        │
+│             │                                                     │
+│  ┌──────────▼───────────┐    ┌──────────────────────────┐        │
+│  │  Caddy Reverse Proxy │    │  Admin Dashboard (React) │        │
+│  │  TLS + CORS          │    │  Port 3000               │        │
+│  └──────────────────────┘    └──────────────────────────┘        │
+└─────────────────────────────────────────────────────────────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Cloud Services                                │
+│  ┌────────────────┐  ┌────────────────┐  ┌─────────────────┐    │
+│  │ Firebase Auth   │  │ Cloud Firestore│  │ Shelly Cloud API│    │
+│  └────────────────┘  └────────────────┘  └─────────────────┘    │
+└─────────────────────────────────────────────────────────────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Smart Charger Gateway (On-premise)                  │
+│  ┌────────────────┐  ┌────────────────┐  ┌─────────────────┐    │
+│  │ Shelly Control  │  │ Safety Monitor │  │ Telemetry Writer│    │
+│  │ (LAN/Cloud)     │  │ (Auto-cutoff)  │  │ (Firestore Sync)│    │
+│  └────────────────┘  └────────────────┘  └─────────────────┘    │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### Luồng xác thực và dữ liệu
+---
 
-1. Người dùng đăng nhập qua Firebase Authentication.
-2. Client gửi Firebase ID token trong `Authorization: Bearer <token>`.
-3. Flask xác minh token bằng Firebase Admin SDK và xác định quyền `user`/`admin`.
-4. Tài nguyên người dùng được giới hạn theo `ownerUid`; admin thao tác qua API quản trị.
-5. Flask gọi AI Server bằng `AI_SERVER_INTERNAL_TOKEN` riêng.
-6. Model được lưu tại `web/models/`; mỗi nhóm có `manifest.json` mô tả schema và phiên bản.
+## 📂 Cấu trúc dự án
 
-## Công nghệ sử dụng
-
-| Lớp | Công nghệ chính |
-|---|---|
-| Mobile | Flutter, Dart 3.11+, Material, Riverpod |
-| Mobile data/UI | Firebase Auth, Cloud Firestore, fl_chart, flutter_map, notifications |
-| Mobile device | GPS, background/foreground service, secure storage, connectivity, mDNS |
-| Admin frontend | React 19, TypeScript 5.8, Vite 6, React Router 7 |
-| UI dashboard | Tailwind CSS, shadcn/ui, Radix UI, Recharts, Motion, Lucide |
-| Unified API | Python, Flask 3, Firebase Admin SDK, pandas, scikit-learn |
-| AI runtime | FastAPI, Uvicorn, TensorFlow, XGBoost, ONNX Runtime, joblib |
-| Smart charger | Shelly Cloud/LAN, FastAPI gateway, encrypted profile vault |
-| Hạ tầng | Docker Compose, Nginx, Caddy, HTTPS, Tailscale Funnel |
-| Kiểm thử | Flutter Test, pytest, TypeScript compiler |
-
-## Cấu trúc mã nguồn
-
-```text
-Vinfast Batery/
-├── app/                          # Flutter Android application
-│   ├── assets/                   # Icon, vehicle specs, model on-device
-│   ├── android/                  # Android Gradle project
+```
+Vinfast-Batery/
+├── app/                            # 📱 Flutter Mobile App
 │   ├── lib/
-│   │   ├── core/                 # Theme, provider, service, widget dùng chung
-│   │   ├── data/                 # Model, repository và data service
-│   │   ├── features/             # Auth, pin, sạc, AI, trip, bảo dưỡng...
-│   │   ├── l10n/                 # Bản địa hóa vi/en
-│   │   └── navigation/           # Điều hướng chính
-│   ├── test/                     # Unit, widget, integration test
-│   └── pubspec.yaml
-├── web/
-│   ├── ai_server/                # FastAPI AI runtime
-│   ├── dashboard/                # React Admin Portal
-│   ├── models/                   # Artifact và manifest theo loại model
-│   ├── shelly/                   # Provider, route, vault, Smart Charge
-│   ├── tests/                    # Backend tests
-│   ├── server.py                 # Flask Unified API
-│   ├── start_all.ps1             # Chạy development stack trên Windows
-│   ├── docker-compose.yml        # Stack production/container
-│   └── docker-compose.laptop.yml # Override triển khai laptop
-├── smart_charger_gateway/        # Gateway Shelly legacy/diagnostic
-├── deploy.ps1                    # Deploy Docker + Tailscale Funnel
-└── README.md
+│   │   ├── core/                   #   ├── Theme, constants, providers, widgets
+│   │   ├── data/                   #   ├── Models, repositories, services
+│   │   │   ├── models/             #   │   ├── VehicleModel, SmartChargingSession, ...
+│   │   │   ├── repositories/       #   │   ├── ChargeLog, SmartCharger, VehicleSpec
+│   │   │   └── services/           #   │   └── SmartCharger, Prediction, Telemetry
+│   │   ├── features/               #   ├── Feature modules
+│   │   │   ├── ai/                 #   │   ├── Smart Charging control + AI widgets
+│   │   │   ├── auth/               #   │   ├── Login, register, forgot password
+│   │   │   ├── battery_monitor/    #   │   ├── Real-time battery monitoring
+│   │   │   ├── charge/             #   │   ├── Manual charge tracking
+│   │   │   ├── dashboard/          #   │   ├── Trip logging & daily dashboard
+│   │   │   ├── home/               #   │   ├── Home screen with overview cards
+│   │   │   ├── maintenance/        #   │   ├── Maintenance reminders & logs
+│   │   │   ├── settings/           #   │   ├── Vehicle garage, AI settings, profile
+│   │   │   ├── smart_charging/     #   │   ├── Shelly setup hub & verification
+│   │   │   ├── statistics/         #   │   ├── Charts, cost analysis, trends
+│   │   │   └── trip_planner/       #   │   └── Route planning with battery prediction
+│   │   ├── l10n/                   #   ├── Localization (Vietnamese)
+│   │   ├── navigation/             #   └── Navigation & routing
+│   │   ├── main.dart               #   Entry point
+│   │   └── app.dart                #   App widget & theme
+│   ├── assets/                     #   Icons, models, VinFast specs catalog
+│   ├── android/                    #   Android platform config
+│   └── pubspec.yaml                #   Dependencies
+│
+├── web/                            # 🖥️ Backend & Dashboard
+│   ├── server.py                   #   Flask unified API (~4000 LOC)
+│   ├── ai_server/                  #   FastAPI AI microservice
+│   │   ├── main.py                 #     API routes & health checks
+│   │   ├── model_runtime.py        #     Multi-framework model loading
+│   │   ├── registry.py             #     Model registry & versioning
+│   │   ├── vehicle_adapter.py      #     Per-vehicle personalization adapter
+│   │   ├── fine_tune.py            #     Online fine-tuning pipeline
+│   │   └── lifecycle.py            #     Model lifecycle management
+│   ├── shelly/                     #   Shelly smart relay integration
+│   │   ├── service.py              #     Smart charging orchestration
+│   │   ├── repositories.py         #     Firestore persistence
+│   │   ├── personalization.py      #     Per-vehicle learning & calibration
+│   │   ├── charging_fusion.py      #     Multi-source ETA fusion
+│   │   └── models.py               #     Domain models
+│   ├── dashboard/                  #   React admin dashboard (Vite + shadcn)
+│   ├── models/                     #   Trained ML model artifacts (11 domains)
+│   ├── tests/                      #   Pytest test suite
+│   ├── docker-compose.yml          #   Production deployment
+│   ├── docker-compose.laptop.yml   #   Local development
+│   └── Caddyfile                   #   Reverse proxy + TLS
+│
+├── smart_charger_gateway/          # 🔌 On-premise IoT Gateway
+│   ├── main.py                     #   FastAPI gateway server
+│   ├── smart_charging.py           #   Core charging logic & state machine
+│   ├── shelly.py                   #   Shelly device communication
+│   ├── safety_monitor.py           #   Hardware safety watchdog
+│   ├── graduation_policy.py        #   Safe boot → LAN → Cloud progression
+│   ├── telemetry_writer.py         #   Firestore telemetry sync
+│   └── tests/                      #   Gateway unit tests
+│
+├── build_app.ps1                   # 🔨 Android APK build script
+├── start_server_local.ps1          # 💻 Khởi chạy server trực tiếp (Cách 1 - Local Dev)
+├── start_server_docker.ps1         # 🐳 Khởi chạy server qua Docker + Tailscale (Cách 2)
+├── deploy_web.ps1                  # 🚀 Alias chuyển tiếp tới start_server_docker.ps1
+├── ev_soc_pipeline.pkl             # 🧠 Pre-trained SoC estimation model
+└── SMART_CHARGE_SETUP_GUIDE.md     # 📖 Hardware setup guide
 ```
 
-`smart-charge-ev---quản-lý-sạc-xe-điện/` là giao diện/prototype React riêng. Mobile chính nằm trong `app/`, Admin Portal đang dùng nằm trong `web/dashboard/`.
+---
 
-## Yêu cầu môi trường
-
-### Phát triển trực tiếp trên Windows
-
-- Windows 10/11 và PowerShell 5.1+.
-- Flutter SDK tương thích Dart `^3.11.0`.
-- Android Studio/Android SDK, Java 17 và thiết bị/emulator Android API 26+.
-- Python 3.11 được khuyến nghị.
-- Node.js 20 LTS được khuyến nghị và npm.
-- Firebase project đã bật Email/Password Authentication và Cloud Firestore.
-
-### Chạy bằng container
-
-- Docker Desktop sử dụng Linux containers và Docker Compose v2.
-- Tailscale nếu muốn công bố server laptop ra Internet bằng Funnel.
-
-## Cấu hình Firebase
+## ⚙️ Yêu cầu hệ thống
 
 ### Mobile App
-
-1. Tạo Android app trong Firebase với package `com.bes.vinbatery`.
-2. Đặt `google-services.json` tại `app/android/app/google-services.json`.
-3. Bật **Authentication > Sign-in method > Email/Password**.
-4. Tạo Cloud Firestore và triển khai rules/indexes trong `web/` khi cần.
+| Component | Phiên bản |
+|-----------|-----------|
+| Flutter SDK | ≥ 3.32 |
+| Dart SDK | ≥ 3.11 |
+| Android SDK | ≥ API 23 (Android 6.0) |
+| Java/JDK | 17+ |
 
 ### Backend
+| Component | Phiên bản |
+|-----------|-----------|
+| Python | ≥ 3.11 |
+| Docker & Docker Compose | Latest |
+| Node.js (Dashboard) | ≥ 18 |
 
-Tải service account từ **Project settings > Service accounts > Generate new private key**:
+### Cloud Services
+| Service | Mục đích |
+|---------|----------|
+| Firebase Authentication | Xác thực người dùng |
+| Cloud Firestore | Database chính |
+| Shelly Cloud API | Điều khiển relay IoT |
 
-- Local: đặt JSON trong `web/secrets/serviceAccountKey.json` hoặc khai báo `GOOGLE_APPLICATION_CREDENTIALS`.
-- Docker: minify JSON thành một dòng và đặt vào `FIREBASE_CREDENTIALS_JSON`.
+---
 
-### Admin Portal
+## 🚀 Cài đặt & Chạy
 
-```dotenv
-VITE_FIREBASE_API_KEY=
-VITE_FIREBASE_AUTH_DOMAIN=
-VITE_FIREBASE_PROJECT_ID=
-VITE_FIREBASE_STORAGE_BUCKET=
-VITE_FIREBASE_MESSAGING_SENDER_ID=
-VITE_FIREBASE_APP_ID=
-VITE_API_BASE_URL=http://localhost:5000
-```
+### 1. Mobile App (Flutter)
 
-Khi chạy production/container, đặt thêm APP_ENV=production, CORS_ORIGINS và các secret backend. Compose sẽ dừng ngay nếu thiếu AI_SERVER_INTERNAL_TOKEN, DEV_ADMIN_KEY, ADMIN_EMAILS, FIREBASE_CREDENTIALS_JSON hoặc Firebase Web config.
+```bash
+# Clone repository
+git clone https://github.com/khanhbes/Vinfast-Batery.git
+cd Vinfast-Batery
 
-Admin được xác định bằng custom claim `admin=true` hoặc email trong `ADMIN_EMAILS`. Chỉ dùng `ADMIN_EMAILS=*` trong môi trường phát triển cô lập.
+# Cài đặt Flutter dependencies
+cd app
+flutter pub get
 
-## Chạy dự án trên Windows
+# Chạy debug mode
+flutter run
 
-### 1. Chuẩn bị Python
-
-```powershell
-cd web
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-```
-
-Có thể dùng `requirements-api.txt` và `requirements-ai.txt` nếu muốn tách Flask/AI thành hai virtual environment.
-
-### 2. Chuẩn bị dashboard
-
-```powershell
-cd web\dashboard
-npm install
-cd ..\..
-```
-
-### 3. Khởi động toàn bộ stack
-
-Từ thư mục gốc:
-
-```powershell
-.\web\start_all.ps1
-```
-
-| Dịch vụ | Địa chỉ | Vai trò |
-|---|---|---|
-| Admin Portal | `http://localhost:3000` | Giao diện quản trị Vite |
-| Unified API | `http://localhost:5000` | REST API Flask |
-| AI Server | `http://127.0.0.1:8001` | Runtime AI nội bộ |
-
-```powershell
-Invoke-RestMethod http://localhost:5000/api/health
-```
-
-> `start_all.ps1` sẽ giải phóng các cổng 3000, 5000 và 8001 nếu bị process khác chiếm. Hãy lưu công việc ở các service trên những cổng này trước khi chạy.
-
-## Chạy bằng Docker
-
-### Stack server chuẩn
-
-```powershell
-cd web
-Copy-Item .env.docker.example .env
-# Điền secrets và Firebase Web config trong .env
-docker compose up -d --build
-docker compose ps
-```
-
-Stack gồm `ai`, `api`, `dashboard` và `caddy`. Caddy mở cổng 80/443, xử lý HTTPS và proxy request vào mạng Docker nội bộ.
-
-### Laptop với Tailscale Funnel
-
-```powershell
-cd web
-Copy-Item .env.laptop.example .env.laptop
-# Điền đầy đủ biến bắt buộc
+# Hoặc build APK bằng script tự động
 cd ..
-.\deploy.ps1
+.\build_app.ps1 -Mode debug          # Debug APK
+.\build_app.ps1                       # Release APK (signed)
+.\build_app.ps1 -SplitAbi            # Release chia theo chip ARM
+.\build_app.ps1 -Clean               # Clean build
 ```
 
-Gateway local lắng nghe tại `http://127.0.0.1:8080`. Xem chi tiết trong `web/START_LAPTOP_SERVER.md`.
+#### Cấu hình Firebase
+1. Tạo project trên [Firebase Console](https://console.firebase.google.com/)
+2. Thêm app Android với package name: `com.khanhbes.vinfast_battery`
+3. Download `google-services.json` → `app/android/app/`
+4. Enable **Authentication** (Email/Password) và **Cloud Firestore**
 
-## Chạy ứng dụng Flutter
+### 2. Backend Server (Python)
 
-```powershell
-cd app
-flutter pub get
-flutter analyze
-flutter run --dart-define=APP_API_BASE_URL=http://10.0.2.2:5000
+```bash
+cd web
+
+# Tạo file cấu hình từ template
+cp .env.docker.example .env
+# Chỉnh sửa .env với thông tin thật
+
+# Khởi chạy toàn bộ backend bằng Docker
+docker compose up -d
+
+# Hoặc chạy local (development)
+python -m venv .venv
+.venv\Scripts\activate           # Windows
+source .venv/bin/activate        # macOS/Linux
+pip install -r requirements.txt
+python server.py
 ```
 
-- Android Emulator: dùng `http://10.0.2.2:5000`.
-- Thiết bị thật: dùng IP LAN của server, ví dụ `http://192.168.1.10:5000`.
-- Production: dùng URL HTTPS public.
+#### Biến môi trường quan trọng (`.env`)
 
-Điện thoại thật và server phải truy cập được nhau; firewall phải cho phép kết nối tới cổng API.
+| Biến | Mô tả |
+|------|--------|
+| `FIREBASE_CREDENTIALS_JSON` | Firebase Admin SDK credentials (JSON string) |
+| `AI_SERVER_INTERNAL_TOKEN` | Token bảo mật giữa API ↔ AI Server |
+| `ADMIN_EMAILS` | Danh sách email admin (comma-separated) |
+| `SHELLY_PROVIDER` | `integrator` hoặc `legacy` |
+| `SHELLY_INTEGRATOR_TAG` | Shelly Cloud integration tag |
+| `CORS_ORIGINS` | Allowed origins cho CORS |
 
-## Build APK
+### 3. Smart Charger Gateway
 
-### Cấu hình release signing
+```bash
+cd smart_charger_gateway
 
-Sao chép `app/android/key.properties.example` thành `app/android/key.properties` rồi điền keystore riêng. CI có thể dùng các biến `ANDROID_STORE_FILE`, `ANDROID_STORE_PASSWORD`, `ANDROID_KEY_ALIAS` và `ANDROID_KEY_PASSWORD`. File `key.properties`, `*.jks` và `*.keystore` đã được loại khỏi Git.
+# Tạo cấu hình
+cp .env.example .env
+# Chỉnh sửa .env
 
-```powershell
-cd app
-flutter clean
-flutter pub get
-flutter build apk --release `
-  --dart-define=APP_API_BASE_URL=https://your-domain.example
+# Cài đặt & chạy
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+python main.py
 ```
 
-APK được tạo tại `app/build/app/outputs/flutter-apk/app-release.apk`.
+> 📖 Hướng dẫn chi tiết setup phần cứng Shelly: xem [`SMART_CHARGE_SETUP_GUIDE.md`](SMART_CHARGE_SETUP_GUIDE.md)
 
-Để giảm dung lượng từng file:
+### 4. Admin Dashboard (React)
 
-```powershell
-flutter build apk --release --split-per-abi `
-  --dart-define=APP_API_BASE_URL=https://your-domain.example
-```
+```bash
+cd web/dashboard
 
-> [!CAUTION]
-> Build release sẽ bị từ chối nếu chưa có release signing. Chỉ dùng `ALLOW_DEBUG_SIGNING=true` cho bản build local tạm thời; không phát hành APK được ký bằng debug key.
+# Cài đặt dependencies
+npm install
 
-Server phân phối APK qua `web/apk/` và metadata `web/app_config.json`. Khi phát hành, cần đồng bộ version, build number, release notes và `VinFastBattery_latest.apk`.
+# Chạy development server
+npm run dev          # http://localhost:3000
 
-## API chính
-
-Endpoint nghiệp vụ yêu cầu Firebase ID token trừ route public được cấu hình rõ ràng.
-
-### Hệ thống và dữ liệu người dùng
-
-| Method | Endpoint | Mô tả |
-|---|---|---|
-| `GET` | `/api/health` | Trạng thái API/Firebase |
-| `GET` | `/api/auth/me` | Tài khoản và role hiện tại |
-| `GET/POST` | `/api/user/vehicles` | Danh sách hoặc tạo xe |
-| `GET` | `/api/user/charge-logs` | Lịch sử sạc |
-| `GET` | `/api/user/trip-logs` | Lịch sử chuyến đi |
-| `GET` | `/api/user/maintenance` | Công việc bảo dưỡng |
-| `GET` | `/api/user/sync/overview` | Tổng quan đồng bộ |
-
-### AI, SOC và chuyến đi
-
-| Method | Endpoint | Mô tả |
-|---|---|---|
-| `POST` | `/api/ai/predict-range` | Dự đoán quãng đường |
-| `POST` | `/api/ai/predict-charging-time` | Ước tính thời gian sạc |
-| `POST` | `/api/ai/predict-degradation` | Dự đoán suy giảm pin |
-| `POST` | `/api/ai/analyze-patterns` | Phân tích mẫu sử dụng |
-| `POST` | `/api/ai/train-vehicle-profile` | Huấn luyện profile theo xe |
-| `GET` | `/api/ai/profile-status/<vehicleId>` | Trạng thái profile cá nhân |
-| `GET` | `/api/soc/history` | Lịch sử SOC |
-| `POST` | `/api/trip/predict` | Dự đoán chuyến đi |
-| `GET` | `/api/trip/history` | Lịch sử dự đoán chuyến đi |
-
-### Quản trị và cập nhật app
-
-| Method | Endpoint | Mô tả |
-|---|---|---|
-| `GET/POST` | `/api/admin/<entity>` | Liệt kê hoặc tạo bản ghi |
-| `GET/PUT/DELETE` | `/api/admin/<entity>/<id>` | Đọc, cập nhật, soft delete |
-| `POST` | `/api/admin/<entity>/<id>/restore` | Khôi phục bản ghi |
-| `GET/POST` | `/api/admin/export`, `/api/admin/import` | Xuất/nhập dữ liệu |
-| `GET` | `/api/admin/audit-logs` | Nhật ký kiểm toán |
-| `GET` | `/api/admin/ai/types` | Danh mục model |
-| `POST` | `/api/admin/ai/models/<type>/upload` | Upload model |
-| `POST` | `/api/admin/ai/models/<type>/deploy` | Triển khai model |
-| `POST` | `/api/admin/ai/models/<type>/rollback` | Rollback model |
-| `GET` | `/api/app/config` | Metadata APK hiện tại |
-| `GET` | `/api/app/download` | Tải APK mới nhất |
-
-## Dữ liệu và phân quyền
-
-Các collection nghiệp vụ chính là `Vehicles`, `ChargeLogs`, `TripLogs` và `MaintenanceTasks`. Hệ thống còn có dữ liệu Smart Charge, notification, telemetry, model registry, prediction, feedback và audit log.
-
-- User chỉ đọc/ghi dữ liệu thuộc `ownerUid` của mình.
-- Admin quản trị dữ liệu toàn hệ thống qua backend.
-- Xóa mặc định là soft delete bằng `isDeleted` và có thể khôi phục.
-- Dữ liệu legacy thiếu `ownerUid` phải được migrate trước khi dùng.
-- Rules/indexes nằm tại `web/firestore.rules` và `web/firestore.indexes.json`.
-
-## Kiểm thử
-
-```powershell
-# Flutter
-cd app
-flutter analyze
-flutter test
-
-# Backend
-cd ..\web
-.\.venv\Scripts\python.exe -m pytest tests -q
-
-# Admin Portal
-cd dashboard
-npm run lint
+# Build production
 npm run build
-
-# Gateway legacy (chạy từ repository root)
-cd ..\..\smart_charger_gateway
-python -m pytest tests -q
 ```
 
-## Biến môi trường quan trọng
+---
 
-| Biến | Mục đích |
-|---|---|
-| `FIREBASE_CREDENTIALS_JSON` | Firebase service account JSON cho container |
-| `GOOGLE_APPLICATION_CREDENTIALS` | Đường dẫn service account khi chạy local |
-| `ADMIN_EMAILS` | Danh sách email admin, phân tách dấu phẩy |
-| `AI_SERVER_INTERNAL_TOKEN` | Xác thực Flask ↔ AI Server |
-| `DEV_ADMIN_KEY` | Bảo vệ thao tác bootstrap/internal |
-| `SHELLY_PROFILE_MASTER_KEY` | Mã hóa profile thiết bị Shelly |
-| `SMART_CHARGE_MAX_MINUTES` | Giới hạn tuyệt đối một phiên Smart Charge |
-| `SHELLY_PROVIDER` | Provider Shelly, mặc định `integrator` |
-| `CORS_ORIGINS` | Danh sách origin dashboard được phép gọi API |
-| `APP_API_BASE_URL` | URL API nhúng vào app qua `--dart-define` |
-| `VITE_API_BASE_URL` | Base URL API của dashboard |
+## 🧠 Mô hình AI
 
-Xem mẫu tại `web/.env.docker.example` và `web/.env.laptop.example`.
+Hệ thống sử dụng **11 mô hình AI** được tổ chức trong Model Registry với lifecycle management hoàn chỉnh:
 
-## Bảo mật và an toàn
+| # | Model | Framework | Mô tả |
+|---|-------|-----------|--------|
+| 1 | `charging_time` | XGBoost / TFLite | Dự đoán thời gian sạc (phút) từ SoC hiện tại → mục tiêu |
+| 2 | `soc` | Scikit-learn | Ước lượng State of Charge từ điện áp, dòng, nhiệt độ |
+| 3 | `soh_degradation` | XGBoost | Dự đoán xu hướng chai pin dựa trên lịch sử sạc/xả |
+| 4 | `dte` | XGBoost | Distance to Empty — quãng đường còn lại |
+| 5 | `anomaly_detection` | Isolation Forest | Phát hiện bất thường trong dữ liệu sạc/pin |
+| 6 | `charging_recommender` | Rule + ML | Gợi ý mức sạc tối ưu cho LFP |
+| 7 | `eco_driving` | Gradient Boosting | Đánh giá phong cách lái tiết kiệm |
+| 8 | `eco_routing` | Gradient Boosting | Tối ưu tuyến đường theo năng lượng tiêu thụ |
+| 9 | `trip_labeling` | Classification | Phân loại chuyến đi (commute, errands, leisure) |
+| 10 | `user_behavior` | Clustering | Phân tích hành vi sử dụng xe |
+| 11 | `lifecycle` | Regression | Dự đoán tuổi thọ pin còn lại |
 
-- Không commit Firebase service account, `.env`, keystore, token Shelly hoặc master key.
-- Thay toàn bộ token/key mặc định trước khi chạy production.
-- Không sử dụng `ADMIN_EMAILS=*` ngoài môi trường dev cô lập.
-- Chỉ cung cấp API qua HTTPS khi truy cập từ Internet.
-- Không expose trực tiếp AI Server `8001`, Shelly hoặc gateway legacy ra Internet.
-- Sao lưu `SHELLY_PROFILE_MASTER_KEY` an toàn; mất key sẽ không giải mã được profile cũ.
-- Chỉ thêm file vào `.gitignore` không xóa secret khỏi lịch sử Git. Nếu đã lộ, phải thu hồi và cấp khóa mới.
-- Timer/ngắt sạc an toàn nên nằm trên Shelly khi có thể, không phụ thuộc hoàn toàn vào app hoặc mạng.
+### Per-Vehicle Personalization Pipeline
 
-## Khắc phục sự cố
+```
+Phiên sạc mới → evaluate_training() → update_profile()
+                     │                        │
+                     ▼                        ▼
+              ┌─────────────┐         ┌──────────────────┐
+              │ Eligibility │         │ Online Calibration│
+              │ Check:      │         │ • global_time_scale
+              │ • ≥20 min   │         │ • soc_band params
+              │ • ≥10% gain │         │ • effective_capacity
+              │ • telemetry │         │ • power_scale
+              │   ≥70%      │         └──────────────────┘
+              └─────────────┘                  │
+                                               ▼
+                                 ┌─────────────────────────┐
+                                 │ Stage Progression:       │
+                                 │ 0-2 sessions  → base    │
+                                 │ 3-9 sessions  → calibrating
+                                 │ 10+ sessions  → personalized
+                                 └─────────────────────────┘
+```
 
-### Dashboard không kết nối API
+---
 
-- Kiểm tra `http://localhost:5000/api/health`, `VITE_API_BASE_URL` và CORS.
-- Với Docker, kiểm tra `ai` healthy vì `api` phụ thuộc AI Server.
+## 🔌 Tích hợp phần cứng
 
-### Firebase báo unauthorized
+### Shelly Smart Relay
 
-- Đảm bảo Mobile, Web và service account cùng một Firebase project.
-- Kiểm tra ID token, Email/Password provider và `ADMIN_EMAILS`/custom claim.
+Hệ thống hỗ trợ relay thông minh **Shelly 1PM Mini Gen3** (hoặc tương đương) để điều khiển bật/tắt sạc:
 
-### Điện thoại không gọi được localhost
+| Tính năng | Chi tiết |
+|-----------|----------|
+| **Giao thức** | REST API (Cloud) / mDNS (LAN) |
+| **Telemetry** | Công suất (W), năng lượng (Wh), điện áp (V) — mỗi 30s |
+| **An toàn** | Auto-cutoff khi quá áp, quá dòng, mất kết nối |
+| **Graduation** | Safe boot → LAN verified → Cloud verified |
 
-`localhost` trên điện thoại là chính điện thoại. Dùng IP LAN của máy chạy Flask hoặc URL HTTPS/Tailscale và truyền qua `APP_API_BASE_URL`.
+### Xe VinFast hỗ trợ
 
-### AI endpoint trả 502
+| Model | Dung lượng pin | Công suất sạc max |
+|-------|---------------|-------------------|
+| Evo 200 | 1,872 Wh | 480W |
+| Evo Lite Neo | 1,488 Wh | 360W |
+| Evo Grand | 2,400 Wh | 600W |
+| **Feliz 2025** | **2,600 Wh** | **600W** |
+| Feliz S | 1,440 Wh | 360W |
+| Klara S | 1,920 Wh | 480W |
+| Klara A2 | 1,680 Wh | 420W |
+| Vento S | 1,872 Wh | 480W |
+| Theon S | 3,500 Wh | 700W |
+| Tempest | 2,880 Wh | 720W |
+| Ludo | 1,056 Wh | 264W |
 
-- Kiểm tra AI Server ở cổng 8001.
-- Kiểm tra `AI_SERVER_URL` và internal token ở API/AI giống nhau.
-- Kiểm tra manifest/artifact trong `web/models/<type>/`.
+---
 
-### Docker/Tailscale không public được
+## 📡 API Reference
 
-- Kiểm tra Docker Desktop, trạng thái container và log.
-- Chạy `tailscale funnel status` bằng PowerShell Administrator.
-- Đảm bảo laptop không sleep và còn kết nối Internet.
+### Smart Charging Endpoints
 
-## Tài liệu liên quan
+| Method | Endpoint | Mô tả |
+|--------|----------|--------|
+| `POST` | `/api/smart-charging/preview` | Tạo preview dự đoán thời gian sạc |
+| `POST` | `/api/smart-charging/start` | Bắt đầu phiên sạc thông minh |
+| `POST` | `/api/smart-charging/stop` | Dừng phiên sạc |
+| `GET` | `/api/smart-charging/status` | Trạng thái phiên sạc hiện tại |
+| `GET` | `/api/smart-charging/history` | Lịch sử phiên sạc |
 
-- `web/START_LAPTOP_SERVER.md`: Docker và Tailscale Funnel trên Windows.
-- `web/SHELLY_PROFILE_VAULT_SETUP.md`: vault mã hóa profile Shelly.
-- `SMART_CHARGE_SETUP_GUIDE.md`: hướng dẫn Smart Charge.
-- `web/AI_LIFECYCLE.md`: lifecycle model, Personal AI, canary và drift.
-- `web/TELEMETRY_SCHEMA.md`: schema telemetry, đồng bộ Flutter/Web và nguồn dữ liệu.
-- `smart_charger_gateway/README.md`: gateway legacy/diagnostic.
+### Shelly Integration
 
-## Trạng thái dự án
+| Method | Endpoint | Mô tả |
+|--------|----------|--------|
+| `POST` | `/api/shelly/relay/on` | Bật relay (bắt đầu sạc) |
+| `POST` | `/api/shelly/relay/off` | Tắt relay (dừng sạc) |
+| `GET` | `/api/shelly/status` | Trạng thái thiết bị & telemetry |
+| `POST` | `/api/shelly/verify-cloud` | Xác minh kết nối Cloud |
 
-Dự án đang được phát triển. Trước khi dùng thực tế cần hoàn thiện release signing, quản lý secret, kiểm thử phần cứng Smart Charge, giám sát production, backup dữ liệu và quy trình khôi phục sự cố.
+### AI & Model Management
+
+| Method | Endpoint | Mô tả |
+|--------|----------|--------|
+| `GET` | `/api/ai/models` | Danh sách model đã đăng ký |
+| `GET` | `/api/ai/models/{key}/health` | Health check model cụ thể |
+| `POST` | `/api/ai/predict` | Inference trực tiếp |
+| `GET` | `/api/ai/adapter/{vehicleId}` | Per-vehicle adapter data |
+
+---
+
+## 🧪 Testing
+
+### Backend (Python)
+
+```bash
+cd web
+python -m pytest tests/ -v
+
+# Test cụ thể
+python -m pytest tests/test_shelly_cloud_first.py -v
+python -m pytest tests/test_vehicle_adapter.py -v
+python -m pytest tests/test_personal_smart_charge_v3.py -v
+```
+
+### Smart Charger Gateway
+
+```bash
+cd smart_charger_gateway
+python -m pytest tests/ -v
+```
+
+### Flutter App
+
+```bash
+cd app
+flutter test
+flutter test test/unit/battery_capacity_test.dart
+```
+
+---
+
+## 🚢 Deployment
+
+### Production (Docker Compose)
+
+```bash
+cd web
+
+# Build & deploy tất cả services
+docker compose up -d --build
+
+# Kiểm tra health
+docker compose ps
+curl https://your-domain/api/health
+```
+
+**Services trong Docker Compose:**
+
+| Service | Port (internal) | Mô tả |
+|---------|----------------|--------|
+| `ai` | 8001 | FastAPI AI prediction server |
+| `api` | 5000 | Flask unified API |
+| `dashboard` | 3000 | React admin dashboard |
+| `caddy` | 80/443 | Reverse proxy + auto TLS |
+
+### APK Distribution
+
+```powershell
+# Build release APK
+.\build_app.ps1
+
+# APK sẽ được tự động copy sang:
+# - app/releases/         (archive)
+# - web/apk/              (OTA distribution)
+```
+
+---
+
+## 🤝 Đóng góp
+
+1. Fork repository
+2. Tạo feature branch: `git checkout -b feature/ten-tinh-nang`
+3. Commit changes: `git commit -m "feat: mô tả ngắn gọn"`
+4. Push to branch: `git push origin feature/ten-tinh-nang`
+5. Tạo Pull Request
+
+### Quy ước commit
+
+| Prefix | Ý nghĩa |
+|--------|---------|
+| `feat:` | Tính năng mới |
+| `fix:` | Sửa lỗi |
+| `docs:` | Cập nhật tài liệu |
+| `refactor:` | Refactor code |
+| `test:` | Thêm/sửa test |
+| `chore:` | Công việc bảo trì |
+
+---
+
+## 📄 Giấy phép
+
+Dự án này được phân phối dưới giấy phép **MIT License**. Xem file [LICENSE](LICENSE) để biết thêm chi tiết.
+
+---
+
+<p align="center">
+  <strong>Được phát triển bởi <a href="https://github.com/khanhbes">@khanhbes</a></strong>
+  <br />
+  <em>VinFast Battery — Sạc thông minh, pin bền lâu ⚡</em>
+</p>

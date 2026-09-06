@@ -384,7 +384,7 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _ChargingBatteryBar extends StatelessWidget {
+class _ChargingBatteryBar extends StatefulWidget {
   const _ChargingBatteryBar({
     required this.currentPercent,
     required this.targetPercent,
@@ -396,136 +396,286 @@ class _ChargingBatteryBar extends StatelessWidget {
   final Animation<double> glowAnimation;
 
   @override
+  State<_ChargingBatteryBar> createState() => _ChargingBatteryBarState();
+}
+
+class _ChargingBatteryBarState extends State<_ChargingBatteryBar>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _flowController;
+
+  @override
+  void initState() {
+    super.initState();
+    _flowController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2200),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _flowController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final reducedMotion = MediaQuery.disableAnimationsOf(context);
+    final clampedCurrent = widget.currentPercent.clamp(0.0, 100.0);
+    final clampedTarget = widget.targetPercent.clamp(0.0, 100.0);
 
     return AnimatedBuilder(
-      animation: glowAnimation,
-      builder: (context, _) => Container(
-        height: 40,
-        padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(
-          color: const Color(0xFF080808),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: CockpitColors.emerald.withValues(
-              alpha: .3 + glowAnimation.value * .15,
+      animation: Listenable.merge([widget.glowAnimation, _flowController]),
+      builder: (context, _) {
+        final flowPhase = reducedMotion ? 0.0 : _flowController.value;
+        final glowVal = widget.glowAnimation.value;
+
+        return Container(
+          height: 44,
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0B1412),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: CockpitColors.emerald.withValues(
+                alpha: .35 + glowVal * .25,
+              ),
+              width: 1.5,
             ),
+            boxShadow: [
+              BoxShadow(
+                color: CockpitColors.emerald.withValues(alpha: .10 + glowVal * .10),
+                blurRadius: 12,
+                spreadRadius: 1,
+              ),
+            ],
           ),
-        ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final width = constraints.maxWidth;
-            final currentWidth = width * currentPercent.clamp(0, 100) / 100;
-            final targetX = width * targetPercent.clamp(0, 100) / 100;
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final totalWidth = constraints.maxWidth;
+              final currentWidth = (totalWidth * clampedCurrent / 100).clamp(
+                0.0,
+                totalWidth,
+              );
+              final targetX = (totalWidth * clampedTarget / 100).clamp(
+                0.0,
+                totalWidth,
+              );
 
-            return Stack(
-              children: [
-                // Current fill
-                AnimatedContainer(
-                  duration: reducedMotion
-                      ? Duration.zero
-                      : CockpitMotion.battery,
-                  width: currentWidth,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    gradient: const LinearGradient(
-                      colors: [
-                        Color(0xFF059669),
-                        CockpitColors.emeraldStrong,
-                        CockpitColors.emerald,
-                      ],
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: CockpitColors.emerald.withValues(alpha: .20),
-                        blurRadius: 8,
-                      ),
-                    ],
-                  ),
-                  // Energy wave overlay
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
+              return Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  // ── Battery segment notches (20%, 40%, 60%, 80%) ──
+                  Positioned.fill(
                     child: CustomPaint(
-                      painter: _EnergyWavePainter(phase: glowAnimation.value),
+                      painter: _BatteryNotchesPainter(),
                     ),
                   ),
-                ),
 
-                // Target indicator line
-                Positioned(
-                  left: targetX - 1,
-                  top: 0,
-                  bottom: 0,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Container(
-                        width: 2,
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(1),
+                  // ── Active fill with energy flow ──
+                  if (currentWidth > 0)
+                    AnimatedContainer(
+                      duration: reducedMotion
+                          ? Duration.zero
+                          : CockpitMotion.battery,
+                      width: currentWidth,
+                      height: double.infinity,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(11),
+                        gradient: const LinearGradient(
+                          colors: [
+                            Color(0xFF047857), // Deep emerald
+                            Color(0xFF059669),
+                            Color(0xFF10B981), // Emerald strong
+                            Color(0xFF34D399), // Mint cyan
+                          ],
+                          stops: [0.0, 0.35, 0.75, 1.0],
                         ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF10B981).withValues(alpha: .40),
+                            blurRadius: 10,
+                            spreadRadius: 1,
+                          ),
+                        ],
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 4,
-                          vertical: 1,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: .7),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          '${targetPercent.round()}%',
-                          style: CockpitTypography.numbers(
-                            fontSize: 8,
-                            fontWeight: FontWeight.w700,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(11),
+                        child: CustomPaint(
+                          painter: _EnergyFlowStreamPainter(
+                            phase: flowPhase,
+                            glowIntensity: glowVal,
                           ),
                         ),
                       ),
-                      Container(
-                        width: 2,
-                        height: 6,
+                    ),
+
+                  // ── Leading Edge Pulse Spark (head of charging fill) ──
+                  if (currentWidth > 2 && currentWidth < totalWidth)
+                    Positioned(
+                      left: currentWidth - 3,
+                      top: 0,
+                      bottom: 0,
+                      child: Container(
+                        width: 6,
                         decoration: BoxDecoration(
                           color: Colors.white,
-                          borderRadius: BorderRadius.circular(1),
+                          borderRadius: BorderRadius.circular(3),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.white.withValues(alpha: .9),
+                              blurRadius: 6,
+                              spreadRadius: 2,
+                            ),
+                            BoxShadow(
+                              color: const Color(0xFF34D399).withValues(alpha: .8),
+                              blurRadius: 12,
+                              spreadRadius: 4,
+                            ),
+                          ],
                         ),
                       ),
-                    ],
+                    ),
+
+                  // ── Target indicator line & badge ──
+                  Positioned(
+                    left: (targetX - 1).clamp(0.0, totalWidth - 2),
+                    top: 0,
+                    bottom: 0,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Container(
+                          width: 2.5,
+                          height: 5,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(1),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.white.withValues(alpha: .6),
+                                blurRadius: 4,
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 1.5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0A0F0D).withValues(alpha: .92),
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: .5),
+                              width: 0.8,
+                            ),
+                          ),
+                          child: Text(
+                            '${clampedTarget.round()}%',
+                            style: CockpitTypography.numbers(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        Container(
+                          width: 2.5,
+                          height: 5,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(1),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.white.withValues(alpha: .6),
+                                blurRadius: 4,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            );
-          },
-        ),
-      ),
+                ],
+              );
+            },
+          ),
+        );
+      },
     );
   }
 }
 
-class _EnergyWavePainter extends CustomPainter {
-  const _EnergyWavePainter({required this.phase});
-  final double phase;
-
+class _BatteryNotchesPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment(-1 + phase * 3, 0),
-        end: Alignment(-0.5 + phase * 3, 0),
-        colors: [
-          Colors.transparent,
-          Colors.white.withValues(alpha: .22),
-          Colors.transparent,
-        ],
-      ).createShader(Offset.zero & size);
-    canvas.drawRect(Offset.zero & size, paint);
+      ..color = Colors.white.withValues(alpha: .12)
+      ..strokeWidth = 1.0;
+
+    for (final fraction in [0.25, 0.50, 0.75]) {
+      final x = size.width * fraction;
+      canvas.drawLine(Offset(x, 4), Offset(x, 10), paint);
+      canvas.drawLine(Offset(x, size.height - 10), Offset(x, size.height - 4), paint);
+    }
   }
 
   @override
-  bool shouldRepaint(_EnergyWavePainter old) => old.phase != phase;
+  bool shouldRepaint(_BatteryNotchesPainter oldDelegate) => false;
+}
+
+class _EnergyFlowStreamPainter extends CustomPainter {
+  const _EnergyFlowStreamPainter({
+    required this.phase,
+    required this.glowIntensity,
+  });
+
+  final double phase;
+  final double glowIntensity;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0) return;
+
+    // Diagonal flowing shimmer rays
+    final rayWidth = size.height * 1.5;
+    final cycleDistance = size.width + rayWidth * 2;
+    final currentOffset = -rayWidth + cycleDistance * phase;
+
+    final shimmerPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Colors.transparent,
+          Colors.white.withValues(alpha: .10),
+          Colors.white.withValues(alpha: .38 + glowIntensity * .20),
+          Colors.white.withValues(alpha: .10),
+          Colors.transparent,
+        ],
+        stops: const [0.0, 0.35, 0.5, 0.65, 1.0],
+      ).createShader(
+        Rect.fromLTWH(currentOffset, 0, rayWidth, size.height),
+      );
+
+    canvas.drawRect(Offset.zero & size, shimmerPaint);
+
+    // Subtle floating energy micro-particles
+    final particlePaint = Paint()..color = Colors.white.withValues(alpha: .55);
+    final p1X = ((phase * 1.3) % 1.0) * size.width;
+    final p2X = (((phase + 0.45) * 1.1) % 1.0) * size.width;
+    final p3X = (((phase + 0.8) * 1.2) % 1.0) * size.width;
+
+    canvas.drawCircle(Offset(p1X, size.height * 0.35), 1.5, particlePaint);
+    canvas.drawCircle(Offset(p2X, size.height * 0.68), 1.8, particlePaint);
+    canvas.drawCircle(Offset(p3X, size.height * 0.22), 1.2, particlePaint);
+  }
+
+  @override
+  bool shouldRepaint(_EnergyFlowStreamPainter old) =>
+      old.phase != phase || old.glowIntensity != glowIntensity;
 }
 
 class _StatBox extends StatelessWidget {

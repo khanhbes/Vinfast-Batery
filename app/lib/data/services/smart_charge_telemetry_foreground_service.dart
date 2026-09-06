@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'dart:ui';
 
 import 'package:firebase_core/firebase_core.dart';
@@ -182,10 +183,34 @@ class _SmartChargeTelemetryTaskHandler extends TaskHandler {
         },
       });
       final power = status.powerW.round();
-      final minutes = (status.timerRemaining?.inSeconds ?? 0) ~/ 60;
+      final totalSeconds = status.timerRemaining?.inSeconds ?? 0;
+      final hours = totalSeconds ~/ 3600;
+      final minutes = (totalSeconds % 3600) ~/ 60;
+      final timeStr = totalSeconds > 0
+          ? (hours > 0
+              ? 'còn khoảng ${hours}g ${minutes.toString().padLeft(2, '0')}p'
+              : 'còn khoảng $minutes phút')
+          : 'đang sạc';
+
+      final capacity =
+          session.effectiveCapacityWh ??
+          session.estimatedCapacityWh ??
+          2600.0;
+      final baseline = session.baselineEnergyWh;
+      final energyUsed = (baseline != null && status.energyWh >= baseline)
+          ? max(session.energyUsedWh, status.energyWh - baseline)
+          : session.energyUsedWh;
+      final estimatedSoc = capacity > 0
+          ? (session.startSoc + energyUsed / capacity * 100).clamp(
+              session.startSoc,
+              100.0,
+            )
+          : session.startSoc;
+      final socText = '${estimatedSoc.round()}%';
+
       await FlutterForegroundTask.updateService(
-        notificationTitle: 'Đang theo dõi Smart Charge',
-        notificationText: '$power W · còn khoảng $minutes phút',
+        notificationTitle: 'Đang sạc $socText · $power W',
+        notificationText: '$socText · $power W · $timeStr',
       );
 
       if (!status.relay) {

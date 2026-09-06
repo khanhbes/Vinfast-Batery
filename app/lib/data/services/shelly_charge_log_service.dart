@@ -312,8 +312,7 @@ class ShellyChargeLogService {
     final baseline = session.baselineEnergyWh;
     if (capacity <= 0 || baseline == null) return null;
     return (session.startSoc +
-            (energyWh - baseline).clamp(0, double.infinity) *
-                0.90 /
+            (energyWh - baseline).clamp(0, double.infinity) /
                 capacity *
                 100)
         .clamp(0, 100)
