@@ -793,7 +793,7 @@ class SmartChargerService {
     );
     return min(
       session.targetSoc,
-      session.startSoc + used * 0.90 / capacity * 100,
+      session.startSoc + used / capacity * 100,
     );
   }
 

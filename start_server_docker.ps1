@@ -1,11 +1,13 @@
 <#
 .SYNOPSIS
-  Build and deploy the local VinFast Battery stack through Tailscale Funnel.
+  Khởi động & Triển khai server qua Docker và Tailscale Funnel (Cách 2):
+  - Build & Chạy container: ai, api, dashboard, laptop_gateway
+  - Bật Tailscale Funnel cổng 8080 (public ra https://khanhbes.tailaafca5.ts.net)
 
 .EXAMPLE
-  .\deploy_web.ps1
-  .\deploy_web.ps1 -Service api
-  .\deploy_web.ps1 -NoCache
+  .\start_server_docker.ps1
+  .\start_server_docker.ps1 -Service api
+  .\start_server_docker.ps1 -NoCache
 #>
 [CmdletBinding()]
 param(

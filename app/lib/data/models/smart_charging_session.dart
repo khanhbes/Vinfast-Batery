@@ -782,6 +782,7 @@ class SmartChargingSession {
     double? tariffVndPerKwhSnapshot,
     double? estimatedCostVnd,
     String? costQuality,
+    double? actualEndSoc,
   }) => SmartChargingSession(
     sessionId: sessionId,
     vehicleId: vehicleId,
@@ -827,7 +828,7 @@ class SmartChargingSession {
     profileVersion: profileVersion,
     adapterVersion: adapterVersion,
     safetyEvents: safetyEvents,
-    actualEndSoc: actualEndSoc,
+    actualEndSoc: actualEndSoc ?? this.actualEndSoc,
     trainingEligible: trainingEligible,
     telemetryCoverage: telemetryCoverage,
     ownerUid: ownerUid,

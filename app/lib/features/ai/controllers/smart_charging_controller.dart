@@ -627,7 +627,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         session.estimatedCapacityWh ??
         state.draft.estimatedCapacityWh;
     final estimatedSoc = capacity > 0
-        ? (session.startSoc + energy * 0.90 / capacity * 100).clamp(
+        ? (session.startSoc + energy / capacity * 100).clamp(
             session.startSoc,
             100,
           )

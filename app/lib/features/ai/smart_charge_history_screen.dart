@@ -403,23 +403,34 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
     });
   }
 
-  void _openDetail(SmartChargingSession session) => showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    backgroundColor: Colors.transparent,
-    barrierColor: Colors.black.withValues(alpha: .72),
-    builder: (_) => FractionallySizedBox(
-      heightFactor: .96,
-      child: ClipRRect(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        child: SmartChargeSessionDetailScreen(
-          controller: widget.controller,
-          session: session,
+  Future<void> _openDetail(SmartChargingSession session) async {
+    final deletedOrChanged = await showModalBottomSheet<dynamic>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: .72),
+      builder: (_) => FractionallySizedBox(
+        heightFactor: .96,
+        child: ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          child: SmartChargeSessionDetailScreen(
+            controller: widget.controller,
+            session: session,
+          ),
         ),
       ),
-    ),
-  );
+    );
+    if (!mounted) return;
+    if (deletedOrChanged == true || deletedOrChanged is String) {
+      if (mounted) {
+        setState(() {
+          _items.removeWhere((it) => it.sessionId == session.sessionId);
+        });
+      }
+      await _load(reset: true);
+    }
+  }
 
   Future<void> _export() async {
     final format = await showModalBottomSheet<ChargeReportFormat>(
@@ -1484,18 +1495,30 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
         ],
       ),
     );
-    if (value == null) return;
+    if (value == null || !mounted) return;
     try {
       final summary = await widget.controller.confirmActualEndSoc(
         _session,
         value,
       );
-      if (mounted) setState(() => _summary = summary);
+      if (mounted) {
+        setState(() {
+          _session = _session.copyWith(actualEndSoc: value);
+          _summary = summary;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Đã xác nhận SOC thực tế: ${value.toStringAsFixed(0)}%'),
+            backgroundColor: const Color(0xFF10B981),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('$error')));
+        ).showSnackBar(SnackBar(content: Text('Lỗi: $error')));
       }
     }
   }
@@ -1548,7 +1571,13 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
     if (confirmed != true || !mounted) return;
     try {
       await widget.controller.privacyEraseSession(_session.sessionId, code);
-      if (mounted) Navigator.of(context).pop();
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && Navigator.of(context).canPop()) {
+            Navigator.of(context).pop(true);
+          }
+        });
+      }
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1578,10 +1607,16 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
         ],
       ),
     );
-    if (confirmed != true) return;
+    if (confirmed != true || !mounted) return;
     try {
       await widget.controller.hideSession(_session.sessionId);
-      if (mounted) Navigator.of(context).pop();
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && Navigator.of(context).canPop()) {
+            Navigator.of(context).pop(true);
+          }
+        });
+      }
     } on Object catch (error) {
       if (mounted) {
         AppPopup.showError('Không thể ẩn phiên', detail: '$error');
