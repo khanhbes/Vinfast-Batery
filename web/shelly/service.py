@@ -463,6 +463,15 @@ class SmartChargeService:
         self.repository.save_session(uid, session)
         self.repository.upsert_charge_log(uid, session)
         self._update_personal_calibration(uid, session, decision)
+        try:
+            from ai_server.dataset_manager import upsert_session_record
+            session_dict = session.to_dict() if hasattr(session, 'to_dict') else dict(session)
+            session_dict['vehicleId'] = session.vehicle_id
+            session_dict['userId'] = uid
+            upsert_session_record(session_dict, actual_soc=actual_soc)
+        except Exception as exc:
+            import logging
+            logging.getLogger('SmartChargeService').warning('Could not record into dataset file: %s', exc)
         return session
 
 

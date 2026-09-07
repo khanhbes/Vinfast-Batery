@@ -9,6 +9,7 @@ import 'dart:ui';
 import 'app.dart';
 import 'data/services/notification_service.dart';
 import 'data/services/background_service_config.dart';
+import 'core/constants/app_constants.dart';
 import 'core/widgets/app_popup.dart';
 import 'core/services/app_error_reporter.dart';
 import 'data/services/charging_prediction_adapter.dart';
@@ -78,6 +79,10 @@ void main() async {
       String? pendingRecovery;
       try {
         final prefs = await SharedPreferences.getInstance();
+        final customUrl = prefs.getString('custom_api_base_url');
+        if (customUrl != null && customUrl.isNotEmpty) {
+          AppConstants.setCustomApiBaseUrl(customUrl);
+        }
         final chargeActive = prefs.getBool('charge_active') ?? false;
         final tripActive = prefs.getBool('trip_active') ?? false;
         if (chargeActive) {

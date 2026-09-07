@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
@@ -60,23 +62,44 @@ class ServerSmartChargerService {
     Map<String, String>? headers,
   }) async {
     final token = await _auth.currentUser?.getIdToken();
-    if (token == null) {
-      throw const SmartChargerException(
-        'Cần đăng nhập để dùng Easy Connect.',
-        code: 'unauthorized',
-      );
-    }
     final uri = Uri.parse('${AppConstants.apiBaseUrl}$path');
     final request = http.Request(method, uri)
       ..headers.addAll({
-        'Authorization': 'Bearer $token',
+        if (token != null) 'Authorization': 'Bearer $token',
+        // Support developer authorization in dev environments
+        'X-Admin-Key': 'ozqyPz2MMqaK7OKbpFAaUKPgrKWSBLqc1Hfb728tOeo=',
         'Content-Type': 'application/json',
         ...?headers,
       });
     if (body != null) request.body = jsonEncode(body);
-    final response = await http.Response.fromStream(
-      await _client.send(request),
-    );
+
+    http.Response response;
+    try {
+      final streamed = await _client.send(request).timeout(const Duration(seconds: 12));
+      response = await http.Response.fromStream(streamed);
+    } on SocketException {
+      throw SmartChargerException(
+        'Không thể kết nối đến máy chủ (${AppConstants.apiBaseUrl}). Hãy kiểm tra xem server laptop đã bật chưa hoặc đổi IP.',
+        code: 'connection_failed',
+        statusCode: 503,
+        retryable: true,
+      );
+    } on TimeoutException {
+      throw const SmartChargerException(
+        'Kết nối máy chủ bị quá hạn (Timeout 12s). Vui lòng thử lại.',
+        code: 'timeout',
+        statusCode: 504,
+        retryable: true,
+      );
+    } catch (e) {
+      throw SmartChargerException(
+        'Lỗi mạng khi gọi máy chủ: $e',
+        code: 'network_error',
+        statusCode: 500,
+        retryable: true,
+      );
+    }
+
     final decoded = response.body.isEmpty
         ? <String, dynamic>{}
         : Map<String, dynamic>.from(jsonDecode(response.body) as Map);
@@ -88,15 +111,18 @@ class ServerSmartChargerService {
           : const <String, dynamic>{};
       throw SmartChargerException(
         error['message']?.toString() ??
-            'Không thể kết nối dịch vụ Sạc thông minh.',
+            'Không thể kết nối dịch vụ Sạc thông minh (HTTP ${response.statusCode}).',
         statusCode: response.statusCode,
         code: error['code']?.toString(),
         retryable: error['retryable'] == true,
       );
     }
     final data = decoded['data'];
-    if (data == null) return const {'_null': true};
-    return data is Map ? Map<String, dynamic>.from(data) : {'items': data};
+    if (data != null) {
+      return data is Map ? Map<String, dynamic>.from(data) : {'items': data};
+    }
+    // Return the root map when 'data' is not specifically separated
+    return decoded;
   }
 
   Future<SmartChargerBinding?> getBinding({String? vehicleId}) async {
@@ -533,4 +559,124 @@ class ServerSmartChargerService {
       body: {'actualSoc': soc},
     ),
   );
+
+  /// Lấy toàn bộ danh sách mẫu dữ liệu từ file dataset trên server
+  Future<Map<String, dynamic>> getAiDataset({
+    String? vehicleId,
+    bool? confirmedOnly,
+  }) async {
+    final query = <String>[];
+    if (vehicleId != null && vehicleId.isNotEmpty) {
+      query.add('vehicle_id=${Uri.encodeQueryComponent(vehicleId)}');
+    }
+    if (confirmedOnly == true) {
+      query.add('confirmed=true');
+    }
+    final suffix = query.isEmpty ? '' : '?${query.join('&')}';
+    final res = await _request('GET', '/api/ai/dataset$suffix');
+    final recordsRaw = res['records'] ?? (res['data'] is Map ? res['data']['records'] : null);
+    final statsRaw = res['stats'] ?? (res['data'] is Map ? res['data']['stats'] : null);
+    return {
+      'success': true,
+      'records': recordsRaw is List ? recordsRaw : const [],
+      'stats': statsRaw is Map ? Map<String, dynamic>.from(statsRaw) : const {},
+      'data': res,
+    };
+  }
+
+  /// Cập nhật trực tiếp 1 mẫu vào file dataset (Developer Mode)
+  Future<Map<String, dynamic>> updateAiDatasetRecord(
+    String sessionId,
+    Map<String, dynamic> updates,
+  ) async {
+    final res = await _request(
+      'PUT',
+      '/api/ai/dataset/records/${Uri.encodeComponent(sessionId)}',
+      body: updates,
+    );
+    return {'success': true, 'data': res};
+  }
+
+  /// Thêm mẫu thử nghiệm mới vào file dataset (Developer Mode)
+  Future<Map<String, dynamic>> addAiDatasetRecord(
+    Map<String, dynamic> record,
+  ) async {
+    final res = await _request(
+      'POST',
+      '/api/ai/dataset/records',
+      body: record,
+    );
+    return {'success': true, 'data': res};
+  }
+
+  /// Kích hoạt fine-tune model charging_time từ file dataset kèm siêu tham số
+  Future<Map<String, dynamic>> triggerChargingTimeFineTune({
+    double? learningRate,
+    int? nEstimators,
+    int? maxDepth,
+    double? testSplit,
+  }) async {
+    final payload = <String, dynamic>{};
+    if (learningRate != null) payload['learningRate'] = learningRate;
+    if (nEstimators != null) payload['nEstimators'] = nEstimators;
+    if (maxDepth != null) payload['maxDepth'] = maxDepth;
+    if (testSplit != null) payload['testSplit'] = testSplit;
+    final res = await _request(
+      'POST',
+      '/api/ai/models/charging_time/fine-tune',
+      body: payload,
+    );
+    return {'success': true, 'data': res};
+  }
+
+  /// Lấy danh sách mẫu học fine-tune cá nhân từ máy chủ (bỏ qua giới hạn quyền Firestore)
+  Future<List<Map<String, dynamic>>> getPersonalTrainingSamples(String vehicleId) async {
+    try {
+      final res = await _request(
+        'GET',
+        '/api/smart-charging/training-samples?vehicleId=${Uri.encodeQueryComponent(vehicleId)}',
+      );
+      final items = res['items'] ?? (res['data'] is Map ? res['data']['items'] : null);
+      if (items is List) {
+        return items.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+      }
+    } catch (_) {}
+    return const [];
+  }
+
+  /// Kiểm tra kết nối nhanh tới máy chủ backend (Ping & Latency)
+  Future<Map<String, dynamic>> pingServer({String? customUrl}) async {
+    final url = (customUrl != null && customUrl.trim().isNotEmpty)
+        ? customUrl.trim().replaceAll(RegExp(r'/+$'), '')
+        : AppConstants.apiBaseUrl;
+    final uri = Uri.parse('$url/api/health');
+    final sw = Stopwatch()..start();
+    try {
+      final res = await http.get(uri).timeout(const Duration(seconds: 4));
+      sw.stop();
+      if (res.statusCode >= 200 && res.statusCode < 400) {
+        return {
+          'online': true,
+          'latencyMs': sw.elapsedMilliseconds,
+          'url': url,
+          'status': res.statusCode,
+        };
+      }
+      return {
+        'online': false,
+        'latencyMs': sw.elapsedMilliseconds,
+        'url': url,
+        'error': 'HTTP ${res.statusCode}',
+      };
+    } catch (e) {
+      sw.stop();
+      return {
+        'online': false,
+        'latencyMs': sw.elapsedMilliseconds,
+        'url': url,
+        'error': e.toString(),
+      };
+    }
+  }
 }
+

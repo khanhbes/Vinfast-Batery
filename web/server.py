@@ -5,6 +5,14 @@ Firebase Auth middleware + RBAC (user/admin).
 
 Port: 5000
 """
+import sys
+if sys.platform == 'win32':
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+
 import os
 import io
 import csv
@@ -15,6 +23,7 @@ import math
 import random
 import functools
 import glob
+import warnings
 import numpy as np
 from datetime import datetime, timedelta, timezone
 from flask import Flask, request, jsonify, Response, redirect, send_file
@@ -73,7 +82,9 @@ def _load_consumption_model():
     for path in candidates:
         if os.path.isfile(path):
             try:
-                _consumption_model = joblib.load(path)
+                with warnings.catch_warnings():
+                    warnings.simplefilter('ignore')
+                    _consumption_model = joblib.load(path)
                 _consumption_model_status = 'loaded'
                 print(f'✅ Consumption model loaded: {path}')
                 return
@@ -3672,30 +3683,126 @@ def ai_charging_model_status():
             }
         }), 500
 
-# ── AI Fine-Tuning & Shadow Mode Endpoints ─────────────────────────
+# ── AI Dataset Management & Fine-Tuning Endpoints ───────────────────
+
+@app.route('/api/ai/dataset', methods=['GET'])
+def ai_get_dataset():
+    """Retrieve charging time dataset records and summary statistics."""
+    try:
+        from ai_server.dataset_manager import load_dataset, get_dataset_stats
+        records = load_dataset()
+        stats = get_dataset_stats()
+
+        vehicle_id = request.args.get('vehicle_id') or request.args.get('vehicleId')
+        if vehicle_id:
+            records = [r for r in records if r.get('vehicle_id') == vehicle_id]
+
+        confirmed_only = request.args.get('confirmed')
+        if confirmed_only and confirmed_only.lower() in ('true', '1'):
+            records = [r for r in records if r.get('is_user_confirmed')]
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'stats': stats,
+                'records': records,
+            },
+            'stats': stats,
+            'records': records,
+        })
+    except Exception as exc:
+        print(f"Error reading AI dataset: {exc}")
+        return jsonify({'success': False, 'error': str(exc)}), 500
+
+
+@app.route('/api/ai/dataset/export-csv', methods=['GET'])
+def ai_export_dataset_csv():
+    """Download the charging time dataset as CSV file."""
+    try:
+        from ai_server.dataset_manager import export_csv_text
+        csv_data = export_csv_text()
+        return Response(
+            csv_data,
+            mimetype='text/csv',
+            headers={
+                'Content-Disposition': 'attachment; filename=charging_time_dataset.csv',
+                'Cache-Control': 'no-cache',
+            }
+        )
+    except Exception as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 500
+
+
+@app.route('/api/ai/dataset/records/<session_id>', methods=['PUT'])
+def ai_update_dataset_record(session_id):
+    """Update a specific record in the dataset file (Developer Mode edit)."""
+    try:
+        from ai_server.dataset_manager import update_record
+        updates = request.get_json(silent=True) or {}
+        updated = update_record(session_id, updates)
+        if not updated:
+            return jsonify({'success': False, 'error': f'Sample {session_id} not found'}), 404
+        return jsonify({'success': True, 'data': updated})
+    except Exception as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 500
+
+
+@app.route('/api/ai/dataset/records', methods=['POST'])
+def ai_add_dataset_record():
+    """Add a new test sample to the dataset file (Developer Mode)."""
+    try:
+        from ai_server.dataset_manager import add_manual_record
+        data = request.get_json(silent=True) or {}
+        record = add_manual_record(data)
+        return jsonify({'success': True, 'data': record})
+    except Exception as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 500
+
 
 @app.route('/api/ai/models/charging_time/fine-tune', methods=['POST'])
 def ai_fine_tune_charging_time():
-    """Trigger fine-tuning of charging_time model and export joblib + tflite."""
+    """Trigger fine-tuning of charging_time model using physical dataset and export joblib + tflite."""
     try:
         _require_user_or_admin()
     except ValueError as e:
         return jsonify({'success': False, 'error': str(e)}), 401
 
     try:
+        from ai_server.dataset_manager import load_dataset
         from ai_server.fine_tune import run_fine_tuning
-        sessions = []
+
+        body = request.get_json(silent=True) or {}
+        learning_rate = float(body.get('learning_rate') or body.get('learningRate') or 0.08)
+        n_estimators = int(body.get('n_estimators') or body.get('nEstimators') or 120)
+        max_depth = int(body.get('max_depth') or body.get('maxDepth') or 3)
+
+        # 1. Load from dataset file (contains verified ground-truth actual_end_soc)
+        dataset_records = load_dataset()
+        sessions = [dict(r) for r in dataset_records if not r.get('training_excluded')]
+
+        # 2. Augment with any live shelly history
         if shelly_repo and hasattr(shelly_repo, 'history'):
             try:
                 history = shelly_repo.history('all', 100)
-                sessions = [s.to_dict() if hasattr(s, 'to_dict') else s for s in history]
+                known_ids = {r.get('session_id') for r in sessions}
+                for s in history:
+                    s_dict = s.to_dict() if hasattr(s, 'to_dict') else s
+                    sid = s_dict.get('sessionId') or s_dict.get('session_id')
+                    if sid and sid not in known_ids:
+                        sessions.append(s_dict)
             except Exception as ex:
                 print(f"Could not read shelly history: {ex}")
         
         models_dir = os.path.join(os.path.dirname(__file__), 'ai_models', 'charging_time')
         os.makedirs(models_dir, exist_ok=True)
         
-        result = run_fine_tuning(sessions, models_dir)
+        result = run_fine_tuning(
+            sessions,
+            models_dir,
+            learning_rate=learning_rate,
+            n_estimators=n_estimators,
+            max_depth=max_depth,
+        )
         if not result.get('success'):
             return jsonify({'success': False, 'error': result.get('error', 'Fine-tuning failed')}), 500
 
@@ -3713,6 +3820,11 @@ def ai_fine_tune_charging_time():
                         'realSamplesCount': result['dataset']['realSamplesCount'],
                         'trainedAt': datetime.now(timezone.utc).isoformat(),
                         'tflitePath': result.get('tflitePath'),
+                        'hyperparameters': {
+                            'learningRate': learning_rate,
+                            'nEstimators': n_estimators,
+                            'maxDepth': max_depth,
+                        },
                     }
                 )
             except Exception as ex:
@@ -3829,7 +3941,7 @@ def ai_get_vehicle_adapter(vehicle_id):
 
 
 @app.route('/api/ai/models/charging_time/predict', methods=['POST'])
-def ai_predict_charging_time():
+def ai_model_predict_charging_time():
     """Predict charging duration using global model + per-vehicle adapter calibration."""
     try:
         body = request.get_json() or {}

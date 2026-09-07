@@ -105,6 +105,9 @@ def run_fine_tuning(
     sessions: list[dict[str, Any]],
     output_dir: str,
     new_version: str | None = None,
+    learning_rate: float = 0.08,
+    n_estimators: int = 120,
+    max_depth: int = 3,
 ) -> dict[str, Any]:
     """Train charging_time regressor and export .joblib and .tflite."""
     try:
@@ -164,11 +167,11 @@ def run_fine_tuning(
         X_tr, y_tr = X_arr[indices[:split]], y_arr[indices[:split]]
         X_te, y_te = X_arr[indices[split:]], y_arr[indices[split:]]
 
-    # 3. Fit GradientBoostingRegressor
+    # 3. Fit GradientBoostingRegressor with configurable hyperparameters
     model = GradientBoostingRegressor(
-        n_estimators=120,
-        learning_rate=0.08,
-        max_depth=3,
+        n_estimators=max(10, min(500, int(n_estimators))),
+        learning_rate=max(0.005, min(0.5, float(learning_rate))),
+        max_depth=max(1, min(10, int(max_depth))),
         random_state=42,
     )
     model.fit(X_tr, y_tr)

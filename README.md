@@ -218,10 +218,8 @@ Vinfast-Batery/
 │   ├── telemetry_writer.py         #   Firestore telemetry sync
 │   └── tests/                      #   Gateway unit tests
 │
-├── build_app.ps1                   # 🔨 Android APK build script
-├── start_server_local.ps1          # 💻 Khởi chạy server trực tiếp (Cách 1 - Local Dev)
-├── start_server_docker.ps1         # 🐳 Khởi chạy server qua Docker + Tailscale (Cách 2)
-├── deploy_web.ps1                  # 🚀 Alias chuyển tiếp tới start_server_docker.ps1
+├── run.ps1                         # ⚡ Trung tâm điều khiển, chạy server & build APK
+├── run.bat                         # 🚀 Shortcut nhấp đúp chạy nhanh trên Windows
 ├── ev_soc_pipeline.pkl             # 🧠 Pre-trained SoC estimation model
 └── SMART_CHARGE_SETUP_GUIDE.md     # 📖 Hardware setup guide
 ```
@@ -270,12 +268,11 @@ flutter pub get
 # Chạy debug mode
 flutter run
 
-# Hoặc build APK bằng script tự động
+# Hoặc build APK bằng trung tâm điều khiển
 cd ..
-.\build_app.ps1 -Mode debug          # Debug APK
-.\build_app.ps1                       # Release APK (signed)
-.\build_app.ps1 -SplitAbi            # Release chia theo chip ARM
-.\build_app.ps1 -Clean               # Clean build
+.\run.ps1 3                           # Option 3: Build Release APK (tối ưu, ký số, copy OTA)
+.\run.ps1 4                           # Option 4: Build Debug APK (test nhanh)
+.\run.ps1 5                           # Option 5: Dọn cache và Build sạch (Clean build)
 ```
 
 #### Cấu hình Firebase
@@ -286,6 +283,13 @@ cd ..
 
 ### 2. Backend Server (Python)
 
+> 💡 **Khuyến nghị:** Dùng script trung tâm `run.ps1` (hoặc nhấp đúp `run.bat`) từ thư mục gốc để khởi chạy tự động:
+> ```powershell
+> .\run.ps1 1       # Cách 1: Khởi chạy Server Cục bộ (Local Dev: AI 8001 + API 5000 + Dashboard 3000)
+> .\run.ps1 2       # Cách 2: Khởi chạy Server Docker & Tailscale Funnel (Public internet)
+> .\run.ps1 6       # Dọn dẹp & Giải phóng các cổng khi cần tắt server
+> ```
+
 ```bash
 cd web
 
@@ -293,10 +297,10 @@ cd web
 cp .env.docker.example .env
 # Chỉnh sửa .env với thông tin thật
 
-# Khởi chạy toàn bộ backend bằng Docker
+# Hoặc khởi chạy thủ công bằng Docker
 docker compose up -d
 
-# Hoặc chạy local (development)
+# Hoặc chạy thủ công local (development)
 python -m venv .venv
 .venv\Scripts\activate           # Windows
 source .venv/bin/activate        # macOS/Linux
@@ -514,8 +518,11 @@ curl https://your-domain/api/health
 ### APK Distribution
 
 ```powershell
-# Build release APK
-.\build_app.ps1
+# Build release APK (tự động tối ưu và copy OTA)
+.\run.ps1 3
+
+# Hoặc mở menu tương tác
+.\run.ps1
 
 # APK sẽ được tự động copy sang:
 # - app/releases/         (archive)

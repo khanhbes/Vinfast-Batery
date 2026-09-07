@@ -93,3 +93,10 @@ firebase-service-account.json
 key.properties
 *.jks
 *.keystore
+
+# Runtime dataset and model binaries
+web/data/
+web/models/fine_tuned/
+web/models/test_models/
+*.pkl
+app/qa-evidence/

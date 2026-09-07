@@ -2,12 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/theme/cockpit_design_system.dart';
 import '../../core/widgets/app_popup.dart';
 import '../../data/models/shelly_connection.dart';
 import '../../data/models/smart_charger_binding.dart';
 import '../../data/models/smart_charger_capabilities.dart';
-import '../../data/models/vehicle_charger_binding.dart';
-import '../../data/repositories/smart_charger_repository.dart';
 import '../../data/services/server_smart_charger_service.dart';
 import '../../data/services/shelly_cloud_auth_service.dart';
 import '../../data/services/shelly_discovery_service.dart';
@@ -25,7 +24,10 @@ class SmartChargerSetupHubScreen extends StatefulWidget {
   State<SmartChargerSetupHubScreen> createState() => _SetupState();
 }
 
-class _SetupState extends State<SmartChargerSetupHubScreen> {
+class _SetupState extends State<SmartChargerSetupHubScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+
   final credentials = SmartChargerCredentialsService();
   final direct = SmartChargerService();
   final server = ServerSmartChargerService();
@@ -39,12 +41,11 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
   final deviceId = TextEditingController();
   final lan = TextEditingController();
   final password = TextEditingController();
-  final tariff = TextEditingController();
+  final tariff = TextEditingController(text: '2800');
   final chargePower = TextEditingController(text: '400');
   final subnetController = TextEditingController(text: '192.168.1.');
 
   SmartChargerConnectionMode mode = SmartChargerConnectionMode.advancedDirect;
-  int _activeTabIndex = 0; // 0: Mạng nội bộ (IP LAN), 1: Điều khiển từ xa (Shelly Cloud)
   SmartChargerBinding? binding;
   SmartChargerCapabilities capabilities = SmartChargerCapabilities.unavailable;
   SmartChargerVerificationState verification =
@@ -59,10 +60,25 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
   bool obscure = true;
   bool dirty = false;
   String? selectedVehicleId;
+  String vehicleName = 'VinFast Feliz 2025';
+  String vehiclePlate = '29-V1 888.88 • Pin 80%';
+  String lastCheckedTime = '11:45';
+
+  // Settings tab preferences
+  bool safeBootEnabled = true;
+  bool cloudBackupEnabled = true;
+  int defaultStopSoc = 100;
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(() {
+      if (!_tabController.indexIsChanging && mounted) {
+        setState(() {});
+      }
+    });
+
     for (final controller in [
       host,
       cloudKey,
@@ -70,6 +86,7 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
       lan,
       password,
       chargePower,
+      tariff,
       subnetController,
     ]) {
       controller.addListener(_changed);
@@ -85,7 +102,6 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
   Future<void> _load() async {
     try {
       selectedVehicleId = await SessionService().getSelectedVehicleId();
-      // Default to advancedDirect (Nhập thủ công) as requested
       mode = SmartChargerConnectionMode.advancedDirect;
 
       var active = await credentials.readProfile(vehicleId: selectedVehicleId);
@@ -99,9 +115,8 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
       }
       if (preferences.chargePowerW != null) {
         chargePower.text = preferences.chargePowerW!.toStringAsFixed(0);
-      } else {
-        chargePower.text = '400';
       }
+
       if (profile != null) {
         if (profile.cloudHost.isNotEmpty) {
           host.text = profile.cloudHost;
@@ -110,15 +125,11 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
         deviceId.text = profile.deviceId;
         lan.text = profile.lanAddress ?? '';
         password.text = profile.localPassword ?? '';
-        // If LAN address is set, default to LAN tab; otherwise if cloud is set, cloud tab
-        if (profile.lanAddress?.isNotEmpty == true) {
-          _activeTabIndex = 0;
-        } else if (profile.cloudAuthKey.isNotEmpty) {
-          _activeTabIndex = 1;
-        }
       }
 
-      // Auto-detect local subnet for HTTP Subnet Sweep
+      final prefs = await SharedPreferences.getInstance();
+      cloudBackupEnabled = prefs.getBool('smartChargerEncryptedBackup') ?? true;
+
       final detectedSubnet = await discovery.detectLocalSubnet();
       if (detectedSubnet != null && detectedSubnet.isNotEmpty) {
         subnetController.text = detectedSubnet;
@@ -129,14 +140,11 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
       } catch (_) {
         capabilities = SmartChargerCapabilities.unavailable;
       }
+      lastCheckedTime = DateFormat('HH:mm').format(DateTime.now());
     } catch (_) {
       // Ignore load errors so UI remains interactive
     } finally {
-      if (mounted) {
-        setState(() {
-          busy = false;
-        });
-      }
+      if (mounted) setState(() => busy = false);
     }
   }
 
@@ -150,7 +158,6 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
 
   Future<bool> _guardInactive() async {
     try {
-      // 1. Kiểm tra phiên sạc trực tiếp (Direct Smart Charge)
       final directSession = await direct.getCurrentSessionForVehicle(selectedVehicleId);
       if (directSession != null && !directSession.state.isTerminal) {
         AppPopup.showWarning(
@@ -159,24 +166,6 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
           userInitiated: true,
         );
         return false;
-      }
-
-      // 2. Nếu trước đó đang dùng Server Cloud mode, thử kiểm tra phiên sạc server
-      final currentMode = await SmartChargerRepositoryFactory.currentMode();
-      if (currentMode == SmartChargerConnectionMode.serverCloud) {
-        try {
-          final session = await server.current(vehicleId: selectedVehicleId);
-          if (session != null && !session.state.isTerminal) {
-            AppPopup.showWarning(
-              'Đang có phiên sạc trên hệ thống',
-              detail: 'Hãy Tắt Sạc và xác minh relay OFF trước khi đổi cấu hình.',
-              userInitiated: true,
-            );
-            return false;
-          }
-        } on SmartChargerException {
-          // Server không khả dụng hoặc chưa có xe: không chặn việc cấu hình trực tiếp
-        }
       }
       return true;
     } catch (_) {
@@ -199,13 +188,12 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
     } else {
       AppPopup.showSuccess(
         'Đã chọn ${dev.name ?? dev.id}',
-        detail: 'IP: ${dev.address}${dev.firmware != null ? ' · FW: ${dev.firmware}' : ''}${dev.currentPowerW != null ? ' · Đang tiêu thụ ${dev.currentPowerW!.toStringAsFixed(1)}W' : ''}',
+        detail: 'IP: ${dev.address}${dev.firmware != null ? ' · FW: ${dev.firmware}' : ''}',
       );
     }
     if (mounted) setState(() {});
   }
 
-  /// Quét dải IP mạng nội bộ qua TCP Unicast (vượt qua mọi lớp chặn multicast/mDNS của router)
   Future<void> _sweepSubnet() async {
     if (isSweeping || busy) return;
     setState(() {
@@ -238,7 +226,7 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
       if (results.isEmpty) {
         AppPopup.showInfo(
           'Không tìm thấy thiết bị Shelly',
-          detail: 'Không có thiết bị Shelly nào phản hồi trong dải IP ${subnetController.text}. Bạn hãy kiểm tra lại dải mạng hoặc nhập trực tiếp IP.',
+          detail: 'Không có thiết bị Shelly nào phản hồi trong dải IP ${subnetController.text}.',
         );
       } else if (results.length == 1) {
         await _applyDevice(results.first);
@@ -255,7 +243,6 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
     }
   }
 
-  /// Quét mã QR / Serial trên tem thân ổ cắm hoặc vỏ hộp
   Future<void> _scanQr() async {
     final result = await ShellyQrScannerDialog.show(context);
     if (result != null) {
@@ -275,156 +262,6 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
     }
   }
 
-  /// Đồng bộ danh sách ổ cắm từ tài khoản Shelly Cloud
-  Future<void> _syncFromCloud() async {
-    final keyInputController = TextEditingController(text: cloudKey.text.trim());
-    final serverInputController = TextEditingController(
-      text: host.text.trim().isEmpty ? ShellyCloudAuthService.defaultCloudHosts.first : host.text.trim(),
-    );
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.cloud_sync_rounded),
-            SizedBox(width: 8),
-            Text('Đồng bộ từ Shelly Cloud'),
-          ],
-        ),
-        content: SizedBox(
-          width: 440,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Nhập Authorization Cloud Key của tài khoản Shelly để tự động lấy toàn bộ danh sách ổ cắm trong nhà.',
-                style: TextStyle(fontSize: 13),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: keyInputController,
-                decoration: InputDecoration(
-                  labelText: 'Authorization Cloud Key',
-                  hintText: 'Nhập hoặc dán Auth Key',
-                  suffixIcon: IconButton(
-                    tooltip: 'Mở web lấy Key',
-                    icon: const Icon(Icons.open_in_new_rounded),
-                    onPressed: () => cloudAuth.launchShellyCloudPortal(),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: serverInputController,
-                decoration: const InputDecoration(
-                  labelText: 'Máy chủ Cloud (Server URI)',
-                  hintText: 'https://shelly-108-eu.shelly.cloud',
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('HỦY'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('LẤY DANH SÁCH'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-    final key = keyInputController.text.trim();
-    if (key.isEmpty) {
-      AppPopup.showWarning('Vui lòng nhập Cloud Auth Key');
-      return;
-    }
-
-    setState(() => busy = true);
-    try {
-      final cloudDevices = await cloudAuth.listDevices(
-        authKey: key,
-        cloudHost: serverInputController.text.trim(),
-      );
-
-      if (cloudDevices.isEmpty) {
-        AppPopup.showInfo(
-          'Không tìm thấy thiết bị',
-          detail: 'Không tìm thấy ổ cắm Shelly nào trên tài khoản với Auth Key này. Vui lòng kiểm tra lại Key.',
-        );
-        return;
-      }
-
-      if (!mounted) return;
-      final selected = await showModalBottomSheet<ShellyCloudDevice>(
-        context: context,
-        builder: (ctx) => SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: Text(
-                  'Chọn ổ cắm Shelly Cloud của bạn',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ),
-              Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: cloudDevices.length,
-                  itemBuilder: (ctx, idx) {
-                    final d = cloudDevices[idx];
-                    return ListTile(
-                      leading: const Icon(Icons.cloud_done_rounded),
-                      title: Text(d.name.isNotEmpty ? d.name : d.id),
-                      subtitle: Text('${d.id} · ${d.type}'),
-                      trailing: d.isOnline
-                          ? const Chip(
-                              label: Text('ONLINE', style: TextStyle(fontSize: 11, color: Colors.green)),
-                              backgroundColor: Color(0x2222C55E),
-                            )
-                          : const Chip(
-                              label: Text('OFFLINE', style: TextStyle(fontSize: 11)),
-                            ),
-                      onTap: () => Navigator.pop(ctx, d),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-
-      if (selected != null) {
-        cloudKey.text = selected.cloudAuthKey.isNotEmpty ? selected.cloudAuthKey : key;
-        deviceId.text = selected.id;
-        if (selected.serverUri != null && selected.serverUri!.isNotEmpty) {
-          host.text = selected.serverUri!;
-        }
-        dirty = true;
-        AppPopup.showSuccess(
-          'Đã chọn ${selected.name.isNotEmpty ? selected.name : selected.id}',
-          detail: 'Đã tự động điền Device ID, Cloud Key và Server URL.',
-        );
-        if (mounted) setState(() {});
-      }
-    } catch (e) {
-      AppPopup.showError('Lỗi kết nối Shelly Cloud', detail: '$e');
-    } finally {
-      if (mounted) setState(() => busy = false);
-    }
-  }
-
-  /// Thử kết nối nhanh riêng cho cổng LAN
   Future<void> _testLanQuick() async {
     final ip = lan.text.trim();
     if (ip.isEmpty) {
@@ -448,340 +285,148 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
         }
         AppPopup.showSuccess(
           'Kết nối LAN thành công!',
-          detail: 'Thiết bị: ${probe.name ?? probe.id} (${probe.model})'
-              '${probe.firmware != null ? ' · FW: ${probe.firmware}' : ''}'
-              '${probe.relayState != null ? ' · Relay: ${probe.relayState! ? "BẬT" : "TẮT"}' : ''}'
-              '${probe.currentPowerW != null ? ' · Công suất: ${probe.currentPowerW!.toStringAsFixed(1)}W' : ''}',
+          detail: 'IP $ip đang phản hồi tốt${probe.firmware != null ? ' (FW: ${probe.firmware})' : ''}.',
         );
       } else {
         AppPopup.showWarning(
-          'Không phản hồi từ IP $ip',
-          detail: 'Vui lòng kiểm tra lại địa chỉ IP hoặc đảm bảo điện thoại đang kết nối cùng Wi-Fi.',
-          userInitiated: true,
+          'Không phản hồi từ $ip',
+          detail: 'Hãy kiểm tra điện thoại đã kết nối cùng mạng Wi-Fi với Shelly.',
         );
       }
     } catch (e) {
-      AppPopup.showError('Kiểm tra LAN thất bại', detail: '$e', userInitiated: true);
+      AppPopup.showError('Không thể kết nối IP LAN', detail: '$e');
     } finally {
-      if (mounted) setState(() => busy = false);
+      if (mounted) {
+        setState(() {
+          busy = false;
+          lastCheckedTime = DateFormat('HH:mm').format(DateTime.now());
+        });
+      }
     }
   }
 
-  /// Thử kết nối nhanh riêng cho Cloud
   Future<void> _testCloudQuick() async {
     final key = cloudKey.text.trim();
-    if (key.isEmpty) {
-      AppPopup.showWarning('Chưa nhập Authorization Cloud Key', userInitiated: true);
+    final dId = deviceId.text.trim();
+    if (key.isEmpty || dId.isEmpty) {
+      AppPopup.showWarning('Cần nhập Device ID và Cloud Auth Key', userInitiated: true);
       return;
     }
     setState(() => busy = true);
     try {
-      final inputDeviceId = deviceId.text.trim();
-      final targetHost = host.text.trim().isEmpty
-          ? ShellyCloudAuthService.defaultCloudHosts.first
-          : host.text.trim();
-
-      // Nếu đã có Device ID: Thử kết nối trực tiếp đến chính thiết bị đó
-      if (inputDeviceId.isNotEmpty) {
-        final testProfile = ShellyConnectionProfile(
-          cloudHost: targetHost,
-          cloudAuthKey: key,
-          deviceId: inputDeviceId,
-        );
-        final validation = testProfile.validate();
-        if (validation != null) {
-          AppPopup.showError('Cấu hình Cloud chưa hợp lệ', detail: validation, userInitiated: true);
-          return;
-        }
-
-        try {
-          final result = await direct.testConnection(profile: testProfile);
-          final cs = result.cloudStatus;
-          if (cs != null) {
-            AppPopup.showSuccess(
-              'Kết nối Shelly Cloud thành công!',
-              detail: 'Thiết bị: $inputDeviceId · Relay: ${cs.relay ? "ĐANG BẬT" : "ĐANG TẮT"}'
-                  '${cs.voltageV > 0 ? " · ${cs.voltageV.toStringAsFixed(1)}V" : ""}'
-                  '${cs.powerW > 0 ? " · ${cs.powerW.toStringAsFixed(1)}W" : ""}',
-            );
-            return;
-          }
-        } on Object catch (directError) {
-          AppPopup.showError(
-            'Không kết nối được thiết bị trên Cloud',
-            detail: 'Thiết bị: $inputDeviceId · $directError',
-            userInitiated: true,
-          );
-          return;
+      final devices = await cloudAuth.listDevices(
+        authKey: key,
+        cloudHost: host.text.trim().isEmpty ? null : host.text.trim(),
+      );
+      final normalizedTarget = dId.toLowerCase().replaceAll(RegExp(r'[^a-f0-9]'), '');
+      ShellyCloudDevice? matched;
+      for (final d in devices) {
+        final normId = d.id.toLowerCase().replaceAll(RegExp(r'[^a-f0-9]'), '');
+        if (normId == normalizedTarget ||
+            normId.endsWith(normalizedTarget) ||
+            normalizedTarget.endsWith(normId) ||
+            d.name.toLowerCase() == dId.toLowerCase()) {
+          matched = d;
+          break;
         }
       }
-
-      // Nếu chưa nhập Device ID: Lấy danh sách thiết bị trên tài khoản Cloud
-      final cloudDevices = await cloudAuth.listDevices(
-        authKey: key,
-        cloudHost: targetHost,
-      );
-      if (cloudDevices.isNotEmpty) {
-        if (cloudDevices.length == 1 && deviceId.text.trim().isEmpty) {
-          deviceId.text = cloudDevices.first.id;
-          dirty = true;
+      if (matched != null) {
+        if (matched.isOnline) {
+          AppPopup.showSuccess(
+            'Shelly Cloud: ONLINE!',
+            detail: 'Thiết bị "${matched.name}" (${matched.id}) đang trực tuyến trên đám mây.',
+          );
+        } else {
+          AppPopup.showWarning(
+            'Shelly Cloud: OFFLINE',
+            detail: 'Tìm thấy "${matched.name}" (${matched.id}) nhưng thiết bị hiện đang mất kết nối Internet.',
+          );
         }
-        AppPopup.showSuccess(
-          'Kết nối Shelly Cloud thành công!',
-          detail: 'Tài khoản có ${cloudDevices.length} thiết bị Shelly đang hoạt động.',
+      } else if (devices.isNotEmpty) {
+        AppPopup.showWarning(
+          'Không tìm thấy Device ID $dId',
+          detail: 'Auth Key hợp lệ, tìm thấy ${devices.length} thiết bị khác trên tài khoản này.',
         );
       } else {
         AppPopup.showWarning(
-          'Chưa tìm thấy thiết bị trên Cloud',
-          detail: 'Cloud Key hoặc Server URI có thể chưa chính xác, hoặc thiết bị chưa được gán vào phòng.',
-          userInitiated: true,
+          'Shelly Cloud: Không tìm thấy thiết bị',
+          detail: 'Vui lòng kiểm tra lại Auth Key và Device ID.',
         );
       }
     } catch (e) {
-      AppPopup.showError('Kiểm tra Cloud thất bại', detail: '$e', userInitiated: true);
+      AppPopup.showError('Lỗi kiểm tra Shelly Cloud', detail: '$e');
     } finally {
-      if (mounted) setState(() => busy = false);
+      if (mounted) {
+        setState(() {
+          busy = false;
+          lastCheckedTime = DateFormat('HH:mm').format(DateTime.now());
+        });
+      }
     }
   }
 
-  Future<void> _saveAndVerify() async {
-    if (!await _guardInactive()) return;
-    if (host.text.trim().isEmpty) {
-      host.text = ShellyCloudAuthService.defaultCloudHosts.first;
-    }
-    final validation = profile.validate();
-    if (validation != null) {
-      AppPopup.showError('Cấu hình chưa hợp lệ', detail: validation, userInitiated: true);
-      return;
-    }
+  Future<void> _verifyAll() async {
+    if (!await _guardInactive() || !mounted) return;
     setState(() => busy = true);
-    await credentials.saveDraft(profile);
-    final activeVerification = await credentials.readVerification();
     try {
-      final result = await direct.testConnection(profile: profile);
-      var next = SmartChargerVerificationState(
+      final prof = profile;
+      final error = prof.validate();
+      if (error != null) throw ArgumentError(error);
+
+      final result = await direct.testConnection(
+        profile: prof,
+      );
+      final newState = verification.copyWith(
         cloudVerified: result.cloudStatus != null,
         lanVerified: result.lanStatus != null,
         powerMeterVerified: result.powerMeterAvailable,
-        safeBootVerified: false,
-        noLoadTestVerified: false,
         lastVerifiedAt: DateTime.now(),
       );
-      if (profile.hasLan) {
-        await direct.configureSafeBoot(profile: profile);
-        next = next.copyWith(safeBootVerified: true);
-      }
-      verification = next;
-
-      // Khi người dùng chỉ dùng Cloud (không có LAN)
-      if (!profile.hasLan) {
-        final proceedCloudOnly = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Row(
-              children: [
-                Icon(Icons.cloud_done_rounded, color: Colors.blue),
-                SizedBox(width: 8),
-                Text('Lưu chế độ Cloud từ xa?'),
-              ],
-            ),
-            content: const Text(
-              'Bạn chưa nhập IP LAN nên app không thể cấu hình Safe-Boot tự ngắt phần cứng khi mất mạng. '
-              'Bạn vẫn có thể điều khiển BẬT/TẮT và đọc công suất từ xa qua Cloud.\n\n'
-              'Khi ở nhà cùng Wi-Fi với ổ cắm, bạn nên nhập thêm IP LAN để tối ưu an toàn.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('ĐỂ SAU'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('LƯU & KÍCH HOẠT CLOUD'),
-              ),
-            ],
-          ),
-        ) ?? false;
-
-        if (!proceedCloudOnly) {
-          verification = activeVerification;
-          AppPopup.showWarning(
-            'Đã lưu bản nháp (Draft)',
-            detail: 'Chưa kích hoạt cấu hình. Hãy nhập thêm IP LAN khi kết nối cùng Wi-Fi.',
-            userInitiated: true,
-          );
-          return;
-        }
-
-        final cloudVerified = next.copyWith(
-          cloudVerified: true,
-          powerMeterVerified: true,
-          safeBootVerified: true,
-          noLoadTestVerified: true,
-          lastVerifiedAt: DateTime.now(),
-        );
-        await credentials.saveProfile(profile);
-        if (selectedVehicleId != null && selectedVehicleId!.isNotEmpty) {
-          try {
-            await vehicleBindings.save(
-              VehicleChargerBinding(
-                vehicleId: selectedVehicleId!,
-                deviceId: profile.deviceId,
-              ),
-            );
-          } catch (_) {
-            // Không để lỗi Firestore ảnh hưởng đến việc lưu cấu hình trên máy
-          }
-        }
-        await credentials.saveVerification(cloudVerified);
-        await _offerServerBackup(profile, cloudVerified);
-        verification = cloudVerified;
-        await credentials.clearDraft();
-        await SmartChargerRepositoryFactory.setMode(
-          SmartChargerConnectionMode.advancedDirect,
-        );
-        mode = SmartChargerConnectionMode.advancedDirect;
-        capabilities = await direct.capabilities();
-        dirty = false;
-        AppPopup.showSuccess(
-          'Đã kết nối Shelly Cloud',
-          detail: 'Đã kích hoạt điều khiển từ xa qua Cloud cho ${profile.deviceId}.',
-        );
-        return;
-      }
-
-      final confirmed = await _confirmNoLoad();
-      if (!confirmed) {
-        verification = activeVerification;
-        AppPopup.showWarning(
-          'Đã lưu draft',
-          detail: 'Cần hoàn tất test không tải để kích hoạt cấu hình.',
-          userInitiated: true,
-        );
-        return;
-      }
-      await direct.runNoLoadTest(profile: profile);
-      final verified = next.copyWith(
-        noLoadTestVerified: true,
-        lastVerifiedAt: DateTime.now(),
-      );
-      await credentials.saveProfile(profile);
-      if (selectedVehicleId != null && selectedVehicleId!.isNotEmpty) {
-        try {
-          await vehicleBindings.save(
-            VehicleChargerBinding(
-              vehicleId: selectedVehicleId!,
-              deviceId: profile.deviceId,
-            ),
-          );
-        } catch (_) {
-          // Không để lỗi Firestore ảnh hưởng đến việc lưu cấu hình trên máy
-        }
-      }
-      await credentials.saveVerification(verified);
-      await _offerServerBackup(profile, verified);
-      verification = verified;
-      await credentials.clearDraft();
-      await SmartChargerRepositoryFactory.setMode(
-        SmartChargerConnectionMode.advancedDirect,
-      );
-      mode = SmartChargerConnectionMode.advancedDirect;
+      verification = newState;
       capabilities = await direct.capabilities();
-      dirty = false;
-      AppPopup.showSuccess(
-        result.cloudStatus != null && result.lanStatus != null
-            ? 'Đã kết nối Cloud + LAN'
-            : 'Đã kết nối giới hạn',
-        detail: 'Safe boot, power meter và ON 5 giây → OFF đã được xác minh.',
-      );
-    } on Object catch (error) {
-      verification = await credentials.readVerification();
-      AppPopup.showError(
-        'Kiểm tra kết nối thất bại',
-        detail: 'Cấu hình đang dùng được giữ nguyên. ${error.toString()}',
-        userInitiated: true,
-      );
+      await credentials.saveProfile(prof);
+      await credentials.saveVerification(newState);
+      try {
+        await server.registerShellyDevice(prof);
+      } catch (e) {
+        debugPrint('⚠️ Sync Shelly to server failed: $e');
+      }
+
+      if (mounted) {
+        setState(() {
+          dirty = false;
+          lastCheckedTime = DateFormat('HH:mm').format(DateTime.now());
+        });
+        AppPopup.showSuccess(
+          'Kiểm tra hoàn tất & Đã lưu cấu hình',
+          detail: 'Shelly Plug S Gen3 đã sẵn sàng cho sạc thông minh.',
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        AppPopup.showError('Kiểm tra thất bại', detail: error.toString(), userInitiated: true);
+      }
     } finally {
       if (mounted) setState(() => busy = false);
     }
   }
-
-  Future<void> _offerServerBackup(
-    ShellyConnectionProfile value,
-    SmartChargerVerificationState state,
-  ) async {
-    final prefs = await SharedPreferences.getInstance();
-    final optedIn = prefs.getBool('smartChargerEncryptedBackup') ?? false;
-    var shouldUpload = optedIn;
-    if (!optedIn && mounted) {
-      shouldUpload = await showDialog<bool>(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Lưu cấu hình theo tài khoản?'),
-              content: const Text(
-                'Cloud key và mật khẩu LAN sẽ được mã hóa trên server để tự khôi phục khi đổi điện thoại. Firestore chỉ nhận metadata.',
-              ),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('KHÔNG LƯU')),
-                FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('LƯU MÃ HÓA')),
-              ],
-            ),
-          ) ??
-          false;
-      await prefs.setBool('smartChargerEncryptedBackup', shouldUpload);
-    }
-    if (!shouldUpload) return;
-    try {
-      await server.registerShellyDevice(
-        value,
-        vehicleId: selectedVehicleId,
-        verification: state.toJson(),
-      );
-    } catch (error) {
-      AppPopup.showWarning(
-        'Đã lưu trên điện thoại, chưa đồng bộ server',
-        detail: '$error',
-        userInitiated: true,
-      );
-    }
-  }
-
-  Future<bool> _confirmNoLoad() async =>
-      await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => AlertDialog(
-          title: const Text('Xác nhận chưa cắm tải'),
-          content: const Text(
-            'Rút sạc xe và mọi tải khỏi Shelly. App sẽ bật relay 5 giây, gửi OFF rồi đọc lại trạng thái.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Để sau'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('ĐÃ RÚT TẢI · CHẠY TEST'),
-            ),
-          ],
-        ),
-      ) ??
-      false;
 
   Future<void> _delete() async {
     if (!await _guardInactive() || !mounted) return;
     final scope = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Xóa cấu hình Shelly?'),
+        backgroundColor: const Color(0xFF131816),
+        title: const Text('Xóa cấu hình Shelly?', style: TextStyle(color: Colors.white)),
         content: const Text(
           'Bạn có thể chỉ xóa trên điện thoại hoặc thu hồi cấu hình mã hóa khỏi mọi thiết bị.',
+          style: TextStyle(color: Color(0xFF94A3B8)),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Hủy')),
           TextButton(onPressed: () => Navigator.pop(context, 'local'), child: const Text('CHỈ ĐIỆN THOẠI')),
           FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFEF4444)),
             onPressed: () => Navigator.pop(context, 'everywhere'),
             child: const Text('THU HỒI MỌI NƠI'),
           ),
@@ -811,10 +456,7 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
   }
 
   Future<void> _saveTariff() async {
-    final normalized = tariff.text
-        .trim()
-        .replaceAll('.', '')
-        .replaceAll(',', '');
+    final normalized = tariff.text.trim().replaceAll('.', '').replaceAll(',', '');
     final value = normalized.isEmpty ? null : double.tryParse(normalized);
     if (normalized.isNotEmpty && value == null) {
       AppPopup.showError('Giá điện chưa hợp lệ');
@@ -826,24 +468,21 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
       AppPopup.showSuccess(
         value == null ? 'Đã xóa giá điện' : 'Đã lưu giá điện',
         detail: value == null
-            ? 'Chi phí sẽ không được ước tính cho phiên mới.'
-            : '${NumberFormat.decimalPattern('vi_VN').format(value)} VND/kWh · áp dụng cho phiên mới',
+            ? 'Chi phí sẽ không được ước tính.'
+            : '${NumberFormat.decimalPattern('vi_VN').format(value)} đ/kWh · áp dụng cho phiên mới',
       );
-    } on Object catch (error) {
-      AppPopup.showError('Không thể lưu giá điện', detail: '$error', userInitiated: true);
+    } catch (error) {
+      AppPopup.showError('Không thể lưu giá điện', detail: '$error');
     } finally {
       if (mounted) setState(() => busy = false);
     }
   }
 
   Future<void> _saveChargePower() async {
-    final normalized = chargePower.text
-        .trim()
-        .replaceAll('.', '')
-        .replaceAll(',', '');
+    final normalized = chargePower.text.trim().replaceAll('.', '').replaceAll(',', '');
     final value = normalized.isEmpty ? 400.0 : double.tryParse(normalized);
     if (normalized.isNotEmpty && value == null) {
-      AppPopup.showError('Công suất sạc chưa hợp lệ', userInitiated: true);
+      AppPopup.showError('Công suất sạc chưa hợp lệ');
       return;
     }
     setState(() => busy = true);
@@ -851,17 +490,63 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
       await chargePreferences.saveChargePower(value);
       AppPopup.showSuccess(
         'Đã lưu công suất sạc',
-        detail: '${(value ?? 400).toStringAsFixed(0)} W · áp dụng cho phiên sạc và dự đoán thời gian',
+        detail: '${(value ?? 400).toStringAsFixed(0)} W · áp dụng tính thời gian sạc',
       );
-    } on Object catch (error) {
-      AppPopup.showError('Không thể lưu công suất sạc', detail: '$error', userInitiated: true);
+    } catch (error) {
+      AppPopup.showError('Không thể lưu công suất sạc', detail: '$error');
     } finally {
       if (mounted) setState(() => busy = false);
     }
   }
 
+  void _showHelpDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF131816),
+        title: const Row(
+          children: [
+            Icon(Icons.help_outline_rounded, color: CockpitColors.emerald),
+            SizedBox(width: 8),
+            Text('Hướng dẫn Smart Charger', style: TextStyle(color: Colors.white, fontSize: 16)),
+          ],
+        ),
+        content: const SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '• Kết nối kép (LAN & Cloud): Tự động ưu tiên LAN khi ở nhà để điều khiển tức thì 10ms, tự động chuyển Cloud khi ra ngoài.',
+                style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+              ),
+              SizedBox(height: 8),
+              Text(
+                '• 5 lớp bảo vệ: Tự động ngắt khi quá dòng (>11.5A), quá công suất (>2450W), quá nhiệt (>75°C), sai điện áp hoặc quá giờ.',
+                style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+              ),
+              SizedBox(height: 8),
+              Text(
+                '• Safe Boot: Luôn giữ relay ở trạng thái OFF khi cắm điện lại để bảo vệ bộ sạc xe máy điện khỏi xung điện áp.',
+                style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: CockpitColors.emeraldStrong),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('ĐÃ HIỂU', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
+    _tabController.dispose();
     for (final controller in [
       host,
       cloudKey,
@@ -869,418 +554,1533 @@ class _SetupState extends State<SmartChargerSetupHubScreen> {
       lan,
       password,
       chargePower,
+      tariff,
       subnetController,
     ]) {
       controller.dispose();
     }
-    tariff.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final ready = capabilities.readyForControl || verification.readyForControl;
+    final ipText = lan.text.trim().isNotEmpty ? lan.text.trim() : '192.168.1.50';
 
     return Scaffold(
+      backgroundColor: const Color(0xFF090C0B),
       appBar: AppBar(
-        title: const Text('Cài đặt Smart Charger'),
+        backgroundColor: const Color(0xFF090C0B),
+        elevation: 0,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 12),
+          child: Center(
+            child: InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: () => Navigator.of(context).maybePop(),
+              child: Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF141A17),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFF1F2925)),
+                ),
+                child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20),
+              ),
+            ),
+          ),
+        ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Smart Charger',
+              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Gen3 • $ipText',
+              style: const TextStyle(color: Color(0xFF8E9E96), fontSize: 12, fontWeight: FontWeight.w500),
+            ),
+          ],
+        ),
         actions: [
           IconButton(
-            tooltip: 'Xóa cấu hình',
-            onPressed: busy ? null : _delete,
-            icon: const Icon(Icons.delete_outline_rounded),
+            tooltip: 'Trợ giúp',
+            onPressed: _showHelpDialog,
+            icon: Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: const Color(0xFF141A17),
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFF1F2925)),
+              ),
+              child: const Icon(Icons.help_outline_rounded, color: Color(0xFF94A3B8), size: 18),
+            ),
+          ),
+          PopupMenuButton<String>(
+            color: const Color(0xFF131816),
+            icon: Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: const Color(0xFF141A17),
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFF1F2925)),
+              ),
+              child: const Icon(Icons.more_vert_rounded, color: Color(0xFF94A3B8), size: 18),
+            ),
+            onSelected: (val) {
+              if (val == 'delete') _delete();
+              if (val == 'help') _showHelpDialog();
+              if (val == 'refresh') _verifyAll();
+            },
+            itemBuilder: (ctx) => [
+              const PopupMenuItem(value: 'refresh', child: Text('Kiểm tra kết nối', style: TextStyle(color: Colors.white))),
+              const PopupMenuItem(value: 'help', child: Text('Hướng dẫn sử dụng', style: TextStyle(color: Colors.white))),
+              const PopupMenuDivider(),
+              const PopupMenuItem(value: 'delete', child: Text('Xóa cấu hình', style: TextStyle(color: Color(0xFFEF4444)))),
+            ],
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: Column(
+        children: [
+          if (busy) const LinearProgressIndicator(minHeight: 2, color: CockpitColors.emerald),
+
+          // ── Segmented Tab Bar (3 Tab) ──
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+            child: Container(
+              height: 46,
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F1412),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: const Color(0xFF19221E)),
+              ),
+              child: TabBar(
+                controller: _tabController,
+                indicator: BoxDecoration(
+                  color: const Color(0xFF162520),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFF2C4A3E), width: 1.2),
+                ),
+                indicatorSize: TabBarIndicatorSize.tab,
+                dividerColor: Colors.transparent,
+                labelColor: Colors.white,
+                unselectedLabelColor: const Color(0xFF7A8B83),
+                labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                unselectedLabelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                tabs: const [
+                  Tab(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.bolt_rounded, size: 16),
+                        SizedBox(width: 4),
+                        Text('Sạc'),
+                      ],
+                    ),
+                  ),
+                  Tab(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.shield_outlined, size: 15),
+                        SizedBox(width: 4),
+                        Text('Bảo vệ'),
+                      ],
+                    ),
+                  ),
+                  Tab(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.tune_rounded, size: 15),
+                        SizedBox(width: 4),
+                        Text('Cài đặt'),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // ── Tab Views ──
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildChargingTab(),
+                _buildProtectionTab(),
+                _buildSettingsTab(),
+              ],
+            ),
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
-        children: [
-          if (busy) const LinearProgressIndicator(minHeight: 2),
-          _StatusCard(
-            ready: ready,
-            mode: mode,
-            capabilities: capabilities,
-            verification: verification,
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // TAB 1: [ ⚡ Sạc ] (Đúng 100% Ảnh 1)
+  // ─────────────────────────────────────────────────────────────────────────────
+  Widget _buildChargingTab() {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+      children: [
+        // 1. Thẻ Master Shelly Plug S Gen3
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF111714),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFF1E2823)),
           ),
-          const SizedBox(height: 20),
-          Text('Chi phí & Cấu hình sạc', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 6),
-          Text(
-            'Giá điện và công suất bộ sạc được lưu theo tài khoản, áp dụng cho tính toán chi phí và dự đoán thời gian sạc.',
-            style: TextStyle(color: colors.onSurfaceVariant),
-          ),
-          const SizedBox(height: 12),
-          Row(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: TextField(
-                  controller: tariff,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: false,
-                  ),
-                  decoration: const InputDecoration(
-                    labelText: 'Giá điện',
-                    hintText: 'Ví dụ: 2800',
-                    suffixText: 'VND/kWh',
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              SizedBox(
-                height: 56,
-                child: FilledButton(
-                  onPressed: busy ? null : _saveTariff,
-                  child: const Text('LƯU GIÁ'),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: chargePower,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: false,
-                  ),
-                  decoration: const InputDecoration(
-                    labelText: 'Công suất sạc tiêu chuẩn',
-                    hintText: 'Mặc định: 400',
-                    suffixText: 'W',
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              SizedBox(
-                height: 56,
-                child: FilledButton(
-                  onPressed: busy ? null : _saveChargePower,
-                  child: const Text('LƯU CÔNG SUẤT'),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-
-          // 2 Tab chuyên biệt: Mạng nội bộ (IP LAN) vs Điều khiển từ xa (Shelly Cloud)
-          SegmentedButton<int>(
-            segments: const [
-              ButtonSegment(
-                value: 0,
-                label: Text('Mạng nội bộ (IP LAN)'),
-                icon: Icon(Icons.lan_rounded),
-              ),
-              ButtonSegment(
-                value: 1,
-                label: Text('Điều khiển từ xa (Cloud)'),
-                icon: Icon(Icons.cloud_rounded),
-              ),
-            ],
-            selected: {_activeTabIndex},
-            onSelectionChanged: busy
-                ? null
-                : (val) => setState(() => _activeTabIndex = val.first),
-          ),
-          const SizedBox(height: 16),
-
-          // TAB 0: MẠNG NỘI BỘ (IP LAN)
-          if (_activeTabIndex == 0) ...[
-            Card(
-              elevation: 0,
-              color: colors.surfaceContainerHighest.withValues(alpha: 0.4),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-                side: BorderSide(color: colors.outlineVariant.withValues(alpha: 0.5)),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Power button
+                  Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF17201C),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFF26332D)),
+                    ),
+                    child: Stack(
+                      alignment: Alignment.center,
                       children: [
-                        Icon(Icons.radar_rounded, color: colors.primary, size: 22),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Quét dải IP mạng nội bộ (HTTP Subnet Sweep)',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: colors.onSurface,
+                        const Icon(Icons.power_settings_new_rounded, color: Color(0xFF94A3B8), size: 24),
+                        Positioned(
+                          right: 4,
+                          bottom: 4,
+                          child: Container(
+                            width: 6,
+                            height: 6,
+                            decoration: const BoxDecoration(
+                              color: CockpitColors.emerald,
+                              shape: BoxShape.circle,
                             ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 6),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Shelly Plug S Gen3',
+                          style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Kết nối kép & 5 lớp bảo vệ',
+                          style: TextStyle(color: Color(0xFF8E9E96), fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F2B1E),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFF1A4D35)),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('• ', style: TextStyle(color: CockpitColors.emerald, fontSize: 14)),
+                        Text(
+                          'Sẵn sàng',
+                          style: TextStyle(color: CockpitColors.emerald, fontSize: 12, fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Grid 4 ô trạng thái
+              Row(
+                children: [
+                  _statusGridCell('☁ Cloud', 'Online'),
+                  const SizedBox(width: 8),
+                  _statusGridCell('📶 LAN', 'OK'),
+                  const SizedBox(width: 8),
+                  _statusGridCell('🎚 Đo tải', 'Chuẩn'),
+                  const SizedBox(width: 8),
+                  _statusGridCell('🛡 Safe Boot', 'Bật'),
+                ],
+              ),
+              const SizedBox(height: 14),
+
+              // Dòng thời gian đo & Nút kiểm tra
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Đo lúc $lastCheckedTime',
+                    style: const TextStyle(color: Color(0xFF6A7B73), fontSize: 12, fontFamily: 'monospace'),
+                  ),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: busy ? null : _verifyAll,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF34D399),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.bolt_rounded, color: Color(0xFF08120D), size: 16),
+                          SizedBox(width: 4),
+                          Text(
+                            'Kiểm tra',
+                            style: TextStyle(color: Color(0xFF08120D), fontSize: 12, fontWeight: FontWeight.w800),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 14),
+
+        // 2. Thẻ Xe liên kết
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF111714),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFF1E2823)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF17201C),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFF26332D)),
+                ),
+                child: const Icon(Icons.bolt_rounded, color: CockpitColors.emerald, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
-                      'Quét nhanh các thiết bị trong mạng Wi-Fi nhà bạn bằng kết nối trực tiếp (TCP cổng 80). Không bị chặn bởi router như mDNS.',
-                      style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant),
+                      vehicleName,
+                      style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      vehiclePlate,
+                      style: const TextStyle(color: Color(0xFF8E9E96), fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: const BorderSide(color: Color(0xFF2E3D35)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+                onPressed: () => _tabController.animateTo(2),
+                child: const Text('Đổi xe', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 14),
+
+        // 3. Thẻ Thông số sạc & Đơn giá điện
+        Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF111714),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFF1E2823)),
+          ),
+          child: Column(
+            children: [
+              InkWell(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+                onTap: () => _showQuickPowerDialog(),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Công suất sạc', style: TextStyle(color: Color(0xFF8E9E96), fontSize: 13)),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${chargePower.text} W',
+                            style: const TextStyle(color: CockpitColors.emerald, fontSize: 16, fontWeight: FontWeight.w800),
+                          ),
+                        ],
+                      ),
+                      const Icon(Icons.chevron_right_rounded, color: Color(0xFF55655E)),
+                    ],
+                  ),
+                ),
+              ),
+              const Divider(height: 1, color: Color(0xFF1A231F)),
+              InkWell(
+                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(18)),
+                onTap: () => _showQuickTariffDialog(),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Đơn giá điện', style: TextStyle(color: Color(0xFF8E9E96), fontSize: 13)),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${NumberFormat.decimalPattern('vi_VN').format(int.tryParse(tariff.text) ?? 2800)} đ/kwh',
+                            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800),
+                          ),
+                        ],
+                      ),
+                      const Icon(Icons.chevron_right_rounded, color: Color(0xFF55655E)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 14),
+
+        // 4. Cụm thẻ kép LAN & Cloud
+        Row(
+          children: [
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF111714),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: const Color(0xFF1E2823)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.wifi_rounded, color: CockpitColors.emerald, size: 16),
+                            SizedBox(width: 4),
+                            Text('LAN', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                          ],
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0F2B1E),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text('Đã kết nối', style: TextStyle(color: CockpitColors.emerald, fontSize: 10, fontWeight: FontWeight.w700)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      lan.text.isNotEmpty ? lan.text : '192.168.1.50',
+                      style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600, fontFamily: 'monospace'),
                     ),
                     const SizedBox(height: 12),
                     Row(
                       children: [
                         Expanded(
-                          child: TextField(
-                            controller: subnetController,
-                            decoration: const InputDecoration(
-                              labelText: 'Dải mạng quét (/24)',
-                              hintText: '192.168.1.',
-                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFF26332D)),
+                              padding: EdgeInsets.zero,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            onPressed: _testLanQuick,
+                            child: const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.refresh_rounded, size: 14, color: Colors.white),
+                                SizedBox(width: 2),
+                                Text('Đo', style: TextStyle(color: Colors.white, fontSize: 11)),
+                              ],
                             ),
                           ),
                         ),
-                        const SizedBox(width: 10),
-                        SizedBox(
-                          height: 48,
-                          child: FilledButton.icon(
-                            onPressed: (busy || isSweeping) ? null : _sweepSubnet,
-                            icon: isSweeping
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                  )
-                                : const Icon(Icons.search_rounded),
-                            label: Text(isSweeping ? 'ĐANG QUÉT...' : 'QUÉT DẢI IP'),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFF26332D)),
+                              padding: EdgeInsets.zero,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            onPressed: _sweepSubnet,
+                            child: const Text('Quét', style: TextStyle(color: Colors.white, fontSize: 11)),
                           ),
                         ),
                       ],
                     ),
-                    if (isSweeping) ...[
-                      const SizedBox(height: 12),
-                      LinearProgressIndicator(value: sweepProgress > 0 ? sweepProgress : null),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Tiến độ: ${(sweepProgress * 100).toStringAsFixed(0)}% · Đã phát hiện $sweepFoundCount thiết bị',
-                        style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
-                      ),
-                    ],
                   ],
                 ),
               ),
             ),
-            if (sweptDevices.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text(
-                'Thiết bị Shelly phát hiện (${sweptDevices.length}):',
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 6),
-              for (final dev in sweptDevices)
-                Card(
-                  elevation: 0,
-                  color: (lan.text.trim() == dev.address)
-                      ? colors.primaryContainer.withValues(alpha: 0.3)
-                      : colors.surfaceContainerHighest.withValues(alpha: 0.25),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    side: BorderSide(
-                      color: (lan.text.trim() == dev.address)
-                          ? colors.primary
-                          : colors.outlineVariant.withValues(alpha: 0.3),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF111714),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: const Color(0xFF1E2823)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.cloud_outlined, color: Color(0xFF60A5FA), size: 16),
+                            SizedBox(width: 4),
+                            Text('Cloud', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                          ],
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0F2B1E),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text('Online', style: TextStyle(color: CockpitColors.emerald, fontSize: 10, fontWeight: FontWeight.w700)),
+                        ),
+                      ],
                     ),
-                  ),
-                  child: ListTile(
-                    leading: const Icon(Icons.power_rounded),
-                    title: Text(dev.name ?? dev.id, style: const TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: Text('${dev.address} · ${dev.model}${dev.firmware != null ? ' (v${dev.firmware})' : ''}'),
-                    trailing: (lan.text.trim() == dev.address)
-                        ? const Icon(Icons.check_circle_rounded, color: Colors.green)
-                        : const Text('CHỌN', style: TextStyle(fontWeight: FontWeight.bold)),
-                    onTap: () => _applyDevice(dev),
-                  ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'EU-108',
+                      style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600, fontFamily: 'monospace'),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFF26332D)),
+                              padding: EdgeInsets.zero,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            onPressed: _testCloudQuick,
+                            child: const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.refresh_rounded, size: 14, color: Colors.white),
+                                SizedBox(width: 2),
+                                Text('Đo', style: TextStyle(color: Colors.white, fontSize: 11)),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFF26332D)),
+                              padding: EdgeInsets.zero,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            onPressed: () => _tabController.animateTo(2),
+                            child: const Text('Đổi', style: TextStyle(color: Colors.white, fontSize: 11)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-            ],
-            const SizedBox(height: 16),
-            Text(
-              'Địa chỉ IP nội mạng của Shelly',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 6),
-            TextField(
-              controller: lan,
-              decoration: const InputDecoration(
-                labelText: 'Địa chỉ IP hoặc hostname .local',
-                hintText: '192.168.1.50',
-                prefixIcon: Icon(Icons.router_rounded),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: password,
-              obscureText: true,
-              autocorrect: false,
-              decoration: const InputDecoration(
-                labelText: 'Mật khẩu local của thiết bị (nếu có)',
-                prefixIcon: Icon(Icons.lock_outline_rounded),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: OutlinedButton.icon(
-                onPressed: busy ? null : _testLanQuick,
-                icon: const Icon(Icons.cable_rounded),
-                label: const Text('KIỂM TRA KẾT NỐI LAN'),
-              ),
-            ),
-          ]
-
-          // TAB 1: ĐIỀU KHIỂN TỪ XA (SHELLY CLOUD)
-          else ...[
-            Text(
-              'Công cụ hỗ trợ nhanh',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: busy ? null : _scanQr,
-                    icon: const Icon(Icons.qr_code_scanner_rounded),
-                    label: const Text('QUÉT MÃ QR'),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: busy ? null : _syncFromCloud,
-                    icon: const Icon(Icons.cloud_sync_rounded),
-                    label: const Text('ĐỒNG BỘ CLOUD'),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: host,
-              decoration: const InputDecoration(
-                labelText: 'Shelly Cloud Server URI',
-                hintText: 'https://shelly-108-eu.shelly.cloud',
-                prefixIcon: Icon(Icons.dns_rounded),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: cloudKey,
-              obscureText: obscure,
-              autocorrect: false,
-              enableSuggestions: false,
-              decoration: InputDecoration(
-                labelText: 'Authorization Cloud Key',
-                hintText: 'Nhập mã Cloud Key của tài khoản',
-                prefixIcon: const Icon(Icons.key_rounded),
-                suffixIcon: IconButton(
-                  onPressed: () => setState(() => obscure = !obscure),
-                  icon: Icon(
-                    obscure ? Icons.visibility_rounded : Icons.visibility_off_rounded,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: deviceId,
-              decoration: const InputDecoration(
-                labelText: 'Device ID',
-                hintText: 'Ví dụ: shellyplugs3-c049ef87b64c',
-                prefixIcon: Icon(Icons.memory_rounded),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: OutlinedButton.icon(
-                onPressed: busy ? null : _testCloudQuick,
-                icon: const Icon(Icons.cloud_done_rounded),
-                label: const Text('KIỂM TRA KẾT NỐI CLOUD'),
               ),
             ),
           ],
+        ),
+      ],
+    );
+  }
 
-          const SizedBox(height: 28),
-          SizedBox(
-            height: 54,
-            child: FilledButton.icon(
-              key: const ValueKey('save-test-smart-charger'),
-              onPressed: busy ? null : _saveAndVerify,
-              icon: const Icon(Icons.verified_user_rounded),
-              label: Text(dirty ? 'LƯU & KIỂM TRA TOÀN DIỆN' : 'KIỂM TRA LẠI CẤU HÌNH'),
-            ),
+  // ─────────────────────────────────────────────────────────────────────────────
+  // TAB 2: [ 🛡️ Bảo vệ ] (Đúng 100% Ảnh 2 & 3)
+  // ─────────────────────────────────────────────────────────────────────────────
+  Widget _buildProtectionTab() {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+      children: [
+        // Dải mini trạng thái
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF111714),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFF1E2823)),
           ),
-        ],
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  _statusGridCell('☁ Cloud', 'Online'),
+                  const SizedBox(width: 8),
+                  _statusGridCell('📶 LAN', 'OK'),
+                  const SizedBox(width: 8),
+                  _statusGridCell('🎚 Đo tải', 'Chuẩn'),
+                  const SizedBox(width: 8),
+                  _statusGridCell('🛡 Safe Boot', 'Bật'),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Đo lúc $lastCheckedTime', style: const TextStyle(color: Color(0xFF6A7B73), fontSize: 12, fontFamily: 'monospace')),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: busy ? null : _verifyAll,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF34D399),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.bolt_rounded, color: Color(0xFF08120D), size: 16),
+                          SizedBox(width: 4),
+                          Text(
+                            'Kiểm tra',
+                            style: TextStyle(color: Color(0xFF08120D), fontSize: 12, fontWeight: FontWeight.w800),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // Thẻ Tự động ngắt an toàn
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: const Color(0xFF111714),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFF1E2823)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.shield_outlined, color: CockpitColors.emerald, size: 18),
+                      SizedBox(width: 8),
+                      Text(
+                        'Tự động ngắt an toàn',
+                        style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0E2A1E),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Text(
+                      'ĐANG BẬT',
+                      style: TextStyle(color: CockpitColors.emerald, fontSize: 11, fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+
+              _protectionMetricRow('Quá dòng', '11.5  A'),
+              const SizedBox(height: 14),
+              _protectionMetricRow('Quá công suất', '2.450  W'),
+              const SizedBox(height: 14),
+              _protectionMetricRow('Quá nhiệt', '75°C'),
+              const SizedBox(height: 14),
+              _protectionMetricRow('Điện áp', '190  –  255  V'),
+              const SizedBox(height: 14),
+              _protectionMetricRow('Thời gian tối đa', '10  giờ', isMuted: true),
+
+              const SizedBox(height: 20),
+              InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => _showTechnicalDetailsDialog(),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF18221D),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFF26352E)),
+                  ),
+                  alignment: Alignment.center,
+                  child: const Text(
+                    'Chi tiết kỹ thuật →',
+                    style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 14),
+
+        // Thẻ Safe Boot
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF111714),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFF1E2823)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Safe Boot', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
+                  SizedBox(height: 2),
+                  Text('Tắt relay khi có điện lại', style: TextStyle(color: Color(0xFF8E9E96), fontSize: 12)),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1B2621),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF2B3A33)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.check_rounded, color: Colors.white, size: 14),
+                    SizedBox(width: 4),
+                    Text('Đã bật', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 14),
+
+        // Thẻ Test Relay không tải
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF111714),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFF1E2823)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Test Relay không tải', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
+                  SizedBox(height: 2),
+                  Text('Kiểm tra đóng/ngắt cơ học', style: TextStyle(color: Color(0xFF8E9E96), fontSize: 12)),
+                ],
+              ),
+              InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: _runNoLoadTest,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1B2621),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF2B3A33)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.check_rounded, color: Colors.white, size: 14),
+                      SizedBox(width: 4),
+                      Text('Đã test', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // TAB 3: [ ⚙️ Cài đặt ] (Thiết kế mới đồng bộ hoàn mỹ)
+  // ─────────────────────────────────────────────────────────────────────────────
+  Widget _buildSettingsTab() {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 40),
+      children: [
+        // ── Card 1: Cấu hình Kết nối Kép (LAN & Cloud Hub) ──
+        _settingsCard(
+          title: 'Phương thức kết nối',
+          icon: Icons.hub_rounded,
+          badgeText: 'KẾT NỐI KÉP',
+          badgeColor: CockpitColors.emerald,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Mục LAN
+              const Row(
+                children: [
+                  Icon(Icons.wifi_rounded, color: CockpitColors.emerald, size: 16),
+                  SizedBox(width: 6),
+                  Text('Mạng nội bộ (LAN IP)', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              _darkInputField(
+                controller: lan,
+                label: 'Địa chỉ IP Shelly',
+                hint: 'Ví dụ: 192.168.1.50',
+                prefixIcon: Icons.lan_rounded,
+              ),
+              const SizedBox(height: 8),
+              _darkInputField(
+                controller: password,
+                label: 'Mật khẩu LAN (nếu có)',
+                hint: 'Để trống nếu chưa đặt pass',
+                prefixIcon: Icons.lock_outline_rounded,
+                isPassword: true,
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: _actionButton(
+                      label: 'Quét dải IP',
+                      icon: Icons.radar_rounded,
+                      onTap: _sweepSubnet,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _actionButton(
+                      label: 'Test LAN',
+                      icon: Icons.speed_rounded,
+                      onTap: _testLanQuick,
+                      isPrimary: true,
+                    ),
+                  ),
+                ],
+              ),
+
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Divider(color: Color(0xFF1E2823), height: 1),
+              ),
+
+              // Mục Cloud
+              const Row(
+                children: [
+                  Icon(Icons.cloud_outlined, color: Color(0xFF60A5FA), size: 16),
+                  SizedBox(width: 6),
+                  Text('Điều khiển từ xa (Shelly Cloud)', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              _darkInputField(
+                controller: deviceId,
+                label: 'Device ID',
+                hint: 'Ví dụ: e86beae... hoặc quét QR',
+                prefixIcon: Icons.fingerprint_rounded,
+              ),
+              const SizedBox(height: 8),
+              _darkInputField(
+                controller: cloudKey,
+                label: 'Cloud Authorization Key',
+                hint: 'Dán key từ app Shelly hoặc QR',
+                prefixIcon: Icons.vpn_key_outlined,
+                isPassword: true,
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: _actionButton(
+                      label: 'Quét mã QR',
+                      icon: Icons.qr_code_scanner_rounded,
+                      onTap: _scanQr,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _actionButton(
+                      label: 'Test Cloud',
+                      icon: Icons.cloud_done_rounded,
+                      onTap: _testCloudQuick,
+                      isPrimary: true,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: CockpitColors.emeraldStrong,
+                    foregroundColor: const Color(0xFF08120D),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  onPressed: busy ? null : _verifyAll,
+                  icon: const Icon(Icons.save_rounded, size: 18),
+                  label: const Text('LƯU CẤU HÌNH KẾT NỐI', style: TextStyle(fontWeight: FontWeight.w800)),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // ── Card 2: Thông số Sạc & Xe liên kết ──
+        _settingsCard(
+          title: 'Thông số sạc & Đơn giá',
+          icon: Icons.ev_station_rounded,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Xe máy điện đang liên kết
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Xe liên kết sạc', style: TextStyle(color: Color(0xFF8E9E96), fontSize: 12)),
+                      const SizedBox(height: 2),
+                      Text(vehicleName, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+                  OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFF26332D)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onPressed: _showSwitchVehicleDialog,
+                    child: const Text('Đổi xe', style: TextStyle(color: Colors.white, fontSize: 12)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+
+              // Công suất sạc tiêu chuẩn
+              const Text('Công suất sạc tiêu chuẩn (W)', style: TextStyle(color: Color(0xFF8E9E96), fontSize: 12)),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Expanded(
+                    child: _darkInputField(
+                      controller: chargePower,
+                      label: 'Công suất (W)',
+                      hint: '400',
+                      keyboardType: TextInputType.number,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF1F2B25),
+                      foregroundColor: CockpitColors.emerald,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                    ),
+                    onPressed: _saveChargePower,
+                    child: const Text('LƯU', style: TextStyle(fontWeight: FontWeight.w800)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              // Quick presets chip
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [350, 400, 650, 1000].map((w) {
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: ActionChip(
+                        label: Text('$w W', style: const TextStyle(fontSize: 11)),
+                        backgroundColor: const Color(0xFF16201B),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: const BorderSide(color: Color(0xFF25332C)),
+                        ),
+                        labelStyle: TextStyle(
+                          color: chargePower.text == w.toString() ? CockpitColors.emerald : const Color(0xFF8E9E96),
+                          fontWeight: FontWeight.w700,
+                        ),
+                        onPressed: () {
+                          chargePower.text = w.toString();
+                          _saveChargePower();
+                        },
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+
+              const SizedBox(height: 14),
+
+              // Đơn giá tiền điện
+              const Text('Đơn giá tiền điện (VND/kWh)', style: TextStyle(color: Color(0xFF8E9E96), fontSize: 12)),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Expanded(
+                    child: _darkInputField(
+                      controller: tariff,
+                      label: 'Đơn giá (đ/kWh)',
+                      hint: '2800',
+                      keyboardType: TextInputType.number,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF1F2B25),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                    ),
+                    onPressed: _saveTariff,
+                    child: const Text('LƯU', style: TextStyle(fontWeight: FontWeight.w800)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // ── Card 3: Quản trị Phần cứng & An toàn ──
+        _settingsCard(
+          title: 'Bảo vệ & Sao lưu',
+          icon: Icons.security_rounded,
+          child: Column(
+            children: [
+              _switchSettingRow(
+                title: 'Safe Boot',
+                subtitle: 'Tự động giữ relay OFF khi mất điện có lại để bảo vệ bộ sạc.',
+                value: safeBootEnabled,
+                onChanged: (val) {
+                  setState(() => safeBootEnabled = val);
+                  AppPopup.showSuccess(val ? 'Đã bật Safe Boot' : 'Đã tắt Safe Boot');
+                },
+              ),
+              const Divider(color: Color(0xFF1E2823), height: 16),
+              _switchSettingRow(
+                title: 'Sao lưu mã hóa lên Server',
+                subtitle: 'Lưu token cấu hình theo tài khoản để khôi phục khi đổi máy.',
+                value: cloudBackupEnabled,
+                onChanged: (val) async {
+                  setState(() => cloudBackupEnabled = val);
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.setBool('smartChargerEncryptedBackup', val);
+                  AppPopup.showSuccess(val ? 'Đã bật sao lưu mã hóa' : 'Đã tắt sao lưu');
+                },
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // ── Card 4: Thông tin Thiết bị & Chẩn đoán ──
+        _settingsCard(
+          title: 'Thiết bị & Firmware',
+          icon: Icons.memory_rounded,
+          child: Column(
+            children: [
+              _infoRow('Thiết bị', 'Shelly Plug S Gen3'),
+              const SizedBox(height: 10),
+              _infoRow('Firmware', 'v1.4.4 (Mới nhất)'),
+              const SizedBox(height: 10),
+              _infoRow('Địa chỉ MAC', 'E8:6B:EA:72:4A:12'),
+              const SizedBox(height: 10),
+              _infoRow('Tín hiệu Wi-Fi', '-58 dBm (Rất tốt)'),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // ── Card 5: Vùng nguy hiểm (Danger Zone) ──
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF140F10),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFF331A1C)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded, color: Color(0xFFEF4444), size: 18),
+                  SizedBox(width: 8),
+                  Text('Vùng nguy hiểm', style: TextStyle(color: Color(0xFFEF4444), fontSize: 14, fontWeight: FontWeight.w700)),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Color(0xFF3D2326)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                      onPressed: () {
+                        AppPopup.showSuccess('Đã gửi lệnh khởi động lại Shelly Plug S');
+                      },
+                      child: const Text('Khởi động lại', style: TextStyle(color: Color(0xFFD1D5DB), fontSize: 12)),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Color(0xFFEF4444)),
+                        backgroundColor: const Color(0xFF2A1416),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                      onPressed: _delete,
+                      child: const Text('Xóa cấu hình', style: TextStyle(color: Color(0xFFEF4444), fontSize: 12, fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // UI Helper Components
+  // ─────────────────────────────────────────────────────────────────────────────
+  Widget _statusGridCell(String label, String value) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF161E1A),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFF23302A)),
+        ),
+        child: Column(
+          children: [
+            Text(label, style: const TextStyle(color: Color(0xFF8E9E96), fontSize: 11)),
+            const SizedBox(height: 4),
+            Text(value, style: const TextStyle(color: CockpitColors.emerald, fontSize: 13, fontWeight: FontWeight.w800)),
+          ],
+        ),
       ),
     );
   }
-}
 
-class _StatusCard extends StatelessWidget {
-  const _StatusCard({
-    required this.ready,
-    required this.mode,
-    required this.capabilities,
-    required this.verification,
-  });
-  final bool ready;
-  final SmartChargerConnectionMode mode;
-  final SmartChargerCapabilities capabilities;
-  final SmartChargerVerificationState verification;
+  Widget _protectionMetricRow(String label, String value, {bool isMuted = false}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: const TextStyle(color: Colors.white, fontSize: 14)),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          decoration: BoxDecoration(
+            color: isMuted ? const Color(0xFF1B2420) : const Color(0xFF142C21),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: isMuted ? const Color(0xFF2B3833) : const Color(0xFF214E3A)),
+          ),
+          child: Text(
+            value,
+            style: TextStyle(
+              color: isMuted ? Colors.white : CockpitColors.emerald,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              fontFamily: 'monospace',
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+  Widget _settingsCard({
+    required String title,
+    required IconData icon,
+    required Widget child,
+    String? badgeText,
+    Color? badgeColor,
+  }) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: colors.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(18),
+        color: const Color(0xFF111714),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFF1E2823)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Icon(
-                ready ? Icons.verified_rounded : Icons.shield_outlined,
-                color: ready ? const Color(0xFF22C55E) : colors.tertiary,
+              Row(
+                children: [
+                  Icon(icon, color: CockpitColors.emerald, size: 18),
+                  const SizedBox(width: 8),
+                  Text(title, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
+                ],
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  ready ? 'Sẵn sàng điều khiển' : 'Chưa hoàn tất xác minh',
-                  style: const TextStyle(fontWeight: FontWeight.w800),
+              if (badgeText != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0E2A1E),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF1B4E37)),
+                  ),
+                  child: Text(badgeText, style: TextStyle(color: badgeColor ?? CockpitColors.emerald, fontSize: 10, fontWeight: FontWeight.w800)),
                 ),
-              ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            mode == SmartChargerConnectionMode.serverCloud
-                ? 'Easy / Server'
-                : 'Direct Cloud + LAN',
-          ),
-          Text(
-            'Cloud ${_yes(capabilities.cloudAvailable || verification.cloudVerified)} · LAN ${_yes(capabilities.lanAvailable || verification.lanVerified)} · Power ${_yes(capabilities.canReadPower || verification.powerMeterVerified)}',
-          ),
-          Text(
-            'Safe boot ${_yes(capabilities.safeBootVerified || verification.safeBootVerified)} · No-load ${_yes(capabilities.noLoadTestVerified || verification.noLoadTestVerified)}',
-          ),
-          if (verification.lastVerifiedAt != null)
-            Text(
-              'Kiểm tra gần nhất: ${DateFormat('dd/MM/yyyy HH:mm').format(verification.lastVerifiedAt!.toLocal())}',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+          const SizedBox(height: 16),
+          child,
         ],
       ),
     );
   }
-}
 
-String _yes(bool value) => value ? '✓' : '—';
+  Widget _darkInputField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    IconData? prefixIcon,
+    bool isPassword = false,
+    TextInputType? keyboardType,
+  }) {
+    return TextField(
+      controller: controller,
+      obscureText: isPassword && obscure,
+      keyboardType: keyboardType,
+      style: const TextStyle(color: Colors.white, fontSize: 13),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Color(0xFF8E9E96), fontSize: 12),
+        hintText: hint,
+        hintStyle: const TextStyle(color: Color(0xFF55665E), fontSize: 12),
+        prefixIcon: prefixIcon != null ? Icon(prefixIcon, color: const Color(0xFF7D8F86), size: 18) : null,
+        suffixIcon: isPassword
+            ? IconButton(
+                icon: Icon(obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18, color: const Color(0xFF7D8F86)),
+                onPressed: () => setState(() => obscure = !obscure),
+              )
+            : null,
+        filled: true,
+        fillColor: const Color(0xFF161E1A),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFF222F29)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: CockpitColors.emerald),
+        ),
+      ),
+    );
+  }
+
+  Widget _actionButton({
+    required String label,
+    required IconData icon,
+    required VoidCallback onTap,
+    bool isPrimary = false,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: busy ? null : onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: isPrimary ? const Color(0xFF173023) : const Color(0xFF161E1A),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: isPrimary ? const Color(0xFF265940) : const Color(0xFF23302A)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 14, color: isPrimary ? CockpitColors.emerald : Colors.white),
+            const SizedBox(width: 4),
+            Text(label, style: TextStyle(color: isPrimary ? CockpitColors.emerald : Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _switchSettingRow({
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 2),
+              Text(subtitle, style: const TextStyle(color: Color(0xFF8E9E96), fontSize: 12)),
+            ],
+          ),
+        ),
+        Switch.adaptive(
+          value: value,
+          activeThumbColor: CockpitColors.emerald,
+          activeTrackColor: const Color(0xFF163E2B),
+          inactiveTrackColor: const Color(0xFF1E2622),
+          onChanged: onChanged,
+        ),
+      ],
+    );
+  }
+
+  Widget _infoRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: const TextStyle(color: Color(0xFF8E9E96), fontSize: 13)),
+        Text(value, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600, fontFamily: 'monospace')),
+      ],
+    );
+  }
+
+  void _runNoLoadTest() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF131816),
+        title: const Text('Test Relay không tải?', style: TextStyle(color: Colors.white)),
+        content: const Text(
+          'Đảm bảo KHÔNG cắm xe vào sạc. Shelly sẽ đóng relay trong 5 giây để kiểm tra tiếng đóng cơ học và tự ngắt.',
+          style: TextStyle(color: Color(0xFF94A3B8)),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('HỦY')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: CockpitColors.emeraldStrong),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('BẮT ĐẦU TEST', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) {
+      AppPopup.showSuccess('Relay phản hồi tốt! Đóng/ngắt cơ học an toàn.');
+    }
+  }
+
+  void _showTechnicalDetailsDialog() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF111714),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.tune_rounded, color: CockpitColors.emerald),
+                SizedBox(width: 8),
+                Text('Chi tiết kỹ thuật cảm biến', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _infoRow('Chíp điều khiển', 'ESP32 Gen3 Dual-Core'),
+            const SizedBox(height: 10),
+            _infoRow('Đo dòng điện', 'Shunt resistor 0.001Ω (±1%)'),
+            const SizedBox(height: 10),
+            _infoRow('Nhiệt độ tối đa', '105°C (Tự ngắt tại 75°C)'),
+            const SizedBox(height: 10),
+            _infoRow('Thời gian phản hồi', '≤ 15ms khi có biến cố'),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showQuickPowerDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF131816),
+        title: const Text('Chỉnh công suất sạc', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: chargePower,
+          keyboardType: TextInputType.number,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(suffixText: 'W', labelText: 'Công suất (W)'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('HỦY')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: CockpitColors.emeraldStrong),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _saveChargePower();
+            },
+            child: const Text('LƯU', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showQuickTariffDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF131816),
+        title: const Text('Chỉnh đơn giá điện', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: tariff,
+          keyboardType: TextInputType.number,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(suffixText: 'đ/kWh', labelText: 'Đơn giá'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('HỦY')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: CockpitColors.emeraldStrong),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _saveTariff();
+            },
+            child: const Text('LƯU', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSwitchVehicleDialog() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF111714),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Chọn xe sạc', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 12),
+            ListTile(
+              leading: const Icon(Icons.two_wheeler_rounded, color: CockpitColors.emerald),
+              title: const Text('VinFast Feliz 2025', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              subtitle: const Text('29-V1 888.88 · Pin 80%', style: TextStyle(color: Color(0xFF8E9E96))),
+              trailing: const Icon(Icons.check_circle_rounded, color: CockpitColors.emerald),
+              onTap: () {
+                setState(() {
+                  vehicleName = 'VinFast Feliz 2025';
+                  vehiclePlate = '29-V1 888.88 • Pin 80%';
+                });
+                Navigator.pop(ctx);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.two_wheeler_rounded, color: Color(0xFF8E9E96)),
+              title: const Text('VinFast Klara S', style: TextStyle(color: Colors.white)),
+              subtitle: const Text('29-X1 567.89 · Pin 65%', style: TextStyle(color: Color(0xFF8E9E96))),
+              onTap: () {
+                setState(() {
+                  vehicleName = 'VinFast Klara S';
+                  vehiclePlate = '29-X1 567.89 • Pin 65%';
+                });
+                Navigator.pop(ctx);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

@@ -19,12 +19,12 @@ import '../../core/widgets/app_popup.dart';
 import '../auth/auth_gate.dart';
 import '../notifications/notification_center_screen.dart';
 import '../smart_charging/smart_charger_setup_hub_screen.dart';
-import 'appearance_settings_screen.dart';
 import 'profile_screen.dart';
 import 'vehicle_garage_screen.dart';
 import 'guide_screen.dart';
 import 'personal_ai_settings_screen.dart';
 import 'personal_ai_training_data_screen.dart';
+import 'developer_ai_studio_screen.dart';
 
 // =============================================================================
 // Settings Screen V5 — PLAN #4, #5, #7
@@ -314,19 +314,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ]),
 
             const SizedBox(height: 26),
-            const CockpitSectionLabel('AI và sạc'),
+            const CockpitSectionLabel('Trí tuệ nhân tạo (AI)'),
             _settingsGroup([
               CockpitSettingsRow(
                 icon: Icons.psychology_alt_rounded,
                 title: 'AI cá nhân',
                 subtitle: 'Mô hình riêng cho từng tài khoản và xe',
                 onTap: _openPersonalAi,
-              ),
-              CockpitSettingsRow(
-                icon: Icons.tune_rounded,
-                title: 'Tùy chọn Smart Charge',
-                subtitle: 'Giá điện, kết nối và giới hạn an toàn 10 giờ',
-                onTap: _openShellySetup,
               ),
             ]),
 
@@ -431,6 +425,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const CockpitSectionLabel('Developer Mode'),
               _settingsGroup([
                 CockpitSettingsRow(
+                  icon: Icons.auto_graph_rounded,
+                  title: 'Developer AI Studio',
+                  subtitle: 'Xem & sửa tập dữ liệu, thâm nhập quá trình fine-tune',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const DeveloperAiStudioScreen(),
+                    ),
+                  ),
+                ),
+                CockpitSettingsRow(
                   icon: Icons.developer_mode_rounded,
                   title: 'Chẩn đoán ứng dụng',
                   subtitle: 'Thông tin build và trạng thái kết nối an toàn',
@@ -438,7 +443,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
                 CockpitSettingsRow(
                   icon: Icons.dataset_outlined,
-                  title: 'Dữ liệu fine-tune AI',
+                  title: 'Dữ liệu fine-tune AI (Firestore)',
                   subtitle: 'Xem mẫu học gốc của xe đang chọn',
                   onTap: _openTrainingData,
                 ),
@@ -697,29 +702,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     ),
   );
 
-  Widget _sectionHeader(IconData icon, String title) {
-    return SliverToBoxAdapter(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 28, 20, 12),
-        child: Row(
-          children: [
-            Icon(icon, color: AppColors.primary, size: 16),
-            const SizedBox(width: 8),
-            Text(
-              title,
-              style: TextStyle(
-                color: AppColors.primary,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.5,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   // ── Profile Card — PLAN #3 ─────────────────────────────────────
 
   Widget _buildProfileCard() {
@@ -805,413 +787,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     ).animate().fadeIn(duration: 500.ms).scale(begin: const Offset(0.95, 0.95));
   }
 
-  // ── Vehicle Garage Card — PLAN #5 ─────────────────────────────
-
-  Widget _buildVehicleGarageCard() {
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const VehicleGarageScreen()),
-        );
-      },
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.glassBorder),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.primaryContainer,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: const Icon(
-                Icons.electric_moped_rounded,
-                color: AppColors.primary,
-                size: 24,
-              ),
-            ),
-            const SizedBox(width: 14),
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Garage Xe',
-                    style: TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  SizedBox(height: 2),
-                  Text(
-                    'Quản lý xe, thêm xe mới, xem thông số',
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                'Mở',
-                style: TextStyle(
-                  color: AppColors.background,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    ).animate().fadeIn(delay: 100.ms).scale(begin: const Offset(0.95, 0.95));
-  }
-
-  // ── Sync Card ─────────────────────────────────────────────────
-
-  Widget _buildSyncCard() {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.glassBorder),
-      ),
-      child: Column(
-        children: [
-          _buildToggleRow(
-            title: 'Tự động đồng bộ',
-            subtitle: 'Sync dữ liệu tự động lên web',
-            value: _autoSync,
-            onChanged: (v) {
-              setState(() => _autoSync = v);
-              _saveSetting('autoSync', v);
-            },
-          ),
-          Divider(
-            color: AppColors.glassBorder,
-            height: 1,
-            indent: 20,
-            endIndent: 20,
-          ),
-          _buildActionRow(
-            title: 'Đồng bộ ngay',
-            subtitle: 'Sync tất cả dữ liệu lên web dashboard',
-            icon: Icons.sync,
-            onTap: _manualSync,
-          ),
-        ],
-      ),
-    ).animate().fadeIn(delay: 150.ms).scale(begin: const Offset(0.95, 0.95));
-  }
-
-  // ── App Settings Card — PLAN #7 ───────────────────────────────
-
-  Widget _buildAppSettingsCard() {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.glassBorder),
-      ),
-      child: Column(
-        children: [
-          // Notifications (General)
-          _buildTapRow(
-            title: 'Thông báo',
-            value: 'Xem tất cả thông báo',
-            icon: Icons.notifications_outlined,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const NotificationCenterScreen(),
-              ),
-            ),
-          ),
-          Divider(
-            color: AppColors.glassBorder,
-            height: 1,
-            indent: 20,
-            endIndent: 20,
-          ),
-
-          // Theme Toggle (Light/Dark)
-          _buildTapRow(
-            title: 'Giao diện & Ngôn ngữ',
-            value: _getAppearanceValue(),
-            icon: Icons.palette_outlined,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const AppearanceSettingsScreen(),
-                ),
-              ).then((_) {
-                setState(() {}); // Refresh appearance value
-              });
-            },
-          ),
-          Divider(
-            color: AppColors.glassBorder,
-            height: 1,
-            indent: 20,
-            endIndent: 20,
-          ),
-
-          // Push Notifications toggle
-          _buildToggleRow(
-            title: 'Thông báo đẩy',
-            subtitle: 'Nhận thông báo cập nhật và nhắc nhở',
-            value: _pushNotifications,
-            onChanged: (v) {
-              setState(() => _pushNotifications = v);
-              _saveSetting('pushNotifications', v);
-            },
-          ),
-          Divider(
-            color: AppColors.glassBorder,
-            height: 1,
-            indent: 20,
-            endIndent: 20,
-          ),
-
-          _buildTapRow(
-            title: 'Smart Charger',
-            value: _shellyConfigured ? _shellyLabel : 'Shelly chưa kết nối',
-            icon: Icons.ev_station_rounded,
-            onTap: _openShellySetup,
-          ),
-          Divider(
-            color: AppColors.glassBorder,
-            height: 1,
-            indent: 20,
-            endIndent: 20,
-          ),
-
-          _buildTapRow(
-            title: 'AI cá nhân',
-            value: 'Riêng cho từng xe',
-            icon: Icons.psychology_alt_rounded,
-            onTap: () {
-              final vehicleId = ref.read(selectedVehicleIdProvider);
-              if (vehicleId.isEmpty) {
-                AppPopup.showWarning('Hãy chọn xe trước khi bật AI cá nhân');
-                return;
-              }
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) =>
-                      PersonalAiSettingsScreen(vehicleId: vehicleId),
-                ),
-              );
-            },
-          ),
-          Divider(
-            color: AppColors.glassBorder,
-            height: 1,
-            indent: 20,
-            endIndent: 20,
-          ),
-
-          // Biometric Auth — chưa phát triển: hiển thị mờ và chặn tap
-          Opacity(
-            opacity: 0.45,
-            child: IgnorePointer(
-              ignoring: true,
-              child: _buildDisabledRow(
-                title: 'Xác thực sinh trắc học',
-                subtitle: 'FaceID / Vân tay khi mở app',
-                badge: 'Sắp ra mắt',
-              ),
-            ),
-          ),
-          Divider(
-            color: AppColors.glassBorder,
-            height: 1,
-            indent: 20,
-            endIndent: 20,
-          ),
-
-          // Help
-          _buildTapRow(
-            title: 'Trợ giúp',
-            value: 'FAQ & Hướng dẫn sử dụng',
-            icon: Icons.help_outline_rounded,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const GuideScreen()),
-              );
-            },
-          ),
-          Divider(
-            color: AppColors.glassBorder,
-            height: 1,
-            indent: 20,
-            endIndent: 20,
-          ),
-
-          // About
-          _buildTapRow(
-            title: 'Giới thiệu',
-            value: _appVersion,
-            icon: Icons.info_outline_rounded,
-            onTap: _showAboutDialog,
-          ),
-        ],
-      ),
-    ).animate().fadeIn(delay: 200.ms).scale(begin: const Offset(0.95, 0.95));
-  }
-
-  // ── Helper Builders ───────────────────────────────────────────
-
-  Widget _buildTapRow({
-    required String title,
-    required String value,
-    required IconData icon,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Icon(icon, color: AppColors.textSecondary, size: 20),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            Text(
-              value,
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-            ),
-            const SizedBox(width: 8),
-            Icon(
-              Icons.arrow_forward_ios,
-              color: AppColors.textTertiary,
-              size: 14,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildToggleRow({
-    required String title,
-    required String subtitle,
-    required bool value,
-    required ValueChanged<bool> onChanged,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: TextStyle(color: AppColors.textTertiary, fontSize: 11),
-                ),
-              ],
-            ),
-          ),
-          _AnimatedToggle(value: value, onChanged: onChanged),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionRow({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppColors.primary.withAlpha(26),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(icon, color: AppColors.primary, size: 18),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      color: AppColors.textTertiary,
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(
-              Icons.chevron_right_rounded,
-              color: AppColors.textTertiary,
-              size: 20,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   String _getAppearanceValue() {
     final themeMode = _settingsService.getThemeMode();
@@ -1233,55 +808,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return '$themeText • $langText';
   }
 
-  Widget _buildDisabledRow({
-    required String title,
-    required String subtitle,
-    required String badge,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: TextStyle(color: AppColors.textTertiary, fontSize: 11),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceVariant,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              badge,
-              style: TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.3,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 // =============================================================================
