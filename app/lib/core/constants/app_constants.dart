@@ -4,14 +4,24 @@ class AppConstants {
 
   static const String appName = 'VinFast Battery';
 
-  // API Base URL — truyền qua --dart-define=APP_API_BASE_URL=https://...
-  // Fallback: 10.0.2.2 cho Android emulator, localhost cho iOS simulator
-  /// API Base URL — laptop server published through Tailscale Funnel.
-  /// Chỉ dùng localhost/emulator khi build dev với --dart-define
-  static const String apiBaseUrl = String.fromEnvironment(
+  // API Base URL — mặc định dùng Tailscale Funnel.
+  // Có thể ghi đè linh hoạt trong Developer Mode hoặc SharedPreferences.
+  static const String defaultApiBaseUrl = String.fromEnvironment(
     'APP_API_BASE_URL',
     defaultValue: 'https://khanhbes.tailaafca5.ts.net',
   );
+
+  static String? _customApiBaseUrl;
+
+  static String get apiBaseUrl => _customApiBaseUrl ?? defaultApiBaseUrl;
+
+  static void setCustomApiBaseUrl(String? url) {
+    if (url != null && url.trim().isNotEmpty) {
+      _customApiBaseUrl = url.trim().replaceAll(RegExp(r'/+$'), '');
+    } else {
+      _customApiBaseUrl = null;
+    }
+  }
   static const String appVersion = '1.1.3';
 
   // Firestore Collection Names

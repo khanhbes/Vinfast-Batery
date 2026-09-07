@@ -93,14 +93,14 @@ Nếu app báo không xác minh được timer/relay, rút tải hoặc tắt Sh
 Từ thư mục gốc của repo:
 
 ```powershell
-.\build_app.ps1
+.\run.ps1 3
 ```
 
 Script chạy `pub get`, analyze và toàn bộ test **trước khi tăng version**; sau đó build APK arm64, sao chép `VinFastBattery_latest.apk` sang web server local. API release bắt buộc HTTPS, mặc định là `https://khanhbes.tailaafca5.ts.net`. Smart Charge không còn dùng `SMART_CHARGER_API_BASE_URL`; API chung lấy từ `APP_API_BASE_URL`.
 
 ## Runtime hiện tại
 
-Hệ thống vận hành trên laptop với Docker và Tailscale Funnel. Dùng `deploy_web.ps1`
+Hệ thống vận hành trên laptop với Docker và Tailscale Funnel. Dùng `.\run.ps1 2` (hoặc mở `run.bat` chọn [2])
 ở root để build/khởi động stack local; không dùng VPS hoặc SSH. `smart_charger_gateway/`
 là gateway legacy/diagnostic, không phải runtime dependency của app/web stack chính.
 # AI cá nhân, ETA fusion và lịch sử realtime

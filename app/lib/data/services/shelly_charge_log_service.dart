@@ -2,7 +2,10 @@ import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'server_smart_charger_service.dart';
 
 import '../models/smart_charge_history.dart';
 import '../models/smart_charge_cost.dart';
@@ -668,6 +671,11 @@ class ShellyChargeLogService {
       'estimatedUsableCapacityWh': summary.estimatedUsableCapacityWh,
       'updatedAt': FieldValue.serverTimestamp(),
     });
+    try {
+      await ServerSmartChargerService().confirmActualSoc(session.sessionId, soc);
+    } catch (e) {
+      debugPrint('⚠️ Sync actual SOC to server dataset failed: $e');
+    }
     return summary;
   }
 
