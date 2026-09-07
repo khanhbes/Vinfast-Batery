@@ -1,0 +1,1039 @@
+{
+  "flask": [
+    {
+      "path": "/",
+      "methods": [
+        "GET"
+      ],
+      "function": "open_dashboard",
+      "decorators": [],
+      "line": 340
+    },
+    {
+      "path": "/dashboard",
+      "methods": [
+        "GET"
+      ],
+      "function": "open_dashboard",
+      "decorators": [],
+      "line": 341
+    },
+    {
+      "path": "/api/health",
+      "methods": [
+        "GET"
+      ],
+      "function": "health_check",
+      "decorators": [],
+      "line": 522
+    },
+    {
+      "path": "/api/auth/me",
+      "methods": [
+        "GET"
+      ],
+      "function": "auth_me",
+      "decorators": [
+        "@require_auth"
+      ],
+      "line": 552
+    },
+    {
+      "path": "/api/auth/set-admin",
+      "methods": [
+        "POST"
+      ],
+      "function": "set_admin",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 566
+    },
+    {
+      "path": "/api/user/vehicles",
+      "methods": [
+        "GET"
+      ],
+      "function": "user_vehicles",
+      "decorators": [
+        "@require_auth"
+      ],
+      "line": 593
+    },
+    {
+      "path": "/api/user/vehicles",
+      "methods": [
+        "POST"
+      ],
+      "function": "user_add_vehicle",
+      "decorators": [
+        "@require_auth"
+      ],
+      "line": 612
+    },
+    {
+      "path": "/api/user/charge-logs",
+      "methods": [
+        "GET"
+      ],
+      "function": "user_charge_logs",
+      "decorators": [
+        "@require_auth"
+      ],
+      "line": 629
+    },
+    {
+      "path": "/api/user/trip-logs",
+      "methods": [
+        "GET"
+      ],
+      "function": "user_trip_logs",
+      "decorators": [
+        "@require_auth"
+      ],
+      "line": 651
+    },
+    {
+      "path": "/api/user/maintenance",
+      "methods": [
+        "GET"
+      ],
+      "function": "user_maintenance",
+      "decorators": [
+        "@require_auth"
+      ],
+      "line": 669
+    },
+    {
+      "path": "/api/admin/<entity>",
+      "methods": [
+        "GET"
+      ],
+      "function": "admin_list",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 692
+    },
+    {
+      "path": "/api/admin/<entity>/<doc_id>",
+      "methods": [
+        "GET"
+      ],
+      "function": "admin_get",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 724
+    },
+    {
+      "path": "/api/admin/<entity>",
+      "methods": [
+        "POST"
+      ],
+      "function": "admin_create",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 742
+    },
+    {
+      "path": "/api/admin/<entity>/<doc_id>",
+      "methods": [
+        "PUT"
+      ],
+      "function": "admin_update",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 763
+    },
+    {
+      "path": "/api/admin/<entity>/<doc_id>",
+      "methods": [
+        "DELETE"
+      ],
+      "function": "admin_delete",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 784
+    },
+    {
+      "path": "/api/admin/<entity>/<doc_id>/restore",
+      "methods": [
+        "POST"
+      ],
+      "function": "admin_restore",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 804
+    },
+    {
+      "path": "/api/admin/<entity>/bulk-delete",
+      "methods": [
+        "POST"
+      ],
+      "function": "admin_bulk_delete",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 824
+    },
+    {
+      "path": "/api/admin/audit-logs",
+      "methods": [
+        "GET"
+      ],
+      "function": "admin_audit_logs",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 847
+    },
+    {
+      "path": "/api/admin/reset-all",
+      "methods": [
+        "POST"
+      ],
+      "function": "admin_reset_all_data",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 860
+    },
+    {
+      "path": "/api/admin/users",
+      "methods": [
+        "GET"
+      ],
+      "function": "admin_users",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 905
+    },
+    {
+      "path": "/api/admin/export",
+      "methods": [
+        "GET"
+      ],
+      "function": "admin_export",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 928
+    },
+    {
+      "path": "/api/admin/import",
+      "methods": [
+        "POST"
+      ],
+      "function": "admin_import",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 976
+    },
+    {
+      "path": "/api/telemetry",
+      "methods": [
+        "GET"
+      ],
+      "function": "get_telemetry",
+      "decorators": [],
+      "line": 1069
+    },
+    {
+      "path": "/api/charge-logs",
+      "methods": [
+        "GET"
+      ],
+      "function": "get_charge_logs",
+      "decorators": [],
+      "line": 1089
+    },
+    {
+      "path": "/api/admin/ai/dataset/<vehicle_id>",
+      "methods": [
+        "GET"
+      ],
+      "function": "ai_dataset",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 1503
+    },
+    {
+      "path": "/api/ai/predict-degradation",
+      "methods": [
+        "POST"
+      ],
+      "function": "ai_predict",
+      "decorators": [],
+      "line": 1524
+    },
+    {
+      "path": "/api/ai/analyze-patterns",
+      "methods": [
+        "POST"
+      ],
+      "function": "ai_analyze",
+      "decorators": [],
+      "line": 1549
+    },
+    {
+      "path": "/api/ai/train-vehicle-profile",
+      "methods": [
+        "POST"
+      ],
+      "function": "ai_train",
+      "decorators": [],
+      "line": 1565
+    },
+    {
+      "path": "/api/ai/profile-status/<vehicle_id>",
+      "methods": [
+        "GET"
+      ],
+      "function": "ai_profile_status",
+      "decorators": [],
+      "line": 1601
+    },
+    {
+      "path": "/api/admin/ai/normalize-dataset",
+      "methods": [
+        "POST"
+      ],
+      "function": "ai_normalize",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 1619
+    },
+    {
+      "path": "/api/admin/ai/train",
+      "methods": [
+        "POST"
+      ],
+      "function": "ai_admin_train",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 1654
+    },
+    {
+      "path": "/api/admin/ai/test",
+      "methods": [
+        "POST"
+      ],
+      "function": "ai_admin_test",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 1712
+    },
+    {
+      "path": "/api/ai/predict-consumption",
+      "methods": [
+        "POST"
+      ],
+      "function": "ai_predict_consumption",
+      "decorators": [],
+      "line": 1736
+    },
+    {
+      "path": "/api/ai/predict-range",
+      "methods": [
+        "POST"
+      ],
+      "function": "ai_predict_range",
+      "decorators": [],
+      "line": 1823
+    },
+    {
+      "path": "/api/ai/predict-charging-time",
+      "methods": [
+        "POST"
+      ],
+      "function": "ai_predict_charging_time",
+      "decorators": [],
+      "line": 2081
+    },
+    {
+      "path": "/api/predict-degradation",
+      "methods": [
+        "POST"
+      ],
+      "function": "compat_predict",
+      "decorators": [],
+      "line": 2177
+    },
+    {
+      "path": "/api/predict-consumption",
+      "methods": [
+        "POST"
+      ],
+      "function": "compat_predict",
+      "decorators": [],
+      "line": 2182
+    },
+    {
+      "path": "/api/analyze-patterns",
+      "methods": [
+        "POST"
+      ],
+      "function": "compat_predict_consumption",
+      "decorators": [],
+      "line": 2187
+    },
+    {
+      "path": "/api/train-vehicle-profile",
+      "methods": [
+        "POST"
+      ],
+      "function": "compat_analyze",
+      "decorators": [],
+      "line": 2192
+    },
+    {
+      "path": "/api/profile-status/<vehicle_id>",
+      "methods": [
+        "GET"
+      ],
+      "function": "compat_train",
+      "decorators": [],
+      "line": 2197
+    },
+    {
+      "path": "/api/admin/ai/refresh-insights",
+      "methods": [
+        "POST"
+      ],
+      "function": "ai_refresh_insights",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 2316
+    },
+    {
+      "path": "/api/admin/ai/status",
+      "methods": [
+        "GET"
+      ],
+      "function": "ai_center_status",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 2333
+    },
+    {
+      "path": "/api/admin/migrate-legacy",
+      "methods": [
+        "POST"
+      ],
+      "function": "migrate_legacy",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 2381
+    },
+    {
+      "path": "/api/admin/ai/types",
+      "methods": [
+        "GET"
+      ],
+      "function": "admin_ai_types",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 2673
+    },
+    {
+      "path": "/api/admin/ai/models/<type_key>/test-version",
+      "methods": [
+        "POST"
+      ],
+      "function": "admin_test_version",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 2780
+    },
+    {
+      "path": "/api/admin/ai/models/<type_key>/deploy",
+      "methods": [
+        "POST"
+      ],
+      "function": "admin_deploy_model",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 2802
+    },
+    {
+      "path": "/api/admin/ai/models/<type_key>/reset",
+      "methods": [
+        "POST"
+      ],
+      "function": "admin_reset_model",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 2867
+    },
+    {
+      "path": "/api/admin/ai/models/<type_key>/undeploy",
+      "methods": [
+        "POST"
+      ],
+      "function": "admin_undeploy_model",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 2891
+    },
+    {
+      "path": "/api/user/ai/models/deployed",
+      "methods": [
+        "GET"
+      ],
+      "function": "user_ai_models_deployed",
+      "decorators": [],
+      "line": 2939
+    },
+    {
+      "path": "/api/user/ai/models/runtime-diagnostics",
+      "methods": [
+        "GET"
+      ],
+      "function": "user_ai_models_runtime_diagnostics",
+      "decorators": [],
+      "line": 3014
+    },
+    {
+      "path": "/api/admin/ai/models/<type_key>",
+      "methods": [
+        "GET"
+      ],
+      "function": "admin_list_models_for_type",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 3153
+    },
+    {
+      "path": "/api/admin/ai/models/<type_key>/status",
+      "methods": [
+        "GET"
+      ],
+      "function": "admin_list_models_for_type",
+      "decorators": [],
+      "line": 3159
+    },
+    {
+      "path": "/api/admin/ai/models/<type_key>/rollback",
+      "methods": [
+        "POST"
+      ],
+      "function": "admin_status_for_type",
+      "decorators": [],
+      "line": 3165
+    },
+    {
+      "path": "/api/admin/ai/models/<type_key>/load-active",
+      "methods": [
+        "POST"
+      ],
+      "function": "admin_rollback_model_for_type",
+      "decorators": [],
+      "line": 3171
+    },
+    {
+      "path": "/api/admin/ai/models/<type_key>/activate",
+      "methods": [
+        "POST"
+      ],
+      "function": "admin_activate_model",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 3178
+    },
+    {
+      "path": "/api/admin/ai/models/<type_key>/deactivate",
+      "methods": [
+        "POST"
+      ],
+      "function": "admin_deactivate_model",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 3191
+    },
+    {
+      "path": "/api/admin/ai/models/<type_key>/validate-version",
+      "methods": [
+        "POST"
+      ],
+      "function": "admin_validate_version",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 3198
+    },
+    {
+      "path": "/api/admin/ai/models/<type_key>/predict",
+      "methods": [
+        "POST"
+      ],
+      "function": "admin_quick_predict",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 3205
+    },
+    {
+      "path": "/api/admin/ai/models/<type_key>/<version>",
+      "methods": [
+        "DELETE"
+      ],
+      "function": "admin_delete_model_for_type",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 3214
+    },
+    {
+      "path": "/api/admin/ai/models/<type_key>/upload",
+      "methods": [
+        "POST"
+      ],
+      "function": "admin_delete_model_for_type",
+      "decorators": [],
+      "line": 3220
+    },
+    {
+      "path": "/api/admin/ai/models",
+      "methods": [
+        "GET"
+      ],
+      "function": "admin_list_models_legacy",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 3268
+    },
+    {
+      "path": "/api/admin/ai/models/rollback",
+      "methods": [
+        "POST"
+      ],
+      "function": "admin_list_models_legacy",
+      "decorators": [],
+      "line": 3274
+    },
+    {
+      "path": "/api/admin/ai/models/upload",
+      "methods": [
+        "POST"
+      ],
+      "function": "admin_rollback_legacy",
+      "decorators": [],
+      "line": 3280
+    },
+    {
+      "path": "/api/soc/history",
+      "methods": [
+        "GET"
+      ],
+      "function": "admin_upload_model_legacy",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 3285
+    },
+    {
+      "path": "/api/trip/predict",
+      "methods": [
+        "POST"
+      ],
+      "function": "trip_predict",
+      "decorators": [],
+      "line": 3336
+    },
+    {
+      "path": "/api/trip/history",
+      "methods": [
+        "GET"
+      ],
+      "function": "trip_history",
+      "decorators": [],
+      "line": 3440
+    },
+    {
+      "path": "/api/ai/charge-feedback",
+      "methods": [
+        "POST"
+      ],
+      "function": "ai_charge_feedback",
+      "decorators": [],
+      "line": 3551
+    },
+    {
+      "path": "/api/ai/charging-model-status",
+      "methods": [
+        "GET"
+      ],
+      "function": "ai_charging_model_status",
+      "decorators": [],
+      "line": 3602
+    },
+    {
+      "path": "/api/ai/dataset",
+      "methods": [
+        "GET"
+      ],
+      "function": "ai_get_dataset",
+      "decorators": [],
+      "line": 3688
+    },
+    {
+      "path": "/api/ai/dataset/export-csv",
+      "methods": [
+        "GET"
+      ],
+      "function": "ai_export_dataset_csv",
+      "decorators": [],
+      "line": 3718
+    },
+    {
+      "path": "/api/ai/dataset/records/<session_id>",
+      "methods": [
+        "PUT"
+      ],
+      "function": "ai_update_dataset_record",
+      "decorators": [],
+      "line": 3736
+    },
+    {
+      "path": "/api/ai/dataset/records",
+      "methods": [
+        "POST"
+      ],
+      "function": "ai_add_dataset_record",
+      "decorators": [],
+      "line": 3750
+    },
+    {
+      "path": "/api/ai/models/charging_time/fine-tune",
+      "methods": [
+        "POST"
+      ],
+      "function": "ai_fine_tune_charging_time",
+      "decorators": [],
+      "line": 3762
+    },
+    {
+      "path": "/api/ai/models/charging_time/fine-tune/vehicle",
+      "methods": [
+        "POST"
+      ],
+      "function": "ai_fine_tune_vehicle_charging_time",
+      "decorators": [],
+      "line": 3841
+    },
+    {
+      "path": "/api/ai/models/charging_time/adapters",
+      "methods": [
+        "GET"
+      ],
+      "function": "ai_list_vehicle_adapters",
+      "decorators": [],
+      "line": 3915
+    },
+    {
+      "path": "/api/ai/models/charging_time/adapters/<vehicle_id>",
+      "methods": [
+        "GET"
+      ],
+      "function": "ai_get_vehicle_adapter",
+      "decorators": [],
+      "line": 3928
+    },
+    {
+      "path": "/api/ai/models/charging_time/predict",
+      "methods": [
+        "POST"
+      ],
+      "function": "ai_model_predict_charging_time",
+      "decorators": [],
+      "line": 3943
+    },
+    {
+      "path": "/api/ai/models/charging_time/training-readiness/<vehicle_id>",
+      "methods": [
+        "GET"
+      ],
+      "function": "ai_vehicle_training_readiness",
+      "decorators": [],
+      "line": 4004
+    },
+    {
+      "path": "/api/smart-charge/shadow-status",
+      "methods": [
+        "GET"
+      ],
+      "function": "smart_charge_shadow_status",
+      "decorators": [],
+      "line": 4034
+    },
+    {
+      "path": "/api/web/sync/battery-state",
+      "methods": [
+        "POST"
+      ],
+      "function": "web_sync_battery_state",
+      "decorators": [],
+      "line": 4060
+    },
+    {
+      "path": "/api/telemetry",
+      "methods": [
+        "POST"
+      ],
+      "function": "ingest_telemetry",
+      "decorators": [],
+      "line": 4099
+    },
+    {
+      "path": "/api/web/sync/trip-prediction",
+      "methods": [
+        "POST"
+      ],
+      "function": "web_sync_trip_prediction",
+      "decorators": [],
+      "line": 4117
+    },
+    {
+      "path": "/api/user/ai/models",
+      "methods": [
+        "GET"
+      ],
+      "function": "user_ai_models",
+      "decorators": [],
+      "line": 4180
+    },
+    {
+      "path": "/api/user/ai/models/<type_key>/download",
+      "methods": [
+        "GET"
+      ],
+      "function": "user_ai_model_download",
+      "decorators": [],
+      "line": 4316
+    },
+    {
+      "path": "/api/user/ai/models/<type_key>/predict",
+      "methods": [
+        "POST"
+      ],
+      "function": "user_ai_model_predict",
+      "decorators": [],
+      "line": 4356
+    },
+    {
+      "path": "/api/web/sync/user",
+      "methods": [
+        "POST"
+      ],
+      "function": "sync_user",
+      "decorators": [],
+      "line": 4390
+    },
+    {
+      "path": "/api/web/sync/vehicle",
+      "methods": [
+        "POST"
+      ],
+      "function": "sync_vehicle",
+      "decorators": [],
+      "line": 4412
+    },
+    {
+      "path": "/api/web/sync/full",
+      "methods": [
+        "POST"
+      ],
+      "function": "sync_full",
+      "decorators": [],
+      "line": 4439
+    },
+    {
+      "path": "/api/user/sync/overview",
+      "methods": [
+        "GET"
+      ],
+      "function": "sync_overview",
+      "decorators": [],
+      "line": 4500
+    },
+    {
+      "path": "/api/admin/migrate",
+      "methods": [
+        "POST"
+      ],
+      "function": "admin_migrate_collections",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 4591
+    },
+    {
+      "path": "/api/app/config",
+      "methods": [
+        "GET"
+      ],
+      "function": "app_config",
+      "decorators": [],
+      "line": 4667
+    },
+    {
+      "path": "/api/app/config",
+      "methods": [
+        "POST"
+      ],
+      "function": "update_app_config",
+      "decorators": [
+        "@require_admin"
+      ],
+      "line": 4677
+    },
+    {
+      "path": "/api/app/download",
+      "methods": [
+        "GET"
+      ],
+      "function": "app_download",
+      "decorators": [],
+      "line": 4692
+    }
+  ],
+  "fastapi": [
+    {
+      "path": "/healthz",
+      "method": "GET",
+      "function": "healthz",
+      "line": 151
+    },
+    {
+      "path": "/v1/types",
+      "method": "GET",
+      "function": "types",
+      "line": 166
+    },
+    {
+      "path": "/v1/models/{type_key}",
+      "method": "GET",
+      "function": "list_models",
+      "line": 190
+    },
+    {
+      "path": "/v1/models/{type_key}/status",
+      "method": "GET",
+      "function": "status_for_type",
+      "line": 197
+    },
+    {
+      "path": "/v1/models/{type_key}/upload",
+      "method": "POST",
+      "function": "upload_model",
+      "line": 203
+    },
+    {
+      "path": "/v1/models/{type_key}/rollback",
+      "method": "POST",
+      "function": "rollback_model",
+      "line": 299
+    },
+    {
+      "path": "/v1/models/{type_key}/{version}",
+      "method": "DELETE",
+      "function": "delete_model",
+      "line": 321
+    },
+    {
+      "path": "/v1/models/{type_key}/activate",
+      "method": "POST",
+      "function": "activate_model",
+      "line": 343
+    },
+    {
+      "path": "/v1/models/{type_key}/deploy",
+      "method": "POST",
+      "function": "deploy_model",
+      "line": 369
+    },
+    {
+      "path": "/v1/models/{type_key}/load-active",
+      "method": "POST",
+      "function": "load_active_model",
+      "line": 404
+    },
+    {
+      "path": "/v1/models/{type_key}/deactivate",
+      "method": "POST",
+      "function": "deactivate_model",
+      "line": 438
+    },
+    {
+      "path": "/v1/models/{type_key}/validate-version",
+      "method": "POST",
+      "function": "validate_version",
+      "line": 460
+    },
+    {
+      "path": "/v1/models/{type_key}/test-version",
+      "method": "POST",
+      "function": "test_version",
+      "line": 496
+    },
+    {
+      "path": "/v1/models/{type_key}/reset",
+      "method": "POST",
+      "function": "reset_model",
+      "line": 558
+    },
+    {
+      "path": "/v1/models/{type_key}/validate-file",
+      "method": "POST",
+      "function": "validate_model_file",
+      "line": 603
+    },
+    {
+      "path": "/v1/models/{type_key}/load-active",
+      "method": "POST",
+      "function": "load_active_model",
+      "line": 659
+    },
+    {
+      "path": "/v1/models/{type_key}/predict",
+      "method": "POST",
+      "function": "predict_generic",
+      "line": 814
+    },
+    {
+      "path": "/v1/soc/status",
+      "method": "GET",
+      "function": "soc_status",
+      "line": 869
+    },
+    {
+      "path": "/v1/soc/predict",
+      "method": "POST",
+      "function": "soc_predict",
+      "line": 875
+    }
+  ]
+}
