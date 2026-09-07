@@ -28,7 +28,7 @@ class AppTheme {
   /// Light is retained as a compatibility entry point. The product now ships
   /// a single dark cockpit visual system, so legacy light/system preferences
   /// resolve to the regular dark theme.
-  static ThemeData get lightTheme => _buildDarkTheme();
+  static ThemeData get lightTheme => _buildLightTheme();
 
   static ThemeData _buildLightTheme() {
     return ThemeData(
