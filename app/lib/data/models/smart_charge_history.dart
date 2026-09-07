@@ -177,7 +177,7 @@ class SmartChargeEnergySummary {
     }
     if (gridWh < 0) gridWh = 0;
 
-    final storedWh = gridWh;
+    final storedWh = gridWh * 0.90;
     final capacity =
         session.effectiveCapacityWh ?? session.estimatedCapacityWh ?? 0;
     final estimatedEndSoc = capacity > 0

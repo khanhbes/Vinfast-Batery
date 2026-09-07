@@ -374,6 +374,11 @@ function Build-AndroidApp {
                 Copy-Item -Path $apk.FullName -Destination $latestTarget -Force
                 Write-Ok "Da cap nhat OTA web server: $latestTarget"
             }
+            if ($apk.Name -match 'app-debug.apk') {
+                $debugTarget = Join-Path $webApkDir "VinFastBattery_debug.apk"
+                Copy-Item -Path $apk.FullName -Destination $debugTarget -Force
+                Write-Ok "Da cap nhat debug APK cho web server: $debugTarget"
+            }
         }
 
         Write-Host ""

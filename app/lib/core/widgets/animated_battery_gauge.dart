@@ -109,33 +109,39 @@ class _AnimatedBatteryGaugeState extends State<AnimatedBatteryGauge>
                   ],
                 ),
               ),
-              // Center content
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.bolt_rounded,
-                    color: color,
-                    size: widget.size * 0.15,
+              // Center content with overflow protection for large text scaling
+              Padding(
+                padding: EdgeInsets.all(widget.size * 0.12),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.bolt_rounded,
+                        color: color,
+                        size: widget.size * 0.15,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${(value * 100).toInt()}%',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: widget.size * 0.18,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -1,
+                        ),
+                      ),
+                      Text(
+                        'Pin',
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: widget.size * 0.07,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${(value * 100).toInt()}%',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: widget.size * 0.18,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -1,
-                    ),
-                  ),
-                  Text(
-                    'Pin',
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: widget.size * 0.07,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ],
           ),
