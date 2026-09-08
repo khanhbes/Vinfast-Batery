@@ -47,7 +47,9 @@ class SmartChargerCredentialsService {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return null;
     final last = _lastServerSyncAt;
-    if (!force && last != null && DateTime.now().difference(last) < const Duration(minutes: 5)) {
+    if (!force &&
+        last != null &&
+        DateTime.now().difference(last) < const Duration(minutes: 5)) {
       return null;
     }
     _lastServerSyncAt = DateTime.now();
@@ -60,7 +62,8 @@ class SmartChargerCredentialsService {
       if (deviceId.isEmpty) return null;
       final serverProfile = await server.restoreDirectProfile(deviceId);
       if (serverProfile != null) {
-        final verified = metadata['cloudVerified'] == true &&
+        final verified =
+            metadata['cloudVerified'] == true &&
             metadata['powerMeterVerified'] == true &&
             metadata['safeBootVerified'] == true &&
             metadata['noLoadTestVerified'] == true;
@@ -97,7 +100,13 @@ class SmartChargerCredentialsService {
   Future<void> saveProfile(ShellyConnectionProfile profile) async {
     final validation = profile.validate();
     if (validation != null) throw ArgumentError(validation);
-    await _storage.write(key: _profileKey, value: jsonEncode(profile.toJson()));
+    final encoded = jsonEncode(profile.toJson());
+    final previous = await _storage.read(key: _profileKey);
+    // Verification belongs to the exact saved configuration, not a new device
+    // or changed credentials. Invalidate first so a failed write stays safe.
+    if (previous != encoded) await invalidateVerification();
+    await _storage.write(key: _profileKey, value: encoded);
+    await clearDraft();
   }
 
   Future<ShellyConnectionProfile?> readDraft() async {
@@ -177,8 +186,7 @@ class SmartChargerVerificationState {
   final DateTime? lastVerifiedAt;
 
   bool get readyForControl =>
-      cloudVerified ||
-      (lanVerified && safeBootVerified && noLoadTestVerified);
+      cloudVerified || (lanVerified && safeBootVerified && noLoadTestVerified);
 
   static const unverified = SmartChargerVerificationState(
     cloudVerified: false,

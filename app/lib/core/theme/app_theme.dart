@@ -25,10 +25,42 @@ class AppTheme {
   // ═══════════════════════════════════════════════════════════════
   // LIGHT THEME
   // ═══════════════════════════════════════════════════════════════
-  /// Light is retained as a compatibility entry point. The product now ships
-  /// a single dark cockpit visual system, so legacy light/system preferences
-  /// resolve to the regular dark theme.
-  static ThemeData get lightTheme => _buildLightTheme();
+  /// Shared touch targets; minimum height lets enlarged text wrap safely.
+  static ThemeData _withControls(ThemeData theme) {
+    const controls = ButtonStyle(
+      minimumSize: WidgetStatePropertyAll(Size(48, 48)),
+      visualDensity: VisualDensity.standard,
+      tapTargetSize: MaterialTapTargetSize.padded,
+      animationDuration: Duration(milliseconds: 180),
+      padding: WidgetStatePropertyAll(
+        EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      ),
+      shape: WidgetStatePropertyAll(
+        RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(14)),
+        ),
+      ),
+    );
+    return theme.copyWith(
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: theme.elevatedButtonTheme.style?.merge(controls) ?? controls,
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: theme.filledButtonTheme.style?.merge(controls) ?? controls,
+      ),
+      outlinedButtonTheme: const OutlinedButtonThemeData(style: controls),
+      textButtonTheme: const TextButtonThemeData(style: controls),
+      iconButtonTheme: const IconButtonThemeData(
+        style: ButtonStyle(
+          minimumSize: WidgetStatePropertyAll(Size(48, 48)),
+          visualDensity: VisualDensity.standard,
+          tapTargetSize: MaterialTapTargetSize.padded,
+        ),
+      ),
+    );
+  }
+
+  static ThemeData get lightTheme => _withControls(_buildLightTheme());
 
   static ThemeData _buildLightTheme() {
     return ThemeData(
@@ -52,7 +84,7 @@ class AppTheme {
         onError: Colors.white,
         outline: AppColorsLight.border,
       ),
-      textTheme: GoogleFonts.plusJakartaSansTextTheme(
+      textTheme: GoogleFonts.interTextTheme(
         TextTheme(
           displayLarge: TextStyle(
             color: AppColorsLight.textPrimary,
@@ -217,7 +249,7 @@ class AppTheme {
   // ═══════════════════════════════════════════════════════════════
   // DARK THEME
   // ═══════════════════════════════════════════════════════════════
-  static ThemeData get darkTheme => _buildDarkTheme();
+  static ThemeData get darkTheme => _withControls(_buildDarkTheme());
 
   static ThemeData _buildDarkTheme() {
     return ThemeData(
@@ -241,7 +273,7 @@ class AppTheme {
         onError: Color(0xFF690005),
         outline: AppColorsDark.borderLight,
       ),
-      textTheme: GoogleFonts.plusJakartaSansTextTheme(
+      textTheme: GoogleFonts.interTextTheme(
         const TextTheme(
           displayLarge: TextStyle(
             color: AppColorsDark.textPrimary,
@@ -406,7 +438,7 @@ class AppTheme {
     );
   }
 
-  static ThemeData get amoledTheme => _buildDarkTheme().copyWith(
+  static ThemeData get amoledTheme => darkTheme.copyWith(
     scaffoldBackgroundColor: Colors.black,
     colorScheme: _buildDarkTheme().colorScheme.copyWith(
       surface: Colors.black,
@@ -425,9 +457,9 @@ class AppColorsLight {
   AppColorsLight._();
 
   // Primary palette
-  static const Color primary = Color(0xFF006FDB);
-  static const Color primaryContainer = Color(0xFFDCEEFF);
-  static const Color onPrimaryContainer = Color(0xFF003A75);
+  static const Color primary = Color(0xFF047857);
+  static const Color primaryContainer = Color(0xFFD1FAE5);
+  static const Color onPrimaryContainer = Color(0xFF064E3B);
   static const Color secondary = Color(0xFF424242);
   static const Color accent = Color(0xFF00B0FF);
 

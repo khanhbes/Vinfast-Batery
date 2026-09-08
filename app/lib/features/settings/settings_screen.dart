@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/widgets/settings_reveal.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -9,7 +10,7 @@ import '../../data/models/smart_charger_binding.dart';
 import '../../data/repositories/smart_charger_repository.dart';
 import '../../data/services/server_smart_charger_service.dart';
 
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_ui_colors.dart';
 import '../../core/theme/cockpit_design_system.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/services/auth_service.dart';
@@ -90,9 +91,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _openShellySetup() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const SmartChargerSetupHubScreen()),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => SmartChargerSetupHubScreen()));
     await _loadShellyState();
   }
 
@@ -152,9 +153,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       applicationLegalese:
           '© 2026 VinFast Battery. Hệ thống quản lý pin xe điện.',
       applicationIcon: Container(
-        padding: const EdgeInsets.all(8),
+        padding: EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: AppColors.primary.withAlpha(40),
+          color: AppUiColors.of(context).primary.withAlpha(40),
           borderRadius: BorderRadius.circular(12),
         ),
         child: ClipRRect(
@@ -168,7 +169,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
         ),
       ),
-      children: const [
+      children: [
         SizedBox(height: 12),
         Text(
           'Theo dõi sức khỏe pin, dự đoán thời gian sạc và lên kế hoạch chuyến đi với AI.',
@@ -186,34 +187,34 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.card,
+        backgroundColor: AppUiColors.of(context).surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
+        title: Text(
           'Đăng xuất',
-          style: TextStyle(color: AppColors.textPrimary),
+          style: TextStyle(color: AppUiColors.of(context).text),
         ),
-        content: const Text(
+        content: Text(
           'Bạn có chắc chắn muốn đăng xuất?',
-          style: TextStyle(color: AppColors.textSecondary),
+          style: TextStyle(color: AppUiColors.of(context).muted),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text(
+            child: Text(
               'Hủy',
-              style: TextStyle(color: AppColors.textSecondary),
+              style: TextStyle(color: AppUiColors.of(context).muted),
             ),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.error,
+              backgroundColor: AppUiColors.of(context).danger,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
-            child: const Text('Đăng xuất'),
+            child: Text('Đăng xuất'),
           ),
         ],
       ),
@@ -235,7 +236,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       // is immediate even if a nested page is still transitioning, and the
       // Back button can never return to account data.
       Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
-        MaterialPageRoute<void>(builder: (_) => const AuthGate()),
+        MaterialPageRoute<void>(builder: (_) => AuthGate()),
         (_) => false,
       );
     } else {
@@ -255,8 +256,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           result['success'] == true ? 'Đồng bộ thành công' : 'Đồng bộ thất bại',
         ),
         backgroundColor: result['success'] == true
-            ? AppColors.success
-            : AppColors.error,
+            ? AppUiColors.of(context).primary
+            : AppUiColors.of(context).danger,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
@@ -266,31 +267,34 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AppUiColors.of(context).background,
       body: SafeArea(
         child: ListView(
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+          physics: BouncingScrollPhysics(),
+          padding: EdgeInsets.fromLTRB(16, 8, 16, 96),
           children: [
-            const Text(
+            Text(
               'Cài đặt',
               style: TextStyle(
-                color: AppColors.textPrimary,
+                color: AppUiColors.of(context).text,
                 fontSize: 28,
                 fontWeight: FontWeight.w800,
                 letterSpacing: -.8,
               ),
             ),
-            const SizedBox(height: 4),
-            const Text(
+            SizedBox(height: 4),
+            Text(
               'Cấu hình phương tiện, AI cá nhân và tùy chọn ứng dụng',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              style: TextStyle(
+                color: AppUiColors.of(context).muted,
+                fontSize: 13,
+              ),
             ),
-            const SizedBox(height: 20),
+            SizedBox(height: 20),
             _buildProfileCard(),
 
-            const SizedBox(height: 26),
-            const CockpitSectionLabel('Xe và bộ sạc'),
+            SizedBox(height: 26),
+            CockpitSectionLabel('Xe và bộ sạc'),
             _settingsGroup([
               CockpitSettingsRow(
                 icon: Icons.electric_moped_rounded,
@@ -298,9 +302,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 subtitle: 'Quản lý xe, dung lượng pin và xe đang chọn',
                 onTap: () => Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => const VehicleGarageScreen(),
-                  ),
+                  MaterialPageRoute(builder: (_) => VehicleGarageScreen()),
                 ),
               ),
               CockpitSettingsRow(
@@ -313,8 +315,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ]),
 
-            const SizedBox(height: 26),
-            const CockpitSectionLabel('Trí tuệ nhân tạo (AI)'),
+            SizedBox(height: 26),
+            CockpitSectionLabel('Trí tuệ nhân tạo (AI)'),
             _settingsGroup([
               CockpitSettingsRow(
                 icon: Icons.psychology_alt_rounded,
@@ -324,8 +326,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ]),
 
-            const SizedBox(height: 26),
-            const CockpitSectionLabel('Thông báo'),
+            SizedBox(height: 26),
+            CockpitSectionLabel('Thông báo'),
             _settingsGroup([
               CockpitSettingsRow(
                 icon: Icons.notifications_outlined,
@@ -333,9 +335,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 subtitle: 'Cảnh báo sạc, đồng bộ và nhắc nhở',
                 onTap: () => Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => const NotificationCenterScreen(),
-                  ),
+                  MaterialPageRoute(builder: (_) => NotificationCenterScreen()),
                 ),
               ),
               CockpitSettingsRow(
@@ -350,8 +350,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ]),
 
-            const SizedBox(height: 26),
-            const CockpitSectionLabel('Dữ liệu và quyền riêng tư'),
+            SizedBox(height: 26),
+            CockpitSectionLabel('Dữ liệu và quyền riêng tư'),
             _settingsGroup([
               CockpitSettingsRow(
                 icon: Icons.cloud_sync_outlined,
@@ -369,13 +369,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 subtitle: 'Đẩy dữ liệu hiện tại lên web dashboard',
                 onTap: _isLoading ? null : _manualSync,
               ),
-              const CockpitSettingsRow(
+              CockpitSettingsRow(
                 icon: Icons.download_outlined,
                 title: 'Tải dữ liệu tài khoản',
                 subtitle: 'Xuất toàn bộ dữ liệu người dùng',
                 availability: SettingsItemAvailability.comingSoon,
               ),
-              const CockpitSettingsRow(
+              CockpitSettingsRow(
                 icon: Icons.shield_outlined,
                 title: 'Quyền riêng tư và bảo mật',
                 subtitle: 'Kiểm soát dữ liệu và quyền truy cập',
@@ -383,8 +383,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ]),
 
-            const SizedBox(height: 26),
-            const CockpitSectionLabel('Ứng dụng'),
+            SizedBox(height: 26),
+            CockpitSectionLabel('Ứng dụng'),
             _settingsGroup([
               CockpitSettingsRow(
                 icon: Icons.palette_outlined,
@@ -392,7 +392,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 subtitle: _getAppearanceValue(),
                 onTap: _showAppearanceSheet,
               ),
-              const CockpitSettingsRow(
+              CockpitSettingsRow(
                 icon: Icons.fingerprint_rounded,
                 title: 'Xác thực sinh trắc học',
                 subtitle: 'Vân tay hoặc khuôn mặt khi mở ứng dụng',
@@ -400,8 +400,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ]),
 
-            const SizedBox(height: 26),
-            const CockpitSectionLabel('Hỗ trợ'),
+            SizedBox(height: 26),
+            CockpitSectionLabel('Hỗ trợ'),
             _settingsGroup([
               CockpitSettingsRow(
                 icon: Icons.help_outline_rounded,
@@ -409,7 +409,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 subtitle: 'FAQ và hướng dẫn sử dụng',
                 onTap: () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const GuideScreen()),
+                  MaterialPageRoute(builder: (_) => GuideScreen()),
                 ),
               ),
               CockpitSettingsRow(
@@ -421,17 +421,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ]),
 
             if (_developerUnlocked) ...[
-              const SizedBox(height: 26),
-              const CockpitSectionLabel('Developer Mode'),
+              SizedBox(height: 26),
+              CockpitSectionLabel('Developer Mode'),
               _settingsGroup([
                 CockpitSettingsRow(
                   icon: Icons.auto_graph_rounded,
                   title: 'Developer AI Studio',
-                  subtitle: 'Xem & sửa tập dữ liệu, thâm nhập quá trình fine-tune',
+                  subtitle:
+                      'Xem & sửa tập dữ liệu, thâm nhập quá trình fine-tune',
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => const DeveloperAiStudioScreen(),
+                      builder: (_) => DeveloperAiStudioScreen(),
                     ),
                   ),
                 ),
@@ -450,11 +451,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ]),
             ],
 
-            const SizedBox(height: 30),
+            SizedBox(height: 30),
             _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? Center(child: CircularProgressIndicator())
                 : _AnimatedSignOutButton(onTap: _signOut),
-            const SizedBox(height: 22),
+            SizedBox(height: 22),
             Semantics(
               button: true,
               label:
@@ -463,12 +464,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 behavior: HitTestBehavior.opaque,
                 onTap: _handleVersionTap,
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  padding: EdgeInsets.symmetric(vertical: 12),
                   child: Center(
                     child: Text(
                       'STABLE CHANNEL $_appVersion',
-                      style: const TextStyle(
-                        color: AppColors.textTertiary,
+                      style: TextStyle(
+                        color: AppUiColors.of(context).muted,
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 1.5,
@@ -484,16 +485,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Widget _settingsGroup(List<Widget> rows) => CockpitSurface(
-    padding: const EdgeInsets.all(4),
-    child: Column(
-      children: [
-        for (var index = 0; index < rows.length; index++) ...[
-          rows[index],
-          if (index != rows.length - 1)
-            const Divider(height: 1, indent: 58, endIndent: 12),
+  Widget _settingsGroup(List<Widget> rows) => SettingsReveal(
+    child: CockpitSurface(
+      color: AppUiColors.of(context).surface,
+      padding: EdgeInsets.all(4),
+      child: Column(
+        children: [
+          for (var index = 0; index < rows.length; index++) ...[
+            rows[index],
+            if (index != rows.length - 1)
+              Divider(height: 1, indent: 58, endIndent: 12),
+          ],
         ],
-      ],
+      ),
     ),
   );
 
@@ -556,14 +560,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
-    backgroundColor: AppColors.card,
-    shape: const RoundedRectangleBorder(
+    backgroundColor: AppUiColors.of(context).surface,
+    shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
     ),
     builder: (sheetContext) => SafeArea(
       child: StatefulBuilder(
         builder: (context, setSheetState) => SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          padding: EdgeInsets.fromLTRB(20, 0, 20, 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -573,8 +577,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   fontWeight: FontWeight.w900,
                 ),
               ),
-              const SizedBox(height: 18),
-              const CockpitSectionLabel('Giao diện'),
+              SizedBox(height: 18),
+              CockpitSectionLabel('Giao diện'),
+              _sheetChoice(
+                context,
+                icon: Icons.light_mode_rounded,
+                title: 'Sáng',
+                selected: _settingsService.getThemeMode() == AppThemeMode.light,
+                onTap: () async {
+                  await _settingsService.setThemeMode(AppThemeMode.light);
+                  if (context.mounted) setSheetState(() {});
+                },
+              ),
+              _sheetChoice(
+                context,
+                icon: Icons.brightness_auto_rounded,
+                title: 'Theo hệ thống',
+                selected:
+                    _settingsService.getThemeMode() == AppThemeMode.system,
+                onTap: () async {
+                  await _settingsService.setThemeMode(AppThemeMode.system);
+                  if (context.mounted) setSheetState(() {});
+                },
+              ),
               _sheetChoice(
                 context,
                 icon: Icons.dark_mode_rounded,
@@ -596,8 +621,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   setSheetState(() {});
                 },
               ),
-              const SizedBox(height: 18),
-              const CockpitSectionLabel('Ngôn ngữ'),
+              SizedBox(height: 18),
+              CockpitSectionLabel('Ngôn ngữ'),
               _sheetChoice(
                 context,
                 icon: Icons.language_rounded,
@@ -637,25 +662,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     minTileHeight: 56,
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
     tileColor: selected
-        ? CockpitColors.emerald.withValues(alpha: .10)
+        ? AppUiColors.of(context).primary.withValues(alpha: .10)
         : Colors.transparent,
     leading: Icon(
       icon,
-      color: selected ? CockpitColors.emerald : CockpitColors.muted,
+      color: selected
+          ? AppUiColors.of(context).primary
+          : AppUiColors.of(context).muted,
     ),
-    title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+    title: Text(title, style: TextStyle(fontWeight: FontWeight.w700)),
     trailing: selected
-        ? const Icon(Icons.check_circle_rounded, color: CockpitColors.emerald)
+        ? Icon(
+            Icons.check_circle_rounded,
+            color: AppUiColors.of(context).primary,
+          )
         : null,
   );
 
   Future<void> _showDeveloperSheet() => showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
-    backgroundColor: AppColors.card,
+    backgroundColor: AppUiColors.of(context).surface,
     builder: (context) => SafeArea(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        padding: EdgeInsets.fromLTRB(20, 0, 20, 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -666,14 +696,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 context,
               ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             _diagnosticLine('Build', _appVersion),
             _diagnosticLine('Smart Charger', _shellyLabel),
             _diagnosticLine('Auto sync', _autoSync ? 'Bật' : 'Tắt'),
-            const SizedBox(height: 12),
-            const Text(
+            SizedBox(height: 12),
+            Text(
               'Cloud key, mật khẩu LAN và token đăng nhập không được hiển thị.',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              style: TextStyle(
+                color: AppUiColors.of(context).muted,
+                fontSize: 12,
+              ),
             ),
           ],
         ),
@@ -682,20 +715,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   );
 
   Widget _diagnosticLine(String label, String value) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 7),
+    padding: EdgeInsets.symmetric(vertical: 7),
     child: Row(
       children: [
         Expanded(
           child: Text(
             label,
-            style: const TextStyle(color: AppColors.textSecondary),
+            style: TextStyle(color: AppUiColors.of(context).muted),
           ),
         ),
         Flexible(
           child: Text(
             value,
             textAlign: TextAlign.right,
-            style: const TextStyle(fontWeight: FontWeight.w700),
+            style: TextStyle(fontWeight: FontWeight.w700),
           ),
         ),
       ],
@@ -718,17 +751,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       onTap: () {
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => const ProfileScreen()),
+          MaterialPageRoute(builder: (_) => ProfileScreen()),
         ).then((_) {
           _loadUserProfile(); // Refresh after returning
         });
       },
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppColors.card,
+          color: AppUiColors.of(context).surface,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.glassBorder),
+          border: Border.all(color: AppUiColors.of(context).border),
         ),
         child: Row(
           children: [
@@ -736,15 +769,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               width: 52,
               height: 52,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [AppColors.primaryContainer, AppColors.primary],
+                gradient: LinearGradient(
+                  colors: [
+                    AppUiColors.of(context).primarySurface,
+                    AppUiColors.of(context).primary,
+                  ],
                 ),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Center(
                 child: Text(
                   initials,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: Colors.white,
                     fontSize: 18,
                     fontWeight: FontWeight.w800,
@@ -752,41 +788,40 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ),
             ),
-            const SizedBox(width: 14),
+            SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     _userName,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
+                    style: TextStyle(
+                      color: AppUiColors.of(context).text,
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 2),
+                  SizedBox(height: 2),
                   Text(
                     _userEmail,
                     style: TextStyle(
-                      color: AppColors.textSecondary,
+                      color: AppUiColors.of(context).muted,
                       fontSize: 12,
                     ),
                   ),
                 ],
               ),
             ),
-            const Icon(
+            Icon(
               Icons.chevron_right_rounded,
-              color: AppColors.textTertiary,
+              color: AppUiColors.of(context).muted,
               size: 22,
             ),
           ],
         ),
       ),
-    ).animate().fadeIn(duration: 500.ms).scale(begin: const Offset(0.95, 0.95));
+    ).animate().fadeIn(duration: 500.ms).scale(begin: Offset(0.95, 0.95));
   }
-
 
   String _getAppearanceValue() {
     final themeMode = _settingsService.getThemeMode();
@@ -807,104 +842,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     return '$themeText • $langText';
   }
-
 }
 
 // =============================================================================
 // Animated Widgets
 // =============================================================================
 
-class _AnimatedToggle extends StatefulWidget {
+class _AnimatedToggle extends StatelessWidget {
+  const _AnimatedToggle({required this.value, required this.onChanged});
   final bool value;
   final ValueChanged<bool> onChanged;
-
-  const _AnimatedToggle({required this.value, required this.onChanged});
-
   @override
-  State<_AnimatedToggle> createState() => _AnimatedToggleState();
-}
-
-class _AnimatedToggleState extends State<_AnimatedToggle>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _slideAnimation;
-  late Animation<Color?> _colorAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 250),
-      vsync: this,
-    );
-    _slideAnimation = Tween<double>(
-      begin: 0,
-      end: 22,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
-    _colorAnimation = ColorTween(
-      begin: AppColors.surfaceVariant,
-      end: AppColors.primary,
-    ).animate(_controller);
-
-    if (widget.value) _controller.value = 1.0;
-  }
-
-  @override
-  void didUpdateWidget(_AnimatedToggle oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.value != oldWidget.value) {
-      widget.value ? _controller.forward() : _controller.reverse();
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => widget.onChanged(!widget.value),
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, child) {
-          return Container(
-            width: 50,
-            height: 28,
-            padding: const EdgeInsets.all(2),
-            decoration: BoxDecoration(
-              color: _colorAnimation.value,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Stack(
-              children: [
-                Positioned(
-                  left: _slideAnimation.value,
-                  child: Container(
-                    width: 24,
-                    height: 24,
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black26,
-                          blurRadius: 2,
-                          offset: Offset(0, 1),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Switch.adaptive(
+    value: value,
+    onChanged: onChanged,
+    materialTapTargetSize: MaterialTapTargetSize.padded,
+  );
 }
 
 class _AnimatedSignOutButton extends StatefulWidget {
@@ -925,7 +878,7 @@ class _AnimatedSignOutButtonState extends State<_AnimatedSignOutButton>
   void initState() {
     super.initState();
     _controller = AnimationController(
-      duration: const Duration(milliseconds: 150),
+      duration: Duration(milliseconds: 150),
       vsync: this,
     );
     _scaleAnimation = Tween<double>(
@@ -952,25 +905,27 @@ class _AnimatedSignOutButtonState extends State<_AnimatedSignOutButton>
       child: ScaleTransition(
         scale: _scaleAnimation,
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 16),
+          padding: EdgeInsets.symmetric(vertical: 16),
           decoration: BoxDecoration(
-            color: const Color(0xFF3D2828),
+            color: Color(0xFF3D2828),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: AppColors.error.withAlpha(77)),
+            border: Border.all(
+              color: AppUiColors.of(context).danger.withAlpha(77),
+            ),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
                 Icons.logout_rounded,
-                color: AppColors.error.withAlpha(204),
+                color: AppUiColors.of(context).danger.withAlpha(204),
                 size: 18,
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: 8),
               Text(
                 'Đăng xuất',
                 style: TextStyle(
-                  color: AppColors.error.withAlpha(204),
+                  color: AppUiColors.of(context).danger.withAlpha(204),
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
                 ),

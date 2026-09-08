@@ -1,0 +1,153 @@
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - link "Đến nội dung chính" [ref=e4] [cursor=pointer]:
+      - /url: "#main-content"
+    - complementary [ref=e5]:
+      - navigation "Điều hướng chính" [ref=e12]:
+        - link "Tổng quan" [ref=e13] [cursor=pointer]:
+          - /url: /
+        - link "Người dùng" [ref=e20] [cursor=pointer]:
+          - /url: /users
+        - link "AI Center" [ref=e27] [cursor=pointer]:
+          - /url: /ai
+        - link "Kiểm toán" [ref=e41] [cursor=pointer]:
+          - /url: /audit
+        - link "Hệ thống" [ref=e47] [cursor=pointer]:
+          - /url: /settings
+    - generic [ref=e55]:
+      - banner [ref=e56]:
+        - generic [ref=e57]:
+          - paragraph [ref=e58]: VinFast BMS
+          - paragraph [ref=e59]: Dashboard
+        - button "Mở menu tài khoản" [ref=e60] [cursor=pointer]
+      - main [ref=e62]:
+        - generic [ref=e63]:
+          - status [ref=e64]: QA fixture — dữ liệu giả lập, không điều khiển thiết bị.
+          - generic [ref=e65]:
+            - generic [ref=e66]:
+              - generic [ref=e67]:
+                - heading "AI Center" [level=1] [ref=e68]
+                - paragraph [ref=e69]: Quản lý và giám sát các mô hình AI dự đoán pin
+              - link "Cài đặt" [ref=e71] [cursor=pointer]:
+                - /url: /settings
+            - generic [ref=e72]:
+              - generic [ref=e73]:
+                - generic [ref=e74]:
+                  - generic [ref=e75]:
+                    - generic [ref=e76]: AI Model Hub · Roadmap
+                    - heading "Trung tâm quản lý mô hình AI" [level=2] [ref=e80]
+                    - paragraph [ref=e81]: 1 mô hình AI theo roadmap 3 giai đoạn. Upload, hot-swap và kiểm thử nhanh trực tiếp từ dashboard.
+                  - button "Làm mới" [ref=e82] [cursor=pointer]
+                - generic [ref=e83]:
+                  - generic [ref=e84]:
+                    - generic [ref=e85]: Tổng mô hình
+                    - generic [ref=e90]: "1"
+                    - generic [ref=e91]: 0 đang lên kế hoạch
+                  - generic [ref=e92]:
+                    - generic [ref=e93]: Đã triển khai
+                    - generic [ref=e97]: 1/1
+                  - generic [ref=e98]:
+                    - generic [ref=e99]: Model đã nạp
+                    - generic [ref=e105]: 1/1
+                    - generic [ref=e106]: Loaded vào bộ nhớ
+                  - generic [ref=e107]:
+                    - generic [ref=e108]: Tổng versions
+                    - generic [ref=e113]: "1"
+                - generic [ref=e114]:
+                  - generic [ref=e115]: Đã triển khai
+                  - generic [ref=e117]: Đang làm
+                  - generic [ref=e119]: Lên kế hoạch
+              - generic [ref=e121]:
+                - generic [ref=e123]:
+                  - generic [ref=e128]:
+                    - generic [ref=e129]:
+                      - heading "Pin & sạc" [level=3] [ref=e130]
+                      - generic [ref=e131]: v1.0
+                    - paragraph [ref=e132]: Dữ liệu kiểm thử
+                  - generic [ref=e133]: 1 mô hình
+                - button "Mở phòng thử nghiệm Dự đoán thời gian sạc" [expanded] [ref=e138] [cursor=pointer]:
+                  - generic [ref=e139]:
+                    - generic [ref=e145]:
+                      - generic [ref=e146]: Đã triển khai
+                      - generic [ref=e150]: v1.0
+                    - heading "Dự đoán thời gian sạc" [level=3] [ref=e152]
+                    - paragraph [ref=e153]: Dữ liệu giả lập để kiểm tra giao diện.
+                    - generic [ref=e154]:
+                      - generic [ref=e155]:
+                        - generic [ref=e156]: Sẵn sàng
+                        - generic [ref=e160]: qa-v1
+                      - generic [ref=e161]:
+                        - generic [ref=e162]: Features
+                        - generic [ref=e167]: "3"
+                    - generic [ref=e168]: "Load: —"
+                - generic [ref=e174]:
+                  - generic [ref=e175]:
+                    - generic [ref=e176]:
+                      - generic [ref=e177]:
+                        - generic [ref=e178]: Dự đoán thời gian sạc · v1.0
+                        - heading "Dự đoán thời gian sạc" [level=2] [ref=e182]
+                        - paragraph [ref=e183]: Dữ liệu giả lập để kiểm tra giao diện.
+                      - generic [ref=e184]:
+                        - generic [ref=e185]:
+                          - generic [ref=e186]:
+                            - generic [ref=e187]: SOC bắt đầu
+                            - generic [ref=e188]: "20"
+                          - slider "SOC bắt đầu" [ref=e189] [cursor=pointer]: "20"
+                        - generic [ref=e190]:
+                          - generic [ref=e191]:
+                            - generic [ref=e192]: SOC kết thúc
+                            - generic [ref=e193]: "80"
+                          - slider "SOC kết thúc" [ref=e194] [cursor=pointer]: "80"
+                    - generic [ref=e196]:
+                      - button "Chạy dự đoán" [ref=e197] [cursor=pointer]
+                      - button "Quản lý model" [ref=e198] [cursor=pointer]
+                  - generic [ref=e200]:
+                    - generic [ref=e203]: Kết quả dự đoán
+                    - generic [ref=e204]: 1 giờ
+                    - generic [ref=e207]:
+                      - generic [ref=e208]:
+                        - generic [ref=e209]: Mức tăng pin
+                        - generic [ref=e210]: +60%
+                      - generic [ref=e211]:
+                        - generic [ref=e212]: Model version
+                        - generic [ref=e213]: qa-v1
+  - dialog "Quản lý model Dự đoán thời gian sạc" [ref=e214]:
+    - generic [ref=e215]:
+      - generic [ref=e216]:
+        - generic [ref=e217]:
+          - generic [ref=e223]:
+            - generic [ref=e224]:
+              - heading "Dự đoán thời gian sạc" [level=3] [ref=e225]
+              - generic [ref=e226]: ACTIVE · qa-v1
+            - paragraph [ref=e227]: Quản lý phiên bản & triển khai mô hình
+          - generic [ref=e228]:
+            - button "Upload model" [active] [ref=e229] [cursor=pointer]
+            - button "Đóng quản lý model" [ref=e230] [cursor=pointer]
+        - generic [ref=e231]:
+          - button "Danh sách Versions (1)" [ref=e232] [cursor=pointer]
+          - button "Test Version" [ref=e237] [cursor=pointer]
+          - button "Đánh giá" [ref=e241] [cursor=pointer]
+        - table [ref=e246]:
+          - rowgroup [ref=e247]:
+            - row [ref=e248]:
+              - columnheader "Version" [ref=e249]
+              - columnheader "Uploaded" [ref=e250]
+              - columnheader "Size" [ref=e251]
+              - columnheader "Ghi chú" [ref=e252]
+              - columnheader "Thao tác" [ref=e253]
+          - rowgroup [ref=e254]:
+            - row [ref=e255]:
+              - cell "qa-v1 ACTIVE" [ref=e256]:
+                - generic [ref=e257]:
+                  - generic [ref=e258]: qa-v1
+                  - generic [ref=e259]: ACTIVE
+              - cell "08:00:00 8/9/2026" [ref=e263]
+              - cell "0 B" [ref=e264]
+              - cell "—" [ref=e265]
+              - cell [ref=e266]:
+                - generic [ref=e267]:
+                  - button "Đánh giá" [ref=e268] [cursor=pointer]
+                  - button "Deactivate" [ref=e269] [cursor=pointer]
+      - generic [ref=e270]:
+        - generic [ref=e271]: v1.0 · Dữ liệu giả lập để kiểm tra giao diện.
+        - button "Làm mới" [ref=e272] [cursor=pointer]

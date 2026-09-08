@@ -4,10 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/providers/app_providers.dart';
 import '../core/services/notification_center_service.dart';
-import '../core/theme/app_colors.dart';
-import '../core/theme/app_motion.dart';
-import '../core/theme/cockpit_design_system.dart';
+import '../core/theme/app_ui_colors.dart';
+import '../core/widgets/app_navigation_bar.dart';
 import '../core/widgets/app_popup.dart';
+import '../core/widgets/app_tab_stack.dart';
 import '../core/widgets/vehicle_switcher.dart';
 import '../core/widgets/global_charging_pill.dart';
 import '../features/ai/smart_charge_history_screen.dart';
@@ -48,12 +48,12 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
   void initState() {
     super.initState();
     _screens = [
-      _RefreshableTab(child: const OverviewScreen()), // Tab 0: Overview
+      _RefreshableTab(child: OverviewScreen()), // Tab 0: Overview
       // Charge and History own their refresh indicators. Wrapping them here
       // created two simultaneous pull-to-refresh spinners.
-      const ChargeScreen(), // Tab 1: Charge
-      const _SelectedHistory(), // Tab 2: History
-      _RefreshableTab(child: const MoreScreen()), // Tab 3: More
+      ChargeScreen(), // Tab 1: Charge
+      _SelectedHistory(), // Tab 2: History
+      _RefreshableTab(child: MoreScreen()), // Tab 3: More
     ];
   }
 
@@ -64,90 +64,36 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
     ref.watch(vehicleContextRestoreProvider);
     final currentIndex = ref.watch(currentTabProvider);
 
-    const energyMode = true;
     SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
+      SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
-        systemNavigationBarColor: CockpitColors.shell,
-        systemNavigationBarIconBrightness: Brightness.light,
-        systemNavigationBarDividerColor: CockpitColors.border,
+        statusBarIconBrightness: Theme.of(context).brightness == Brightness.dark
+            ? Brightness.light
+            : Brightness.dark,
+        systemNavigationBarColor: AppUiColors.of(context).surface,
+        systemNavigationBarIconBrightness:
+            Theme.of(context).brightness == Brightness.dark
+            ? Brightness.light
+            : Brightness.dark,
+        systemNavigationBarDividerColor: AppUiColors.of(context).border,
       ),
     );
 
     return Scaffold(
-      backgroundColor: CockpitColors.background,
+      backgroundColor: AppUiColors.of(context).background,
       appBar: _buildUnifiedAppBar(context, currentIndex),
       body: Stack(
         children: [
-          IndexedStack(index: currentIndex, children: _screens),
-          const GlobalChargingPill(),
+          AppTabStack(index: currentIndex, children: _screens),
+          GlobalChargingPill(),
         ],
       ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: CockpitColors.shell.withValues(alpha: 0.98),
-          border: const Border(
-            top: BorderSide(color: AppColors.glassBorder, width: 0.5),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: CockpitColors.emerald.withValues(alpha: 0.05),
-              blurRadius: 20,
-              offset: const Offset(0, -4),
-            ),
-          ],
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _NavItem(
-                  icon: Icons.dashboard_rounded,
-                  label: 'Tổng quan',
-                  isSelected: currentIndex == 0,
-                  energyMode: energyMode,
-                  onTap: () {
-                    AppPopup.clearShownErrors();
-                    ref.read(currentTabProvider.notifier).state = 0;
-                  },
-                ),
-                _NavItem(
-                  icon: Icons.bolt_rounded,
-                  label: 'Sạc',
-                  isSelected: currentIndex == 1,
-                  energyMode: energyMode,
-                  onTap: () {
-                    AppPopup.clearShownErrors();
-                    ref.read(currentTabProvider.notifier).state = 1;
-                  },
-                ),
-                _NavItem(
-                  icon: Icons.history_rounded,
-                  label: 'Lịch sử',
-                  isSelected: currentIndex == 2,
-                  energyMode: energyMode,
-                  onTap: () {
-                    AppPopup.clearShownErrors();
-                    ref.read(currentTabProvider.notifier).state = 2;
-                  },
-                ),
-                _NavItem(
-                  icon: Icons.more_horiz_rounded,
-                  label: 'Khác',
-                  isSelected: currentIndex == 3,
-                  energyMode: energyMode,
-                  onTap: () {
-                    AppPopup.clearShownErrors();
-                    ref.read(currentTabProvider.notifier).state = 3;
-                  },
-                ),
-              ],
-            ),
-          ),
-        ),
+      bottomNavigationBar: AppNavigationBar(
+        selectedIndex: currentIndex,
+        onSelected: (index) {
+          AppPopup.clearShownErrors();
+          ref.read(currentTabProvider.notifier).state = index;
+        },
       ),
     );
   }
@@ -161,7 +107,7 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
     const energyMode = true;
 
     return AppBar(
-      backgroundColor: CockpitColors.shell,
+      backgroundColor: AppUiColors.of(context).surface,
       elevation: 0,
       // The Charge workspace already has its own contextual heading. Keeping
       // another "Smart Charge" here caused truncation beside the vehicle pill.
@@ -172,13 +118,13 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: CockpitColors.text,
+                color: AppUiColors.of(context).text,
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
               ),
             ),
       actions: [
-        const VehicleSwitcher(),
+        VehicleSwitcher(),
         // Notification bell with badge
         StreamBuilder<int>(
           stream: NotificationCenterService().watchUnreadCount(),
@@ -191,7 +137,7 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
             );
           },
         ),
-        const SizedBox(width: 8),
+        SizedBox(width: 8),
       ],
     );
   }
@@ -199,7 +145,7 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
   void _openNotificationCenter(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const NotificationCenterScreen()),
+      MaterialPageRoute(builder: (_) => NotificationCenterScreen()),
     );
   }
 }
@@ -213,11 +159,11 @@ class _SelectedHistory extends ConsumerWidget {
     final pending = ref.watch(pendingSmartChargeTargetProvider);
     final id = pending?.vehicleId ?? selectedId;
     if (id.isEmpty) {
-      return const Center(child: Text('Hãy chọn xe để xem lịch sử sạc'));
+      return Center(child: Text('Hãy chọn xe để xem lịch sử sạc'));
     }
     final vehicle = ref.watch(vehicleProvider(id));
     return vehicle.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: Text('Không thể tải lịch sử: $e')),
       data: (value) {
         final args = SmartChargingControllerArgs(
@@ -256,97 +202,10 @@ class _RefreshableTab extends ConsumerWidget {
 
     return RefreshIndicator(
       onRefresh: () => refreshCoordinator.refreshAll(),
-      color: AppColors.primary,
-      backgroundColor: AppColors.card,
+      color: AppUiColors.of(context).primary,
+      backgroundColor: AppUiColors.of(context).surface,
       displacement: 60,
       child: child,
-    );
-  }
-}
-
-class _NavItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool isSelected;
-  final bool energyMode;
-  final VoidCallback onTap;
-
-  const _NavItem({
-    required this.icon,
-    required this.label,
-    required this.isSelected,
-    required this.energyMode,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final duration = MediaQuery.disableAnimationsOf(context)
-        ? Duration.zero
-        : AppMotion.base;
-    const accent = CockpitColors.emerald;
-    const muted = CockpitColors.muted;
-    return Semantics(
-      button: true,
-      selected: isSelected,
-      label: label,
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          child: AnimatedContainer(
-            duration: duration,
-            curve: Curves.easeInOut,
-            padding: EdgeInsets.symmetric(
-              horizontal: isSelected ? 16 : 12,
-              vertical: 8,
-            ),
-            decoration: BoxDecoration(
-              color: isSelected
-                  ? accent.withValues(alpha: 0.14)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: isSelected
-                    ? accent.withValues(alpha: .30)
-                    : Colors.transparent,
-              ),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AnimatedContainer(
-                  duration: duration,
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? accent.withValues(alpha: 0.12)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    icon,
-                    color: isSelected ? accent : muted,
-                    size: 22,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: isSelected ? accent : muted,
-                    fontSize: 10,
-                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
@@ -369,7 +228,7 @@ class _NotificationBell extends StatelessWidget {
       button: true,
       label: unreadCount > 0 ? 'Thông báo, $unreadCount chưa đọc' : 'Thông báo',
       child: Material(
-        color: CockpitColors.elevated,
+        color: AppUiColors.of(context).elevated,
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
           onTap: onTap,
@@ -383,8 +242,8 @@ class _NotificationBell extends StatelessWidget {
                 Icon(
                   Icons.notifications_outlined,
                   color: unreadCount > 0
-                      ? CockpitColors.emerald
-                      : CockpitColors.muted,
+                      ? AppUiColors.of(context).primary
+                      : AppUiColors.of(context).muted,
                   size: 22,
                 ),
                 if (unreadCount > 0)
@@ -392,24 +251,21 @@ class _NotificationBell extends StatelessWidget {
                     top: 8,
                     right: 8,
                     child: Container(
-                      padding: const EdgeInsets.all(2),
+                      padding: EdgeInsets.all(2),
                       decoration: BoxDecoration(
-                        color: CockpitColors.emerald,
+                        color: AppUiColors.of(context).primary,
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: CockpitColors.elevated,
+                          color: AppUiColors.of(context).elevated,
                           width: 1.5,
                         ),
                       ),
-                      constraints: const BoxConstraints(
-                        minWidth: 16,
-                        minHeight: 16,
-                      ),
+                      constraints: BoxConstraints(minWidth: 16, minHeight: 16),
                       child: Center(
                         child: Text(
                           unreadCount > 99 ? '99+' : unreadCount.toString(),
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: AppUiColors.of(context).onPrimary,
                             fontSize: 9,
                             fontWeight: FontWeight.w700,
                           ),

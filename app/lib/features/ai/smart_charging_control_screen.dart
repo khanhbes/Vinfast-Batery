@@ -6,6 +6,8 @@ import 'package:fl_chart/fl_chart.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/theme/cockpit_design_system.dart';
 import '../../core/widgets/app_popup.dart';
+import '../../core/widgets/power_action_button.dart';
+import '../../core/widgets/pulse_glow_button.dart';
 import '../../core/widgets/debug_error_sheet.dart';
 import '../../data/models/smart_charge_history.dart';
 import '../../data/models/smart_charging_session.dart';
@@ -73,7 +75,6 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
   Widget build(BuildContext context) {
     final state = ref.watch(smartChargingControllerProvider(args));
     final controller = ref.read(smartChargingControllerProvider(args).notifier);
-    final colors = Theme.of(context).colorScheme;
 
     ref.listen<SmartChargingUiState>(
       smartChargingControllerProvider(args),
@@ -94,29 +95,11 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
         bottomNavigationBar: state.hasActiveSession
             ? SafeArea(
                 minimum: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                child: SizedBox(
-                  height: 54,
-                  child: FilledButton.icon(
-                    key: const ValueKey('stop-smart-session-button'),
-                    onPressed: state.phase == SmartChargingViewPhase.stopping
-                        ? null
-                        : () => _emergencyOff(controller),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: colors.error,
-                      foregroundColor: colors.onError,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    icon: const Icon(Icons.power_settings_new_rounded),
-                    label: const Text(
-                      'NGẮT NGUỒN NGAY',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
+                child: PowerActionButton(
+                  key: const ValueKey('stop-smart-session-button'),
+                  stopping: state.phase == SmartChargingViewPhase.stopping,
+                  onPressed: () => _emergencyOff(controller),
+                  label: 'NGẮT NGUỒN NGAY',
                 ),
               )
             : null,
@@ -183,9 +166,15 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                                       key: const ValueKey('timed-mode'),
                                       readyForControl:
                                           (state.capabilities.readyForControl ||
-                                              state.capabilities.supportsDeviceTimer ||
-                                              state.capabilities.cloudAvailable ||
-                                              state.capabilities.lanAvailable) &&
+                                              state
+                                                  .capabilities
+                                                  .supportsDeviceTimer ||
+                                              state
+                                                  .capabilities
+                                                  .cloudAvailable ||
+                                              state
+                                                  .capabilities
+                                                  .lanAvailable) &&
                                           state.phase !=
                                               SmartChargingViewPhase.starting,
                                       onStart: (duration) => _startTimedCharge(
@@ -413,7 +402,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                 : canStart
                 ? 'SẠC THEO AI'
                 : (state.preview!.aiChargeEligible ||
-                        state.preview!.isPhysicsFallback)
+                      state.preview!.isPhysicsFallback)
                 ? 'Hoàn tất cài đặt ổ sạc'
                 : 'Chưa khả dụng',
             style: TextStyle(
@@ -930,7 +919,11 @@ class _SmartChargeHeaderState extends State<_SmartChargeHeader>
       if (reducedMotion) return child;
       final curved = CurvedAnimation(
         parent: _slideInController,
-        curve: Interval(delay, (delay + 0.6).clamp(0, 1), curve: Curves.easeOutCubic),
+        curve: Interval(
+          delay,
+          (delay + 0.6).clamp(0, 1),
+          curve: Curves.easeOutCubic,
+        ),
       );
       return FadeTransition(
         opacity: curved,
@@ -1044,8 +1037,10 @@ class _SmartChargeHeaderState extends State<_SmartChargeHeader>
                   ? _buildDotStatic(dotColor)
                   : AnimatedBuilder(
                       animation: _dotPulseController,
-                      builder: (context, _) =>
-                          _buildDotAnimated(dotColor, _dotPulseController.value),
+                      builder: (context, _) => _buildDotAnimated(
+                        dotColor,
+                        _dotPulseController.value,
+                      ),
                     ),
               const SizedBox(width: 8),
               Expanded(
@@ -1109,7 +1104,9 @@ class _SmartChargeHeaderState extends State<_SmartChargeHeader>
         ),
         boxShadow: [
           BoxShadow(
-            color: CockpitColors.emerald.withValues(alpha: .08 + glowValue * .18),
+            color: CockpitColors.emerald.withValues(
+              alpha: .08 + glowValue * .18,
+            ),
             blurRadius: 12 + glowValue * 8,
             spreadRadius: glowValue * 3,
           ),
@@ -1130,9 +1127,7 @@ class _SmartChargeHeaderState extends State<_SmartChargeHeader>
       decoration: BoxDecoration(
         color: CockpitColors.emerald.withValues(alpha: .12),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: CockpitColors.emerald.withValues(alpha: .30),
-        ),
+        border: Border.all(color: CockpitColors.emerald.withValues(alpha: .30)),
       ),
       child: Text(
         'AI POWERED',
@@ -2041,32 +2036,31 @@ class _ManualControlsSection extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: OutlinedButton.icon(
+                child: PulseGlowButton(
                   key: const ValueKey('manual-on-button'),
-                  onPressed: state.capabilities.readyForControl ? onOn : null,
-                  icon: const Icon(Icons.power_rounded),
-                  label: const Text('BẬT SẠC'),
-                  style: OutlinedButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
+                  isActive: state.isCharging,
+                  onTap: state.capabilities.readyForControl ? onOn : () {},
+                  icon: Icons.power_rounded,
+                  label: 'BẬT SẠC',
+                  activeLabel: 'ĐANG SẠC',
+                  activeColor: CockpitColors.emeraldStrong,
+                  height: 46,
+                  borderRadius: CockpitRadius.medium,
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 12),
               Expanded(
-                child: OutlinedButton.icon(
+                child: PulseGlowButton(
                   key: const ValueKey('smart-charging-manual-off'),
-                  onPressed: onOff,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: error,
-                    side: BorderSide(color: error),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  icon: const Icon(Icons.power_settings_new_rounded),
-                  label: const Text('TẮT SẠC'),
+                  isActive: false,
+                  onTap: onOff,
+                  icon: Icons.power_settings_new_rounded,
+                  label: 'TẮT SẠC',
+                  activeColor: error,
+                  inactiveColor: CockpitColors.surfaceSoft,
+                  height: 46,
+                  borderRadius: CockpitRadius.medium,
+                  showGlow: false,
                 ),
               ),
             ],

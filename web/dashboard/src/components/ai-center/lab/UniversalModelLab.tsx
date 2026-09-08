@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Route, Loader2, Settings, Upload, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 // @ts-ignore
@@ -26,6 +26,8 @@ export default function UniversalModelLab({ meta, onModelChanged }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const generation = useRef(0);
+  useEffect(() => () => { generation.current++; }, []);
 
   // Initialize inputs from sampleInput or defaults when meta.key changes
   useEffect(() => {
@@ -49,7 +51,14 @@ export default function UniversalModelLab({ meta, onModelChanged }: Props) {
     setInputState(initial);
     setResult(null);
     setError(null);
-  }, [meta.key, meta.sampleInput, meta.inputFields, meta.visibleInputFields, meta.inputSchema]);
+  }, [meta.key]);
+
+  useEffect(() => {
+    generation.current++;
+    setResult(null);
+    setError(null);
+    setLoading(false);
+  }, [meta.key, meta.runtimeStatus?.activeVersion, meta.runtimeStatus?.lastLoadAt]);
 
   const availability = getModelAvailability(meta);
   const canPredict = isModelPredictable(meta);
@@ -69,6 +78,9 @@ export default function UniversalModelLab({ meta, onModelChanged }: Props) {
   }, [meta.key, onModelChanged]);
 
   const handleInputChange = (field: string, value: any) => {
+    generation.current++;
+    setResult(null);
+    setError(null);
     setInputState((prev) => ({
       ...prev,
       [field]: value,
@@ -76,17 +88,21 @@ export default function UniversalModelLab({ meta, onModelChanged }: Props) {
   };
 
   const runPrediction = async () => {
-    if (!canPredict) return;
+    if (!canPredict || loading) return;
+    const id = ++generation.current;
     setLoading(true);
     setError(null);
+    setResult(null);
     try {
       const payload = buildPredictionPayload(meta, inputState);
       const res = await aiQuickPredict(meta.key, payload);
+      if (id !== generation.current) return;
       setResult(res?.data ?? res);
     } catch (e: any) {
+      if (id !== generation.current) return;
       setError(e?.message || 'Không thể chạy dự đoán. Model không phản hồi hoặc dữ liệu chưa hợp lệ.');
     } finally {
-      setLoading(false);
+      if (id === generation.current) setLoading(false);
     }
   };
 
@@ -158,12 +174,13 @@ export default function UniversalModelLab({ meta, onModelChanged }: Props) {
             </div>
 
             {error && (
-              <div className="mt-3 flex items-center justify-between rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">
+              <div role="alert" className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">
                 <span>{error}</span>
                 <Button
                   size="sm"
                   variant="ghost"
                   onClick={runPrediction}
+                  disabled={!canPredict || loading}
                   className="h-6 text-xs text-red-200 hover:text-white"
                 >
                   <RefreshCw className="w-3 h-3 mr-1" /> Thử lại

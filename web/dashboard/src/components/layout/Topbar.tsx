@@ -1,63 +1,35 @@
-import { Bell, Search, ChevronDown } from 'lucide-react';
-import { Input } from '@/components/ui/input';
+import { ChevronDown, UserRound } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
-export function Topbar() {
-  return (
-    <header className="h-16 border-b border-border bg-background sticky top-0 z-40 px-8 flex items-center justify-between">
-      <div className="flex items-center gap-4 flex-1 max-w-md">
-        <div className="relative w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input 
-            placeholder="Tìm kiếm người dùng, xe, mã lỗi..." 
-            className="pl-10 bg-surface border-border focus-visible:ring-primary text-sm"
-          />
-        </div>
-      </div>
+const titles: Record<string, string> = { '/': 'Tổng quan', '/users': 'Người dùng', '/ai': 'AI Center', '/audit': 'Kiểm toán', '/settings': 'Hệ thống' };
 
-      <div className="flex items-center gap-6">
-        <div className="relative">
-          <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-primary hover:bg-surface-light">
-            <Bell className="w-5 h-5" />
-            <span className="absolute top-2 right-2 w-2 h-2 bg-primary rounded-full border-2 border-background shadow-[0_0_8px_rgba(0,209,255,0.5)]" />
-          </Button>
-        </div>
-
-        <div className="h-8 w-[1px] bg-border" />
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="flex items-center gap-3 px-2 hover:bg-surface-light">
-              <Avatar className="w-8 h-8 border border-border">
-                <AvatarImage src="https://api.dicebear.com/7.x/avataaars/svg?seed=Admin" />
-                <AvatarFallback>AD</AvatarFallback>
-              </Avatar>
-              <div className="text-left hidden md:block">
-                <p className="text-sm font-semibold text-foreground leading-none">Admin Khanh</p>
-                <p className="text-[10px] text-muted-foreground mt-1 uppercase tracking-wider">Quản trị viên</p>
-              </div>
-              <ChevronDown className="w-4 h-4 text-muted-foreground" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56 bg-surface border-border text-foreground">
-            <DropdownMenuLabel className="text-muted-foreground text-[10px] uppercase tracking-widest">Tài khoản của tôi</DropdownMenuLabel>
-            <DropdownMenuSeparator className="bg-border" />
-            <DropdownMenuItem className="hover:bg-surface-light cursor-pointer">Hồ sơ cá nhân</DropdownMenuItem>
-            <DropdownMenuItem className="hover:bg-surface-light cursor-pointer">Cài đặt bảo mật</DropdownMenuItem>
-            <DropdownMenuSeparator className="bg-border" />
-            <DropdownMenuItem className="text-destructive hover:bg-destructive/10 cursor-pointer font-medium">Đăng xuất</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    </header>
-  );
+export function Topbar({ userName, userEmail, onSignOut }: {
+  userName?: string | null; userEmail?: string | null; onSignOut: () => void;
+}) {
+  const { pathname } = useLocation();
+  return <header className="dashboard-topbar">
+    <div className="min-w-0">
+      <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">VinFast BMS</p>
+      <p className="truncate text-sm font-semibold">{titles[pathname] ?? 'Dashboard'}</p>
+    </div>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" className="max-w-[60%] gap-2" aria-label="Mở menu tài khoản">
+          <UserRound className="shrink-0 text-primary" aria-hidden="true" />
+          <span className="hidden truncate sm:block">{userName || userEmail || 'Tài khoản'}</span>
+          <ChevronDown aria-hidden="true" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="max-w-[calc(100vw-2rem)] w-64">
+        <DropdownMenuLabel className="break-words">{userEmail || 'Tài khoản của tôi'}</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild><Link to="/settings">Cài đặt hệ thống</Link></DropdownMenuItem>
+        <DropdownMenuItem asChild><Link to="/audit">Nhật ký kiểm toán</Link></DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem className="text-destructive" onSelect={onSignOut}>Đăng xuất</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  </header>;
 }

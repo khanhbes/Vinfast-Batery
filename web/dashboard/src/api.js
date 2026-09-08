@@ -199,6 +199,7 @@ export const aiValidateVersion = (typeKey, version) =>
   });
 
 /// Test nhanh một version đã upload (chưa deploy) — PLAN1
+/** @param {string} typeKey @param {string} version @param {Record<string, unknown> | null} testInput */
 export const aiTestVersion = (typeKey, version, testInput = null) =>
   apiFetch(`/api/admin/ai/models/${encodeURIComponent(typeKey)}/test-version`, {
     method: 'POST',

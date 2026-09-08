@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../core/services/settings_service.dart';
-import '../../core/theme/app_colors.dart';
 
 class AppearanceSettingsScreen extends StatefulWidget {
   const AppearanceSettingsScreen({super.key});
@@ -37,35 +36,38 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: AppColors.background,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: AppColors.textPrimary),
+          icon: Icon(
+            Icons.arrow_back_ios,
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
+        title: Text(
           'Giao diện & Ngôn ngữ',
           style: TextStyle(
-            color: AppColors.textPrimary,
+            color: Theme.of(context).colorScheme.onSurface,
             fontSize: 18,
             fontWeight: FontWeight.w700,
           ),
         ),
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(16),
         children: [
           // Theme Section
           _buildSectionTitle('Giao diện'),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           _buildThemeCard(),
-          const SizedBox(height: 24),
+          SizedBox(height: 24),
 
           // Language Section
           _buildSectionTitle('Ngôn ngữ'),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           _buildLanguageCard(),
         ],
       ),
@@ -76,7 +78,7 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
     return Text(
       title,
       style: TextStyle(
-        color: AppColors.textSecondary,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
         fontSize: 13,
         fontWeight: FontWeight.w600,
         letterSpacing: 0.5,
@@ -87,19 +89,34 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
   Widget _buildThemeCard() {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.card,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: Column(
         children: [
+          _buildThemeOption(
+            icon: Icons.brightness_auto_rounded,
+            title: 'Theo hệ thống',
+            subtitle: 'Tự đổi sáng và tối theo thiết bị',
+            value: AppThemeMode.system,
+          ),
+          _buildThemeOption(
+            icon: Icons.light_mode_rounded,
+            title: 'Sáng',
+            subtitle: 'Nền sáng, chữ rõ và điểm nhấn xanh',
+            value: AppThemeMode.light,
+          ),
           _buildThemeOption(
             icon: Icons.dark_mode,
             title: 'Dark Cockpit',
             subtitle: 'Nền gần đen, cân bằng độ tương phản',
             value: AppThemeMode.dark,
           ),
-          Divider(height: 1, color: AppColors.border),
+          Divider(
+            height: 1,
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
           _buildThemeOption(
             icon: Icons.brightness_2_rounded,
             title: 'AMOLED',
@@ -125,40 +142,48 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
         height: 40,
         decoration: BoxDecoration(
           color: isSelected
-              ? AppColors.primary.withAlpha(30)
-              : AppColors.surfaceVariant,
+              ? Theme.of(context).colorScheme.primary.withAlpha(30)
+              : Theme.of(context).colorScheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(10),
         ),
         child: Icon(
           icon,
-          color: isSelected ? AppColors.primary : AppColors.textSecondary,
+          color: isSelected
+              ? Theme.of(context).colorScheme.primary
+              : Theme.of(context).colorScheme.onSurfaceVariant,
           size: 20,
         ),
       ),
       title: Text(
         title,
         style: TextStyle(
-          color: AppColors.textPrimary,
+          color: Theme.of(context).colorScheme.onSurface,
           fontSize: 15,
           fontWeight: FontWeight.w600,
         ),
       ),
       subtitle: Text(
         subtitle,
-        style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+          fontSize: 12,
+        ),
       ),
       trailing: isSelected
-          ? Icon(Icons.check_circle, color: AppColors.primary)
-          : const SizedBox(width: 24),
+          ? Icon(
+              Icons.check_circle,
+              color: Theme.of(context).colorScheme.primary,
+            )
+          : SizedBox(width: 24),
     );
   }
 
   Widget _buildLanguageCard() {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.card,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: Column(
         children: [
@@ -168,14 +193,20 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
             subtitle: 'System language',
             value: AppLanguage.system,
           ),
-          Divider(height: 1, color: AppColors.border),
+          Divider(
+            height: 1,
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
           _buildLanguageOption(
             flag: '🇻🇳',
             title: 'Tiếng Việt',
             subtitle: 'Vietnamese',
             value: AppLanguage.vietnamese,
           ),
-          Divider(height: 1, color: AppColors.border),
+          Divider(
+            height: 1,
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
           _buildLanguageOption(
             flag: '🇬🇧',
             title: 'English',
@@ -201,27 +232,33 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
         height: 40,
         decoration: BoxDecoration(
           color: isSelected
-              ? AppColors.primary.withAlpha(30)
-              : AppColors.surfaceVariant,
+              ? Theme.of(context).colorScheme.primary.withAlpha(30)
+              : Theme.of(context).colorScheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(10),
         ),
-        child: Center(child: Text(flag, style: const TextStyle(fontSize: 20))),
+        child: Center(child: Text(flag, style: TextStyle(fontSize: 20))),
       ),
       title: Text(
         title,
         style: TextStyle(
-          color: AppColors.textPrimary,
+          color: Theme.of(context).colorScheme.onSurface,
           fontSize: 15,
           fontWeight: FontWeight.w600,
         ),
       ),
       subtitle: Text(
         subtitle,
-        style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+          fontSize: 12,
+        ),
       ),
       trailing: isSelected
-          ? Icon(Icons.check_circle, color: AppColors.primary)
-          : const SizedBox(width: 24),
+          ? Icon(
+              Icons.check_circle,
+              color: Theme.of(context).colorScheme.primary,
+            )
+          : SizedBox(width: 24),
     );
   }
 
@@ -229,7 +266,7 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
     await _settings.setThemeMode(mode);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('Đã áp dụng giao diện mới'),
           duration: Duration(milliseconds: 1200),
           behavior: SnackBarBehavior.floating,
@@ -242,7 +279,7 @@ class _AppearanceSettingsScreenState extends State<AppearanceSettingsScreen> {
     await _settings.setLanguage(language);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('Đã áp dụng ngôn ngữ mới'),
           duration: Duration(milliseconds: 1200),
           behavior: SnackBarBehavior.floating,

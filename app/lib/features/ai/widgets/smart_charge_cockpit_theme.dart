@@ -17,12 +17,22 @@ abstract final class SmartChargeCockpitColors {
 }
 
 class SmartChargeCockpitTheme extends StatelessWidget {
-  const SmartChargeCockpitTheme({super.key, required this.child});
+  const SmartChargeCockpitTheme({
+    super.key,
+    required this.child,
+    this.adaptive = false,
+  });
   final Widget child;
+  final bool adaptive;
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(color: SmartChargeCockpitColors.background, child: child);
+    return ColoredBox(
+      color: adaptive
+          ? Theme.of(context).scaffoldBackgroundColor
+          : SmartChargeCockpitColors.background,
+      child: child,
+    );
   }
 }
 
@@ -32,12 +42,22 @@ class CockpitPanel extends StatelessWidget {
     required this.child,
     this.padding = const EdgeInsets.all(18),
     this.highlight = false,
+    this.adaptive = false,
   });
   final Widget child;
   final EdgeInsets padding;
   final bool highlight;
+  final bool adaptive;
 
   @override
-  Widget build(BuildContext context) =>
-      CockpitSurface(padding: padding, highlight: highlight, child: child);
+  Widget build(BuildContext context) => adaptive
+      ? Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: child,
+        )
+      : CockpitSurface(padding: padding, highlight: highlight, child: child);
 }

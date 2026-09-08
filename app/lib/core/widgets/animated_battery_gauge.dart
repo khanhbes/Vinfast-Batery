@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/app_motion.dart';
 
 /// Widget vẽ gauge pin với animation xoay tròn
 class AnimatedBatteryGauge extends StatefulWidget {
@@ -14,7 +15,7 @@ class AnimatedBatteryGauge extends StatefulWidget {
     super.key,
     required this.batteryPercent,
     this.size = 200,
-    this.animationDuration = const Duration(milliseconds: 1500),
+    this.animationDuration = AppMotion.ambient,
   });
 
   @override
@@ -26,6 +27,14 @@ class _AnimatedBatteryGaugeState extends State<AnimatedBatteryGauge>
   late AnimationController _controller;
   late Animation<double> _animation;
 
+  double get _target => widget.batteryPercent.clamp(0, 100) / 100.0;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!AppMotion.enabled(context)) _controller.value = 1;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -35,7 +44,7 @@ class _AnimatedBatteryGaugeState extends State<AnimatedBatteryGauge>
     );
     _animation = Tween<double>(
       begin: 0,
-      end: widget.batteryPercent / 100.0,
+      end: _target,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
     _controller.forward();
   }
@@ -43,17 +52,16 @@ class _AnimatedBatteryGaugeState extends State<AnimatedBatteryGauge>
   @override
   void didUpdateWidget(covariant AnimatedBatteryGauge oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _controller.duration = widget.animationDuration;
     if (oldWidget.batteryPercent != widget.batteryPercent) {
-      _animation =
-          Tween<double>(
-            begin: _animation.value,
-            end: widget.batteryPercent / 100.0,
-          ).animate(
-            CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
-          );
-      _controller
-        ..reset()
-        ..forward();
+      _animation = Tween<double>(begin: _animation.value, end: _target).animate(
+        CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
+      );
+      if (AppMotion.enabled(context)) {
+        _controller.forward(from: 0);
+      } else {
+        _controller.value = 1;
+      }
     }
   }
 
@@ -124,7 +132,7 @@ class _AnimatedBatteryGaugeState extends State<AnimatedBatteryGauge>
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${(value * 100).toInt()}%',
+                        '${widget.batteryPercent.clamp(0, 100)}%',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: widget.size * 0.18,

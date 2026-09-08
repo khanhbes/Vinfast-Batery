@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/app_providers.dart';
 import '../services/session_service.dart';
-import '../theme/cockpit_design_system.dart';
+import '../theme/app_ui_colors.dart';
 import 'vehicle_picker_sheet.dart';
 
 /// Compact, global vehicle selector used by the V4 shell.
@@ -50,63 +50,22 @@ class VehicleSwitcher extends ConsumerWidget {
             unawaited(SessionService().setSelectedVehicleId(current.vehicleId));
           });
         }
-        return GestureDetector(
-          onTap: () => VehiclePickerSheet.show(context, ref),
-          child: Semantics(
-            button: true,
-            label: 'Xe đang chọn: ${current.vehicleName}. Nhấn để đổi xe',
-            child: Container(
-              constraints: const BoxConstraints(minHeight: 40),
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: .05),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: CockpitColors.border),
+        return Tooltip(
+          message: 'Đổi xe: ${current.vehicleName}',
+          child: SizedBox(
+            width: 160,
+            child: TextButton.icon(
+              onPressed: () => VehiclePickerSheet.show(context, ref),
+              style: TextButton.styleFrom(
+                minimumSize: const Size(48, 48),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                backgroundColor: AppUiColors.of(context).elevated,
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Lightning icon with subtle glow
-                  Container(
-                    width: 26,
-                    height: 26,
-                    decoration: BoxDecoration(
-                      color: CockpitColors.emerald.withValues(alpha: .14),
-                      borderRadius: BorderRadius.circular(9),
-                      border: Border.all(
-                        color: CockpitColors.emerald.withValues(alpha: .25),
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: CockpitColors.emerald.withValues(alpha: .12),
-                          blurRadius: 6,
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.bolt_rounded,
-                      size: 15,
-                      color: CockpitColors.emerald,
-                    ),
-                  ),
-                  const SizedBox(width: 7),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 120),
-                    child: Text(
-                      current.vehicleName,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  const Icon(
-                    Icons.keyboard_arrow_down_rounded,
-                    size: 18,
-                    color: CockpitColors.muted,
-                  ),
-                ],
+              icon: const Icon(Icons.directions_bike_rounded, size: 20),
+              label: Text(
+                current.vehicleName.isEmpty ? 'Chọn xe' : current.vehicleName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ),

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
+import '../../core/theme/app_motion.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/services/auth_service.dart';
@@ -126,39 +126,33 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         ),
                       ),
                     ),
-                  ).animate().fadeIn(duration: 300.ms),
+                  ).appFadeSlideIn(index: 3),
                   const SizedBox(height: 24),
 
                   // Logo
                   Container(
-                        width: 72,
-                        height: 72,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              AppColors.primary.withAlpha(40),
-                              AppColors.primaryContainer.withAlpha(60),
-                            ],
-                          ),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: AppColors.primary.withAlpha(51),
-                          ),
-                        ),
-                        child: const Icon(
-                          Icons.person_add_rounded,
-                          color: AppColors.primary,
-                          size: 34,
-                        ),
-                      )
-                      .animate()
-                      .fadeIn(duration: 400.ms)
-                      .scale(
-                        begin: const Offset(0.8, 0.8),
-                        curve: Curves.easeOutBack,
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          AppColors.primary.withAlpha(40),
+                          AppColors.primaryContainer.withAlpha(60),
+                        ],
                       ),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: AppColors.primary.withAlpha(51),
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.person_add_rounded,
+                      color: AppColors.primary,
+                      size: 34,
+                    ),
+                  ).appScalePop(),
                   const SizedBox(height: 16),
 
                   const Text(
@@ -169,7 +163,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       fontWeight: FontWeight.w800,
                       letterSpacing: -0.5,
                     ),
-                  ).animate().fadeIn(delay: 100.ms),
+                  ).appFadeSlideIn(index: 1),
                   const SizedBox(height: 6),
                   Text(
                     'Nhập thông tin để đăng ký tài khoản mới',
@@ -177,7 +171,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       color: AppColors.textSecondary,
                       fontSize: 13,
                     ),
-                  ).animate().fadeIn(delay: 150.ms),
+                  ).appFadeSlideIn(index: 1),
                   const SizedBox(height: 28),
 
                   // Error
@@ -211,10 +205,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ),
                         ],
                       ),
-                    ).animate().fadeIn().shake(
-                      hz: 3,
-                      offset: const Offset(4, 0),
-                    ),
+                    ).appFadeSlideIn(slide: 0),
                     const SizedBox(height: 16),
                   ],
 
@@ -236,7 +227,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       if (v.trim().length < 2) return 'Họ tên quá ngắn';
                       return null;
                     },
-                  ).animate().fadeIn(delay: 200.ms).slideX(begin: -0.05),
+                  ).appFadeSlideIn(index: 2),
                   const SizedBox(height: 14),
 
                   // Email
@@ -258,7 +249,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         return 'Email không hợp lệ';
                       return null;
                     },
-                  ).animate().fadeIn(delay: 250.ms).slideX(begin: -0.05),
+                  ).appFadeSlideIn(index: 2),
                   const SizedBox(height: 14),
 
                   // Phone Number
@@ -280,7 +271,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         return 'Số điện thoại không hợp lệ';
                       return null;
                     },
-                  ).animate().fadeIn(delay: 300.ms).slideX(begin: -0.05),
+                  ).appFadeSlideIn(index: 3),
                   const SizedBox(height: 14),
 
                   // Password
@@ -312,7 +303,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       if (v.length < 6) return 'Mật khẩu tối thiểu 6 ký tự';
                       return null;
                     },
-                  ).animate().fadeIn(delay: 350.ms).slideX(begin: -0.05),
+                  ).appFadeSlideIn(index: 3),
                   const SizedBox(height: 14),
 
                   // Confirm Password
@@ -344,13 +335,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       if (v != _passCtrl.text) return 'Mật khẩu không khớp';
                       return null;
                     },
-                  ).animate().fadeIn(delay: 400.ms).slideX(begin: -0.05),
+                  ).appFadeSlideIn(index: 4),
                   const SizedBox(height: 28),
 
                   // Register Button
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      minWidth: double.infinity,
+                      minHeight: 52,
+                    ),
                     child: ElevatedButton(
                       onPressed: _loading ? null : _register,
                       style: ElevatedButton.styleFrom(
@@ -380,7 +373,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               ),
                             ),
                     ),
-                  ).animate().fadeIn(delay: 450.ms).slideY(begin: 0.1),
+                  ).appFadeSlideIn(index: 4),
                   const SizedBox(height: 16),
 
                   // Back to login
@@ -404,7 +397,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         ],
                       ),
                     ),
-                  ).animate().fadeIn(delay: 500.ms),
+                  ).appFadeSlideIn(index: 5),
                   const SizedBox(height: 24),
                 ],
               ),

@@ -1,0 +1,64 @@
+- generic [ref=f1e3]:
+  - link "Đến nội dung chính" [ref=f1e4] [cursor=pointer]:
+    - /url: "#main-content"
+  - complementary [ref=f1e5]:
+    - generic [ref=f1e6]: VinFast BMS
+    - navigation "Điều hướng chính" [ref=f1e12]:
+      - link "Tổng quan" [ref=f1e13] [cursor=pointer]:
+        - /url: /
+      - link "Người dùng" [ref=f1e20] [cursor=pointer]:
+        - /url: /users
+      - link "AI Center" [ref=f1e27] [cursor=pointer]:
+        - /url: /ai
+      - link "Kiểm toán" [ref=f1e41] [cursor=pointer]:
+        - /url: /audit
+      - link "Hệ thống" [ref=f1e47] [cursor=pointer]:
+        - /url: /settings
+    - generic [ref=f1e52]:
+      - button "Đăng xuất" [ref=f1e53] [cursor=pointer]
+      - button "Thu gọn điều hướng" [expanded] [ref=f1e54] [cursor=pointer]: Thu gọn
+  - generic [ref=f1e55]:
+    - banner [ref=f1e56]:
+      - generic [ref=f1e57]:
+        - paragraph [ref=f1e58]: VinFast BMS
+        - paragraph [ref=f1e59]: Dashboard
+      - button "Mở menu tài khoản" [ref=f1e60] [cursor=pointer]:
+        - generic [ref=f1e61]: Kiểm thử giao diện
+    - main [ref=f1e62]:
+      - generic [ref=f1e63]:
+        - status [ref=f1e64]: QA fixture — dữ liệu giả lập, không điều khiển thiết bị.
+        - generic [ref=f1e65]:
+          - generic [ref=f1e66]:
+            - generic [ref=f1e67]:
+              - heading "AI Center" [level=1] [ref=f1e68]
+              - paragraph [ref=f1e69]: Quản lý và giám sát các mô hình AI dự đoán pin
+            - link "Cài đặt" [ref=f1e71] [cursor=pointer]:
+              - /url: /settings
+          - generic [ref=f1e72]:
+            - generic [ref=f1e73]:
+              - generic [ref=f1e74]:
+                - generic [ref=f1e75]:
+                  - generic [ref=f1e76]: AI Model Hub · Roadmap
+                  - heading "Trung tâm quản lý mô hình AI" [level=2] [ref=f1e80]
+                  - paragraph [ref=f1e81]: Các mô hình AI theo roadmap 3 giai đoạn. Upload, hot-swap và kiểm thử nhanh trực tiếp từ dashboard.
+                - button "Làm mới" [disabled]
+              - generic [ref=f1e82]:
+                - generic [ref=f1e83]:
+                  - generic [ref=f1e84]: Tổng mô hình
+                  - generic [ref=f1e89]: "0"
+                  - generic [ref=f1e90]: 0 đang lên kế hoạch
+                - generic [ref=f1e91]:
+                  - generic [ref=f1e92]: Đã triển khai
+                  - generic [ref=f1e96]: 0/0
+                - generic [ref=f1e97]:
+                  - generic [ref=f1e98]: Model đã nạp
+                  - generic [ref=f1e104]: 0/0
+                  - generic [ref=f1e105]: Loaded vào bộ nhớ
+                - generic [ref=f1e106]:
+                  - generic [ref=f1e107]: Tổng versions
+                  - generic [ref=f1e112]: "0"
+              - generic [ref=f1e113]:
+                - generic [ref=f1e114]: Đã triển khai
+                - generic [ref=f1e116]: Đang làm
+                - generic [ref=f1e118]: Lên kế hoạch
+            - generic [ref=f1e120]: Đang tải danh sách mô hình...

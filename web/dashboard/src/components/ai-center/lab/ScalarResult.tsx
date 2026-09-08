@@ -66,8 +66,8 @@ export default function ScalarResult({ meta, result, accent, inputState }: Props
       <div className="mt-8 text-sm text-slate-400">
         {meta.outputDescription || 'Kết quả dự đoán'}
       </div>
-      <div className="mt-1 flex items-end gap-2">
-        <span className="text-5xl lg:text-6xl font-semibold tracking-[-.06em] text-white">
+      <div className="mt-1 flex flex-wrap items-end gap-2">
+        <span className="break-words text-4xl lg:text-5xl font-semibold tracking-[-.04em] text-white">
           {mainDisplay}
         </span>
         {unitDisplay && (
@@ -85,7 +85,7 @@ export default function ScalarResult({ meta, result, accent, inputState }: Props
             />
             <Line
               label="Độ tin cậy"
-              value={result?.confidence ? `${Math.round(result.confidence * 100)}%` : '—'}
+              value={result?.confidence != null ? `${Math.round(result.confidence * 100)}%` : '—'}
             />
             <Line
               label="Hiệu suất đã chỉnh"

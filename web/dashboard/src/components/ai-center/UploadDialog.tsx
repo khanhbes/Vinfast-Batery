@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useId } from 'react';
 import { Upload, X, Loader2, AlertTriangle, CheckCircle2, AlertCircle, PlayCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { ModalSurface } from '@/components/ui/modal-surface';
 // @ts-ignore
 import { aiUploadModel } from '@/api';
 
@@ -30,6 +31,7 @@ interface Props {
 }
 
 export default function UploadDialog({ typeKey, typeLabel, onClose, onUploaded }: Props) {
+  const fieldId = useId();
   const [file, setFile] = useState<File | null>(null);
   const [version, setVersion] = useState('');
   const [note, setNote] = useState('');
@@ -46,6 +48,7 @@ export default function UploadDialog({ typeKey, typeLabel, onClose, onUploaded }
   } | null>(null);
 
   const submit = async () => {
+    if (busy) return;
     if (!file || !version.trim()) {
       setError('Chọn file model và nhập version');
       return;
@@ -65,7 +68,8 @@ export default function UploadDialog({ typeKey, typeLabel, onClose, onUploaded }
   };
 
   const handleClose = (switchToTest = false) => {
-    onUploaded(switchToTest);
+    if (busy) return;
+    if (result) onUploaded(switchToTest);
     onClose();
   };
 
@@ -73,8 +77,7 @@ export default function UploadDialog({ typeKey, typeLabel, onClose, onUploaded }
   if (result) {
     const hasWarnings = result.validation?.warnings && result.validation.warnings.length > 0;
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
-        onClick={() => handleClose(false)}>
+      <ModalSurface label="Kết quả upload model" onClose={() => handleClose(false)}>
         <div className="bg-background rounded-xl shadow-2xl w-full max-w-md border"
           onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center justify-between p-4 border-b">
@@ -86,7 +89,7 @@ export default function UploadDialog({ typeKey, typeLabel, onClose, onUploaded }
               )}
               {result.validation?.ok ? 'Upload thành công' : 'Upload hoàn tất (có cảnh báo)'}
             </h3>
-            <button onClick={() => handleClose(false)} className="text-muted-foreground hover:text-foreground">
+            <button aria-label="Đóng kết quả upload" onClick={() => handleClose(false)} className="min-h-11 min-w-11 text-muted-foreground hover:text-foreground">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -186,13 +189,12 @@ export default function UploadDialog({ typeKey, typeLabel, onClose, onUploaded }
             )}
           </div>
         </div>
-      </div>
+      </ModalSurface>
     );
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
-      onClick={onClose}>
+    <ModalSurface label={`Upload model ${typeLabel}`} busy={busy} onClose={() => handleClose(false)}>
       <div
         className="bg-background rounded-xl shadow-2xl w-full max-w-md border"
         onClick={(e) => e.stopPropagation()}
@@ -204,15 +206,16 @@ export default function UploadDialog({ typeKey, typeLabel, onClose, onUploaded }
             </h3>
             <p className="text-xs text-muted-foreground">{typeLabel}</p>
           </div>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+          <button aria-label="Đóng upload" disabled={busy} onClick={() => handleClose(false)} className="min-h-11 min-w-11 text-muted-foreground hover:text-foreground">
             <X className="w-4 h-4" />
           </button>
         </div>
 
         <div className="p-4 space-y-3">
           <div>
-            <label className="text-xs font-medium block mb-1">File model (.pkl, .h5, .pt, .onnx, ...)</label>
+            <label htmlFor={`${fieldId}-file`} className="text-xs font-medium block mb-1">File model (.pkl, .h5, .pt, .onnx, ...)</label>
             <input
+              id={`${fieldId}-file`}
               type="file"
               accept=".pkl,.h5,.hdf5,.pt,.pth,.onnx,.joblib,.cbm,.bin,.pmml,.pb,.tflite,.safetensors"
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
@@ -226,8 +229,9 @@ export default function UploadDialog({ typeKey, typeLabel, onClose, onUploaded }
           </div>
 
           <div>
-            <label className="text-xs font-medium block mb-1">Version *</label>
+            <label htmlFor={`${fieldId}-version`} className="text-xs font-medium block mb-1">Version *</label>
             <input
+              id={`${fieldId}-version`}
               type="text"
               value={version}
               onChange={(e) => setVersion(e.target.value)}
@@ -237,8 +241,9 @@ export default function UploadDialog({ typeKey, typeLabel, onClose, onUploaded }
           </div>
 
           <div>
-            <label className="text-xs font-medium block mb-1">Ghi chú</label>
+            <label htmlFor={`${fieldId}-note`} className="text-xs font-medium block mb-1">Ghi chú</label>
             <textarea
+              id={`${fieldId}-note`}
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder="tùy chọn — mô tả thay đổi, dataset, metric..."
@@ -289,6 +294,6 @@ export default function UploadDialog({ typeKey, typeLabel, onClose, onUploaded }
           </Button>
         </div>
       </div>
-    </div>
+    </ModalSurface>
   );
 }

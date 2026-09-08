@@ -47,6 +47,12 @@ class _PremiumCardState extends State<PremiumCard> {
 
   bool get _interactive => widget.onTap != null || widget.onLongPress != null;
 
+  @override
+  void didUpdateWidget(covariant PremiumCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_interactive) _pressed = false;
+  }
+
   void _setPressed(bool v) {
     if (!_interactive) return;
     if (_pressed == v) return;
@@ -61,9 +67,13 @@ class _PremiumCardState extends State<PremiumCard> {
         (widget.selected ? AppColors.primary : AppColors.glassBorder);
 
     Widget card = AnimatedContainer(
-      duration: AppMotion.fast,
+      duration: AppMotion.durationFor(context, AppMotion.fast),
       curve: AppMotion.emphasized,
-      transform: Matrix4.identity()..scale(_pressed ? 0.985 : 1.0),
+      transform: Matrix4.diagonal3Values(
+        _pressed && AppMotion.enabled(context) ? 0.985 : 1,
+        _pressed && AppMotion.enabled(context) ? 0.985 : 1,
+        1,
+      ),
       transformAlignment: Alignment.center,
       padding: widget.padding,
       decoration: BoxDecoration(
@@ -78,14 +88,15 @@ class _PremiumCardState extends State<PremiumCard> {
 
     if (!_interactive) return card;
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTapDown: (_) => _setPressed(true),
-      onTapCancel: () => _setPressed(false),
-      onTapUp: (_) => _setPressed(false),
-      onTap: widget.onTap,
-      onLongPress: widget.onLongPress,
-      child: card,
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        customBorder: RoundedRectangleBorder(borderRadius: widget.borderRadius),
+        onHighlightChanged: _setPressed,
+        onTap: widget.onTap,
+        onLongPress: widget.onLongPress,
+        child: card,
+      ),
     );
   }
 }
