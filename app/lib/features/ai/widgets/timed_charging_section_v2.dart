@@ -23,13 +23,18 @@ class TimedChargingSectionV2 extends StatefulWidget {
 }
 
 class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
-    with SingleTickerProviderStateMixin {
-  int _selectedMinutes = 120; // default: 2 giờ (Khuyên dùng)
-  late AnimationController _pulseController;
+    with TickerProviderStateMixin {
+  late final AnimationController _pulseController;
+  late final AnimationController _rippleController;
+  late final Animation<double> _rippleScale;
+  late final Animation<double> _rippleOpacity;
+  int _selectedMinutes = 60;
+  bool _pressed = false;
+  bool _submitting = false;
 
   static const _presets = [
     // `-1` is a UI-only "start now" choice. It is deliberately translated
-    // to the six-hour device safety timer below; no relay ON is unbounded.
+    // to the seven-hour device safety timer below; no relay ON is unbounded.
     (minutes: -1, label: 'Ngay lập tức'),
     (minutes: 30, label: '30 phút'),
     (minutes: 60, label: '1 giờ'),
@@ -43,13 +48,78 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
     super.initState();
     _pulseController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2800),
-    )..repeat(reverse: true);
+      duration: const Duration(milliseconds: 2200),
+    );
+    _rippleController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 750),
+    );
+    _rippleScale = Tween<double>(begin: 0.9, end: 1.45).animate(
+      CurvedAnimation(parent: _rippleController, curve: Curves.easeOutCubic),
+    );
+    _rippleOpacity = Tween<double>(begin: 0.65, end: 0.0).animate(
+      CurvedAnimation(parent: _rippleController, curve: Curves.easeOutCubic),
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncPulse();
+  }
+
+  @override
+  void didUpdateWidget(covariant TimedChargingSectionV2 oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncPulse();
+  }
+
+  void _syncPulse() {
+    if (!MediaQuery.disableAnimationsOf(context) &&
+        widget.readyForControl &&
+        !_submitting) {
+      if (!_pulseController.isAnimating) _pulseController.repeat(reverse: true);
+    } else {
+      _pulseController.stop();
+    }
+  }
+
+  Future<void> _start() async {
+    if (_submitting || !widget.readyForControl) return;
+    _rippleController.forward(from: 0.0);
+    setState(() => _submitting = true);
+    _syncPulse();
+    try {
+      await widget.onStart(
+        _selectedMinutes == -1
+            ? const Duration(hours: 7)
+            : Duration(minutes: _selectedMinutes),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Không gửi được lệnh sạc. Kiểm tra kết nối và thử lại.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+          _pressed = false;
+        });
+        _syncPulse();
+      }
+    }
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
+    _rippleController.dispose();
     super.dispose();
   }
 
@@ -65,7 +135,7 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
   @override
   Widget build(BuildContext context) {
     final reducedMotion = MediaQuery.disableAnimationsOf(context);
-    final enabled = widget.readyForControl;
+    final enabled = widget.readyForControl && !_submitting;
 
     return Column(
       key: const ValueKey('timed-mode-v2'),
@@ -178,15 +248,15 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
 
         const SizedBox(height: 24),
 
-        // ── Big circular power button ──
+        // ── Big circular power button with pulse glow & ripple shockwave ──
         Center(
           child: SizedBox(
-            width: 152,
-            height: 152,
+            width: 168,
+            height: 168,
             child: Stack(
               alignment: Alignment.center,
               children: [
-                // Outer glow pulse
+                // Outer breathing glow halo
                 if (enabled && !reducedMotion)
                   AnimatedBuilder(
                     animation: _pulseController,
@@ -197,74 +267,150 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: CockpitColors.emerald.withValues(
-                              alpha: .06 + _pulseController.value * .12,
+                            color: CockpitColors.emeraldStrong.withValues(
+                              alpha: 0.15 + _pulseController.value * 0.25,
                             ),
-                            blurRadius: 28,
-                            spreadRadius: 4 + _pulseController.value * 8,
+                            blurRadius: 32,
+                            spreadRadius: 4 + _pulseController.value * 12,
+                          ),
+                          BoxShadow(
+                            color: CockpitColors.emerald.withValues(
+                              alpha: 0.10 + _pulseController.value * 0.15,
+                            ),
+                            blurRadius: 18,
+                            spreadRadius: 2 + _pulseController.value * 6,
                           ),
                         ],
                       ),
                     ),
                   ),
+
+                // Expanding shockwave ripple ring on tap
+                if (!reducedMotion)
+                  AnimatedBuilder(
+                    animation: _rippleController,
+                    builder: (context, _) {
+                      if (_rippleController.value == 0 ||
+                          _rippleController.isCompleted) {
+                        return const SizedBox.shrink();
+                      }
+                      return Transform.scale(
+                        scale: _rippleScale.value,
+                        child: Container(
+                          width: 130,
+                          height: 130,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: CockpitColors.emeraldStrong.withValues(
+                                alpha: _rippleOpacity.value,
+                              ),
+                              width: 3.0,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+
                 // Main button
                 Material(
                   color: Colors.transparent,
                   shape: const CircleBorder(),
                   child: InkWell(
                     key: const ValueKey('timed-charge-start-button'),
-                    onTap: enabled
-                        ? () {
-                            final duration = _selectedMinutes == -1
-                                ? const Duration(hours: 7)
-                                : Duration(minutes: _selectedMinutes);
-                            widget.onStart(duration);
-                          }
-                        : null,
+                    onTap: enabled ? _start : null,
+                    onHighlightChanged: (pressed) =>
+                        setState(() => _pressed = pressed),
                     customBorder: const CircleBorder(),
-                    child: AnimatedOpacity(
-                      duration: CockpitMotion.standard,
-                      opacity: enabled ? 1.0 : 0.35,
-                      child: Container(
-                        width: 120,
-                        height: 120,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: enabled
-                              ? const RadialGradient(
-                                  colors: [
-                                    Color(0xFF34D399), // emerald-400
-                                    CockpitColors.emeraldStrong,
-                                    Color(0xFF059669), // emerald-600
-                                  ],
-                                  stops: [0.0, 0.5, 1.0],
-                                )
-                              : null,
-                          color: enabled ? null : CockpitColors.elevated,
-                          border: Border.all(
-                            color: enabled
-                                ? CockpitColors.emerald.withValues(alpha: .4)
-                                : CockpitColors.border,
-                            width: 2,
-                          ),
-                          boxShadow: enabled
-                              ? [
-                                  BoxShadow(
-                                    color: CockpitColors.emerald.withValues(
-                                      alpha: .30,
+                    child: AnimatedScale(
+                      scale: _pressed && !reducedMotion ? 0.94 : 1.0,
+                      duration: reducedMotion
+                          ? Duration.zero
+                          : const Duration(milliseconds: 140),
+                      child: AnimatedOpacity(
+                        duration: reducedMotion
+                            ? Duration.zero
+                            : CockpitMotion.standard,
+                        opacity: enabled ? 1.0 : 0.35,
+                        child: Container(
+                          width: 124,
+                          height: 124,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: enabled
+                                ? const RadialGradient(
+                                    colors: [
+                                      Color(0xFF6EE7B7), // emerald-300 highlight
+                                      CockpitColors.emeraldStrong,
+                                      Color(0xFF047857), // emerald-700 depth
+                                    ],
+                                    stops: [0.0, 0.45, 1.0],
+                                  )
+                                : null,
+                            color: enabled ? null : CockpitColors.elevated,
+                            border: Border.all(
+                              color: enabled
+                                  ? const Color(0xFFA7F3D0).withValues(alpha: 0.6)
+                                  : CockpitColors.border,
+                              width: 2.5,
+                            ),
+                            boxShadow: enabled
+                                ? [
+                                    BoxShadow(
+                                      color: CockpitColors.emeraldStrong.withValues(
+                                        alpha: 0.38,
+                                      ),
+                                      blurRadius: 28,
+                                      spreadRadius: 3,
                                     ),
-                                    blurRadius: 24,
-                                    spreadRadius: 2,
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.4),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              // Subtle shimmer reflection curve on the top half
+                              if (enabled)
+                                Positioned(
+                                  top: 8,
+                                  child: Container(
+                                    width: 76,
+                                    height: 38,
+                                    decoration: BoxDecoration(
+                                      borderRadius: const BorderRadius.vertical(
+                                        top: Radius.circular(40),
+                                      ),
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        colors: [
+                                          Colors.white.withValues(alpha: 0.32),
+                                          Colors.white.withValues(alpha: 0.0),
+                                        ],
+                                      ),
+                                    ),
                                   ),
-                                ]
-                              : null,
-                        ),
-                        child: Icon(
-                          Icons.power_settings_new_rounded,
-                          size: 48,
-                          color: enabled
-                              ? const Color(0xFF0A0A0A)
-                              : CockpitColors.dim,
+                                ),
+                              Semantics(
+                                label: _submitting
+                                    ? 'Đang gửi lệnh sạc'
+                                    : _buttonLabel,
+                                child: Icon(
+                                  Icons.power_settings_new_rounded,
+                                  size: 50,
+                                  color: enabled
+                                      ? const Color(0xFF022C22) // dark emerald text
+                                      : CockpitColors.dim,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -285,7 +431,7 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
             const SizedBox(width: 6),
             Flexible(
               child: Text(
-                _buttonLabel,
+                _submitting ? 'Đang gửi lệnh sạc…' : _buttonLabel,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,

@@ -22,7 +22,7 @@ class EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -60,8 +60,8 @@ class EmptyState extends StatelessWidget {
             ],
             if (actionLabel != null && onAction != null) ...[
               const SizedBox(height: 20),
-              SizedBox(
-                height: 44,
+              ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
                 child: OutlinedButton.icon(
                   onPressed: onAction,
                   icon: const Icon(Icons.add_rounded, size: 18),

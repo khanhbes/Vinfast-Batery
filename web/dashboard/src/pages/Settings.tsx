@@ -1,9 +1,60 @@
 import { useEffect, useState } from 'react';
-import { Settings as SettingsIcon, AlertTriangle, Wrench, Database, Shield, HelpCircle, PlugZap } from 'lucide-react';
+import { Settings as SettingsIcon, AlertTriangle, Wrench, Database, Shield, HelpCircle, PlugZap, Cpu } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { shellyProfiles, saveShellyProfile, revokeShellyProfile } from '@/api';
+
+function DeveloperAiStudioCard() {
+  return (
+    <Card className="border-border/50 bg-surface/50 backdrop-blur-sm md:col-span-2 lg:col-span-3">
+      <CardHeader>
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-indigo-500/10 rounded-lg">
+            <Cpu className="w-5 h-5 text-indigo-400" />
+          </div>
+          <div>
+            <CardTitle className="text-lg">Developer AI Studio</CardTitle>
+            <CardDescription>Quản lý tập dữ liệu huấn luyện, siêu tham số và fine-tune mô hình thời gian sạc</CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="p-3.5 rounded-xl bg-muted/40 border border-border/50">
+            <div className="text-xs text-muted-foreground font-medium">Model Engine</div>
+            <div className="text-base font-bold text-foreground mt-1">Gradient Boosting</div>
+            <div className="text-[11px] text-emerald-500 font-semibold mt-0.5">v2.4.0 · Active</div>
+          </div>
+          <div className="p-3.5 rounded-xl bg-muted/40 border border-border/50">
+            <div className="text-xs text-muted-foreground font-medium">Learning Rate</div>
+            <div className="text-base font-bold text-foreground mt-1">0.08</div>
+            <div className="text-[11px] text-muted-foreground mt-0.5">Step size shrinkage</div>
+          </div>
+          <div className="p-3.5 rounded-xl bg-muted/40 border border-border/50">
+            <div className="text-xs text-muted-foreground font-medium">N Estimators</div>
+            <div className="text-base font-bold text-foreground mt-1">120</div>
+            <div className="text-[11px] text-muted-foreground mt-0.5">Boosting stages</div>
+          </div>
+          <div className="p-3.5 rounded-xl bg-muted/40 border border-border/50">
+            <div className="text-xs text-muted-foreground font-medium">Max Depth</div>
+            <div className="text-base font-bold text-foreground mt-1">3</div>
+            <div className="text-[11px] text-muted-foreground mt-0.5">Tree depth limiter</div>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2 pt-2">
+          <Button className="h-9 px-4 rounded-xl gap-2 font-medium bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm">
+            <Cpu className="w-4 h-4" />
+            Fine-tune Model ngay
+          </Button>
+          <Button variant="outline" className="h-9 px-4 rounded-xl font-medium border-border/70">
+            Kiểm tra tập dữ liệu
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 function SmartChargerVaultCard() {
   const [profiles, setProfiles] = useState<any[]>([]);
@@ -64,7 +115,7 @@ export default function Settings() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="page-header">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Cài đặt hệ thống</h1>
           <p className="text-muted-foreground mt-1">Quản lý cấu hình và thiết lập hệ thống VinFast BMS</p>
@@ -74,6 +125,7 @@ export default function Settings() {
       {/* Settings Categories */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <SmartChargerVaultCard />
+        <DeveloperAiStudioCard />
         {/* General Settings */}
         <Card className="border-border/50 bg-surface/50 backdrop-blur-sm">
           <CardHeader>

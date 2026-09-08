@@ -30,6 +30,11 @@ export default function ModelTypeCard({ meta, selected, onSelect }: Props) {
   return (
     <Card
       onClick={onSelect}
+      role="button"
+      tabIndex={0}
+      aria-expanded={selected}
+      aria-label={`Mở phòng thử nghiệm ${meta.label}`}
+      onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(); } }}
       className={`cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5 ${
         selected ? `ring-2 ${c.ring} shadow-md border-primary/50` : 'ring-1 ring-transparent'
       } ${meta.status === 'planned' ? 'opacity-90' : ''}`}

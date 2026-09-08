@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   X, Upload, RefreshCw, Layers, PlayCircle, BarChart3,
   Sparkles, Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { ModalSurface } from '@/components/ui/modal-surface';
 import { Badge } from '@/components/ui/badge';
 // @ts-ignore
 import { aiListModels, aiDeleteModel, aiDeactivateModel, aiDeployModel, aiTestVersion } from '@/api';
@@ -30,6 +31,7 @@ export default function ModelManagerDrawer({
 }: Props) {
   const [tab, setTab] = useState<Tab>('versions');
   const [versions, setVersions] = useState<ModelVersion[]>([]);
+  const requestGeneration = useRef(0);
   const [loading, setLoading] = useState(true);
   const [isBusy, setIsBusy] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -42,14 +44,17 @@ export default function ModelManagerDrawer({
   const c = ACCENT_CLASSES[meta.accent] || ACCENT_CLASSES.slate;
 
   const reloadVersions = useCallback(async () => {
+    const request = ++requestGeneration.current;
     setLoading(true);
     try {
       const res = await aiListModels(meta.key);
+      if (request !== requestGeneration.current) return;
       setVersions((res?.data?.versions ?? []) as ModelVersion[]);
     } catch (e: any) {
+      if (request !== requestGeneration.current) return;
       setMessage({ type: 'err', text: e?.message || 'Không tải được danh sách version' });
     } finally {
-      setLoading(false);
+      if (request === requestGeneration.current) setLoading(false);
     }
   }, [meta.key]);
 
@@ -58,6 +63,7 @@ export default function ModelManagerDrawer({
       reloadVersions();
       setMessage(null);
     }
+    return () => { requestGeneration.current++; };
   }, [isOpen, reloadVersions]);
 
   const sortedVersions = useMemo(
@@ -67,9 +73,12 @@ export default function ModelManagerDrawer({
 
   useEffect(() => {
     if (sortedVersions.length > 0) {
-      const defaultVer = activeVersion || sortedVersions[0].version;
+      const defaultVer = sortedVersions.some(v => v.version === activeVersion) ? activeVersion! : sortedVersions[0].version;
       setSelectedTestVersion((prev) => (prev && sortedVersions.some((v) => v.version === prev) ? prev : defaultVer));
       setSelectedVersionForMetrics((prev) => (prev && sortedVersions.some((v) => v.version === prev) ? prev : defaultVer));
+    } else {
+      setSelectedTestVersion(null);
+      setSelectedVersionForMetrics(null);
     }
   }, [activeVersion, sortedVersions]);
 
@@ -136,11 +145,11 @@ export default function ModelManagerDrawer({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-end bg-black/60 backdrop-blur-xs transition-opacity animate-in fade-in duration-200">
+    <ModalSurface label={`Quản lý model ${meta.label}`} drawer busy={isBusy} onClose={onClose}>
       <div className="relative h-full w-full max-w-2xl border-l border-white/10 bg-slate-950 p-6 text-white shadow-2xl overflow-y-auto flex flex-col justify-between">
         <div>
           {/* Header */}
-          <div className="flex items-start justify-between border-b border-white/10 pb-5">
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/10 pb-5">
             <div className="flex items-center gap-3">
               <div className={`h-11 w-11 rounded-xl flex items-center justify-center ${c.bg} ${c.text} border ${c.border}`}>
                 <Icon className="h-6 w-6" />
@@ -166,6 +175,7 @@ export default function ModelManagerDrawer({
               <Button
                 size="sm"
                 onClick={() => setUploadOpen(true)}
+                disabled={isBusy}
                 className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-xs h-8"
               >
                 <Upload className="w-3.5 h-3.5 mr-1.5" />
@@ -175,6 +185,8 @@ export default function ModelManagerDrawer({
                 size="sm"
                 variant="ghost"
                 onClick={onClose}
+                aria-label="Đóng quản lý model"
+                disabled={isBusy}
                 className="h-8 w-8 p-0 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg"
               >
                 <X className="h-5 w-5" />
@@ -302,7 +314,7 @@ export default function ModelManagerDrawer({
           }}
         />
       )}
-    </div>
+    </ModalSurface>
   );
 }
 

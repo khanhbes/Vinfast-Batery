@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_ui_colors.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 /// Shared EV cockpit tokens used across the application.
@@ -14,6 +15,8 @@ abstract final class CockpitColors {
 
   static const emerald = Color(0xFF34D399);
   static const emeraldStrong = Color(0xFF10B981);
+  static const emeraldGlow = Color(0x3310B981);
+  static const emeraldSubtle = Color(0x1A10B981);
   static const amber = Color(0xFFFBBF24);
   static const danger = Color(0xFFF87171);
   static const info = Color(0xFF60A5FA);
@@ -40,6 +43,14 @@ abstract final class CockpitRadius {
   static const medium = 16.0;
   static const large = 24.0;
   static const sheet = 28.0;
+  static const full = 999.0;
+}
+
+abstract final class CockpitButtonTokens {
+  static const double height = 48.0;
+  static const double iconSize = 22.0;
+  static const double radius = 14.0;
+  static const EdgeInsets padding = EdgeInsets.symmetric(horizontal: 16, vertical: 12);
 }
 
 abstract final class CockpitMotion {
@@ -49,6 +60,8 @@ abstract final class CockpitMotion {
   static const battery = Duration(milliseconds: 300);
   static const chargingGlow = Duration(milliseconds: 2500);
   static const energyWave = Duration(seconds: 4);
+  static const glowPulse = Duration(milliseconds: 1800);
+  static const ripple = Duration(milliseconds: 650);
 
   static bool enabled(BuildContext context) =>
       MediaQuery.maybeOf(context)?.disableAnimations != true;
@@ -64,6 +77,42 @@ abstract final class CockpitTypography {
     fontWeight: fontWeight,
     color: color,
     fontFeatures: const [FontFeature.tabularFigures()],
+  );
+
+  static TextStyle heading({
+    double? fontSize,
+    FontWeight fontWeight = FontWeight.w700,
+    Color color = CockpitColors.text,
+    double? letterSpacing,
+  }) => GoogleFonts.inter(
+    fontSize: fontSize,
+    fontWeight: fontWeight,
+    color: color,
+    letterSpacing: letterSpacing,
+  );
+
+  static TextStyle body({
+    double? fontSize,
+    FontWeight fontWeight = FontWeight.w400,
+    Color color = CockpitColors.text,
+    double? height,
+  }) => GoogleFonts.inter(
+    fontSize: fontSize,
+    fontWeight: fontWeight,
+    color: color,
+    height: height,
+  );
+
+  static TextStyle label({
+    double? fontSize,
+    FontWeight fontWeight = FontWeight.w600,
+    Color color = CockpitColors.muted,
+    double? letterSpacing,
+  }) => GoogleFonts.inter(
+    fontSize: fontSize,
+    fontWeight: fontWeight,
+    color: color,
+    letterSpacing: letterSpacing,
   );
 }
 
@@ -113,11 +162,11 @@ class CockpitSectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(left: 4, bottom: 10),
+    padding: EdgeInsets.only(left: 4, bottom: 10),
     child: Text(
       label.toUpperCase(),
       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-        color: CockpitColors.muted,
+        color: AppUiColors.of(context).muted,
         fontWeight: FontWeight.w800,
         letterSpacing: 1.1,
       ),
@@ -150,7 +199,9 @@ class CockpitSettingsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = availability == SettingsItemAvailability.enabled;
-    final accent = danger ? CockpitColors.danger : CockpitColors.emerald;
+    final accent = danger
+        ? AppUiColors.of(context).danger
+        : AppUiColors.of(context).primary;
     return Semantics(
       button: enabled && onTap != null,
       enabled: enabled,
@@ -159,9 +210,9 @@ class CockpitSettingsRow extends StatelessWidget {
         onTap: enabled ? onTap : null,
         borderRadius: BorderRadius.circular(CockpitRadius.medium),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 64),
+          constraints: BoxConstraints(minHeight: 64),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             child: Row(
               children: [
                 Container(
@@ -174,10 +225,10 @@ class CockpitSettingsRow extends StatelessWidget {
                   child: Icon(
                     icon,
                     size: 19,
-                    color: enabled ? accent : CockpitColors.dim,
+                    color: enabled ? accent : AppUiColors.of(context).muted,
                   ),
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -188,23 +239,21 @@ class CockpitSettingsRow extends StatelessWidget {
                         style: Theme.of(context).textTheme.titleSmall?.copyWith(
                           color: enabled
                               ? (danger
-                                    ? CockpitColors.danger
-                                    : CockpitColors.text)
-                              : CockpitColors.dim,
+                                    ? AppUiColors.of(context).danger
+                                    : AppUiColors.of(context).text)
+                              : AppUiColors.of(context).muted,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                       if (subtitle != null) ...[
-                        const SizedBox(height: 2),
+                        SizedBox(height: 2),
                         Text(
                           subtitle!,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(
                                 color: enabled
-                                    ? CockpitColors.muted
-                                    : CockpitColors.dim,
+                                    ? AppUiColors.of(context).muted
+                                    : AppUiColors.of(context).muted,
                               ),
                         ),
                       ],
@@ -213,10 +262,7 @@ class CockpitSettingsRow extends StatelessWidget {
                 ),
                 if (!enabled)
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: .05),
                       borderRadius: BorderRadius.circular(999),
@@ -225,8 +271,8 @@ class CockpitSettingsRow extends StatelessWidget {
                       availability == SettingsItemAvailability.comingSoon
                           ? 'Sắp có'
                           : 'Đã khóa',
-                      style: const TextStyle(
-                        color: CockpitColors.dim,
+                      style: TextStyle(
+                        color: AppUiColors.of(context).muted,
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
                       ),
@@ -234,9 +280,9 @@ class CockpitSettingsRow extends StatelessWidget {
                   )
                 else
                   trailing ??
-                      const Icon(
+                      Icon(
                         Icons.chevron_right_rounded,
-                        color: CockpitColors.dim,
+                        color: AppUiColors.of(context).muted,
                       ),
               ],
             ),

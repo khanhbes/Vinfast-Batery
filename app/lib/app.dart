@@ -75,9 +75,9 @@ class _VinFastBatteryAppState extends State<VinFastBatteryApp> {
           debugShowCheckedModeBanner: false,
 
           // Theme support (Light/Dark/System per PLAN1)
-          theme: selectedTheme,
+          theme: AppTheme.lightTheme,
           darkTheme: selectedTheme,
-          themeMode: ThemeMode.dark,
+          themeMode: _settings.getThemeModeValue(),
 
           // Localization support (Vietnamese/English per PLAN1)
           locale: _settings.getLocale(),

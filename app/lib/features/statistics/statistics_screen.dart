@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_animate/flutter_animate.dart';
+import '../../core/theme/app_motion.dart';
 import 'package:fl_chart/fl_chart.dart';
 
 import '../../core/theme/app_colors.dart';
@@ -9,6 +9,7 @@ import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/error_state.dart';
 import '../../core/widgets/loading_skeleton.dart';
 import '../../core/widgets/stat_card.dart';
+import '../../core/widgets/responsive_card_grid.dart';
 import '../../data/models/charge_log_model.dart';
 import '../../data/repositories/ai_insights_repository.dart';
 import '../../data/services/battery_capacity_service.dart';
@@ -87,7 +88,7 @@ class StatisticsScreen extends ConsumerWidget {
                       ),
                     ],
                   ),
-                ).animate().fadeIn(duration: 400.ms),
+                ).appFadeSlideIn(index: 4),
               ),
 
               // ── Summary Cards ──
@@ -225,46 +226,35 @@ class StatisticsScreen extends ConsumerWidget {
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final ratio = constraints.maxWidth > 380
-              ? 1.3
-              : constraints.maxWidth > 300
-              ? 1.1
-              : 0.95;
-          return GridView.count(
-            crossAxisCount: 2,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childAspectRatio: ratio,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
+          return ResponsiveCardGrid(
             children: [
               StatCard(
                 icon: Icons.battery_charging_full_rounded,
                 iconColor: AppColors.primary,
                 title: 'Tổng lần sạc',
                 value: '$totalCharges',
-              ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.2),
+              ).appFadeSlideIn(index: 2),
               StatCard(
                 icon: Icons.trending_up_rounded,
                 iconColor: AppColors.info,
                 title: 'Sạc TB / lần',
                 value:
                     '${((stats['avgChargeGain'] as double?) ?? 0.0).toStringAsFixed(0)}%',
-              ).animate().fadeIn(delay: 300.ms).slideY(begin: 0.2),
+              ).appFadeSlideIn(index: 3),
               StatCard(
                 icon: Icons.battery_1_bar_rounded,
                 iconColor: AppColors.warning,
                 title: 'Pin bắt đầu TB',
                 value:
                     '${((stats['avgStartBattery'] as double?) ?? 0.0).toStringAsFixed(0)}%',
-              ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.2),
+              ).appFadeSlideIn(index: 4),
               StatCard(
                 icon: Icons.timer_outlined,
                 iconColor: AppColors.error,
                 title: 'Thời gian sạc TB',
                 value:
                     '${((stats['avgChargeDuration'] as double?) ?? 0.0).toStringAsFixed(1)}h',
-              ).animate().fadeIn(delay: 500.ms).slideY(begin: 0.2),
+              ).appFadeSlideIn(index: 5),
             ],
           );
         },
@@ -546,7 +536,7 @@ class StatisticsScreen extends ConsumerWidget {
           ],
         ),
       ),
-    ).animate().fadeIn(delay: 700.ms).slideY(begin: 0.2);
+    ).appFadeSlideIn(index: 7);
   }
 
   // ── Consumption Bar Chart ──
@@ -776,7 +766,7 @@ class StatisticsScreen extends ConsumerWidget {
           ],
         ),
       ),
-    ).animate().fadeIn(delay: 900.ms).slideY(begin: 0.2);
+    ).appFadeSlideIn(index: 9);
   }
 }
 
@@ -838,7 +828,7 @@ class _ChartCard extends StatelessWidget {
           ],
         ),
       ),
-    ).animate().fadeIn(delay: delay.ms).slideY(begin: 0.2);
+    ).appFadeSlideIn(index: delay ~/ 100);
   }
 }
 
@@ -1133,7 +1123,7 @@ class _AiPredictionWidgetState extends ConsumerState<_AiPredictionWidget> {
           ],
         ),
       ),
-    ).animate().fadeIn(delay: 750.ms).slideY(begin: 0.2);
+    ).appFadeSlideIn(index: 7);
   }
 
   Widget _buildPredictionContent(Map<String, dynamic> pred) {
@@ -1452,7 +1442,7 @@ class _AiPatternWidgetState extends ConsumerState<_AiPatternWidget> {
           ],
         ),
       ),
-    ).animate().fadeIn(delay: 800.ms).slideY(begin: 0.2);
+    ).appFadeSlideIn(index: 8);
   }
 
   Widget _buildPatternContent(Map<String, dynamic> data) {
@@ -1810,7 +1800,7 @@ class _AiCapacityDetailPanelState
           ],
         ),
       ),
-    ).animate().fadeIn(delay: 750.ms).slideY(begin: 0.2);
+    ).appFadeSlideIn(index: 7);
   }
 
   Widget _buildCompareRow(

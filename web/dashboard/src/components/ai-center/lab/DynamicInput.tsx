@@ -45,6 +45,7 @@ export default function DynamicInput({
           </span>
         </div>
         <select
+          aria-label={label}
           disabled={disabled}
           value={value ?? enumList[0]}
           onChange={(e) => {
@@ -81,6 +82,7 @@ export default function DynamicInput({
           </span>
         </span>
         <input
+          aria-label={label}
           disabled={disabled}
           className={`mt-3 w-full cursor-pointer ${accentSlider} disabled:opacity-50 disabled:cursor-not-allowed`}
           type="range"
@@ -102,6 +104,9 @@ export default function DynamicInput({
         {unit && <span className="text-xs text-slate-400">{unit.trim()}</span>}
       </div>
       <input
+        aria-label={label}
+        min={schema?.min}
+        max={schema?.max}
         disabled={disabled}
         type={type === 'string' ? 'text' : 'number'}
         value={value ?? ''}
@@ -109,9 +114,9 @@ export default function DynamicInput({
         onChange={(e) => {
           const raw = e.target.value;
           if (type === 'integer') {
-            onChange(raw === '' ? '' : parseInt(raw, 10));
+            onChange(raw);
           } else if (type === 'number') {
-            onChange(raw === '' ? '' : parseFloat(raw));
+            onChange(raw);
           } else {
             onChange(raw);
           }

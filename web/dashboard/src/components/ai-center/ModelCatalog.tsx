@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   RefreshCw, Sparkles, Database, CheckCircle2, Rocket,
   Shield, Bot, HeartPulse, Clock,
@@ -23,25 +23,30 @@ export default function ModelCatalog() {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const request = useRef(0);
 
   const reload = useCallback(async () => {
+    const id = ++request.current;
     setLoading(true);
     setError(null);
     try {
       const res = await aiListTypes();
+      if (id !== request.current) return;
       const list = (res?.data?.types ?? []) as ModelTypeMeta[];
       const grs = (res?.data?.groups ?? []) as ModelGroupMeta[];
       setTypes(list);
       setGroups(grs);
     } catch (e: any) {
+      if (id !== request.current) return;
       setError(e?.message || 'Không tải được danh sách model type');
     } finally {
-      setLoading(false);
+      if (id === request.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     reload();
+    return () => { request.current++; };
   }, [reload]);
 
   const selected = types.find((t) => t.key === selectedKey) || null;
@@ -54,6 +59,15 @@ export default function ModelCatalog() {
     }
     return m;
   }, [types]);
+  const displayGroups = useMemo(() => {
+    const result = [...groups];
+    for (const key of Object.keys(byGroup)) {
+      if (!result.some(g => g.key === key)) {
+        result.push({ key: key as ModelGroup, label: key, subtitle: 'Các mô hình được máy chủ cung cấp', phase: '', order: result.length });
+      }
+    }
+    return result;
+  }, [groups, byGroup]);
 
   // Aggregate KPIs
   const readyCount = types.filter(isModelDeployed).length;
@@ -96,7 +110,7 @@ export default function ModelCatalog() {
       </div>
 
       {error && (
-        <div className="text-sm rounded-md border border-red-200 bg-red-50 text-red-700 p-3">
+        <div role="alert" className="text-sm rounded-md border border-red-200 bg-red-50 text-red-700 p-3">
           {error}
         </div>
       )}
@@ -105,7 +119,7 @@ export default function ModelCatalog() {
       {loading && types.length === 0 ? (
         <div className="text-center py-10 text-muted-foreground text-sm">Đang tải danh sách mô hình...</div>
       ) : (
-        groups.map((g) => {
+        displayGroups.map((g) => {
           const groupTypes = byGroup[g.key] || [];
           if (groupTypes.length === 0) return null;
           const gm = GROUP_META[g.key] || GROUP_META.survival;
@@ -154,6 +168,7 @@ export default function ModelCatalog() {
               {isGroupSelected && selected && (
                 <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
                   <UniversalModelLab
+                    key={selected.key}
                     meta={selected}
                     onModelChanged={reload}
                   />
@@ -163,6 +178,7 @@ export default function ModelCatalog() {
           );
         })
       )}
+      {!loading && !error && types.length === 0 && <p role="status" className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">Chưa có mô hình nào trong danh mục máy chủ.</p>}
     </div>
   );
 }

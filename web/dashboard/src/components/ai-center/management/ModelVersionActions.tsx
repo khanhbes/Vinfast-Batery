@@ -22,7 +22,7 @@ export default function ModelVersionActions({
   onEvaluate,
 }: Props) {
   return (
-    <div className="inline-flex items-center gap-1.5">
+    <div className="inline-flex flex-wrap items-center gap-2">
       {onEvaluate && (
         <Button
           size="sm"
@@ -82,6 +82,7 @@ export default function ModelVersionActions({
           onClick={() => onDelete(version.version)}
           className="text-xs h-8 px-2 text-red-400 hover:text-red-300 hover:bg-red-500/10"
           title="Xóa version"
+          aria-label={`Xóa version ${version.version}`}
         >
           <Trash2 className="w-3.5 h-3.5" />
         </Button>

@@ -1,16 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { Sidebar } from '@/components/layout/Sidebar';
-import { Topbar } from '@/components/layout/Topbar';
-import Dashboard from '@/pages/Dashboard';
-import UserManagement from '@/pages/UserManagement';
-import AiCenter from '@/pages/AiCenter';
-import AuditSystem from '@/pages/AuditSystem';
-import Settings from '@/pages/Settings';
+import { DashboardShell } from '@/components/layout/DashboardShell';
+import { MotionConfig } from 'motion/react';
+import { toast } from 'sonner';
+const Dashboard = lazy(() => import('@/pages/Dashboard'));
+const UserManagement = lazy(() => import('@/pages/UserManagement'));
+const AiCenter = lazy(() => import('@/pages/AiCenter'));
+const AuditSystem = lazy(() => import('@/pages/AuditSystem'));
+const Settings = lazy(() => import('@/pages/Settings'));
 import Login from '@/pages/Login';
 import { Toaster } from '@/components/ui/sonner';
 import { auth } from '@/firebase';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 
 function AppContent({ isAuthenticated, loading }: { isAuthenticated: boolean; loading: boolean }) {
   if (loading) {
@@ -29,12 +30,13 @@ function AppContent({ isAuthenticated, loading }: { isAuthenticated: boolean; lo
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-50 font-sans text-slate-900">
-      <Sidebar />
-      <div className="flex-1 flex flex-col min-w-0">
-        <Topbar />
-        <main className="flex-1 p-8 overflow-y-auto">
-          <div className="max-w-7xl mx-auto">
+    <>
+      <DashboardShell
+        userName={auth.currentUser?.displayName}
+        userEmail={auth.currentUser?.email}
+        onSignOut={() => { void signOut(auth).catch(() => toast.error('Chưa đăng xuất được. Hãy thử lại.')); }}
+      >
+            <Suspense fallback={<p role="status" className="py-8 text-muted-foreground">Đang tải trang…</p>}>
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/users" element={<UserManagement />} />
@@ -43,11 +45,10 @@ function AppContent({ isAuthenticated, loading }: { isAuthenticated: boolean; lo
               <Route path="/settings" element={<Settings />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
-          </div>
-        </main>
-      </div>
+            </Suspense>
+      </DashboardShell>
       <Toaster position="top-right" />
-    </div>
+    </>
   );
 }
 
@@ -64,8 +65,10 @@ export default function App() {
   }, []);
 
   return (
+    <MotionConfig reducedMotion="user" transition={{ duration: 0.24, ease: [0.2, 0, 0, 1] }}>
     <Router>
       <AppContent isAuthenticated={isAuthenticated} loading={loading} />
     </Router>
+    </MotionConfig>
   );
 }

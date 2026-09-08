@@ -12,6 +12,7 @@ import '../../core/services/auth_service.dart';
 import '../../core/services/notification_center_service.dart';
 import '../../core/services/session_service.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/bootstrap_splash.dart';
 import '../../data/repositories/vehicle_spec_repository.dart';
 import '../../data/services/maintenance_reminder_service.dart';
 import '../../data/services/vehicle_model_link_service.dart';
@@ -198,25 +199,7 @@ class _BootstrapSplashScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const CircularProgressIndicator(color: AppColors.primary),
-            const SizedBox(height: 16),
-            Text(
-              message,
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    return BootstrapSplash(message: message);
   }
 }
 
@@ -353,7 +336,8 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
       final vehicleId = ref.read(selectedVehicleIdProvider);
       final credentials = SmartChargerCredentialsService();
       final restored = await credentials.restoreFromCloud(vehicleId: vehicleId);
-      if (restored != null && (await credentials.readVerification()).readyForControl) {
+      if (restored != null &&
+          (await credentials.readVerification()).readyForControl) {
         await SmartChargerRepositoryFactory.setMode(
           SmartChargerConnectionMode.advancedDirect,
         );
@@ -383,7 +367,8 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
       final restored = await credentials.restoreFromCloud(
         vehicleId: selectedVehicleId,
       );
-      if (restored != null && (await credentials.readVerification()).readyForControl) {
+      if (restored != null &&
+          (await credentials.readVerification()).readyForControl) {
         await SmartChargerRepositoryFactory.setMode(
           SmartChargerConnectionMode.advancedDirect,
         );

@@ -10,6 +10,12 @@ import 'package:flutter_animate/flutter_animate.dart';
 class AppMotion {
   AppMotion._();
 
+  static bool enabled(BuildContext context) =>
+      !(MediaQuery.maybeOf(context)?.disableAnimations ?? false);
+
+  static Duration durationFor(BuildContext context, Duration duration) =>
+      enabled(context) ? duration : Duration.zero;
+
   // ── Durations ──────────────────────────────────────────────────────
   /// Cho micro feedback (ripple, toggle...).
   static const Duration instant = Duration(milliseconds: 80);
@@ -46,7 +52,7 @@ class AppMotion {
   static Duration staggerFor(
     int index, {
     Duration step = stagger,
-    Duration max = const Duration(milliseconds: 600),
+    Duration max = const Duration(milliseconds: 240),
   }) {
     final ms = (step.inMilliseconds * index).clamp(0, max.inMilliseconds);
     return Duration(milliseconds: ms);
@@ -142,29 +148,64 @@ extension AppMotionAnimate on Widget {
     Duration? duration,
     double slide = 0.08,
   }) {
-    final d = duration ?? AppMotion.base;
-    final dl = delay ?? AppMotion.staggerFor(index);
-    return animate()
-        .fadeIn(delay: dl, duration: d, curve: AppMotion.enter)
-        .slideY(
-          begin: slide,
-          end: 0,
-          delay: dl,
-          duration: d,
-          curve: AppMotion.enter,
-        );
+    return AppReveal(
+      duration: duration ?? AppMotion.base,
+      delay: delay ?? AppMotion.staggerFor(index),
+      offset: Offset(0, (slide * 100).clamp(-12.0, 12.0)),
+      child: this,
+    );
   }
 
   /// Pop scale entrance — dùng cho hero badges, FABs.
   Widget appScalePop({Duration? delay, Duration? duration}) {
-    return animate()
-        .fadeIn(delay: delay, duration: duration ?? AppMotion.fast)
-        .scale(
-          begin: const Offset(0.92, 0.92),
-          end: const Offset(1, 1),
-          delay: delay,
-          duration: duration ?? AppMotion.base,
-          curve: AppMotion.emphasized,
-        );
+    return Builder(
+      builder: (context) {
+        if (!AppMotion.enabled(context)) return this;
+        return animate()
+            .fadeIn(delay: delay, duration: duration ?? AppMotion.fast)
+            .scale(
+              begin: const Offset(0.92, 0.92),
+              end: const Offset(1, 1),
+              delay: delay,
+              duration: duration ?? AppMotion.base,
+              curve: AppMotion.emphasized,
+            );
+      },
+    );
+  }
+}
+
+/// Subtle, one-shot entrance. Layout, focus and hit targets remain available
+/// throughout; rebuilds do not restart it and no delayed timers are created.
+class AppReveal extends StatelessWidget {
+  const AppReveal({
+    super.key,
+    required this.child,
+    this.duration = AppMotion.base,
+    this.delay = Duration.zero,
+    this.offset = const Offset(0, 8),
+  });
+
+  final Widget child;
+  final Duration duration;
+  final Duration delay;
+  final Offset offset;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!AppMotion.enabled(context)) return child;
+    final delayMs = delay.inMilliseconds.clamp(0, 240);
+    final motionMs = duration.inMilliseconds.clamp(1, 600);
+    final total = delayMs + motionMs;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: Duration(milliseconds: total),
+      curve: Interval(delayMs / total, 1, curve: AppMotion.enter),
+      child: child,
+      builder: (context, value, child) => Opacity(
+        opacity: 0.82 + 0.18 * value,
+        child: Transform.translate(offset: offset * (1 - value), child: child),
+      ),
+    );
   }
 }

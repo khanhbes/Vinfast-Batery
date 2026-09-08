@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
+import '../../core/theme/app_motion.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/services/auth_service.dart';
@@ -117,45 +117,39 @@ class _LoginScreenState extends State<LoginScreen> {
                 children: [
                   // Logo with gradient glow
                   Container(
-                        width: 80,
-                        height: 80,
-                        padding: const EdgeInsets.all(5),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              AppColors.primary.withAlpha(40),
-                              AppColors.primaryContainer.withAlpha(60),
-                            ],
-                          ),
-                          borderRadius: BorderRadius.circular(22),
-                          border: Border.all(
-                            color: AppColors.primary.withAlpha(51),
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.primary.withAlpha(20),
-                              blurRadius: 30,
-                              spreadRadius: 5,
-                            ),
-                          ],
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(18),
-                          child: Image.asset(
-                            'assets/icons/app_icon.png',
-                            fit: BoxFit.cover,
-                            filterQuality: FilterQuality.high,
-                          ),
-                        ),
-                      )
-                      .animate()
-                      .fadeIn(duration: 500.ms)
-                      .scale(
-                        begin: const Offset(0.7, 0.7),
-                        curve: Curves.easeOutBack,
+                    width: 80,
+                    height: 80,
+                    padding: const EdgeInsets.all(5),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          AppColors.primary.withAlpha(40),
+                          AppColors.primaryContainer.withAlpha(60),
+                        ],
                       ),
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(
+                        color: AppColors.primary.withAlpha(51),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primary.withAlpha(20),
+                          blurRadius: 30,
+                          spreadRadius: 5,
+                        ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(18),
+                      child: Image.asset(
+                        'assets/icons/app_icon.png',
+                        fit: BoxFit.cover,
+                        filterQuality: FilterQuality.high,
+                      ),
+                    ),
+                  ).appScalePop(),
                   const SizedBox(height: 20),
 
                   const Text(
@@ -166,7 +160,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       fontWeight: FontWeight.w800,
                       letterSpacing: -0.5,
                     ),
-                  ).animate().fadeIn(delay: 100.ms),
+                  ).appFadeSlideIn(index: 1),
                   const SizedBox(height: 6),
                   Text(
                     'Đăng nhập để tiếp tục',
@@ -174,7 +168,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       color: AppColors.textSecondary,
                       fontSize: 14,
                     ),
-                  ).animate().fadeIn(delay: 150.ms),
+                  ).appFadeSlideIn(index: 1),
                   const SizedBox(height: 36),
 
                   // Error banner
@@ -208,10 +202,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ],
                       ),
-                    ).animate().fadeIn().shake(
-                      hz: 3,
-                      offset: const Offset(4, 0),
-                    ),
+                    ).appFadeSlideIn(slide: 0),
                     const SizedBox(height: 16),
                   ],
 
@@ -232,7 +223,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       if (!v.contains('@')) return 'Email không hợp lệ';
                       return null;
                     },
-                  ).animate().fadeIn(delay: 200.ms).slideX(begin: -0.05),
+                  ).appFadeSlideIn(index: 2),
                   const SizedBox(height: 14),
 
                   // Password
@@ -260,7 +251,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       if (v.length < 6) return 'Tối thiểu 6 ký tự';
                       return null;
                     },
-                  ).animate().fadeIn(delay: 250.ms).slideX(begin: -0.05),
+                  ).appFadeSlideIn(index: 2),
 
                   // Forgot password
                   Align(
@@ -276,13 +267,15 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                     ),
-                  ).animate().fadeIn(delay: 280.ms),
+                  ).appFadeSlideIn(index: 2),
                   const SizedBox(height: 8),
 
                   // Login Button
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      minWidth: double.infinity,
+                      minHeight: 52,
+                    ),
                     child: ElevatedButton(
                       onPressed: _loading ? null : _submit,
                       style: ElevatedButton.styleFrom(
@@ -312,7 +305,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
                     ),
-                  ).animate().fadeIn(delay: 300.ms).slideY(begin: 0.1),
+                  ).appFadeSlideIn(index: 3),
                   const SizedBox(height: 20),
 
                   // Register link
@@ -326,6 +319,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       );
                     },
                     child: RichText(
+                      textScaler: MediaQuery.textScalerOf(context),
+                      textAlign: TextAlign.center,
                       text: TextSpan(
                         text: 'Chưa có tài khoản? ',
                         style: TextStyle(
@@ -343,7 +338,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ],
                       ),
                     ),
-                  ).animate().fadeIn(delay: 350.ms),
+                  ).appFadeSlideIn(index: 3),
                 ],
               ),
             ),

@@ -134,7 +134,7 @@ export default function UserManagement() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="page-header">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Quản lý người dùng</h1>
           <p className="text-muted-foreground mt-1">Quản lý tài khoản và phân quyền hệ thống</p>

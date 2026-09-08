@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -50,13 +49,13 @@ class SettingsService extends ChangeNotifier {
   ThemeMode getThemeModeValue() {
     switch (_themeMode) {
       case AppThemeMode.light:
-        return ThemeMode.dark;
+        return ThemeMode.light;
       case AppThemeMode.dark:
         return ThemeMode.dark;
       case AppThemeMode.amoled:
         return ThemeMode.dark;
       case AppThemeMode.system:
-        return ThemeMode.dark;
+        return ThemeMode.system;
     }
   }
 
@@ -65,10 +64,10 @@ class SettingsService extends ChangeNotifier {
     _themeMode = mode;
     notifyListeners();
     final value = switch (mode) {
-      AppThemeMode.light => 'dark',
+      AppThemeMode.light => 'light',
       AppThemeMode.dark => 'dark',
       AppThemeMode.amoled => 'amoled',
-      AppThemeMode.system => 'dark',
+      AppThemeMode.system => 'system',
     };
     try {
       await _prefs?.setString(_themeKey, value);
@@ -112,6 +111,10 @@ class SettingsService extends ChangeNotifier {
 
   static AppThemeMode _decodeThemeMode(String? raw) {
     switch (raw) {
+      case 'light':
+        return AppThemeMode.light;
+      case 'system':
+        return AppThemeMode.system;
       case 'amoled':
         return AppThemeMode.amoled;
       case 'dark':

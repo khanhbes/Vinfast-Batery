@@ -45,7 +45,23 @@ export default function ModelVersionsList({
   }
 
   return (
-    <div className="overflow-x-auto">
+    <>
+    <div className="space-y-3 md:hidden">
+      {versions.map(v => <article key={v.version} className="rounded-xl border border-white/10 p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <h4 className="break-all font-mono font-semibold text-white">{v.version}</h4>
+          {v.active && <Badge className="bg-emerald-700 text-white">ACTIVE</Badge>}
+        </div>
+        <dl className="my-4 space-y-2 text-sm">
+          <div><dt className="text-slate-400">Tải lên</dt><dd className="text-slate-200">{formatDate(v.uploadedAt)}</dd></div>
+          <div><dt className="text-slate-400">Kích thước</dt><dd className="text-slate-200">{v.sizeBytes == null ? 'Chưa có dữ liệu' : formatBytes(v.sizeBytes)}</dd></div>
+          {v.note && <div><dt className="text-slate-400">Ghi chú</dt><dd className="break-words text-slate-200">{v.note}</dd></div>}
+        </dl>
+        <ModelVersionActions version={v} isBusy={isBusy} onTest={onTest}
+          onDeploy={onDeploy} onDelete={onDelete} onDeactivate={onDeactivate} onEvaluate={onEvaluate} />
+      </article>)}
+    </div>
+    <div className="hidden overflow-x-auto md:block">
       <table className="w-full text-sm">
         <thead className="text-xs uppercase text-slate-400 border-b border-white/10">
           <tr>
@@ -79,7 +95,7 @@ export default function ModelVersionsList({
                 {formatDate(v.uploadedAt)}
               </td>
               <td className="py-3 px-3 text-slate-400 text-xs">
-                {formatBytes(v.sizeBytes)}
+                {v.sizeBytes == null ? '—' : formatBytes(v.sizeBytes)}
               </td>
               <td className="py-3 px-3 text-slate-400 text-xs truncate max-w-[200px]" title={v.note || ''}>
                 {v.note || '—'}
@@ -100,5 +116,6 @@ export default function ModelVersionsList({
         </tbody>
       </table>
     </div>
+    </>
   );
 }

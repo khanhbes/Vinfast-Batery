@@ -239,7 +239,7 @@ export default function AuditSystem() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="page-header">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Hệ thống kiểm toán</h1>
           <p className="text-muted-foreground mt-1">Theo dõi và ghi lại tất cả hoạt động hệ thống</p>

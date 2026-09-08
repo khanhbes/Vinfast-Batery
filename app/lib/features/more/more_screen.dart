@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/app_motion.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/vehicle_context_provider.dart';
@@ -55,7 +56,7 @@ class MoreScreen extends ConsumerWidget {
             context,
             MaterialPageRoute(builder: (_) => const AiModelsScreen()),
           ),
-        ),
+        ).appFadeSlideIn(),
         ListTile(
           leading: const Icon(Icons.map_rounded),
           title: const Text('Trip Planner'),
@@ -64,7 +65,7 @@ class MoreScreen extends ConsumerWidget {
             context,
             MaterialPageRoute(builder: (_) => const TripPlannerWrapper()),
           ),
-        ),
+        ).appFadeSlideIn(index: 1),
         ListTile(
           leading: const Icon(Icons.build_rounded),
           title: const Text('Bảo dưỡng'),
@@ -73,7 +74,7 @@ class MoreScreen extends ConsumerWidget {
             context,
             MaterialPageRoute(builder: (_) => const MaintenanceScreen()),
           ),
-        ),
+        ).appFadeSlideIn(index: 2),
         ListTile(
           leading: const Icon(Icons.settings_rounded),
           title: const Text('Cài đặt'),
@@ -82,7 +83,7 @@ class MoreScreen extends ConsumerWidget {
             context,
             MaterialPageRoute(builder: (_) => const SettingsScreen()),
           ),
-        ),
+        ).appFadeSlideIn(index: 3),
       ],
     );
   }

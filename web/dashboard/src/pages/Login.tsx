@@ -52,7 +52,7 @@ export default function Login() {
   return (
     <>
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-4">
-        <div className="w-full max-w-md">
+        <div className="page-enter w-full max-w-md">
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center w-16 h-16 bg-primary/10 rounded-2xl mb-4 border border-primary/20 shadow-[0_0_20px_rgba(0,209,255,0.2)]">
               <BatteryCharging className="w-8 h-8 text-primary" />
@@ -68,8 +68,10 @@ export default function Login() {
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">Email</label>
+                  <label htmlFor="login-email" className="text-sm font-medium text-foreground">Email</label>
                   <Input
+                    id="login-email"
+                    autoComplete="username"
                     type="email"
                     placeholder="you@example.com"
                     value={email}
@@ -80,9 +82,11 @@ export default function Login() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">Mật khẩu</label>
+                  <label htmlFor="login-password" className="text-sm font-medium text-foreground">Mật khẩu</label>
                   <div className="relative">
                     <Input
+                      id="login-password"
+                      autoComplete="current-password"
                       type={showPassword ? 'text' : 'password'}
                       placeholder="••••••••"
                       value={password}
@@ -92,6 +96,8 @@ export default function Login() {
                     />
                     <Button
                       type="button"
+                      aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                      aria-pressed={showPassword}
                       variant="ghost"
                       size="icon"
                       className="absolute right-0 top-0 h-full px-3 text-muted-foreground hover:text-foreground"

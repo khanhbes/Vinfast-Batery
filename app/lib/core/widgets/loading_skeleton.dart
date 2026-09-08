@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'responsive_card_grid.dart';
 import 'package:shimmer/shimmer.dart';
 
 import '../theme/app_colors.dart';
@@ -172,13 +173,7 @@ class LoadingSkeleton extends StatelessWidget {
   }
 
   Widget _buildStatsSkeleton() {
-    return GridView.count(
-      crossAxisCount: 2,
-      mainAxisSpacing: 10,
-      crossAxisSpacing: 10,
-      childAspectRatio: 1.45,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
+    return ResponsiveCardGrid(
       children: List.generate(
         4,
         (_) => Container(
