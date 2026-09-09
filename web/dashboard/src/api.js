@@ -1,12 +1,7 @@
 import { auth } from './firebase.js'
+import { requestPortal } from './lib/httpClient'
 
 const BASE = ''  // same origin via proxy
-const RETRYABLE_METHODS = new Set(['GET', 'HEAD'])
-const MAX_RETRIES = 2
-
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms))
-}
 
 function emitPortalError(message) {
   window.dispatchEvent(new CustomEvent('vf:error', { detail: { message } }))
@@ -27,49 +22,10 @@ async function apiFetch(path, options = {}) {
   const headers = { 'Content-Type': 'application/json', ...options.headers }
   if (token) headers['Authorization'] = `Bearer ${token}`
 
-  const method = (options.method || 'GET').toUpperCase()
-  const canRetry = RETRYABLE_METHODS.has(method)
-  let lastError = null
-
   try {
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
-      try {
-        const res = await fetch(`${BASE}${path}`, { ...options, headers })
-        const shouldRetryStatus = canRetry && res.status >= 500 && attempt < MAX_RETRIES
-        if (shouldRetryStatus) {
-          await sleep(350 * (attempt + 1))
-          continue
-        }
-
-        const contentType = res.headers.get('content-type') || ''
-        const isJson = contentType.includes('application/json')
-        const body = isJson ? await res.json() : await res.text()
-
-        if (!res.ok) {
-          const message = isJson
-            ? (body?.error || body?.message || `HTTP ${res.status}`)
-            : `HTTP ${res.status}`
-          throw new Error(message)
-        }
-
-        if (isJson && body?.success === false) {
-          const message = body.error || body.message || 'Yeu cau that bai'
-          throw new Error(message)
-        }
-
-        return body
-      } catch (err) {
-        lastError = err
-        const isLastAttempt = attempt >= MAX_RETRIES
-        if (!canRetry || isLastAttempt) {
-          throw err
-        }
-        await sleep(350 * (attempt + 1))
-      }
-    }
-    throw lastError || new Error('Khong the ket noi den server')
+    return await requestPortal(`${BASE}${path}`, { ...options, headers })
   } catch (error) {
-    const message = error?.message || 'Khong the ket noi den server'
+    const message = error?.message || 'The server could not be reached'
     emitPortalError(message)
     throw error
   }
@@ -107,6 +63,8 @@ export const adminBulkDelete = (entity, ids) =>
 
 // ── Users ──
 export const adminUsers = () => apiFetch('/api/admin/users')
+export const adminDataSnapshot = (limit = 500) =>
+  apiFetch(`/api/admin/data-snapshot?limit=${encodeURIComponent(limit)}`)
 export const setAdmin = (email) =>
   apiFetch('/api/auth/set-admin', { method: 'POST', body: JSON.stringify({ email }) })
 
@@ -198,7 +156,7 @@ export const aiValidateVersion = (typeKey, version) =>
     body: JSON.stringify({ version }),
   });
 
-/// Test nhanh một version đã upload (chưa deploy) — PLAN1
+/// Smoke-test an uploaded version before deployment — PLAN1
 /** @param {string} typeKey @param {string} version @param {Record<string, unknown> | null} testInput */
 export const aiTestVersion = (typeKey, version, testInput = null) =>
   apiFetch(`/api/admin/ai/models/${encodeURIComponent(typeKey)}/test-version`, {
@@ -206,7 +164,7 @@ export const aiTestVersion = (typeKey, version, testInput = null) =>
     body: JSON.stringify({ version, testInput }),
   })
 
-/// Deploy một version — PLAN1
+/// Deploy a version — PLAN1
 export const aiDeployModel = (typeKey, version) =>
   apiFetch(`/api/admin/ai/models/${encodeURIComponent(typeKey)}/deploy`, {
     method: 'POST',
@@ -235,25 +193,13 @@ export async function aiUploadModel(typeKey, file, version, note = '', skipSmoke
   if (skipSmokeTest) form.append('skipSmokeTest', 'true')
 
   try {
-    const res = await fetch(`${BASE}/api/admin/ai/models/${encodeURIComponent(typeKey)}/upload`, {
+    return await requestPortal(`${BASE}/api/admin/ai/models/${encodeURIComponent(typeKey)}/upload`, {
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: form,
     })
-    const contentType = res.headers.get('content-type') || ''
-    const isJson = contentType.includes('application/json')
-    const body = isJson ? await res.json() : await res.text()
-    if (!res.ok || (isJson && body?.success === false)) {
-      let msg = (isJson && (body?.error || body?.message)) || `HTTP ${res.status}`
-      // Handle case where error/message is an object
-      if (typeof msg === 'object') {
-        msg = JSON.stringify(msg)
-      }
-      throw new Error(msg)
-    }
-    return body
   } catch (err) {
-    emitPortalError(err?.message || 'Upload model that bai')
+    emitPortalError(err?.message || 'Model upload failed')
     throw err
   }
 }
@@ -263,28 +209,14 @@ export const aiSocStatus = () => apiFetch('/api/soc/status')
 // ── Legacy ──
 export const migrateLegacy = () => apiFetch('/api/admin/migrate-legacy', { method: 'POST' })
 
-// ── Telemetry (public) ──
+// ── Telemetry (authenticated; backend enforces owner/admin scope) ──
 export const getTelemetry = (tripId) => {
   const qs = tripId ? `?trip_id=${encodeURIComponent(tripId)}` : ''
-  return fetch(`${BASE}/api/telemetry${qs}`).then(async r => {
-    if (!r.ok) {
-      const message = `HTTP ${r.status} khi tai telemetry`
-      emitPortalError(message)
-      throw new Error(message)
-    }
-    return r.json()
-  })
+  return apiFetch(`/api/telemetry${qs}`)
 }
 export const getChargeLogs = (vehicleId) => {
   const qs = vehicleId ? `?vehicleId=${encodeURIComponent(vehicleId)}` : ''
-  return fetch(`${BASE}/api/charge-logs${qs}`).then(async r => {
-    if (!r.ok) {
-      const message = `HTTP ${r.status} khi tai charge logs`
-      emitPortalError(message)
-      throw new Error(message)
-    }
-    return r.json()
-  })
+  return apiFetch(`/api/charge-logs${qs}`)
 }
 
 export { emitPortalError, emitPortalSuccess }

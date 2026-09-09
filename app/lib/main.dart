@@ -40,13 +40,21 @@ void main() async {
     );
     if (_isExpectedOperationalError(details.exception)) return;
     FlutterError.presentError(details);
-    AppPopup.showError('Đã xảy ra lỗi trong ứng dụng. Vui lòng thử lại.');
+    AppPopup.showError(
+      'Đã xảy ra lỗi trong ứng dụng. Vui lòng thử lại.',
+      error: details.exception,
+      stackTrace: details.stack,
+    );
   };
 
   PlatformDispatcher.instance.onError = (error, stack) {
     AppErrorReporter.report(error, stack, source: 'PlatformDispatcher');
     if (_isExpectedOperationalError(error)) return true;
-    AppPopup.showError('Ứng dụng gặp lỗi ngoài luồng chính.');
+    AppPopup.showError(
+      'Ứng dụng gặp lỗi ngoài luồng chính.',
+      error: error,
+      stackTrace: stack,
+    );
     return true;
   };
 

@@ -234,7 +234,7 @@ void main() {
     expect(find.text('ĐANG SẠC'), findsWidgets);
     expect(find.byKey(const ValueKey('session-countdown')), findsOneWidget);
     expect(find.text('402 W'), findsOneWidget);
-    expect(find.text('NGẮT NGUỒN NGAY'), findsOneWidget);
+    expect(find.text('Dừng sạc'), findsOneWidget);
   });
 
   testWidgets('charger display state maps correctly to UI indicators', (

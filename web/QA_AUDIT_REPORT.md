@@ -1,4 +1,6 @@
 # MASTER QA, SECURITY, LOGIC & UI/UX AUDIT REPORT
+
+> Cập nhật 09/09/2026: nội dung dưới đây là baseline lịch sử, không mô tả trạng thái source hiện tại. Xem [báo cáo khắc phục và kiểm chứng](QA_REMEDIATION_2026_09_09.md). Những kết luận PASS từ suy luận/code review không được coi là bằng chứng browser, performance hay security E2E. Release gate toàn master audit vẫn **BLOCK RELEASE** cho đến khi các khoảng trống trong báo cáo mới được kiểm chứng.
 ## VinFast Battery Web Ecosystem
 
 - **Target Systems:** Flask Unified Backend (`server.py`) + FastAPI AI Service (`ai_server/`) + React 18 / Vite Dashboard (`dashboard/`) + Caddy Ingress + Firebase / Firestore Integration

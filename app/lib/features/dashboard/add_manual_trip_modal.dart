@@ -6,7 +6,6 @@ import '../../core/providers/app_providers.dart';
 import '../../data/models/trip_log_model.dart';
 import '../../data/models/vehicle_model.dart';
 import '../../data/repositories/trip_log_repository.dart';
-import '../home/home_screen.dart';
 
 /// Modal nhập tay chuyến đi (manual trip entry)
 class AddManualTripModal extends ConsumerStatefulWidget {
@@ -47,18 +46,20 @@ class _AddManualTripModalState extends ConsumerState<AddManualTripModal> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Container(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
       ),
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardTheme.color ?? colors.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Form(
           key: _formKey,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -69,16 +70,16 @@ class _AddManualTripModalState extends ConsumerState<AddManualTripModal> {
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: AppColors.border,
+                    color: colors.outlineVariant,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
               ),
               const SizedBox(height: 16),
-              const Text(
+              Text(
                 'Nhập chuyến đi thủ công',
                 style: TextStyle(
-                  color: AppColors.textPrimary,
+                  color: colors.onSurface,
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
                 ),
@@ -86,8 +87,8 @@ class _AddManualTripModalState extends ConsumerState<AddManualTripModal> {
               const SizedBox(height: 4),
               Text(
                 'Xe: ${widget.vehicle.vehicleName.isNotEmpty ? widget.vehicle.vehicleName : widget.vehicle.vehicleId}',
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
+                style: TextStyle(
+                  color: colors.onSurfaceVariant,
                   fontSize: 13,
                 ),
               ),

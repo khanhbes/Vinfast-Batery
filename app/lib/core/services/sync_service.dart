@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/app_constants.dart';
+import 'api_service.dart';
 
 /// SyncService - Đồng bộ dữ liệu giữa App và Web Dashboard
 /// Xử lý: User sync, Vehicle sync, Battery state sync, Trip prediction sync
@@ -21,6 +22,12 @@ class SyncService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
+  /// Every sync write is authenticated with the current Firebase ID token.
+  /// The backend derives ownerUid from this token and rejects anonymous or
+  /// spoofed ownership, so plain Content-Type headers are not sufficient.
+  Future<Map<String, String>> _authenticatedHeaders() =>
+      ApiService().getHeaders();
+
   /// Đồng bộ user mới với web dashboard
   Future<bool> syncUserToWeb() async {
     try {
@@ -35,10 +42,11 @@ class SyncService {
       final userData = userDoc.data() ?? {};
 
       // Gửi đến web API
+      final headers = await _authenticatedHeaders();
       final response = await http
           .post(
             Uri.parse('$_baseUrl/api/web/sync/user'),
-            headers: {'Content-Type': 'application/json'},
+            headers: headers,
             body: jsonEncode({
               'uid': user.uid,
               'email': user.email,
@@ -92,10 +100,11 @@ class SyncService {
       final vehicleData = vehicleDoc.data()!;
 
       // Gửi đến web API
+      final headers = await _authenticatedHeaders();
       final response = await http
           .post(
             Uri.parse('$_baseUrl/api/web/sync/vehicle'),
-            headers: {'Content-Type': 'application/json'},
+            headers: headers,
             body: jsonEncode({
               'vehicleId': vehicleId,
               'ownerUid': user.uid,
@@ -191,10 +200,11 @@ class SyncService {
 
       final batteryState = snapshot.docs.first.data() as Map<String, dynamic>;
 
+      final headers = await _authenticatedHeaders();
       final response = await http
           .post(
             Uri.parse('$_baseUrl/api/web/sync/battery-state'),
-            headers: {'Content-Type': 'application/json'},
+            headers: headers,
             body: jsonEncode({
               'vehicleId': vehicleId,
               'percentage': batteryState['percentage'] ?? 0,
@@ -233,10 +243,11 @@ class SyncService {
 
       final data = doc.data()!;
 
+      final headers = await _authenticatedHeaders();
       final response = await http
           .post(
             Uri.parse('$_baseUrl/api/web/sync/trip-prediction'),
-            headers: {'Content-Type': 'application/json'},
+            headers: headers,
             body: jsonEncode({
               'predictionId': predictionId,
               'vehicleId': data['vehicleId'],

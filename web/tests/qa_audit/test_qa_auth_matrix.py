@@ -24,7 +24,7 @@ class TestAuthMatrix:
             headers={"X-Admin-Key": secret_key}
         )
         # Auth succeeds because X-Admin-Key matches _DEV_ADMIN_KEY (status is 200 or 502 upstream)
-        assert response.status_code in (200, 502), (
+        assert response.status_code == 401, (
             f"Expected auth bypass with valid X-Admin-Key, got {response.status_code}"
         )
 
@@ -52,7 +52,7 @@ class TestAuthMatrix:
         
         with server.app.test_request_context(headers={"Authorization": "Bearer mock-token"}):
             uid, email, role = server._verify_token()
-            assert role == "admin", "Vulnerability WEB-H2: Wildcard * in ADMIN_EMAILS elevates regular users to admin"
+            assert role == "user", "Wildcard must never elevate a regular user"
 
     def test_web_h5_regular_user_cannot_access_admin_endpoints(self, client, monkeypatch):
         """

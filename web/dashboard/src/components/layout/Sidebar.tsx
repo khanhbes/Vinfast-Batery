@@ -1,16 +1,17 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, BrainCircuit, History, Settings, ChevronLeft, ChevronRight, BatteryCharging, LogOut } from 'lucide-react';
+import { LayoutDashboard, Users, BrainCircuit, History, Settings, ChevronLeft, ChevronRight, BatteryCharging, LogOut, Database } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
 const navItems = [
-  { icon: LayoutDashboard, label: 'Tổng quan', path: '/' },
-  { icon: Users, label: 'Người dùng', path: '/users' },
-  { icon: BrainCircuit, label: 'AI Center', path: '/ai' },
-  { icon: History, label: 'Kiểm toán', path: '/audit' },
-  { icon: Settings, label: 'Hệ thống', path: '/settings' },
+  { icon: LayoutDashboard, label: 'Overview', path: '/' },
+  { icon: Users, label: 'Accounts', path: '/users' },
+  { icon: Database, label: 'App data', path: '/data' },
+  { icon: BrainCircuit, label: 'AI Studio', path: '/ai' },
+  { icon: History, label: 'Audit log', path: '/audit' },
+  { icon: Settings, label: 'Settings', path: '/settings' },
 ];
 
 export function Sidebar({ onSignOut }: { onSignOut: () => void }) {
@@ -26,7 +27,7 @@ export function Sidebar({ onSignOut }: { onSignOut: () => void }) {
       <BatteryCharging className="h-9 w-9 shrink-0 text-primary" aria-hidden="true" />
       {!collapsed && <span className="whitespace-nowrap font-bold tracking-tight">VinFast BMS</span>}
     </div>
-    <nav aria-label="Điều hướng chính" className="sidebar-nav">
+    <nav aria-label="Primary navigation" className="sidebar-nav">
       {navItems.map(({ icon: Icon, label, path }) => <NavLink
         key={path} to={path} end={path === '/'} title={label} aria-label={label}
         className={({ isActive }) => cn('sidebar-link', isActive && 'is-active')}
@@ -39,12 +40,12 @@ export function Sidebar({ onSignOut }: { onSignOut: () => void }) {
       </NavLink>)}
     </nav>
     <div className="sidebar-footer mt-auto border-t p-3">
-      <Button variant="ghost" className="w-full justify-start" aria-label="Đăng xuất" title="Đăng xuất" onClick={onSignOut}>
-        <LogOut aria-hidden="true" />{!collapsed && 'Đăng xuất'}
+      <Button variant="ghost" className="w-full justify-start" aria-label="Sign out" title="Sign out" onClick={onSignOut}>
+        <LogOut aria-hidden="true" />{!collapsed && 'Sign out'}
       </Button>
-      <Button variant="ghost" className="mt-2 w-full justify-start" aria-label={collapsed ? 'Mở rộng điều hướng' : 'Thu gọn điều hướng'} aria-expanded={!collapsed} title={collapsed ? 'Mở rộng điều hướng' : 'Thu gọn điều hướng'} onClick={() => setCollapsed(!collapsed)}>
+      <Button variant="ghost" className="mt-2 w-full justify-start" aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'} aria-expanded={!collapsed} title={collapsed ? 'Expand navigation' : 'Collapse navigation'} onClick={() => setCollapsed(!collapsed)}>
         {collapsed ? <ChevronRight aria-hidden="true" /> : <ChevronLeft aria-hidden="true" />}
-        {!collapsed && 'Thu gọn'}
+        {!collapsed && 'Collapse'}
       </Button>
     </div>
   </motion.aside>;

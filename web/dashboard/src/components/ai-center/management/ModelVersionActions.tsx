@@ -32,7 +32,7 @@ export default function ModelVersionActions({
           className="text-xs h-8 px-2.5 text-slate-200 border-white/10 hover:bg-white/10"
         >
           <BarChart3 className="w-3.5 h-3.5 mr-1" />
-          Đánh giá
+          Evaluation
         </Button>
       )}
 
@@ -81,8 +81,8 @@ export default function ModelVersionActions({
           disabled={isBusy}
           onClick={() => onDelete(version.version)}
           className="text-xs h-8 px-2 text-red-400 hover:text-red-300 hover:bg-red-500/10"
-          title="Xóa version"
-          aria-label={`Xóa version ${version.version}`}
+          title="Delete version"
+          aria-label={`Delete version ${version.version}`}
         >
           <Trash2 className="w-3.5 h-3.5" />
         </Button>

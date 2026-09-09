@@ -39,12 +39,8 @@ class TestAiUploadLifecycle:
         """
         store = ModelStore(temp_models_dir)
         traversal_version = "sub/../../escaped_version"
-        path = store.path_of(traversal_version, ".pkl")
-        
-        # Check if resolved path escapes store.root
-        resolved_path = os.path.abspath(path)
-        escaped = not resolved_path.startswith(store.root)
-        assert escaped, "Vulnerability WEB-H24 Confirmed: version parameter permits directory traversal outside model root!"
+        with pytest.raises(ValueError):
+            store.path_of(traversal_version, '.pkl')
 
     def test_web_h8_unsafe_deserialization_fallback(self, tmp_path):
         """
@@ -54,10 +50,8 @@ class TestAiUploadLifecycle:
         test_file = tmp_path / "model.unknown_ext"
         test_file.write_bytes(b"\x80\x04\x95\x15\x00\x00\x00\x00\x00\x00\x00}\x94\x8c\x04test\x94\x8c\x04pass\x94s.")
         
-        loaded = _load_model_file(str(test_file))
-        assert loaded == {"test": "pass"}, (
-            "Vulnerability WEB-H8 Confirmed: _load_model_file executes pickle deserialization on arbitrary unknown extensions"
-        )
+        with pytest.raises(RuntimeError, match='Unsupported model format'):
+            _load_model_file(str(test_file))
 
     def test_web_h25_manifest_atomic_write(self, temp_models_dir):
         """

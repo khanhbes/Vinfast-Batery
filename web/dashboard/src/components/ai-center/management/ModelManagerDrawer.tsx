@@ -32,6 +32,7 @@ export default function ModelManagerDrawer({
   const [tab, setTab] = useState<Tab>('versions');
   const [versions, setVersions] = useState<ModelVersion[]>([]);
   const requestGeneration = useRef(0);
+  const mutationPending = useRef(false);
   const [loading, setLoading] = useState(true);
   const [isBusy, setIsBusy] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -52,7 +53,7 @@ export default function ModelManagerDrawer({
       setVersions((res?.data?.versions ?? []) as ModelVersion[]);
     } catch (e: any) {
       if (request !== requestGeneration.current) return;
-      setMessage({ type: 'err', text: e?.message || 'Không tải được danh sách version' });
+      setMessage({ type: 'err', text: e?.message || 'Could not load the version list' });
     } finally {
       if (request === requestGeneration.current) setLoading(false);
     }
@@ -85,55 +86,65 @@ export default function ModelManagerDrawer({
   if (!isOpen) return null;
 
   const onDelete = async (version: string) => {
+    if (mutationPending.current) return;
     const isActive = version === activeVersion;
-    const msg = isActive
-      ? `Version "${version}" đang là phiên bản chính thức (ACTIVE).\nNếu xóa, chức năng dự đoán sẽ bị tạm ngắt cho đến khi chọn version mới.\n\nTiếp tục xóa?`
-      : `Xóa vĩnh viễn version "${version}"?`;
+    if (isActive) {
+      setMessage({ type: 'err', text: 'The active version cannot be deleted. Deploy a replacement first.' });
+      return;
+    }
+    const msg = `Permanently delete version "${version}" of "${meta.label}"? This action cannot be undone.`;
 
     if (!confirm(msg)) return;
-
+    mutationPending.current = true;
     setIsBusy(true);
     try {
       await aiDeleteModel(meta.key, version);
-      setMessage({ type: 'ok', text: `Đã xóa version ${version}` });
+      setMessage({ type: 'ok', text: `Deleted version ${version}` });
       await reloadVersions();
       onModelChanged();
     } catch (e: any) {
-      setMessage({ type: 'err', text: e?.message || 'Xóa thất bại' });
+      setMessage({ type: 'err', text: e?.message || 'Delete failed' });
     } finally {
+      mutationPending.current = false;
       setIsBusy(false);
     }
   };
 
   const onDeactivate = async () => {
-    if (!confirm(`Deactivate model "${meta.label}"?\nModel sẽ không còn được nạp trong bộ nhớ runtime.`)) return;
+    if (mutationPending.current) return;
+    if (!confirm(`Deactivate model "${meta.label}"?\nThe model will no longer be loaded in runtime memory.`)) return;
 
+    mutationPending.current = true;
     setIsBusy(true);
     try {
       await aiDeactivateModel(meta.key);
-      setMessage({ type: 'ok', text: 'Đã deactivate model' });
+      setMessage({ type: 'ok', text: 'Model deactivated' });
       await reloadVersions();
       onModelChanged();
     } catch (e: any) {
-      setMessage({ type: 'err', text: e?.message || 'Deactivate thất bại' });
+      setMessage({ type: 'err', text: e?.message || 'Deactivation failed' });
     } finally {
+      mutationPending.current = false;
       setIsBusy(false);
     }
   };
 
   const onDeploy = async (version: string) => {
-    if (!confirm(`Triển khai version ${version} làm phiên bản chính thức (ACTIVE)?`)) return;
+    if (mutationPending.current) return;
+    if (!confirm(`Deploy version ${version} as the production version (ACTIVE)?`)) return;
 
+    mutationPending.current = true;
     setIsBusy(true);
     try {
-      setMessage({ type: 'info', text: `Đang triển khai version ${version}...` });
+      setMessage({ type: 'info', text: `Deploying version ${version}...` });
       const res = await aiDeployModel(meta.key, version);
-      setMessage({ type: 'ok', text: `Đã triển khai thành công ${version}: ${res?.data?.status || 'Active'}` });
+      setMessage({ type: 'ok', text: `Successfully deployed ${version}: ${res?.data?.status || 'Active'}` });
       await reloadVersions();
       onModelChanged();
     } catch (e: any) {
-      setMessage({ type: 'err', text: `Deploy thất bại: ${e?.message}` });
+      setMessage({ type: 'err', text: `Deployment failed: ${e?.message}` });
     } finally {
+      mutationPending.current = false;
       setIsBusy(false);
     }
   };
@@ -141,11 +152,11 @@ export default function ModelManagerDrawer({
   const onTestVersion = (version: string) => {
     setSelectedTestVersion(version);
     setTab('test');
-    setMessage({ type: 'info', text: `Đang kiểm thử nhanh version ${version}` });
+    setMessage({ type: 'info', text: `Running a smoke test for version ${version}` });
   };
 
   return (
-    <ModalSurface label={`Quản lý model ${meta.label}`} drawer busy={isBusy} onClose={onClose}>
+    <ModalSurface label={`Manage model ${meta.label}`} drawer busy={isBusy} onClose={onClose}>
       <div className="relative h-full w-full max-w-2xl border-l border-white/10 bg-slate-950 p-6 text-white shadow-2xl overflow-y-auto flex flex-col justify-between">
         <div>
           {/* Header */}
@@ -163,11 +174,11 @@ export default function ModelManagerDrawer({
                     </Badge>
                   ) : (
                     <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-500/30">
-                      Chưa active
+                      Not active
                     </Badge>
                   )}
                 </div>
-                <p className="text-xs text-slate-400 mt-0.5">Quản lý phiên bản & triển khai mô hình</p>
+                <p className="text-xs text-slate-400 mt-0.5">Manage versions and model deployments</p>
               </div>
             </div>
 
@@ -185,7 +196,7 @@ export default function ModelManagerDrawer({
                 size="sm"
                 variant="ghost"
                 onClick={onClose}
-                aria-label="Đóng quản lý model"
+                aria-label="Close model manager"
                 disabled={isBusy}
                 className="h-8 w-8 p-0 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg"
               >
@@ -221,7 +232,7 @@ export default function ModelManagerDrawer({
               }`}
             >
               <Layers className="w-3.5 h-3.5" />
-              Danh sách Versions ({versions.length})
+              Version list ({versions.length})
             </button>
             <button
               onClick={() => setTab('test')}
@@ -243,7 +254,7 @@ export default function ModelManagerDrawer({
               }`}
             >
               <BarChart3 className="w-3.5 h-3.5" />
-              Đánh giá
+              Evaluation
             </button>
           </div>
 
@@ -297,7 +308,7 @@ export default function ModelManagerDrawer({
             className="h-8 border-white/10 hover:bg-white/10 text-white text-xs"
           >
             <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
-            Làm mới
+            Refresh
           </Button>
         </div>
       </div>
@@ -308,7 +319,7 @@ export default function ModelManagerDrawer({
           typeLabel={meta.label}
           onClose={() => setUploadOpen(false)}
           onUploaded={() => {
-            setMessage({ type: 'ok', text: 'Upload thành công! Hãy kiểm thử version trước khi Deploy.' });
+            setMessage({ type: 'ok', text: 'Upload successful! Test the version before deployment.' });
             reloadVersions();
             onModelChanged();
           }}
@@ -348,7 +359,7 @@ function DrawerTestTab({
   if (!effectiveVersion) {
     return (
       <div className="text-center py-10 text-slate-400 text-sm">
-        Chưa có version nào để test. Hãy upload model trước.
+        There are no versions to test. Upload a model first.
       </div>
     );
   }
@@ -361,7 +372,7 @@ function DrawerTestTab({
       const res = await aiTestVersion(meta.key, effectiveVersion, values);
       setResult(res?.data ?? res);
     } catch (e: any) {
-      setError(e?.message || 'Kiểm thử thất bại');
+      setError(e?.message || 'Test failed');
     } finally {
       setRunning(false);
     }
@@ -372,7 +383,7 @@ function DrawerTestTab({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between bg-white/[0.03] p-3 rounded-lg border border-white/10">
-        <span className="text-xs text-slate-300 font-medium">Version kiểm thử:</span>
+        <span className="text-xs text-slate-300 font-medium">Test version:</span>
         <select
           value={effectiveVersion}
           onChange={(e) => onSelectedVersionChange(e.target.value)}
@@ -380,7 +391,7 @@ function DrawerTestTab({
         >
           {versions.map((v) => (
             <option key={v.version} value={v.version}>
-              {v.version} {v.active ? '(Active)' : '(Chưa deploy)'}
+              {v.version} {v.active ? '(Active)' : '(Not deployed)'}
             </option>
           ))}
         </select>
@@ -413,7 +424,7 @@ function DrawerTestTab({
         className="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs h-9"
       >
         {running ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <PlayCircle className="w-4 h-4 mr-2" />}
-        Chạy kiểm thử version {effectiveVersion}
+        Run version test {effectiveVersion}
       </Button>
 
       {error && (
@@ -425,7 +436,7 @@ function DrawerTestTab({
       {result && (
         <div className="rounded-lg border border-white/10 bg-slate-900/60 p-4 space-y-2">
           <div className="flex items-center justify-between text-xs text-slate-400">
-            <span>Kết quả trả về:</span>
+            <span>Returned result:</span>
             <span className="font-mono text-emerald-400 font-bold text-sm">
               {result.formattedPrediction || (typeof result.prediction === 'number' ? result.prediction.toFixed(2) : String(result.prediction))}
             </span>
@@ -456,7 +467,7 @@ function DrawerMetricsTab({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between bg-white/[0.03] p-3 rounded-lg border border-white/10">
-        <span className="text-xs text-slate-300 font-medium">Version đánh giá:</span>
+        <span className="text-xs text-slate-300 font-medium">Evaluation version:</span>
         <select
           value={inspectedVersion}
           onChange={(e) => onSelectedVersionChange(e.target.value)}
@@ -473,17 +484,17 @@ function DrawerMetricsTab({
       <div className="rounded-xl border border-white/10 bg-slate-900/50 p-4 space-y-3">
         <h4 className="text-sm font-semibold text-white flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-emerald-400" />
-          Tổng quan phiên bản {inspectedVersion}
+          Version overview {inspectedVersion}
         </h4>
         <div className="grid grid-cols-2 gap-3 text-xs">
           <div className="rounded-lg bg-white/[0.02] p-2.5 border border-white/5">
-            <span className="text-slate-400">Trạng thái:</span>
+            <span className="text-slate-400">Status:</span>
             <div className="font-semibold text-slate-200 mt-0.5">
-              {inspectedVersion === activeVersion ? 'Đang hoạt động (ACTIVE)' : 'Lưu trữ / Sẵn sàng'}
+              {inspectedVersion === activeVersion ? 'Active' : 'Stored / ready'}
             </div>
           </div>
           <div className="rounded-lg bg-white/[0.02] p-2.5 border border-white/5">
-            <span className="text-slate-400">Kích thước:</span>
+            <span className="text-slate-400">Size:</span>
             <div className="font-semibold text-slate-200 mt-0.5">
               {versions.find((v) => v.version === inspectedVersion)?.sizeBytes
                 ? `${(versions.find((v) => v.version === inspectedVersion)!.sizeBytes! / 1024).toFixed(1)} KB`

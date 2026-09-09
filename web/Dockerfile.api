@@ -11,14 +11,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements-api.txt .
 RUN pip install --no-cache-dir -r requirements-api.txt
 
-COPY server.py telemetry_schema.py .
+# Keep every first-party module imported by server.py in the runtime image.
+# Listing these explicitly preserves the small image context while preventing
+# a successful build that only fails later when Gunicorn boots a worker.
+COPY server.py telemetry_schema.py csv_security.py sync_writes.py request_limits.py .
 COPY ai_server/ ./ai_server/
 COPY shelly/ ./shelly/
 
 # Fail the build if OneDrive/Docker BuildKit provides an offline or empty
 # placeholder instead of the actual API source.  Without this guard Python
 # exits cleanly and Docker keeps restarting an apparently healthy image.
-RUN test -s /app/server.py
+RUN test -s /app/server.py \
+    && test -s /app/telemetry_schema.py \
+    && test -s /app/csv_security.py \
+    && test -s /app/sync_writes.py \
+    && test -s /app/request_limits.py
 
 RUN mkdir -p /app/models
 

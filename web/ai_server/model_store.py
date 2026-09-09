@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import threading
 from datetime import datetime, timezone
@@ -82,9 +83,16 @@ class ModelStore:
         return path if os.path.isfile(path) else None
 
     def path_of(self, version: str, ext: Optional[str] = None) -> str:
+        if not isinstance(version, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,127}', version):
+            raise ValueError('Invalid model version')
         if ext is None:
             ext = self._ext_for(version)
-        return os.path.join(self.root, f"v_{version}{ext}")
+        if not isinstance(ext, str) or not re.fullmatch(r'\.[A-Za-z0-9]{1,16}', ext):
+            raise ValueError('Invalid model extension')
+        path = os.path.realpath(os.path.join(self.root, f"v_{version}{ext}"))
+        if os.path.commonpath([os.path.realpath(self.root), path]) != os.path.realpath(self.root):
+            raise ValueError('Model path escapes store')
+        return path
 
     def has_version(self, version: str) -> bool:
         return os.path.isfile(self.path_of(version)) and any(
@@ -140,13 +148,15 @@ class ModelStore:
 
     def remove(self, version: str) -> None:
         with self._lock:
+            # Resolve extension before removing its manifest entry.
+            path = self.path_of(version)
             data = self._read_manifest()
             if data.get("active") == version:
                 raise ValueError("Không thể xóa version đang active")
             data["versions"] = [v for v in data.get("versions", []) if v.get("version") != version]
             self._write_manifest(data)
             try:
-                os.remove(self.path_of(version))
+                os.remove(path)
             except FileNotFoundError:
                 pass
 

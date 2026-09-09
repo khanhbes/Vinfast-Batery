@@ -18,7 +18,10 @@ import io
 import csv
 import uuid
 import json
+from csv_security import csv_text
 from telemetry_schema import TelemetryValidationError, normalize_telemetry
+from sync_writes import commit_owned_writes, valid_document_id
+from request_limits import rate_limit
 import math
 import random
 import functools
@@ -98,7 +101,8 @@ def _load_consumption_model():
     _consumption_model_error = 'ev_soc_pipeline.pkl not found'
     print('⚠ Consumption model: file not found')
 
-_load_consumption_model()
+if _RUNTIME_ENV != 'testing':
+    _load_consumption_model()
 
 # 19 feature names expected by ev_soc_pipeline
 _CONSUMPTION_FEATURES = [
@@ -291,6 +295,8 @@ def _load_firebase_cred_from_env():
         return None
 
 try:
+    if _RUNTIME_ENV == 'testing':
+        raise RuntimeError('Firebase initialization disabled in isolated tests')
     import firebase_admin
     from firebase_admin import credentials, firestore, auth as fb_auth
 
@@ -327,14 +333,31 @@ except Exception as e:
 # FLASK APP
 # ═══════════════════════════════════════════════════════════════
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 65 * 1024 * 1024
 _cors_origins_raw = os.environ.get('CORS_ORIGINS', '').strip()
 if _IS_PRODUCTION and not _cors_origins_raw:
     raise RuntimeError('CORS_ORIGINS phải được cấu hình trong môi trường production')
 _cors_origins = [origin.strip() for origin in _cors_origins_raw.split(',') if origin.strip()]
 if _IS_PRODUCTION and '*' in _cors_origins:
     raise RuntimeError('CORS_ORIGINS không được dùng wildcard trong production')
-CORS(app, origins=_cors_origins or '*')
+CORS(app, origins=_cors_origins or ['http://localhost:3000', 'http://127.0.0.1:3000'])
 app.secret_key = os.urandom(24)
+
+
+@app.after_request
+def add_security_headers(response):
+    """Apply defense-in-depth headers even when the API is reached directly."""
+    response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    response.headers.setdefault('X-Frame-Options', 'DENY')
+    response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    response.headers.setdefault('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+    response.headers.setdefault('Cross-Origin-Opener-Policy', 'same-origin')
+    response.headers.setdefault('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; base-uri 'none'")
+    if request.is_secure or request.headers.get('X-Forwarded-Proto', '').lower() == 'https':
+        response.headers.setdefault('Strict-Transport-Security', 'max-age=31536000')
+    if request.path.startswith('/api/'):
+        response.headers.setdefault('Cache-Control', 'no-store')
+    return response
 
 
 @app.route('/', methods=['GET'])
@@ -391,10 +414,9 @@ def _verify_token():
         uid = decoded.get('uid', '')
         email = decoded.get('email', '')
         email_norm = (email or '').strip().lower()
-        allow_all_admin = '*' in ADMIN_EMAILS
         # Admin check: custom claim hoặc allowlist email
         role = 'admin' if (
-            decoded.get('admin') is True or allow_all_admin or email_norm in ADMIN_EMAILS
+            decoded.get('admin') is True or email_norm in (set(ADMIN_EMAILS) - {'*'})
         ) else 'user'
         return uid, email, role
     except Exception:
@@ -416,16 +438,24 @@ def require_auth(f):
 
 
 _DEV_ADMIN_KEY = os.environ.get('DEV_ADMIN_KEY', '').strip()
-if _IS_PRODUCTION and not _DEV_ADMIN_KEY:
-    raise RuntimeError('DEV_ADMIN_KEY phải được cấu hình trong môi trường production')
+
+def _dev_admin_allowed():
+    """Explicit local-only escape hatch. A Bearer identity is never overridden."""
+    return (
+        not _IS_PRODUCTION
+        and request.remote_addr in ('127.0.0.1', '::1')
+        and os.environ.get('ALLOW_DEV_ADMIN_KEY', '').lower() == 'true'
+        and not request.headers.get('Authorization')
+        and bool(_DEV_ADMIN_KEY)
+        and request.headers.get('X-Admin-Key') == _DEV_ADMIN_KEY
+    )
 
 def require_admin(f):
     """Decorator: yêu cầu quyền admin."""
     @functools.wraps(f)
     def decorated(*args, **kwargs):
         # Dev bypass: X-Admin-Key header (only when Firebase not available or key matches)
-        admin_key = request.headers.get('X-Admin-Key', '')
-        if admin_key and admin_key == _DEV_ADMIN_KEY:
+        if _dev_admin_allowed():
             request._uid = 'dev-admin'
             request._email = 'dev@local'
             request._role = 'admin'
@@ -901,12 +931,10 @@ def admin_reset_all_data():
     })
 
 
-# ── Users list (Firebase Auth) ──
-@app.route('/api/admin/users', methods=['GET'])
-@require_admin
-def admin_users():
+def _list_auth_users():
+    """Return the Firebase Auth directory in a JSON-safe, reusable shape."""
     if not _firebase_available or not _firebase_auth:
-        return jsonify({'success': True, 'data': []})
+        return []
     users = []
     page = _firebase_auth.list_users()
     for u in page.iterate_all():
@@ -917,9 +945,156 @@ def admin_users():
             'disabled': u.disabled,
             'createdAt': u.user_metadata.creation_timestamp,
             'lastSignIn': u.user_metadata.last_sign_in_timestamp,
-            'isAdmin': (u.custom_claims or {}).get('admin', False),
+            'isAdmin': (
+                (u.custom_claims or {}).get('admin') is True
+                or (u.email or '').strip().lower() in (ADMIN_EMAILS - {'*'})
+            ),
         })
+    return users
+
+
+# ── Users list (Firebase Auth) ──
+@app.route('/api/admin/users', methods=['GET'])
+@require_admin
+def admin_users():
+    users = _list_auth_users()
     return jsonify({'success': True, 'data': users})
+
+
+_ADMIN_SNAPSHOT_COLLECTIONS = {
+    'profiles': ('users', 'uid'),
+    'vehicleSpecs': ('VinFastModelSpecs', 'modelId'),
+    'vehicles': ('Vehicles', 'vehicleId'),
+    'chargeLogs': ('ChargeLogs', 'id'),
+    'chargeSamples': ('ChargeSamples', 'id'),
+    'chargeFeedback': ('charge_feedback', 'id'),
+    'tripLogs': ('TripLogs', 'id'),
+    'legacyTripLogs': ('trip_logs', 'id'),
+    'maintenance': ('MaintenanceTasks', 'id'),
+    'telemetry': ('TelemetryPoints', 'id'),
+    'batteryStates': ('battery_states', 'id'),
+    'tripPredictions': ('trip_predictions', 'id'),
+    'socPredictions': ('soc_predictions', 'id'),
+    'aiProfiles': ('AiVehicleProfiles', 'id'),
+    'aiInsights': ('AiVehicleInsights', 'vehicleId'),
+    'aiDeployments': ('AiModelDeployments', 'typeKey'),
+    'notifications': ('UserNotifications', 'id'),
+    'auditLogs': ('AuditLogs', 'id'),
+}
+
+_ADMIN_SNAPSHOT_SUBCOLLECTIONS = {
+    'smartChargingSessions': ('smartChargingSessions', 'sessionId', 'ownerUid'),
+    'chargingTrainingSamples': ('chargingTrainingSamples', 'sessionId', 'ownerUid'),
+    'smartChargePreferences': ('smartChargePreferences', 'id', 'ownerUid'),
+    'vehicleChargerBindings': ('vehicleChargerBindings', 'id', 'ownerUid'),
+    'smartChargeTelemetry': ('smartChargeTelemetry', 'id', 'sessionId'),
+}
+
+_SNAPSHOT_SECRET_FIELDS = {
+    'password', 'localpassword', 'cloudauthkey', 'authkey', 'token',
+    'accesstoken', 'refreshtoken', 'secret', 'privatekey', 'credential',
+    'credentials', 'authorization',
+}
+
+
+def _redact_admin_snapshot(value):
+    """Prevent credentials from reaching the browser even for administrators."""
+    if isinstance(value, dict):
+        return {
+            key: ('[redacted]' if str(key).replace('_', '').lower() in _SNAPSHOT_SECRET_FIELDS
+                  else _redact_admin_snapshot(item))
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_admin_snapshot(item) for item in value]
+    return value
+
+
+def _admin_snapshot_collection(collection_name: str, id_field: str, limit: int) -> dict:
+    snapshots = list(_fs().collection(collection_name).limit(limit + 1).stream())
+    truncated = len(snapshots) > limit
+    items = [_redact_admin_snapshot(_doc_to_json(doc, id_field)) for doc in snapshots[:limit]]
+    return {'items': items, 'loaded': len(items), 'truncated': truncated}
+
+
+def _admin_snapshot_collection_group(group_name: str, id_field: str,
+                                     parent_id_field: str, limit: int) -> dict:
+    snapshots = list(_fs().collection_group(group_name).limit(limit + 1).stream())
+    truncated = len(snapshots) > limit
+    items = []
+    for doc in snapshots[:limit]:
+        item = _doc_to_json(doc, id_field)
+        parent = getattr(getattr(doc, 'reference', None), 'parent', None)
+        owner_ref = getattr(parent, 'parent', None)
+        if not item.get(parent_id_field) and owner_ref is not None:
+            item[parent_id_field] = owner_ref.id
+        items.append(_redact_admin_snapshot(item))
+    return {'items': items, 'loaded': len(items), 'truncated': truncated}
+
+
+@app.route('/api/admin/data-snapshot', methods=['GET'])
+@require_admin
+@rate_limit(30, 60)
+def admin_data_snapshot():
+    """One consistent, admin-only view of data written by the app and backend."""
+    if not _fs():
+        return jsonify({'success': False, 'error': 'Firestore unavailable'}), 503
+
+    try:
+        limit = int(request.args.get('limit', 500))
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'limit must be an integer'}), 400
+    limit = max(1, min(limit, 1000))
+
+    datasets = {}
+    errors = {}
+    for key, (collection_name, id_field) in _ADMIN_SNAPSHOT_COLLECTIONS.items():
+        try:
+            datasets[key] = _admin_snapshot_collection(collection_name, id_field, limit)
+        except Exception as exc:
+            datasets[key] = {'items': [], 'loaded': 0, 'truncated': False}
+            errors[key] = str(exc)
+
+    for key, (group_name, id_field, parent_id_field) in _ADMIN_SNAPSHOT_SUBCOLLECTIONS.items():
+        try:
+            datasets[key] = _admin_snapshot_collection_group(
+                group_name, id_field, parent_id_field, limit)
+        except Exception as exc:
+            datasets[key] = {'items': [], 'loaded': 0, 'truncated': False}
+            errors[key] = str(exc)
+
+    profiles_by_uid = {
+        str(item.get('uid') or item.get('ownerUid')): item
+        for item in datasets['profiles']['items']
+        if item.get('uid') or item.get('ownerUid')
+    }
+    accounts = []
+    for auth_user in _list_auth_users():
+        uid = str(auth_user.get('uid') or '')
+        accounts.append({**profiles_by_uid.get(uid, {}), **auth_user, 'uid': uid})
+    known_uids = {item['uid'] for item in accounts}
+    for uid, profile in profiles_by_uid.items():
+        if uid not in known_uids:
+            accounts.append({**profile, 'uid': uid, 'authRecordMissing': True})
+
+    datasets['accounts'] = {
+        'items': accounts,
+        'loaded': len(accounts),
+        'truncated': False,
+    }
+    totals = {key: dataset['loaded'] for key, dataset in datasets.items()}
+    return jsonify({
+        'success': True,
+        'data': {
+            'schemaVersion': 'admin-data-snapshot-v1',
+            'generatedAt': _utcnow(),
+            'limitPerDataset': limit,
+            'datasets': datasets,
+            'totals': totals,
+            'partial': bool(errors),
+            'errors': errors,
+        },
+    })
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -960,12 +1135,8 @@ def admin_export():
     if fmt == 'csv':
         if not rows:
             return Response('', mimetype='text/csv')
-        output = io.StringIO()
-        writer = csv.DictWriter(output, fieldnames=rows[0].keys())
-        writer.writeheader()
-        writer.writerows(rows)
         return Response(
-            output.getvalue(),
+            csv_text(rows),
             mimetype='text/csv',
             headers={'Content-Disposition': f'attachment; filename={entity}.csv'},
         )
@@ -1067,10 +1238,13 @@ _seed_telemetry()
 
 
 @app.route('/api/telemetry', methods=['GET'])
+@require_auth
 def get_telemetry():
     """Trả telemetry — ưu tiên Firestore, chỉ fallback demo khi bật ALLOW_DEMO_DATA."""
     if _fs():
         q = _fs().collection('TelemetryPoints').where('isDeleted', '==', False)
+        if request._role != 'admin':
+            q = q.where('ownerUid', '==', request._uid)
         trip = request.args.get('trip_id')
         if trip:
             q = q.where('trip_id', '==', trip)
@@ -1087,11 +1261,14 @@ def get_telemetry():
 
 # Backward-compatible endpoints (cho dashboard hiện tại)
 @app.route('/api/charge-logs', methods=['GET'])
+@require_auth
 def get_charge_logs():
     """Public charge logs — ưu tiên Firestore, chỉ fallback demo khi bật ALLOW_DEMO_DATA."""
     vid = request.args.get('vehicleId')
     if _fs():
         q = _fs().collection('ChargeLogs').where('isDeleted', '==', False)
+        if request._role != 'admin':
+            q = q.where('ownerUid', '==', request._uid)
         if vid:
             q = q.where('vehicleId', '==', vid)
         docs = q.order_by('startTime', direction='DESCENDING').limit(100).stream()
@@ -1369,6 +1546,19 @@ def _save_profile(vehicle_id: str, profile: dict):
         _local_profiles[vehicle_id] = profile
 
 
+def _can_access_vehicle(vehicle_id: str) -> bool:
+    """Authorize a personal AI profile against the verified request identity."""
+    if getattr(request, '_role', None) == 'admin':
+        return True
+    if not valid_document_id(vehicle_id):
+        return False
+    if _fs():
+        snapshot = _fs().collection('Vehicles').document(vehicle_id).get()
+        return bool(snapshot.exists and (snapshot.to_dict() or {}).get('ownerUid') == request._uid)
+    profile = _local_profiles.get(vehicle_id) or {}
+    return profile.get('ownerUid') == getattr(request, '_uid', None)
+
+
 def _to_dt(v):
     if v is None:
         return None
@@ -1522,10 +1712,14 @@ def ai_dataset(vehicle_id):
 
 
 @app.route('/api/ai/predict-degradation', methods=['POST'])
+@require_auth
+@rate_limit(90, 60)
 def ai_predict():
     data = request.get_json() or {}
     charge_logs = data.get('chargeLogs', [])
     vehicle_id = data.get('vehicleId', '')
+    if vehicle_id and not _can_access_vehicle(vehicle_id):
+        return jsonify({'success': False, 'error': 'Forbidden'}), 403
     if not charge_logs:
         return jsonify({'success': False, 'error': 'Cần cung cấp chargeLogs'}), 400
     try:
@@ -1547,10 +1741,14 @@ def ai_predict():
 
 
 @app.route('/api/ai/analyze-patterns', methods=['POST'])
+@require_auth
+@rate_limit(90, 60)
 def ai_analyze():
     data = request.get_json() or {}
     charge_logs = data.get('chargeLogs', [])
     vehicle_id = data.get('vehicleId', '')
+    if vehicle_id and not _can_access_vehicle(vehicle_id):
+        return jsonify({'success': False, 'error': 'Forbidden'}), 403
     try:
         result = pattern_analyzer.analyze(charge_logs)
         result['vehicleId'] = vehicle_id
@@ -1563,12 +1761,16 @@ def ai_analyze():
 
 
 @app.route('/api/ai/train-vehicle-profile', methods=['POST'])
+@require_auth
+@rate_limit(3, 3600)
 def ai_train():
     data = request.get_json() or {}
     vehicle_id = data.get('vehicleId', '')
     charge_logs = data.get('chargeLogs', [])
     if not vehicle_id:
         return jsonify({'success': False, 'error': 'vehicleId là bắt buộc'}), 400
+    if not _can_access_vehicle(vehicle_id):
+        return jsonify({'success': False, 'error': 'Forbidden'}), 403
     if len(charge_logs) < 5:
         return jsonify({'success': False, 'error': f'Cần ≥ 5 lần sạc (hiện {len(charge_logs)})'}), 400
     try:
@@ -1583,6 +1785,7 @@ def ai_train():
 
         profile = {
             'vehicleId': vehicle_id, 'trainedAt': _utcnow(), 'version': '1.0',
+            'ownerUid': request._uid,
             'dataPoints': len(charge_logs), 'healthAdjustment': round(adj, 2),
             'stats': {
                 'avgDoD': round(dod, 1), 'avgChargeRate': round(rate, 2),
@@ -1599,7 +1802,10 @@ def ai_train():
 
 
 @app.route('/api/ai/profile-status/<vehicle_id>', methods=['GET'])
+@require_auth
 def ai_profile_status(vehicle_id):
+    if not _can_access_vehicle(vehicle_id):
+        return jsonify({'success': False, 'error': 'Forbidden'}), 403
     profile = _get_profile(vehicle_id)
     if not profile:
         return jsonify({'success': True, 'data': {
@@ -1734,6 +1940,7 @@ def ai_admin_test():
 # AI ENDPOINT — Predict Consumption (ML model)
 # ═══════════════════════════════════════════════════════════════
 @app.route('/api/ai/predict-consumption', methods=['POST'])
+@rate_limit(90, 60)
 def ai_predict_consumption():
     """Predict battery consumption for a planned trip using ev_soc_pipeline.
     Accepts full 19-feature input or minimal context (distance, payload, etc.).
@@ -1821,6 +2028,7 @@ def _predict_remaining_range(payload: dict) -> dict:
 
 
 @app.route('/api/ai/predict-range', methods=['POST'])
+@rate_limit(90, 60)
 def ai_predict_range():
     try:
         result = _predict_remaining_range(request.get_json(silent=True) or {})
@@ -2079,6 +2287,7 @@ def _guardrail_check(ai_result: dict, heuristic_result: dict,
 
 
 @app.route('/api/ai/predict-charging-time', methods=['POST'])
+@rate_limit(90, 60)
 def ai_predict_charging_time():
     """Predict charging time — uses AI Center model with heuristic fallback.
     
@@ -2532,10 +2741,17 @@ def _active_model_artifact(type_key: str):
 def _normalize_json_value(value):
     if isinstance(value, dict):
         return {k: _normalize_json_value(v) for k, v in value.items()}
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple, set)):
         return [_normalize_json_value(v) for v in value]
-    if isinstance(value, tuple):
-        return [_normalize_json_value(v) for v in value]
+    if isinstance(value, bytes):
+        return value.hex()
+    if hasattr(value, 'latitude') and hasattr(value, 'longitude'):
+        return {
+            'latitude': float(value.latitude),
+            'longitude': float(value.longitude),
+        }
+    if hasattr(value, 'path') and not isinstance(value, str):
+        return str(value.path)
     if hasattr(value, 'isoformat') and not isinstance(value, str):
         return value.isoformat()
     return value
@@ -2670,6 +2886,146 @@ def _update_runtime_health(type_key: str):
 
 # ── Admin Model Deployment APIs ──────────────────────────────────
 
+_ADMIN_MODEL_ENGLISH_COPY = {
+    'soc': {
+        'label': 'Battery consumption prediction', 'shortName': 'SOC Consumption',
+        'description': 'Predict the SOC consumed by a trip.',
+        'useCase': 'Estimate battery use from distance, speed, acceleration, payload, weather and elevation.',
+        'outputDescription': 'Expected SOC consumed during the trip.',
+        'outputMeaning': 'Predicted SOC reduction in percentage points.',
+    },
+    'dte': {
+        'label': 'Dynamic remaining range', 'shortName': 'Dynamic DTE',
+        'description': 'Estimate remaining range from battery condition and operating context.',
+        'useCase': 'Correct the base range estimate using SOC, SoH, temperature, speed and payload.',
+        'outputDescription': 'Expected remaining driving range.',
+        'outputMeaning': 'Distance the vehicle can travel under the current conditions.',
+    },
+    'eco_driving': {
+        'label': 'Driving behavior score', 'shortName': 'Eco-driving score',
+        'description': 'Score a trip from acceleration, braking and speed behavior.',
+        'useCase': 'Classify driving style as efficient, normal or aggressive and support coaching.',
+        'outputDescription': 'A 1-100 score with an efficient, normal or aggressive label.',
+        'outputMeaning': 'Energy-efficient driving score from 0 to 100.', 'outputUnit': 'points',
+    },
+    'eco_routing': {
+        'label': 'Energy-efficient route recommendation', 'shortName': 'Eco-routing',
+        'description': 'Compare candidate routes and identify the most energy-efficient option.',
+        'useCase': 'Rank routes using distance, traffic, elevation, battery level and temperature.',
+        'outputDescription': 'Predicted SOC use by route with a recommended option.',
+        'outputMeaning': 'Expected battery consumption for each route.',
+    },
+    'charging_time': {
+        'label': 'Smart Charge', 'shortName': 'Smart Charge',
+        'description': 'Predict charging time and support automatic Shelly cut-off.',
+        'useCase': 'Estimate time to the target SOC using charging rate, temperature and battery condition.',
+        'outputDescription': 'Expected time required to reach the target SOC.',
+        'outputMeaning': 'Required charging time in seconds; clients format it as hours and minutes.',
+        'outputUnit': 'seconds',
+    },
+    'charging_recommender': {
+        'label': 'Smart charging recommendation', 'shortName': 'Charging recommendation',
+        'description': 'Learn weekly mobility patterns and recommend when to charge.',
+        'useCase': 'Use battery level and recent trip and charging behavior to suggest the next charge.',
+        'outputDescription': 'Probability of needing a charge within 24 hours and a suggested time.',
+        'outputMeaning': 'Probability that the vehicle should be connected within the next 24 hours.',
+    },
+    'trip_labeling': {
+        'label': 'Automatic trip purpose', 'shortName': 'Trip labeling',
+        'description': 'Classify trip purpose from location, time and route frequency.',
+        'useCase': 'Label recurring journeys without requiring manual input from the user.',
+        'outputDescription': 'Trip category and prediction confidence.',
+        'outputMeaning': 'Trip purpose inferred by the model.', 'outputUnit': 'class',
+    },
+    'soh_degradation': {
+        'label': 'Battery health degradation forecast', 'shortName': 'SoH degradation',
+        'description': 'Forecast LFP battery aging and time to 80% SoH.',
+        'useCase': 'Estimate degradation from charge cycles, depth of discharge, temperature and driving behavior.',
+        'outputDescription': 'Months until SoH reaches 80%, with a monthly forecast curve.',
+        'outputMeaning': 'Estimated time remaining before the battery health threshold.',
+        'outputUnit': 'months',
+    },
+    'anomaly_detection': {
+        'label': 'Battery anomaly detection', 'shortName': 'Anomaly detection',
+        'description': 'Detect unusual SOC loss by comparing measured and predicted consumption.',
+        'useCase': 'Identify repeated deviations that may indicate tire pressure, battery-cell or sensor issues.',
+        'outputDescription': 'Anomaly score, likely cause and 30-day trend.',
+        'outputMeaning': 'Severity score from 0 for normal to 1 for critical.',
+    },
+}
+
+
+_ADMIN_FIELD_ENGLISH_COPY = {
+    'distance_km': ('Distance', 'Trip distance', 'km'),
+    'duration_min': ('Duration', 'Expected trip duration', 'min'),
+    'avg_speed_kmh': ('Average speed', 'Average trip speed', 'km/h'),
+    'max_speed_kmh': ('Maximum speed', 'Highest trip speed', 'km/h'),
+    'avg_acceleration': ('Average acceleration', 'Average trip acceleration', 'm/s²'),
+    'max_acceleration': ('Maximum acceleration', 'Highest positive acceleration', 'm/s²'),
+    'min_acceleration': ('Braking acceleration', 'Highest deceleration', 'm/s²'),
+    'payload_kg': ('Payload', 'Passengers and cargo mass', 'kg'),
+    'ambient_temp_c': ('Ambient temperature', 'Surrounding air temperature', '°C'),
+    'weather_encoded': ('Weather', '0: dry, 1: light rain, 2: heavy rain', 'code'),
+    'elevation_change_m': ('Elevation change', 'Net elevation change along the trip', 'm'),
+    'batteryPercent': ('Current battery', 'Current battery state of charge', '%'),
+    'stateOfHealth': ('Battery health', 'Current battery state of health', '%'),
+    'temperatureC': ('Temperature', 'Operating temperature', '°C'),
+    'averageSpeedKmh': ('Average speed', 'Expected average speed', 'km/h'),
+    'payloadKg': ('Payload', 'Passengers and cargo mass', 'kg'),
+    'baseEfficiencyKmPerPercent': ('Base efficiency', 'Baseline distance per SOC percentage point', 'km/%'),
+    'hardAccelCount': ('Hard accelerations', 'Number of abrupt acceleration events', 'events'),
+    'hardBrakeCount': ('Hard braking events', 'Number of abrupt braking events', 'events'),
+    'avgSpeed': ('Average speed', 'Average trip speed', 'km/h'),
+    'maxSpeed': ('Maximum speed', 'Highest trip speed', 'km/h'),
+    'accelerationStd': ('Acceleration variation', 'Variation in pedal input', 'm/s²'),
+    'tripDurationMin': ('Trip duration', 'Total driving time', 'min'),
+    'idleTimeMin': ('Idle time', 'Time stopped during the trip', 'min'),
+    'currentBattery': ('Current battery', 'Current battery state of charge', '%'),
+    'temperature': ('Temperature', 'Ambient operating temperature', '°C'),
+    'start_soc': ('Starting SOC', 'Battery level at the start of charging', '%'),
+    'end_soc': ('Target SOC', 'Desired battery level', '%'),
+    'dayOfWeek': ('Day of week', '1: Monday through 7: Sunday', 'day'),
+    'avgDailyKm_lastWeek': ('Last-week daily distance', 'Average daily distance last week', 'km'),
+    'avgDailyKm_sameDow': ('Same-day average distance', 'Average distance on this weekday', 'km'),
+    'lastChargeHoursAgo': ('Last charge', 'Hours since the previous charge', 'hours'),
+    'nightChargeRatio': ('Night charging ratio', 'Share of sessions performed overnight', 'ratio'),
+    'weekendTrips': ('Weekend trips', 'Expected number of weekend trips', 'trips'),
+    'startLat': ('Start latitude', 'Latitude of the trip origin', '°'),
+    'startLng': ('Start longitude', 'Longitude of the trip origin', '°'),
+    'endLat': ('End latitude', 'Latitude of the trip destination', '°'),
+    'endLng': ('End longitude', 'Longitude of the trip destination', '°'),
+    'startHour': ('Start hour', 'Departure hour from 0 to 23', 'hour'),
+    'durationMin': ('Travel time', 'Trip duration', 'min'),
+    'distanceKm': ('Distance', 'Trip distance', 'km'),
+    'frequencyLastMonth': ('Monthly frequency', 'Similar trips during the previous month', 'trips'),
+    'currentSoH': ('Current battery health', 'Current state of health', '%'),
+    'cycleCount': ('Charge cycles', 'Accumulated charge-discharge cycles', 'cycles'),
+    'avgDoD': ('Average depth of discharge', 'Average battery depth of discharge', 'DoD'),
+    'fastChargeRatio': ('Fast charging ratio', 'Share of high-power charging sessions', 'ratio'),
+    'avgTempCharging': ('Average charging temperature', 'Average temperature while charging', '°C'),
+    'monthsInUse': ('Months in service', 'Vehicle age in months', 'months'),
+    'aggressiveDrivingRatio': ('Aggressive driving ratio', 'Share of aggressive driving events', 'ratio'),
+    'predictedSoCDrop': ('Predicted SOC drop', 'Model-estimated battery consumption', '%'),
+    'actualSoCDrop': ('Measured SOC drop', 'Observed battery consumption', '%'),
+    'tripDistanceKm': ('Trip distance', 'Length of the trip', 'km'),
+    'consecutiveAnomalies': ('Consecutive anomalies', 'Recent trips with a large deviation', 'trips'),
+}
+
+
+def _english_admin_model_meta(meta: dict) -> dict:
+    translated = dict(meta)
+    translated.update(_ADMIN_MODEL_ENGLISH_COPY.get(meta.get('key'), {}))
+    translated['inputSchema'] = {}
+    for field, definition in (meta.get('inputSchema') or {}).items():
+        translated_definition = dict(definition or {})
+        copy = _ADMIN_FIELD_ENGLISH_COPY.get(field)
+        if copy:
+            label, description, unit = copy
+            translated_definition.update({'label': label, 'desc': description, 'unit': unit})
+        translated['inputSchema'][field] = translated_definition
+    return translated
+
+
 @app.route('/api/admin/ai/types', methods=['GET'])
 @require_admin
 def admin_ai_types():
@@ -2756,7 +3112,7 @@ def admin_ai_types():
         
         # Build response
         result.append({
-            **meta,
+            **_english_admin_model_meta(meta),
             'deploymentStatus': deploy['deploymentStatus'],
             'deploymentVersion': deploy['deploymentVersion'],
             'deployedAt': deploy['deployedAt'],
@@ -2774,6 +3130,11 @@ def admin_ai_types():
         {"key": "health", "label": "Sức khỏe Xe", "subtitle": "Bảo dưỡng dự đoán", "phase": "v3.0", "order": 3},
     ]
     
+    groups = [
+        {'key': 'survival', 'label': 'Core range and energy', 'subtitle': 'Reduce uncertainty around range and consumption', 'phase': 'v1.0', 'order': 1},
+        {'key': 'assistant', 'label': 'Smart assistant', 'subtitle': 'Support daily charging and trip decisions', 'phase': 'v2.0', 'order': 2},
+        {'key': 'health', 'label': 'Vehicle health', 'subtitle': 'Predict battery health and maintenance needs', 'phase': 'v3.0', 'order': 3},
+    ]
     return jsonify({'success': True, 'data': {'types': result, 'groups': groups}})
 
 
@@ -2801,31 +3162,27 @@ def admin_test_version(type_key):
 
 @app.route('/api/admin/ai/models/<type_key>/deploy', methods=['POST'])
 @require_admin
+@rate_limit(12, 600)
 def admin_deploy_model(type_key):
     """Deploy một version — đổi deploymentStatus sang 'deployed'."""
-    body = request.get_json() or {}
-    version = body.get('version', '').strip()
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict) or not isinstance(body.get('version'), str):
+        return jsonify({'success': False, 'error': 'version is required'}), 400
+    version = body['version'].strip()
     
     if not version:
         return jsonify({'success': False, 'error': 'version is required'}), 400
     
-    # Verify version exists
-    store = _model_store_for(type_key)
-    if not store:
-        return jsonify({'success': False, 'error': 'AI registry unavailable'}), 503
-    
-    versions = [v.get('version') for v in store.list_versions()]
-    if version not in versions:
-        return jsonify({'success': False, 'error': f'Version {version} không tồn tại'}), 404
-    
     # Deploy to AI server — activate specific version
     try:
-        # First activate the version in model store
-        store.activate(version)
-        # Then load-active to load it into runtime
-        data, code = _ai_request_json('POST', f'/v1/models/{type_key}/load-active')
+        # The AI worker is the sole writer of active pointers. Flask must not
+        # change the shared manifest before runtime validation succeeds.
+        data, code = _ai_request_json('POST', f'/v1/models/{type_key}/deploy', json_body={'version': version})
         if code != 200:
-            return jsonify({'success': False, 'error': data.get('error', 'Deploy failed')}), code
+            return jsonify({'success': False, 'error': 'Chưa triển khai được model. Phiên bản đang chạy được giữ nguyên nếu chưa có xác nhận.'}), code
+        confirmed = data.get('data', {}) if isinstance(data, dict) else {}
+        if data.get('success') is not True or confirmed.get('activeVersion') != version:
+            return jsonify({'success': False, 'error': 'Chưa xác nhận được version đang chạy. Hãy làm mới trạng thái.'}), 502
     except Exception as e:
         return jsonify({'success': False, 'error': f'AI server error: {e}'}), 502
     
@@ -2866,6 +3223,7 @@ def admin_deploy_model(type_key):
 
 @app.route('/api/admin/ai/models/<type_key>/reset', methods=['POST'])
 @require_admin
+@rate_limit(6, 3600)
 def admin_reset_model(type_key):
     """Clear all versions for a model type (safety reset).
     
@@ -3164,6 +3522,7 @@ def admin_status_for_type(type_key):
 
 @app.route('/api/admin/ai/models/<type_key>/rollback', methods=['POST'])
 @require_admin
+@rate_limit(12, 600)
 def admin_rollback_model_for_type(type_key):
     return _ai_proxy_json('POST', f'/v1/models/{type_key}/rollback', json_body=request.get_json() or {})
 
@@ -3219,6 +3578,7 @@ def admin_delete_model_for_type(type_key, version):
 
 @app.route('/api/admin/ai/models/<type_key>/upload', methods=['POST'])
 @require_admin
+@rate_limit(6, 3600)
 def admin_upload_model_for_type(type_key):
     """Forward multipart upload to FastAPI (per type)."""
     if _http is None:
@@ -3228,6 +3588,11 @@ def admin_upload_model_for_type(type_key):
     upload = request.files['file']
     version = (request.form.get('version') or '').strip()
     note = request.form.get('note') or ''
+    from ai_server.upload_policy import validate_upload
+    try:
+        validate_upload(upload.filename, version)
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
     if not version:
         return jsonify({'success': False, 'error': 'version field is required'}), 400
 
@@ -3549,6 +3914,8 @@ _charging_model_version = 'v1.0.0'
 _charging_model_samples = 0
 
 @app.route('/api/ai/charge-feedback', methods=['POST'])
+@require_auth
+@rate_limit(30, 3600)
 def ai_charge_feedback():
     """Submit charge feedback for ML training."""
     global _charging_model_samples
@@ -3560,6 +3927,8 @@ def ai_charge_feedback():
         missing = [f for f in required if f not in body]
         if missing:
             return jsonify({'success': False, 'error': f'Missing fields: {missing}'}), 400
+        if not _can_access_vehicle(str(body['vehicleId'])):
+            return jsonify({'success': False, 'error': 'Forbidden'}), 403
         
         # Calculate error
         predicted_duration = body['predictedDurationMinutes']
@@ -3570,6 +3939,7 @@ def ai_charge_feedback():
         # Store feedback
         feedback_record = {
             **body,
+            'ownerUid': request._uid,
             'errorPercent': error_percent,
             'createdAt': datetime.now(timezone.utc).isoformat(),
             'id': f"fb_{datetime.now().timestamp()}",
@@ -3686,6 +4056,7 @@ def ai_charging_model_status():
 # ── AI Dataset Management & Fine-Tuning Endpoints ───────────────────
 
 @app.route('/api/ai/dataset', methods=['GET'])
+@require_admin
 def ai_get_dataset():
     """Retrieve charging time dataset records and summary statistics."""
     try:
@@ -3716,6 +4087,7 @@ def ai_get_dataset():
 
 
 @app.route('/api/ai/dataset/export-csv', methods=['GET'])
+@require_admin
 def ai_export_dataset_csv():
     """Download the charging time dataset as CSV file."""
     try:
@@ -3734,6 +4106,7 @@ def ai_export_dataset_csv():
 
 
 @app.route('/api/ai/dataset/records/<session_id>', methods=['PUT'])
+@require_admin
 def ai_update_dataset_record(session_id):
     """Update a specific record in the dataset file (Developer Mode edit)."""
     try:
@@ -3748,6 +4121,7 @@ def ai_update_dataset_record(session_id):
 
 
 @app.route('/api/ai/dataset/records', methods=['POST'])
+@require_admin
 def ai_add_dataset_record():
     """Add a new test sample to the dataset file (Developer Mode)."""
     try:
@@ -3760,6 +4134,8 @@ def ai_add_dataset_record():
 
 
 @app.route('/api/ai/models/charging_time/fine-tune', methods=['POST'])
+@require_admin
+@rate_limit(3, 3600)
 def ai_fine_tune_charging_time():
     """Trigger fine-tuning of charging_time model using physical dataset and export joblib + tflite."""
     try:
@@ -4058,6 +4434,7 @@ def smart_charge_shadow_status():
 # WEB SYNC ENDPOINTS
 # ═══════════════════════════════════════════════════════════════
 @app.route('/api/web/sync/battery-state', methods=['POST'])
+@require_auth
 def web_sync_battery_state():
     """Sync battery state from mobile app to web dashboard."""
     try:
@@ -4075,6 +4452,7 @@ def web_sync_battery_state():
         except TelemetryValidationError as exc:
             return jsonify({'success': False, 'error': str(exc)}), 400
         telemetry['syncedAt'] = datetime.now(timezone.utc)
+        telemetry['ownerUid'] = request._uid
         telemetry.setdefault('source', 'flutter_app')
         doc_ref = _firestore_db.collection('battery_states').add(telemetry)
         
@@ -4115,6 +4493,7 @@ def ingest_telemetry():
     return jsonify({'success': True, 'data': {'id': doc_ref[1].id, 'telemetry': telemetry}}), 201
 
 @app.route('/api/web/sync/trip-prediction', methods=['POST'])
+@require_auth
 def web_sync_trip_prediction():
     """Sync trip prediction from mobile app to web dashboard."""
     try:
@@ -4129,6 +4508,7 @@ def web_sync_trip_prediction():
         # Store trip prediction
         doc_ref = _firestore_db.collection('trip_predictions').add({
             **body,
+            'ownerUid': request._uid,
             'syncedAt': datetime.now(timezone.utc),
             'source': 'mobile_app'
         })
@@ -4158,8 +4538,7 @@ def _require_user_or_admin():
     Xác thực user-facing request: chấp nhận Firebase token HOẶC X-Admin-Key.
     Trả (uid, email) hoặc raise ValueError nếu không xác thực được.
     """
-    admin_key = request.headers.get('X-Admin-Key', '')
-    if admin_key and admin_key == _DEV_ADMIN_KEY:
+    if _dev_admin_allowed():
         return 'dev-admin', 'dev@local'
     uid, email, _role = _verify_token()
     if not uid:
@@ -4420,9 +4799,11 @@ def sync_vehicle():
     if not _fs():
         return jsonify({'success': False, 'error': 'Firestore không khả dụng'}), 503
 
-    body = request.get_json() or {}
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({'success': False, 'error': 'JSON object bắt buộc'}), 400
     vehicle_id = body.get('vehicleId') or body.get('id')
-    if not vehicle_id:
+    if not valid_document_id(vehicle_id):
         return jsonify({'success': False, 'error': 'vehicleId bắt buộc'}), 400
 
     payload = dict(body)
@@ -4432,7 +4813,14 @@ def sync_vehicle():
     payload['syncedAt'] = datetime.now(timezone.utc).isoformat()
     payload = _ensure_schema(payload, 'Vehicles')
 
-    _fs().collection('Vehicles').document(vehicle_id).set(payload, merge=True)
+    try:
+        commit_owned_writes(_fs(), [('Vehicles', vehicle_id, payload)], uid)
+    except PermissionError:
+        return jsonify({'success': False, 'error': 'Không có quyền đồng bộ xe này'}), 403
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+    except Exception:
+        return jsonify({'success': False, 'error': 'Chưa đồng bộ được xe. Hãy thử lại sau.'}), 503
     return jsonify({'success': True, 'data': {'vehicleId': vehicle_id}})
 
 
@@ -4451,23 +4839,30 @@ def sync_full():
     if not _fs():
         return jsonify({'success': False, 'error': 'Firestore không khả dụng'}), 503
 
-    body = request.get_json() or {}
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({'success': False, 'error': 'JSON object bắt buộc'}), 400
     stats: dict = {}
+    writes = []
     now_iso = datetime.now(timezone.utc).isoformat()
 
     # Upsert profile
     if 'profile' in body:
+        if not isinstance(body['profile'], dict):
+            return jsonify({'success': False, 'error': 'profile phải là object'}), 400
         profile = dict(body['profile'])
         profile['ownerUid'] = uid
         profile.setdefault('email', email)
         profile['syncedAt'] = now_iso
-        _fs().collection('users').document(uid).set(profile, merge=True)
+        writes.append(('users', uid, profile))
         stats['profile'] = 'synced'
 
     # Upsert collections
     collection_keys = ['vehicles', 'chargeLogs', 'tripLogs', 'maintenance', 'chargeSamples', 'telemetry']
     for key in collection_keys:
         items = body.get(key, [])
+        if not isinstance(items, list) or any(not isinstance(item, dict) for item in items):
+            return jsonify({'success': False, 'error': f'{key} phải là danh sách object'}), 400
         if not items:
             continue
         col_name = _STANDARD_COLLECTIONS[key]
@@ -4486,14 +4881,24 @@ def sync_full():
                 item['ownerUid'] = uid
                 item['syncedAt'] = now_iso
             item = _ensure_schema(item, col_name)
-            doc_id = item.get(id_field) or item.get('vehicleId') or item.get('id')
+            doc_id = item.get(id_field) or item.get('id')
             if doc_id:
-                _fs().collection(col_name).document(str(doc_id)).set(item, merge=True)
+                writes.append((col_name, str(doc_id), item))
             else:
-                _fs().collection(col_name).add(item)
+                if key == 'vehicles':
+                    return jsonify({'success': False, 'error': 'vehicleId bắt buộc'}), 400
+                return jsonify({'success': False, 'error': f'{key}: id ổn định bắt buộc để tránh ghi trùng khi retry'}), 400
             count += 1
         stats[key] = count
 
+    try:
+        commit_owned_writes(_fs(), writes, uid)
+    except PermissionError:
+        return jsonify({'success': False, 'error': 'Không có quyền đồng bộ bản ghi hoặc xe liên quan'}), 403
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+    except Exception:
+        return jsonify({'success': False, 'error': 'Chưa đồng bộ được dữ liệu. Hãy thử lại sau.'}), 503
     return jsonify({'success': True, 'data': {'uid': uid, 'synced': stats, 'syncedAt': now_iso}})
 
 

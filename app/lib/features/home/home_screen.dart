@@ -65,8 +65,11 @@ class HomeScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: AppUiColors.of(context).background,
       body: SafeArea(
-        child: RefreshIndicator(
-          color: AppUiColors.of(context).primary,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: RefreshIndicator(
+              color: AppUiColors.of(context).primary,
           onRefresh: () async {
             ref.invalidate(allVehiclesProvider);
             if (vehicleId.isNotEmpty) {
@@ -118,6 +121,37 @@ class HomeScreen extends ConsumerWidget {
                 ),
               ),
 
+              // ── Quick Actions ──
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(20, 20, 20, 0),
+                  child: vehicleAsync.when(
+                    data: (vehicle) => _QuickActionsRow(
+                      vehicleId: vehicle?.vehicleId ?? '',
+                      onSync: () => _showSyncDialog(context),
+                    ),
+                    loading: () => _QuickActionsShimmer(),
+                    error: (_, __) => _QuickActionsRow(
+                      vehicleId: '',
+                      onSync: () => _showSyncDialog(context),
+                    ),
+                  ),
+                ),
+              ),
+
+              // ── Stat Cards Row ──
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(20, 20, 20, 0),
+                  child: vehicleAsync.when(
+                    data: (vehicle) => _StatCardsRow(vehicle: vehicle),
+                    loading: () => _StatCardsRowShimmer(),
+                    error: (_, __) => _StatCardsRow(vehicle: null),
+                  ),
+                ),
+              ),
+
+              // ── Range Prediction Card ──
               SliverToBoxAdapter(
                 child: Padding(
                   padding: EdgeInsets.fromLTRB(20, 20, 20, 0),
@@ -138,18 +172,6 @@ class HomeScreen extends ConsumerWidget {
                 ),
               ),
 
-              // ── Stat Cards Row ──
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(20, 20, 20, 0),
-                  child: vehicleAsync.when(
-                    data: (vehicle) => _StatCardsRow(vehicle: vehicle),
-                    loading: () => _StatCardsRowShimmer(),
-                    error: (_, __) => _StatCardsRow(vehicle: null),
-                  ),
-                ),
-              ),
-
               // ── Battery Health Score ──
               SliverToBoxAdapter(
                 child: Padding(
@@ -164,24 +186,6 @@ class HomeScreen extends ConsumerWidget {
                     loading: () => _BatteryHealthShimmer(),
                     error: (_, __) =>
                         _BatteryHealthCard(soh: null, vehicleId: ''),
-                  ),
-                ),
-              ),
-
-              // ── Quick Actions ──
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(20, 24, 20, 0),
-                  child: vehicleAsync.when(
-                    data: (vehicle) => _QuickActionsRow(
-                      vehicleId: vehicle?.vehicleId ?? '',
-                      onSync: () => _showSyncDialog(context),
-                    ),
-                    loading: () => _QuickActionsShimmer(),
-                    error: (_, __) => _QuickActionsRow(
-                      vehicleId: '',
-                      onSync: () => _showSyncDialog(context),
-                    ),
                   ),
                 ),
               ),
@@ -212,6 +216,8 @@ class HomeScreen extends ConsumerWidget {
             ],
           ),
         ),
+          ),
+        ),
       ),
     );
   }
@@ -230,11 +236,15 @@ class _VehicleBanner extends StatelessWidget {
 
   const _VehicleBanner({this.vehicle});
 
-    final name = vehicle?.name.isNotEmpty == true
-        ? vehicle!.name
-        : (vehicle?.model.isNotEmpty == true ? vehicle!.model : 'VinFast EV');
-    final plate = vehicle?.licensePlate.isNotEmpty == true
-        ? vehicle!.licensePlate
+  @override
+  Widget build(BuildContext context) {
+    final name = vehicle?.vehicleName.isNotEmpty == true
+        ? vehicle!.vehicleName
+        : (vehicle?.vinfastModelName?.isNotEmpty == true
+            ? vehicle!.vinfastModelName!
+            : 'VinFast EV');
+    final plate = vehicle?.vehicleId.isNotEmpty == true
+        ? vehicle!.vehicleId
         : 'VF-ECO';
     final percent = vehicle?.hasBatteryData == true
         ? vehicle?.lastBatteryPercent
@@ -245,9 +255,9 @@ class _VehicleBanner extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(28),
         color: CockpitColors.surface,
-        image: const DecorationImage(
+        image: DecorationImage(
           onError: (_, __) {},
-          image: NetworkImage(
+          image: const NetworkImage(
             'https://images.unsplash.com/photo-1617788138017-80ad40651399?w=800',
           ),
           fit: BoxFit.cover,
@@ -335,7 +345,7 @@ class _VehicleBanner extends StatelessWidget {
                     border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
                   ),
                   child: Text(
-                    vehicle?.model.toUpperCase() ?? 'VF COCKPIT',
+                    vehicle?.vinfastModelName?.toUpperCase() ?? 'VF COCKPIT',
                     style: CockpitTypography.label(
                       color: Colors.white70,
                       fontSize: 10,

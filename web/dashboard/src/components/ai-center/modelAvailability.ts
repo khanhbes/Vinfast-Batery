@@ -60,15 +60,15 @@ export function getModelAvailability(meta: ModelTypeMeta): ModelAvailabilityInfo
   if (rt.isLoaded && rt.isPredictable) {
     return {
       state: 'ready',
-      label: 'Sẵn sàng',
-      badgeText: activeVersion ? `Sẵn sàng · ${activeVersion}` : 'Sẵn sàng',
+      label: 'Ready',
+      badgeText: activeVersion ? `Ready · ${activeVersion}` : 'Ready',
       color: 'text-emerald-400',
       bg: 'bg-emerald-500/10',
       borderColor: 'border-emerald-500/30',
       icon: CheckCircle2,
       canPredict: true,
       activeVersion,
-      description: 'Model đã nạp và sẵn sàng chạy kiểm thử dự đoán.',
+      description: 'The model is loaded and ready for prediction tests.',
     };
   }
 
@@ -76,15 +76,15 @@ export function getModelAvailability(meta: ModelTypeMeta): ModelAvailabilityInfo
   if (rt.isLoaded && rt.isPredictable === false) {
     return {
       state: 'invalid',
-      label: 'Model có lỗi',
-      badgeText: activeVersion ? `Lỗi kiểm tra · ${activeVersion}` : 'Lỗi kiểm tra',
+      label: 'Model error',
+      badgeText: activeVersion ? `Validation error · ${activeVersion}` : 'Validation error',
       color: 'text-red-400',
       bg: 'bg-red-500/10',
       borderColor: 'border-red-500/30',
       icon: XCircle,
       canPredict: false,
       activeVersion,
-      description: 'Model đã nạp nhưng kiểm tra smoke test hoặc predictor không đạt yêu cầu.',
+      description: 'The model is loaded, but its smoke test or predictor validation failed.',
     };
   }
 
@@ -92,15 +92,15 @@ export function getModelAvailability(meta: ModelTypeMeta): ModelAvailabilityInfo
   if (isModelDeployed(meta)) {
     return {
       state: 'deployed_not_loaded',
-      label: 'Chưa nạp RAM',
-      badgeText: activeVersion ? `Đã kích hoạt · ${activeVersion}` : 'Đã triển khai',
+      label: 'Not loaded in memory',
+      badgeText: activeVersion ? `Activated · ${activeVersion}` : 'Deployed',
       color: 'text-blue-400',
       bg: 'bg-blue-500/10',
       borderColor: 'border-blue-500/30',
       icon: Loader2,
       canPredict: false,
       activeVersion,
-      description: 'Model đã được kích hoạt làm phiên bản chính thức, đang cần nạp vào bộ nhớ.',
+      description: 'The model is active in production and needs to be loaded into memory.',
     };
   }
 
@@ -108,29 +108,29 @@ export function getModelAvailability(meta: ModelTypeMeta): ModelAvailabilityInfo
   if (rt.versionsCount > 0) {
     return {
       state: 'uploaded_only',
-      label: 'Chưa triển khai',
-      badgeText: `${rt.versionsCount} version chưa active`,
+      label: 'Not deployed',
+      badgeText: `${rt.versionsCount} versions are not active`,
       color: 'text-amber-400',
       bg: 'bg-amber-500/10',
       borderColor: 'border-amber-500/30',
       icon: AlertCircle,
       canPredict: false,
       activeVersion: null,
-      description: 'Bạn đã upload model nhưng chưa chọn version hoạt động (Deploy / Active).',
+      description: 'Models were uploaded, but no active version has been selected.',
     };
   }
 
   // 5. No model at all
   return {
     state: 'no_model',
-    label: 'Chưa có model',
-    badgeText: 'Chưa có model',
+    label: 'No model',
+    badgeText: 'No model',
     color: 'text-slate-400',
     bg: 'bg-slate-500/10',
     borderColor: 'border-slate-500/30',
     icon: PackageX,
     canPredict: false,
     activeVersion: null,
-    description: 'Chưa có file model nào được tải lên cho chức năng này.',
+    description: 'No model file has been uploaded for this function.',
   };
 }

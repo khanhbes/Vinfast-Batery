@@ -65,6 +65,8 @@ class StatCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: AppColors.textTertiary,
               fontSize: 12,
@@ -75,6 +77,8 @@ class StatCard extends StatelessWidget {
             const SizedBox(height: 2),
             Text(
               subtitle!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(color: AppColors.textHint, fontSize: 11),
             ),
           ],

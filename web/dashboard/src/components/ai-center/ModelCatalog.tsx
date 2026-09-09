@@ -38,7 +38,7 @@ export default function ModelCatalog() {
       setGroups(grs);
     } catch (e: any) {
       if (id !== request.current) return;
-      setError(e?.message || 'Không tải được danh sách model type');
+      setError(e?.message || 'Could not load the model catalog');
     } finally {
       if (id === request.current) setLoading(false);
     }
@@ -63,7 +63,7 @@ export default function ModelCatalog() {
     const result = [...groups];
     for (const key of Object.keys(byGroup)) {
       if (!result.some(g => g.key === key)) {
-        result.push({ key: key as ModelGroup, label: key, subtitle: 'Các mô hình được máy chủ cung cấp', phase: '', order: result.length });
+        result.push({ key: key as ModelGroup, label: key, subtitle: 'Models provided by the server', phase: '', order: result.length });
       }
     }
     return result;
@@ -84,28 +84,28 @@ export default function ModelCatalog() {
             <div className="flex items-center gap-2 text-xs font-medium uppercase text-muted-foreground">
               <Sparkles className="w-3.5 h-3.5" /> AI Model Hub · Roadmap
             </div>
-            <h2 className="text-2xl font-bold mt-1">Trung tâm quản lý mô hình AI</h2>
+            <h2 className="text-2xl font-bold mt-1">AI model operations</h2>
             <p className="text-sm text-muted-foreground max-w-2xl">
-              {types.length > 0 ? `${types.length} mô hình AI` : 'Các mô hình AI'} theo roadmap 3 giai đoạn. Upload, hot-swap và kiểm thử nhanh trực tiếp từ dashboard.
+              {types.length > 0 ? `${types.length} AI models` : 'AI models'} across the three-stage roadmap. Upload, hot-swap and smoke-test directly from the dashboard.
             </p>
           </div>
           <Button variant="outline" size="sm" onClick={reload} disabled={loading}>
             <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Làm mới
+            Refresh
           </Button>
         </div>
 
         <div className="mt-5 grid grid-cols-2 md:grid-cols-4 gap-3">
-          <KpiTile icon={<Database className="w-4 h-4" />} label="Tổng mô hình" value={String(types.length)} hint={`${plannedCount} đang lên kế hoạch`} />
-          <KpiTile icon={<CheckCircle2 className="w-4 h-4 text-green-600" />} label="Đã triển khai" value={`${readyCount}/${types.length}`} />
-          <KpiTile icon={<Rocket className="w-4 h-4 text-blue-600" />} label="Model đã nạp" value={`${loadedCount}/${readyCount}`} hint="Loaded vào bộ nhớ" />
-          <KpiTile icon={<Database className="w-4 h-4 text-violet-600" />} label="Tổng versions" value={String(totalVersions)} />
+          <KpiTile icon={<Database className="w-4 h-4" />} label="Total models" value={String(types.length)} hint={`${plannedCount} planned`} />
+          <KpiTile icon={<CheckCircle2 className="w-4 h-4 text-green-600" />} label="Deployed" value={`${readyCount}/${types.length}`} />
+          <KpiTile icon={<Rocket className="w-4 h-4 text-blue-600" />} label="Models loaded" value={`${loadedCount}/${readyCount}`} hint="Loaded in memory" />
+          <KpiTile icon={<Database className="w-4 h-4 text-violet-600" />} label="Total versions" value={String(totalVersions)} />
         </div>
 
         <div className="mt-4 text-xs text-muted-foreground flex flex-wrap gap-3">
-          <Legend color="bg-green-500" label="Đã triển khai" />
-          <Legend color="bg-blue-500" label="Đang làm" />
-          <Legend color="bg-slate-400" label="Lên kế hoạch" />
+          <Legend color="bg-green-500" label="Deployed" />
+          <Legend color="bg-blue-500" label="In progress" />
+          <Legend color="bg-slate-400" label="Planned" />
         </div>
       </div>
 
@@ -117,7 +117,7 @@ export default function ModelCatalog() {
 
       {/* Groups */}
       {loading && types.length === 0 ? (
-        <div className="text-center py-10 text-muted-foreground text-sm">Đang tải danh sách mô hình...</div>
+        <div className="text-center py-10 text-muted-foreground text-sm">Loading model catalog...</div>
       ) : (
         displayGroups.map((g) => {
           const groupTypes = byGroup[g.key] || [];
@@ -145,7 +145,7 @@ export default function ModelCatalog() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Clock className="w-3.5 h-3.5" /> {groupTypes.length} mô hình
+                    <Clock className="w-3.5 h-3.5" /> {groupTypes.length} models
                   </div>
                 </div>
               </div>
@@ -178,7 +178,7 @@ export default function ModelCatalog() {
           );
         })
       )}
-      {!loading && !error && types.length === 0 && <p role="status" className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">Chưa có mô hình nào trong danh mục máy chủ.</p>}
+      {!loading && !error && types.length === 0 && <p role="status" className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">No models are available in the server catalog.</p>}
     </div>
   );
 }

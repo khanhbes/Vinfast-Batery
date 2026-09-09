@@ -24,8 +24,90 @@ abstract final class CockpitColors {
   static const text = Color(0xFFF8FAFC);
   static const muted = Color(0xFF94A3B8);
   static const dim = Color(0xFF64748B);
-  static const border = Color(0x14FFFFFF);
-  static const borderStrong = Color(0x24FFFFFF);
+  static const border = Color(0xFF1E232B);
+  static const borderStrong = Color(0xFF282F3B);
+}
+
+/// Theme-adaptive color scheme accessor via `context.cockpit`.
+extension CockpitThemeX on BuildContext {
+  CockpitColorScheme get cockpit => CockpitColorScheme.of(this);
+}
+
+class CockpitColorScheme {
+  CockpitColorScheme.of(BuildContext context) : _ui = AppUiColors.of(context);
+  final AppUiColors _ui;
+
+  bool get dark => _ui.dark;
+  Color get background => _ui.background;
+  Color get shell => _ui.shell;
+  Color get surface => _ui.surface;
+  Color get elevated => _ui.elevated;
+  Color get surfaceSoft => _ui.surfaceSoft;
+  Color get cardBackground => _ui.cardBackground;
+  Color get border => _ui.border;
+  Color get borderStrong => _ui.borderStrong;
+
+  Color get text => _ui.text;
+  Color get muted => _ui.muted;
+  Color get dim => _ui.dim;
+
+  Color get emerald => CockpitColors.emerald;
+  Color get emeraldStrong => CockpitColors.emeraldStrong;
+  Color get emeraldGlow => CockpitColors.emeraldGlow;
+  Color get emeraldSubtle => CockpitColors.emeraldSubtle;
+  Color get amber => _ui.amber;
+  Color get danger => _ui.danger;
+  Color get info => _ui.info;
+
+  TextStyle numbers({
+    double? fontSize,
+    FontWeight fontWeight = FontWeight.w700,
+    Color? color,
+    double? letterSpacing,
+  }) => CockpitTypography.numbers(
+    fontSize: fontSize,
+    fontWeight: fontWeight,
+    color: color ?? text,
+    letterSpacing: letterSpacing,
+  );
+
+  TextStyle heading({
+    double? fontSize,
+    FontWeight fontWeight = FontWeight.w700,
+    Color? color,
+    double? letterSpacing,
+  }) => CockpitTypography.heading(
+    fontSize: fontSize,
+    fontWeight: fontWeight,
+    color: color ?? text,
+    letterSpacing: letterSpacing,
+  );
+
+  TextStyle body({
+    double? fontSize,
+    FontWeight fontWeight = FontWeight.w400,
+    Color? color,
+    double? height,
+    double? letterSpacing,
+  }) => CockpitTypography.body(
+    fontSize: fontSize,
+    fontWeight: fontWeight,
+    color: color ?? text,
+    height: height,
+    letterSpacing: letterSpacing,
+  );
+
+  TextStyle label({
+    double? fontSize,
+    FontWeight fontWeight = FontWeight.w600,
+    Color? color,
+    double? letterSpacing,
+  }) => CockpitTypography.label(
+    fontSize: fontSize,
+    fontWeight: fontWeight,
+    color: color ?? muted,
+    letterSpacing: letterSpacing,
+  );
 }
 
 abstract final class CockpitSpacing {
@@ -72,10 +154,12 @@ abstract final class CockpitTypography {
     double? fontSize,
     FontWeight fontWeight = FontWeight.w700,
     Color color = CockpitColors.text,
+    double? letterSpacing,
   }) => GoogleFonts.jetBrainsMono(
     fontSize: fontSize,
     fontWeight: fontWeight,
     color: color,
+    letterSpacing: letterSpacing,
     fontFeatures: const [FontFeature.tabularFigures()],
   );
 
@@ -96,11 +180,13 @@ abstract final class CockpitTypography {
     FontWeight fontWeight = FontWeight.w400,
     Color color = CockpitColors.text,
     double? height,
+    double? letterSpacing,
   }) => GoogleFonts.inter(
     fontSize: fontSize,
     fontWeight: fontWeight,
     color: color,
     height: height,
+    letterSpacing: letterSpacing,
   );
 
   static TextStyle label({
@@ -133,27 +219,30 @@ class CockpitSurface extends StatelessWidget {
   final Color? color;
 
   @override
-  Widget build(BuildContext context) => DecoratedBox(
-    decoration: BoxDecoration(
-      color: color ?? CockpitColors.surface,
-      borderRadius: BorderRadius.circular(CockpitRadius.large),
-      border: Border.all(
-        color: highlight
-            ? CockpitColors.emerald.withValues(alpha: .34)
-            : CockpitColors.border,
+  Widget build(BuildContext context) {
+    final colors = context.cockpit;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color ?? colors.surface,
+        borderRadius: BorderRadius.circular(CockpitRadius.large),
+        border: Border.all(
+          color: highlight
+              ? colors.emerald.withValues(alpha: .34)
+              : colors.borderStrong,
+        ),
+        boxShadow: highlight && CockpitMotion.enabled(context)
+            ? [
+                BoxShadow(
+                  color: colors.emerald.withValues(alpha: .09),
+                  blurRadius: 28,
+                  spreadRadius: 1,
+                ),
+              ]
+            : const [],
       ),
-      boxShadow: highlight && CockpitMotion.enabled(context)
-          ? [
-              BoxShadow(
-                color: CockpitColors.emerald.withValues(alpha: .09),
-                blurRadius: 28,
-                spreadRadius: 1,
-              ),
-            ]
-          : const [],
-    ),
-    child: Padding(padding: padding, child: child),
-  );
+      child: Padding(padding: padding, child: child),
+    );
+  }
 }
 
 class CockpitSectionLabel extends StatelessWidget {

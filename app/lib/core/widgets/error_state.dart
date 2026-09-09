@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 import '../utils/app_error_formatter.dart';
+import 'debug_error_sheet.dart';
 
 /// Widget hiển thị trạng thái lỗi — Dark Premium V3.
 ///
@@ -97,9 +98,23 @@ class ErrorState extends StatelessWidget {
                   ),
                 ),
               ),
+              const SizedBox(height: 10),
+              TextButton.icon(
+                onPressed: () => DebugErrorSheet.show(
+                  context,
+                  error: rawError,
+                  source: 'ErrorState',
+                ),
+                icon: const Icon(Icons.bug_report_outlined, size: 16),
+                label: const Text('Xem chi tiết lỗi (Debug)'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.error,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
             ],
             if (onRetry != null) ...[
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
               ConstrainedBox(
                 constraints: const BoxConstraints(minHeight: 48),
                 child: ElevatedButton.icon(

@@ -193,9 +193,10 @@ class _AddChargeLogModalState extends ConsumerState<AddChargeLogModal> {
         constraints: BoxConstraints(
           maxHeight: MediaQuery.of(context).size.height * 0.9,
         ),
-        decoration: const BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardTheme.color ??
+              Theme.of(context).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -206,7 +207,10 @@ class _AddChargeLogModalState extends ConsumerState<AddChargeLogModal> {
             // Header
             _buildHeader(),
 
-            const Divider(color: AppColors.border, height: 1),
+            Divider(
+              color: Theme.of(context).colorScheme.outlineVariant,
+              height: 1,
+            ),
 
             // Content (scrollable)
             Flexible(
@@ -214,6 +218,7 @@ class _AddChargeLogModalState extends ConsumerState<AddChargeLogModal> {
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
                 child: Form(
                   key: _formKey,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [

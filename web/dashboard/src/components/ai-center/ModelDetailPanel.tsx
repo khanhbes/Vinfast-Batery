@@ -38,7 +38,7 @@ export default function ModelDetailPanel({ meta, onAfterChange }: Props) {
       const res = await aiListModels(meta.key);
       setVersions((res?.data?.versions ?? []) as ModelVersion[]);
     } catch (e: any) {
-      setMessage({ type: 'err', text: e?.message || 'Không tải được danh sách' });
+      setMessage({ type: 'err', text: e?.message || 'Could not load the list' });
     } finally {
       setLoading(false);
     }
@@ -75,7 +75,7 @@ export default function ModelDetailPanel({ meta, onAfterChange }: Props) {
     setLoadingModel(true);
     aiLoadActiveModel(meta.key)
       .then(() => setLoadError(null))
-      .catch((e: any) => setLoadError(e?.message || 'Không thể nạp model'))
+      .catch((e: any) => setLoadError(e?.message || 'The model could not be loaded'))
       .finally(() => setLoadingModel(false));
   }, [activeVersion, meta.key, reload]);
 
@@ -98,75 +98,75 @@ export default function ModelDetailPanel({ meta, onAfterChange }: Props) {
   const onDelete = async (v: string) => {
     const isActive = v === activeVersion;
     const msg = isActive
-      ? `Version "${v}" đang được active. Xóa sẽ deactivate model này.\n\nTiếp tục?`
-      : `Xóa vĩnh viễn version "${v}"?`;
+      ? `Version "${v}" is active. Deleting it will deactivate this model.\n\nContinue?`
+      : `Permanently delete version "${v}"?`;
     if (!confirm(msg)) return;
     try {
       await aiDeleteModel(meta.key, v);
-      setMessage({ type: 'ok', text: `Đã xóa ${v}${isActive ? ' và deactivate' : ''}` });
+      setMessage({ type: 'ok', text: `Deleted ${v}${isActive ? ' and deactivated' : ''}` });
       await reload();
       onAfterChange();
     } catch (e: any) {
-      setMessage({ type: 'err', text: e?.message || 'Xóa thất bại' });
+      setMessage({ type: 'err', text: e?.message || 'Delete failed' });
     }
   };
 
   const onDeactivate = async () => {
-    if (!confirm(`Deactivate model "${meta.label}"?\n\nModel sẽ không còn được nạp trong bộ nhớ.`)) return;
+    if (!confirm(`Deactivate model "${meta.label}"?\n\nThe model will no longer be loaded in memory.`)) return;
     try {
       await aiDeactivateModel(meta.key);
-      setMessage({ type: 'ok', text: 'Đã deactivate model' });
+      setMessage({ type: 'ok', text: 'Model deactivated' });
       await reload();
       onAfterChange();
     } catch (e: any) {
-      setMessage({ type: 'err', text: e?.message || 'Deactivate thất bại' });
+      setMessage({ type: 'err', text: e?.message || 'Deactivation failed' });
     }
   };
 
-  // ── PLAN1: Test version chưa deploy ────────────────────────────────
+  // ── PLAN1: Test version not deployed ────────────────────────────────
   const onTestVersion = (version: string) => {
     setSelectedTestVersion(version);
     setTab('test');
-    setMessage({ type: 'info', text: `Đã chọn version ${version} để test nhanh` });
+    setMessage({ type: 'info', text: `Selected version ${version} for a smoke test` });
   };
 
-  // ── PLAN1: Deploy version chính thức ───────────────────────────────
+  // ── PLAN1: Deploy version production ───────────────────────────────
   const onDeploy = async (version: string) => {
-    if (!confirm(`Triển khai model "${meta.label}" version ${version}?\n\nModel sẽ được active và sẵn sàng cho app.`)) return;
+    if (!confirm(`Deploy model "${meta.label}" version ${version}?\n\nThe model will become active and available to the app.`)) return;
     try {
-      setMessage({ type: 'ok', text: `Đang deploy ${version}...` });
+      setMessage({ type: 'ok', text: `Deploying ${version}...` });
       const res = await aiDeployModel(meta.key, version);
-      setMessage({ type: 'ok', text: `Đã triển khai ${version}: ${res?.data?.status || 'OK'}` });
+      setMessage({ type: 'ok', text: `Deployed ${version}: ${res?.data?.status || 'OK'}` });
       await reload();
       onAfterChange();
     } catch (e: any) {
-      setMessage({ type: 'err', text: `Deploy thất bại: ${e?.message}` });
+      setMessage({ type: 'err', text: `Deployment failed: ${e?.message}` });
     }
   };
 
   const [fineTuning, setFineTuning] = useState(false);
 
   const onFineTune = async () => {
-    if (!confirm('Bắt đầu fine-tune mô hình Smart Charge từ các phiên sạc thực tế?')) return;
+    if (!confirm('Start fine-tuning the Smart Charge model from real charging sessions?')) return;
     try {
       setFineTuning(true);
-      setMessage({ type: 'info', text: 'Đang trích xuất dataset và huấn luyện mô hình...' });
+      setMessage({ type: 'info', text: 'Extracting the dataset and training the model...' });
       const res = await fetch('/api/ai/models/charging_time/fine-tune', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
       const data = await res.json();
       if (!data.success) {
-        throw new Error(data.error || 'Fine-tune thất bại');
+        throw new Error(data.error || 'Fine-tuning failed');
       }
       setMessage({
         type: 'ok',
-        text: `Đã fine-tune thành công version ${data.data.version}! MAPE: ${data.data.metrics.mape}% (Độ chính xác: ${data.data.metrics.accuracyPct}%)`,
+        text: `Successfully fine-tuned version ${data.data.version}! MAPE: ${data.data.metrics.mape}% (Accuracy: ${data.data.metrics.accuracyPct}%)`,
       });
       await reload();
       onAfterChange();
     } catch (e: any) {
-      setMessage({ type: 'err', text: `Lỗi fine-tune: ${e?.message}` });
+      setMessage({ type: 'err', text: `Fine-tuning error: ${e?.message}` });
     } finally {
       setFineTuning(false);
     }
@@ -198,7 +198,7 @@ export default function ModelDetailPanel({ meta, onAfterChange }: Props) {
               className="bg-indigo-600 hover:bg-indigo-700 text-white"
             >
               <Brain className={`w-4 h-4 mr-1 ${fineTuning ? 'animate-spin' : ''}`} />
-              {fineTuning ? 'Đang train...' : 'Fine-tune AI'}
+              {fineTuning ? 'Training...' : 'Fine-tune AI'}
             </Button>
           )}
           {activeVersion && (
@@ -209,7 +209,7 @@ export default function ModelDetailPanel({ meta, onAfterChange }: Props) {
           )}
           <Button variant="outline" size="sm" onClick={reload} disabled={loading}>
             <RefreshCw className={`w-4 h-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
-            Làm mới
+            Refresh
           </Button>
           <Button size="sm" onClick={() => setUploadOpen(true)}>
             <Upload className="w-4 h-4 mr-1" />
@@ -224,7 +224,7 @@ export default function ModelDetailPanel({ meta, onAfterChange }: Props) {
         <div className={`px-5 py-3 border-b ${c.bg}`}>
           {meta.useCase && (
             <div className="text-sm">
-              <span className={`font-semibold ${c.text}`}>Bài toán: </span>
+              <span className={`font-semibold ${c.text}`}>Task: </span>
               <span className="text-foreground/80">{meta.useCase}</span>
             </div>
           )}
@@ -240,7 +240,7 @@ export default function ModelDetailPanel({ meta, onAfterChange }: Props) {
       <div className="flex gap-1 px-4 border-b bg-muted/20">
         <TabButton active={tab === 'test'} onClick={() => setTab('test')} icon={<FlaskConical className="w-4 h-4" />} label="Test nhanh" />
         <TabButton active={tab === 'versions'} onClick={() => setTab('versions')} icon={<History className="w-4 h-4" />} label="Versions" count={versions.length} />
-        <TabButton active={tab === 'metrics'} onClick={() => setTab('metrics')} icon={<BarChart3 className="w-4 h-4" />} label="Đánh giá" />
+        <TabButton active={tab === 'metrics'} onClick={() => setTab('metrics')} icon={<BarChart3 className="w-4 h-4" />} label="Evaluation" />
       </div>
 
       <CardContent className="p-4">
@@ -262,7 +262,7 @@ export default function ModelDetailPanel({ meta, onAfterChange }: Props) {
           loadingModel ? (
             <div className="text-center py-10 text-muted-foreground">
               <Loader2 className="w-8 h-8 mx-auto mb-2 animate-spin opacity-40" />
-              <div className="text-sm">Đang nạp model…</div>
+              <div className="text-sm">Loading model...</div>
             </div>
           ) : !hasVersions ? (
             <NoModelState
@@ -321,7 +321,7 @@ export default function ModelDetailPanel({ meta, onAfterChange }: Props) {
           typeLabel={meta.label}
           onClose={() => setUploadOpen(false)}
           onUploaded={(switchToTest = false) => {
-            setMessage({ type: 'ok', text: 'Upload thành công — Chọn version để Test và Deploy' });
+            setMessage({ type: 'ok', text: 'Upload successful — Select a version to test and deploy' });
             setLoadError(null);
             reload();
             onAfterChange();
@@ -343,14 +343,14 @@ function NoModelState({ typeKey, label, hasVersions, error, onUpload }: {
   return (
     <div className="text-center py-12 space-y-3">
       <PackageX className="w-12 h-12 mx-auto text-muted-foreground/30" />
-      <div className="text-lg font-semibold text-foreground">Chưa có model này</div>
+      <div className="text-lg font-semibold text-foreground">This model is not available</div>
       <div className="text-sm text-muted-foreground max-w-md mx-auto">
         {error ? (
           <span className="text-red-600">{error}</span>
         ) : hasVersions ? (
-          <>Model <span className="font-mono text-xs bg-muted rounded px-1">{typeKey}</span> đã có version nhưng chưa được triển khai. Vào tab <strong>Versions</strong> để Test → Đánh giá → Deploy.</>
+          <>Model <span className="font-mono text-xs bg-muted rounded px-1">{typeKey}</span> has stored versions but none is deployed. Open the <strong>Versions</strong> tab to Test → Evaluate → Deploy.</>
         ) : (
-          <>Model <span className="font-mono text-xs bg-muted rounded px-1">{label}</span> chưa được upload. Nhấn nút bên dưới để upload file model đã train.</>
+          <>Model <span className="font-mono text-xs bg-muted rounded px-1">{label}</span> has not been uploaded. Use the button below to upload a trained model file.</>
         )}
       </div>
       <Button onClick={onUpload} className="mt-2">
@@ -391,13 +391,13 @@ function VersionsTab({ versions, loading, onDelete, onTest, onDeploy, onEvaluate
   onDeploy?: (v: string) => void;
   onEvaluate?: (v: string) => void;
 }) {
-  if (loading) return <div className="text-sm text-muted-foreground py-6 text-center">Đang tải...</div>;
+  if (loading) return <div className="text-sm text-muted-foreground py-6 text-center">Loading...</div>;
   if (versions.length === 0) {
     return (
       <div className="text-center py-10 text-muted-foreground">
         <Upload className="w-8 h-8 mx-auto mb-2 opacity-30" />
-        <div className="text-sm">Chưa có version nào.</div>
-        <div className="text-xs">Nhấn "Upload model" để thêm version đầu tiên.</div>
+        <div className="text-sm">No versions yet.</div>
+        <div className="text-xs">Select "Upload model" to add the first version.</div>
       </div>
     );
   }
@@ -410,8 +410,8 @@ function VersionsTab({ versions, loading, onDelete, onTest, onDeploy, onEvaluate
             <th className="text-left py-2">Version</th>
             <th className="text-left py-2">Uploaded</th>
             <th className="text-left py-2">Size</th>
-            <th className="text-left py-2">Ghi chú</th>
-            <th className="text-right py-2">Thao tác</th>
+            <th className="text-left py-2">Notes</th>
+            <th className="text-right py-2">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -428,19 +428,19 @@ function VersionsTab({ versions, loading, onDelete, onTest, onDeploy, onEvaluate
               </td>
               <td className="py-2 text-right">
                 <div className="inline-flex gap-1">
-                  {/* PLAN1: Evaluate version - chuyển sang tab Đánh giá */}
+                  {/* PLAN1: Evaluate version - switch to the Evaluation */}
                   {onEvaluate && (
                     <Button size="sm" variant="outline" onClick={() => onEvaluate(v.version)}>
-                      <BarChart3 className="w-3.5 h-3.5 mr-1" /> Đánh giá
+                      <BarChart3 className="w-3.5 h-3.5 mr-1" /> Evaluation
                     </Button>
                   )}
-                  {/* PLAN1: Test version chưa deploy */}
+                  {/* PLAN1: Test version not deployed */}
                   {!v.active && onTest && (
                     <Button size="sm" variant="outline" onClick={() => onTest(v.version)}>
                       <PlayCircle className="w-3.5 h-3.5 mr-1" /> Test
                     </Button>
                   )}
-                  {/* Deploy version chính thức */}
+                  {/* Deploy version production */}
                   {!v.active && onDeploy && (
                     <Button size="sm" variant="default" onClick={() => onDeploy(v.version)} className="bg-blue-600 hover:bg-blue-700">
                       <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Deploy
@@ -529,7 +529,7 @@ function TestTab({
 
   const run = async () => {
     if (!effectiveSelectedVersion) {
-      setError('Chưa có version để test');
+      setError('There is no version to test');
       return;
     }
     setRunning(true);
@@ -553,7 +553,7 @@ function TestTab({
       }
       setResult(res?.data ?? res);
     } catch (e: any) {
-      setError(e?.message || 'Predict lỗi');
+      setError(e?.message || 'Prediction failed');
     } finally {
       setRunning(false);
     }
@@ -566,7 +566,7 @@ function TestTab({
   return (
     <div className="grid md:grid-cols-2 gap-4">
       <div>
-        {/* Version selector - cho phép chọn version để test */}
+        {/* Version selector - select a version to test */}
         <div className="flex items-center justify-between mb-3">
           <div className="text-sm font-medium">Test version</div>
           <select 
@@ -576,7 +576,7 @@ function TestTab({
           >
             {versions.map((v) => (
               <option key={v.version} value={v.version}>
-                {v.version} {v.active ? '(active)' : '(chưa deploy)'}
+                {v.version} {v.active ? '(active)' : '(not deployed)'}
               </option>
             ))}
           </select>
@@ -616,7 +616,7 @@ function TestTab({
                 )}
                 {schema?.min !== undefined && schema?.max !== undefined && (
                   <div className="text-[10px] text-muted-foreground ml-32 pl-2">
-                    Giá trị: {schema.min} - {schema.max}
+                    Range: {schema.min} - {schema.max}
                   </div>
                 )}
               </div>
@@ -625,13 +625,13 @@ function TestTab({
         </div>
         <Button onClick={run} disabled={running} className="mt-3 w-full">
           {running ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <PlayCircle className="w-4 h-4 mr-2" />}
-          Chạy prediction
+          Run prediction
         </Button>
 
         {/* Processed input section */}
         {result?.processedInput && (
           <div className="mt-4">
-            <div className="text-sm font-medium mb-1 text-muted-foreground">Input đã xử lý</div>
+            <div className="text-sm font-medium mb-1 text-muted-foreground">Processed input</div>
             <div className="rounded-md border bg-muted/10 p-2 text-xs font-mono overflow-auto max-h-[100px]">
               <pre className="whitespace-pre-wrap break-words">{JSON.stringify(result.processedInput, null, 2)}</pre>
             </div>
@@ -644,7 +644,7 @@ function TestTab({
         {hasWarnings && (
           <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-2">
             <div className="flex items-center gap-1 text-xs text-amber-700 font-medium mb-1">
-              <AlertCircle className="w-3 h-3" /> Cảnh báo
+              <AlertCircle className="w-3 h-3" /> Warnings
             </div>
             <ul className="text-xs text-amber-700 space-y-0.5">
               {(result?.warnings || []).map((w, i) => (
@@ -682,7 +682,7 @@ function TestTab({
               <>
                 {'prediction' in result && (
                   <div className="mb-3">
-                    <div className="text-sm text-muted-foreground mb-1">Kết quả dự đoán:</div>
+                    <div className="text-sm text-muted-foreground mb-1">Prediction result:</div>
                     {/* Formatted time output for charging_time */}
                     {result.formattedPrediction ? (
                       <div className="space-y-1">
@@ -693,7 +693,7 @@ function TestTab({
                         </div>
                         <div className="text-xs text-muted-foreground">
                           {result.predictionSeconds !== undefined && (
-                            <span>Model output: {result.predictionSeconds.toFixed(1)} giây → {result.predictionMinutes?.toFixed(1)} phút</span>
+                            <span>Model output: {result.predictionSeconds.toFixed(1)} seconds → {result.predictionMinutes?.toFixed(1)} minutes</span>
                           )}
                         </div>
                       </div>
@@ -722,7 +722,7 @@ function TestTab({
                 <pre className="whitespace-pre-wrap break-words">{JSON.stringify(result, null, 2)}</pre>
               </>
             ) : !error ? (
-              <div className="text-muted-foreground">Chạy prediction để xem kết quả</div>
+              <div className="text-muted-foreground">Run a prediction to see results</div>
             ) : null}
           </div>
         </div>
@@ -792,7 +792,7 @@ function MetricsTabEnhanced({ meta, versions, selectedVersion, onSelectedVersion
   // Build test cases by varying each field across low/mid/high
   const buildTestCases = (base: Record<string, any>) => {
     const cases: { label: string; payload: Record<string, any> }[] = [
-      { label: 'Baseline (giá trị nhập)', payload: { ...base } },
+      { label: 'Baseline (entered values)', payload: { ...base } },
     ];
     visibleFields.forEach(field => {
       const schema = meta.inputSchema?.[field];
@@ -801,7 +801,7 @@ function MetricsTabEnhanced({ meta, versions, selectedVersion, onSelectedVersion
         const max = Number(schema.max);
         const desc = schema.desc || field;
         cases.push({
-          label: `${desc} thấp (${min}${schema.unit || ''})`,
+          label: `${desc} low (${min}${schema.unit || ''})`,
           payload: { ...base, [field]: min },
         });
         cases.push({
@@ -843,7 +843,7 @@ function MetricsTabEnhanced({ meta, versions, selectedVersion, onSelectedVersion
             payload: tc.payload,
             prediction: null,
             ok: false,
-            error: e?.message || 'Predict lỗi',
+            error: e?.message || 'Prediction failed',
           });
         }
       }
@@ -873,7 +873,7 @@ function MetricsTabEnhanced({ meta, versions, selectedVersion, onSelectedVersion
       });
       setEvaluationMode('results');
     } catch (error: any) {
-      setEvalError(error?.message || 'Đánh giá thất bại');
+      setEvalError(error?.message || 'Evaluation failed');
     } finally {
       setIsEvaluating(false);
     }
@@ -883,7 +883,7 @@ function MetricsTabEnhanced({ meta, versions, selectedVersion, onSelectedVersion
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <div className="text-sm font-medium">Đánh giá model</div>
+          <div className="text-sm font-medium">Evaluation model</div>
           <select
             value={inspectedVersion}
             onChange={(e) => onSelectedVersionChange(e.target.value)}
@@ -901,13 +901,13 @@ function MetricsTabEnhanced({ meta, versions, selectedVersion, onSelectedVersion
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <BarChart3 className="w-5 h-5" />
-              Đánh giá mô hình AI
+              Evaluation AI models
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Chạy đánh giá tổng quan về model {meta.label} version {inspectedVersion}
+                Run a general evaluation of model {meta.label} version {inspectedVersion}
               </p>
               
               <div className="grid grid-cols-2 gap-4 text-sm">
@@ -927,7 +927,7 @@ function MetricsTabEnhanced({ meta, versions, selectedVersion, onSelectedVersion
 
               <Button onClick={initializeInputs} className="w-full">
                 <PlayCircle className="w-4 h-4 mr-2" />
-                Bắt đầu đánh giá
+                Start evaluation
               </Button>
             </div>
           </CardContent>
@@ -940,18 +940,18 @@ function MetricsTabEnhanced({ meta, versions, selectedVersion, onSelectedVersion
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <div className="text-sm font-medium">Nhập dữ liệu test</div>
+          <div className="text-sm font-medium">Enter test data</div>
           <Button variant="outline" size="sm" onClick={() => setEvaluationMode('select')}>
-            Quay lại
+            Back
           </Button>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Nhập features cho test case baseline</CardTitle>
+            <CardTitle className="text-sm">Enter features for the baseline test case</CardTitle>
             <CardDescription className="text-xs">
-              Hệ thống sẽ chạy nhiều test case dựa trên giá trị này (varying min/max của mỗi feature)
-              và gọi API thật để lấy prediction.
+              The system will run multiple test cases from these values, varying each feature across its minimum and maximum,
+              and call the real API for every prediction.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -984,13 +984,13 @@ function MetricsTabEnhanced({ meta, versions, selectedVersion, onSelectedVersion
               <div className="flex gap-2 pt-2">
                 <Button onClick={runEvaluation} disabled={isEvaluating} className="flex-1">
                   {isEvaluating ? (
-                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Đang chạy {buildTestCases(testInputs).length} test cases...</>
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Running {buildTestCases(testInputs).length} test cases...</>
                   ) : (
-                    <><TrendingUp className="w-4 h-4 mr-2" /> Chạy đánh giá</>
+                    <><TrendingUp className="w-4 h-4 mr-2" /> Run evaluation</>
                   )}
                 </Button>
                 <Button variant="outline" onClick={() => setEvaluationMode('select')} disabled={isEvaluating}>
-                  Hủy
+                  Cancel
                 </Button>
               </div>
             </div>
@@ -1009,9 +1009,9 @@ function MetricsTabEnhanced({ meta, versions, selectedVersion, onSelectedVersion
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <div className="text-sm font-medium">Kết quả đánh giá (dữ liệu thật từ model)</div>
+          <div className="text-sm font-medium">Evaluation results from the real model</div>
           <Button variant="outline" size="sm" onClick={() => setEvaluationMode('select')}>
-            Đánh giá mới
+            New evaluation
           </Button>
         </div>
 
@@ -1022,7 +1022,7 @@ function MetricsTabEnhanced({ meta, versions, selectedVersion, onSelectedVersion
               <div className="flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-blue-500" />
                 <div>
-                  <div className="text-xs text-muted-foreground">Trung bình</div>
+                  <div className="text-xs text-muted-foreground">Average</div>
                   <div className="text-base font-bold">{er.averagePrediction.toFixed(2)} {unit}</div>
                 </div>
               </div>
@@ -1033,7 +1033,7 @@ function MetricsTabEnhanced({ meta, versions, selectedVersion, onSelectedVersion
               <div className="flex items-center gap-2">
                 <CheckCircle2 className={`w-4 h-4 ${successColor}`} />
                 <div>
-                  <div className="text-xs text-muted-foreground">Tỷ lệ predict OK</div>
+                  <div className="text-xs text-muted-foreground">Successful predictions</div>
                   <div className={`text-base font-bold ${successColor}`}>{er.successRate.toFixed(0)}% ({er.successCases}/{er.totalCases})</div>
                 </div>
               </div>
@@ -1050,7 +1050,7 @@ function MetricsTabEnhanced({ meta, versions, selectedVersion, onSelectedVersion
           <Card>
             <CardContent className="p-3">
               <div>
-                <div className="text-xs text-muted-foreground">Biên độ (range)</div>
+                <div className="text-xs text-muted-foreground">Prediction span</div>
                 <div className="text-base font-bold">{er.rangePrediction.toFixed(2)} {unit}</div>
               </div>
             </CardContent>
@@ -1060,7 +1060,7 @@ function MetricsTabEnhanced({ meta, versions, selectedVersion, onSelectedVersion
         {/* Bar chart */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Biểu đồ dự đoán theo test case</CardTitle>
+            <CardTitle className="text-sm">Prediction chart theo test case</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
@@ -1071,7 +1071,7 @@ function MetricsTabEnhanced({ meta, versions, selectedVersion, onSelectedVersion
                     <div className="flex justify-between mb-1">
                       <span className="truncate max-w-[60%]" title={tc.label}>{tc.label}</span>
                       <span className={`font-mono ${tc.ok ? '' : 'text-red-600'}`}>
-                        {tc.ok ? `${tc.formattedPrediction || `${(tc.prediction as number).toFixed(2)} ${unit}`}` : `❌ ${tc.error || 'lỗi'}`}
+                        {tc.ok ? `${tc.formattedPrediction || `${(tc.prediction as number).toFixed(2)} ${unit}`}` : `❌ ${tc.error || 'error'}`}
                       </span>
                     </div>
                     <div className="h-3 bg-muted rounded overflow-hidden">
@@ -1092,7 +1092,7 @@ function MetricsTabEnhanced({ meta, versions, selectedVersion, onSelectedVersion
         {/* Detailed Results */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Chi tiết các test case</CardTitle>
+            <CardTitle className="text-sm">Test case details</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
@@ -1120,7 +1120,7 @@ function MetricsTabEnhanced({ meta, versions, selectedVersion, onSelectedVersion
           <CardContent className="p-3">
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div><span className="font-medium">Version:</span> <span className="font-mono">{er.modelVersion}</span></div>
-              <div><span className="font-medium">Đánh giá lúc:</span> {new Date(er.evaluatedAt).toLocaleString('vi-VN')}</div>
+              <div><span className="font-medium">Evaluated at:</span> {new Date(er.evaluatedAt).toLocaleString('en-US')}</div>
             </div>
           </CardContent>
         </Card>

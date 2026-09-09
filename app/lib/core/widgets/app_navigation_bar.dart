@@ -29,13 +29,15 @@ class AppNavigationBar extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: CockpitColors.shell.withValues(alpha: 0.96),
-        border: const Border(
-          top: BorderSide(color: CockpitColors.border, width: 1),
+        color: (Theme.of(context).bottomNavigationBarTheme.backgroundColor ??
+                ui.surface)
+            .withValues(alpha: 0.96),
+        border: Border(
+          top: BorderSide(color: ui.border, width: 1),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.4),
+            color: Colors.black.withValues(alpha: ui.dark ? 0.4 : 0.08),
             blurRadius: 16,
             offset: const Offset(0, -4),
           ),
@@ -56,14 +58,18 @@ class AppNavigationBar extends StatelessWidget {
                     child: Semantics(
                       selected: selectedIndex == i,
                       button: true,
-                      label: destinations[i].$2,
+                      label: 'Tab ${destinations[i].$2}',
+                      hint: 'Chuyển sang màn hình ${destinations[i].$2}',
                       onTap: () => onSelected(i),
                       child: InkWell(
                         key: ValueKey('navigation-destination-$i'),
                         onTap: () => onSelected(i),
-                        borderRadius: BorderRadius.circular(CockpitRadius.medium),
-                        splashColor: CockpitColors.emerald.withValues(alpha: 0.15),
-                        highlightColor: CockpitColors.emerald.withValues(alpha: 0.08),
+                        borderRadius:
+                            BorderRadius.circular(CockpitRadius.medium),
+                        splashColor:
+                            CockpitColors.emerald.withValues(alpha: 0.15),
+                        highlightColor:
+                            CockpitColors.emerald.withValues(alpha: 0.08),
                         child: AnimatedContainer(
                           duration: duration,
                           curve: Curves.easeOutCubic,
@@ -72,7 +78,8 @@ class AppNavigationBar extends StatelessWidget {
                             color: selectedIndex == i
                                 ? CockpitColors.emerald.withValues(alpha: 0.12)
                                 : Colors.transparent,
-                            borderRadius: BorderRadius.circular(CockpitRadius.medium),
+                            borderRadius:
+                                BorderRadius.circular(CockpitRadius.medium),
                             border: Border.all(
                               color: selectedIndex == i
                                   ? CockpitColors.emerald.withValues(alpha: 0.3)
@@ -92,7 +99,7 @@ class AppNavigationBar extends StatelessWidget {
                                   size: 22,
                                   color: selectedIndex == i
                                       ? CockpitColors.emeraldStrong
-                                      : CockpitColors.dim,
+                                      : ui.muted,
                                 ),
                               ),
                               const SizedBox(height: 3),
@@ -108,7 +115,7 @@ class AppNavigationBar extends StatelessWidget {
                                       : FontWeight.w500,
                                   color: selectedIndex == i
                                       ? CockpitColors.emeraldStrong
-                                      : CockpitColors.dim,
+                                      : ui.muted,
                                 ),
                               ),
                             ],

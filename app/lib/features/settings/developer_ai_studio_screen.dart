@@ -621,9 +621,9 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             height: 44,
             decoration: BoxDecoration(
-              color: CockpitColors.surface,
+              color: _ui.surface,
               borderRadius: BorderRadius.circular(CockpitRadius.medium),
-              border: Border.all(color: CockpitColors.border),
+              border: Border.all(color: _ui.border),
             ),
             child: TabBar(
               isScrollable: false,
@@ -639,7 +639,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
               ),
               dividerColor: Colors.transparent,
               labelColor: CockpitColors.emeraldStrong,
-              unselectedLabelColor: CockpitColors.muted,
+              unselectedLabelColor: _ui.muted,
               labelStyle: CockpitTypography.label(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,

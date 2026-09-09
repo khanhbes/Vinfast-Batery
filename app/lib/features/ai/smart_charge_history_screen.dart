@@ -218,7 +218,22 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
               if (_error != null && _items.isEmpty)
                 SliverFillRemaining(child: _errorState())
               else if (visible.isEmpty && _activeSession == null)
-                SliverFillRemaining(child: _EmptyHistory())
+                SliverFillRemaining(
+                  child: _EmptyHistory(
+                    isFiltered: _filter != null ||
+                        _statusFilter != SmartChargeHistorySessionFilter.all ||
+                        _customRange != null ||
+                        _allVehicles,
+                    onClearFilter: () => setState(() {
+                      _filter = null;
+                      _statusFilter = SmartChargeHistorySessionFilter.all;
+                      _customRange = null;
+                      _allVehicles = false;
+                      _visibleCount = 20;
+                      _load(reset: true);
+                    }),
+                  ),
+                )
               else ...[
                 if (_error != null)
                   SliverToBoxAdapter(
@@ -821,26 +836,53 @@ class _SevenDayBars extends StatelessWidget {
 }
 
 class _EmptyHistory extends StatelessWidget {
-  const _EmptyHistory();
+  const _EmptyHistory({this.isFiltered = false, this.onClearFilter});
+  final bool isFiltered;
+  final VoidCallback? onClearFilter;
+
   @override
   Widget build(BuildContext context) => ListView(
+    physics: const AlwaysScrollableScrollPhysics(),
     children: [
-      SizedBox(height: 120),
+      const SizedBox(height: 100),
       Icon(
-        Icons.electric_bolt_outlined,
+        isFiltered
+            ? Icons.filter_alt_off_rounded
+            : Icons.electric_bolt_outlined,
         size: 48,
         color: Theme.of(context).colorScheme.outline,
       ),
-      SizedBox(height: 12),
-      Center(child: Text('Chưa có phiên Smart Charge hoàn tất')),
-      SizedBox(height: 6),
+      const SizedBox(height: 12),
       Center(
         child: Text(
-          'Phiên sạc sẽ xuất hiện ở đây sau khi relay OFF được xác minh.',
+          isFiltered
+              ? 'Không có phiên sạc phù hợp bộ lọc'
+              : 'Chưa có phiên Smart Charge hoàn tất',
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+      const SizedBox(height: 6),
+      Center(
+        child: Text(
+          isFiltered
+              ? 'Thử đổi khoảng ngày hoặc chuyển bộ lọc sang Tất cả.'
+              : 'Phiên sạc sẽ xuất hiện ở đây sau khi relay OFF được xác minh.',
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodySmall,
         ),
       ),
+      if (isFiltered && onClearFilter != null) ...[
+        const SizedBox(height: 16),
+        Center(
+          child: OutlinedButton.icon(
+            onPressed: onClearFilter,
+            icon: const Icon(Icons.clear_all_rounded, size: 18),
+            label: const Text('Xóa bộ lọc'),
+          ),
+        ),
+      ],
     ],
   );
 }
@@ -881,58 +923,126 @@ class _HistoryRow extends StatelessWidget {
     final cost = session.estimatedCostVnd == null
         ? '—'
         : '${NumberFormat.decimalPattern('vi_VN').format(session.estimatedCostVnd)} đ';
-    final status = session.energyQuality == 'partial'
+    final isPartial = session.energyQuality == 'partial';
+    final isCompleted = session.state == ChargingSessionState.completed;
+    final statusText = isPartial
         ? 'Partial'
-        : session.state == ChargingSessionState.completed
-        ? 'Hoàn thành'
-        : 'Đã dừng';
+        : isCompleted
+            ? 'Hoàn thành'
+            : 'Đã dừng';
+    final statusBg = isPartial
+        ? Colors.grey.withValues(alpha: 0.15)
+        : isCompleted
+            ? CockpitColors.emerald.withValues(alpha: 0.15)
+            : CockpitColors.amber.withValues(alpha: 0.15);
+    final statusFg = isPartial
+        ? AppUiColors.of(context).muted
+        : isCompleted
+            ? CockpitColors.emeraldStrong
+            : CockpitColors.amber;
+
     return Semantics(
       button: true,
       label:
-          'Chi tiết phiên sạc ${DateFormat('dd/MM/yyyy').format(session.createdAt)}',
-      child: ListTile(
-        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        onTap: onTap,
-        title: Row(
-          children: [
-            Expanded(
-              child: Text(
-                session.strategy == ChargingStrategy.manualTimed
-                    ? 'Sạc thủ công'
-                    : 'Sạc theo AI',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
-            ),
-            Text(
-              _energy(session.energyUsedWh),
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
-            if (!session.state.isTerminal) ...[
-              SizedBox(width: 8),
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(99),
-                ),
-                child: Text(
-                  'ĐANG SẠC',
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900),
+          'Chi tiết phiên sạc ${DateFormat('dd/MM/yyyy').format(session.createdAt)}, trạng thái $statusText',
+      child: Dismissible(
+        key: ValueKey('history-session-${session.sessionId}'),
+        direction: session.state.isTerminal
+            ? DismissDirection.endToStart
+            : DismissDirection.none,
+        confirmDismiss: (_) async {
+          onHide();
+          return false;
+        },
+        background: Container(
+          alignment: Alignment.centerRight,
+          padding: const EdgeInsets.only(right: 20),
+          color: Theme.of(context).colorScheme.errorContainer,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.visibility_off_rounded,
+                  color: Theme.of(context).colorScheme.error),
+              const SizedBox(width: 8),
+              Text(
+                'Ẩn phiên',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],
-          ],
-        ),
-        subtitle: Padding(
-          padding: EdgeInsets.only(top: 5),
-          child: Text(
-            '${DateFormat('dd/MM · HH:mm').format(session.createdAt.toLocal())}  ·  '
-            '${session.startSoc.toStringAsFixed(0)} → Mục tiêu ${session.targetSoc.toStringAsFixed(0)}%  ·  '
-            '${!session.state.isTerminal ? '${_duration(session.remaining())} còn lại' : _duration(duration)} · $cost · $status',
           ),
         ),
-        trailing: Icon(Icons.chevron_right_rounded),
-        onLongPress: session.state.isTerminal ? onHide : null,
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          onTap: onTap,
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  session.strategy == ChargingStrategy.manualTimed
+                      ? 'Sạc thủ công'
+                      : 'Sạc theo AI',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: statusBg,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  statusText,
+                  style: TextStyle(
+                    color: statusFg,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                _energy(session.energyUsedWh),
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ],
+          ),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${DateFormat('dd/MM · HH:mm').format(session.createdAt.toLocal())} · ${_duration(duration)} · $cost',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppUiColors.of(context).muted,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    '${session.startSoc.toStringAsFixed(0)}% → ${session.targetSoc.toStringAsFixed(0)}%',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: AppUiColors.of(context).text,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          trailing: const Icon(Icons.chevron_right_rounded),
+          onLongPress: session.state.isTerminal ? onHide : null,
+        ),
       ),
     );
   }

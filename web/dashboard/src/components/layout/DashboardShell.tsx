@@ -21,7 +21,7 @@ export function DashboardShell({ children, userName, userEmail, onSignOut }: {
   }, [pathname]);
 
   return <div className="dashboard-shell">
-    <a className="skip-link" href="#main-content">Đến nội dung chính</a>
+    <a className="skip-link" href="#main-content">Skip to main content</a>
     <Sidebar onSignOut={onSignOut} />
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
       <Topbar userName={userName} userEmail={userEmail} onSignOut={onSignOut} />

@@ -64,7 +64,7 @@ export default function ScalarResult({ meta, result, accent, inputState }: Props
 
       {/* Result title & big value */}
       <div className="mt-8 text-sm text-slate-400">
-        {meta.outputDescription || 'Kết quả dự đoán'}
+        {meta.outputDescription || 'Prediction result'}
       </div>
       <div className="mt-1 flex flex-wrap items-end gap-2">
         <span className="break-words text-4xl lg:text-5xl font-semibold tracking-[-.04em] text-white">
@@ -80,15 +80,15 @@ export default function ScalarResult({ meta, result, accent, inputState }: Props
         {meta.key === 'dte' && (
           <>
             <Line
-              label="Khoảng an toàn"
-              value={result ? `${result.rangeLowKm ?? '—'}–${result.rangeHighKm ?? '—'} km` : 'Chưa có dữ liệu'}
+              label="Safe range"
+              value={result ? `${result.rangeLowKm ?? '—'}–${result.rangeHighKm ?? '—'} km` : 'No data'}
             />
             <Line
-              label="Độ tin cậy"
+              label="Confidence"
               value={result?.confidence != null ? `${Math.round(result.confidence * 100)}%` : '—'}
             />
             <Line
-              label="Hiệu suất đã chỉnh"
+              label="Adjusted efficiency"
               value={result?.adjustedEfficiencyKmPerPercent ? `${result.adjustedEfficiencyKmPerPercent} km/%` : '—'}
             />
           </>
@@ -97,7 +97,7 @@ export default function ScalarResult({ meta, result, accent, inputState }: Props
         {meta.key === 'charging_time' && (
           <>
             <Line
-              label="Mức tăng pin"
+              label="Battery gain"
               value={
                 inputState.start_soc !== undefined && inputState.end_soc !== undefined
                   ? `+${Math.max(0, Number(inputState.end_soc) - Number(inputState.start_soc))}%`
@@ -115,15 +115,15 @@ export default function ScalarResult({ meta, result, accent, inputState }: Props
           <>
             {result?.confidence !== undefined && (
               <Line
-                label="Độ tin cậy"
+                label="Confidence"
                 value={`${Math.round(result.confidence * 100)}%`}
               />
             )}
             {meta.outputMeaning && (
-              <Line label="Ý nghĩa" value={meta.outputMeaning} />
+              <Line label="Meaning" value={meta.outputMeaning} />
             )}
             <Line
-              label="Phiên bản model"
+              label="Model version"
               value={result?.modelVersion || '—'}
             />
           </>

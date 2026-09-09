@@ -50,22 +50,27 @@ class VehicleSwitcher extends ConsumerWidget {
             unawaited(SessionService().setSelectedVehicleId(current.vehicleId));
           });
         }
-        return Tooltip(
-          message: 'Đổi xe: ${current.vehicleName}',
-          child: SizedBox(
-            width: 160,
-            child: TextButton.icon(
-              onPressed: () => VehiclePickerSheet.show(context, ref),
-              style: TextButton.styleFrom(
-                minimumSize: const Size(48, 48),
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                backgroundColor: AppUiColors.of(context).elevated,
-              ),
-              icon: const Icon(Icons.directions_bike_rounded, size: 20),
-              label: Text(
-                current.vehicleName.isEmpty ? 'Chọn xe' : current.vehicleName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+        return Semantics(
+          button: true,
+          label: 'Chọn xe. Đang chọn: ${current.vehicleName.isEmpty ? "Chưa đặt tên" : current.vehicleName}',
+          hint: 'Chạm để đổi xe trong gara',
+          child: Tooltip(
+            message: 'Đổi xe: ${current.vehicleName}',
+            child: SizedBox(
+              width: 160,
+              child: TextButton.icon(
+                onPressed: () => VehiclePickerSheet.show(context, ref),
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(48, 48),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  backgroundColor: AppUiColors.of(context).elevated,
+                ),
+                icon: const Icon(Icons.directions_bike_rounded, size: 20),
+                label: Text(
+                  current.vehicleName.isEmpty ? 'Chọn xe' : current.vehicleName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ),
           ),

@@ -68,11 +68,11 @@ class _StartChargeConfirmationSheetState
       maxHeight: MediaQuery.sizeOf(context).height * .92,
     ),
     decoration: BoxDecoration(
-      color: CockpitColors.shell,
+      color: Theme.of(context).cardTheme.color ?? context.cockpit.surface,
       borderRadius: const BorderRadius.vertical(
         top: Radius.circular(CockpitRadius.sheet),
       ),
-      border: Border.all(color: CockpitColors.border),
+      border: Border.all(color: context.cockpit.border),
     ),
     child: SafeArea(
       child: SingleChildScrollView(

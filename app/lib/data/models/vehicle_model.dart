@@ -15,6 +15,8 @@ class VehicleModel {
   final int totalTrips;
   final int lastBatteryPercent;
   final String? avatarColor;
+  final String? licensePlate;
+  final String? batteryType;
   // ── VinFast Model Link fields ──
   final String? vinfastModelId;
   final String? vinfastModelName;
@@ -42,6 +44,8 @@ class VehicleModel {
     this.totalTrips = 0,
     this.lastBatteryPercent = 100,
     this.avatarColor,
+    this.licensePlate,
+    this.batteryType,
     this.vinfastModelId,
     this.vinfastModelName,
     this.specVersion,
@@ -118,6 +122,8 @@ class VehicleModel {
           ? data['hasOdoData'] as bool
           : data.containsKey('currentOdo'),
       avatarColor: data['avatarColor'],
+      licensePlate: data['licensePlate'] as String?,
+      batteryType: data['batteryType'] as String? ?? data['batteryChemistry'] as String?,
       vinfastModelId: data['vinfastModelId'],
       vinfastModelName: data['vinfastModelName'],
       specVersion: data['specVersion'] == null
@@ -162,6 +168,8 @@ class VehicleModel {
           ? data['hasOdoData'] as bool
           : data.containsKey('currentOdo'),
       avatarColor: data['avatarColor'],
+      licensePlate: data['licensePlate'] as String?,
+      batteryType: data['batteryType'] as String? ?? data['batteryChemistry'] as String?,
       vinfastModelId: data['vinfastModelId'],
       vinfastModelName: data['vinfastModelName'],
       specVersion: data['specVersion'] == null
@@ -196,6 +204,8 @@ class VehicleModel {
       'hasEfficiencyData': hasEfficiencyData,
       'hasOdoData': hasOdoData,
       'avatarColor': avatarColor,
+      if (licensePlate != null && licensePlate!.isNotEmpty) 'licensePlate': licensePlate,
+      if (batteryType != null && batteryType!.isNotEmpty) 'batteryType': batteryType,
       'vinfastModelId': vinfastModelId,
       'vinfastModelName': vinfastModelName,
       'specVersion': specVersion,
@@ -221,6 +231,8 @@ class VehicleModel {
     int? totalTrips,
     int? lastBatteryPercent,
     String? avatarColor,
+    String? licensePlate,
+    String? batteryType,
     String? vinfastModelId,
     String? vinfastModelName,
     int? specVersion,
@@ -245,6 +257,8 @@ class VehicleModel {
       totalTrips: totalTrips ?? this.totalTrips,
       lastBatteryPercent: lastBatteryPercent ?? this.lastBatteryPercent,
       avatarColor: avatarColor ?? this.avatarColor,
+      licensePlate: licensePlate ?? this.licensePlate,
+      batteryType: batteryType ?? this.batteryType,
       vinfastModelId: vinfastModelId ?? this.vinfastModelId,
       vinfastModelName: vinfastModelName ?? this.vinfastModelName,
       specVersion: specVersion ?? this.specVersion,

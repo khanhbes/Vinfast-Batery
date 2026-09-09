@@ -31,8 +31,8 @@ class AppColors {
   static const Color cardElevated = Color(0xFF171A20);
 
   // ── Borders ───────────────────────────────────────────
-  static const Color border = Color(0x14FFFFFF);
-  static const Color borderLight = Color(0x24FFFFFF);
+  static const Color border = Color(0xFF1E232B);
+  static const Color borderLight = Color(0xFF282F3B);
 
   // ── Text ──────────────────────────────────────────────
   static const Color textPrimary = Color(0xFFF8FAFC);
@@ -69,7 +69,7 @@ class AppColors {
 
   // ── Glass / Overlay ───────────────────────────────────
   static const Color glass = Color(0x08FFFFFF);
-  static const Color glassBorder = Color(0x1AFFFFFF);
+  static const Color glassBorder = Color(0xFF282F3B);
 
   // ── Legacy aliases ────────────────────────────────────
   static const Color cardBackground = card;

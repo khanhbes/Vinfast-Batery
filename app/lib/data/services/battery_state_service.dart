@@ -459,10 +459,17 @@ class BatteryStateService {
   }) async {
     try {
       final url = Uri.parse('$_baseUrl/api/ai/charge-feedback');
+      final token = await FirebaseAuth.instance.currentUser?.getIdToken();
+      if (token == null || token.isEmpty) {
+        throw StateError('Cần đăng nhập trước khi gửi phản hồi sạc');
+      }
       final response = await http
           .post(
             url,
-            headers: {'Content-Type': 'application/json'},
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
             body: jsonEncode({
               'vehicleId': vehicleId,
               'predictionId': predictionId,

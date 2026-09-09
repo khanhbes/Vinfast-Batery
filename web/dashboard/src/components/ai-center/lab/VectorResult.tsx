@@ -22,7 +22,7 @@ export default function VectorResult({ meta, result, accent }: Props) {
   return (
     <div className="mx-auto w-full max-w-sm space-y-4">
       <div className="text-sm text-slate-400">
-        {meta.outputDescription || 'Biểu đồ dự đoán'}
+        {meta.outputDescription || 'Prediction chart'}
       </div>
 
       {chartData && chartData.data.length > 0 ? (
@@ -35,13 +35,13 @@ export default function VectorResult({ meta, result, accent }: Props) {
         </div>
       ) : (
         <div className="flex h-44 items-center justify-center rounded-xl border border-dashed border-white/10 bg-white/[0.02] text-sm text-slate-400">
-          Chưa có dữ liệu chuỗi thời gian
+          No time-series data
         </div>
       )}
 
       {result?.modelVersion && (
         <div className="flex justify-between text-xs text-slate-400 border-t border-white/10 pt-3">
-          <span>Phiên bản model</span>
+          <span>Model version</span>
           <span className="font-mono text-slate-200">{result.modelVersion}</span>
         </div>
       )}
