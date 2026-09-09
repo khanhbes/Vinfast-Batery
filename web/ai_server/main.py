@@ -22,8 +22,6 @@ Only the Flask proxy should reach this service.
 from __future__ import annotations
 
 import os
-import shutil
-import tempfile
 from typing import Optional
 
 try:
@@ -36,6 +34,7 @@ from fastapi.responses import JSONResponse
 
 from .model_runtime import ModelRuntime
 from .model_store import ModelStore
+from .upload_policy import validate_upload, copy_upload
 from .prediction_service import PredictionService
 from .registry import MODEL_TYPES, list_types, list_groups
 from .schemas import ModelStatus, PredictRequest, UploadResult
@@ -214,30 +213,27 @@ async def upload_model(
     rt = _get_runtime(type_key)
 
     version = (version or "").strip()
-    if not version or any(c in version for c in "/\\:"):
-        return _err(400, "version không hợp lệ")
+    try:
+        ext = validate_upload(file.filename, version)
+    except ValueError as exc:
+        return _err(400, str(exc))
     if st.has_version(version):
         return _err(409, f"version '{version}' đã tồn tại")
 
-    # Accept any file extension (.pkl, .h5, .pt, .onnx, etc.)
-    filename = file.filename or "model.pkl"
-    _, ext = os.path.splitext(filename)
-    ext = ext or ".pkl"
-
     skip_smoke = skipSmokeTest.lower() in ("true", "1", "yes")
 
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
     try:
-        shutil.copyfileobj(file.file, tmp)
-        tmp.close()
+        tmp_path = copy_upload(file.file, ext)
+    except ValueError as exc:
+        return _err(400, str(exc))
     finally:
         file.file.close()
 
     try:
-        meta = st.save_from_temp(tmp.name, version, note, ext=ext)
+        meta = st.save_from_temp(tmp_path, version, note, ext=ext)
     except Exception as e:
         try:
-            os.remove(tmp.name)
+            os.remove(tmp_path)
         except FileNotFoundError:
             pass
         return _err(400, f"lưu model thất bại: {e}")
@@ -311,8 +307,7 @@ def rollback_model(
     if not st.has_version(version):
         return _err(404, f"version '{version}' không tồn tại")
     try:
-        smoke = rt.swap_to(version, require_smoke=False)
-        st.activate(version)
+        smoke = rt.deploy_version(version)
         return _ok({"activeVersion": version, "smokeTest": smoke})
     except Exception as e:
         return _err(500, f"rollback thất bại: {e}")
@@ -328,14 +323,8 @@ def delete_model(
     st = _get_store(type_key)
     rt = _get_runtime(type_key)
     try:
-        # Check if trying to delete active version
-        active = st.active_version()
-        if active == version:
-            # First deactivate, then delete
-            st.deactivate()
-            rt.clear()
-        st.remove(version)
-        return _ok({"deleted": version, "wasActive": active == version})
+        rt.remove_version(version)
+        return _ok({"deleted": version, "wasActive": False})
     except Exception as e:
         return _err(400, str(e))
 
@@ -359,8 +348,7 @@ def activate_model(
     
     try:
         # Activate in store and load into runtime
-        smoke = rt.swap_to(version, require_smoke=False)
-        st.activate(version)
+        smoke = rt.deploy_version(version)
         return _ok({"activeVersion": version, "smokeTest": smoke})
     except Exception as e:
         return _err(500, f"activate thất bại: {e}")
@@ -389,8 +377,7 @@ def deploy_model(
         return _err(404, f"version '{version}' không tồn tại")
 
     try:
-        smoke = rt.swap_to(version, require_smoke=False)
-        st.activate(version)
+        smoke = rt.deploy_version(version)
         return _ok({
             "status": "deployed",
             "activeVersion": version,
@@ -423,7 +410,7 @@ def load_active_model(
         return _err(404, f"Không có version nào đang active cho '{type_key}'")
 
     try:
-        smoke = rt.swap_to(active, require_smoke=False)
+        smoke = rt.load_persisted()
         return _ok({
             "activeVersion": active,
             "smokeTest": smoke,
@@ -450,8 +437,7 @@ def deactivate_model(
         return _ok({"status": "already_inactive", "message": "Không có model nào đang active"})
     
     try:
-        st.deactivate()
-        rt.clear()
+        active = rt.deactivate_persisted()
         return _ok({"status": "deactivated", "previousVersion": active})
     except Exception as e:
         return _err(500, f"Deactivate thất bại: {e}")
@@ -570,25 +556,7 @@ async def reset_model(
     rt = _get_runtime(type_key)
 
     try:
-        st.deactivate()
-    except Exception:
-        pass
-
-    try:
-        rt.unload()
-    except Exception:
-        pass
-
-    try:
-        data = st._read_manifest()
-        versions = data.get("versions", [])
-        deleted_versions = [v.get("version") for v in versions if v.get("version")]
-        for v in versions:
-            try:
-                st.remove(v["version"])
-            except Exception:
-                pass
-        st._write_manifest({"active": None, "versions": []})
+        deleted_versions = rt.reset_versions()
     except Exception as e:
         return _err(500, f"reset failed: {e}")
     
@@ -612,22 +580,18 @@ async def validate_model_file(
     """
     _check_token(x_internal_token)
     
-    # Accept any file extension
-    filename = file.filename or "model.pkl"
-    _, ext = os.path.splitext(filename)
-    ext = ext or ".pkl"
-
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
     try:
-        shutil.copyfileobj(file.file, tmp)
-        tmp.close()
+        ext = validate_upload(file.filename)
+        tmp_path = copy_upload(file.file, ext)
+    except ValueError as exc:
+        return _err(400, str(exc))
     finally:
         file.file.close()
 
     try:
         # Load and validate the model
         from .model_runtime import _load_model_file, _create_predictor
-        model = _load_model_file(tmp.name)
+        model = _load_model_file(tmp_path)
         predictor = _create_predictor(model)
         
         # Run smoke test
@@ -651,7 +615,7 @@ async def validate_model_file(
         return _err(400, f"validation failed: {e}")
     finally:
         try:
-            os.remove(tmp.name)
+            os.remove(tmp_path)
         except FileNotFoundError:
             pass
 
@@ -682,7 +646,7 @@ def load_active_model(
         })
 
     try:
-        rt.swap_to(active, require_smoke=False)
+        rt.load_persisted()
         return _ok({
             "status": "loaded",
             "activeVersion": active,

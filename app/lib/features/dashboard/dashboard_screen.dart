@@ -246,15 +246,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             _handleQuickAction(action, vehicleAsync, vehicleId),
       ),
       body: SafeArea(
-        child: RefreshIndicator(
-          color: AppColors.primaryGreen,
-          backgroundColor: AppColors.surface,
-          onRefresh: () async {
-            ref.invalidate(vehicleProvider(vehicleId));
-            ref.invalidate(dashboardTripsProvider(vehicleId));
-            ref.invalidate(dashboardMaintenanceProvider(vehicleId));
-          },
-          child: SingleChildScrollView(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: RefreshIndicator(
+              color: AppColors.primaryGreen,
+              backgroundColor: Theme.of(context).cardTheme.color ??
+                  Theme.of(context).colorScheme.surface,
+              onRefresh: () async {
+                ref.invalidate(vehicleProvider(vehicleId));
+                ref.invalidate(dashboardTripsProvider(vehicleId));
+                ref.invalidate(dashboardMaintenanceProvider(vehicleId));
+              },
+              child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(
               parent: BouncingScrollPhysics(),
             ),
@@ -353,6 +357,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 _buildMaintenanceSection(vehicleId, vehicleAsync),
               ],
             ),
+          ),
+        ),
           ),
         ),
       ),

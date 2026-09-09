@@ -20,7 +20,7 @@ class ChargingBatteryAnimationV3 extends StatefulWidget {
 }
 
 class _ChargingBatteryAnimationV3State extends State<ChargingBatteryAnimationV3>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late double _beginSoc;
   late double _endSoc;
   late final AnimationController _energyWave;
@@ -28,12 +28,26 @@ class _ChargingBatteryAnimationV3State extends State<ChargingBatteryAnimationV3>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _beginSoc = widget.currentSoc.clamp(0, 100).toDouble();
     _endSoc = _beginSoc;
     _energyWave = AnimationController(
       vsync: this,
       duration: CockpitMotion.energyWave,
     );
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.inactive) {
+      if (_energyWave.isAnimating) _energyWave.stop();
+    } else if (state == AppLifecycleState.resumed) {
+      if (CockpitMotion.enabled(context) && !_energyWave.isAnimating) {
+        _energyWave.repeat();
+      }
+    }
   }
 
   @override
@@ -49,6 +63,7 @@ class _ChargingBatteryAnimationV3State extends State<ChargingBatteryAnimationV3>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _energyWave.dispose();
     super.dispose();
   }

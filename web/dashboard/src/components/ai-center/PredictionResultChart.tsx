@@ -70,7 +70,7 @@ export default function PredictionResultChart({
               tickFormatter={formatValue}
             />
             <Tooltip
-              formatter={(value) => [formatValue(value as number), chartData.unit || 'Giá trị']}
+              formatter={(value) => [formatValue(value as number), chartData.unit || 'Value']}
               labelStyle={{ fontSize: 12 }}
               contentStyle={{ fontSize: 12, borderRadius: 6 }}
             />
@@ -103,7 +103,7 @@ export default function PredictionResultChart({
               tickFormatter={formatValue}
             />
             <Tooltip
-              formatter={(value) => [formatValue(value as number), chartData.unit || 'Giá trị']}
+              formatter={(value) => [formatValue(value as number), chartData.unit || 'Value']}
               labelStyle={{ fontSize: 12 }}
               contentStyle={{ fontSize: 12, borderRadius: 6 }}
             />
@@ -136,7 +136,7 @@ export default function PredictionResultChart({
 
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-        Không có dữ liệu biểu đồ
+        No chart data
       </div>
     );
   }, [chartData, height, colors]);
@@ -156,7 +156,7 @@ export default function PredictionResultChart({
 
   return (
     <div className="space-y-3">
-      <div className="text-sm font-medium text-muted-foreground">Kết quả dự đoán</div>
+      <div className="text-sm font-medium text-muted-foreground">Prediction result</div>
       <div className="rounded-md border bg-card p-3">
         {chart}
       </div>

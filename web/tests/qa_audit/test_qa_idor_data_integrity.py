@@ -22,7 +22,7 @@ class TestIdorAndDataIntegrity:
             "/api/web/sync/battery-state",
             json={"batteryLevel": 85, "voltage": 400.0, "current": 10.0}
         )
-        assert response.status_code != 401 and response.status_code != 403, (
+        assert response.status_code == 401, (
             "Vulnerability: /api/web/sync/battery-state is completely unauthenticated"
         )
 
@@ -35,7 +35,7 @@ class TestIdorAndDataIntegrity:
             "/api/web/sync/trip-prediction",
             json={"distance": 25.5, "predictedSoc": 60}
         )
-        assert response.status_code != 401 and response.status_code != 403, (
+        assert response.status_code == 401, (
             "Vulnerability: /api/web/sync/trip-prediction is completely unauthenticated"
         )
 
@@ -45,11 +45,10 @@ class TestIdorAndDataIntegrity:
         exposing all historical charging samples and vehicle telemetry without auth.
         """
         resp_list = client.get("/api/ai/dataset")
-        assert resp_list.status_code == 200, "Dataset listing is public without authentication"
+        assert resp_list.status_code == 401
         
         resp_csv = client.get("/api/ai/dataset/export-csv")
-        assert resp_csv.status_code == 200, "Dataset CSV export is public without authentication"
-        assert "text/csv" in resp_csv.content_type
+        assert resp_csv.status_code == 401
 
     def test_unauthenticated_ai_dataset_tampering_put(self, client):
         """
@@ -60,7 +59,7 @@ class TestIdorAndDataIntegrity:
             "/api/ai/dataset/records/test_session_id_123",
             json={"actual_end_soc": 99.0, "notes": "tampered_by_attacker"}
         )
-        assert resp.status_code != 401 and resp.status_code != 403, (
+        assert resp.status_code == 401, (
             "Vulnerability: dataset record update lacks authentication"
         )
 
@@ -73,6 +72,11 @@ class TestIdorAndDataIntegrity:
         mock_doc = MagicMock()
         mock_fs.collection.return_value.document.return_value = mock_doc
         monkeypatch.setattr(server, "_firestore_db", mock_fs)
+        monkeypatch.setattr(server, '_verify_token', lambda: ('user-a', 'a@test.invalid', 'user'))
+        from sync_writes import commit_owned_writes
+        mock_doc.get.return_value.exists = True
+        mock_doc.get.return_value.to_dict.return_value = {'ownerUid': 'user-b'}
+        monkeypatch.setattr(server, 'commit_owned_writes', lambda db, writes, uid: commit_owned_writes(db, writes, uid, runner=lambda fn: fn(MagicMock())))
         
         secret_key = "test-secret-dev-admin-key-32-bytes"
         monkeypatch.setattr(server, "_DEV_ADMIN_KEY", secret_key)
@@ -89,13 +93,8 @@ class TestIdorAndDataIntegrity:
             },
             headers=headers
         )
-        assert response.status_code == 200
-        mock_fs.collection.assert_called_with("Vehicles")
-        mock_fs.collection.return_value.document.assert_called_with(target_vehicle_b_id)
-        called_payload = mock_doc.set.call_args[0][0]
-        assert called_payload["ownerUid"] == "dev-admin", (
-            "Vulnerability WEB-H13: sync_vehicle overwrites target vehicle ownership without verifying existing owner"
-        )
+        assert response.status_code == 403
+        mock_doc.set.assert_not_called()
 
     def test_web_h12_owner_uid_override_in_user_add_vehicle(self, client, monkeypatch):
         """

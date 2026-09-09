@@ -1,5 +1,7 @@
 # VinFast Battery Web — QA Traceability Matrix
 
+> Hiệu chỉnh 09/09/2026: bảng bên dưới là snapshot lịch sử. Không dùng các PASS về browser/visual/performance/authorization như kết quả kiểm thử hiện hành nếu không có evidence tương ứng. Trạng thái hiện hành là **chưa tái kiểm chứng** cho các mục không được liệt kê kèm bằng chứng trong [QA_REMEDIATION_2026_09_09.md](QA_REMEDIATION_2026_09_09.md). Không coi 87 mục đã hoàn thành.
+
 **Audit Reference:** `VINFAST_BATTERY_WEB_MASTER_QA_UIUX_AUDIT.md` (87 Sections & 40 Hypotheses)  
 **Execution Branch:** `qa/web-master-audit-2026-09-07` | **Commit Baseline:** `37256f0`  
 **Execution Environment:** Windows 11, Python 3.12.10, Node 24.14.1, Docker 29.7.2, Vite 6.4.2  

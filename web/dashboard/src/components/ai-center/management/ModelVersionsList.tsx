@@ -27,7 +27,7 @@ export default function ModelVersionsList({
   if (loading) {
     return (
       <div className="text-center py-10 text-slate-400 text-sm">
-        Đang tải danh sách version...
+        Loading versions...
       </div>
     );
   }
@@ -36,40 +36,40 @@ export default function ModelVersionsList({
     return (
       <div className="text-center py-12 text-slate-400">
         <Upload className="w-8 h-8 mx-auto mb-2 opacity-30 text-white" />
-        <div className="text-sm font-medium text-slate-300">Chưa có version nào</div>
+        <div className="text-sm font-medium text-slate-300">No versions yet</div>
         <div className="text-xs text-slate-500 mt-1">
-          Nhấn "Upload model" để thêm version đầu tiên.
+          Select "Upload model" to add the first version.
         </div>
       </div>
     );
   }
 
   return (
-    <>
-    <div className="space-y-3 md:hidden">
+    <div className="model-version-layout">
+    <div className="model-version-cards space-y-3">
       {versions.map(v => <article key={v.version} className="rounded-xl border border-white/10 p-4">
         <div className="flex flex-wrap items-center gap-2">
           <h4 className="break-all font-mono font-semibold text-white">{v.version}</h4>
           {v.active && <Badge className="bg-emerald-700 text-white">ACTIVE</Badge>}
         </div>
         <dl className="my-4 space-y-2 text-sm">
-          <div><dt className="text-slate-400">Tải lên</dt><dd className="text-slate-200">{formatDate(v.uploadedAt)}</dd></div>
-          <div><dt className="text-slate-400">Kích thước</dt><dd className="text-slate-200">{v.sizeBytes == null ? 'Chưa có dữ liệu' : formatBytes(v.sizeBytes)}</dd></div>
-          {v.note && <div><dt className="text-slate-400">Ghi chú</dt><dd className="break-words text-slate-200">{v.note}</dd></div>}
+          <div><dt className="text-slate-400">Uploaded</dt><dd className="text-slate-200">{formatDate(v.uploadedAt)}</dd></div>
+          <div><dt className="text-slate-400">Size</dt><dd className="text-slate-200">{v.sizeBytes == null ? 'No data' : formatBytes(v.sizeBytes)}</dd></div>
+          {v.note && <div><dt className="text-slate-400">Notes</dt><dd className="break-words text-slate-200">{v.note}</dd></div>}
         </dl>
         <ModelVersionActions version={v} isBusy={isBusy} onTest={onTest}
           onDeploy={onDeploy} onDelete={onDelete} onDeactivate={onDeactivate} onEvaluate={onEvaluate} />
       </article>)}
     </div>
-    <div className="hidden overflow-x-auto md:block">
-      <table className="w-full text-sm">
-        <thead className="text-xs uppercase text-slate-400 border-b border-white/10">
+    <div className="model-version-table overflow-x-auto">
+      <table className="w-full min-w-[680px] text-sm [overflow-wrap:normal]">
+        <thead className="whitespace-nowrap text-xs uppercase text-slate-400 border-b border-white/10">
           <tr>
             <th className="text-left py-2.5 px-3">Version</th>
             <th className="text-left py-2.5 px-3">Uploaded</th>
             <th className="text-left py-2.5 px-3">Size</th>
-            <th className="text-left py-2.5 px-3">Ghi chú</th>
-            <th className="text-right py-2.5 px-3">Thao tác</th>
+            <th className="text-left py-2.5 px-3">Notes</th>
+            <th className="text-right py-2.5 px-3">Actions</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-white/5">
@@ -81,10 +81,10 @@ export default function ModelVersionsList({
               }`}
             >
               <td className="py-3 px-3 font-mono">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-white">{v.version}</span>
+                <div className="flex min-w-32 flex-wrap items-center gap-2">
+                  <span className="break-all font-semibold text-white">{v.version}</span>
                   {v.active && (
-                    <Badge variant="default" className="bg-emerald-600 hover:bg-emerald-600 text-white text-[10px] px-1.5 py-0 h-4">
+                    <Badge variant="default" className="shrink-0 whitespace-nowrap bg-emerald-600 hover:bg-emerald-600 text-white text-[10px] px-1.5 py-0 h-4">
                       <CheckCircle2 className="w-2.5 h-2.5 mr-0.5" />
                       ACTIVE
                     </Badge>
@@ -116,6 +116,6 @@ export default function ModelVersionsList({
         </tbody>
       </table>
     </div>
-    </>
+    </div>
   );
 }

@@ -20,12 +20,12 @@ export function buildPredictionPayload(
     const definition = schema[field];
     const label = definition?.label || field;
     if (raw === undefined || raw === null || String(raw).trim() === '') {
-      throw new Error(`Nhập giá trị cho ${label}.`);
+      throw new Error(`Enter a value for ${label}.`);
     }
     if (definition?.type === 'number' || definition?.type === 'integer') {
       const value = Number(raw);
       if (!Number.isFinite(value) || (definition.type === 'integer' && !Number.isInteger(value))) {
-        throw new Error(`${label} phải là ${definition.type === 'integer' ? 'số nguyên' : 'số hữu hạn'} hợp lệ.`);
+        throw new Error(`${label} must be a valid ${definition.type === 'integer' ? 'integer' : 'finite number'}.`);
       }
       payload[field] = value;
     } else {
@@ -38,17 +38,17 @@ export function buildPredictionPayload(
       const end = Number(payload.end_soc);
       const start = Number(payload.start_soc);
       if (!Number.isFinite(end) || !Number.isFinite(start) || end <= start) {
-        throw new Error('SOC kết thúc phải lớn hơn SOC bắt đầu.');
+        throw new Error('Ending SOC must be greater than starting SOC.');
       }
       payload[field] = end - start;
     } else if (spec.formula === 'abs(ambient_temp_c - 27)') {
       const temperature = Number(payload.ambient_temp_c);
-      if (!Number.isFinite(temperature)) throw new Error('Nhiệt độ môi trường không hợp lệ.');
+      if (!Number.isFinite(temperature)) throw new Error('Ambient temperature is invalid.');
       payload[field] = Math.abs(temperature - 27);
     } else if (!spec.formula && spec.default !== undefined) {
       payload[field] = spec.default;
     } else {
-      throw new Error(`Chưa hỗ trợ công thức của ${field}. Không gửi giá trị thay thế.`);
+      throw new Error(`No formula is available for ${field}. No substitute value will be sent.`);
     }
   }
 
@@ -56,25 +56,25 @@ export function buildPredictionPayload(
     const value = payload[field];
     const definition = schema[field];
     const label = definition?.label || field;
-    if (value === undefined || (typeof value === 'number' && !Number.isFinite(value))) throw new Error(`Thiếu hoặc sai giá trị ${label}.`);
-    if (definition?.min !== undefined && Number(value) < definition.min) throw new Error(`${label} phải ≥ ${definition.min}.`);
-    if (definition?.max !== undefined && Number(value) > definition.max) throw new Error(`${label} phải ≤ ${definition.max}.`);
-    if (definition?.enum && !(definition.enum as (string | number)[]).includes(value)) throw new Error(`Chọn giá trị hợp lệ cho ${label}.`);
+    if (value === undefined || (typeof value === 'number' && !Number.isFinite(value))) throw new Error(`Missing or invalid value for ${label}.`);
+    if (definition?.min !== undefined && Number(value) < definition.min) throw new Error(`${label} must be at least ${definition.min}.`);
+    if (definition?.max !== undefined && Number(value) > definition.max) throw new Error(`${label} must be at most ${definition.max}.`);
+    if (definition?.enum && !(definition.enum as (string | number)[]).includes(value)) throw new Error(`Select a valid value for ${label}.`);
   }
   return payload;
 }
 
 /**
- * Formats duration in seconds to "X giờ Y phút" or "X phút".
+ * Formats duration in seconds to "X hours Y minutes" or "X minutes".
  */
 export function formatDurationSeconds(seconds: number): string {
   if (!Number.isFinite(seconds)) return '—';
-  if (seconds <= 0) return '0 phút';
+  if (seconds <= 0) return '0 minutes';
   const totalMins = Math.round(seconds / 60);
   const hours = Math.floor(totalMins / 60);
   const mins = totalMins % 60;
   if (hours > 0) {
-    return mins > 0 ? `${hours} giờ ${mins} phút` : `${hours} giờ`;
+    return mins > 0 ? `${hours} hours ${mins} minutes` : `${hours} hours`;
   }
-  return `${mins} phút`;
+  return `${mins} minutes`;
 }

@@ -24,7 +24,7 @@ export default function ModelResultPanel({
       {loading && (
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-950/70 backdrop-blur-xs">
           <Loader2 className="h-8 w-8 animate-spin text-emerald-400 opacity-90" />
-          <span className="mt-2 text-xs text-slate-300 font-medium">Đang tính toán dự đoán...</span>
+          <span className="mt-2 text-xs text-slate-300 font-medium">Calculating prediction...</span>
         </div>
       )}
 

@@ -22,25 +22,25 @@ export default function Login() {
 
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      toast.success('Đăng nhập thành công!');
+      toast.success('Signed in successfully.');
       navigate('/');
     } catch (error: any) {
-      let errorMessage = 'Đăng nhập thất bại';
+      let errorMessage = 'Sign in failed';
       
       switch (error.code) {
         case 'auth/invalid-credential':
         case 'auth/user-not-found':
         case 'auth/wrong-password':
-          errorMessage = 'Email hoặc mật khẩu không đúng';
+          errorMessage = 'Incorrect email address or password';
           break;
         case 'auth/invalid-email':
-          errorMessage = 'Email không hợp lệ';
+          errorMessage = 'Enter a valid email address';
           break;
         case 'auth/too-many-requests':
-          errorMessage = 'Quá nhiều lần thử. Vui lòng thử lại sau';
+          errorMessage = 'Too many attempts. Please try again later';
           break;
         default:
-          errorMessage = error.message || 'Đăng nhập thất bại';
+          errorMessage = error.message || 'Sign in failed';
       }
       
       toast.error(errorMessage);
@@ -58,12 +58,12 @@ export default function Login() {
               <BatteryCharging className="w-8 h-8 text-primary" />
             </div>
             <h1 className="text-2xl font-bold text-foreground">VinFast BMS</h1>
-            <p className="text-muted-foreground mt-2">Hệ thống quản lý pin thông minh</p>
+            <p className="text-muted-foreground mt-2">Battery operations and AI workspace</p>
           </div>
 
           <Card className="border-border/50 bg-surface/50 backdrop-blur-sm shadow-xl">
             <CardHeader className="text-center pb-4">
-              <CardTitle className="text-xl">Đăng nhập</CardTitle>
+              <CardTitle className="text-xl">Administrator sign in</CardTitle>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
@@ -82,7 +82,7 @@ export default function Login() {
                 </div>
 
                 <div className="space-y-2">
-                  <label htmlFor="login-password" className="text-sm font-medium text-foreground">Mật khẩu</label>
+                  <label htmlFor="login-password" className="text-sm font-medium text-foreground">Password</label>
                   <div className="relative">
                     <Input
                       id="login-password"
@@ -96,7 +96,7 @@ export default function Login() {
                     />
                     <Button
                       type="button"
-                      aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
                       aria-pressed={showPassword}
                       variant="ghost"
                       size="icon"
@@ -116,10 +116,10 @@ export default function Login() {
                   {loading ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Đang đăng nhập...
+                      Signing in...
                     </>
                   ) : (
-                    'Đăng nhập'
+                    'Sign in'
                   )}
                 </Button>
               </form>

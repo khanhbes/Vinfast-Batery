@@ -86,15 +86,6 @@ def _load_model_file(path: str) -> Any:
     elif ext in ('.pt', '.pth'):
         return _load_torchscript_file(path)
     else:
-        # Unknown extension: try pickle first, then keras
-        try:
-            return _load_pickle_file(path)
-        except Exception:
-            pass
-        try:
-            return _load_keras_file(path)
-        except Exception:
-            pass
         raise RuntimeError(f"Unsupported model format: {ext}")
 
 
@@ -525,6 +516,7 @@ class ModelRuntime:
         self._last_error: Optional[str] = None
         self._validation_error: Optional[str] = None
         self._lock = threading.RLock()
+        self._lifecycle_lock = threading.RLock()
 
     # ── Properties ───────────────────────────────────────────────
     @property
@@ -675,6 +667,54 @@ class ModelRuntime:
             self._last_error = None
             self._validation_error = None if loaded["validation"].get("ok") else loaded["validation"].get("error")
         return loaded["validation"]
+
+    def deploy_version(self, version: str) -> Dict[str, Any]:
+        """Validate first, persist next, publish last. Failed deploy keeps A intact.
+
+        Serializes lifecycle changes in the single AI worker; inference can keep
+        using the old predictor while the candidate is being validated.
+        """
+        with self._lifecycle_lock:
+            loaded = self.try_load_version(version, require_smoke=True)
+            if not loaded['validation'].get('ok') or loaded.get('predictor') is None:
+                raise RuntimeError('Model validation failed')
+            with self._lock:
+                self.store.activate(version)
+                self._model = loaded['model']
+                self._predictor = loaded['predictor']
+                self._active_version = version
+                self._last_load_at = _utc_now_iso()
+                self._last_error = None
+                self._validation_error = None
+            return loaded['validation']
+
+    def deactivate_persisted(self) -> Optional[str]:
+        with self._lifecycle_lock, self._lock:
+            previous = self.store.active_version()
+            self.store.deactivate()
+            self.clear()
+            return previous
+
+    def remove_version(self, version: str) -> None:
+        with self._lifecycle_lock:
+            # ModelStore rejects the active version, including during a deploy.
+            self.store.remove(version)
+
+    def reset_versions(self) -> List[str]:
+        with self._lifecycle_lock:
+            versions = [v['version'] for v in self.store.list_versions()]
+            self.deactivate_persisted()
+            for version in versions:
+                self.store.remove(version)
+            # Never erase a concurrently uploaded version's manifest entry.
+            return versions
+
+    def load_persisted(self) -> Dict[str, Any]:
+        with self._lifecycle_lock:
+            version = self.store.active_version()
+            if not version:
+                raise RuntimeError('No active model')
+            return self.deploy_version(version)
 
     def reload_active_from_disk(self) -> Optional[str]:
         """On startup: load whatever manifest says is active."""

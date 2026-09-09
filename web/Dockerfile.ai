@@ -12,6 +12,8 @@ COPY requirements-ai.txt .
 RUN pip install --no-cache-dir -r requirements-ai.txt
 
 COPY ai_server/ ./ai_server/
+# dataset_manager.py reuses the shared CSV hardening helper.
+COPY csv_security.py .
 
 RUN mkdir -p /app/models
 

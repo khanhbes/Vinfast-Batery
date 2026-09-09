@@ -1,21 +1,34 @@
 import 'package:flutter/material.dart';
 import '../theme/cockpit_design_system.dart';
 
+/// Explicit command states for asynchronous charging/vehicle operations.
+enum CommandState {
+  idle,
+  sending,
+  confirming,
+  confirmed,
+  failed,
+}
+
 /// Interactive button / toggle featuring:
-/// 1. Pulse glow: Breathing emerald ambient glow when active
-/// 2. Ripple wave: Expanding radial shockwave when tapped or switched
-/// 3. Smooth scale & haptic-like press animation
+/// 1. Command State Flow: sending (amber spinner) -> confirming (emerald spinner) -> confirmed / failed
+/// 2. Pulse glow: Breathing emerald ambient glow when active
+/// 3. Ripple wave: Expanding radial shockwave when tapped or confirmed
+/// 4. Smooth scale & haptic-like press animation
+/// 5. Lifecycle safe: Pauses animations when app is backgrounded
+/// 6. Reduced motion aware: Respects system accessibility setting
 class PulseGlowButton extends StatefulWidget {
   const PulseGlowButton({
     super.key,
     required this.isActive,
     required this.onTap,
+    this.commandState = CommandState.idle,
     this.label,
     this.activeLabel,
     this.icon,
     this.activeIcon,
     this.activeColor = CockpitColors.emeraldStrong,
-    this.inactiveColor = CockpitColors.surfaceSoft,
+    this.inactiveColor,
     this.width,
     this.height = CockpitButtonTokens.height,
     this.borderRadius = CockpitRadius.medium,
@@ -24,12 +37,13 @@ class PulseGlowButton extends StatefulWidget {
 
   final bool isActive;
   final VoidCallback onTap;
+  final CommandState commandState;
   final String? label;
   final String? activeLabel;
   final IconData? icon;
   final IconData? activeIcon;
   final Color activeColor;
-  final Color inactiveColor;
+  final Color? inactiveColor;
   final double? width;
   final double height;
   final double borderRadius;
@@ -40,7 +54,7 @@ class PulseGlowButton extends StatefulWidget {
 }
 
 class _PulseGlowButtonState extends State<PulseGlowButton>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   late final AnimationController _pulseController;
   late final Animation<double> _pulseAnimation;
 
@@ -51,9 +65,14 @@ class _PulseGlowButtonState extends State<PulseGlowButton>
   late final AnimationController _pressController;
   late final Animation<double> _pressScaleAnimation;
 
+  bool _isEffectiveActive(PulseGlowButton w) =>
+      w.commandState == CommandState.confirmed ||
+      (w.commandState == CommandState.idle && w.isActive);
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
 
     // Pulse breathing glow
     _pulseController = AnimationController(
@@ -65,7 +84,7 @@ class _PulseGlowButtonState extends State<PulseGlowButton>
       curve: Curves.easeInOutSine,
     );
 
-    if (widget.isActive && widget.showGlow) {
+    if (_isEffectiveActive(widget) && widget.showGlow) {
       _pulseController.repeat(reverse: true);
     }
 
@@ -93,10 +112,28 @@ class _PulseGlowButtonState extends State<PulseGlowButton>
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.inactive) {
+      if (_pulseController.isAnimating) {
+        _pulseController.stop();
+      }
+    } else if (state == AppLifecycleState.resumed) {
+      if (_isEffectiveActive(widget) && widget.showGlow) {
+        _pulseController.repeat(reverse: true);
+      }
+    }
+  }
+
+  @override
   void didUpdateWidget(PulseGlowButton oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.isActive != oldWidget.isActive) {
-      if (widget.isActive) {
+    final isNowActive = _isEffectiveActive(widget);
+    final wasActive = _isEffectiveActive(oldWidget);
+
+    if (isNowActive != wasActive) {
+      if (isNowActive) {
         if (widget.showGlow) {
           _pulseController.repeat(reverse: true);
         }
@@ -106,11 +143,22 @@ class _PulseGlowButtonState extends State<PulseGlowButton>
         _pulseController.reset();
         _rippleController.forward(from: 0.0);
       }
+    } else if (widget.commandState != oldWidget.commandState) {
+      if (widget.commandState == CommandState.confirmed) {
+        _rippleController.forward(from: 0.0);
+        if (widget.showGlow) {
+          _pulseController.repeat(reverse: true);
+        }
+      } else if (widget.commandState == CommandState.failed) {
+        _pulseController.stop();
+        _pulseController.reset();
+      }
     }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pulseController.dispose();
     _rippleController.dispose();
     _pressController.dispose();
@@ -118,6 +166,10 @@ class _PulseGlowButtonState extends State<PulseGlowButton>
   }
 
   void _handleTap() {
+    if (widget.commandState == CommandState.sending ||
+        widget.commandState == CommandState.confirming) {
+      return; // Disabled while in flight
+    }
     _pressController.forward().then((_) => _pressController.reverse());
     _rippleController.forward(from: 0.0);
     widget.onTap();
@@ -125,57 +177,107 @@ class _PulseGlowButtonState extends State<PulseGlowButton>
 
   @override
   Widget build(BuildContext context) {
-    final effectiveLabel = widget.isActive
-        ? (widget.activeLabel ?? widget.label)
-        : widget.label;
-    final effectiveIcon = widget.isActive
+    final colors = context.cockpit;
+    final motionEnabled = CockpitMotion.enabled(context);
+
+    final isSending = widget.commandState == CommandState.sending;
+    final isConfirming = widget.commandState == CommandState.confirming;
+    final isFailed = widget.commandState == CommandState.failed;
+    final isBusy = isSending || isConfirming;
+    final active = _isEffectiveActive(widget);
+
+    String? effectiveLabel;
+    if (isSending) {
+      effectiveLabel = 'Đang gửi lệnh…';
+    } else if (isConfirming) {
+      effectiveLabel = 'Đang xác nhận…';
+    } else if (isFailed) {
+      effectiveLabel = 'Thất bại - Chạm để thử lại';
+    } else if (active) {
+      effectiveLabel = widget.activeLabel ?? widget.label;
+    } else {
+      effectiveLabel = widget.label;
+    }
+
+    final effectiveIcon = active
         ? (widget.activeIcon ?? widget.icon)
         : widget.icon;
 
+    final baseInactiveColor = widget.inactiveColor ?? colors.surfaceSoft;
+
+    Color buttonColor;
+    Color borderColor;
+    Color contentColor;
+
+    if (isFailed) {
+      buttonColor = colors.danger.withValues(alpha: 0.18);
+      borderColor = colors.danger;
+      contentColor = colors.danger;
+    } else if (isSending) {
+      buttonColor = colors.amber.withValues(alpha: 0.15);
+      borderColor = colors.amber;
+      contentColor = colors.amber;
+    } else if (isConfirming) {
+      buttonColor = widget.activeColor.withValues(alpha: 0.18);
+      borderColor = widget.activeColor;
+      contentColor = widget.activeColor;
+    } else if (active) {
+      buttonColor = widget.activeColor;
+      borderColor = widget.activeColor.withValues(alpha: 0.85);
+      contentColor = Colors.black;
+    } else {
+      buttonColor = baseInactiveColor;
+      borderColor = colors.borderStrong;
+      contentColor = colors.text;
+    }
+
     return Semantics(
       button: true,
-      toggled: widget.isActive,
-      label: effectiveLabel ?? 'Toggle',
+      enabled: !isBusy,
+      toggled: active,
+      label: effectiveLabel ?? 'Nút điều khiển',
       child: GestureDetector(
-        onTap: _handleTap,
+        onTap: isBusy ? null : _handleTap,
         child: ScaleTransition(
-          scale: _pressScaleAnimation,
+          scale: motionEnabled ? _pressScaleAnimation : const AlwaysStoppedAnimation(1.0),
           child: Stack(
             alignment: Alignment.center,
             clipBehavior: Clip.none,
             children: [
               // Ripple shockwave ring on state change
-              AnimatedBuilder(
-                animation: _rippleController,
-                builder: (context, _) {
-                  if (_rippleController.value == 0 ||
-                      _rippleController.isCompleted) {
-                    return const SizedBox.shrink();
-                  }
-                  return Transform.scale(
-                    scale: _rippleScaleAnimation.value,
-                    child: Container(
-                      width: widget.width,
-                      height: widget.height,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(widget.borderRadius + 4),
-                        border: Border.all(
-                          color: widget.activeColor.withValues(
-                            alpha: _rippleOpacityAnimation.value,
+              if (motionEnabled)
+                AnimatedBuilder(
+                  animation: _rippleController,
+                  builder: (context, _) {
+                    if (_rippleController.value == 0 ||
+                        _rippleController.isCompleted) {
+                      return const SizedBox.shrink();
+                    }
+                    return Transform.scale(
+                      scale: _rippleScaleAnimation.value,
+                      child: Container(
+                        width: widget.width,
+                        height: widget.height,
+                        decoration: BoxDecoration(
+                          borderRadius:
+                              BorderRadius.circular(widget.borderRadius + 4),
+                          border: Border.all(
+                            color: widget.activeColor.withValues(
+                              alpha: _rippleOpacityAnimation.value,
+                            ),
+                            width: 2.0,
                           ),
-                          width: 2.0,
                         ),
                       ),
-                    ),
-                  );
-                },
-              ),
+                    );
+                  },
+                ),
 
               // Button Body with pulsing shadow
               AnimatedBuilder(
                 animation: _pulseAnimation,
                 builder: (context, child) {
-                  final glowFactor = widget.isActive && widget.showGlow
+                  final glowFactor = active && widget.showGlow && motionEnabled
                       ? _pulseAnimation.value
                       : 0.0;
 
@@ -186,17 +288,13 @@ class _PulseGlowButtonState extends State<PulseGlowButton>
                     height: widget.height,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     decoration: BoxDecoration(
-                      color: widget.isActive
-                          ? widget.activeColor
-                          : widget.inactiveColor,
+                      color: buttonColor,
                       borderRadius: BorderRadius.circular(widget.borderRadius),
                       border: Border.all(
-                        color: widget.isActive
-                            ? widget.activeColor.withValues(alpha: 0.8)
-                            : CockpitColors.borderStrong,
+                        color: borderColor,
                         width: 1.2,
                       ),
-                      boxShadow: widget.isActive
+                      boxShadow: active && motionEnabled
                           ? [
                               BoxShadow(
                                 color: widget.activeColor.withValues(
@@ -208,7 +306,7 @@ class _PulseGlowButtonState extends State<PulseGlowButton>
                             ]
                           : [
                               BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.2),
+                                color: Colors.black.withValues(alpha: 0.15),
                                 blurRadius: 4,
                                 offset: const Offset(0, 2),
                               ),
@@ -224,13 +322,28 @@ class _PulseGlowButtonState extends State<PulseGlowButton>
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    if (effectiveIcon != null) ...[
+                    if (isBusy) ...[
+                      SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(contentColor),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ] else if (isFailed) ...[
+                      Icon(
+                        Icons.error_outline_rounded,
+                        size: 18,
+                        color: contentColor,
+                      ),
+                      const SizedBox(width: 8),
+                    ] else if (effectiveIcon != null) ...[
                       Icon(
                         effectiveIcon,
                         size: 20,
-                        color: widget.isActive
-                            ? Colors.black
-                            : CockpitColors.muted,
+                        color: active ? Colors.black : colors.muted,
                       ),
                       if (effectiveLabel != null) const SizedBox(width: 8),
                     ],
@@ -240,9 +353,7 @@ class _PulseGlowButtonState extends State<PulseGlowButton>
                         style: CockpitTypography.heading(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
-                          color: widget.isActive
-                              ? Colors.black
-                              : CockpitColors.text,
+                          color: contentColor,
                         ),
                       ),
                   ],

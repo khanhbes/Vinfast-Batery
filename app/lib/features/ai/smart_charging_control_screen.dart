@@ -6,7 +6,6 @@ import 'package:fl_chart/fl_chart.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/theme/cockpit_design_system.dart';
 import '../../core/widgets/app_popup.dart';
-import '../../core/widgets/power_action_button.dart';
 import '../../core/widgets/pulse_glow_button.dart';
 import '../../core/widgets/debug_error_sheet.dart';
 import '../../data/models/smart_charge_history.dart';
@@ -92,17 +91,6 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
         appBar: widget.embedded
             ? null
             : AppBar(title: const Text('Smart Charge')),
-        bottomNavigationBar: state.hasActiveSession
-            ? SafeArea(
-                minimum: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                child: PowerActionButton(
-                  key: const ValueKey('stop-smart-session-button'),
-                  stopping: state.phase == SmartChargingViewPhase.stopping,
-                  onPressed: () => _emergencyOff(controller),
-                  label: 'NGẮT NGUỒN NGAY',
-                ),
-              )
-            : null,
         body: SafeArea(
           child: RefreshIndicator(
             onRefresh: controller.refresh,
@@ -2038,7 +2026,14 @@ class _ManualControlsSection extends StatelessWidget {
               Expanded(
                 child: PulseGlowButton(
                   key: const ValueKey('manual-on-button'),
-                  isActive: state.isCharging,
+                  isActive: state.hasActiveSession,
+                  commandState: state.phase == SmartChargingViewPhase.starting
+                      ? CommandState.sending
+                      : (state.hasActiveSession
+                          ? CommandState.confirmed
+                          : (state.phase == SmartChargingViewPhase.error
+                              ? CommandState.failed
+                              : CommandState.idle)),
                   onTap: state.capabilities.readyForControl ? onOn : () {},
                   icon: Icons.power_rounded,
                   label: 'BẬT SẠC',
@@ -2053,6 +2048,9 @@ class _ManualControlsSection extends StatelessWidget {
                 child: PulseGlowButton(
                   key: const ValueKey('smart-charging-manual-off'),
                   isActive: false,
+                  commandState: state.phase == SmartChargingViewPhase.stopping
+                      ? CommandState.sending
+                      : CommandState.idle,
                   onTap: onOff,
                   icon: Icons.power_settings_new_rounded,
                   label: 'TẮT SẠC',

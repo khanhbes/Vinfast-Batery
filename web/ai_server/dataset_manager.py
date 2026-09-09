@@ -6,15 +6,14 @@ and provides APIs for viewing, editing, and fine-tuning in Developer Mode.
 """
 from __future__ import annotations
 
-import csv
-import io
 import json
 import logging
 import os
 import threading
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
+
+from csv_security import csv_text
 
 logger = logging.getLogger("DatasetManager")
 
@@ -113,10 +112,7 @@ def _write_files_unlocked(records: list[dict[str, Any]]) -> None:
         ]
         tmp_csv = CSV_PATH + ".tmp"
         with open(tmp_csv, "w", encoding="utf-8", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
-            writer.writeheader()
-            for r in records:
-                writer.writerow(r)
+            f.write(csv_text(records, fieldnames))
         os.replace(tmp_csv, CSV_PATH)
 
 
@@ -322,9 +318,15 @@ def get_dataset_stats() -> dict[str, Any]:
 
 
 def export_csv_text() -> str:
-    """Return CSV content as a string."""
-    load_dataset()  # Ensure files exist
-    if os.path.exists(CSV_PATH):
-        with open(CSV_PATH, "r", encoding="utf-8") as f:
-            return f.read()
-    return ""
+    """Return a freshly sanitized CSV representation of the JSON dataset."""
+    records = load_dataset()
+    if not records:
+        return ""
+    fieldnames = [
+        "session_id", "vehicle_id", "start_soc", "target_soc", "actual_end_soc",
+        "delta_soc", "duration_seconds", "energy_wh", "avg_power_w",
+        "ambient_temp_c", "avg_charge_rate", "temp_deviation",
+        "is_user_confirmed", "training_eligible", "training_excluded",
+        "developer_note", "created_at", "confirmed_at", "updated_at",
+    ]
+    return csv_text(records, fieldnames)

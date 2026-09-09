@@ -1,6 +1,9 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
+import 'debug_error_sheet.dart';
 
 enum AppNoticeKind { success, error, warning, info }
 
@@ -12,6 +15,7 @@ class AppPopup {
   static String? _lastSignature;
   static DateTime? _lastShownAt;
   static final Set<String> _shownSignatures = <String>{};
+  static bool _isDebugSheetOpen = false;
 
   static void showSuccess(
     String title, {
@@ -24,13 +28,56 @@ class AppPopup {
     String? detail,
     VoidCallback? action,
     bool userInitiated = false,
-  }) => _show(
-    AppNoticeKind.error,
-    title,
-    detail,
-    action,
-    userInitiated: userInitiated,
-  );
+    dynamic error,
+    StackTrace? stackTrace,
+  }) {
+    VoidCallback? effectiveAction = action;
+    if (kDebugMode && effectiveAction == null) {
+      effectiveAction = () {
+        final ctx = navigatorKey.currentContext;
+        if (ctx != null) {
+          DebugErrorSheet.show(
+            ctx,
+            error: error ?? detail ?? title,
+            stackTrace: stackTrace,
+            source: 'AppPopup',
+          );
+        }
+      };
+    }
+
+    _show(
+      AppNoticeKind.error,
+      title,
+      detail,
+      effectiveAction,
+      actionLabel: kDebugMode ? 'CHI TIẾT' : 'MỞ',
+      userInitiated: userInitiated,
+    );
+
+    // Tự động mở DebugErrorSheet trong debug mode nếu chưa mở
+    if (kDebugMode && !_isDebugSheetOpen) {
+      final ctx = navigatorKey.currentContext;
+      if (ctx != null) {
+        _isDebugSheetOpen = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final currentCtx = navigatorKey.currentContext;
+          if (currentCtx != null && currentCtx.mounted) {
+            DebugErrorSheet.show(
+              currentCtx,
+              error: error ?? detail ?? title,
+              stackTrace: stackTrace,
+              source: 'AutoDebug',
+            ).whenComplete(() {
+              _isDebugSheetOpen = false;
+            });
+          } else {
+            _isDebugSheetOpen = false;
+          }
+        });
+      }
+    }
+  }
 
   static void showWarning(
     String title, {

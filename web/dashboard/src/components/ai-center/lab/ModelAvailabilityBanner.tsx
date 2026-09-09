@@ -59,7 +59,7 @@ export default function ModelAvailabilityBanner({
               className="bg-white/10 hover:bg-white/20 text-white border border-white/15 text-xs"
             >
               <Settings className="mr-1.5 h-3.5 w-3.5" />
-              Quản lý model
+              Manage model
             </Button>
           )}
 
@@ -73,7 +73,7 @@ export default function ModelAvailabilityBanner({
                   className="bg-white/10 hover:bg-white/20 text-white border border-white/15 text-xs"
                 >
                   <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${loadingLoad ? 'animate-spin' : ''}`} />
-                  Nạp lại
+                  Load again
                 </Button>
               )}
               <Button
@@ -82,7 +82,7 @@ export default function ModelAvailabilityBanner({
                 className="bg-white/10 hover:bg-white/20 text-white border border-white/15 text-xs"
               >
                 <Settings className="mr-1.5 h-3.5 w-3.5" />
-                Quản lý model
+                Manage model
               </Button>
             </>
           )}
@@ -97,7 +97,7 @@ export default function ModelAvailabilityBanner({
                   className="bg-white/10 hover:bg-white/20 text-white border border-white/15 text-xs"
                 >
                   <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${loadingLoad ? 'animate-spin' : ''}`} />
-                  Thử lại
+                  Try again
                 </Button>
               )}
               <Button
@@ -106,7 +106,7 @@ export default function ModelAvailabilityBanner({
                 className="bg-white/10 hover:bg-white/20 text-white border border-white/15 text-xs"
               >
                 <Settings className="mr-1.5 h-3.5 w-3.5" />
-                Quản lý model
+                Manage model
               </Button>
             </>
           )}

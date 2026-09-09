@@ -338,6 +338,7 @@ class ChargingSession:
     # Normal history removal is reversible soft-hide; privacy erase is a
     # separate explicit destructive operation.
     hidden_at: datetime | None = None
+    safety_policy_version: str = "v2.0"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -411,4 +412,3 @@ class ChargingSession:
             "hidden_at": iso(self.hidden_at),
             "safety_policy_version": self.safety_policy_version,
         }
-

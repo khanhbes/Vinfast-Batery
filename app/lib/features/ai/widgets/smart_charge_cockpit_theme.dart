@@ -28,9 +28,7 @@ class SmartChargeCockpitTheme extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: adaptive
-          ? Theme.of(context).scaffoldBackgroundColor
-          : SmartChargeCockpitColors.background,
+      color: Theme.of(context).scaffoldBackgroundColor,
       child: child,
     );
   }

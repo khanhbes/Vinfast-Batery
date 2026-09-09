@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 /** Native modal provides focus trapping, Escape handling and an inert page.
@@ -7,10 +7,22 @@ export function ModalSurface({ children, label, onClose, busy = false, drawer = 
   children: ReactNode; label: string; onClose: () => void; busy?: boolean; drawer?: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const element = dialog.current;
+    const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     element?.showModal();
-    return () => element?.close();
+    return () => {
+      element?.close();
+      // React removes the portal node during commit. Restore after that commit,
+      // without stealing focus from a different modal opened in the meantime.
+      queueMicrotask(() => {
+        const dialogs = Array.from(document.querySelectorAll('dialog[open]'));
+        const top = dialogs[dialogs.length - 1];
+        if (trigger?.isConnected && (!top || top.contains(trigger))) {
+          trigger.focus({ preventScroll: true });
+        }
+      });
+    };
   }, []);
   return createPortal(<dialog ref={dialog} aria-label={label} aria-busy={busy}
     className={`ui-dialog ${drawer ? 'dark ui-drawer' : ''}`}

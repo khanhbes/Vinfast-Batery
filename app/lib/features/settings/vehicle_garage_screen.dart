@@ -289,6 +289,8 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
               odo: v['currentOdo'] is num
                   ? (v['currentOdo'] as num).toDouble()
                   : null,
+              licensePlate: v['licensePlate'] as String?,
+              batteryType: (v['batteryType'] ?? v['batteryChemistry']) as String?,
               isSelected: isSelected,
               onTap: archived
                   ? () {}
@@ -330,6 +332,8 @@ class _VehicleCard extends StatelessWidget {
   final double? battery;
   final double? soh;
   final double? odo;
+  final String? licensePlate;
+  final String? batteryType;
   final bool isSelected;
   final bool isArchived;
   final VoidCallback onTap;
@@ -342,6 +346,8 @@ class _VehicleCard extends StatelessWidget {
     required this.battery,
     required this.soh,
     required this.odo,
+    this.licensePlate,
+    this.batteryType,
     required this.isSelected,
     this.isArchived = false,
     required this.onTap,
@@ -408,11 +414,23 @@ class _VehicleCard extends StatelessWidget {
                           fontWeight: FontWeight.w700,
                         ),
                       ),
+                      if (licensePlate != null && licensePlate!.trim().isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          'Biển số: $licensePlate · ${batteryType ?? 'LFP'}',
+                          style: const TextStyle(
+                            color: AppColors.primary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 2),
                       Text(
                         '${year == null ? 'Năm —' : 'Năm $year'} • '
-                        '${battery == null || battery! <= 0 ? 'Pin —' : '${battery!.toInt()} Wh'}',
-                        style: TextStyle(
+                        '${battery == null || battery! <= 0 ? 'Pin —' : '${battery!.toInt()} Wh'}'
+                        '${(licensePlate == null || licensePlate!.trim().isEmpty) && batteryType != null ? ' • $batteryType' : ''}',
+                        style: const TextStyle(
                           color: AppColors.textSecondary,
                           fontSize: 12,
                         ),
@@ -572,6 +590,8 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
   bool _isLoading = true;
   bool _isAdding = false;
   final _searchCtrl = TextEditingController();
+  final _licensePlateCtrl = TextEditingController();
+  String _selectedBatteryType = 'LFP';
 
   // Custom values
   int _selectedYear = DateTime.now().year;
@@ -585,6 +605,7 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
 
   @override
   void dispose() {
+    _licensePlateCtrl.dispose();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -622,6 +643,8 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
     final result = await AuthService().addVehicle(
       model: spec.modelName,
       year: _selectedYear,
+      licensePlate: _licensePlateCtrl.text.trim(),
+      batteryType: _selectedBatteryType,
       batteryCapacity: spec.nominalCapacityWh,
       currentBattery: 100,
       stateOfHealth: 100,
@@ -802,6 +825,74 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
                   ),
                 ],
               ),
+            ),
+          ),
+          // Biển số & Loại pin
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _licensePlateCtrl,
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 13,
+                    ),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      hintText: 'Biển số (VD: 29A-123.45)',
+                      hintStyle: const TextStyle(
+                        color: AppColors.textHint,
+                        fontSize: 12,
+                      ),
+                      prefixIcon: const Icon(
+                        Icons.pin_outlined,
+                        color: AppColors.textSecondary,
+                        size: 18,
+                      ),
+                      filled: true,
+                      fillColor: AppColors.surfaceLight,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        vertical: 10,
+                        horizontal: 10,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceLight,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _selectedBatteryType,
+                      dropdownColor: AppColors.surfaceVariant,
+                      icon: const Icon(Icons.arrow_drop_down, color: AppColors.textSecondary),
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'LFP', child: Text('Pin LFP')),
+                        DropdownMenuItem(value: 'NMC', child: Text('Pin NMC')),
+                        DropdownMenuItem(value: 'Khác', child: Text('Khác')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) setState(() => _selectedBatteryType = val);
+                      },
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 8),

@@ -45,12 +45,16 @@ __pycache__/
 **/__pycache__/
 **/.pytest_cache/
 **/.pytest-temp/
+**/.pytest-run-*/
 *.pyo
 *.pyd
 .venv/
 venv/
 env/
 ENV/
+
+# Browser automation session metadata (screenshots under output/playwright are evidence)
+**/.playwright-cli/
 
 # Local Smart Charger Gateway runtime
 smart_charger_gateway/.venv/

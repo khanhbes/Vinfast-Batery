@@ -3,7 +3,4 @@
     <!-- Android XML cannot express private CIDR allowlists. Dart validates every
          cleartext Shelly destination as private/link-local/.local before sending. -->
     <base-config cleartextTrafficPermitted="true" />
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">167.71.207.121</domain>
-    </domain-config>
 </network-security-config>

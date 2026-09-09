@@ -9,6 +9,21 @@ web_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if web_dir not in sys.path:
     sys.path.insert(0, web_dir)
 
+# Set isolation BEFORE test modules import server. Never discover real credentials.
+os.environ['APP_ENV'] = 'testing'
+os.environ['FLASK_ENV'] = 'testing'
+os.environ['ADMIN_EMAILS'] = 'admin@vinfast.vn'
+os.environ['CORS_ORIGINS'] = 'http://localhost:3000'
+os.environ['ALLOW_DEV_ADMIN_KEY'] = 'false'
+
+@pytest.fixture(autouse=True)
+def isolated_dependencies(monkeypatch):
+    import server
+    monkeypatch.setattr(server, '_firestore_db', None)
+    monkeypatch.setattr(server, '_firebase_available', False)
+    monkeypatch.setattr(server, '_firebase_auth', None)
+    monkeypatch.setattr(server, '_ai_request_json', lambda *a, **kw: ({'success': False, 'error': 'AI unavailable (fixture)'}, 502))
+
 @pytest.fixture(scope="session")
 def flask_app():
     # Set environment variables for testing

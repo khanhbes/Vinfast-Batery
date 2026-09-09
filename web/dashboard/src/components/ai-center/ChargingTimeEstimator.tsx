@@ -40,9 +40,9 @@ export default function ChargingTimeEstimator() {
   const [error, setError] = useState<string | null>(null);
 
   const chargerOptions = [
-    { value: 'slow', label: 'Sạc chậm', icon: '🔌', desc: '~150W' },
-    { value: 'standard', label: 'Sạc chuẩn', icon: '⚡', desc: '~600W' },
-    { value: 'fast', label: 'Sạc nhanh', icon: '🚀', desc: '~1200W' },
+    { value: 'slow', label: 'Slow charging', icon: '🔌', desc: '~150W' },
+    { value: 'standard', label: 'Standard charging', icon: '⚡', desc: '~600W' },
+    { value: 'fast', label: 'Fast charging', icon: '🚀', desc: '~1200W' },
   ];
 
   const predict = async () => {
@@ -59,7 +59,7 @@ export default function ChargingTimeEstimator() {
       });
       setResult(res?.data ?? null);
     } catch (e: any) {
-      setError(e?.message || 'Dự đoán thất bại');
+      setError(e?.message || 'Prediction failed');
     } finally {
       setLoading(false);
     }
@@ -102,7 +102,7 @@ export default function ChargingTimeEstimator() {
           </Badge>
         </CardTitle>
         <CardDescription>
-          Dự đoán thời gian sạc bằng AI, kết hợp SoH và điều kiện môi trường
+          Estimate charging time with AI using SoH and environmental conditions
         </CardDescription>
       </CardHeader>
 
@@ -113,14 +113,14 @@ export default function ChargingTimeEstimator() {
           <div className="space-y-4">
             <div className="text-sm font-semibold text-foreground flex items-center gap-2">
               <BatteryCharging className="w-4 h-4 text-blue-400" />
-              Mức pin
+              Battery level
             </div>
 
             <BatteryBar from={currentBattery} to={targetBattery} />
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Pin hiện tại (%)</label>
+                <label className="text-xs text-muted-foreground mb-1 block">Current battery (%)</label>
                 <input
                   type="range"
                   min={0}
@@ -136,7 +136,7 @@ export default function ChargingTimeEstimator() {
                 <div className="text-center text-lg font-bold text-amber-400">{currentBattery}%</div>
               </div>
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Pin mong muốn (%)</label>
+                <label className="text-xs text-muted-foreground mb-1 block">Target battery (%)</label>
                 <input
                   type="range"
                   min={currentBattery + 1}
@@ -174,12 +174,12 @@ export default function ChargingTimeEstimator() {
           <div className="space-y-4">
             <div className="text-sm font-semibold text-foreground flex items-center gap-2">
               <Zap className="w-4 h-4 text-yellow-400" />
-              Điều kiện sạc
+              Charging conditions
             </div>
 
             {/* Charger Type */}
             <div>
-              <label className="text-xs text-muted-foreground mb-2 block">Loại sạc</label>
+              <label className="text-xs text-muted-foreground mb-2 block">Charger type</label>
               <div className="grid grid-cols-3 gap-2">
                 {chargerOptions.map((opt) => (
                   <button
@@ -204,7 +204,7 @@ export default function ChargingTimeEstimator() {
             {/* Temperature */}
             <div>
               <label className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-                <Thermometer className="w-3 h-3" /> Nhiệt độ ({temperature}°C)
+                <Thermometer className="w-3 h-3" /> Temperature ({temperature}°C)
               </label>
               <input
                 type="range"
@@ -217,7 +217,7 @@ export default function ChargingTimeEstimator() {
               <div className="flex justify-between text-[10px] text-muted-foreground">
                 <span>0°C</span>
                 <span className={temperature >= 20 && temperature <= 35 ? 'text-emerald-400' : 'text-amber-400'}>
-                  {temperature < 10 ? '❄️ Lạnh' : temperature <= 35 ? '✅ Tốt' : '🔥 Nóng'}
+                  {temperature < 10 ? '❄️ Cold' : temperature <= 35 ? '✅ Optimal' : '🔥 Hot'}
                 </span>
                 <span>45°C</span>
               </div>
@@ -226,7 +226,7 @@ export default function ChargingTimeEstimator() {
             {/* Battery Health */}
             <div>
               <label className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-                <Battery className="w-3 h-3" /> Sức khỏe pin — SoH ({batteryHealth}%)
+                <Battery className="w-3 h-3" /> Battery health — SoH ({batteryHealth}%)
               </label>
               <input
                 type="range"
@@ -251,7 +251,7 @@ export default function ChargingTimeEstimator() {
           ) : (
             <Timer className="w-5 h-5" />
           )}
-          {loading ? 'Đang tính toán...' : 'Dự đoán với AI'}
+          {loading ? 'Calculating...' : 'Predict with AI'}
         </Button>
 
         {/* ── Error ── */}
@@ -270,30 +270,30 @@ export default function ChargingTimeEstimator() {
               border border-blue-500/30 p-6 text-center">
               <div className="text-sm text-blue-300/80 mb-1 flex items-center justify-center gap-1">
                 <Clock className="w-4 h-4" />
-                Thời gian sạc dự kiến
+                Estimated charging time
               </div>
               <div className="text-4xl font-black text-white tracking-tight">
                 {result.formattedTime}
               </div>
               <div className="text-sm text-muted-foreground mt-2">
-                {result.chargeGainPercent}% pin · {result.chargeRatePercentPerHour}%/giờ · {result.chargePowerW}W
+                {result.chargeGainPercent}% battery · {result.chargeRatePercentPerHour}%/hour · {result.chargePowerW}W
               </div>
               <div className="flex items-center justify-center gap-2 mt-2">
                 <Badge variant="outline" className="text-[10px]">
                   {result.modelSource}
                 </Badge>
                 <Badge variant="outline" className="text-[10px]">
-                  Độ tin cậy: {result.confidence}%
+                  Confidence: {result.confidence}%
                 </Badge>
               </div>
             </div>
 
             {/* Stats grid */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <StatBox icon={<Clock className="w-4 h-4" />} label="Thời gian" value={result.formattedTime} accent="blue" />
-              <StatBox icon={<Zap className="w-4 h-4" />} label="Công suất" value={`${result.chargePowerW}W`} accent="yellow" />
-              <StatBox icon={<TrendingUp className="w-4 h-4" />} label="Tốc độ sạc" value={`${result.chargeRatePercentPerHour}%/h`} accent="emerald" />
-              <StatBox icon={<Battery className="w-4 h-4" />} label="Năng lượng" value={`${result.energyNeededWh} Wh`} accent="purple" />
+              <StatBox icon={<Clock className="w-4 h-4" />} label="Duration" value={result.formattedTime} accent="blue" />
+              <StatBox icon={<Zap className="w-4 h-4" />} label="Power" value={`${result.chargePowerW}W`} accent="yellow" />
+              <StatBox icon={<TrendingUp className="w-4 h-4" />} label="Charge rate" value={`${result.chargeRatePercentPerHour}%/h`} accent="emerald" />
+              <StatBox icon={<Battery className="w-4 h-4" />} label="Energy" value={`${result.energyNeededWh} Wh`} accent="purple" />
             </div>
 
             {/* Charging Curve */}
@@ -301,7 +301,7 @@ export default function ChargingTimeEstimator() {
               <div className="rounded-xl border border-border/50 p-4 bg-card/50">
                 <div className="text-sm font-semibold mb-3 flex items-center gap-2 text-foreground">
                   <TrendingUp className="w-4 h-4 text-blue-400" />
-                  Đường cong sạc (CC-CV)
+                  Charging curve (CC-CV)
                 </div>
                 <div className="space-y-1.5">
                   {result.chargingCurve.map((point, i) => {
@@ -327,8 +327,8 @@ export default function ChargingTimeEstimator() {
                   })}
                 </div>
                 <div className="mt-2 flex justify-between text-[10px] text-muted-foreground px-12">
-                  <span>⚡ CC (dòng không đổi)</span>
-                  <span>📉 CV (áp không đổi, dòng giảm dần)</span>
+                  <span>⚡ CC (constant current)</span>
+                  <span>📉 CV (constant voltage, tapering current)</span>
                 </div>
               </div>
             )}
@@ -338,7 +338,7 @@ export default function ChargingTimeEstimator() {
               <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
                 <div className="text-sm font-semibold mb-2 flex items-center gap-2 text-blue-400">
                   <Info className="w-4 h-4" />
-                  Khuyến nghị
+                  Recommendations
                 </div>
                 <ul className="space-y-1.5">
                   {result.recommendations.map((rec, i) => (

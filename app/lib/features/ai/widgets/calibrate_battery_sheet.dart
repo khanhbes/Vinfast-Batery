@@ -42,22 +42,23 @@ class _CalibrateBatterySheetState extends State<CalibrateBatterySheet> {
   @override
   Widget build(BuildContext context) => Container(
         decoration: BoxDecoration(
-          color: CockpitColors.shell,
+          color: Theme.of(context).cardTheme.color ?? context.cockpit.surface,
           borderRadius: const BorderRadius.vertical(
             top: Radius.circular(CockpitRadius.sheet),
           ),
-          border: Border.all(color: CockpitColors.border),
+          border: Border.all(color: context.cockpit.border),
         ),
         child: SafeArea(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              20,
-              12,
-              20,
-              24 + MediaQuery.viewInsetsOf(context).bottom,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                20,
+                12,
+                20,
+                24 + MediaQuery.viewInsetsOf(context).bottom,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
               children: [
                 // Drag handle
                 Container(
@@ -280,5 +281,6 @@ class _CalibrateBatterySheetState extends State<CalibrateBatterySheet> {
             ),
           ),
         ),
-      );
+      ),
+    );
 }

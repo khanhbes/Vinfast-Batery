@@ -12,7 +12,7 @@ class BootstrapSplash extends StatefulWidget {
 }
 
 class _BootstrapSplashState extends State<BootstrapSplash>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   late final AnimationController _pulseController;
   late final AnimationController _entranceController;
   late final Animation<double> _logoScale;
@@ -23,6 +23,7 @@ class _BootstrapSplashState extends State<BootstrapSplash>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
 
     // Breathing glow aura
     _pulseController = AnimationController(
@@ -71,7 +72,19 @@ class _BootstrapSplashState extends State<BootstrapSplash>
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.inactive) {
+      if (_pulseController.isAnimating) _pulseController.stop();
+    } else if (state == AppLifecycleState.resumed) {
+      if (!_pulseController.isAnimating) _pulseController.repeat(reverse: true);
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pulseController.dispose();
     _entranceController.dispose();
     super.dispose();
@@ -82,7 +95,7 @@ class _BootstrapSplashState extends State<BootstrapSplash>
     final reducedMotion = MediaQuery.disableAnimationsOf(context);
 
     return Scaffold(
-      backgroundColor: CockpitColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(
         fit: StackFit.expand,
         children: [

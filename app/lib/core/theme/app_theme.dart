@@ -438,16 +438,38 @@ class AppTheme {
     );
   }
 
-  static ThemeData get amoledTheme => darkTheme.copyWith(
-    scaffoldBackgroundColor: Colors.black,
-    colorScheme: _buildDarkTheme().colorScheme.copyWith(
-      surface: Colors.black,
-      surfaceContainerLowest: Colors.black,
-    ),
-    appBarTheme: _buildDarkTheme().appBarTheme.copyWith(
-      backgroundColor: Colors.black,
-    ),
-  );
+  static ThemeData get amoledTheme {
+    final baseDark = _buildDarkTheme();
+    return _withControls(
+      baseDark.copyWith(
+        scaffoldBackgroundColor: Colors.black,
+        colorScheme: baseDark.colorScheme.copyWith(
+          surface: Colors.black,
+          surfaceContainerLowest: Colors.black,
+          surfaceContainerLow: Colors.black,
+          surfaceContainer: const Color(0xFF0A0A0A),
+          surfaceContainerHigh: const Color(0xFF121212),
+          surfaceContainerHighest: const Color(0xFF181818),
+        ),
+        cardTheme: const CardThemeData(
+          color: Colors.black,
+        ),
+        dialogTheme: DialogThemeData(
+          backgroundColor: Colors.black,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        ),
+        bottomSheetTheme: const BottomSheetThemeData(
+          backgroundColor: Colors.black,
+        ),
+        appBarTheme: baseDark.appBarTheme.copyWith(
+          backgroundColor: Colors.black,
+        ),
+        bottomNavigationBarTheme: baseDark.bottomNavigationBarTheme.copyWith(
+          backgroundColor: Colors.black,
+        ),
+      ),
+    );
+  }
 }
 
 // ═════════════════════════════════════════════════════════════════

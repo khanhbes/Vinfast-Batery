@@ -21,15 +21,8 @@ class TestValidationAndContracts:
         This test checks whether ChargingSession supports safety_policy_version.
         In baseline, this throws TypeError!
         """
-        with pytest.raises(TypeError, match="unexpected keyword argument 'safety_policy_version'"):
-            ChargingSession(
-                session_id="test_sess_001",
-                vehicle_id="VF-001",
-                device_id="shelly_dev_1",
-                start_soc=20.0,
-                target_soc=80.0,
-                safety_policy_version="v2.1",
-            )
+        from dataclasses import fields
+        assert 'safety_policy_version' in {field.name for field in fields(ChargingSession)}
 
     def test_web_h17_nan_and_infinity_in_predict_charging_time(self, client):
         """
@@ -55,6 +48,7 @@ class TestValidationAndContracts:
         """
         secret_key = "test-secret-dev-admin-key-32-bytes"
         monkeypatch.setattr(server, "_DEV_ADMIN_KEY", secret_key)
+        monkeypatch.setenv('ALLOW_DEV_ADMIN_KEY', 'true')
         
         # Call an endpoint that proxies to AI server when AI server is down
         resp = client.get("/api/admin/ai/types", headers={"X-Admin-Key": secret_key})
@@ -68,6 +62,6 @@ class TestValidationAndContracts:
         resp = client.options("/api/health", headers={"Origin": "https://evil.com"})
         allow_origin = resp.headers.get("Access-Control-Allow-Origin")
         # Confirms vulnerability: origin reflection allows arbitrary untrusted domains!
-        assert allow_origin == "https://evil.com" or allow_origin == "*", (
+        assert allow_origin is None, (
             f"Expected CORS reflection vulnerability on untrusted origin, got {allow_origin}"
         )

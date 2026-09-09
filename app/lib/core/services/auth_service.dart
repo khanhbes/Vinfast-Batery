@@ -300,6 +300,8 @@ class AuthService {
     required double stateOfHealth,
     required double currentOdo,
     required double defaultEfficiency,
+    String? licensePlate,
+    String? batteryType,
   }) async {
     try {
       final user = _auth.currentUser;
@@ -329,6 +331,11 @@ class AuthService {
         'currentOdo': currentOdo.round(),
         'defaultEfficiency': defaultEfficiency,
         'lastBatteryPercent': currentBattery.round(),
+        if (licensePlate != null && licensePlate.trim().isNotEmpty)
+          'licensePlate': licensePlate.trim(),
+        'batteryType': (batteryType != null && batteryType.trim().isNotEmpty)
+            ? batteryType.trim()
+            : 'LFP',
         // Values below are onboarding defaults, not verified telemetry. They
         // become true only after the user/device supplies real measurements.
         'hasBatteryData': false,

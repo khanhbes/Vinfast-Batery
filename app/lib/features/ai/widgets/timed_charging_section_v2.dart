@@ -23,7 +23,7 @@ class TimedChargingSectionV2 extends StatefulWidget {
 }
 
 class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   late final AnimationController _pulseController;
   late final AnimationController _rippleController;
   late final Animation<double> _rippleScale;
@@ -46,6 +46,7 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2200),
@@ -60,6 +61,17 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
     _rippleOpacity = Tween<double>(begin: 0.65, end: 0.0).animate(
       CurvedAnimation(parent: _rippleController, curve: Curves.easeOutCubic),
     );
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.inactive) {
+      if (_pulseController.isAnimating) _pulseController.stop();
+    } else if (state == AppLifecycleState.resumed) {
+      _syncPulse();
+    }
   }
 
   @override
@@ -118,6 +130,7 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pulseController.dispose();
     _rippleController.dispose();
     super.dispose();

@@ -71,7 +71,7 @@ export default function UniversalModelLab({ meta, onModelChanged }: Props) {
       await aiLoadActiveModel(meta.key);
       onModelChanged();
     } catch (e: any) {
-      setError(e?.message || 'Không thể nạp model vào bộ nhớ');
+      setError(e?.message || 'The model could not be loaded into memory');
     } finally {
       setLoadingLoad(false);
     }
@@ -100,7 +100,7 @@ export default function UniversalModelLab({ meta, onModelChanged }: Props) {
       setResult(res?.data ?? res);
     } catch (e: any) {
       if (id !== generation.current) return;
-      setError(e?.message || 'Không thể chạy dự đoán. Model không phản hồi hoặc dữ liệu chưa hợp lệ.');
+      setError(e?.message || 'Prediction could not be completed. The model did not respond or the input is invalid.');
     } finally {
       if (id === generation.current) setLoading(false);
     }
@@ -142,12 +142,12 @@ export default function UniversalModelLab({ meta, onModelChanged }: Props) {
                 {loading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Đang dự đoán...
+                    Running prediction...
                   </>
                 ) : (
                   <>
                     <Route className="mr-2 h-4 w-4" />
-                    Chạy dự đoán
+                    Run prediction
                   </>
                 )}
               </Button>
@@ -158,7 +158,7 @@ export default function UniversalModelLab({ meta, onModelChanged }: Props) {
                 className="border-white/15 bg-white/5 hover:bg-white/10 text-white text-xs"
               >
                 <Settings className="mr-1.5 h-3.5 w-3.5" />
-                Quản lý model
+                Manage model
               </Button>
 
               {availability.state === 'no_model' && (
@@ -183,7 +183,7 @@ export default function UniversalModelLab({ meta, onModelChanged }: Props) {
                   disabled={!canPredict || loading}
                   className="h-6 text-xs text-red-200 hover:text-white"
                 >
-                  <RefreshCw className="w-3 h-3 mr-1" /> Thử lại
+                  <RefreshCw className="w-3 h-3 mr-1" /> Try again
                 </Button>
               </div>
             )}

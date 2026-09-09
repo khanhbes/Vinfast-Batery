@@ -269,9 +269,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return Scaffold(
       backgroundColor: AppUiColors.of(context).background,
       body: SafeArea(
-        child: ListView(
-          physics: BouncingScrollPhysics(),
-          padding: EdgeInsets.fromLTRB(16, 8, 16, 96),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 680),
+            child: ListView(
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
           children: [
             Text(
               'Cài đặt',
@@ -480,6 +483,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
           ],
+        ),
+          ),
         ),
       ),
     );
@@ -761,7 +766,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         decoration: BoxDecoration(
           color: AppUiColors.of(context).surface,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppUiColors.of(context).border),
+          border: Border.all(color: AppUiColors.of(context).borderStrong),
         ),
         child: Row(
           children: [
@@ -795,6 +800,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 children: [
                   Text(
                     _userName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: AppUiColors.of(context).text,
                       fontSize: 16,
@@ -804,6 +811,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   SizedBox(height: 2),
                   Text(
                     _userEmail,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: AppUiColors.of(context).muted,
                       fontSize: 12,

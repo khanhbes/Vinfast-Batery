@@ -673,21 +673,21 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
               'Smart Charger',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: _ui.text,
+              style: CockpitTypography.heading(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
+                color: CockpitColors.text,
               ),
             ),
-            SizedBox(height: 2),
+            const SizedBox(height: 2),
             Text(
               'Gen3 • $ipText',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: _ui.muted,
+              style: CockpitTypography.label(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
+                color: CockpitColors.muted,
               ),
             ),
           ],
@@ -697,31 +697,31 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
             tooltip: 'Trợ giúp',
             onPressed: _showHelpDialog,
             icon: Container(
-              width: 34,
-              height: 34,
+              width: 38,
+              height: 38,
               decoration: BoxDecoration(
-                color: _ui.elevated,
-                shape: BoxShape.circle,
-                border: Border.all(color: _ui.elevated),
+                color: CockpitColors.elevated,
+                borderRadius: BorderRadius.circular(CockpitRadius.small),
+                border: Border.all(color: CockpitColors.border),
               ),
-              child: Icon(
+              child: const Icon(
                 Icons.help_outline_rounded,
-                color: _ui.muted,
+                color: CockpitColors.muted,
                 size: 18,
               ),
             ),
           ),
           PopupMenuButton<String>(
-            color: _ui.surface,
+            color: CockpitColors.surface,
             icon: Container(
-              width: 34,
-              height: 34,
+              width: 38,
+              height: 38,
               decoration: BoxDecoration(
-                color: _ui.elevated,
-                shape: BoxShape.circle,
-                border: Border.all(color: _ui.elevated),
+                color: CockpitColors.elevated,
+                borderRadius: BorderRadius.circular(CockpitRadius.small),
+                border: Border.all(color: CockpitColors.border),
               ),
-              child: Icon(Icons.more_vert_rounded, color: _ui.muted, size: 18),
+              child: const Icon(Icons.more_vert_rounded, color: CockpitColors.muted, size: 18),
             ),
             onSelected: (val) {
               if (val == 'delete') _delete();
@@ -733,27 +733,31 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                 value: 'refresh',
                 child: Text(
                   'Kiểm tra kết nối',
-                  style: TextStyle(color: _ui.text),
+                  style: CockpitTypography.body(fontSize: 13, color: CockpitColors.text),
                 ),
               ),
               PopupMenuItem(
                 value: 'help',
                 child: Text(
                   'Hướng dẫn sử dụng',
-                  style: TextStyle(color: _ui.text),
+                  style: CockpitTypography.body(fontSize: 13, color: CockpitColors.text),
                 ),
               ),
-              PopupMenuDivider(),
+              const PopupMenuDivider(),
               PopupMenuItem(
                 value: 'delete',
                 child: Text(
                   'Xóa cấu hình',
-                  style: TextStyle(color: _ui.danger),
+                  style: CockpitTypography.body(
+                    fontSize: 13,
+                    color: CockpitColors.danger,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ],
           ),
-          SizedBox(width: 8),
+          const SizedBox(width: 8),
         ],
       ),
       body: Column(
@@ -854,13 +858,9 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
       padding: EdgeInsets.fromLTRB(16, 0, 16, 32),
       children: [
         // 1. Thẻ Master Shelly Plug S Gen3
-        Container(
-          padding: EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: _ui.surface,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: _ui.elevated),
-          ),
+        CockpitSurface(
+          highlight: true,
+          padding: const EdgeInsets.all(18),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -869,20 +869,20 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                 children: [
                   // Power button
                   Container(
-                    width: 46,
-                    height: 46,
+                    width: 44,
+                    height: 44,
                     decoration: BoxDecoration(
-                      color: _ui.elevated,
+                      color: CockpitColors.elevated,
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: _ui.border),
+                      border: Border.all(color: CockpitColors.border),
                     ),
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.power_settings_new_rounded,
-                          color: _ui.muted,
-                          size: 24,
+                          color: CockpitColors.muted,
+                          size: 22,
                         ),
                         Positioned(
                           right: 4,
@@ -890,8 +890,8 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           child: Container(
                             width: 6,
                             height: 6,
-                            decoration: BoxDecoration(
-                              color: _ui.primary,
+                            decoration: const BoxDecoration(
+                              color: CockpitColors.emerald,
                               shape: BoxShape.circle,
                             ),
                           ),
@@ -899,47 +899,55 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                       ],
                     ),
                   ),
-                  SizedBox(width: 12),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           'Shelly Plug S Gen3',
-                          style: TextStyle(
-                            color: _ui.text,
+                          style: CockpitTypography.heading(
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
+                            color: CockpitColors.text,
                           ),
                         ),
-                        SizedBox(height: 2),
+                        const SizedBox(height: 2),
                         Text(
                           'Kết nối kép & 5 lớp bảo vệ',
-                          style: TextStyle(color: _ui.muted, fontSize: 12),
+                          style: CockpitTypography.label(
+                            fontSize: 12,
+                            color: CockpitColors.muted,
+                          ),
                         ),
                       ],
                     ),
                   ),
                   Container(
-                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: _ui.primarySurface,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: _ui.primarySurface),
+                      color: CockpitColors.emeraldSubtle,
+                      borderRadius: BorderRadius.circular(CockpitRadius.full),
+                      border: Border.all(color: CockpitColors.emeraldGlow),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          '• ',
-                          style: TextStyle(color: _ui.primary, fontSize: 14),
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: const BoxDecoration(
+                            color: CockpitColors.emerald,
+                            shape: BoxShape.circle,
+                          ),
                         ),
+                        const SizedBox(width: 5),
                         Text(
                           'Sẵn sàng',
-                          style: TextStyle(
-                            color: _ui.primary,
-                            fontSize: 12,
+                          style: CockpitTypography.label(
+                            fontSize: 11,
                             fontWeight: FontWeight.w700,
+                            color: CockpitColors.emerald,
                           ),
                         ),
                       ],
@@ -947,39 +955,36 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                   ),
                 ],
               ),
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
 
-              // Grid 4 ô trạng thái
-              Row(
+              // Dải pill trạng thái gọn gàng
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
-                  _statusGridCell(
-                    '☁ Cloud',
-                    verification.cloudVerified
-                        ? 'Đã xác minh'
-                        : 'Chưa xác minh',
+                  _statusPillBadge(
+                    icon: Icons.cloud_done_rounded,
+                    label: 'Cloud',
+                    verified: verification.cloudVerified,
                   ),
-                  SizedBox(width: 8),
-                  _statusGridCell(
-                    '📶 LAN',
-                    verification.lanVerified ? 'Đã xác minh' : 'Chưa xác minh',
+                  _statusPillBadge(
+                    icon: Icons.wifi_rounded,
+                    label: 'LAN',
+                    verified: verification.lanVerified,
                   ),
-                  SizedBox(width: 8),
-                  _statusGridCell(
-                    '🎚 Đo tải',
-                    verification.powerMeterVerified
-                        ? 'Đã xác minh'
-                        : 'Chưa xác minh',
+                  _statusPillBadge(
+                    icon: Icons.speed_rounded,
+                    label: 'Đo tải',
+                    verified: verification.powerMeterVerified,
                   ),
-                  SizedBox(width: 8),
-                  _statusGridCell(
-                    '🛡 Safe Boot',
-                    verification.safeBootVerified
-                        ? 'Đã xác minh'
-                        : 'Chưa xác minh',
+                  _statusPillBadge(
+                    icon: Icons.shield_rounded,
+                    label: 'Safe Boot',
+                    verified: verification.safeBootVerified,
                   ),
                 ],
               ),
-              SizedBox(height: 14),
+              const SizedBox(height: 14),
 
               // Dòng thời gian đo & Nút kiểm tra
               Row(
@@ -987,42 +992,31 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                 children: [
                   Text(
                     'Đo lúc $lastCheckedTime',
-                    style: TextStyle(
-                      color: _ui.muted,
-                      fontSize: 12,
-                      fontFamily: 'monospace',
+                    style: CockpitTypography.numbers(
+                      fontSize: 11,
+                      color: CockpitColors.dim,
                     ),
                   ),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(16),
-                    onTap: busy ? null : _verifyAll,
-                    child: Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 6,
+                  SizedBox(
+                    height: 36,
+                    child: FilledButton.icon(
+                      onPressed: busy ? null : _verifyAll,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: CockpitColors.emerald,
+                        foregroundColor: CockpitColors.shell,
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(CockpitRadius.small),
+                        ),
                       ),
-                      decoration: BoxDecoration(
-                        color: _ui.primary,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.bolt_rounded,
-                            color: _ui.primarySurface,
-                            size: 16,
-                          ),
-                          SizedBox(width: 4),
-                          Text(
-                            'Kiểm tra',
-                            style: TextStyle(
-                              color: _ui.primarySurface,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
+                      icon: const Icon(Icons.bolt_rounded, size: 16),
+                      label: Text(
+                        'Kiểm tra',
+                        style: CockpitTypography.label(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: CockpitColors.shell,
+                        ),
                       ),
                     ),
                   ),
@@ -1032,84 +1026,85 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
           ),
         ),
 
-        SizedBox(height: 14),
+        const SizedBox(height: 14),
 
         // 2. Thẻ Xe liên kết
-        Container(
-          padding: EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: _ui.surface,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: _ui.elevated),
-          ),
+        CockpitSurface(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
             children: [
               Container(
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: _ui.elevated,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: _ui.border),
+                  color: CockpitColors.elevated,
+                  borderRadius: BorderRadius.circular(CockpitRadius.small),
+                  border: Border.all(color: CockpitColors.border),
                 ),
-                child: Icon(Icons.bolt_rounded, color: _ui.primary, size: 20),
+                child: const Icon(Icons.bolt_rounded, color: CockpitColors.emerald, size: 20),
               ),
-              SizedBox(width: 12),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       vehicleName,
-                      style: TextStyle(
-                        color: _ui.text,
+                      style: CockpitTypography.heading(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
+                        color: CockpitColors.text,
                       ),
                     ),
-                    SizedBox(height: 2),
+                    const SizedBox(height: 2),
                     Text(
                       vehiclePlate,
-                      style: TextStyle(color: _ui.muted, fontSize: 12),
+                      style: CockpitTypography.numbers(
+                        fontSize: 12,
+                        color: CockpitColors.muted,
+                      ),
                     ),
                   ],
                 ),
               ),
-              OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: _ui.text,
-                  side: BorderSide(color: _ui.border),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+              SizedBox(
+                height: 36,
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: CockpitColors.text,
+                    side: const BorderSide(color: CockpitColors.border),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(CockpitRadius.small),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
                   ),
-                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                ),
-                onPressed: () => _tabController.animateTo(2),
-                child: Text(
-                  'Đổi xe',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                  onPressed: () => _tabController.animateTo(2),
+                  child: Text(
+                    'Đổi xe',
+                    style: CockpitTypography.label(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: CockpitColors.text,
+                    ),
+                  ),
                 ),
               ),
             ],
           ),
         ),
 
-        SizedBox(height: 14),
+        const SizedBox(height: 14),
 
         // 3. Thẻ Thông số sạc & Đơn giá điện
-        Container(
-          decoration: BoxDecoration(
-            color: _ui.surface,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: _ui.elevated),
-          ),
+        CockpitSurface(
+          padding: EdgeInsets.zero,
           child: Column(
             children: [
               InkWell(
-                borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(CockpitRadius.large)),
                 onTap: () => _showQuickPowerDialog(),
                 child: Padding(
-                  padding: EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(16),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -1118,32 +1113,32 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         children: [
                           Text(
                             'Công suất sạc',
-                            style: TextStyle(color: _ui.muted, fontSize: 13),
+                            style: CockpitTypography.label(fontSize: 12, color: CockpitColors.muted),
                           ),
-                          SizedBox(height: 4),
+                          const SizedBox(height: 4),
                           Text(
                             '${chargePower.text} W',
-                            style: TextStyle(
-                              color: _ui.primary,
+                            style: CockpitTypography.numbers(
                               fontSize: 16,
                               fontWeight: FontWeight.w800,
+                              color: CockpitColors.emerald,
                             ),
                           ),
                         ],
                       ),
-                      Icon(Icons.chevron_right_rounded, color: _ui.muted),
+                      const Icon(Icons.chevron_right_rounded, color: CockpitColors.muted),
                     ],
                   ),
                 ),
               ),
-              Divider(height: 1, color: _ui.elevated),
+              const Divider(height: 1, color: CockpitColors.border),
               InkWell(
-                borderRadius: BorderRadius.vertical(
-                  bottom: Radius.circular(18),
+                borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(CockpitRadius.large),
                 ),
                 onTap: () => _showQuickTariffDialog(),
                 child: Padding(
-                  padding: EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(16),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -1152,20 +1147,20 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         children: [
                           Text(
                             'Đơn giá điện',
-                            style: TextStyle(color: _ui.muted, fontSize: 13),
+                            style: CockpitTypography.label(fontSize: 12, color: CockpitColors.muted),
                           ),
-                          SizedBox(height: 4),
+                          const SizedBox(height: 4),
                           Text(
-                            '${NumberFormat.decimalPattern('vi_VN').format(int.tryParse(tariff.text) ?? 2800)} đ/kwh',
-                            style: TextStyle(
-                              color: _ui.text,
+                            '${NumberFormat.decimalPattern('vi_VN').format(int.tryParse(tariff.text) ?? 2800)} đ/kWh',
+                            style: CockpitTypography.numbers(
                               fontSize: 16,
                               fontWeight: FontWeight.w800,
+                              color: CockpitColors.text,
                             ),
                           ),
                         ],
                       ),
-                      Icon(Icons.chevron_right_rounded, color: _ui.muted),
+                      const Icon(Icons.chevron_right_rounded, color: CockpitColors.muted),
                     ],
                   ),
                 ),
@@ -1174,130 +1169,113 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
           ),
         ),
 
-        SizedBox(height: 14),
+        const SizedBox(height: 14),
 
         // 4. Cụm thẻ kép LAN & Cloud
         ResponsiveCardGrid(
           minCardWidth: 220,
           children: [
-            Container(
-              padding: EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: _ui.surface,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: _ui.elevated),
-              ),
+            CockpitSurface(
+              padding: const EdgeInsets.all(14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
+                          const Icon(
                             Icons.wifi_rounded,
-                            color: _ui.primary,
+                            color: CockpitColors.emerald,
                             size: 16,
                           ),
-                          SizedBox(width: 4),
+                          const SizedBox(width: 6),
                           Text(
                             'LAN',
-                            style: TextStyle(
-                              color: _ui.text,
+                            style: CockpitTypography.heading(
+                              fontSize: 14,
                               fontWeight: FontWeight.w700,
+                              color: CockpitColors.text,
                             ),
                           ),
                         ],
                       ),
-                      Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: _ui.primarySurface,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          verification.lanVerified
-                              ? 'Đã xác minh'
-                              : 'Chưa xác minh',
-                          style: TextStyle(
-                            color: verification.lanVerified
-                                ? _ui.primary
-                                : _ui.warning,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
+                      _statusPillBadge(
+                        icon: Icons.wifi_rounded,
+                        label: verification.lanVerified ? 'Đã xác minh' : 'Chưa xác minh',
+                        verified: verification.lanVerified,
                       ),
                     ],
                   ),
-                  SizedBox(height: 12),
+                  const SizedBox(height: 12),
                   Text(
                     lan.text.isNotEmpty ? lan.text : 'Chưa cấu hình',
-                    style: TextStyle(
-                      color: _ui.text,
+                    style: CockpitTypography.numbers(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      fontFamily: 'monospace',
+                      color: CockpitColors.text,
                     ),
                   ),
-                  SizedBox(height: 12),
+                  const SizedBox(height: 12),
                   Row(
                     children: [
                       Expanded(
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(color: _ui.border),
-                            padding: EdgeInsets.symmetric(
-                              vertical: 12,
-                              horizontal: 4,
-                            ),
-                            minimumSize: Size(0, 48),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                          onPressed: busy ? null : _testLanQuick,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.refresh_rounded,
-                                size: 14,
-                                color: _ui.text,
+                        child: SizedBox(
+                          height: 40,
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: CockpitColors.border),
+                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(CockpitRadius.small),
                               ),
-                              SizedBox(width: 2),
-                              Text(
-                                'Đo',
-                                style: TextStyle(color: _ui.text, fontSize: 11),
-                              ),
-                            ],
+                            ),
+                            onPressed: busy ? null : _testLanQuick,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.refresh_rounded,
+                                  size: 14,
+                                  color: CockpitColors.text,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Đo',
+                                  style: CockpitTypography.label(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: CockpitColors.text,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                      SizedBox(width: 6),
+                      const SizedBox(width: 8),
                       Expanded(
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(color: _ui.border),
-                            padding: EdgeInsets.symmetric(
-                              vertical: 12,
-                              horizontal: 4,
+                        child: SizedBox(
+                          height: 40,
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: CockpitColors.border),
+                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(CockpitRadius.small),
+                              ),
                             ),
-                            minimumSize: Size(0, 48),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
+                            onPressed: busy || isSweeping ? null : _sweepSubnet,
+                            child: Text(
+                              'Quét',
+                              style: CockpitTypography.label(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: CockpitColors.text,
+                              ),
                             ),
-                          ),
-                          onPressed: busy || isSweeping ? null : _sweepSubnet,
-                          child: Text(
-                            'Quét',
-                            style: TextStyle(color: _ui.text, fontSize: 11),
                           ),
                         ),
                       ),
@@ -1306,122 +1284,105 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                 ],
               ),
             ),
-            Container(
-              padding: EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: _ui.surface,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: _ui.elevated),
-              ),
+            CockpitSurface(
+              padding: const EdgeInsets.all(14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.cloud_outlined, color: _ui.info, size: 16),
-                          SizedBox(width: 4),
+                          const Icon(Icons.cloud_outlined, color: CockpitColors.info, size: 16),
+                          const SizedBox(width: 6),
                           Text(
                             'Cloud',
-                            style: TextStyle(
-                              color: _ui.text,
+                            style: CockpitTypography.heading(
+                              fontSize: 14,
                               fontWeight: FontWeight.w700,
+                              color: CockpitColors.text,
                             ),
                           ),
                         ],
                       ),
-                      Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: _ui.primarySurface,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          verification.cloudVerified
-                              ? 'Đã xác minh'
-                              : 'Chưa xác minh',
-                          style: TextStyle(
-                            color: verification.cloudVerified
-                                ? _ui.primary
-                                : _ui.warning,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
+                      _statusPillBadge(
+                        icon: Icons.cloud_rounded,
+                        label: verification.cloudVerified ? 'Đã xác minh' : 'Chưa xác minh',
+                        verified: verification.cloudVerified,
                       ),
                     ],
                   ),
-                  SizedBox(height: 12),
+                  const SizedBox(height: 12),
                   Text(
                     host.text.trim().isEmpty
                         ? 'Chưa cấu hình máy chủ'
                         : host.text.trim(),
-                    style: TextStyle(
-                      color: _ui.text,
+                    style: CockpitTypography.numbers(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      fontFamily: 'monospace',
+                      color: CockpitColors.text,
                     ),
                   ),
-                  SizedBox(height: 12),
+                  const SizedBox(height: 12),
                   Row(
                     children: [
                       Expanded(
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(color: _ui.border),
-                            padding: EdgeInsets.symmetric(
-                              vertical: 12,
-                              horizontal: 4,
-                            ),
-                            minimumSize: Size(0, 48),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                          onPressed: busy ? null : _testCloudQuick,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.refresh_rounded,
-                                size: 14,
-                                color: _ui.text,
+                        child: SizedBox(
+                          height: 40,
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: CockpitColors.border),
+                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(CockpitRadius.small),
                               ),
-                              SizedBox(width: 2),
-                              Text(
-                                'Đo',
-                                style: TextStyle(color: _ui.text, fontSize: 11),
-                              ),
-                            ],
+                            ),
+                            onPressed: busy ? null : _testCloudQuick,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.refresh_rounded,
+                                  size: 14,
+                                  color: CockpitColors.text,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Đo',
+                                  style: CockpitTypography.label(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: CockpitColors.text,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                      SizedBox(width: 6),
+                      const SizedBox(width: 8),
                       Expanded(
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(color: _ui.border),
-                            padding: EdgeInsets.symmetric(
-                              vertical: 12,
-                              horizontal: 4,
+                        child: SizedBox(
+                          height: 40,
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: CockpitColors.border),
+                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(CockpitRadius.small),
+                              ),
                             ),
-                            minimumSize: Size(0, 48),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
+                            onPressed: () => _tabController.animateTo(2),
+                            child: Text(
+                              'Đổi',
+                              style: CockpitTypography.label(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: CockpitColors.text,
+                              ),
                             ),
-                          ),
-                          onPressed: () => _tabController.animateTo(2),
-                          child: Text(
-                            'Đổi',
-                            style: TextStyle(color: _ui.text, fontSize: 11),
                           ),
                         ),
                       ),
@@ -1444,86 +1405,67 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
       padding: EdgeInsets.fromLTRB(16, 0, 16, 32),
       children: [
         // Dải mini trạng thái
-        Container(
-          padding: EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: _ui.surface,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: _ui.elevated),
-          ),
+        CockpitSurface(
+          padding: const EdgeInsets.all(16),
           child: Column(
             children: [
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
-                  _statusGridCell(
-                    '☁ Cloud',
-                    verification.cloudVerified
-                        ? 'Đã xác minh'
-                        : 'Chưa xác minh',
+                  _statusPillBadge(
+                    icon: Icons.cloud_done_rounded,
+                    label: 'Cloud',
+                    verified: verification.cloudVerified,
                   ),
-                  SizedBox(width: 8),
-                  _statusGridCell(
-                    '📶 LAN',
-                    verification.lanVerified ? 'Đã xác minh' : 'Chưa xác minh',
+                  _statusPillBadge(
+                    icon: Icons.wifi_rounded,
+                    label: 'LAN',
+                    verified: verification.lanVerified,
                   ),
-                  SizedBox(width: 8),
-                  _statusGridCell(
-                    '🎚 Đo tải',
-                    verification.powerMeterVerified
-                        ? 'Đã xác minh'
-                        : 'Chưa xác minh',
+                  _statusPillBadge(
+                    icon: Icons.speed_rounded,
+                    label: 'Đo tải',
+                    verified: verification.powerMeterVerified,
                   ),
-                  SizedBox(width: 8),
-                  _statusGridCell(
-                    '🛡 Safe Boot',
-                    verification.safeBootVerified
-                        ? 'Đã xác minh'
-                        : 'Chưa xác minh',
+                  _statusPillBadge(
+                    icon: Icons.shield_rounded,
+                    label: 'Safe Boot',
+                    verified: verification.safeBootVerified,
                   ),
                 ],
               ),
-              SizedBox(height: 12),
+              const SizedBox(height: 12),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
                     'Đo lúc $lastCheckedTime',
-                    style: TextStyle(
-                      color: _ui.muted,
-                      fontSize: 12,
-                      fontFamily: 'monospace',
+                    style: CockpitTypography.numbers(
+                      fontSize: 11,
+                      color: CockpitColors.dim,
                     ),
                   ),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(16),
-                    onTap: busy ? null : _verifyAll,
-                    child: Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 6,
+                  SizedBox(
+                    height: 36,
+                    child: FilledButton.icon(
+                      onPressed: busy ? null : _verifyAll,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: CockpitColors.emerald,
+                        foregroundColor: CockpitColors.shell,
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(CockpitRadius.small),
+                        ),
                       ),
-                      decoration: BoxDecoration(
-                        color: _ui.primary,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.bolt_rounded,
-                            color: _ui.primarySurface,
-                            size: 16,
-                          ),
-                          SizedBox(width: 4),
-                          Text(
-                            'Kiểm tra',
-                            style: TextStyle(
-                              color: _ui.primarySurface,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
+                      icon: const Icon(Icons.bolt_rounded, size: 16),
+                      label: Text(
+                        'Kiểm tra',
+                        style: CockpitTypography.label(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: CockpitColors.shell,
+                        ),
                       ),
                     ),
                   ),
@@ -1533,16 +1475,11 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
           ),
         ),
 
-        SizedBox(height: 16),
+        const SizedBox(height: 16),
 
         // Thẻ Tự động ngắt an toàn
-        Container(
-          padding: EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: _ui.surface,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: _ui.elevated),
-          ),
+        CockpitSurface(
+          padding: const EdgeInsets.all(18),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1551,202 +1488,233 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.shield_outlined, color: _ui.primary, size: 18),
-                      SizedBox(width: 8),
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: CockpitColors.emerald.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.shield_outlined, color: CockpitColors.emerald, size: 18),
+                      ),
+                      const SizedBox(width: 10),
                       Text(
                         'Tự động ngắt an toàn',
-                        style: TextStyle(
-                          color: _ui.text,
+                        style: CockpitTypography.heading(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
+                          color: CockpitColors.text,
                         ),
                       ),
                     ],
                   ),
                   Container(
-                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: _ui.primarySurface,
-                      borderRadius: BorderRadius.circular(12),
+                      color: CockpitColors.emeraldSubtle,
+                      borderRadius: BorderRadius.circular(CockpitRadius.full),
+                      border: Border.all(color: CockpitColors.emeraldGlow),
                     ),
                     child: Text(
                       'ĐANG BẬT',
-                      style: TextStyle(
-                        color: _ui.primary,
+                      style: CockpitTypography.label(
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
+                        color: CockpitColors.emerald,
                       ),
                     ),
                   ),
                 ],
               ),
-              SizedBox(height: 18),
+              const SizedBox(height: 16),
 
-              _protectionMetricRow('Quá dòng', '11.5  A'),
-              SizedBox(height: 14),
-              _protectionMetricRow('Quá công suất', '2.450  W'),
-              SizedBox(height: 14),
-              _protectionMetricRow('Quá nhiệt', '75°C'),
-              SizedBox(height: 14),
-              _protectionMetricRow('Điện áp', '190  –  255  V'),
-              SizedBox(height: 14),
+              _protectionMetricRow(
+                'Quá dòng',
+                '11.5 A',
+                icon: Icons.electric_bolt_rounded,
+              ),
+              const SizedBox(height: 8),
+              _protectionMetricRow(
+                'Quá công suất',
+                '2.450 W',
+                icon: Icons.flash_on_rounded,
+              ),
+              const SizedBox(height: 8),
+              _protectionMetricRow(
+                'Quá nhiệt',
+                '75°C',
+                icon: Icons.thermostat_rounded,
+              ),
+              const SizedBox(height: 8),
+              _protectionMetricRow(
+                'Điện áp',
+                '190 – 255 V',
+                icon: Icons.power_rounded,
+              ),
+              const SizedBox(height: 8),
               _protectionMetricRow(
                 'Thời gian tối đa',
-                '10  giờ',
+                '10 giờ',
+                icon: Icons.timer_outlined,
                 isMuted: true,
               ),
 
-              SizedBox(height: 20),
-              InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: () => _showTechnicalDetailsDialog(),
-                child: Container(
-                  width: double.infinity,
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  decoration: BoxDecoration(
-                    color: _ui.elevated,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: _ui.border),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    'Chi tiết kỹ thuật →',
-                    style: TextStyle(
-                      color: _ui.text,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
+              const SizedBox(height: 16),
+              SizedBox(
+                height: CockpitButtonTokens.height,
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: _showTechnicalDetailsDialog,
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: CockpitColors.border),
+                    backgroundColor: CockpitColors.elevated,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(CockpitButtonTokens.radius),
                     ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        SizedBox(height: 14),
-
-        // Thẻ Safe Boot
-        Container(
-          padding: EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: _ui.surface,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: _ui.elevated),
-          ),
-          child: Wrap(
-            spacing: 12,
-            runSpacing: 8,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Safe Boot',
-                    style: TextStyle(
-                      color: _ui.text,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  SizedBox(height: 2),
-                  Text(
-                    'Trạng thái xác minh Safe Boot',
-                    style: TextStyle(color: _ui.muted, fontSize: 12),
-                  ),
-                ],
-              ),
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: _ui.elevated,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: _ui.border),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      verification.safeBootVerified
-                          ? Icons.check_rounded
-                          : Icons.help_outline_rounded,
-                      color: _ui.text,
-                      size: 14,
-                    ),
-                    SizedBox(width: 4),
-                    Text(
-                      verification.safeBootVerified
-                          ? 'Đã xác minh'
-                          : 'Chưa xác minh',
-                      style: TextStyle(
-                        color: _ui.text,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        SizedBox(height: 14),
-
-        // Thẻ Test Relay không tải
-        Container(
-          padding: EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: _ui.surface,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: _ui.elevated),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Test Relay không tải',
-                    style: TextStyle(
-                      color: _ui.text,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  SizedBox(height: 2),
-                  Text(
-                    'Kiểm tra đóng/ngắt cơ học',
-                    style: TextStyle(color: _ui.muted, fontSize: 12),
-                  ),
-                ],
-              ),
-              InkWell(
-                borderRadius: BorderRadius.circular(10),
-                onTap: _runNoLoadTest,
-                child: Container(
-                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: _ui.elevated,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: _ui.border),
                   ),
                   child: Row(
-                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.check_rounded, color: _ui.text, size: 14),
-                      SizedBox(width: 4),
                       Text(
-                        'Đã test',
-                        style: TextStyle(
-                          color: _ui.text,
-                          fontSize: 12,
+                        'Chi tiết kỹ thuật',
+                        style: CockpitTypography.label(
+                          fontSize: 13,
                           fontWeight: FontWeight.w700,
+                          color: CockpitColors.text,
                         ),
                       ),
+                      const SizedBox(width: 6),
+                      const Icon(Icons.arrow_forward_rounded, size: 16, color: CockpitColors.muted),
                     ],
                   ),
                 ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // Thẻ Gộp: An toàn phần cứng (Safe Boot + Test Relay)
+        CockpitSurface(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: CockpitColors.emerald.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.verified_user_outlined, color: CockpitColors.emerald, size: 18),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'An toàn phần cứng',
+                    style: CockpitTypography.heading(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: CockpitColors.text,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Row 1: Safe Boot
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Safe Boot',
+                          style: CockpitTypography.heading(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: CockpitColors.text,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Khởi động an toàn & bảo vệ role',
+                          style: CockpitTypography.label(
+                            fontSize: 12,
+                            color: CockpitColors.muted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  _statusPillBadge(
+                    icon: Icons.shield_rounded,
+                    label: verification.safeBootVerified ? 'Đã xác minh' : 'Chưa xác minh',
+                    verified: verification.safeBootVerified,
+                  ),
+                ],
+              ),
+
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 14),
+                child: Divider(color: CockpitColors.border, height: 1),
+              ),
+
+              // Row 2: Test Relay không tải
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Test Relay không tải',
+                          style: CockpitTypography.heading(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: CockpitColors.text,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Kiểm tra đóng/ngắt cơ học relay',
+                          style: CockpitTypography.label(
+                            fontSize: 12,
+                            color: CockpitColors.muted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(
+                    height: 36,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: CockpitColors.border),
+                        backgroundColor: CockpitColors.elevated,
+                        foregroundColor: CockpitColors.text,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(CockpitRadius.small),
+                        ),
+                      ),
+                      onPressed: busy ? null : _runNoLoadTest,
+                      icon: const Icon(Icons.toggle_on_outlined, size: 16, color: CockpitColors.emerald),
+                      label: Text(
+                        'Kiểm tra',
+                        style: CockpitTypography.label(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: CockpitColors.text,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -1760,48 +1728,30 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
   // ─────────────────────────────────────────────────────────────────────────────
   Widget _buildSettingsTab() {
     return ListView(
-      padding: EdgeInsets.fromLTRB(16, 0, 16, 40),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 40),
       children: [
-        // ── Card 1: Cấu hình Kết nối Kép (LAN & Cloud Hub) ──
-        _settingsCard(
-          title: 'Phương thức kết nối',
-          icon: Icons.hub_rounded,
-          badgeText: 'KẾT NỐI KÉP',
-          badgeColor: _ui.primary,
+        // ── Section 1: KẾT NỐI MẠNG NỘI BỘ (LAN) ──
+        const CockpitSectionLabel('Mạng nội bộ (LAN)'),
+        CockpitSurface(
+          padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Mục LAN
-              Row(
-                children: [
-                  Icon(Icons.wifi_rounded, color: _ui.primary, size: 16),
-                  SizedBox(width: 6),
-                  Text(
-                    'Mạng nội bộ (LAN IP)',
-                    style: TextStyle(
-                      color: _ui.text,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 8),
               _darkInputField(
                 controller: lan,
                 label: 'Địa chỉ IP Shelly',
                 hint: 'Ví dụ: 192.168.1.50',
                 prefixIcon: Icons.lan_rounded,
               ),
-              SizedBox(height: 8),
+              const SizedBox(height: 10),
               _darkInputField(
                 controller: password,
                 label: 'Mật khẩu LAN (nếu có)',
-                hint: 'Để trống nếu chưa đặt pass',
+                hint: 'Để trống nếu chưa đặt mật khẩu',
                 prefixIcon: Icons.lock_outline_rounded,
                 isPassword: true,
               ),
-              SizedBox(height: 10),
+              const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
@@ -1811,7 +1761,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                       onTap: _sweepSubnet,
                     ),
                   ),
-                  SizedBox(width: 8),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: _actionButton(
                       label: 'Test LAN',
@@ -1822,43 +1772,34 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                   ),
                 ],
               ),
+            ],
+          ),
+        ),
 
-              Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: Divider(color: _ui.elevated, height: 1),
-              ),
+        const SizedBox(height: 20),
 
-              // Mục Cloud
-              Row(
-                children: [
-                  Icon(Icons.cloud_outlined, color: _ui.info, size: 16),
-                  SizedBox(width: 6),
-                  Text(
-                    'Điều khiển từ xa (Shelly Cloud)',
-                    style: TextStyle(
-                      color: _ui.text,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 8),
+        // ── Section 2: ĐIỀU KHIỂN TỪ XA (SHELLY CLOUD) ──
+        const CockpitSectionLabel('Điều khiển từ xa (Shelly Cloud)'),
+        CockpitSurface(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               _darkInputField(
                 controller: deviceId,
                 label: 'Device ID',
                 hint: 'Ví dụ: e86beae... hoặc quét QR',
                 prefixIcon: Icons.fingerprint_rounded,
               ),
-              SizedBox(height: 8),
+              const SizedBox(height: 10),
               _darkInputField(
                 controller: cloudKey,
                 label: 'Cloud Authorization Key',
-                hint: 'Dán key từ app Shelly hoặc QR',
+                hint: 'Dán key từ app Shelly hoặc quét QR',
                 prefixIcon: Icons.vpn_key_outlined,
                 isPassword: true,
               ),
-              SizedBox(height: 10),
+              const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
@@ -1868,7 +1809,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                       onTap: _scanQr,
                     ),
                   ),
-                  SizedBox(width: 8),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: _actionButton(
                       label: 'Test Cloud',
@@ -1879,36 +1820,43 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                   ),
                 ],
               ),
-              SizedBox(height: 14),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: _ui.primary,
-                    foregroundColor: _ui.onPrimary,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    padding: EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  onPressed: busy ? null : _verifyAll,
-                  icon: Icon(Icons.save_rounded, size: 18),
-                  label: Text(
-                    'LƯU CẤU HÌNH KẾT NỐI',
-                    style: TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                ),
-              ),
             ],
           ),
         ),
 
-        SizedBox(height: 16),
+        const SizedBox(height: 14),
 
-        // ── Card 2: Thông số Sạc & Xe liên kết ──
-        _settingsCard(
-          title: 'Thông số sạc & Đơn giá',
-          icon: Icons.ev_station_rounded,
+        // Nút Lưu Cấu Hình Kết Nối
+        SizedBox(
+          width: double.infinity,
+          height: CockpitButtonTokens.height,
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: CockpitColors.emerald,
+              foregroundColor: CockpitColors.shell,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(CockpitButtonTokens.radius),
+              ),
+            ),
+            onPressed: busy ? null : _verifyAll,
+            icon: const Icon(Icons.save_rounded, size: 18),
+            label: Text(
+              'LƯU CẤU HÌNH KẾT NỐI',
+              style: CockpitTypography.label(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                color: CockpitColors.shell,
+              ),
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 24),
+
+        // ── Section 3: THÔNG SỐ SẠC & ĐƠN GIÁ ──
+        const CockpitSectionLabel('Thông số sạc & Đơn giá'),
+        CockpitSurface(
+          padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1916,47 +1864,74 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  Row(
                     children: [
-                      Text(
-                        'Xe liên kết sạc',
-                        style: TextStyle(color: _ui.muted, fontSize: 12),
-                      ),
-                      SizedBox(height: 2),
-                      Text(
-                        vehicleName,
-                        style: TextStyle(
-                          color: _ui.text,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: CockpitColors.emerald.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
                         ),
+                        child: const Icon(Icons.bolt_rounded, color: CockpitColors.emerald, size: 18),
+                      ),
+                      const SizedBox(width: 10),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Xe liên kết',
+                            style: CockpitTypography.label(fontSize: 11, color: CockpitColors.muted),
+                          ),
+                          const SizedBox(height: 1),
+                          Text(
+                            vehicleName,
+                            style: CockpitTypography.heading(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: CockpitColors.text,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                  OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: _ui.border),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                  SizedBox(
+                    height: 34,
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: CockpitColors.border),
+                        foregroundColor: CockpitColors.text,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(CockpitRadius.small),
+                        ),
                       ),
-                    ),
-                    onPressed: _showSwitchVehicleDialog,
-                    child: Text(
-                      'Đổi xe',
-                      style: TextStyle(color: _ui.text, fontSize: 12),
+                      onPressed: _showSwitchVehicleDialog,
+                      child: Text(
+                        'Đổi xe',
+                        style: CockpitTypography.label(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: CockpitColors.text,
+                        ),
+                      ),
                     ),
                   ),
                 ],
               ),
-              SizedBox(height: 14),
+
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 14),
+                child: Divider(color: CockpitColors.border, height: 1),
+              ),
 
               // Công suất sạc tiêu chuẩn
               Text(
                 'Công suất sạc tiêu chuẩn (W)',
-                style: TextStyle(color: _ui.muted, fontSize: 12),
+                style: CockpitTypography.label(fontSize: 12, color: CockpitColors.muted),
               ),
-              SizedBox(height: 6),
+              const SizedBox(height: 6),
               Row(
                 children: [
                   Expanded(
@@ -1967,47 +1942,60 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                       keyboardType: TextInputType.number,
                     ),
                   ),
-                  SizedBox(width: 8),
-                  FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: _ui.elevated,
-                      foregroundColor: _ui.primary,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    height: 48,
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: CockpitColors.emeraldSubtle,
+                        foregroundColor: CockpitColors.emerald,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(CockpitRadius.small),
+                          side: BorderSide(color: CockpitColors.emerald.withValues(alpha: 0.3)),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
                       ),
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 14,
+                      onPressed: _saveChargePower,
+                      child: Text(
+                        'LƯU',
+                        style: CockpitTypography.label(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: CockpitColors.emerald,
+                        ),
                       ),
-                    ),
-                    onPressed: _saveChargePower,
-                    child: Text(
-                      'LƯU',
-                      style: TextStyle(fontWeight: FontWeight.w800),
                     ),
                   ),
                 ],
               ),
-              SizedBox(height: 8),
+              const SizedBox(height: 8),
               // Quick presets chip
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [350, 400, 650, 1000].map((w) {
+                    final isSelected = chargePower.text == w.toString();
                     return Padding(
-                      padding: EdgeInsets.only(right: 6),
+                      padding: const EdgeInsets.only(right: 6),
                       child: ActionChip(
-                        label: Text('$w W', style: TextStyle(fontSize: 11)),
-                        backgroundColor: _ui.elevated,
+                        label: Text('$w W'),
+                        backgroundColor: isSelected
+                            ? CockpitColors.emeraldSubtle
+                            : CockpitColors.elevated,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
-                          side: BorderSide(color: _ui.border),
+                          side: BorderSide(
+                            color: isSelected
+                                ? CockpitColors.emerald.withValues(alpha: 0.5)
+                                : CockpitColors.border,
+                          ),
                         ),
-                        labelStyle: TextStyle(
-                          color: chargePower.text == w.toString()
-                              ? _ui.primary
-                              : _ui.muted,
+                        labelStyle: CockpitTypography.numbers(
+                          fontSize: 11,
                           fontWeight: FontWeight.w700,
+                          color: isSelected
+                              ? CockpitColors.emerald
+                              : CockpitColors.muted,
                         ),
                         onPressed: () {
                           chargePower.text = w.toString();
@@ -2019,14 +2007,17 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                 ),
               ),
 
-              SizedBox(height: 14),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 14),
+                child: Divider(color: CockpitColors.border, height: 1),
+              ),
 
               // Đơn giá tiền điện
               Text(
                 'Đơn giá tiền điện (VND/kWh)',
-                style: TextStyle(color: _ui.muted, fontSize: 12),
+                style: CockpitTypography.label(fontSize: 12, color: CockpitColors.muted),
               ),
-              SizedBox(height: 6),
+              const SizedBox(height: 6),
               Row(
                 children: [
                   Expanded(
@@ -2037,23 +2028,28 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                       keyboardType: TextInputType.number,
                     ),
                   ),
-                  SizedBox(width: 8),
-                  FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: _ui.elevated,
-                      foregroundColor: _ui.text,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    height: 48,
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: CockpitColors.elevated,
+                        foregroundColor: CockpitColors.text,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(CockpitRadius.small),
+                          side: const BorderSide(color: CockpitColors.border),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
                       ),
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 14,
+                      onPressed: _saveTariff,
+                      child: Text(
+                        'LƯU',
+                        style: CockpitTypography.label(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: CockpitColors.text,
+                        ),
                       ),
-                    ),
-                    onPressed: _saveTariff,
-                    child: Text(
-                      'LƯU',
-                      style: TextStyle(fontWeight: FontWeight.w800),
                     ),
                   ),
                 ],
@@ -2062,12 +2058,12 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
           ),
         ),
 
-        SizedBox(height: 16),
+        const SizedBox(height: 20),
 
-        // ── Card 3: Quản trị Phần cứng & An toàn ──
-        _settingsCard(
-          title: 'Bảo vệ & Sao lưu',
-          icon: Icons.security_rounded,
+        // ── Section 4: BẢO VỆ & SAO LƯU ──
+        const CockpitSectionLabel('Bảo vệ & Sao lưu'),
+        CockpitSurface(
+          padding: const EdgeInsets.all(16),
           child: Column(
             children: [
               _switchSettingRow(
@@ -2077,7 +2073,10 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                 value: verification.safeBootVerified,
                 onChanged: null,
               ),
-              Divider(color: _ui.elevated, height: 16),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Divider(color: CockpitColors.border, height: 1),
+              ),
               _switchSettingRow(
                 title: 'Sao lưu mã hóa lên Server',
                 subtitle:
@@ -2096,97 +2095,106 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
           ),
         ),
 
-        SizedBox(height: 16),
+        const SizedBox(height: 20),
 
-        // ── Card 4: Thông tin Thiết bị & Chẩn đoán ──
-        _settingsCard(
-          title: 'Thiết bị & Firmware',
-          icon: Icons.memory_rounded,
+        // ── Section 5: THIẾT BỊ & FIRMWARE ──
+        const CockpitSectionLabel('Thiết bị & Firmware'),
+        CockpitSurface(
+          padding: const EdgeInsets.all(16),
           child: Column(
             children: [
               _infoRow('Thiết bị', 'Shelly Plug S Gen3'),
-              SizedBox(height: 10),
+              const SizedBox(height: 10),
               _infoRow('Firmware', 'Chưa đọc từ thiết bị'),
-              SizedBox(height: 10),
+              const SizedBox(height: 10),
               _infoRow('Địa chỉ MAC', 'Chưa đọc từ thiết bị'),
-              SizedBox(height: 10),
+              const SizedBox(height: 10),
               _infoRow('Tín hiệu Wi-Fi', 'Chưa có số đo'),
             ],
           ),
         ),
 
-        SizedBox(height: 16),
+        const SizedBox(height: 24),
 
-        // ── Card 5: Vùng nguy hiểm (Danger Zone) ──
+        // ── Section 6: VÙNG NGUY HIỂM ──
         Container(
-          padding: EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: _ui.dangerSurface,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: _ui.dangerSurface),
+            color: CockpitColors.danger.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(CockpitRadius.large),
+            border: Border.all(color: CockpitColors.danger.withValues(alpha: 0.25)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.warning_amber_rounded,
-                    color: _ui.danger,
+                    color: CockpitColors.danger,
                     size: 18,
                   ),
-                  SizedBox(width: 8),
+                  const SizedBox(width: 8),
                   Text(
                     'Vùng nguy hiểm',
-                    style: TextStyle(
-                      color: _ui.danger,
+                    style: CockpitTypography.heading(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
+                      color: CockpitColors.danger,
                     ),
                   ),
                 ],
               ),
-              SizedBox(height: 14),
+              const SizedBox(height: 14),
               Row(
                 children: [
                   Expanded(
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        side: BorderSide(color: _ui.dangerSurface),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
+                    child: SizedBox(
+                      height: CockpitButtonTokens.height,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: CockpitColors.danger.withValues(alpha: 0.2)),
+                          backgroundColor: CockpitColors.elevated,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(CockpitButtonTokens.radius),
+                          ),
                         ),
-                        padding: EdgeInsets.symmetric(vertical: 10),
-                      ),
-                      onPressed: () {
-                        AppPopup.showWarning(
-                          'Chưa hỗ trợ khởi động lại từ màn hình này. Không có lệnh nào được gửi đến Shelly.',
-                        );
-                      },
-                      child: Text(
-                        'Khởi động lại',
-                        style: TextStyle(color: _ui.muted, fontSize: 12),
+                        onPressed: () {
+                          AppPopup.showWarning(
+                            'Chưa hỗ trợ khởi động lại từ màn hình này. Không có lệnh nào được gửi đến Shelly.',
+                          );
+                        },
+                        child: Text(
+                          'Khởi động lại',
+                          style: CockpitTypography.label(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: CockpitColors.muted,
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                  SizedBox(width: 10),
+                  const SizedBox(width: 10),
                   Expanded(
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        side: BorderSide(color: _ui.danger),
-                        backgroundColor: _ui.dangerSurface,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
+                    child: SizedBox(
+                      height: CockpitButtonTokens.height,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: CockpitColors.danger),
+                          backgroundColor: CockpitColors.danger.withValues(alpha: 0.15),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(CockpitButtonTokens.radius),
+                          ),
                         ),
-                        padding: EdgeInsets.symmetric(vertical: 10),
-                      ),
-                      onPressed: _delete,
-                      child: Text(
-                        'Xóa cấu hình',
-                        style: TextStyle(
-                          color: _ui.danger,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
+                        onPressed: _delete,
+                        child: Text(
+                          'Xóa cấu hình',
+                          style: CockpitTypography.label(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: CockpitColors.danger,
+                          ),
                         ),
                       ),
                     ),
@@ -2203,29 +2211,45 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
   // ─────────────────────────────────────────────────────────────────────────────
   // UI Helper Components
   // ─────────────────────────────────────────────────────────────────────────────
-  Widget _statusGridCell(String label, String value) {
-    return Expanded(
-      child: Container(
-        padding: EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: _ui.elevated,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: _ui.border),
-        ),
-        child: Column(
-          children: [
-            Text(label, style: TextStyle(color: _ui.muted, fontSize: 11)),
-            SizedBox(height: 4),
-            Text(
-              value,
-              style: TextStyle(
-                color: _ui.primary,
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-              ),
+  Widget _statusPillBadge({
+    required IconData icon,
+    required String label,
+    required bool verified,
+  }) {
+    final color = verified ? CockpitColors.emerald : CockpitColors.amber;
+    final bg = verified ? CockpitColors.emeraldSubtle : const Color(0x1AFBBF24);
+    return Container(
+      height: 28,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(CockpitRadius.full),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
             ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 5),
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: CockpitTypography.label(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -2233,94 +2257,49 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
   Widget _protectionMetricRow(
     String label,
     String value, {
+    IconData? icon,
     bool isMuted = false,
   }) {
-    return Wrap(
-      spacing: 12,
-      runSpacing: 8,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        Text(label, style: TextStyle(color: _ui.text, fontSize: 14)),
-        Container(
-          padding: EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-          decoration: BoxDecoration(
-            color: isMuted ? _ui.elevated : _ui.primarySurface,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: isMuted ? _ui.border : _ui.primarySurface,
-            ),
-          ),
-          child: Text(
-            value,
-            style: TextStyle(
-              color: isMuted ? _ui.text : _ui.primary,
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-              fontFamily: 'monospace',
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _settingsCard({
-    required String title,
-    required IconData icon,
-    required Widget child,
-    String? badgeText,
-    Color? badgeColor,
-  }) {
+    final accent = isMuted ? CockpitColors.dim : CockpitColors.emerald;
     return Container(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: _ui.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _ui.elevated),
+        color: CockpitColors.elevated,
+        borderRadius: BorderRadius.circular(CockpitRadius.small),
+        border: Border.all(color: CockpitColors.border),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(icon, color: _ui.primary, size: 18),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: TextStyle(
-                        color: _ui.text,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ],
+          if (icon != null) ...[
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: isMuted ? 0.08 : 0.14),
+                borderRadius: BorderRadius.circular(8),
               ),
-              if (badgeText != null)
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: _ui.primarySurface,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: _ui.primarySurface),
-                  ),
-                  child: Text(
-                    badgeText,
-                    style: TextStyle(
-                      color: badgeColor ?? _ui.primary,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-            ],
+              child: Icon(icon, size: 16, color: accent),
+            ),
+            const SizedBox(width: 12),
+          ],
+          Expanded(
+            child: Text(
+              label,
+              style: CockpitTypography.body(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: isMuted ? CockpitColors.muted : CockpitColors.text,
+              ),
+            ),
           ),
-          SizedBox(height: 16),
-          child,
+          Text(
+            value,
+            style: CockpitTypography.numbers(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: accent,
+            ),
+          ),
         ],
       ),
     );
@@ -2339,14 +2318,14 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
       controller: controller,
       obscureText: isPassword && obscure,
       keyboardType: keyboardType,
-      style: TextStyle(color: _ui.text, fontSize: 13),
+      style: CockpitTypography.body(fontSize: 13, color: CockpitColors.text),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(color: _ui.muted, fontSize: 12),
+        labelStyle: CockpitTypography.label(fontSize: 12, color: CockpitColors.muted),
         hintText: hint,
-        hintStyle: TextStyle(color: _ui.muted, fontSize: 12),
+        hintStyle: CockpitTypography.body(fontSize: 12, color: CockpitColors.dim),
         prefixIcon: prefixIcon != null
-            ? Icon(prefixIcon, color: _ui.muted, size: 18)
+            ? Icon(prefixIcon, color: CockpitColors.muted, size: 18)
             : null,
         suffixIcon: isPassword
             ? IconButton(
@@ -2355,21 +2334,21 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                       ? Icons.visibility_off_outlined
                       : Icons.visibility_outlined,
                   size: 18,
-                  color: _ui.muted,
+                  color: CockpitColors.muted,
                 ),
                 onPressed: () => setState(() => obscure = !obscure),
               )
             : null,
         filled: true,
-        fillColor: _ui.elevated,
-        contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        fillColor: CockpitColors.elevated,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: _ui.border),
+          borderRadius: BorderRadius.circular(CockpitRadius.small),
+          borderSide: const BorderSide(color: CockpitColors.border),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: _ui.primary),
+          borderRadius: BorderRadius.circular(CockpitRadius.small),
+          borderSide: const BorderSide(color: CockpitColors.emerald),
         ),
       ),
     );
@@ -2381,20 +2360,35 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
     required VoidCallback onTap,
     bool isPrimary = false,
   }) {
-    return OutlinedButton.icon(
-      onPressed: busy ? null : onTap,
-      style: OutlinedButton.styleFrom(
-        minimumSize: Size(0, 48),
-        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-        foregroundColor: isPrimary ? _ui.primary : _ui.text,
-        backgroundColor: isPrimary ? _ui.primarySurface : _ui.elevated,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-      icon: Icon(icon, size: 16),
-      label: Text(
-        label,
-        textAlign: TextAlign.center,
-        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+    return SizedBox(
+      height: CockpitButtonTokens.height,
+      child: OutlinedButton.icon(
+        onPressed: busy ? null : onTap,
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          foregroundColor: isPrimary ? CockpitColors.emerald : CockpitColors.text,
+          backgroundColor: isPrimary
+              ? CockpitColors.emeraldSubtle
+              : CockpitColors.elevated,
+          side: BorderSide(
+            color: isPrimary
+                ? CockpitColors.emerald.withValues(alpha: 0.3)
+                : CockpitColors.border,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(CockpitButtonTokens.radius),
+          ),
+        ),
+        icon: Icon(icon, size: 16),
+        label: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: CockpitTypography.label(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: isPrimary ? CockpitColors.emerald : CockpitColors.text,
+          ),
+        ),
       ),
     );
   }
@@ -2413,22 +2407,28 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
             children: [
               Text(
                 title,
-                style: TextStyle(
-                  color: _ui.text,
+                style: CockpitTypography.body(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
+                  color: CockpitColors.text,
                 ),
               ),
-              SizedBox(height: 2),
-              Text(subtitle, style: TextStyle(color: _ui.muted, fontSize: 12)),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: CockpitTypography.label(
+                  fontSize: 12,
+                  color: CockpitColors.muted,
+                ),
+              ),
             ],
           ),
         ),
         Switch.adaptive(
           value: value,
-          activeThumbColor: _ui.primary,
-          activeTrackColor: _ui.primarySurface,
-          inactiveTrackColor: _ui.elevated,
+          activeThumbColor: CockpitColors.emerald,
+          activeTrackColor: CockpitColors.emeraldSubtle,
+          inactiveTrackColor: CockpitColors.elevated,
           onChanged: busy ? null : onChanged,
         ),
       ],
@@ -2440,18 +2440,23 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
-          child: Text(label, style: TextStyle(color: _ui.muted, fontSize: 13)),
+          child: Text(
+            label,
+            style: CockpitTypography.label(
+              fontSize: 13,
+              color: CockpitColors.muted,
+            ),
+          ),
         ),
-        SizedBox(width: 12),
+        const SizedBox(width: 12),
         Expanded(
           child: Text(
             value,
             textAlign: TextAlign.end,
-            style: TextStyle(
-              color: _ui.text,
+            style: CockpitTypography.numbers(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              fontFamily: 'monospace',
+              color: CockpitColors.text,
             ),
           ),
         ),
@@ -2501,40 +2506,61 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
   void _showTechnicalDetailsDialog() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: _ui.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      backgroundColor: CockpitColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(CockpitRadius.sheet)),
       ),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.tune_rounded, color: _ui.primary),
-                SizedBox(width: 8),
-                Text(
-                  'Chi tiết kỹ thuật cảm biến',
-                  style: TextStyle(
-                    color: _ui.text,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: CockpitColors.borderStrong,
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-              ],
-            ),
-            SizedBox(height: 16),
-            _infoRow('Chíp điều khiển', 'ESP32 Gen3 Dual-Core'),
-            SizedBox(height: 10),
-            _infoRow('Đo dòng điện', 'Shunt resistor 0.001Ω (±1%)'),
-            SizedBox(height: 10),
-            _infoRow('Nhiệt độ tối đa', '105°C (Tự ngắt tại 75°C)'),
-            SizedBox(height: 10),
-            _infoRow('Thời gian phản hồi', '≤ 15ms khi có biến cố'),
-            SizedBox(height: 20),
-          ],
+              ),
+              Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: CockpitColors.emerald.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.tune_rounded, color: CockpitColors.emerald, size: 18),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Chi tiết kỹ thuật cảm biến',
+                    style: CockpitTypography.heading(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: CockpitColors.text,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              _infoRow('Chíp điều khiển', 'ESP32 Gen3 Dual-Core'),
+              const SizedBox(height: 10),
+              _infoRow('Đo dòng điện', 'Shunt resistor 0.001Ω (±1%)'),
+              const SizedBox(height: 10),
+              _infoRow('Nhiệt độ tối đa', '105°C (Tự ngắt tại 75°C)'),
+              const SizedBox(height: 10),
+              _infoRow('Thời gian phản hồi', '≤ 15ms khi có biến cố'),
+              const SizedBox(height: 20),
+            ],
+          ),
         ),
       ),
     );
@@ -2544,30 +2570,60 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: _ui.surface,
-        title: Text('Chỉnh công suất sạc', style: TextStyle(color: _ui.text)),
+        backgroundColor: CockpitColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(CockpitRadius.large),
+          side: const BorderSide(color: CockpitColors.border),
+        ),
+        title: Text(
+          'Chỉnh công suất sạc',
+          style: CockpitTypography.heading(fontSize: 16, fontWeight: FontWeight.w700, color: CockpitColors.text),
+        ),
         content: TextField(
           controller: chargePower,
           keyboardType: TextInputType.number,
-          style: TextStyle(color: _ui.text),
+          style: CockpitTypography.numbers(fontSize: 15, color: CockpitColors.text),
           decoration: InputDecoration(
             suffixText: 'W',
+            suffixStyle: CockpitTypography.label(fontSize: 13, color: CockpitColors.muted),
             labelText: 'Công suất (W)',
+            labelStyle: CockpitTypography.label(fontSize: 12, color: CockpitColors.muted),
+            filled: true,
+            fillColor: CockpitColors.elevated,
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(CockpitRadius.small),
+              borderSide: const BorderSide(color: CockpitColors.border),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(CockpitRadius.small),
+              borderSide: const BorderSide(color: CockpitColors.emerald),
+            ),
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('HỦY')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'HỦY',
+              style: CockpitTypography.label(fontSize: 12, color: CockpitColors.muted),
+            ),
+          ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: _ui.primary),
+            style: FilledButton.styleFrom(
+              backgroundColor: CockpitColors.emerald,
+              foregroundColor: CockpitColors.shell,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(CockpitRadius.small)),
+            ),
             onPressed: () {
               Navigator.pop(ctx);
               _saveChargePower();
             },
             child: Text(
               'LƯU',
-              style: TextStyle(
-                color: _ui.onPrimary,
-                fontWeight: FontWeight.bold,
+              style: CockpitTypography.label(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: CockpitColors.shell,
               ),
             ),
           ),
@@ -2580,30 +2636,60 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: _ui.surface,
-        title: Text('Chỉnh đơn giá điện', style: TextStyle(color: _ui.text)),
+        backgroundColor: CockpitColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(CockpitRadius.large),
+          side: const BorderSide(color: CockpitColors.border),
+        ),
+        title: Text(
+          'Chỉnh đơn giá điện',
+          style: CockpitTypography.heading(fontSize: 16, fontWeight: FontWeight.w700, color: CockpitColors.text),
+        ),
         content: TextField(
           controller: tariff,
           keyboardType: TextInputType.number,
-          style: TextStyle(color: _ui.text),
+          style: CockpitTypography.numbers(fontSize: 15, color: CockpitColors.text),
           decoration: InputDecoration(
             suffixText: 'đ/kWh',
+            suffixStyle: CockpitTypography.label(fontSize: 13, color: CockpitColors.muted),
             labelText: 'Đơn giá',
+            labelStyle: CockpitTypography.label(fontSize: 12, color: CockpitColors.muted),
+            filled: true,
+            fillColor: CockpitColors.elevated,
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(CockpitRadius.small),
+              borderSide: const BorderSide(color: CockpitColors.border),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(CockpitRadius.small),
+              borderSide: const BorderSide(color: CockpitColors.emerald),
+            ),
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('HỦY')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'HỦY',
+              style: CockpitTypography.label(fontSize: 12, color: CockpitColors.muted),
+            ),
+          ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: _ui.primary),
+            style: FilledButton.styleFrom(
+              backgroundColor: CockpitColors.emerald,
+              foregroundColor: CockpitColors.shell,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(CockpitRadius.small)),
+            ),
             onPressed: () {
               Navigator.pop(ctx);
               _saveTariff();
             },
             child: Text(
               'LƯU',
-              style: TextStyle(
-                color: _ui.onPrimary,
-                fontWeight: FontWeight.bold,
+              style: CockpitTypography.label(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: CockpitColors.shell,
               ),
             ),
           ),

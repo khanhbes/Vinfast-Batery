@@ -5,7 +5,6 @@ import '../services/session_service.dart';
 import '../theme/app_ui_colors.dart';
 import '../theme/app_motion.dart';
 import 'app_popup.dart';
-import 'responsive_card_grid.dart';
 import '../../data/models/vehicle_model.dart';
 import '../../data/models/vinfast_model_spec.dart';
 import '../../data/repositories/vehicle_spec_repository.dart';
@@ -72,13 +71,17 @@ class _VehiclePickerSheetState extends ConsumerState<VehiclePickerSheet> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Chọn xe',
-                              style: Theme.of(context).textTheme.headlineSmall,
+                              'Chọn xe đang kết nối',
+                              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Dữ liệu các tab sẽ theo xe được chọn.',
-                              style: Theme.of(context).textTheme.bodySmall,
+                              'Danh sách xe điện đã ghép nối trong garage',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: ui.muted,
+                              ),
                             ),
                           ],
                         ),
@@ -184,12 +187,23 @@ class _VehicleCard extends StatelessWidget {
         ? vehicle.defaultEfficiency * 100
         : null;
     final range = spec?.rangeKm ?? configuredRange;
+    final batteryType = vehicle.batteryType ?? 'LFP';
+    final licensePlate = vehicle.licensePlate?.trim();
+
     return Semantics(
       selected: selected,
       button: true,
       child: Material(
-        color: selected ? ui.primarySurface : ui.elevated,
-        borderRadius: BorderRadius.circular(16),
+        color: selected
+            ? ui.primary.withAlpha(25)
+            : ui.elevated,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: selected ? ui.primary : ui.borderStrong,
+            width: selected ? 1.8 : 1.0,
+          ),
+        ),
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(16),
@@ -198,46 +212,142 @@ class _VehicleCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
+                // Top Row: Title + Status badge + Checkmark
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Text(
-                      vehicle.vehicleName.isEmpty
-                          ? 'Xe chưa đặt tên'
-                          : vehicle.vehicleName,
-                      style: Theme.of(context).textTheme.titleMedium,
+                    Expanded(
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            vehicle.vehicleName.isEmpty
+                                ? 'Xe chưa đặt tên'
+                                : vehicle.vehicleName,
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (selected)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: ui.primary.withAlpha(35),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: ui.primary.withAlpha(80),
+                                  width: 0.8,
+                                ),
+                              ),
+                              child: Text(
+                                'Đang chọn',
+                                style: TextStyle(
+                                  color: ui.primary,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                     if (selected)
-                      Text('Đang chọn', style: TextStyle(color: ui.primary)),
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: ui.primary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.check_rounded,
+                          size: 16,
+                          color: Colors.black,
+                        ),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 6),
-                Text(
-                  vehicle.vinfastModelName ?? 'Chưa liên kết mẫu xe',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 16),
-                ResponsiveCardGrid(
+                // Subtitle Row: License plate & model & battery
+                Row(
                   children: [
-                    _spec(
-                      context,
-                      'Dung lượng cấu hình',
-                      capacity.isFinite && capacity > 0
-                          ? '${capacity.round()} Wh'
-                          : 'Chưa có dữ liệu',
-                    ),
-                    _spec(
-                      context,
-                      spec == null
-                          ? 'Quãng đường cấu hình'
-                          : 'Quãng đường công bố',
-                      range != null && range.isFinite && range > 0
-                          ? '${range.round()} km'
-                          : 'Chưa có dữ liệu',
+                    Expanded(
+                      child: Text(
+                        '${licensePlate != null && licensePlate.isNotEmpty ? 'Biển số: $licensePlate' : 'Biển số: Chưa đặt'} · ${vehicle.vinfastModelName ?? vehicle.vehicleName} · Pin $batteryType',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: ui.muted,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 14),
+                // 3-Column Specifications Grid
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: ui.surface.withAlpha(120),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: ui.border.withAlpha(40),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _spec(
+                          context,
+                          'Dung lượng',
+                          capacity.isFinite && capacity > 0
+                              ? '${(capacity >= 1000 ? (capacity / 1000).toStringAsFixed(1) : capacity.round())} ${capacity >= 1000 ? 'kWh' : 'Wh'}'
+                              : '—',
+                          ui.primary,
+                        ),
+                      ),
+                      Container(
+                        width: 1,
+                        height: 28,
+                        color: ui.border.withAlpha(40),
+                      ),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: _spec(
+                            context,
+                            'Quãng đường',
+                            range != null && range.isFinite && range > 0
+                                ? '${range.round()} km'
+                                : '—',
+                            ui.text,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        width: 1,
+                        height: 28,
+                        color: ui.border.withAlpha(40),
+                      ),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 8),
+                          child: _spec(
+                            context,
+                            'Loại pin',
+                            batteryType,
+                            ui.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -247,12 +357,28 @@ class _VehicleCard extends StatelessWidget {
     );
   }
 
-  Widget _spec(BuildContext context, String label, String value) => Column(
+  Widget _spec(BuildContext context, String label, String value, Color valueColor) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text(label, style: Theme.of(context).textTheme.bodySmall),
-      const SizedBox(height: 4),
-      Text(value, style: Theme.of(context).textTheme.titleSmall),
+      Text(
+        label,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          fontSize: 11,
+          color: AppUiColors.of(context).muted,
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      const SizedBox(height: 3),
+      Text(
+        value,
+        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+          fontWeight: FontWeight.w700,
+          color: valueColor,
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
     ],
   );
 }

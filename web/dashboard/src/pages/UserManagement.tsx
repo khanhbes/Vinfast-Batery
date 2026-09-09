@@ -1,315 +1,90 @@
-import { useState, useEffect } from 'react';
-import { Users, Plus, Search, Filter, MoreHorizontal, Shield, Car, Edit, Trash2, UserIcon } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { useMemo, useState } from 'react';
+import { AlertCircle, BatteryCharging, BrainCircuit, Car, RefreshCw, Route, Search, ShieldCheck, UserRoundX, Users, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { User } from '@/types';
-import { firebaseService, VehicleData } from '@/services/firebaseService';
-import { getAuth } from 'firebase/auth';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { ModalSurface } from '@/components/ui/modal-surface';
+import { datasetItems, type DataRecord, useAdminData } from '@/data/AdminDataContext';
 
-const auth = getAuth();
+function userId(user: DataRecord) {
+  return String(user.uid || user.ownerUid || '');
+}
 
-interface ExtendedUser extends User {
-  vehicleCount?: number;
-  vehicles?: VehicleData[];
+function initials(user: DataRecord) {
+  const source = String(user.displayName || user.name || user.email || userId(user) || 'U');
+  return source.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase();
+}
+
+function formatDate(value: unknown) {
+  if (value == null || value === '') return 'No data';
+  const date = new Date(typeof value === 'number' && value < 10_000_000_000 ? value * 1000 : value as string | number);
+  return Number.isNaN(date.getTime()) ? 'Unknown' : date.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+function AccountDrawer({ account, related, onClose }: {
+  account: DataRecord;
+  related: { vehicles: number; charges: number; trips: number; ai: number; notifications: number };
+  onClose: () => void;
+}) {
+  return <ModalSurface drawer label="Account details" onClose={onClose}>
+    <div className="min-h-full bg-slate-950 p-6 text-slate-100 sm:p-8">
+      <div className="flex items-start justify-between gap-4 border-b border-slate-800 pb-6"><div className="flex min-w-0 items-center gap-4"><Avatar className="h-12 w-12 border border-slate-700"><AvatarFallback className="bg-emerald-400/10 text-emerald-300">{initials(account)}</AvatarFallback></Avatar><div className="min-w-0"><p className="truncate text-xl font-semibold">{String(account.displayName || account.name || 'Unnamed account')}</p><p className="truncate text-sm text-slate-400">{String(account.email || 'No email address')}</p></div></div><Button variant="ghost" size="icon" aria-label="Close account details" onClick={onClose} className="text-slate-300 hover:bg-slate-800 hover:text-white"><X /></Button></div>
+      <div className="mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-slate-800">{[
+        ['Vehicles', related.vehicles], ['Charges', related.charges], ['Trips', related.trips], ['AI records', related.ai],
+      ].map(([label, value]) => <div key={String(label)} className="bg-slate-900 p-4"><p className="text-2xl font-semibold">{value}</p><p className="text-xs text-slate-400">{label}</p></div>)}</div>
+      <dl className="mt-6 divide-y divide-slate-800">{Object.entries(account).sort(([a], [b]) => a.localeCompare(b)).map(([key, value]) => <div key={key} className="grid gap-1 py-3 sm:grid-cols-[9rem_1fr]"><dt className="text-xs font-medium text-slate-400">{key.replace(/([a-z])([A-Z])/g, '$1 $2')}</dt><dd className="break-words font-mono text-xs">{value == null || value === '' ? '—' : typeof value === 'object' ? JSON.stringify(value) : String(value)}</dd></div>)}</dl>
+      <p className="mt-6 text-xs text-slate-500">{related.notifications} notification records are linked to this account. Sensitive credential fields are redacted by the API.</p>
+    </div>
+  </ModalSurface>;
 }
 
 export default function UserManagement() {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [users, setUsers] = useState<ExtendedUser[]>([]);
-  const [vehicles, setVehicles] = useState<VehicleData[]>([]);
-  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+  const { snapshot, loading, refreshing, error, refresh } = useAdminData();
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState<DataRecord | null>(null);
+  const accounts = datasetItems(snapshot, 'accounts');
+  const vehicles = datasetItems(snapshot, 'vehicles');
+  const chargeLogs = datasetItems(snapshot, 'chargeLogs');
+  const tripLogs = datasetItems(snapshot, 'tripLogs');
+  const aiRecords = [...datasetItems(snapshot, 'aiInsights'), ...datasetItems(snapshot, 'aiProfiles'), ...datasetItems(snapshot, 'tripPredictions'), ...datasetItems(snapshot, 'socPredictions')];
+  const notifications = datasetItems(snapshot, 'notifications');
 
-  useEffect(() => {
-    loadUsersAndVehicles();
-  }, []);
+  const relatedFor = (uid: string) => ({
+    vehicles: vehicles.filter(item => String(item.ownerUid || '') === uid).length,
+    charges: chargeLogs.filter(item => String(item.ownerUid || '') === uid).length,
+    trips: tripLogs.filter(item => String(item.ownerUid || '') === uid).length,
+    ai: aiRecords.filter(item => String(item.ownerUid || '') === uid || vehicles.some(vehicle => String(vehicle.ownerUid || '') === uid && String(vehicle.vehicleId || '') === String(item.vehicleId || ''))).length,
+    notifications: notifications.filter(item => String(item.ownerUid || '') === uid).length,
+  });
 
-  const loadUsersAndVehicles = async () => {
-    try {
-      setLoading(true);
-      
-      // Get vehicles from Firebase
-      const vehicleData = await firebaseService.getVehicles();
-      setVehicles(vehicleData);
+  const filtered = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return accounts;
+    return accounts.filter(user => [user.displayName, user.name, user.email, user.uid].some(value => String(value || '').toLowerCase().includes(query)));
+  }, [accounts, search]);
 
-      // Create user list from vehicle owners
-      const uniqueOwners: ExtendedUser[] = Array.from(
-        new Map(
-          vehicleData
-            .filter(v => v.ownerUid)
-            .map(v => [v.ownerUid!, {
-              id: v.ownerUid!,
-              email: `${v.ownerUid!.replace(/[^a-zA-Z0-9]/g, '').substring(0, 8)}@vinfast.com`,
-              displayName: `User ${v.ownerUid!.replace(/[^a-zA-Z0-9]/g, '').substring(0, 6).toUpperCase()}`,
-              role: 'user' as const,
-              createdAt: new Date().toISOString(),
-              lastLogin: new Date().toISOString()
-            }])
-        ).values()
-      );
+  const directoryMetrics = [
+    { label: 'Accounts', value: accounts.length, icon: Users },
+    { label: 'Administrators', value: accounts.filter(user => user.isAdmin === true || user.role === 'admin').length, icon: ShieldCheck },
+    { label: 'Linked vehicles', value: vehicles.length, icon: Car },
+    { label: 'Disabled', value: accounts.filter(user => user.disabled === true).length, icon: UserRoundX },
+  ];
 
-      // Add current authenticated user as admin
-      if (auth.currentUser) {
-        const currentUser: ExtendedUser = {
-          id: auth.currentUser.uid,
-          email: auth.currentUser.email || '(không có email)',
-          displayName: auth.currentUser.displayName || 'Admin User',
-          role: 'admin',
-          createdAt: new Date().toISOString(),
-          lastLogin: new Date().toISOString()
-        };
-        
-        // Check if current user is already in the list
-        const existingUserIndex = uniqueOwners.findIndex(u => u.id === currentUser.id);
-        if (existingUserIndex >= 0) {
-          uniqueOwners[existingUserIndex] = { ...uniqueOwners[existingUserIndex], role: 'admin' as const };
-        } else {
-          uniqueOwners.unshift(currentUser);
-        }
-      }
+  if (loading && !snapshot) return <div className="grid min-h-[50vh] place-items-center"><div className="text-center"><div className="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-primary/20 border-t-primary" /><p className="mt-3 text-sm text-muted-foreground">Loading account directory...</p></div></div>;
 
-      // Count vehicles for each user
-      const usersWithVehicleCount = uniqueOwners.map(user => {
-        const userVehicles = vehicleData.filter(v => v.ownerUid === user.id);
-        return {
-          ...user,
-          vehicleCount: userVehicles.length,
-          vehicles: userVehicles
-        } as ExtendedUser;
-      });
+  return <div className="space-y-6">
+    <div className="page-header"><div><p className="text-xs font-semibold uppercase tracking-[.18em] text-primary">Firebase identity</p><h1 className="mt-2 text-3xl font-bold">Accounts</h1><p className="mt-1 text-muted-foreground">Authentication records merged with app profiles and linked operational data.</p></div><Button variant="outline" onClick={() => void refresh()} disabled={refreshing} className="gap-2"><RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />Refresh directory</Button></div>
+    {error && <div role="alert" className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /><span>{error}</span></div>}
 
-      setUsers(usersWithVehicleCount);
-    } catch (error) {
-      console.error('Error loading users:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border bg-border md:grid-cols-4">{directoryMetrics.map(({ label, value, icon: Icon }) => <div key={label} className="bg-card p-5"><Icon className="h-5 w-5 text-primary" /><p className="mt-4 text-2xl font-semibold tabular-nums">{value}</p><p className="mt-1 text-xs text-muted-foreground">{label}</p></div>)}</div>
 
-  const filteredUsers = users.filter(user =>
-    user.displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const getRoleBadge = (role: string) => {
-    switch (role) {
-      case 'admin':
-        return <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-200">Quản trị viên</Badge>;
-      case 'user':
-        return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-200">Người dùng</Badge>;
-      default:
-        return <Badge variant="outline">{role}</Badge>;
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('vi-VN', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Đang tải dữ liệu người dùng...</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="page-header">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Quản lý người dùng</h1>
-          <p className="text-muted-foreground mt-1">Quản lý tài khoản và phân quyền hệ thống</p>
-        </div>
-        <Button className="gap-2">
-          <Plus className="w-4 h-4" />
-          Thêm người dùng
-        </Button>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card className="border-border/50 bg-surface/50 backdrop-blur-sm">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-blue-100 rounded-lg">
-                <Users className="w-6 h-6 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-foreground">{users.length}</p>
-                <p className="text-sm text-muted-foreground">Tổng người dùng</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/50 bg-surface/50 backdrop-blur-sm">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-purple-100 rounded-lg">
-                <Shield className="w-6 h-6 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-foreground">
-                  {users.filter(u => u.role === 'admin').length}
-                </p>
-                <p className="text-sm text-muted-foreground">Quản trị viên</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/50 bg-surface/50 backdrop-blur-sm">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-green-100 rounded-lg">
-                <UserIcon className="w-6 h-6 text-green-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-foreground">
-                  {users.filter(u => u.role === 'user').length}
-                </p>
-                <p className="text-sm text-muted-foreground">Người dùng thường</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/50 bg-surface/50 backdrop-blur-sm">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-orange-100 rounded-lg">
-                <Car className="w-6 h-6 text-orange-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-foreground">{vehicles.length}</p>
-                <p className="text-sm text-muted-foreground">Tổng số xe</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Users Table */}
-      <Card className="border-border/50 bg-surface/50 backdrop-blur-sm">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <Users className="w-5 h-5 text-primary" />
-              Danh sách người dùng
-            </CardTitle>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Tìm kiếm người dùng..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 bg-surface-light/50 border-border/50 w-64"
-                />
-              </div>
-              <Button variant="outline" size="icon">
-                <Filter className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border/50">
-                  <th className="text-left p-4 font-medium text-muted-foreground">Người dùng</th>
-                  <th className="text-left p-4 font-medium text-muted-foreground">Email</th>
-                  <th className="text-left p-4 font-medium text-muted-foreground">Vai trò</th>
-                  <th className="text-left p-4 font-medium text-muted-foreground">Số xe</th>
-                  <th className="text-left p-4 font-medium text-muted-foreground">Ngày tạo</th>
-                  <th className="text-left p-4 font-medium text-muted-foreground">Đăng nhập cuối</th>
-                  <th className="text-left p-4 font-medium text-muted-foreground text-center">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredUsers.map((user) => (
-                  <tr key={user.id} className="border-b border-border/30 hover:bg-surface-light/30 transition-colors">
-                    <td className="p-4">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="w-8 h-8">
-                          <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user.email}`} />
-                          <AvatarFallback>
-                            {user.displayName.split(' ').map(n => n[0]).join('').toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="font-medium text-foreground">{user.displayName}</span>
-                      </div>
-                    </td>
-                    <td className="p-4 text-muted-foreground">{user.email}</td>
-                    <td className="p-4">{getRoleBadge(user.role)}</td>
-                    <td className="p-4">
-                      <div className="flex items-center gap-1">
-                        <Car className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm">{user.vehicleCount || 0}</span>
-                      </div>
-                    </td>
-                    <td className="p-4 text-muted-foreground">{formatDate(user.createdAt)}</td>
-                    <td className="p-4 text-muted-foreground">
-                      {user.lastLogin ? formatDate(user.lastLogin) : 'Chưa đăng nhập'}
-                    </td>
-                    <td className="p-4">
-                      <div className="flex items-center justify-center">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
-                              <MoreHorizontal className="w-4 h-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="bg-surface border-border">
-                            <DropdownMenuItem className="hover:bg-surface-light cursor-pointer gap-2">
-                              <Edit className="w-4 h-4" />
-                              Chỉnh sửa
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="hover:bg-surface-light cursor-pointer gap-2">
-                              <Shield className="w-4 h-4" />
-                              Đổi vai trò
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="text-destructive hover:bg-destructive/10 cursor-pointer gap-2">
-                              <Trash2 className="w-4 h-4" />
-                              Xóa
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {filteredUsers.length === 0 && (
-              <div className="text-center py-8">
-                <Users className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground">Không tìm thấy người dùng nào</p>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
+    <Card className="border-border/70"><CardContent className="p-0"><div className="flex flex-col gap-4 border-b p-5 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold">Account directory</h2><p className="text-sm text-muted-foreground">Select an account to inspect its complete profile and linked record counts.</p></div><div className="relative w-full sm:w-80"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search accounts" placeholder="Name, email or UID" value={search} onChange={event => setSearch(event.target.value)} className="pl-10" /></div></div>
+      {filtered.length === 0 ? <div className="py-16 text-center"><Users className="mx-auto h-8 w-8 text-muted-foreground" /><p className="mt-3 font-medium">{accounts.length ? 'No matching accounts' : 'No accounts returned by Firebase Auth'}</p><p className="mt-1 text-sm text-muted-foreground">{accounts.length ? 'Try another name, email address or UID.' : 'Create or sign in with the mobile app, then refresh this page.'}</p></div> : <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-sm"><thead><tr className="border-b text-left text-xs text-muted-foreground"><th className="p-3 font-medium">Account</th><th className="p-3 font-medium">Role</th><th className="p-3 font-medium">Status</th><th className="p-3 font-medium">Vehicles</th><th className="p-3 font-medium">Activity</th><th className="p-3 font-medium">Created</th><th className="p-3 text-right font-medium">Details</th></tr></thead><tbody>{filtered.map(user => { const uid = userId(user); const related = relatedFor(uid); return <tr key={uid} className="border-b border-border/60 hover:bg-muted/40"><td className="p-3"><div className="flex min-w-0 items-center gap-3"><Avatar className="h-9 w-9"><AvatarFallback>{initials(user)}</AvatarFallback></Avatar><div className="min-w-0"><p className="truncate font-medium">{String(user.displayName || user.name || 'Unnamed account')}</p><p className="truncate text-xs text-muted-foreground">{String(user.email || uid)}</p></div></div></td><td className="p-3"><Badge variant={user.isAdmin === true || user.role === 'admin' ? 'default' : 'outline'}>{user.isAdmin === true || user.role === 'admin' ? 'Administrator' : 'User'}</Badge></td><td className="p-3"><Badge variant={user.disabled === true ? 'destructive' : 'secondary'}>{user.disabled === true ? 'Disabled' : user.authRecordMissing === true ? 'Profile only' : 'Active'}</Badge></td><td className="p-3"><button className="inline-flex min-h-11 items-center gap-2" onClick={() => navigate('/data?dataset=vehicles')}><Car className="h-4 w-4 text-primary" />{related.vehicles}</button></td><td className="p-3"><div className="flex gap-3 text-xs text-muted-foreground"><span className="flex items-center gap-1"><BatteryCharging className="h-3.5 w-3.5" />{related.charges}</span><span className="flex items-center gap-1"><Route className="h-3.5 w-3.5" />{related.trips}</span><span className="flex items-center gap-1"><BrainCircuit className="h-3.5 w-3.5" />{related.ai}</span></div></td><td className="whitespace-nowrap p-3 text-xs text-muted-foreground">{formatDate(user.createdAt)}</td><td className="p-3 text-right"><Button variant="ghost" size="sm" onClick={() => setSelected(user)}>Open</Button></td></tr>; })}</tbody></table></div>}
+    </CardContent></Card>
+    {selected && <AccountDrawer account={selected} related={relatedFor(userId(selected))} onClose={() => setSelected(null)} />}
+  </div>;
 }

@@ -17,8 +17,8 @@ const missingFirebaseConfig = Object.entries(firebaseConfig)
 
 if (missingFirebaseConfig.length > 0) {
   throw new Error(
-    `Thiếu cấu hình Firebase Web: ${missingFirebaseConfig.join(', ')}. ` +
-      'Hãy tạo file .env.local từ .env.example.'
+    `Missing Firebase Web configuration: ${missingFirebaseConfig.join(', ')}. ` +
+      'Create .env.local from .env.example.'
   );
 }
 

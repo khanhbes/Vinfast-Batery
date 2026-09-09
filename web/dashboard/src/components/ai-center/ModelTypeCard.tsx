@@ -6,9 +6,9 @@ import { getModelAvailability, getActiveVersion } from './modelAvailability';
 import { getModelIcon } from './modelIcons';
 
 const STATUS_BADGE: Record<string, { bg: string; text: string; label: string; icon: any }> = {
-  ready: { bg: 'bg-green-100', text: 'text-green-700', label: 'Đã triển khai', icon: Sparkles },
-  in_progress: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Đang làm', icon: Sparkles },
-  planned: { bg: 'bg-slate-100', text: 'text-slate-600', label: 'Lên kế hoạch', icon: Clock },
+  ready: { bg: 'bg-green-100', text: 'text-green-700', label: 'Deployed', icon: Sparkles },
+  in_progress: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'In progress', icon: Sparkles },
+  planned: { bg: 'bg-slate-100', text: 'text-slate-600', label: 'Planned', icon: Clock },
 };
 
 interface Props {
@@ -33,7 +33,7 @@ export default function ModelTypeCard({ meta, selected, onSelect }: Props) {
       role="button"
       tabIndex={0}
       aria-expanded={selected}
-      aria-label={`Mở phòng thử nghiệm ${meta.label}`}
+      aria-label={`Open ${meta.label} lab`}
       onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(); } }}
       className={`cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5 ${
         selected ? `ring-2 ${c.ring} shadow-md border-primary/50` : 'ring-1 ring-transparent'

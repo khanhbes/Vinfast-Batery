@@ -36,20 +36,20 @@ export default function ClassResult({ meta, result, accent }: Props) {
   return (
     <div className="mx-auto w-full max-w-sm space-y-5">
       <div className="text-sm text-slate-400">
-        {meta.outputDescription || 'Mục đích chuyến đi được suy luận'}
+        {meta.outputDescription || 'Inferred trip purpose'}
       </div>
 
       <div className={`rounded-2xl border p-5 text-center ${accentBox}`}>
         <div className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
-          <Sparkles className="h-3.5 w-3.5" /> Phân loại
+          <Sparkles className="h-3.5 w-3.5" /> Classification
         </div>
         <div className={`text-2xl lg:text-3xl font-bold tracking-tight ${accentText}`}>
-          {classLabel !== '—' ? String(classLabel).toUpperCase() : 'Chưa có phân loại'}
+          {classLabel !== '—' ? String(classLabel).toUpperCase() : 'No classification'}
         </div>
         {result && (
           <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs text-slate-200">
             <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-            Độ tin cậy: <span className="font-semibold text-white">{confidence}%</span>
+            Confidence: <span className="font-semibold text-white">{confidence}%</span>
           </div>
         )}
       </div>
@@ -57,13 +57,13 @@ export default function ClassResult({ meta, result, accent }: Props) {
       <div className="space-y-3 border-t border-white/10 pt-4 text-sm">
         {meta.outputMeaning && (
           <div className="flex justify-between gap-4">
-            <span className="text-slate-400">Ý nghĩa</span>
+            <span className="text-slate-400">Meaning</span>
             <span className="font-medium text-slate-200 text-right">{meta.outputMeaning}</span>
           </div>
         )}
         {result?.modelVersion && (
           <div className="flex justify-between gap-4">
-            <span className="text-slate-400">Phiên bản</span>
+            <span className="text-slate-400">Version</span>
             <span className="font-mono text-slate-200">{result.modelVersion}</span>
           </div>
         )}

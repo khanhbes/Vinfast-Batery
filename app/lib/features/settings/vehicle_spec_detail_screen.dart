@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/services/auth_service.dart';
@@ -33,6 +32,8 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
   // Editable controllers
   late TextEditingController _modelCtrl;
   late TextEditingController _yearCtrl;
+  late TextEditingController _licensePlateCtrl;
+  late TextEditingController _batteryTypeCtrl;
   late TextEditingController _batteryCapCtrl;
   late TextEditingController _sohCtrl;
   late TextEditingController _odoCtrl;
@@ -46,6 +47,12 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
       text: v['model'] ?? v['vehicleName'] ?? '',
     );
     _yearCtrl = TextEditingController(text: '${v['year'] ?? 2024}');
+    _licensePlateCtrl = TextEditingController(
+      text: v['licensePlate'] ?? '',
+    );
+    _batteryTypeCtrl = TextEditingController(
+      text: v['batteryType'] ?? v['batteryChemistry'] ?? 'LFP',
+    );
     _batteryCapCtrl = TextEditingController(
       text: '${(v['batteryCapacity'] ?? 0).toInt()}',
     );
@@ -63,6 +70,8 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
   void dispose() {
     _modelCtrl.dispose();
     _yearCtrl.dispose();
+    _licensePlateCtrl.dispose();
+    _batteryTypeCtrl.dispose();
     _batteryCapCtrl.dispose();
     _sohCtrl.dispose();
     _odoCtrl.dispose();
@@ -89,6 +98,8 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
         updates: {
           'model': _modelCtrl.text.trim(),
           'vehicleName': _modelCtrl.text.trim(),
+          'licensePlate': _licensePlateCtrl.text.trim(),
+          'batteryType': _batteryTypeCtrl.text.trim(),
           'year': int.tryParse(_yearCtrl.text) ?? 2024,
           'batteryCapacity': double.tryParse(_batteryCapCtrl.text) ?? 0,
           'stateOfHealth': double.tryParse(_sohCtrl.text) ?? 100,
@@ -191,6 +202,18 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
                 icon: Icons.electric_moped_rounded,
               ),
               _SpecRow(
+                label: 'Biển số xe',
+                controller: _licensePlateCtrl,
+                isEditing: _isEditing,
+                icon: Icons.pin_outlined,
+              ),
+              _SpecRow(
+                label: 'Loại pin (LFP / NMC)',
+                controller: _batteryTypeCtrl,
+                isEditing: _isEditing,
+                icon: Icons.electric_bolt_rounded,
+              ),
+              _SpecRow(
                 label: 'Năm SX',
                 controller: _yearCtrl,
                 isEditing: _isEditing,
@@ -288,7 +311,7 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
                 const SizedBox(height: 6),
                 Row(
                   children: [
-                    _miniChip('${_yearCtrl.text}'),
+                    _miniChip(_yearCtrl.text),
                     const SizedBox(width: 8),
                     _miniChip('${_batteryCapCtrl.text} Wh'),
                     const SizedBox(width: 8),
@@ -531,7 +554,7 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
           ),
           _catalogRow(
             'Dung lượng (Ah)',
-            '${_spec!.nominalCapacityAh.toStringAsFixed(1)}',
+            _spec!.nominalCapacityAh.toStringAsFixed(1),
           ),
           Divider(
             color: AppColors.glassBorder,
