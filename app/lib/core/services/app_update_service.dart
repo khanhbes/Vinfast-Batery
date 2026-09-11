@@ -129,10 +129,19 @@ class AppUpdateService with WidgetsBindingObserver {
     final prefs = await SharedPreferences.getInstance();
     final info = await PackageInfo.fromPlatform();
     final currentBuild = int.tryParse(info.buildNumber) ?? 0;
-    final latestBuild = _asInt(_remoteConfig['latestBuild']);
-    final minSupported = _asInt(_remoteConfig['minSupportedBuild']);
-    final latestVersion = _asString(_remoteConfig['latestVersion']);
-    final releaseNotes = _asString(_remoteConfig['releaseNotes']);
+    final ios = Platform.isIOS;
+    final latestBuild = _asInt(_remoteConfig[ios ? 'iosLatestBuild' : 'latestBuild']) > 0
+        ? _asInt(_remoteConfig[ios ? 'iosLatestBuild' : 'latestBuild'])
+        : _asInt(_remoteConfig['latestBuild']);
+    final minSupported = _asInt(_remoteConfig[ios ? 'iosMinSupportedBuild' : 'minSupportedBuild']) > 0
+        ? _asInt(_remoteConfig[ios ? 'iosMinSupportedBuild' : 'minSupportedBuild'])
+        : _asInt(_remoteConfig['minSupportedBuild']);
+    final latestVersion = _asString(_remoteConfig[ios ? 'iosLatestVersion' : 'latestVersion']).isNotEmpty
+        ? _asString(_remoteConfig[ios ? 'iosLatestVersion' : 'latestVersion'])
+        : _asString(_remoteConfig['latestVersion']);
+    final releaseNotes = _asString(_remoteConfig[ios ? 'iosReleaseNotes' : 'releaseNotes']).isNotEmpty
+        ? _asString(_remoteConfig[ios ? 'iosReleaseNotes' : 'releaseNotes'])
+        : _asString(_remoteConfig['releaseNotes']);
     final isForce = _asBool(_remoteConfig['forceUpdate']);
     final delivery = _parseDeliveryMode(_remoteConfig);
 
@@ -162,7 +171,8 @@ class AppUpdateService with WidgetsBindingObserver {
       releaseNotes: releaseNotes,
       forceUpdate: forceUpdate,
       deliveryMode: delivery,
-      apkDownloadUrl: _resolveDownloadUrl(delivery),
+      apkDownloadUrl: ios ? '' : _resolveDownloadUrl(delivery),
+      storeUrl: ios ? _asString(_remoteConfig['iosStoreUrl']) : '',
     );
     if (action == _UpdateDialogAction.later) {
       await _snoozeVersion(prefs, notificationKey);
@@ -208,6 +218,7 @@ class AppUpdateService with WidgetsBindingObserver {
     required bool forceUpdate,
     required _UpdateDeliveryMode deliveryMode,
     required String apkDownloadUrl,
+    required String storeUrl,
   }) async {
     _dialogShowing = true;
     try {
@@ -222,6 +233,7 @@ class AppUpdateService with WidgetsBindingObserver {
           forceUpdate: forceUpdate,
           deliveryMode: deliveryMode,
           apkDownloadUrl: apkDownloadUrl,
+          storeUrl: storeUrl,
         ),
       );
     } finally {
@@ -291,6 +303,7 @@ class _UpdateDialog extends StatefulWidget {
   final bool forceUpdate;
   final _UpdateDeliveryMode deliveryMode;
   final String apkDownloadUrl;
+  final String storeUrl;
 
   const _UpdateDialog({
     required this.currentVersion,
@@ -300,6 +313,7 @@ class _UpdateDialog extends StatefulWidget {
     required this.forceUpdate,
     required this.deliveryMode,
     required this.apkDownloadUrl,
+    required this.storeUrl,
   });
 
   @override
@@ -318,6 +332,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
   bool get forceUpdate => widget.forceUpdate;
   _UpdateDeliveryMode get deliveryMode => widget.deliveryMode;
   String get apkDownloadUrl => widget.apkDownloadUrl;
+  String get storeUrl => widget.storeUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -522,6 +537,22 @@ class _UpdateDialogState extends State<_UpdateDialog> {
   }
 
   Future<void> _download(BuildContext context) async {
+    if (Platform.isIOS) {
+      final uri = Uri.tryParse(storeUrl);
+      if (uri == null || !(uri.scheme == 'https' || uri.scheme == 'itms-apps')) {
+        setState(() => _downloadError = 'Chưa cấu hình liên kết TestFlight/App Store.');
+        return;
+      }
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        if (!forceUpdate && context.mounted) {
+          Navigator.pop(context, _UpdateDialogAction.updateNow);
+        }
+      } else {
+        setState(() => _downloadError = 'Không thể mở TestFlight/App Store.');
+      }
+      return;
+    }
     if (deliveryMode == _UpdateDeliveryMode.shorebird &&
         apkDownloadUrl.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(

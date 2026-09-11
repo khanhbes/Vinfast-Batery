@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'dart:io';
 
 import '../../core/theme/app_colors.dart';
 import '../../data/models/shelly_connection.dart';
@@ -79,11 +80,13 @@ class _ShellySetupScreenState extends State<ShellySetupScreen> {
   }
 
   Future<String> _scan() async {
-    final permission = await Permission.nearbyWifiDevices.request();
-    if (permission.isPermanentlyDenied) {
-      throw StateError(
-        'Quyền Thiết bị Wi‑Fi lân cận bị tắt. Hãy bật trong Cài đặt Android.',
-      );
+    if (Platform.isAndroid) {
+      final permission = await Permission.nearbyWifiDevices.request();
+      if (permission.isPermanentlyDenied) {
+        throw StateError(
+          'Quyền Thiết bị Wi‑Fi lân cận bị tắt. Hãy bật trong Cài đặt Android.',
+        );
+      }
     }
     final devices = await _service.discoverDevices();
     setState(() => _devices = devices);

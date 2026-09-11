@@ -39,6 +39,9 @@ migrate_working_dir/
 **/.flutter-plugins-dependencies
 **/android/.gradle/
 **/ios/Pods/
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/Flutter/ephemeral/
 
 # Python environments and caches
 __pycache__/

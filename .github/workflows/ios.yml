@@ -1,0 +1,50 @@
+name: Flutter platform CI
+
+on:
+  push:
+    branches: [main, feature/ios-platform]
+  pull_request:
+
+jobs:
+  ios-unsigned:
+    name: iOS unsigned (TestFlight readiness)
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.1'
+          channel: stable
+          cache: true
+      - name: Ensure generated iOS Runner project exists
+        run: |
+          if [ ! -d ios/Runner.xcodeproj ]; then
+            flutter create --platforms=ios --org com.khanhbes --project-name vinfast_battery --no-pub .
+          fi
+      - run: flutter pub get
+      - run: pod install --repo-update
+        working-directory: app/ios
+      - run: flutter analyze
+      - run: flutter test --coverage
+      - run: flutter build ios --release --no-codesign
+
+  android-regression:
+    name: Android regression
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.1'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      - run: flutter build apk --debug

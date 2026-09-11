@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
+import 'package:flutter/services.dart';
 
 import '../models/smart_charge_cost.dart';
 import '../models/smart_charging_session.dart';
@@ -113,8 +114,8 @@ class SmartChargeReportService {
     SmartChargeHistorySummary summary,
   ) async {
     final document = pw.Document();
-    final regular = await _androidFont('/system/fonts/Roboto-Regular.ttf');
-    final bold = await _androidFont('/system/fonts/Roboto-Bold.ttf');
+    final regular = await _bundledFont('assets/fonts/VinFastUnicode-Regular.ttf');
+    final bold = await _bundledFont('assets/fonts/VinFastUnicode-Bold.ttf');
     final theme = regular == null
         ? null
         : pw.ThemeData.withFont(base: regular, bold: bold ?? regular);
@@ -206,9 +207,9 @@ class SmartChargeReportService {
     return document.save();
   }
 
-  Future<pw.Font?> _androidFont(String path) async {
+  Future<pw.Font?> _bundledFont(String asset) async {
     try {
-      return pw.Font.ttf(ByteData.sublistView(await File(path).readAsBytes()));
+      return pw.Font.ttf(await rootBundle.load(asset));
     } on Object {
       return null;
     }

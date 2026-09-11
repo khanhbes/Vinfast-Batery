@@ -57,6 +57,13 @@ service cloud.firestore {
       allow create: if isAuth() && request.auth.uid == uid;
       allow delete: if false;
 
+      // FCM/APNs tokens are server-managed only. Mobile clients use the
+      // authenticated /api/mobile/push-tokens endpoints and cannot enumerate
+      // or mutate token documents directly.
+      match /pushTokens/{deviceId} {
+        allow read, write: if false;
+      }
+
       match /vehicleChargerBindings/{vehicleId} {
         allow read: if isAuth() && request.auth.uid == uid;
         allow write: if isAuth() && request.auth.uid == uid && containsNoChargerSecrets();

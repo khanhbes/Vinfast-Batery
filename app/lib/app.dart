@@ -7,6 +7,7 @@ import 'core/theme/app_theme.dart';
 import 'core/widgets/app_popup.dart';
 import 'core/widgets/internet_connection_notice.dart';
 import 'data/services/notification_service.dart';
+import 'data/services/push_notification_service.dart';
 import 'features/auth/auth_gate.dart';
 import 'navigation/app_navigation.dart';
 import 'core/providers/app_providers.dart';
@@ -26,9 +27,19 @@ class _VinFastBatteryAppState extends State<VinFastBatteryApp> {
   void initState() {
     super.initState();
     NotificationService().setTapHandler(_openNotification);
+    PushNotificationService.instance.setDeepLinkHandler(_openPushNotification);
     // initialize() sẽ notifyListeners() ngay sau khi đọc xong prefs,
     // AnimatedBuilder dưới đây tự rebuild — không cần setState ở đây.
     _settings.initialize();
+  }
+
+  void _openPushNotification(Map<String, dynamic> data) {
+    final sessionId = data['sessionId']?.toString();
+    final vehicleId = data['vehicleId']?.toString();
+    if (sessionId == null || sessionId.isEmpty) return;
+    _openNotification(
+      'smart_charge/session/${Uri.encodeComponent(vehicleId ?? '')}/${Uri.encodeComponent(sessionId)}',
+    );
   }
 
   void _openNotification(String payload) {

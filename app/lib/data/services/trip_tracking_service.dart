@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:latlong2/latlong.dart' as ll;
+import '../../core/services/platform_capability_adapter.dart';
 
 import '../models/trip_log_model.dart';
 import '../services/battery_logic_service.dart';
@@ -139,6 +140,19 @@ class TripTrackingService {
   // Callbacks cho UI update
   VoidCallback? onUpdate;
 
+  LocationSettings get _locationSettings => PlatformCapabilityAdapter.isIOS
+      ? const AppleSettings(
+          accuracy: LocationAccuracy.high,
+          activityType: ActivityType.automotiveNavigation,
+          distanceFilter: 10,
+          pauseLocationUpdatesAutomatically: false,
+          showBackgroundLocationIndicator: true,
+        )
+      : const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 10,
+        );
+
   /// Phát snapshot mới lên stream
   void _emitSnapshot() {
     if (!_snapshotController.isClosed) {
@@ -203,6 +217,11 @@ class TripTrackingService {
         if (permission == LocationPermission.denied) return false;
       }
       if (permission == LocationPermission.deniedForever) return false;
+      if (PlatformCapabilityAdapter.isIOS &&
+          permission == LocationPermission.whileInUse) {
+        final elevated = await Geolocator.requestPermission();
+        if (elevated == LocationPermission.always) permission = elevated;
+      }
     } catch (e) {
       debugPrint('❌ Resume permission check failed: $e');
       return false;
@@ -217,10 +236,7 @@ class TripTrackingService {
     try {
       _positionStream =
           Geolocator.getPositionStream(
-            locationSettings: const LocationSettings(
-              accuracy: LocationAccuracy.high,
-              distanceFilter: 10,
-            ),
+            locationSettings: _locationSettings,
           ).listen(
             _onPositionUpdate,
             onError: (error) {
@@ -364,6 +380,11 @@ class TripTrackingService {
               'Quyền vị trí bị từ chối vĩnh viễn. Vui lòng cấp quyền trong Cài đặt.',
         );
       }
+      if (PlatformCapabilityAdapter.isIOS &&
+          permission == LocationPermission.whileInUse) {
+        final elevated = await Geolocator.requestPermission();
+        if (elevated == LocationPermission.always) permission = elevated;
+      }
     } catch (e) {
       return TripStartResult(
         status: TripStartStatus.unknownError,
@@ -419,10 +440,7 @@ class TripTrackingService {
     try {
       _positionStream =
           Geolocator.getPositionStream(
-            locationSettings: const LocationSettings(
-              accuracy: LocationAccuracy.high,
-              distanceFilter: 10,
-            ),
+            locationSettings: _locationSettings,
           ).listen(
             _onPositionUpdate,
             onError: (error) {

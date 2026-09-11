@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleDisplayName</key><string>VinFast Battery</string>
+  <key>CFBundleName</key><string>VinFast Battery</string>
+  <key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+  <key>CFBundleShortVersionString</key><string>$(FLUTTER_BUILD_NAME)</string>
+  <key>CFBundleVersion</key><string>$(FLUTTER_BUILD_NUMBER)</string>
+  <key>LSRequiresIPhoneOS</key><true/>
+  <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string></array>
+  <key>UIBackgroundModes</key><array><string>location</string><string>fetch</string><string>remote-notification</string></array>
+  <key>NSLocationWhenInUseUsageDescription</key><string>VinFast Battery dùng vị trí để ghi lại hành trình của bạn.</string>
+  <key>NSLocationAlwaysAndWhenInUseUsageDescription</key><string>Cho phép VinFast Battery tiếp tục ghi hành trình khi màn hình bị khóa.</string>
+  <key>NSLocalNetworkUsageDescription</key><string>VinFast Battery cần mạng cục bộ để tìm và điều khiển Shelly Plug trong nhà.</string>
+  <key>NSBonjourServices</key><array><string>_shelly._tcp</string></array>
+  <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
+  <key>FirebaseAppDelegateProxyEnabled</key><true/>
+  <key>UIUserInterfaceStyle</key><string>Dark</string>
+</dict></plist>

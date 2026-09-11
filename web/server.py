@@ -17,6 +17,7 @@ import os
 import io
 import csv
 import uuid
+import re
 import json
 from csv_security import csv_text
 from telemetry_schema import TelemetryValidationError, normalize_telemetry
@@ -219,6 +220,7 @@ def _heuristic_consumption(distance: float, soc_start: float, payload_kg: float,
 _firebase_available = False
 _firestore_db = None
 _firebase_auth = None
+_firebase_messaging = None
 _allow_demo_data = os.environ.get('ALLOW_DEMO_DATA', '0').lower() in ('1', 'true', 'yes')
 
 def _find_service_account_path() -> str | None:
@@ -298,7 +300,7 @@ try:
     if _RUNTIME_ENV == 'testing':
         raise RuntimeError('Firebase initialization disabled in isolated tests')
     import firebase_admin
-    from firebase_admin import credentials, firestore, auth as fb_auth
+    from firebase_admin import credentials, firestore, auth as fb_auth, messaging
 
     # Ưu tiên 1: FIREBASE_CREDENTIALS_JSON (base64) — dùng cho Docker
     cred_path = _load_firebase_cred_from_env()
@@ -318,6 +320,7 @@ try:
         print('✅ Firebase Admin SDK initialized with Application Default Credentials')
     _firestore_db = firestore.client()
     _firebase_auth = fb_auth
+    _firebase_messaging = messaging
     _firebase_available = True
 except Exception as e:
     print(f'⚠ Firebase Admin SDK not available: {e}')
@@ -391,6 +394,8 @@ if _IS_PRODUCTION and '*' in ADMIN_EMAILS:
 # In-memory fallback stores
 _local_profiles: dict = {}
 _local_audit: list = []
+_local_push_tokens: dict = {}
+_local_push_deliveries: set = set()
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -1103,6 +1108,98 @@ def admin_data_snapshot():
             'errors': errors,
         },
     })
+
+
+# ============================================================================
+# MOBILE PUSH TOKEN REGISTRY (server-only Firestore collection)
+# ============================================================================
+@app.route('/api/mobile/push-tokens/<device_id>', methods=['PUT'])
+@require_auth
+def upsert_mobile_push_token(device_id):
+    """Register one FCM/APNs token without exposing pushTokens to clients."""
+    try:
+        uuid.UUID(device_id)
+    except (ValueError, AttributeError):
+        return jsonify({'success': False, 'error': {'code': 'invalidDeviceId', 'message': 'deviceId must be a UUID'}}), 400
+    body = request.get_json(silent=True) or {}
+    token = str(body.get('token') or '').strip()
+    platform = str(body.get('platform') or '').strip().lower()
+    bundle_id = str(body.get('bundleId') or '').strip()
+    app_version = str(body.get('appVersion') or '').strip()
+    locale = str(body.get('locale') or '').strip()
+    if not token or platform not in {'ios', 'android'} or not bundle_id or not app_version:
+        return jsonify({'success': False, 'error': {'code': 'invalidPayload', 'message': 'token, platform, bundleId and appVersion are required'}}), 400
+    data = {
+        'token': token,
+        'platform': platform,
+        'bundleId': bundle_id,
+        'appVersion': app_version,
+        'locale': locale[:32],
+        'uid': request._uid,
+        'updatedAt': datetime.now(timezone.utc),
+    }
+    if _firebase_available and _firestore_db:
+        _firestore_db.collection('users').document(request._uid).collection('pushTokens').document(device_id).set(data, merge=True)
+    else:
+        _local_push_tokens[(request._uid, device_id)] = data
+    return jsonify({'success': True, 'data': {'deviceId': device_id}})
+
+
+@app.route('/api/mobile/push-tokens/<device_id>', methods=['DELETE'])
+@require_auth
+def revoke_mobile_push_token(device_id):
+    try:
+        uuid.UUID(device_id)
+    except (ValueError, AttributeError):
+        return jsonify({'success': False, 'error': {'code': 'invalidDeviceId', 'message': 'deviceId must be a UUID'}}), 400
+    if _firebase_available and _firestore_db:
+        ref = _firestore_db.collection('users').document(request._uid).collection('pushTokens').document(device_id)
+        ref.delete()
+    else:
+        _local_push_tokens.pop((request._uid, device_id), None)
+    return jsonify({'success': True})
+
+
+def send_smart_charge_push(uid, *, session_id, vehicle_id=None, state, target_percent=None, route='smart_charge'):
+    """Send one durable Smart Charge event, deduplicated by eventKey."""
+    event_key = f'smart_charge:{session_id}:{state}'
+    payload = {
+        'event': 'smart_charge', 'eventKey': event_key,
+        'sessionId': str(session_id), 'vehicleId': str(vehicle_id or ''),
+        'state': str(state), 'targetPercent': str(target_percent or ''),
+        'route': route,
+    }
+    if event_key in _local_push_deliveries:
+        return {'sent': 0, 'deduplicated': True}
+    tokens = []
+    refs = []
+    if _firebase_available and _firestore_db:
+        delivery_ref = _firestore_db.collection('PushDeliveries').document(event_key.replace('/', '_'))
+        if delivery_ref.get().exists:
+            return {'sent': 0, 'deduplicated': True}
+        query = _firestore_db.collection('users').document(uid).collection('pushTokens').stream()
+        for doc in query:
+            item = doc.to_dict() or {}
+            if item.get('token'):
+                tokens.append(item['token']); refs.append(doc.reference)
+        delivery_ref.set({'uid': uid, 'eventKey': event_key, 'createdAt': datetime.now(timezone.utc)})
+    else:
+        for (owner, _device), item in _local_push_tokens.items():
+            if owner == uid and item.get('token'):
+                tokens.append(item['token'])
+        _local_push_deliveries.add(event_key)
+    if not tokens or not _firebase_messaging:
+        return {'sent': 0, 'deduplicated': False}
+    result = _firebase_messaging.send_each_for_multicast(
+        _firebase_messaging.MulticastMessage(tokens=tokens, data=payload,
+                                             notification=_firebase_messaging.Notification(
+                                                 title='VinFast Battery', body=f'Smart Charge: {state}')))
+    for index, response in enumerate(result.responses):
+        if not response.success and getattr(response, 'exception', None) and refs:
+            code = str(getattr(response.exception, 'code', ''))
+            if code in {'messaging/registration-token-not-registered', 'messaging/invalid-registration-token'}:
+                refs[index].delete()
+    return {'sent': result.success_count, 'failed': result.failure_count, 'deduplicated': False}
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -5088,6 +5185,12 @@ def _load_app_config() -> dict:
         'remindLaterHours': 6,
         'apkUrl': '',
         'releaseNotes': '',
+        # iOS/TestFlight delivery is URL-only; never serve an APK to iOS.
+        'iosLatestVersion': '',
+        'iosLatestBuild': 0,
+        'iosMinSupportedBuild': 0,
+        'iosReleaseNotes': '',
+        'iosStoreUrl': '',
         'features': {},
     }
     try:
@@ -5219,7 +5322,12 @@ def _register_smart_charge_cloud_first():
         }
 
     repository = SmartChargeRepository(_firestore_db)
-    service = SmartChargeService(repository, provider, predictor)
+    service = SmartChargeService(
+        repository,
+        provider,
+        predictor,
+        push_notifier=send_smart_charge_push,
+    )
     app.register_blueprint(create_blueprint(
         service,
         repository,
