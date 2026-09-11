@@ -141,7 +141,7 @@ class TripTrackingService {
   VoidCallback? onUpdate;
 
   LocationSettings get _locationSettings => PlatformCapabilityAdapter.isIOS
-      ? const AppleSettings(
+      ? AppleSettings(
           accuracy: LocationAccuracy.high,
           activityType: ActivityType.automotiveNavigation,
           distanceFilter: 10,
