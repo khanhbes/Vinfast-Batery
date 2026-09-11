@@ -1053,7 +1053,8 @@ def admin_data_snapshot():
             datasets[key] = _admin_snapshot_collection(collection_name, id_field, limit)
         except Exception as exc:
             datasets[key] = {'items': [], 'loaded': 0, 'truncated': False}
-            errors[key] = str(exc)
+            errors[key] = 'Dataset could not be loaded.'
+            print(f'Admin snapshot failed for {collection_name}: {exc}')
 
     for key, (group_name, id_field, parent_id_field) in _ADMIN_SNAPSHOT_SUBCOLLECTIONS.items():
         try:
@@ -1061,7 +1062,8 @@ def admin_data_snapshot():
                 group_name, id_field, parent_id_field, limit)
         except Exception as exc:
             datasets[key] = {'items': [], 'loaded': 0, 'truncated': False}
-            errors[key] = str(exc)
+            errors[key] = 'Dataset could not be loaded.'
+            print(f'Admin snapshot failed for collection group {group_name}: {exc}')
 
     profiles_by_uid = {
         str(item.get('uid') or item.get('ownerUid')): item
@@ -1069,7 +1071,13 @@ def admin_data_snapshot():
         if item.get('uid') or item.get('ownerUid')
     }
     accounts = []
-    for auth_user in _list_auth_users():
+    try:
+        auth_users = _list_auth_users()
+    except Exception as exc:
+        auth_users = []
+        errors['accounts'] = 'Firebase Auth directory could not be loaded.'
+        print(f'Admin snapshot failed for Firebase Auth accounts: {exc}')
+    for auth_user in auth_users:
         uid = str(auth_user.get('uid') or '')
         accounts.append({**profiles_by_uid.get(uid, {}), **auth_user, 'uid': uid})
     known_uids = {item['uid'] for item in accounts}
@@ -4438,13 +4446,20 @@ def smart_charge_shadow_status():
 def web_sync_battery_state():
     """Sync battery state from mobile app to web dashboard."""
     try:
-        body = request.get_json() or {}
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            return jsonify({'success': False, 'error': 'JSON object required'}), 400
         
         if not _firestore_db:
             return jsonify({
                 'success': False,
                 'error': 'Firestore not available'
             }), 503
+        vehicle_id = str(body.get('vehicleId') or '').strip()
+        if not valid_document_id(vehicle_id):
+            return jsonify({'success': False, 'error': 'vehicleId is required'}), 400
+        if not _can_access_vehicle(vehicle_id):
+            return jsonify({'success': False, 'error': 'Forbidden'}), 403
         
         try:
             # Keep every legacy field, then add the stable v1 measurement envelope.
@@ -4454,14 +4469,19 @@ def web_sync_battery_state():
         telemetry['syncedAt'] = datetime.now(timezone.utc)
         telemetry['ownerUid'] = request._uid
         telemetry.setdefault('source', 'flutter_app')
-        doc_ref = _firestore_db.collection('battery_states').add(telemetry)
+        state_id = str(body.get('batteryStateId') or body.get('id') or '').strip()
+        if state_id and valid_document_id(state_id):
+            _firestore_db.collection('battery_states').document(state_id).set(telemetry, merge=True)
+            document_id = state_id
+        else:
+            document_id = _firestore_db.collection('battery_states').add(telemetry)[1].id
         
-        print(f'✅ Battery state synced from mobile: {doc_ref[1].id}')
+        print(f'Battery state synced from mobile: {document_id}')
         
         return jsonify({
             'success': True,
             'data': {
-                'id': doc_ref[1].id,
+                'id': document_id,
                 'syncedAt': datetime.now(timezone.utc).isoformat()
             }
         })
@@ -4497,28 +4517,41 @@ def ingest_telemetry():
 def web_sync_trip_prediction():
     """Sync trip prediction from mobile app to web dashboard."""
     try:
-        body = request.get_json() or {}
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            return jsonify({'success': False, 'error': 'JSON object required'}), 400
         
         if not _firestore_db:
             return jsonify({
                 'success': False,
                 'error': 'Firestore not available'
             }), 503
+        vehicle_id = str(body.get('vehicleId') or '').strip()
+        if not valid_document_id(vehicle_id):
+            return jsonify({'success': False, 'error': 'vehicleId is required'}), 400
+        if not _can_access_vehicle(vehicle_id):
+            return jsonify({'success': False, 'error': 'Forbidden'}), 403
         
         # Store trip prediction
-        doc_ref = _firestore_db.collection('trip_predictions').add({
+        prediction = {
             **body,
             'ownerUid': request._uid,
             'syncedAt': datetime.now(timezone.utc),
             'source': 'mobile_app'
-        })
+        }
+        prediction_id = str(body.get('predictionId') or body.get('id') or '').strip()
+        if prediction_id and valid_document_id(prediction_id):
+            _firestore_db.collection('trip_predictions').document(prediction_id).set(prediction, merge=True)
+            document_id = prediction_id
+        else:
+            document_id = _firestore_db.collection('trip_predictions').add(prediction)[1].id
         
-        print(f'✅ Trip prediction synced from mobile: {doc_ref[1].id}')
+        print(f'Trip prediction synced from mobile: {document_id}')
         
         return jsonify({
             'success': True,
             'data': {
-                'id': doc_ref[1].id,
+                'id': document_id,
                 'syncedAt': datetime.now(timezone.utc).isoformat()
             }
         })

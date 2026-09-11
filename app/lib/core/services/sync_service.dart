@@ -28,6 +28,20 @@ class SyncService {
   Future<Map<String, String>> _authenticatedHeaders() =>
       ApiService().getHeaders();
 
+  dynamic _jsonSafe(dynamic value) {
+    if (value is Timestamp) return value.toDate().toUtc().toIso8601String();
+    if (value is DateTime) return value.toUtc().toIso8601String();
+    if (value is GeoPoint) {
+      return {'latitude': value.latitude, 'longitude': value.longitude};
+    }
+    if (value is DocumentReference) return value.path;
+    if (value is Map) {
+      return value.map((key, item) => MapEntry(key.toString(), _jsonSafe(item)));
+    }
+    if (value is Iterable) return value.map(_jsonSafe).toList();
+    return value;
+  }
+
   /// Đồng bộ user mới với web dashboard
   Future<bool> syncUserToWeb() async {
     try {
@@ -40,6 +54,19 @@ class SyncService {
       // Lấy thông tin user từ Firestore
       final userDoc = await _firestore.collection('users').doc(user.uid).get();
       final userData = userDoc.data() ?? {};
+      final profile = Map<String, dynamic>.from(_jsonSafe(userData) as Map)
+        ..['uid'] = user.uid
+        ..['email'] = user.email ?? userData['email']
+        ..['displayName'] =
+            user.displayName ?? userData['displayName'] ?? userData['name']
+        ..['phoneNumber'] =
+            user.phoneNumber ?? userData['phoneNumber'] ?? userData['phone']
+        ..['photoURL'] = user.photoURL ?? userData['photoURL']
+        ..putIfAbsent(
+          'createdAt',
+          () => user.metadata.creationTime?.toUtc().toIso8601String(),
+        )
+        ..['source'] = 'flutter_app';
 
       // Gửi đến web API
       final headers = await _authenticatedHeaders();
@@ -47,15 +74,7 @@ class SyncService {
           .post(
             Uri.parse('$_baseUrl/api/web/sync/user'),
             headers: headers,
-            body: jsonEncode({
-              'uid': user.uid,
-              'email': user.email,
-              'displayName': user.displayName ?? userData['name'] ?? 'User',
-              'phoneNumber': user.phoneNumber ?? userData['phone'] ?? '',
-              'photoURL': user.photoURL ?? '',
-              'createdAt': DateTime.now().toIso8601String(),
-              'source': 'flutter_app',
-            }),
+            body: jsonEncode(profile),
           )
           .timeout(_timeout);
 
@@ -98,6 +117,10 @@ class SyncService {
       }
 
       final vehicleData = vehicleDoc.data()!;
+      final payload = Map<String, dynamic>.from(_jsonSafe(vehicleData) as Map)
+        ..['vehicleId'] = vehicleId
+        ..['ownerUid'] = user.uid
+        ..['source'] = 'flutter_app';
 
       // Gửi đến web API
       final headers = await _authenticatedHeaders();
@@ -105,20 +128,7 @@ class SyncService {
           .post(
             Uri.parse('$_baseUrl/api/web/sync/vehicle'),
             headers: headers,
-            body: jsonEncode({
-              'vehicleId': vehicleId,
-              'ownerUid': user.uid,
-              'model': vehicleData['model'] ?? 'Unknown',
-              'year': vehicleData['year'] ?? DateTime.now().year,
-              'batteryCapacity': vehicleData['batteryCapacity'] ?? 0,
-              'currentBattery': vehicleData['currentBattery'] ?? 0,
-              'stateOfHealth': vehicleData['stateOfHealth'] ?? 100,
-              'currentOdo': vehicleData['currentOdo'] ?? 0,
-              'defaultEfficiency': vehicleData['defaultEfficiency'] ?? 1.0,
-              'lastBatteryPercent': vehicleData['lastBatteryPercent'] ?? 0,
-              'syncedAt': DateTime.now().toIso8601String(),
-              'source': 'flutter_app',
-            }),
+            body: jsonEncode(payload),
           )
           .timeout(_timeout);
 
@@ -199,23 +209,17 @@ class SyncService {
       }
 
       final batteryState = snapshot.docs.first.data() as Map<String, dynamic>;
+      final payload = Map<String, dynamic>.from(_jsonSafe(batteryState) as Map)
+        ..['batteryStateId'] = snapshot.docs.first.id
+        ..['vehicleId'] = vehicleId
+        ..['source'] = 'flutter_app';
 
       final headers = await _authenticatedHeaders();
       final response = await http
           .post(
             Uri.parse('$_baseUrl/api/web/sync/battery-state'),
             headers: headers,
-            body: jsonEncode({
-              'vehicleId': vehicleId,
-              'percentage': batteryState['percentage'] ?? 0,
-              'soh': batteryState['soh'] ?? 100,
-              'estimatedRange': batteryState['estimatedRange'] ?? 0,
-              'temp': batteryState['temp'] ?? 25.0,
-              'timestamp': (batteryState['timestamp'] as Timestamp)
-                  .toDate()
-                  .toIso8601String(),
-              'source': 'flutter_app',
-            }),
+            body: jsonEncode(payload),
           )
           .timeout(_timeout);
 
@@ -242,31 +246,16 @@ class SyncService {
       if (!doc.exists) return false;
 
       final data = doc.data()!;
+      final payload = Map<String, dynamic>.from(_jsonSafe(data) as Map)
+        ..['predictionId'] = predictionId
+        ..['source'] = 'flutter_app';
 
       final headers = await _authenticatedHeaders();
       final response = await http
           .post(
             Uri.parse('$_baseUrl/api/web/sync/trip-prediction'),
             headers: headers,
-            body: jsonEncode({
-              'predictionId': predictionId,
-              'vehicleId': data['vehicleId'],
-              'from': data['from'],
-              'to': data['to'],
-              'distance': data['distance'],
-              'duration': data['duration'],
-              'consumption': data['consumption'],
-              'startBattery': data['startBattery'],
-              'endBattery': data['endBattery'],
-              'isSafe': data['isSafe'],
-              'weather': data['weather'],
-              'temperature': data['temperature'],
-              'riderWeight': data['riderWeight'],
-              'timestamp': (data['timestamp'] as Timestamp)
-                  .toDate()
-                  .toIso8601String(),
-              'source': 'flutter_app',
-            }),
+            body: jsonEncode(payload),
           )
           .timeout(_timeout);
 

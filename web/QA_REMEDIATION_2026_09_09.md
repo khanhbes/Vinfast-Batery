@@ -1,5 +1,17 @@
 # Web QA — khắc phục và kiểm chứng ngày 09/09/2026
 
+## Cập nhật đồng bộ App → Web ngày 10/09/2026
+
+- App gửi Firebase ID token cho các API đồng bộ user, xe, trạng thái pin và dự đoán chuyến đi; backend tiếp tục lấy `ownerUid` từ token thay vì tin dữ liệu client.
+- Portal có endpoint admin-only `/api/admin/data-snapshot`, hợp nhất Firebase Auth với profile ứng dụng và đọc cùng nguồn Firestore mà app đang ghi.
+- Snapshot bao phủ account/profile, xe/thông số xe, lịch sử sạc/chuyến đi, telemetry, trạng thái pin, bảo trì, dự đoán và profile AI, model deployment, Smart Charge session/telemetry/preferences/training, charger binding, notification, feedback và audit.
+- Credential nhạy cảm được che trước khi trả về trình duyệt; từng dataset lỗi được cô lập thành partial response thay vì làm hỏng toàn bộ portal.
+- Dashboard, Accounts, App data và AI Studio dùng snapshot chung, tự cập nhật mỗi 60 giây/khi tab được focus và vẫn có nút Refresh thủ công.
+- Toàn bộ copy giao diện React và metadata AI dùng trên portal đã chuyển sang tiếng Anh. Nội dung do người dùng nhập được giữ nguyên, không tự động dịch hoặc làm sai dữ liệu gốc.
+- Đã rebuild/recreate image laptop-only. `ai`, `api`, `dashboard` healthy; local gateway và `https://khanhbes.tailaafca5.ts.net/api/health` trả trạng thái `ok`, Firebase connected và consumption model loaded.
+- Đồng bộ trạng thái pin và dự đoán chuyến đi dùng ID ổn định để retry không tạo bản ghi trùng; cả hai endpoint xác minh xe thuộc tài khoản đang đăng nhập.
+- Kiểm chứng sau cùng: Python **158 passed**; frontend **27 passed**; TypeScript lint và Vite production build đạt; `git diff --check` đạt (chỉ cảnh báo LF/CRLF). Dart analyzer hoàn tất, không có error/warning và báo 21 info `avoid_print` tồn tại trong service; mã thoát còn chịu lỗi telemetry ngoài workspace.
+
 ## Phạm vi và kết luận
 
 Đối chiếu `PLAN2.md` và `VINFAST_BATTERY_WEB_MASTER_QA_UIUX_AUDIT.md`.

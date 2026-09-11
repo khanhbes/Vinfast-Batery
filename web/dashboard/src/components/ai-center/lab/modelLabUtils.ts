@@ -74,7 +74,9 @@ export function formatDurationSeconds(seconds: number): string {
   const hours = Math.floor(totalMins / 60);
   const mins = totalMins % 60;
   if (hours > 0) {
-    return mins > 0 ? `${hours} hours ${mins} minutes` : `${hours} hours`;
+    const hoursLabel = `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
+    const minutesLabel = `${mins} ${mins === 1 ? 'minute' : 'minutes'}`;
+    return mins > 0 ? `${hoursLabel} ${minutesLabel}` : hoursLabel;
   }
-  return `${mins} minutes`;
+  return `${mins} ${mins === 1 ? 'minute' : 'minutes'}`;
 }

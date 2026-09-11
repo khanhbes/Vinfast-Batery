@@ -19,4 +19,4 @@ test('preserve valid zero', () => assert.equal(buildPredictionPayload(meta, { ..
 test('reject fractional integer rather than truncating', () => assert.throws(() => buildPredictionPayload({ inputFields: ['n'], inputSchema: { n: { type: 'integer' } } } as ModelTypeMeta, { n: '1.5' })));
 test('reject unsupported formula instead of fabricating zero', () => assert.throws(() => buildPredictionPayload({ ...meta, derivedFields: { delta_soc: { formula: 'unsupported' } } }, valid)));
 test('reject invalid category', () => assert.throws(() => buildPredictionPayload({ inputFields: ['mode'], inputSchema: { mode: { type: 'string', enum: ['normal'] } } } as ModelTypeMeta, { mode: 'unknown' })));
-test('duration formatting remains finite', () => { assert.equal(formatDurationSeconds(3600), '1 giờ'); assert.equal(formatDurationSeconds(Infinity), '—'); });
+test('duration formatting remains finite', () => { assert.equal(formatDurationSeconds(3600), '1 hour'); assert.equal(formatDurationSeconds(Infinity), '—'); });

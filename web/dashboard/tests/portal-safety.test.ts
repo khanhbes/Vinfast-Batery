@@ -51,11 +51,11 @@ test('mutation is never automatically repeated after network failure', async () 
 test('timeout stops a request without replaying a mutation', async () => {
   await assert.rejects(requestPortal('/fixture', { method: 'POST' }, { timeoutMs: 5, fetch: async (_path, options) => new Promise((_resolve, reject) => {
     options?.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
-  }) }), /quá thời gian/);
+  }) }), /timed out/);
 });
 
 test('HTML response is not treated as successful API data', async () => {
-  await assert.rejects(requestPortal('/fixture', {}, { fetch: async () => new Response('<html>proxy error</html>', { headers: { 'content-type': 'text/html' } }) }), /không hợp lệ/);
+  await assert.rejects(requestPortal('/fixture', {}, { fetch: async () => new Response('<html>proxy error</html>', { headers: { 'content-type': 'text/html' } }) }), /invalid response/);
 });
 
 test('upload validates supported format, size, and stable version', () => {
