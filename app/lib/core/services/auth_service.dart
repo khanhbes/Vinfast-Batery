@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'session_service.dart';
 import 'sync_service.dart';
+import '../../data/services/push_notification_service.dart';
 import 'vehicle_policy.dart';
 
 /// AuthService - Xử lý đăng ký/đăng nhập đồng bộ với Web Dashboard
@@ -254,6 +255,7 @@ class AuthService {
   /// Đăng xuất — chỉ method này được gọi FirebaseAuth.signOut()
   Future<Map<String, dynamic>> logout() async {
     try {
+      await PushNotificationService.instance.revokeCurrentUser();
       // Dừng auto sync
       _syncService.stopAutoSync();
 

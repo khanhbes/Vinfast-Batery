@@ -1,0 +1,24 @@
+name: iOS TestFlight signing (manual activation)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  archive:
+    if: ${{ vars.ENABLE_IOS_SIGNING == 'true' }}
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.1'
+          channel: stable
+      - run: flutter pub get
+      - run: pod install --repo-update
+        working-directory: app/ios
+      # Configure certificate, provisioning profile and App Store Connect API
+      # key through encrypted GitHub Secrets before enabling this workflow.
+      - run: flutter build ipa --release

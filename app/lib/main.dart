@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'firebase_options.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import 'dart:ui';
@@ -15,6 +17,7 @@ import 'core/services/app_error_reporter.dart';
 import 'data/services/charging_prediction_adapter.dart';
 import 'data/services/shelly_clients.dart';
 import 'data/services/smart_charger_service.dart';
+import 'data/services/push_notification_service.dart';
 
 /// Provider toàn cục cho trạng thái recovery cần hiển thị dialog
 final pendingRecoveryProvider = StateProvider<String?>((ref) => null);
@@ -63,7 +66,9 @@ void main() async {
       // Khởi tạo Firebase
       Object? firebaseInitError;
       try {
-        await Firebase.initializeApp();
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
       } catch (e, stack) {
         AppErrorReporter.report(e, stack, source: 'Firebase');
         firebaseInitError = e;
@@ -74,6 +79,12 @@ void main() async {
         await NotificationService().initialize();
       } catch (e, stack) {
         AppErrorReporter.report(e, stack, source: 'NotificationService');
+      }
+      try {
+        FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+        await PushNotificationService.instance.initialize();
+      } catch (e, stack) {
+        AppErrorReporter.report(e, stack, source: 'PushNotifications');
       }
 
       // Khởi tạo Background Service

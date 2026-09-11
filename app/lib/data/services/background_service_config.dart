@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/services/platform_capability_adapter.dart';
 
 /// ========================================================================
 /// Background Service Configuration
@@ -53,6 +54,10 @@ class BackgroundServiceConfig {
   /// Bắt đầu service — có log chi tiết trạng thái.
   /// Trả `true` nếu start thành công, `false` nếu thất bại.
   static Future<bool> startService() async {
+    if (!PlatformCapabilityAdapter.supportsContinuousForegroundService) {
+      debugPrint('[BackgroundService] iOS hybrid mode: no continuous service');
+      return false;
+    }
     try {
       final isRunning = await _service.isRunning();
       if (isRunning) {
@@ -75,6 +80,9 @@ class BackgroundServiceConfig {
   /// chạy trong app, chỉ background service (notification) bị bỏ qua.
   /// Trả `true` nếu service started, `false` nếu bỏ qua (không crash).
   static Future<bool> safeStartForTrip() async {
+    if (!PlatformCapabilityAdapter.supportsContinuousForegroundService) {
+      return false;
+    }
     final hasNotifPerm = await ensureNotificationPermission();
     if (!hasNotifPerm) {
       debugPrint('⚠ Notification permission denied — skip background service');

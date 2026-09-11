@@ -5,6 +5,7 @@ import 'dart:ui';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import '../../core/services/platform_capability_adapter.dart';
 
 import '../models/smart_charger_status.dart';
 import '../models/smart_charging_session.dart';
@@ -59,6 +60,10 @@ class SmartChargeTelemetryForegroundService {
   static Future<bool> get isRunning => FlutterForegroundTask.isRunningService;
 
   static Future<void> start(SmartChargingSession session) async {
+    if (!PlatformCapabilityAdapter.supportsContinuousForegroundService) {
+      debugPrint('[SmartChargeTelemetry] iOS uses backend timer and resume reconciliation');
+      return;
+    }
     initialize();
     await FlutterForegroundTask.saveData(
       key: _sessionIdKey,

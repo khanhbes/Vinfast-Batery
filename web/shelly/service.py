@@ -35,7 +35,7 @@ class SmartChargeError(RuntimeError):
 
 class SmartChargeService:
     def __init__(self, repository, provider, predictor, sleeper=time.sleep, clock=utcnow,
-                 model_registry=None):
+                 model_registry=None, push_notifier=None):
         self.repository = repository
         self.provider = provider
         self.predictor = predictor
@@ -55,6 +55,21 @@ class SmartChargeService:
         self.safety_policy = SmartChargeSafetyPolicy()
         self._unsafe_samples: dict[tuple[str, str], int] = {}
         self._last_telemetry_at: dict[str, datetime] = {}
+        self.push_notifier = push_notifier
+
+    def _emit_push(self, uid, session):
+        if self.push_notifier and session.state in {'completed', 'cancelled', 'interrupted', 'failed'}:
+            try:
+                self.push_notifier(
+                    uid,
+                    session_id=session.session_id,
+                    vehicle_id=getattr(session, 'vehicle_id', None),
+                    state=session.state,
+                    target_percent=getattr(session, 'target_soc', None),
+                )
+            except Exception:
+                # Notification delivery must never roll back durable charging state.
+                pass
 
     def capabilities(self, uid: str, vehicle_id: str | None = None) -> dict:
         binding = self.binding(uid, vehicle_id)
@@ -302,6 +317,7 @@ class SmartChargeService:
             self.repository.save_session(uid, session)
             self.repository.upsert_charge_log(uid, session)
             self.repository.append_audit(uid, "session_start_failed", session_id=session.session_id, error=exc.code)
+            self._emit_push(uid, session)
             raise self._provider_error(exc) from exc
 
     def status(self, uid: str, vehicle_id: str | None = None):
@@ -372,6 +388,7 @@ class SmartChargeService:
             self.repository.save_session(uid, session)
             self.repository.upsert_charge_log(uid, session)
             self.repository.append_audit(uid, "relay_off_verified", session_id=session.session_id, reason="manual")
+            self._emit_push(uid, session)
         return session
 
     def personal_profile(self, uid: str, vehicle_id: str) -> PersonalChargingProfile:
@@ -489,6 +506,7 @@ class SmartChargeService:
         else:
             self.repository.save_session(uid, session)
             self.repository.upsert_charge_log(uid, session)
+            self._emit_push(uid, session)
         profile = self.repository.get_personal_profile(uid, session.vehicle_id)
         return {
             "sessionId": session_id,
@@ -823,6 +841,7 @@ class SmartChargeService:
             session.version += 1
             self.repository.save_session(uid, session)
             self.repository.upsert_charge_log(uid, session)
+            self._emit_push(uid, session)
             return session
         if status.timer_remaining <= 0 and session.state in ("arming", "active"):
             try:
@@ -858,6 +877,7 @@ class SmartChargeService:
                 session.version += 1
                 self.repository.save_session(uid, session)
                 self.repository.upsert_charge_log(uid, session)
+                self._emit_push(uid, session)
             return session
         near_planned = abs((now - session.effective_stop_at).total_seconds()) <= 120
         session.state = "completed" if near_planned else "interrupted"

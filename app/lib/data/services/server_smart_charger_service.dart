@@ -173,7 +173,7 @@ class ServerSmartChargerService {
       if (vehicleId != null && vehicleId.isNotEmpty) 'vehicleId': vehicleId,
       if (expectedRevision != null) 'expectedRevision': expectedRevision,
       if (verification != null) 'verification': verification,
-      'source': 'android',
+      'source': Platform.operatingSystem,
     },
   );
 
@@ -679,4 +679,3 @@ class ServerSmartChargerService {
     }
   }
 }
-

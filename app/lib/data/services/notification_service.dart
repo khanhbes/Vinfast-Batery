@@ -58,7 +58,15 @@ class NotificationService {
     const androidSettings = AndroidInitializationSettings(
       '@mipmap/ic_launcher',
     );
-    const initSettings = InitializationSettings(android: androidSettings);
+    const darwinSettings = DarwinInitializationSettings(
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
+    );
+    const initSettings = InitializationSettings(
+      android: androidSettings,
+      iOS: darwinSettings,
+    );
 
     await _plugin.initialize(
       initSettings,
@@ -136,6 +144,16 @@ class NotificationService {
         }
       }
     }
+    if (Platform.isIOS) {
+      final iosPlugin = _plugin.resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin>();
+      final granted = await iosPlugin?.requestPermissions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+      debugPrint('[NotificationService] iOS notification permission: $granted');
+    }
 
     _initialized = true;
     debugPrint('[NotificationService] Initialized (timezone=Asia/Ho_Chi_Minh)');
@@ -143,6 +161,12 @@ class NotificationService {
 
   /// Kiểm tra xem notification permission đã được cấp chưa.
   Future<bool> _hasNotificationPermission() async {
+    if (Platform.isIOS) {
+      final plugin = _plugin.resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin>();
+      final settings = await plugin?.checkPermissions();
+      return settings?.isEnabled ?? true;
+    }
     if (!Platform.isAndroid) return true;
     final status = await Permission.notification.status;
     return status.isGranted;
@@ -165,6 +189,14 @@ class NotificationService {
         icon: '@mipmap/ic_launcher',
       );
 
+  DarwinNotificationDetails _iosDetails({bool presentSound = true}) =>
+      DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: presentSound,
+        threadIdentifier: channelSmartCharge,
+      );
+
   Future<void> notifySmartChargeRelayOff({
     required String sessionId,
     String? vehicleId,
@@ -177,7 +209,7 @@ class NotificationService {
       interrupted
           ? 'Relay đã tắt trước giờ dự kiến. Mở Smart Charge để kiểm tra.'
           : 'App đã đọc lại thiết bị và xác nhận nguồn sạc đã ngắt.',
-      NotificationDetails(android: _smartChargeDetails()),
+      NotificationDetails(android: _smartChargeDetails(), iOS: _iosDetails()),
       payload: _smartChargeSessionPayload(vehicleId, sessionId),
     );
   }
@@ -192,7 +224,7 @@ class NotificationService {
       idSmartChargeUnsafe,
       'Cảnh báo an toàn Smart Charge',
       message,
-      NotificationDetails(android: _smartChargeDetails()),
+      NotificationDetails(android: _smartChargeDetails(), iOS: _iosDetails()),
       payload: _smartChargeSessionPayload(vehicleId, sessionId),
     );
   }
@@ -215,6 +247,7 @@ class NotificationService {
       '🎯 Đã đạt mục tiêu sạc $targetPercent%!',
       'Pin hiện tại: $currentPercent%. Bạn có thể rút sạc.',
       NotificationDetails(
+        iOS: _iosDetails(),
         android: AndroidNotificationDetails(
           channelCharge,
           'Sạc pin',
@@ -234,6 +267,7 @@ class NotificationService {
       '🔋 Pin đã sạc $currentPercent%',
       'Pin đã đạt 80% — Bạn có thể rút sạc để bảo vệ tuổi thọ pin.',
       NotificationDetails(
+        iOS: _iosDetails(),
         android: AndroidNotificationDetails(
           channelCharge,
           'Sạc pin',
@@ -253,6 +287,7 @@ class NotificationService {
       '⚡ Pin đã sạc đầy 100%!',
       'Hãy rút sạc ngay để tránh sạc quá mức, bảo vệ tuổi thọ pin.',
       NotificationDetails(
+        iOS: _iosDetails(),
         android: AndroidNotificationDetails(
           channelCharge,
           'Sạc pin',
@@ -276,6 +311,7 @@ class NotificationService {
       '⚡ Phiên sạc hoàn tất$socText',
       'Nhấn để xác nhận mức pin thực tế trên xe để AI học chuẩn xác hơn.',
       NotificationDetails(
+        iOS: _iosDetails(),
         android: AndroidNotificationDetails(
           channelSmartCharge,
           'Smart Charge Alerts',
@@ -296,6 +332,7 @@ class NotificationService {
       '🔌 Đang sạc... $currentPercent%',
       'Thời gian: $elapsed',
       NotificationDetails(
+        iOS: _iosDetails(presentSound: false),
         android: AndroidNotificationDetails(
           channelCharge,
           'Sạc pin',
@@ -317,6 +354,7 @@ class NotificationService {
       '🛵 Đang di chuyển...',
       'Quãng đường: ${distance.toStringAsFixed(1)} km — Pin: $battery%',
       NotificationDetails(
+        iOS: _iosDetails(presentSound: false),
         android: AndroidNotificationDetails(
           channelTrip,
           'Hành trình',
@@ -380,6 +418,7 @@ class NotificationService {
       'Mốc ~$targetPercent% đã tới. Mở app để đọc lại relay và xác nhận nguồn đã OFF.',
       scheduledDate,
       NotificationDetails(
+        iOS: _iosDetails(),
         android: AndroidNotificationDetails(
           channelSmartCharge,
           'Cảnh báo Smart Charge',
@@ -429,6 +468,7 @@ class NotificationService {
       '🔧 Bảo dưỡng sắp đến hạn',
       '$title — Còn $remainingKm km nữa',
       NotificationDetails(
+        iOS: _iosDetails(),
         android: AndroidNotificationDetails(
           channelMaintenance,
           'Bảo dưỡng',
