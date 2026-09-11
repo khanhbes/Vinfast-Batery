@@ -1,0 +1,67 @@
+name: iOS free sideload IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/ios-platform]
+    paths:
+      - '.github/workflows/ios-free-sideload.yml'
+      - 'app/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build-unsigned-ipa:
+    name: Build IPA for Windows sideloading
+    runs-on: macos-14
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.1'
+          channel: stable
+          cache: true
+
+      - name: Generate the Xcode Runner project
+        run: |
+          if [ ! -d ios/Runner.xcodeproj ]; then
+            flutter create --platforms=ios --org com.khanhbes --project-name vinfast_battery --no-pub .
+          fi
+
+      # A free Apple ID cannot sign the APNs entitlement. The TestFlight workflow
+      # keeps the entitlement; only this disposable sideload build removes it.
+      - name: Remove paid-team-only push entitlement
+        run: |
+          /usr/libexec/PlistBuddy -c "Delete :aps-environment" ios/Runner/Runner.entitlements 2>/dev/null || true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Install CocoaPods
+        run: pod install --repo-update
+        working-directory: app/ios
+
+      - name: Build unsigned iPhone application
+        run: flutter build ios --release --no-codesign
+
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p build/ios/free-sideload/Payload
+          ditto build/ios/iphoneos/Runner.app build/ios/free-sideload/Payload/Runner.app
+          cd build/ios/free-sideload
+          /usr/bin/zip -qry VinFast-Battery-unsigned.ipa Payload
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VinFast-Battery-iOS-free-sideload
+          path: app/build/ios/free-sideload/VinFast-Battery-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
