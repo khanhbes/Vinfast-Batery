@@ -8,7 +8,7 @@ on:
 jobs:
   ios-unsigned:
     name: iOS unsigned (TestFlight readiness)
-    runs-on: macos-14
+    runs-on: macos-15
     defaults:
       run:
         working-directory: app
@@ -24,6 +24,7 @@ jobs:
           if [ ! -d ios/Runner.xcodeproj ]; then
             flutter create --platforms=ios --org com.khanhbes --project-name vinfast_battery --no-pub .
           fi
+          sed -i '' 's/com\.khanhbes\.vinfastBattery/com.khanhbes.vinfastbattery/g' ios/Runner.xcodeproj/project.pbxproj
       - run: flutter pub get
       - run: pod install --repo-update
         working-directory: app/ios
