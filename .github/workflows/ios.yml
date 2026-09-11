@@ -30,7 +30,20 @@ jobs:
         working-directory: app/ios
       - run: flutter analyze
       - run: flutter test --coverage
-      - run: flutter build ios --release --no-codesign
+      - name: Build unsigned iPhone application
+        run: |
+          flutter build ios --config-only --release --no-codesign
+          xcodebuild \
+            -workspace ios/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/ios/unsigned-derived \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY='' \
+            build
 
   android-regression:
     name: Android regression
