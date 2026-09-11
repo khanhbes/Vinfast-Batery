@@ -50,7 +50,18 @@ jobs:
         working-directory: app/ios
 
       - name: Build unsigned iPhone application
+        id: ios-build
+        continue-on-error: true
         run: flutter build ios --release --no-codesign
+
+      # Flutter 3.41 can return a non-zero status after a successful Xcode build
+      # when no Development Team is present. For sideloading, the executable is
+      # intentionally unsigned and will be signed later on Windows.
+      - name: Verify unsigned device binary
+        run: |
+          test -f build/ios/iphoneos/Runner.app/Runner
+          file build/ios/iphoneos/Runner.app/Runner
+          lipo -info build/ios/iphoneos/Runner.app/Runner
 
       - name: Package unsigned IPA
         run: |
