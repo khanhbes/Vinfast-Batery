@@ -96,15 +96,33 @@ def test_dataset_and_global_training_require_admin(client, monkeypatch, method, 
     assert getattr(client, method)(path, json={}).status_code == expected
 
 
-@pytest.mark.parametrize('endpoint', ['battery-state', 'trip-prediction'])
-def test_sync_derives_owner_from_identity(client, monkeypatch, endpoint):
+@pytest.mark.parametrize('endpoint,id_field', [
+    ('battery-state', 'batteryStateId'),
+    ('trip-prediction', 'predictionId'),
+])
+def test_sync_derives_owner_and_upserts_stable_id(client, monkeypatch, endpoint, id_field):
     db = MagicMock()
-    db.collection.return_value.add.return_value = (None, MagicMock(id='fixture'))
     monkeypatch.setattr(server, '_firestore_db', db)
     monkeypatch.setattr(server, '_verify_token', lambda: ('user-a', 'a@test.invalid', 'user'))
-    response = client.post('/api/web/sync/' + endpoint, json={'ownerUid': 'user-b', 'vehicleId': 'fixture-vehicle', 'soc': 50})
+    monkeypatch.setattr(server, '_can_access_vehicle', lambda vehicle_id: vehicle_id == 'fixture-vehicle')
+    response = client.post('/api/web/sync/' + endpoint, json={
+        id_field: 'stable-record', 'ownerUid': 'user-b',
+        'vehicleId': 'fixture-vehicle', 'soc': 50,
+    })
     assert response.status_code == 200
-    assert db.collection.return_value.add.call_args.args[0]['ownerUid'] == 'user-a'
+    written = db.collection.return_value.document.return_value.set.call_args.args[0]
+    assert written['ownerUid'] == 'user-a'
+    db.collection.return_value.document.assert_called_with('stable-record')
+    db.collection.return_value.add.assert_not_called()
+
+
+@pytest.mark.parametrize('endpoint', ['battery-state', 'trip-prediction'])
+def test_sync_rejects_vehicle_owned_by_another_user(client, monkeypatch, endpoint):
+    monkeypatch.setattr(server, '_firestore_db', MagicMock())
+    monkeypatch.setattr(server, '_verify_token', lambda: ('user-a', 'a@test.invalid', 'user'))
+    monkeypatch.setattr(server, '_can_access_vehicle', lambda _vehicle_id: False)
+    response = client.post('/api/web/sync/' + endpoint, json={'vehicleId': 'vehicle-b'})
+    assert response.status_code == 403
 
 
 @pytest.mark.parametrize('version,ext', [('a/../../outside', '.pkl'), ('a', '/../outside'), ('..', '.onnx'), ('a' * 129, '.onnx')])

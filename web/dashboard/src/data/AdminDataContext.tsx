@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { adminDataSnapshot } from '@/api';
 
 export type DataRecord = Record<string, unknown>;
@@ -64,8 +64,11 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const requestInFlight = useRef(false);
 
   const refresh = useCallback(async () => {
+    if (requestInFlight.current) return;
+    requestInFlight.current = true;
     setError('');
     setRefreshing(true);
     try {
@@ -74,12 +77,27 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'The synchronized data snapshot could not be loaded.');
     } finally {
+      requestInFlight.current = false;
       setLoading(false);
       setRefreshing(false);
     }
   }, []);
 
   useEffect(() => { void refresh(); }, [refresh]);
+
+  useEffect(() => {
+    const refreshVisibleData = () => {
+      if (document.visibilityState === 'visible') void refresh();
+    };
+    const timer = window.setInterval(refreshVisibleData, 60_000);
+    window.addEventListener('focus', refreshVisibleData);
+    document.addEventListener('visibilitychange', refreshVisibleData);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refreshVisibleData);
+      document.removeEventListener('visibilitychange', refreshVisibleData);
+    };
+  }, [refresh]);
 
   const value = useMemo(() => ({ snapshot, loading, refreshing, error, refresh }), [snapshot, loading, refreshing, error, refresh]);
   return <AdminDataContext.Provider value={value}>{children}</AdminDataContext.Provider>;
