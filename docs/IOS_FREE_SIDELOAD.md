@@ -50,9 +50,10 @@ nén lại nội dung của file `.ipa`.
 
 ### `could not find executable ... Frameworks/...framework`
 
-Lỗi này cho biết IPA cũ có framework được đóng gói bằng symbolic link mà công
-cụ trên Windows không khôi phục được. Workflow hiện tại đã chuyển các link đó
-thành file thật và kiểm tra lại toàn bộ app sau khi tạo IPA.
+Lỗi này xuất hiện khi metadata app không chỉ đúng executable hoặc khi framework
+được đóng gói bằng symbolic link mà công cụ trên Windows không khôi phục được.
+Workflow hiện tại kiểm tra `CFBundleExecutable`, chuyển các link thành file thật
+và xác nhận lại toàn bộ app sau khi tạo IPA.
 
 1. Không tiếp tục dùng `VinFast-Battery-unsigned.ipa` đã tải trước đây.
 2. Push commit chứa bản sửa workflow lên nhánh `feature/ios-platform`.
