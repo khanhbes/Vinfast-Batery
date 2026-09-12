@@ -64,18 +64,45 @@ jobs:
             CODE_SIGN_IDENTITY='' \
             build
 
-      - name: Verify unsigned device binary
+      - name: Verify unsigned device app and frameworks
         run: |
-          test -f build/ios/free-derived/Build/Products/Release-iphoneos/Runner.app/Runner
-          file build/ios/free-derived/Build/Products/Release-iphoneos/Runner.app/Runner
-          lipo -info build/ios/free-derived/Build/Products/Release-iphoneos/Runner.app/Runner
+          bash ios/scripts/verify_ios_app.sh \
+            build/ios/free-derived/Build/Products/Release-iphoneos/Runner.app
 
       - name: Package unsigned IPA
         run: |
+          rm -rf build/ios/free-sideload
           mkdir -p build/ios/free-sideload/Payload
-          ditto build/ios/free-derived/Build/Products/Release-iphoneos/Runner.app build/ios/free-sideload/Payload/Runner.app
+
+          # Sideloadly runs on Windows, where ZIP symlinks inside versioned
+          # frameworks are not reliably materialized. Copy with -L so every
+          # framework executable is a real file in the IPA.
+          /bin/cp -RL \
+            build/ios/free-derived/Build/Products/Release-iphoneos/Runner.app \
+            build/ios/free-sideload/Payload/Runner.app
+          /usr/bin/xattr -cr build/ios/free-sideload/Payload/Runner.app
+
+          if /usr/bin/find build/ios/free-sideload/Payload -type l -print -quit | /usr/bin/grep -q .; then
+            echo "The Windows sideload package still contains symbolic links." >&2
+            exit 1
+          fi
+
+          bash ios/scripts/verify_ios_app.sh \
+            build/ios/free-sideload/Payload/Runner.app
+
           cd build/ios/free-sideload
-          /usr/bin/zip -qry VinFast-Battery-unsigned.ipa Payload
+          /usr/bin/zip -qr VinFast-Battery-unsigned.ipa Payload
+
+      - name: Verify packaged IPA round trip
+        run: |
+          rm -rf build/ios/free-sideload-check
+          mkdir -p build/ios/free-sideload-check
+          /usr/bin/unzip -q \
+            build/ios/free-sideload/VinFast-Battery-unsigned.ipa \
+            -d build/ios/free-sideload-check
+          test -d build/ios/free-sideload-check/Payload/Runner.app
+          bash ios/scripts/verify_ios_app.sh \
+            build/ios/free-sideload-check/Payload/Runner.app
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4

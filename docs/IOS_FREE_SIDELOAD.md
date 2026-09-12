@@ -31,6 +31,10 @@ Không sử dụng hoặc commit file Firebase Admin SDK JSON vào ứng dụng.
 4. Mở job, tải artifact **VinFast-Battery-iOS-free-sideload** và giải nén để
    lấy `VinFast-Battery-unsigned.ipa`.
 
+Mỗi lần workflow chạy, hãy xóa file IPA cũ trên Windows và tải artifact của lần
+chạy mới nhất. Chỉ giải nén file artifact do GitHub tải về; không giải nén rồi
+nén lại nội dung của file `.ipa`.
+
 ## 3. Ký và cài từ Windows
 
 1. Cài iTunes và iCloud bản tải trực tiếp từ Apple nếu công cụ sideload yêu cầu.
@@ -41,6 +45,24 @@ Không sử dụng hoặc commit file Firebase Admin SDK JSON vào ứng dụng.
    được yêu cầu, rồi bắt đầu cài.
 6. Trên iPhone, bật **Developer Mode** nếu iOS yêu cầu và tin cậy ứng dụng tại
    **Settings > General > VPN & Device Management**.
+
+## Xử lý lỗi
+
+### `could not find executable ... Frameworks/...framework`
+
+Lỗi này cho biết IPA cũ có framework được đóng gói bằng symbolic link mà công
+cụ trên Windows không khôi phục được. Workflow hiện tại đã chuyển các link đó
+thành file thật và kiểm tra lại toàn bộ app sau khi tạo IPA.
+
+1. Không tiếp tục dùng `VinFast-Battery-unsigned.ipa` đã tải trước đây.
+2. Push commit chứa bản sửa workflow lên nhánh `feature/ios-platform`.
+3. Chạy lại **iOS free sideload IPA** trong GitHub Actions.
+4. Tải artifact mới, giải nén artifact đúng một lần và kéo file `.ipa` mới vào
+   Sideloadly.
+
+Nếu job GitHub Actions không qua bước **Verify packaged IPA round trip**, mở log
+của bước đó để xem chính xác framework nào thiếu executable; không dùng artifact
+từ một lần chạy cũ.
 
 Khi ứng dụng hết hạn, lặp lại bước ký/cài. Dữ liệu trên máy có thể bị mất nếu
 gỡ ứng dụng, vì vậy nên đồng bộ dữ liệu quan trọng với backend trước.
