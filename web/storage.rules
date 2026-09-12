@@ -1,0 +1,19 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Catalog media is uploaded only by the authenticated admin API through
+    // Firebase Admin SDK. Mobile and dashboard clients receive published URLs
+    // but never get direct write access to the bucket.
+    match /vehicle-catalog/{allPaths=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // No other bucket path is opened by the catalog feature. Add explicit,
+    // narrowly-scoped rules here if another product area adopts Storage.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

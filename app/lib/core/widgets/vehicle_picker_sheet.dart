@@ -59,7 +59,7 @@ class _VehiclePickerSheetState extends ConsumerState<VehiclePickerSheet> {
         child: SafeArea(
           top: false,
           child: SizedBox(
-            height: MediaQuery.sizeOf(context).height * .85,
+            height: MediaQuery.sizeOf(context).height * .9,
             child: Column(
               children: [
                 Padding(
@@ -72,16 +72,15 @@ class _VehiclePickerSheetState extends ConsumerState<VehiclePickerSheet> {
                           children: [
                             Text(
                               'Chọn xe đang kết nối',
-                              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.w700,
-                              ),
+                              style: Theme.of(context).textTheme.headlineSmall
+                                  ?.copyWith(fontWeight: FontWeight.w700),
                             ),
                             const SizedBox(height: 4),
                             Text(
                               'Danh sách xe điện đã ghép nối trong garage',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: ui.muted,
-                              ),
+                              style: Theme.of(
+                                context,
+                              ).textTheme.bodySmall?.copyWith(color: ui.muted),
                             ),
                           ],
                         ),
@@ -137,7 +136,8 @@ class _VehiclePickerSheetState extends ConsumerState<VehiclePickerSheet> {
                           final vehicle = active[index];
                           VinFastModelSpec? spec;
                           for (final candidate in specs) {
-                            if (candidate.modelId == vehicle.vinfastModelId) {
+                            if (candidate.modelId ==
+                                vehicle.effectiveCatalogId) {
                               spec = candidate;
                               break;
                             }
@@ -187,16 +187,17 @@ class _VehicleCard extends StatelessWidget {
         ? vehicle.defaultEfficiency * 100
         : null;
     final range = spec?.rangeKm ?? configuredRange;
-    final batteryType = vehicle.batteryType ?? 'LFP';
+    final batteryType = vehicle.batteryType?.trim();
+    final batteryTypeLabel = batteryType?.isNotEmpty == true
+        ? batteryType!
+        : 'Chưa có dữ liệu';
     final licensePlate = vehicle.licensePlate?.trim();
 
     return Semantics(
       selected: selected,
       button: true,
       child: Material(
-        color: selected
-            ? ui.primary.withAlpha(25)
-            : ui.elevated,
+        color: selected ? ui.primary.withAlpha(25) : ui.elevated,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
           side: BorderSide(
@@ -226,9 +227,8 @@ class _VehicleCard extends StatelessWidget {
                             vehicle.vehicleName.isEmpty
                                 ? 'Xe chưa đặt tên'
                                 : vehicle.vehicleName,
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w700),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -279,10 +279,10 @@ class _VehicleCard extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        '${licensePlate != null && licensePlate.isNotEmpty ? 'Biển số: $licensePlate' : 'Biển số: Chưa đặt'} · ${vehicle.vinfastModelName ?? vehicle.vehicleName} · Pin $batteryType',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: ui.muted,
-                        ),
+                        '${licensePlate != null && licensePlate.isNotEmpty ? 'Biển số: $licensePlate' : 'Biển số: Chưa đặt'} · ${spec?.modelName ?? vehicle.vinfastModelName ?? vehicle.vehicleName}',
+                        style: Theme.of(
+                          context,
+                        ).textTheme.bodySmall?.copyWith(color: ui.muted),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -292,13 +292,14 @@ class _VehicleCard extends StatelessWidget {
                 const SizedBox(height: 14),
                 // 3-Column Specifications Grid
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
                   decoration: BoxDecoration(
                     color: ui.surface.withAlpha(120),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: ui.border.withAlpha(40),
-                    ),
+                    border: Border.all(color: ui.border.withAlpha(40)),
                   ),
                   child: Row(
                     children: [
@@ -341,7 +342,7 @@ class _VehicleCard extends StatelessWidget {
                           child: _spec(
                             context,
                             'Loại pin',
-                            batteryType,
+                            batteryTypeLabel,
                             ui.primary,
                           ),
                         ),
@@ -357,7 +358,12 @@ class _VehicleCard extends StatelessWidget {
     );
   }
 
-  Widget _spec(BuildContext context, String label, String value, Color valueColor) => Column(
+  Widget _spec(
+    BuildContext context,
+    String label,
+    String value,
+    Color valueColor,
+  ) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Text(

@@ -43,13 +43,9 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
   void initState() {
     super.initState();
     final v = widget.vehicleData;
-    _modelCtrl = TextEditingController(
-      text: v['model'] ?? v['vehicleName'] ?? '',
-    );
+    _modelCtrl = TextEditingController(text: v['nickname'] ?? '');
     _yearCtrl = TextEditingController(text: '${v['year'] ?? 2024}');
-    _licensePlateCtrl = TextEditingController(
-      text: v['licensePlate'] ?? '',
-    );
+    _licensePlateCtrl = TextEditingController(text: v['licensePlate'] ?? '');
     _batteryTypeCtrl = TextEditingController(
       text: v['batteryType'] ?? v['batteryChemistry'] ?? 'LFP',
     );
@@ -96,15 +92,10 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
       final result = await AuthService().updateVehicle(
         vehicleId: widget.vehicleId,
         updates: {
-          'model': _modelCtrl.text.trim(),
-          'vehicleName': _modelCtrl.text.trim(),
+          'nickname': _modelCtrl.text.trim(),
           'licensePlate': _licensePlateCtrl.text.trim(),
-          'batteryType': _batteryTypeCtrl.text.trim(),
-          'year': int.tryParse(_yearCtrl.text) ?? 2024,
-          'batteryCapacity': double.tryParse(_batteryCapCtrl.text) ?? 0,
           'stateOfHealth': double.tryParse(_sohCtrl.text) ?? 100,
           'currentOdo': double.tryParse(_odoCtrl.text) ?? 0,
-          'defaultEfficiency': double.tryParse(_efficiencyCtrl.text) ?? 1.2,
         },
       );
 
@@ -193,10 +184,38 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
             ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.05),
             const SizedBox(height: 24),
 
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.primaryContainer,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.primary.withAlpha(50)),
+              ),
+              child: const Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.verified_user_outlined, color: AppColors.primary),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Thông số hãng được quản lý bởi catalog chung. Bạn chỉ có thể sửa tên gọi riêng, biển số, ODO và tình trạng pin thực tế.',
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
             // Editable Specs
             _buildSpecSection('THÔNG SỐ XE', [
               _SpecRow(
-                label: 'Model',
+                label: 'Tên gọi riêng',
                 controller: _modelCtrl,
                 isEditing: _isEditing,
                 icon: Icons.electric_moped_rounded,
@@ -210,20 +229,20 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
               _SpecRow(
                 label: 'Loại pin (LFP / NMC)',
                 controller: _batteryTypeCtrl,
-                isEditing: _isEditing,
+                isEditing: false,
                 icon: Icons.electric_bolt_rounded,
               ),
               _SpecRow(
                 label: 'Năm SX',
                 controller: _yearCtrl,
-                isEditing: _isEditing,
+                isEditing: false,
                 icon: Icons.calendar_today,
                 keyboardType: TextInputType.number,
               ),
               _SpecRow(
                 label: 'Dung lượng pin (Wh)',
                 controller: _batteryCapCtrl,
-                isEditing: _isEditing,
+                isEditing: false,
                 icon: Icons.battery_full_rounded,
                 keyboardType: TextInputType.number,
               ),
@@ -244,7 +263,7 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
               _SpecRow(
                 label: 'Hiệu suất (km/%)',
                 controller: _efficiencyCtrl,
-                isEditing: _isEditing,
+                isEditing: false,
                 icon: Icons.eco_rounded,
                 keyboardType: TextInputType.numberWithOptions(decimal: true),
               ),

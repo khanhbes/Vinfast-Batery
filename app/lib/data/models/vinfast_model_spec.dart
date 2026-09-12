@@ -10,6 +10,12 @@
 class VinFastModelSpec {
   final String modelId;
   final String modelName;
+  final String brandId;
+  final String brandName;
+  final String variant;
+  final String market;
+  final String vehicleType;
+  final bool selectable;
   final List<String> aliases;
   final double nominalCapacityWh;
   final double nominalCapacityAh;
@@ -29,10 +35,24 @@ class VinFastModelSpec {
   final double? topSpeedKmh;
   final double? rangeKm;
   final String? imageAsset;
+  final String? imageUrl;
+  final String? description;
+  final String? batteryChemistry;
+  final String? connector;
+  final String? rangeTestCycle;
+  final double? usableCapacityWh;
+  final double? maxDcChargePowerW;
+  final List<Map<String, dynamic>> sources;
 
   VinFastModelSpec({
     required this.modelId,
     required this.modelName,
+    this.brandId = 'vinfast',
+    this.brandName = 'VinFast',
+    this.variant = '',
+    this.market = 'VN',
+    this.vehicleType = 'scooter',
+    this.selectable = true,
     this.aliases = const [],
     required this.nominalCapacityWh,
     required this.nominalCapacityAh,
@@ -50,9 +70,21 @@ class VinFastModelSpec {
     this.topSpeedKmh,
     this.rangeKm,
     this.imageAsset,
+    this.imageUrl,
+    this.description,
+    this.batteryChemistry,
+    this.connector,
+    this.rangeTestCycle,
+    this.usableCapacityWh,
+    this.maxDcChargePowerW,
+    this.sources = const [],
   });
 
-  factory VinFastModelSpec.fromMap(Map<String, dynamic> data, {String? id}) {
+  factory VinFastModelSpec.fromMap(
+    Map<String, dynamic> data, {
+    String? id,
+    String locale = 'vi',
+  }) {
     double? optDouble(dynamic v) {
       if (v == null) return null;
       if (v is num) return v.toDouble();
@@ -65,38 +97,127 @@ class VinFastModelSpec {
       return int.tryParse(v.toString());
     }
 
+    final localized = data['localized'] is Map
+        ? Map<String, dynamic>.from(data['localized'] as Map)
+        : const <String, dynamic>{};
+    final vi = localized['vi'] is Map
+        ? Map<String, dynamic>.from(localized['vi'] as Map)
+        : const <String, dynamic>{};
+    final en = localized['en'] is Map
+        ? Map<String, dynamic>.from(localized['en'] as Map)
+        : const <String, dynamic>{};
+    final selectedLocale = locale == 'en' ? en : vi;
+    final fallbackLocale = locale == 'en' ? vi : en;
+    final battery = data['battery'] is Map
+        ? Map<String, dynamic>.from(data['battery'] as Map)
+        : const <String, dynamic>{};
+    final charging = data['charging'] is Map
+        ? Map<String, dynamic>.from(data['charging'] as Map)
+        : const <String, dynamic>{};
+    final performance = data['performance'] is Map
+        ? Map<String, dynamic>.from(data['performance'] as Map)
+        : const <String, dynamic>{};
+    final defaults = data['appDefaults'] is Map
+        ? Map<String, dynamic>.from(data['appDefaults'] as Map)
+        : const <String, dynamic>{};
+    final media = data['media'] is Map
+        ? Map<String, dynamic>.from(data['media'] as Map)
+        : const <String, dynamic>{};
+    final resolvedName =
+        (selectedLocale['displayName'] ??
+                fallbackLocale['displayName'] ??
+                data['modelName'] ??
+                '${data['brandName'] ?? ''} ${data['model'] ?? ''}')
+            .toString()
+            .trim();
     return VinFastModelSpec(
-      modelId: id ?? data['modelId'] ?? '',
-      modelName: data['modelName'] ?? '',
+      modelId: id ?? data['catalogId'] ?? data['modelId'] ?? '',
+      modelName: resolvedName,
+      brandId: (data['brandId'] ?? 'vinfast').toString(),
+      brandName: (data['brandName'] ?? 'VinFast').toString(),
+      variant: (data['variant'] ?? '').toString(),
+      market: (data['market'] ?? 'VN').toString(),
+      vehicleType: (data['vehicleType'] ?? 'scooter').toString(),
+      selectable: data['selectable'] != false && data['isDeleted'] != true,
       aliases: List<String>.from(data['aliases'] ?? const []),
-      nominalCapacityWh: (data['nominalCapacityWh'] ?? 0).toDouble(),
-      nominalCapacityAh: (data['nominalCapacityAh'] ?? 0).toDouble(),
-      nominalVoltageV: (data['nominalVoltageV'] ?? 0).toDouble(),
-      maxChargePowerW: (data['maxChargePowerW'] ?? 0).toDouble(),
-      ratedMotorPowerW: (data['ratedMotorPowerW'] ?? 0).toDouble(),
-      peakMotorPowerW: (data['peakMotorPowerW'] ?? 0).toDouble(),
+      nominalCapacityWh:
+          (defaults['calculationCapacityWh'] ??
+                  battery['calculationCapacityWh'] ??
+                  data['nominalCapacityWh'] ??
+                  0)
+              .toDouble(),
+      nominalCapacityAh:
+          (battery['capacityAh'] ?? data['nominalCapacityAh'] ?? 0).toDouble(),
+      nominalVoltageV: (battery['voltageV'] ?? data['nominalVoltageV'] ?? 0)
+          .toDouble(),
+      maxChargePowerW:
+          (defaults['maxSafeChargePowerW'] ??
+                  charging['maxSafeChargePowerW'] ??
+                  charging['maxAcPowerW'] ??
+                  data['maxChargePowerW'] ??
+                  0)
+              .toDouble(),
+      ratedMotorPowerW:
+          (performance['ratedMotorPowerW'] ?? data['ratedMotorPowerW'] ?? 0)
+              .toDouble(),
+      peakMotorPowerW:
+          (performance['peakMotorPowerW'] ?? data['peakMotorPowerW'] ?? 0)
+              .toDouble(),
       defaultEfficiencyKmPerPercent:
-          (data['defaultEfficiencyKmPerPercent'] ?? 1.2).toDouble(),
-      source: data['source'] ?? 'vinfast_catalog',
-      specVersion: optInt(data['specVersion']) ?? 1,
+          (defaults['defaultEfficiencyKmPerPercent'] ??
+                  data['defaultEfficiencyKmPerPercent'] ??
+                  1.2)
+              .toDouble(),
+      source:
+          data['source'] ??
+          (data['sources'] is List ? 'reviewed_catalog' : 'vinfast_catalog'),
+      specVersion: optInt(data['revision'] ?? data['specVersion']) ?? 1,
       updatedAt: data['updatedAt'] is DateTime
           ? data['updatedAt'] as DateTime
           : data['updatedAt'] != null
           ? DateTime.tryParse(data['updatedAt'].toString())
           : null,
-      modelLine: data['modelLine'] as String?,
-      tagline: data['tagline'] as String?,
-      releaseYear: optInt(data['releaseYear']),
-      topSpeedKmh: optDouble(data['topSpeedKmh']),
-      rangeKm: optDouble(data['rangeKm']),
+      modelLine: (data['model'] ?? data['modelLine']) as String?,
+      tagline:
+          (selectedLocale['tagline'] ??
+                  fallbackLocale['tagline'] ??
+                  data['tagline'])
+              as String?,
+      releaseYear: optInt(data['modelYear'] ?? data['releaseYear']),
+      topSpeedKmh: optDouble(performance['topSpeedKmh'] ?? data['topSpeedKmh']),
+      rangeKm: optDouble(performance['rangeKm'] ?? data['rangeKm']),
       imageAsset: data['imageAsset'] as String?,
+      imageUrl:
+          (media['thumbnailUrl'] ?? media['heroUrl'] ?? data['imageUrl'])
+              as String?,
+      description:
+          (selectedLocale['description'] ?? fallbackLocale['description'])
+              as String?,
+      batteryChemistry: battery['chemistry'] as String?,
+      connector: charging['connector'] as String?,
+      rangeTestCycle: performance['rangeTestCycle'] as String?,
+      usableCapacityWh: optDouble(battery['usableCapacityWh']),
+      maxDcChargePowerW: optDouble(charging['maxDcPowerW']),
+      sources: data['sources'] is List
+          ? (data['sources'] as List)
+                .whereType<Map>()
+                .map((item) => Map<String, dynamic>.from(item))
+                .toList()
+          : const [],
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
       'modelId': modelId,
+      'catalogId': modelId,
       'modelName': modelName,
+      'brandId': brandId,
+      'brandName': brandName,
+      'variant': variant,
+      'market': market,
+      'vehicleType': vehicleType,
+      'selectable': selectable,
       'aliases': aliases,
       'nominalCapacityWh': nominalCapacityWh,
       'nominalCapacityAh': nominalCapacityAh,
@@ -114,6 +235,14 @@ class VinFastModelSpec {
       if (topSpeedKmh != null) 'topSpeedKmh': topSpeedKmh,
       if (rangeKm != null) 'rangeKm': rangeKm,
       if (imageAsset != null) 'imageAsset': imageAsset,
+      if (imageUrl != null) 'imageUrl': imageUrl,
+      if (description != null) 'description': description,
+      if (batteryChemistry != null) 'batteryChemistry': batteryChemistry,
+      if (connector != null) 'connector': connector,
+      if (rangeTestCycle != null) 'rangeTestCycle': rangeTestCycle,
+      if (usableCapacityWh != null) 'usableCapacityWh': usableCapacityWh,
+      if (maxDcChargePowerW != null) 'maxDcChargePowerW': maxDcChargePowerW,
+      'sources': sources,
     };
   }
 

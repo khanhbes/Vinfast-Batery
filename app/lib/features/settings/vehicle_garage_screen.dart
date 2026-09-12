@@ -290,7 +290,8 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
                   ? (v['currentOdo'] as num).toDouble()
                   : null,
               licensePlate: v['licensePlate'] as String?,
-              batteryType: (v['batteryType'] ?? v['batteryChemistry']) as String?,
+              batteryType:
+                  (v['batteryType'] ?? v['batteryChemistry']) as String?,
               isSelected: isSelected,
               onTap: archived
                   ? () {}
@@ -414,7 +415,8 @@ class _VehicleCard extends StatelessWidget {
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      if (licensePlate != null && licensePlate!.trim().isNotEmpty) ...[
+                      if (licensePlate != null &&
+                          licensePlate!.trim().isNotEmpty) ...[
                         const SizedBox(height: 2),
                         Text(
                           'Biển số: $licensePlate · ${batteryType ?? 'LFP'}',
@@ -585,16 +587,30 @@ class _AddVehicleSheet extends StatefulWidget {
 }
 
 class _AddVehicleSheetState extends State<_AddVehicleSheet> {
+  static const _vehicleTypes = [
+    ('all', 'Tất cả'),
+    ('scooter', 'Xe máy'),
+    ('motorcycle', 'Mô tô'),
+    ('car', 'Ô tô'),
+    ('suv', 'SUV'),
+    ('pickup', 'Bán tải'),
+    ('van', 'Van'),
+    ('bus', 'Bus'),
+    ('truck', 'Tải'),
+    ('other', 'Khác'),
+  ];
+
   List<VinFastModelSpec> _allSpecs = [];
   List<VinFastModelSpec> _filteredSpecs = [];
   bool _isLoading = true;
   bool _isAdding = false;
   final _searchCtrl = TextEditingController();
   final _licensePlateCtrl = TextEditingController();
-  String _selectedBatteryType = 'LFP';
-
-  // Custom values
-  int _selectedYear = DateTime.now().year;
+  final _nicknameCtrl = TextEditingController();
+  String _selectedVehicleType = 'all';
+  String _selectedBrand = 'all';
+  String _selectedMarket = 'all';
+  String _selectedYear = 'all';
 
   @override
   void initState() {
@@ -606,6 +622,7 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
   @override
   void dispose() {
     _licensePlateCtrl.dispose();
+    _nicknameCtrl.dispose();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -629,11 +646,27 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
   void _filterSpecs() {
     final query = _searchCtrl.text.toLowerCase().trim();
     setState(() {
-      _filteredSpecs = query.isEmpty
-          ? _allSpecs
-          : _allSpecs
-                .where((s) => s.modelName.toLowerCase().contains(query))
-                .toList();
+      _filteredSpecs = _allSpecs.where((spec) {
+        final haystack = '${spec.brandName} ${spec.modelName} ${spec.variant}'
+            .toLowerCase();
+        final matchesQuery = query.isEmpty || haystack.contains(query);
+        final matchesType =
+            _selectedVehicleType == 'all' ||
+            spec.vehicleType == _selectedVehicleType;
+        final matchesBrand =
+            _selectedBrand == 'all' || spec.brandName == _selectedBrand;
+        final matchesMarket =
+            _selectedMarket == 'all' || spec.market == _selectedMarket;
+        final matchesYear =
+            _selectedYear == 'all' ||
+            spec.releaseYear.toString() == _selectedYear;
+        return spec.selectable &&
+            matchesQuery &&
+            matchesType &&
+            matchesBrand &&
+            matchesMarket &&
+            matchesYear;
+      }).toList();
     });
   }
 
@@ -641,15 +674,9 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
     setState(() => _isAdding = true);
 
     final result = await AuthService().addVehicle(
-      model: spec.modelName,
-      year: _selectedYear,
+      catalogId: spec.modelId,
+      nickname: _nicknameCtrl.text.trim(),
       licensePlate: _licensePlateCtrl.text.trim(),
-      batteryType: _selectedBatteryType,
-      batteryCapacity: spec.nominalCapacityWh,
-      currentBattery: 100,
-      stateOfHealth: 100,
-      currentOdo: 0,
-      defaultEfficiency: spec.defaultEfficiencyKmPerPercent,
     );
 
     if (!mounted) return;
@@ -679,7 +706,17 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final h = MediaQuery.of(context).size.height * 0.85;
+    final h = MediaQuery.of(context).size.height * 0.92;
+    final brands = _allSpecs.map((spec) => spec.brandName).toSet().toList()
+      ..sort();
+    final markets = _allSpecs.map((spec) => spec.market).toSet().toList()
+      ..sort();
+    final years = _allSpecs
+        .map((spec) => spec.releaseYear)
+        .whereType<int>()
+        .toSet()
+        .toList()
+      ..sort((a, b) => b.compareTo(a));
 
     return Container(
       height: h,
@@ -687,7 +724,9 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
         color: AppColors.background,
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
-      child: Column(
+      child: SafeArea(
+        top: false,
+        child: Column(
         children: [
           // Handle
           Container(
@@ -718,7 +757,7 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
                       ),
                       SizedBox(height: 4),
                       Text(
-                        'Chọn model từ danh sách VinFast',
+                        'Chọn cấu hình đã được quản trị viên xác minh',
                         style: TextStyle(
                           color: AppColors.textSecondary,
                           fontSize: 13,
@@ -772,7 +811,7 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
               ),
             ),
           ),
-          // Year picker
+          // Catalog type filters
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
             child: SizedBox(
@@ -780,7 +819,7 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
               child: Row(
                 children: [
                   Text(
-                    'Năm sản xuất:',
+                    'Loại xe:',
                     style: TextStyle(
                       color: AppColors.textSecondary,
                       fontSize: 13,
@@ -790,13 +829,16 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
                   Expanded(
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
-                      itemCount: DateTime.now().year - 2020 + 1,
+                      itemCount: _vehicleTypes.length,
                       separatorBuilder: (_, index) => const SizedBox(width: 8),
                       itemBuilder: (ctx, i) {
-                        final year = 2020 + i;
-                        final selected = year == _selectedYear;
+                        final value = _vehicleTypes[i].$1;
+                        final selected = value == _selectedVehicleType;
                         return GestureDetector(
-                          onTap: () => setState(() => _selectedYear = year),
+                          onTap: () {
+                            setState(() => _selectedVehicleType = value);
+                            _filterSpecs();
+                          },
                           child: Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 14,
@@ -809,7 +851,7 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
-                              '$year',
+                              _vehicleTypes[i].$2,
                               style: TextStyle(
                                 color: selected
                                     ? AppColors.background
@@ -827,69 +869,74 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
               ),
             ),
           ),
-          // Biển số & Loại pin
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 6),
             child: Row(
               children: [
                 Expanded(
-                  child: TextField(
-                    controller: _licensePlateCtrl,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 13,
-                    ),
-                    decoration: InputDecoration(
-                      isDense: true,
-                      hintText: 'Biển số (VD: 29A-123.45)',
-                      hintStyle: const TextStyle(
-                        color: AppColors.textHint,
-                        fontSize: 12,
-                      ),
-                      prefixIcon: const Icon(
-                        Icons.pin_outlined,
-                        color: AppColors.textSecondary,
-                        size: 18,
-                      ),
-                      filled: true,
-                      fillColor: AppColors.surfaceLight,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        vertical: 10,
-                        horizontal: 10,
-                      ),
-                    ),
+                  child: _catalogDropdown(
+                    label: 'Hãng',
+                    value: _selectedBrand,
+                    items: brands,
+                    onChanged: (value) {
+                      setState(() => _selectedBrand = value);
+                      _filterSpecs();
+                    },
                   ),
                 ),
                 const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceLight,
-                    borderRadius: BorderRadius.circular(12),
+                Expanded(
+                  child: _catalogDropdown(
+                    label: 'Thị trường',
+                    value: _selectedMarket,
+                    items: markets,
+                    onChanged: (value) {
+                      setState(() => _selectedMarket = value);
+                      _filterSpecs();
+                    },
                   ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: _selectedBatteryType,
-                      dropdownColor: AppColors.surfaceVariant,
-                      icon: const Icon(Icons.arrow_drop_down, color: AppColors.textSecondary),
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      items: const [
-                        DropdownMenuItem(value: 'LFP', child: Text('Pin LFP')),
-                        DropdownMenuItem(value: 'NMC', child: Text('Pin NMC')),
-                        DropdownMenuItem(value: 'Khác', child: Text('Khác')),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) setState(() => _selectedBatteryType = val);
-                      },
-                    ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _catalogDropdown(
+                    label: 'Năm',
+                    value: _selectedYear,
+                    items: years.map((year) => year.toString()).toList(),
+                    onChanged: (value) {
+                      setState(() => _selectedYear = value);
+                      _filterSpecs();
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Personal values only; catalog technical values are read-only.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+            child: Column(
+              children: [
+                TextField(
+                  controller: _nicknameCtrl,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 13,
+                  ),
+                  decoration: _personalFieldDecoration(
+                    hint: 'Tên gọi riêng (không bắt buộc)',
+                    icon: Icons.drive_file_rename_outline_rounded,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _licensePlateCtrl,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 13,
+                  ),
+                  decoration: _personalFieldDecoration(
+                    hint: 'Biển số (không bắt buộc)',
+                    icon: Icons.pin_outlined,
                   ),
                 ),
               ],
@@ -924,8 +971,70 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
                     },
                   ),
           ),
-        ],
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _catalogDropdown({
+    required String label,
+    required String value,
+    required List<String> items,
+    required ValueChanged<String> onChanged,
+  }) {
+    return DropdownButtonFormField<String>(
+      initialValue: value,
+      isExpanded: true,
+      icon: const Icon(Icons.expand_more_rounded, size: 18),
+      dropdownColor: AppColors.card,
+      decoration: InputDecoration(
+        isDense: true,
+        labelText: label,
+        labelStyle: const TextStyle(
+          color: AppColors.textSecondary,
+          fontSize: 11,
+        ),
+        filled: true,
+        fillColor: AppColors.surfaceLight,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide.none,
+        ),
+        contentPadding: const EdgeInsets.fromLTRB(10, 10, 4, 8),
+      ),
+      style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+      items: [
+        const DropdownMenuItem(value: 'all', child: Text('Tất cả')),
+        ...items.map(
+          (item) => DropdownMenuItem(
+            value: item,
+            child: Text(item, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+        ),
+      ],
+      onChanged: (next) {
+        if (next != null) onChanged(next);
+      },
+    );
+  }
+
+  InputDecoration _personalFieldDecoration({
+    required String hint,
+    required IconData icon,
+  }) {
+    return InputDecoration(
+      isDense: true,
+      hintText: hint,
+      hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 12),
+      prefixIcon: Icon(icon, color: AppColors.textSecondary, size: 18),
+      filled: true,
+      fillColor: AppColors.surfaceLight,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide.none,
+      ),
+      contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
     );
   }
 
@@ -973,18 +1082,7 @@ class _SpecCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryContainer,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    Icons.electric_moped_rounded,
-                    color: AppColors.primary,
-                    size: 22,
-                  ),
-                ),
+                _CatalogVehicleImage(spec: spec),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -1026,6 +1124,17 @@ class _SpecCard extends StatelessWidget {
                             ),
                           ],
                         ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${spec.brandName} · ${spec.vehicleType.toUpperCase()} · ${spec.market}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.primary,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -1111,6 +1220,46 @@ class _SpecCard extends StatelessWidget {
           fontSize: 11,
           fontWeight: FontWeight.w500,
         ),
+      ),
+    );
+  }
+}
+
+class _CatalogVehicleImage extends StatelessWidget {
+  const _CatalogVehicleImage({required this.spec});
+
+  final VinFastModelSpec spec;
+
+  @override
+  Widget build(BuildContext context) {
+    final fallback = Container(
+      width: 52,
+      height: 52,
+      decoration: BoxDecoration(
+        color: AppColors.primaryContainer,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Icon(
+        {'car', 'suv', 'pickup', 'van'}.contains(spec.vehicleType)
+            ? Icons.directions_car_filled_rounded
+            : Icons.electric_moped_rounded,
+        color: AppColors.primary,
+        size: 24,
+      ),
+    );
+    final url = spec.imageUrl?.trim() ?? '';
+    if (url.isEmpty) return fallback;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Image.network(
+        url,
+        width: 68,
+        height: 52,
+        fit: BoxFit.cover,
+        frameBuilder: (context, child, frame, _) => frame == null
+            ? Container(width: 68, height: 52, color: AppColors.surfaceVariant)
+            : child,
+        errorBuilder: (_, error, stackTrace) => fallback,
       ),
     );
   }

@@ -12,4 +12,7 @@ firebase-admin>=6.4.0
 requests>=2.32.0
 PyJWT[crypto]>=2.9.0
 cryptography>=42.0.0
+beautifulsoup4>=4.12.3
+pypdf>=5.0.0
+Pillow>=11.0.0
 cryptography>=42.0.0

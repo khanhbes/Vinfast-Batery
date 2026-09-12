@@ -6,6 +6,7 @@ import 'session_service.dart';
 import 'sync_service.dart';
 import '../../data/services/push_notification_service.dart';
 import 'vehicle_policy.dart';
+import 'api_service.dart';
 
 /// AuthService - Xử lý đăng ký/đăng nhập đồng bộ với Web Dashboard
 class AuthService {
@@ -291,19 +292,13 @@ class AuthService {
     required String password,
   }) => login(email: email, password: password);
 
-  /// Thêm xe mới + đồng bộ web
-  /// Dùng WriteBatch để tạo Vehicles/{vehicleId} và upsert users/{uid}
-  /// cùng lúc, tránh lỗi [cloud_firestore/not-found] khi user doc chưa có.
+  /// Add a vehicle from the reviewed global catalog. Manufacturer-controlled
+  /// values are resolved by the server and are never accepted from the app.
   Future<Map<String, dynamic>> addVehicle({
-    required String model,
-    required int year,
-    required double batteryCapacity,
-    required double currentBattery,
-    required double stateOfHealth,
-    required double currentOdo,
-    required double defaultEfficiency,
+    required String catalogId,
+    String? nickname,
     String? licensePlate,
-    String? batteryType,
+    int initialOdo = 0,
   }) async {
     try {
       final user = _auth.currentUser;
@@ -311,97 +306,24 @@ class AuthService {
         return {'success': false, 'error': 'Not logged in'};
       }
 
-      // Đảm bảo user doc tồn tại trước (set merge)
       await _ensureUserDoc(user);
-
-      // Vehicle creation is guarded by a transaction. The query is repeated
-      // after acquiring the user-document read lock, so concurrent devices
-      // cannot both observe the same free slot and exceed the configured
-      // active-vehicle limit.
-      final vehicleRef = _firestore.collection('Vehicles').doc();
-      final vehicleId = vehicleRef.id;
-      final userRef = _firestore.collection('users').doc(user.uid);
-      final vehicleData = {
-        'vehicleId': vehicleId,
-        'vehicleName': '$model $year',
-        'ownerUid': user.uid,
-        'model': model,
-        'year': year,
-        'batteryCapacity': batteryCapacity,
-        'currentBattery': currentBattery.round(),
-        'stateOfHealth': stateOfHealth,
-        'currentOdo': currentOdo.round(),
-        'defaultEfficiency': defaultEfficiency,
-        'lastBatteryPercent': currentBattery.round(),
+      final result = await ApiService().post('/api/user/vehicles', {
+        'catalogId': catalogId,
+        if (nickname != null && nickname.trim().isNotEmpty)
+          'nickname': nickname.trim(),
         if (licensePlate != null && licensePlate.trim().isNotEmpty)
           'licensePlate': licensePlate.trim(),
-        'batteryType': (batteryType != null && batteryType.trim().isNotEmpty)
-            ? batteryType.trim()
-            : 'LFP',
-        // Values below are onboarding defaults, not verified telemetry. They
-        // become true only after the user/device supplies real measurements.
-        'hasBatteryData': false,
-        'hasSohData': false,
-        'hasEfficiencyData': true,
-        'hasOdoData': false,
-        'isDeleted': false,
-        'totalCharges': 0,
-        'totalTrips': 0,
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-        'source': 'flutter_app',
-        'syncedToWeb': false,
-        'needsSync': true,
-      };
-
-      try {
-        await _firestore.runTransaction((transaction) async {
-          // Reading and updating the user profile in the same transaction
-          // serializes vehicle writes for this account.  The array/count is
-          // the write-side ledger, so two devices cannot both consume the
-          // last active-vehicle slot after observing the same query result.
-          final userSnapshot = await transaction.get(userRef);
-          final userData = userSnapshot.data() ?? <String, dynamic>{};
-          final listedVehicles =
-              (userData['vehicles'] as List<dynamic>?)
-                  ?.whereType<String>()
-                  .toSet() ??
-              <String>{};
-          final storedCount = userData['activeVehicleCount'];
-          final activeVehicleCount = storedCount is num
-              ? storedCount.toInt()
-              : listedVehicles.length;
-          if (activeVehicleCount >= maxVehiclesPerAccount) {
-            throw StateError('vehicleLimitReached');
-          }
-          transaction.set(vehicleRef, vehicleData);
-          transaction.set(userRef, {
-            'vehicles': FieldValue.arrayUnion([vehicleId]),
-            'activeVehicleCount': activeVehicleCount + 1,
-            'updatedAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
-        });
-      } on StateError catch (error) {
-        if (error.message == 'vehicleLimitReached') {
-          return {
-            'success': false,
-            'error':
-                'Bạn đã đạt giới hạn $maxVehiclesPerAccount xe đang hoạt động',
-            'code': 'vehicleLimitReached',
-          };
-        }
-        rethrow;
+        'initialOdo': initialOdo,
+      });
+      final data = result['data'];
+      if (result['success'] == true && data is Map) {
+        return {
+          ...result,
+          'vehicleId': data['vehicleId']?.toString() ?? '',
+          'synced': true,
+        };
       }
-
-      // 3. Đồng bộ với web
-      final syncResult = await _syncService.syncVehicleToWeb(vehicleId);
-
-      return {
-        'success': true,
-        'vehicleId': vehicleId,
-        'synced': syncResult,
-        'message': 'Vehicle added successfully',
-      };
+      return result;
     } catch (e) {
       return {'success': false, 'error': 'Failed to add vehicle: $e'};
     }
@@ -585,25 +507,29 @@ class AuthService {
         return {'success': false, 'error': 'Not logged in'};
       }
 
-      final updateData = <String, dynamic>{
-        'updatedAt': FieldValue.serverTimestamp(),
-        'needsSync': true,
+      const personalFields = {
+        'nickname',
+        'licensePlate',
+        'currentOdo',
+        'currentBattery',
+        'lastBatteryPercent',
+        'stateOfHealth',
+        'avatarColor',
+        'hasBatteryData',
+        'hasSohData',
+        'hasOdoData',
       };
-
-      if (updates != null) {
-        updateData.addAll(updates);
+      final safeUpdates = <String, dynamic>{};
+      updates?.forEach((key, value) {
+        if (personalFields.contains(key)) safeUpdates[key] = value;
+      });
+      if (safeUpdates.length != (updates?.length ?? 0)) {
+        return {
+          'success': false,
+          'error': 'Thông số kỹ thuật của xe chỉ do catalog quản lý.',
+        };
       }
-
-      await _firestore.collection('Vehicles').doc(vehicleId).update(updateData);
-
-      // Đồng bộ với web
-      final syncResult = await _syncService.syncVehicleToWeb(vehicleId);
-
-      return {
-        'success': true,
-        'synced': syncResult,
-        'message': 'Vehicle updated',
-      };
+      return ApiService().patch('/api/user/vehicles/$vehicleId', safeUpdates);
     } catch (e) {
       return {'success': false, 'error': 'Failed to update vehicle: $e'};
     }

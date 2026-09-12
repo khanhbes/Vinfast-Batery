@@ -14,7 +14,7 @@ RUN pip install --no-cache-dir -r requirements-api.txt
 # Keep every first-party module imported by server.py in the runtime image.
 # Listing these explicitly preserves the small image context while preventing
 # a successful build that only fails later when Gunicorn boots a worker.
-COPY server.py telemetry_schema.py csv_security.py sync_writes.py request_limits.py .
+COPY server.py telemetry_schema.py csv_security.py sync_writes.py request_limits.py vehicle_catalog.py catalog_research_worker.py ./
 COPY ai_server/ ./ai_server/
 COPY shelly/ ./shelly/
 

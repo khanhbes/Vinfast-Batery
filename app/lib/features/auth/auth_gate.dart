@@ -399,7 +399,9 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
 
     // Auto-match VinFast model spec
     try {
-      final linkedId = vehicleData['vinfastModelId'] as String?;
+      final linkedId =
+          vehicleData['catalogId'] as String? ??
+          vehicleData['vinfastModelId'] as String?;
       if (linkedId == null || linkedId.isEmpty) {
         final name = vehicleData['vehicleName'] as String? ?? '';
         final match = await VehicleSpecRepository().matchByVehicleName(name);

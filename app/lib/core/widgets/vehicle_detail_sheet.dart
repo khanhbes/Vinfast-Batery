@@ -54,7 +54,7 @@ class _VehicleDetailSheetState extends ConsumerState<VehicleDetailSheet> {
     }
     try {
       final specRepo = ref.read(vehicleSpecRepositoryProvider);
-      final spec = await specRepo.getSpec(widget.vehicle.vinfastModelId!);
+      final spec = await specRepo.getSpec(widget.vehicle.effectiveCatalogId!);
       if (spec == null) {
         setState(() => _loadingCapacity = false);
         return;

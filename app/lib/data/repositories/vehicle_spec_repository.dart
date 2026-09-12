@@ -12,8 +12,8 @@ import '../models/vinfast_model_spec.dart';
 /// Thứ tự fallback: Firestore → SharedPreferences cache → local asset
 /// ========================================================================
 class VehicleSpecRepository {
-  static const _cacheKey = 'vinfast_specs_cache_v3';
-  static const _cacheTimestampKey = 'vinfast_specs_cache_ts_v3';
+  static const _cacheKey = 'global_ev_catalog_cache_v4';
+  static const _cacheTimestampKey = 'global_ev_catalog_cache_ts_v4';
   static const _cacheTtlHours = 24;
 
   final FirebaseFirestore _firestore;
@@ -21,8 +21,16 @@ class VehicleSpecRepository {
   VehicleSpecRepository({FirebaseFirestore? firestore})
     : _firestore = firestore ?? FirebaseFirestore.instance;
 
-  CollectionReference get _specsRef =>
+  CollectionReference get _specsRef => _firestore.collection('VehicleCatalog');
+  CollectionReference get _legacySpecsRef =>
       _firestore.collection('VinFastModelSpecs');
+
+  Stream<int> watchCatalogRevision() => _firestore
+      .collection('VehicleCatalogMeta')
+      .doc('current')
+      .snapshots()
+      .map((snapshot) => (snapshot.data()?['revision'] as num?)?.toInt() ?? 0)
+      .distinct();
 
   /// Lấy tất cả specs, ưu tiên Firestore → cache → local
   Future<List<VinFastModelSpec>> getAllSpecs() async {
@@ -76,19 +84,27 @@ class VehicleSpecRepository {
   // ── Firestore ──
 
   Future<List<VinFastModelSpec>> _fetchFromFirestore() async {
-    // VinFastModelSpecs is read-only from clients (managed via backend/admin).
-    // If Firestore is empty, return [] so the caller falls back to cache/asset.
-    final snapshot = await _specsRef.get();
-    if (snapshot.docs.isEmpty) {
+    // This constraint is also enforced by Firestore rules. Archived entries
+    // remain available only through the owner-aware mobile detail API.
+    final snapshot = await _specsRef.where('selectable', isEqualTo: true).get();
+    var documents = snapshot.docs;
+    if (documents.isEmpty) {
+      // One-release compatibility window while the reviewed global catalog is
+      // seeded. Old installs and local development continue to work.
+      documents = (await _legacySpecsRef.get()).docs;
       debugPrint(
-        'ℹ️ VehicleSpecRepository: Firestore VinFastModelSpecs empty (backend-managed)',
+        'ℹ️ VehicleSpecRepository: global catalog empty; using legacy projection',
       );
-      return [];
     }
-    return snapshot.docs.map((doc) {
-      final data = doc.data() as Map<String, dynamic>;
-      return VinFastModelSpec.fromMap(data, id: doc.id);
-    }).toList();
+    return documents
+        .map((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          final locale =
+              WidgetsBinding.instance.platformDispatcher.locale.languageCode;
+          return VinFastModelSpec.fromMap(data, id: doc.id, locale: locale);
+        })
+        .where((spec) => spec.selectable)
+        .toList();
   }
 
   // ── SharedPreferences Cache ──
@@ -138,5 +154,10 @@ final vehicleSpecRepositoryProvider = Provider<VehicleSpecRepository>((ref) {
 
 /// Provider lấy tất cả specs (cached)
 final allVinFastSpecsProvider = FutureProvider<List<VinFastModelSpec>>((ref) {
+  ref.watch(vehicleCatalogRevisionProvider);
   return ref.watch(vehicleSpecRepositoryProvider).getAllSpecs();
+});
+
+final vehicleCatalogRevisionProvider = StreamProvider<int>((ref) {
+  return ref.watch(vehicleSpecRepositoryProvider).watchCatalogRevision();
 });

@@ -36,7 +36,8 @@ class _AiCapacityCardState extends ConsumerState<AiCapacityCard> {
   void didUpdateWidget(covariant AiCapacityCard oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.vehicle.vehicleId != widget.vehicle.vehicleId ||
-        oldWidget.vehicle.vinfastModelId != widget.vehicle.vinfastModelId) {
+        oldWidget.vehicle.effectiveCatalogId !=
+            widget.vehicle.effectiveCatalogId) {
       _calculate();
     }
   }
@@ -58,7 +59,7 @@ class _AiCapacityCardState extends ConsumerState<AiCapacityCard> {
 
     try {
       final specRepo = ref.read(vehicleSpecRepositoryProvider);
-      final spec = await specRepo.getSpec(widget.vehicle.vinfastModelId!);
+      final spec = await specRepo.getSpec(widget.vehicle.effectiveCatalogId!);
       if (spec == null) {
         setState(() {
           _loading = false;

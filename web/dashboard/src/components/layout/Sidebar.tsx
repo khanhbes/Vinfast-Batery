@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, BrainCircuit, History, Settings, ChevronLeft, ChevronRight, BatteryCharging, LogOut, Database } from 'lucide-react';
+import { LayoutDashboard, Users, BrainCircuit, History, Settings, ChevronLeft, ChevronRight, BatteryCharging, LogOut, Database, CarFront } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ const navItems = [
   { icon: LayoutDashboard, label: 'Overview', path: '/' },
   { icon: Users, label: 'Accounts', path: '/users' },
   { icon: Database, label: 'App data', path: '/data' },
+  { icon: CarFront, label: 'Vehicle catalog', path: '/catalog' },
   { icon: BrainCircuit, label: 'AI Studio', path: '/ai' },
   { icon: History, label: 'Audit log', path: '/audit' },
   { icon: Settings, label: 'Settings', path: '/settings' },
