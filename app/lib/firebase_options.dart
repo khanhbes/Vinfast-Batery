@@ -27,12 +27,9 @@ class DefaultFirebaseOptions {
     storageBucket: 'vinfast-873db.firebasestorage.app',
   );
 
-  // The iOS app must be registered in Firebase Console before TestFlight.
-  // Replace the placeholder appId/apiKey with the values emitted by
-  // `flutterfire configure --platforms=ios`.
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyAKoNr2iPZi2XB0l_JaGhTkM2hsitwqyKE',
-    appId: '1:450938791386:ios:vinfastbattery',
+    apiKey: 'AIzaSyD8rhhBPcyj_XGIf15dBxfcjbWj8g5-T6I',
+    appId: '1:450938791386:ios:5b5037bea92dfd642dcce3',
     messagingSenderId: '450938791386',
     projectId: 'vinfast-873db',
     storageBucket: 'vinfast-873db.firebasestorage.app',

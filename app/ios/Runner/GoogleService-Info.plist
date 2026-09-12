@@ -1,5 +1,34 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>API_KEY</key><string>AIzaSyAKoNr2iPZi2XB0l_JaGhTkM2hsitwqyKE</string><key>GCM_SENDER_ID</key><string>450938791386</string><key>PROJECT_ID</key><string>vinfast-873db</string><key>STORAGE_BUCKET</key><string>vinfast-873db.firebasestorage.app</string><key>BUNDLE_ID</key><string>com.khanhbes.vinfastbattery</string><key>GOOGLE_APP_ID</key><string>1:450938791386:ios:vinfastbattery</string><key>IS_ANALYTICS_ENABLED</key><false/><key>IS_ADS_ENABLED</key><false/>
-</dict></plist>
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>450938791386-7c0qp2hhp7u8lionsr8bb6pg9ule5jju.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.450938791386-7c0qp2hhp7u8lionsr8bb6pg9ule5jju</string>
+	<key>API_KEY</key>
+	<string>AIzaSyD8rhhBPcyj_XGIf15dBxfcjbWj8g5-T6I</string>
+	<key>GCM_SENDER_ID</key>
+	<string>450938791386</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.khanhbes.vinfastbattery</string>
+	<key>PROJECT_ID</key>
+	<string>vinfast-873db</string>
+	<key>STORAGE_BUCKET</key>
+	<string>vinfast-873db.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:450938791386:ios:5b5037bea92dfd642dcce3</string>
+</dict>
+</plist>
