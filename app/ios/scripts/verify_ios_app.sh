@@ -30,7 +30,7 @@ verify_macho() {
     exit 1
   fi
 
-  if ! /usr/bin/lipo -verify_arch arm64 "$binary_path"; then
+  if ! /usr/bin/lipo "$binary_path" -verify_arch arm64; then
     echo "Executable does not contain the arm64 device architecture: ${binary_path}" >&2
     /usr/bin/lipo -info "$binary_path" >&2 || true
     exit 1
