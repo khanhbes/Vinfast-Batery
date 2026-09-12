@@ -9,6 +9,7 @@ const AiCenter = lazy(() => import('@/pages/AiCenter'));
 const AuditSystem = lazy(() => import('@/pages/AuditSystem'));
 const Settings = lazy(() => import('@/pages/Settings'));
 const DataExplorer = lazy(() => import('@/pages/DataExplorer'));
+const VehicleCatalog = lazy(() => import('@/pages/VehicleCatalog'));
 import Login from '@/pages/Login';
 import { Toaster } from '@/components/ui/sonner';
 import { auth } from '@/firebase';
@@ -46,6 +47,7 @@ function AppContent({ user, loading, sessionRevision }: { user: User | null; loa
               <Route path="/" element={<Dashboard />} />
               <Route path="/users" element={<UserManagement />} />
               <Route path="/data" element={<DataExplorer />} />
+              <Route path="/catalog" element={<VehicleCatalog />} />
               <Route path="/ai" element={<AiCenter />} />
               <Route path="/audit" element={<AuditSystem />} />
               <Route path="/settings" element={<Settings />} />

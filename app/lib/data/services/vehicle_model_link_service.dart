@@ -1,6 +1,6 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/services/api_service.dart';
 
 import '../models/vehicle_model.dart';
 import '../models/vinfast_model_spec.dart';
@@ -10,24 +10,20 @@ import '../repositories/vehicle_spec_repository.dart';
 /// VehicleModelLinkService — Liên kết xe người dùng ↔ model VinFast
 /// ========================================================================
 class VehicleModelLinkService {
-  final FirebaseFirestore _firestore;
-
-  VehicleModelLinkService({FirebaseFirestore? firestore})
-    : _firestore = firestore ?? FirebaseFirestore.instance;
+  VehicleModelLinkService();
 
   /// Liên kết xe với model VinFast (manual flow)
   Future<void> linkModel({
     required String vehicleId,
     required VinFastModelSpec spec,
   }) async {
-    await _firestore.collection('Vehicles').doc(vehicleId).update({
-      'vinfastModelId': spec.modelId,
-      'vinfastModelName': spec.modelName,
-      'specVersion': spec.specVersion,
-      'defaultEfficiency': spec.defaultEfficiencyKmPerPercent,
-      'specLinkedAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    final result = await ApiService().put(
+      '/api/user/vehicles/$vehicleId/catalog',
+      {'catalogId': spec.modelId},
+    );
+    if (result['success'] != true) {
+      throw StateError(result['error']?.toString() ?? 'Catalog link failed');
+    }
     debugPrint(
       '🔗 Linked $vehicleId → ${spec.modelName} (v${spec.specVersion})',
     );
@@ -35,14 +31,9 @@ class VehicleModelLinkService {
 
   /// Bỏ liên kết model
   Future<void> unlinkModel(String vehicleId) async {
-    await _firestore.collection('Vehicles').doc(vehicleId).update({
-      'vinfastModelId': FieldValue.delete(),
-      'vinfastModelName': FieldValue.delete(),
-      'specVersion': FieldValue.delete(),
-      'specLinkedAt': FieldValue.delete(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-    debugPrint('🔗 Unlinked $vehicleId from VinFast model');
+    throw UnsupportedError(
+      'Catalog links cannot be cleared; select another published vehicle instead.',
+    );
   }
 
   /// Auto-match: thử tìm model phù hợp theo tên xe

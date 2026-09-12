@@ -23,6 +23,11 @@ from csv_security import csv_text
 from telemetry_schema import TelemetryValidationError, normalize_telemetry
 from sync_writes import commit_owned_writes, valid_document_id
 from request_limits import rate_limit
+from vehicle_catalog import (
+    PERSONAL_VEHICLE_FIELDS,
+    create_catalog_blueprint,
+    create_user_vehicle,
+)
 import math
 import random
 import functools
@@ -647,18 +652,33 @@ def user_vehicles():
 @app.route('/api/user/vehicles', methods=['POST'])
 @require_auth
 def user_add_vehicle():
-    """User tạo xe mới — tự gắn ownerUid."""
-    data = request.get_json() or {}
-    uid = request._uid
-    data['ownerUid'] = uid
-    data = _ensure_schema(data, 'vehicles')
-
-    if _fs():
-        vid = data.pop('vehicleId', None) or str(uuid.uuid4())
-        _fs().collection('Vehicles').document(vid).set(data)
-        data['vehicleId'] = vid
-        _audit('create', 'Vehicles', vid, uid, request._email)
-    return jsonify({'success': True, 'data': data}), 201
+    """Create a vehicle from one reviewed catalog configuration."""
+    if not _fs():
+        return jsonify({'success': False, 'error': 'Firestore unavailable'}), 503
+    try:
+        max_vehicles = max(
+            1,
+            min(int(os.environ.get('MAX_VEHICLES_PER_ACCOUNT', '2')), 10),
+        )
+    except ValueError:
+        max_vehicles = 2
+    result, status = create_user_vehicle(
+        _fs(),
+        request._uid,
+        request.get_json(silent=True) or {},
+        max_vehicles=max_vehicles,
+    )
+    if status < 300:
+        vehicle = result.get('data') or {}
+        _audit(
+            'create',
+            'Vehicles',
+            vehicle.get('vehicleId', ''),
+            request._uid,
+            request._email,
+            {'catalogId': vehicle.get('catalogId')},
+        )
+    return jsonify(result), status
 
 
 @app.route('/api/user/charge-logs', methods=['GET'])
@@ -4936,12 +4956,24 @@ def sync_vehicle():
     if not valid_document_id(vehicle_id):
         return jsonify({'success': False, 'error': 'vehicleId bắt buộc'}), 400
 
-    payload = dict(body)
+    existing = _fs().collection('Vehicles').document(vehicle_id).get()
+    if not existing.exists:
+        return jsonify({
+            'success': False,
+            'error': 'Create vehicles with POST /api/user/vehicles and a published catalogId.',
+        }), 409
+    current = existing.to_dict() or {}
+    if current.get('ownerUid') != uid:
+        return jsonify({'success': False, 'error': 'Không có quyền đồng bộ xe này'}), 403
+    payload = {
+        key: value for key, value in body.items()
+        if key in PERSONAL_VEHICLE_FIELDS
+    }
     payload['ownerUid'] = uid
     payload['vehicleId'] = vehicle_id
-    payload.setdefault('source', 'flutter_app')
+    payload['source'] = current.get('source', 'catalog_api')
     payload['syncedAt'] = datetime.now(timezone.utc).isoformat()
-    payload = _ensure_schema(payload, 'Vehicles')
+    payload['updatedAt'] = _utcnow()
 
     try:
         commit_owned_writes(_fs(), [('Vehicles', vehicle_id, payload)], uid)
@@ -5000,6 +5032,25 @@ def sync_full():
         count = 0
         for item in items:
             item = dict(item)
+            if key == 'vehicles':
+                candidate_id = item.get('vehicleId') or item.get('id')
+                if not valid_document_id(candidate_id):
+                    return jsonify({'success': False, 'error': 'vehicleId bắt buộc'}), 400
+                existing_vehicle = _fs().collection('Vehicles').document(str(candidate_id)).get()
+                if not existing_vehicle.exists:
+                    return jsonify({
+                        'success': False,
+                        'error': 'Vehicles must be created from the published catalog.',
+                    }), 409
+                current_vehicle = existing_vehicle.to_dict() or {}
+                if current_vehicle.get('ownerUid') != uid:
+                    return jsonify({'success': False, 'error': 'Không có quyền đồng bộ xe này'}), 403
+                item = {
+                    field: value for field, value in item.items()
+                    if field in PERSONAL_VEHICLE_FIELDS
+                }
+                item['vehicleId'] = str(candidate_id)
+                item['source'] = current_vehicle.get('source', 'catalog_api')
             item['ownerUid'] = uid
             item['syncedAt'] = now_iso
             item.setdefault('source', 'flutter_app')
@@ -5010,7 +5061,10 @@ def sync_full():
                     return jsonify({'success': False, 'error': f'telemetry không hợp lệ: {exc}'}), 400
                 item['ownerUid'] = uid
                 item['syncedAt'] = now_iso
-            item = _ensure_schema(item, col_name)
+            if key == 'vehicles':
+                item['updatedAt'] = now_iso
+            else:
+                item = _ensure_schema(item, col_name)
             doc_id = item.get(id_field) or item.get('id')
             if doc_id:
                 writes.append((col_name, str(doc_id), item))
@@ -5339,6 +5393,15 @@ def _register_smart_charge_cloud_first():
 
 
 _register_smart_charge_cloud_first()
+
+# Catalog routes receive narrow dependencies after auth and Firestore helpers
+# have been initialized. This keeps the catalog module independently testable.
+app.register_blueprint(create_catalog_blueprint(
+    require_admin=require_admin,
+    require_auth=require_auth,
+    get_db=_fs,
+    audit=_audit,
+))
 
 
 if __name__ == '__main__':

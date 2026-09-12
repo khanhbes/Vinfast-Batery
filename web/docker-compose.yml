@@ -48,6 +48,9 @@ services:
       SHELLY_CONSENT_CALLBACK_URL: ${SHELLY_CONSENT_CALLBACK_URL:-}
       SHELLY_PROFILE_MASTER_KEY: ${SHELLY_PROFILE_MASTER_KEY:-}
       SMART_CHARGE_MAX_MINUTES: ${SMART_CHARGE_MAX_MINUTES:-600}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_CATALOG_MODEL: ${GEMINI_CATALOG_MODEL:-gemini-2.5-flash}
+      CATALOG_RESEARCH_DAILY_LIMIT: ${CATALOG_RESEARCH_DAILY_LIMIT:-50}
     volumes:
       - models_data:/app/models
       - apk_data:/app/apk
@@ -62,6 +65,25 @@ services:
       timeout: 10s
       retries: 5
       start_period: 60s
+
+  catalog-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    command: ["python", "catalog_research_worker.py"]
+    container_name: vinfast_catalog_worker
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      FIREBASE_CREDENTIALS_JSON: ${FIREBASE_CREDENTIALS_JSON:?Set FIREBASE_CREDENTIALS_JSON in the environment}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_CATALOG_MODEL: ${GEMINI_CATALOG_MODEL:-gemini-2.5-flash}
+      CATALOG_RESEARCH_POLL_SECONDS: ${CATALOG_RESEARCH_POLL_SECONDS:-3}
+    networks:
+      - vinfast_net
 
   # ── React Dashboard → Nginx (internal; Caddy terminates TLS) ──
   dashboard:

@@ -68,6 +68,39 @@ export const adminDataSnapshot = (limit = 500) =>
 export const setAdmin = (email) =>
   apiFetch('/api/auth/set-admin', { method: 'POST', body: JSON.stringify({ email }) })
 
+// ── Global EV catalog ──
+export const catalogList = (status = '') =>
+  apiFetch(`/api/admin/vehicle-catalog${status ? `?status=${encodeURIComponent(status)}` : ''}`)
+export const catalogGet = (catalogId) =>
+  apiFetch(`/api/admin/vehicle-catalog/${encodeURIComponent(catalogId)}`)
+export const catalogCreate = (data) =>
+  apiFetch('/api/admin/vehicle-catalog', { method: 'POST', body: JSON.stringify(data) })
+export const catalogUpdate = (catalogId, data) =>
+  apiFetch(`/api/admin/vehicle-catalog/${encodeURIComponent(catalogId)}`, { method: 'PATCH', body: JSON.stringify(data) })
+export const catalogPublish = (catalogId) =>
+  apiFetch(`/api/admin/vehicle-catalog/${encodeURIComponent(catalogId)}/publish`, { method: 'POST' })
+export const catalogArchive = (catalogId) =>
+  apiFetch(`/api/admin/vehicle-catalog/${encodeURIComponent(catalogId)}/archive`, { method: 'POST' })
+export const catalogRestore = (catalogId) =>
+  apiFetch(`/api/admin/vehicle-catalog/${encodeURIComponent(catalogId)}/restore`, { method: 'POST' })
+export const catalogResearchCreate = (data) =>
+  apiFetch('/api/admin/catalog-research-jobs', { method: 'POST', body: JSON.stringify(data) })
+export const catalogResearchGet = (jobId) =>
+  apiFetch(`/api/admin/catalog-research-jobs/${encodeURIComponent(jobId)}`)
+export const catalogManufacturers = () => apiFetch('/api/admin/vehicle-manufacturers')
+export const catalogManufacturerSave = (brandId, data) =>
+  apiFetch(`/api/admin/vehicle-manufacturers/${encodeURIComponent(brandId)}`, { method: 'PUT', body: JSON.stringify(data) })
+
+export async function catalogUploadMedia(catalogId, file, metadata) {
+  const token = await getToken()
+  const form = new FormData()
+  form.append('file', file)
+  Object.entries(metadata).forEach(([key, value]) => form.append(key, String(value)))
+  return requestPortal(`${BASE}/api/admin/vehicle-catalog/${encodeURIComponent(catalogId)}/media`, {
+    method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {}, body: form,
+  })
+}
+
 // ── Import/Export ──
 export const adminExport = (entity, format = 'json', params = {}) => {
   const qs = new URLSearchParams({ entity, format, ...params }).toString()

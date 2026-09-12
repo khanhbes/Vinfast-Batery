@@ -98,8 +98,8 @@ class TestIdorAndDataIntegrity:
 
     def test_web_h12_owner_uid_override_in_user_add_vehicle(self, client, monkeypatch):
         """
-        WEB-H12: Test whether /api/user/vehicles (POST) derives ownerUid from token
-        or trusts the ownerUid passed in the request body.
+        WEB-H12: Legacy/custom vehicle payloads are rejected. Creation requires
+        a published catalogId and ownership is always derived from the token.
         """
         mock_fs = MagicMock()
         mock_doc = MagicMock()
@@ -112,13 +112,12 @@ class TestIdorAndDataIntegrity:
         monkeypatch.setattr(server, "_firebase_available", True)
         monkeypatch.setattr(server, "_firebase_auth", MockFirebaseAuth())
         
-        client.post(
+        response = client.post(
             "/api/user/vehicles",
             json={"model": "VF-8", "ownerUid": "victim_user_b"},
             headers={"Authorization": "Bearer token_a"}
         )
-        
-        called_data = mock_doc.set.call_args[0][0]
-        assert called_data["ownerUid"] == "user_a_real_id", (
-            "Backend must derive ownerUid from verified token, not trust client input"
-        )
+
+        assert response.status_code == 400
+        assert response.get_json()["error"] == "catalogId is required"
+        mock_doc.set.assert_not_called()

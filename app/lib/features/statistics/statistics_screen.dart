@@ -1566,7 +1566,7 @@ class _AiCapacityDetailPanelState
       }
 
       final specRepo = ref.read(vehicleSpecRepositoryProvider);
-      final spec = await specRepo.getSpec(vehicle.vinfastModelId!);
+      final spec = await specRepo.getSpec(vehicle.effectiveCatalogId!);
       if (spec == null) {
         setState(() => _loading = false);
         return;

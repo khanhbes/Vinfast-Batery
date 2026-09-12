@@ -57,7 +57,7 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(find.text('Xe đã lưu trữ'), findsNothing);
-        expect(find.text('2400 Wh'), findsOneWidget);
+        expect(find.text('2.4 kWh'), findsOneWidget);
         expect(find.text('Chưa có dữ liệu'), findsOneWidget);
         expect(find.textContaining('LFP'), findsNothing);
         expect(tester.takeException(), isNull);

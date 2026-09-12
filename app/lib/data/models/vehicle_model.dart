@@ -17,6 +17,10 @@ class VehicleModel {
   final String? avatarColor;
   final String? licensePlate;
   final String? batteryType;
+  final String? nickname;
+  final String? catalogId;
+  final int? catalogRevisionAtSelection;
+  final Map<String, dynamic>? catalogSnapshot;
   // ── VinFast Model Link fields ──
   final String? vinfastModelId;
   final String? vinfastModelName;
@@ -46,6 +50,10 @@ class VehicleModel {
     this.avatarColor,
     this.licensePlate,
     this.batteryType,
+    this.nickname,
+    this.catalogId,
+    this.catalogRevisionAtSelection,
+    this.catalogSnapshot,
     this.vinfastModelId,
     this.vinfastModelName,
     this.specVersion,
@@ -59,8 +67,17 @@ class VehicleModel {
   });
 
   /// Convert Firestore document to model
-  /// Whether this vehicle has been linked to a VinFast model spec
-  bool get hasModelLink => vinfastModelId != null && vinfastModelId!.isNotEmpty;
+  /// Catalog identifier used by both new global entries and legacy VinFast
+  /// records during the compatibility release.
+  String? get effectiveCatalogId {
+    final globalId = catalogId?.trim() ?? '';
+    if (globalId.isNotEmpty) return globalId;
+    final legacyId = vinfastModelId?.trim() ?? '';
+    return legacyId.isEmpty ? null : legacyId;
+  }
+
+  /// Whether this vehicle has been linked to a reviewed vehicle catalog entry.
+  bool get hasModelLink => effectiveCatalogId != null;
 
   /// Parse số nguyên an toàn — chấp nhận `int`, `double`, `num`, `String`,
   /// hoặc `null`. Tránh crash `'double' is not a subtype of int` khi Firestore
@@ -123,7 +140,16 @@ class VehicleModel {
           : data.containsKey('currentOdo'),
       avatarColor: data['avatarColor'],
       licensePlate: data['licensePlate'] as String?,
-      batteryType: data['batteryType'] as String? ?? data['batteryChemistry'] as String?,
+      batteryType:
+          data['batteryType'] as String? ?? data['batteryChemistry'] as String?,
+      nickname: data['nickname'] as String?,
+      catalogId: data['catalogId'] as String?,
+      catalogRevisionAtSelection: data['catalogRevisionAtSelection'] == null
+          ? null
+          : _asInt(data['catalogRevisionAtSelection']),
+      catalogSnapshot: data['catalogSnapshot'] is Map
+          ? Map<String, dynamic>.from(data['catalogSnapshot'] as Map)
+          : null,
       vinfastModelId: data['vinfastModelId'],
       vinfastModelName: data['vinfastModelName'],
       specVersion: data['specVersion'] == null
@@ -169,7 +195,16 @@ class VehicleModel {
           : data.containsKey('currentOdo'),
       avatarColor: data['avatarColor'],
       licensePlate: data['licensePlate'] as String?,
-      batteryType: data['batteryType'] as String? ?? data['batteryChemistry'] as String?,
+      batteryType:
+          data['batteryType'] as String? ?? data['batteryChemistry'] as String?,
+      nickname: data['nickname'] as String?,
+      catalogId: data['catalogId'] as String?,
+      catalogRevisionAtSelection: data['catalogRevisionAtSelection'] == null
+          ? null
+          : _asInt(data['catalogRevisionAtSelection']),
+      catalogSnapshot: data['catalogSnapshot'] is Map
+          ? Map<String, dynamic>.from(data['catalogSnapshot'] as Map)
+          : null,
       vinfastModelId: data['vinfastModelId'],
       vinfastModelName: data['vinfastModelName'],
       specVersion: data['specVersion'] == null
@@ -204,8 +239,15 @@ class VehicleModel {
       'hasEfficiencyData': hasEfficiencyData,
       'hasOdoData': hasOdoData,
       'avatarColor': avatarColor,
-      if (licensePlate != null && licensePlate!.isNotEmpty) 'licensePlate': licensePlate,
-      if (batteryType != null && batteryType!.isNotEmpty) 'batteryType': batteryType,
+      if (licensePlate != null && licensePlate!.isNotEmpty)
+        'licensePlate': licensePlate,
+      if (batteryType != null && batteryType!.isNotEmpty)
+        'batteryType': batteryType,
+      if (nickname != null) 'nickname': nickname,
+      if (catalogId != null) 'catalogId': catalogId,
+      if (catalogRevisionAtSelection != null)
+        'catalogRevisionAtSelection': catalogRevisionAtSelection,
+      if (catalogSnapshot != null) 'catalogSnapshot': catalogSnapshot,
       'vinfastModelId': vinfastModelId,
       'vinfastModelName': vinfastModelName,
       'specVersion': specVersion,
@@ -233,6 +275,10 @@ class VehicleModel {
     String? avatarColor,
     String? licensePlate,
     String? batteryType,
+    String? nickname,
+    String? catalogId,
+    int? catalogRevisionAtSelection,
+    Map<String, dynamic>? catalogSnapshot,
     String? vinfastModelId,
     String? vinfastModelName,
     int? specVersion,
@@ -259,6 +305,11 @@ class VehicleModel {
       avatarColor: avatarColor ?? this.avatarColor,
       licensePlate: licensePlate ?? this.licensePlate,
       batteryType: batteryType ?? this.batteryType,
+      nickname: nickname ?? this.nickname,
+      catalogId: catalogId ?? this.catalogId,
+      catalogRevisionAtSelection:
+          catalogRevisionAtSelection ?? this.catalogRevisionAtSelection,
+      catalogSnapshot: catalogSnapshot ?? this.catalogSnapshot,
       vinfastModelId: vinfastModelId ?? this.vinfastModelId,
       vinfastModelName: vinfastModelName ?? this.vinfastModelName,
       specVersion: specVersion ?? this.specVersion,

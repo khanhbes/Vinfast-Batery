@@ -113,9 +113,19 @@ service cloud.firestore {
     // ── Vehicles ──
     match /Vehicles/{vehicleId} {
       allow read: if isAuth() && isOwner(resource.data.ownerUid);
-      allow create: if isAuth() && request.resource.data.ownerUid == request.auth.uid;
+      // Creation and catalog changes are server-only so a client cannot forge
+      // manufacturer-controlled battery or charging specifications.
+      allow create: if false;
       allow update: if isAuth() && isOwner(resource.data.ownerUid) &&
-        request.resource.data.ownerUid == request.auth.uid;
+        request.resource.data.ownerUid == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'nickname', 'vehicleName', 'licensePlate', 'currentOdo',
+          'currentBattery', 'lastBatteryPercent', 'stateOfHealth',
+          'avatarColor', 'hasBatteryData', 'hasSohData', 'hasOdoData',
+          'totalCharges', 'totalTrips', 'isDeleted', 'isArchived',
+          'archivedAt', 'updatedAt', 'needsSync', 'syncedToWeb',
+          'lastWebSync'
+        ]);
       // Vehicles are archived via isDeleted/archivedAt; physical deletion is
       // prohibited so histories and AI profiles remain recoverable.
       allow delete: if false;
@@ -238,6 +248,37 @@ service cloud.firestore {
     match /VinFastModelSpecs/{modelId} {
       allow read: if true;
       allow write: if false; // Managed via backend/admin
+    }
+
+    // ── Global EV catalog ──
+    // Only selectable, reviewed records can be listed/read directly. Archived
+    // details go through the owner-aware mobile API so another user cannot use
+    // Firestore as a bypass. Every mutable/admin surface uses the RBAC API.
+    match /VehicleCatalog/{catalogId} {
+      allow read: if isAuth() && resource.data.selectable == true;
+      allow write: if false;
+    }
+    match /VehicleCatalogMeta/{metaId} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+    match /VehicleCatalogDrafts/{catalogId} {
+      allow read, write: if false;
+    }
+    match /VehicleCatalogHistory/{catalogId} {
+      allow read, write: if false;
+      match /revisions/{revisionId} {
+        allow read, write: if false;
+      }
+    }
+    match /VehicleCatalogKeys/{identityKey} {
+      allow read, write: if false;
+    }
+    match /VehicleManufacturers/{brandId} {
+      allow read, write: if false;
+    }
+    match /VehicleResearchJobs/{jobId} {
+      allow read, write: if false;
     }
 
     // ── AiVehicleInsights (app reads own data, backend writes via Admin SDK) ──

@@ -138,6 +138,47 @@ class ApiService {
     return _post(endpoint, body);
   }
 
+  Future<Map<String, dynamic>> patch(
+    String endpoint,
+    Map<String, dynamic> body,
+  ) async {
+    return _write(endpoint, body, method: 'PATCH');
+  }
+
+  Future<Map<String, dynamic>> put(
+    String endpoint,
+    Map<String, dynamic> body,
+  ) async {
+    return _write(endpoint, body, method: 'PUT');
+  }
+
+  Future<Map<String, dynamic>> _write(
+    String endpoint,
+    Map<String, dynamic> body, {
+    required String method,
+  }) async {
+    try {
+      final headers = await getHeaders();
+      final request = http.Request(method, Uri.parse('$_baseUrl$endpoint'))
+        ..headers.addAll(headers)
+        ..body = jsonEncode(body);
+      final streamed = await request.send().timeout(
+        const Duration(seconds: 30),
+      );
+      final response = await http.Response.fromStream(streamed);
+      return _handleResponse(endpoint, response);
+    } catch (error, stack) {
+      AppErrorReporter.report(
+        error,
+        stack,
+        source: 'ApiService',
+        endpoint: endpoint,
+        debugCode: '${method}_ERROR',
+      );
+      return {'success': false, 'error': 'Không thể kết nối tới máy chủ.'};
+    }
+  }
+
   Future<Map<String, dynamic>> _post(
     String endpoint,
     Map<String, dynamic> body,
