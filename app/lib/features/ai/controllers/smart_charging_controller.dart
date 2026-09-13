@@ -13,6 +13,7 @@ import '../../../data/repositories/charge_log_repository.dart';
 import '../../../data/services/charging_prediction_adapter.dart';
 import '../../../data/services/smart_charger_service.dart';
 import '../../../data/services/smart_charge_telemetry_foreground_service.dart';
+import '../../../data/services/smart_charge_energy_accumulator.dart';
 import '../../../data/services/smart_charge_preferences_service.dart';
 import '../../../data/services/smart_charge_report_service.dart';
 import '../../../data/services/shelly_charge_log_service.dart';
@@ -291,6 +292,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
   DateTime? _lastCalibrationAt;
   StreamSubscription<SmartChargerStatus>? _foregroundStatusSubscription;
   bool _foregroundPolling = false;
+  DateTime? _lastForegroundStatusAt;
   StreamSubscription<ChargingConnectionState>? _connectionSubscription;
 
   Future<void> initialize() async {
@@ -419,6 +421,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
           .statuses
           .listen((status) {
             if (_disposed) return;
+            _lastForegroundStatusAt = _clock();
             state = state.copyWith(
               chargerStatus: status,
               session: _sessionWithStatus(state.session, status),
@@ -454,9 +457,16 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
   }
 
   Future<void> _startForegroundMonitor(SmartChargingSession session) async {
+    if (_repository?.telemetryOwner != SmartChargeTelemetryOwner.clientDirect) {
+      // Server Cloud owns its own telemetry. Starting a Direct worker here
+      // would disable UI polling while that worker has no local credentials.
+      _foregroundPolling = false;
+      return;
+    }
     try {
       await SmartChargeTelemetryForegroundService.start(session);
       _foregroundPolling = true;
+      _lastForegroundStatusAt = _clock();
       state = state.copyWith(
         telemetryStatus: SmartChargeTelemetryStatus.recording,
       );
@@ -522,7 +532,14 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
   Future<void> retrySession() => _refreshSession();
 
   Future<void> _refreshStatus() async {
-    if (_foregroundPolling) return;
+    if (_foregroundPolling) {
+      final last = _lastForegroundStatusAt;
+      if (last != null && _clock().difference(last) <= const Duration(seconds: 15)) {
+        return;
+      }
+      // A foreground task that stopped emitting must never freeze the UI.
+      _foregroundPolling = false;
+    }
     if (_statusRequestRunning || _disposed) return;
     _statusRequestRunning = true;
     try {
@@ -597,28 +614,28 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     SmartChargerStatus status,
   ) {
     if (session == null || session.state.isTerminal) return session;
-    final baseline = session.baselineEnergyWh;
-    var energy = session.energyUsedWh;
-    if (baseline != null && status.energyWh >= baseline) {
-      energy = max(energy, status.energyWh - baseline);
-    }
-    final capacity =
-        session.effectiveCapacityWh ??
-        session.estimatedCapacityWh ??
-        state.draft.estimatedCapacityWh;
-    final estimatedSoc = capacity > 0
-        ? (session.startSoc + energy / capacity * 100).clamp(
-            session.startSoc,
-            100,
-          )
-        : session.estimatedSoc;
-    return session.copyWith(
-      energyUsedWh: energy,
-      estimatedSoc: estimatedSoc?.toDouble(),
+    final meter = SmartChargeEnergyAccumulator.ingest(session, status.energyWh);
+    final measured = session.copyWith(
+      baselineEnergyWh: meter.baselineEnergyWh,
+      lastMeterEnergyWh: meter.lastMeterEnergyWh,
+      energyUsedWh: meter.energyUsedWh,
+      energyQuality: meter.energyQuality,
+    );
+    final estimate = SmartChargeEnergyAccumulator.estimate(measured);
+    return measured.copyWith(
+      estimatedSoc: estimate.soc,
+      estimatedStoredEnergyWh: estimate.available
+          ? estimate.storedEnergyWh
+          : null,
+      socEstimateSource: estimate.available ? 'shelly_energy' : 'unavailable',
+      socEstimateQuality: estimate.available
+          ? (meter.energyQuality == 'good' ? 'live' : 'partial')
+          : 'unavailable',
+      socEstimationVersion: 2,
       tariffVndPerKwhSnapshot:
           session.tariffVndPerKwhSnapshot ?? state.preferences?.tariffVndPerKwh,
       estimatedCostVnd: _costFor(
-        energy,
+        meter.energyUsedWh,
         session.tariffVndPerKwhSnapshot ?? state.preferences?.tariffVndPerKwh,
       ),
       costQuality:
@@ -886,10 +903,14 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       state = state.copyWith(draft: draft);
     }
     final error = draft.validate(now: now);
-    if (error != null) {
+    final capacityError = draft.strategy != ChargingStrategy.manualTimed &&
+            draft.estimatedCapacityWh <= 0
+        ? 'Xe chưa có dung lượng pin đã được xác minh. Hãy cập nhật catalog hoặc dùng Sạc hẹn giờ.'
+        : null;
+    if (error != null || capacityError != null) {
       state = state.copyWith(
         phase: SmartChargingViewPhase.error,
-        actionError: error,
+        actionError: error ?? capacityError,
       );
       return;
     }

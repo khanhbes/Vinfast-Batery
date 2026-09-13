@@ -31,6 +31,7 @@ class SmartChargeRepository:
         self._personal_profiles: dict[tuple[str, str], PersonalChargingProfile] = {}
         self._telemetry: dict[tuple[str, str], list[dict]] = {}
         self._vehicle_owners: dict[str, str] = {}
+        self._test_vehicle_capacities: dict[str, float] = {}
         self._archived_vehicles: set[tuple[str, str]] = set()
         # Include vehicle identity in the in-memory idempotency marker.  A
         # privacy erase for one vehicle must never reset/erase markers for a
@@ -55,10 +56,19 @@ class SmartChargeRepository:
         with self._lock:
             return self._last_history_skipped
 
-    def register_vehicle_owner(self, uid: str, vehicle_id: str) -> None:
-        """Deterministic test/dev registration; production reads Vehicles."""
+    def register_vehicle_owner(
+        self, uid: str, vehicle_id: str, *, verified_capacity_wh: float = 3500,
+    ) -> None:
+        """Deterministic test/dev registration; production reads Vehicles.
+
+        This is deliberately isolated from Firestore production reads. Test
+        fixtures registering a vehicle declare a verified test capacity rather
+        than exercising the production missing-capacity guard.
+        """
         with self._lock:
             self._vehicle_owners[vehicle_id] = uid
+            if verified_capacity_wh > 0:
+                self._test_vehicle_capacities[vehicle_id] = verified_capacity_wh
 
     def set_vehicle_archived(self, uid: str, vehicle_id: str, archived: bool = True) -> None:
         with self._lock:
@@ -80,10 +90,22 @@ class SmartChargeRepository:
             result = {"vehicleId": vehicle_id, **data}
             capacity = result.get("nominalCapacityWh") or result.get("batteryCapacityWh") or result.get("batteryCapacity")
             model_id = result.get("vinfastModelId")
+            catalog_id = result.get("catalogId") or model_id
             try:
                 capacity_value = float(capacity or 0)
             except (TypeError, ValueError):
                 capacity_value = 0.0
+            if capacity_value <= 0 and catalog_id:
+                catalog = self.db.collection("VehicleCatalog").document(str(catalog_id)).get()
+                catalog_data = catalog.to_dict() or {} if catalog.exists else {}
+                defaults = catalog_data.get("appDefaults") or {}
+                battery = catalog_data.get("battery") or {}
+                capacity = (defaults.get("calculationCapacityWh")
+                            or battery.get("calculationCapacityWh"))
+                try:
+                    capacity_value = float(capacity or 0)
+                except (TypeError, ValueError):
+                    capacity_value = 0.0
             if capacity_value <= 0 and model_id:
                 spec = self.db.collection("VinFastModelSpecs").document(str(model_id)).get()
                 spec_data = spec.to_dict() or {} if spec.exists else {}
@@ -97,7 +119,11 @@ class SmartChargeRepository:
             return result
         with self._lock:
             return (
-                {"vehicleId": vehicle_id, "ownerUid": uid}
+                {
+                    "vehicleId": vehicle_id,
+                    "ownerUid": uid,
+                    "nominalCapacityWh": self._test_vehicle_capacities.get(vehicle_id),
+                }
                 if self._vehicle_owners.get(vehicle_id) == uid and
                 (uid, vehicle_id) not in self._archived_vehicles
                 else None
@@ -566,7 +592,9 @@ class SmartChargeRepository:
             "startTime": session.created_at,
             "endTime": session.stopped_at if session.state in ("completed", "cancelled", "interrupted", "failed") else None,
             "startBatteryPercent": round(session.start_soc),
-            "endBatteryPercent": round(session.estimated_soc if session.estimated_soc is not None else session.target_soc),
+            # A target is a plan, not an observed battery result. Keep this
+            # null when no capacity-backed estimate exists.
+            "endBatteryPercent": round(session.actual_end_soc if session.actual_end_soc is not None else session.estimated_soc) if (session.actual_end_soc is not None or session.estimated_soc is not None) else None,
             "targetBatteryPercent": round(session.target_soc),
             "source": "shelly_smart_charging",
             "shellyDeviceId": session.device_id,
@@ -586,7 +614,15 @@ class SmartChargeRepository:
             "fallbackReason": session.fallback_reason,
             "predictedDurationSeconds": session.predicted_duration_seconds,
             "predictionAnalyzedAt": session.prediction_analyzed_at,
-            "socEstimated": True,
+            "socEstimated": session.estimated_soc is not None,
+            "socEstimateSource": session.soc_estimate_source,
+            "socEstimateQuality": session.soc_estimate_quality,
+            "socEstimationVersion": session.soc_estimation_version,
+            "chargingEfficiency": session.charging_efficiency,
+            "capacitySource": session.capacity_source,
+            "capacityRevision": session.capacity_revision,
+            "lastMeterEnergyWh": session.last_meter_energy_wh,
+            "estimatedStoredEnergyWh": session.estimated_stored_energy_wh,
             "etaCandidates": [item.to_dict() for item in session.eta_candidates],
             "etaFusionReason": session.fusion_reason,
             "personalProfileVersion": session.profile_version,
@@ -618,6 +654,31 @@ class SmartChargeRepository:
             "updatedAt": datetime.now(timezone.utc),
         }
         self.db.collection("ChargeLogs").document(session.session_id).set(payload, merge=True)
+        # Server Cloud owns telemetry, therefore it also advances the vehicle
+        # snapshot after a durable terminal log. Never move it backwards over
+        # a newer confirmed/user reading.
+        if session.state in ("completed", "cancelled", "interrupted", "failed"):
+            soc = session.actual_end_soc if session.actual_end_soc is not None else session.estimated_soc
+            observed_at = session.stopped_at or session.updated_at
+            if soc is not None and session.vehicle_id:
+                try:
+                    vehicle = self.db.collection("Vehicles").document(session.vehicle_id)
+                    current = vehicle.get().to_dict() or {}
+                    existing_at = _date(current.get("batteryDataUpdatedAt"))
+                    if current.get("ownerUid") == uid and (existing_at is None or existing_at <= observed_at):
+                        vehicle.set({
+                            "currentBattery": round(soc),
+                            "lastBatteryPercent": round(soc),
+                            "hasBatteryData": True,
+                            "batteryDataSource": "user_confirmed" if session.actual_end_soc is not None else "smart_charge_estimated",
+                            "batteryDataSessionId": session.session_id,
+                            "batteryDataUpdatedAt": observed_at,
+                            "updatedAt": datetime.now(timezone.utc),
+                        }, merge=True)
+                except Exception:
+                    # The ChargeLog is canonical; a later reconciliation can
+                    # retry the denormalized vehicle snapshot safely.
+                    pass
 
     def get_by_idempotency(self, uid: str, key: str) -> ChargingSession | None:
         with self._lock:
@@ -1193,8 +1254,15 @@ def _session(data: dict) -> ChargingSession:
         prediction_warnings=list(data.get("prediction_warnings") or []),
         fallback_reason=data.get("fallback_reason"),
         prediction_analyzed_at=_date(data.get("prediction_analyzed_at")),
-        estimated_soc=data.get("estimated_soc"), baseline_energy_wh=data.get("baseline_energy_wh"), energy_used_wh=float(data.get("energy_used_wh") or 0),
+        estimated_soc=data.get("estimated_soc"), baseline_energy_wh=data.get("baseline_energy_wh"),
+        last_meter_energy_wh=data.get("last_meter_energy_wh"), energy_used_wh=float(data.get("energy_used_wh") or 0),
         energy_quality=str(data.get("energy_quality") or "good"),
+        estimated_stored_energy_wh=data.get("estimated_stored_energy_wh"),
+        charging_efficiency=float(data.get("charging_efficiency") or .90),
+        capacity_source=data.get("capacity_source"), capacity_revision=data.get("capacity_revision"),
+        soc_estimate_source=data.get("soc_estimate_source"),
+        soc_estimate_quality=str(data.get("soc_estimate_quality") or "unavailable"),
+        soc_estimation_version=int(data.get("soc_estimation_version") or 1),
         relay_verified=bool(data.get("relay_verified")), timer_verified=bool(data.get("timer_verified")), transport=str(data.get("transport") or "shelly_cloud"),
         stopped_at=_date(data.get("stopped_at")), stop_reason=data.get("stop_reason"), version=int(data.get("version") or 1), last_error=data.get("last_error"),
         eta_candidates=[EtaCandidate(

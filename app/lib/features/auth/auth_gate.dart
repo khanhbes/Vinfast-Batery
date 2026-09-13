@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,6 +16,7 @@ import '../../data/repositories/vehicle_spec_repository.dart';
 import '../../data/services/maintenance_reminder_service.dart';
 import '../../data/services/vehicle_model_link_service.dart';
 import '../../data/services/smart_charger_credentials_service.dart';
+import '../../core/services/firebase_bootstrap_coordinator.dart';
 import '../../data/repositories/smart_charger_repository.dart';
 import '../../data/models/smart_charger_binding.dart';
 import '../../main.dart' show firebaseInitErrorProvider;
@@ -90,10 +90,15 @@ class _AuthGateState extends ConsumerState<AuthGate> {
         ? const Duration(seconds: 8)
         : const Duration(seconds: 3);
 
-    var restoredUser = await completer.future.timeout(
-      timeout,
-      onTimeout: () => null,
-    );
+    User? restoredUser;
+    try {
+      restoredUser = await completer.future.timeout(
+        timeout,
+        onTimeout: () => null,
+      );
+    } finally {
+      await sub?.cancel();
+    }
 
     // Nếu lần trước đã đăng nhập và chưa bấm Đăng xuất, nhưng Firebase vẫn
     // trả null ở cold start, thử khôi phục bằng credential đã mã hóa.
@@ -135,7 +140,8 @@ class _AuthGateState extends ConsumerState<AuthGate> {
   Future<void> _retryFirebaseInit() async {
     setState(() => _initializing = true);
     try {
-      await Firebase.initializeApp();
+      await FirebaseBootstrapCoordinator.ensureInitialized();
+      await FirebaseBootstrapCoordinator.initializePushServices();
       ref.read(firebaseInitErrorProvider.notifier).state = null;
     } catch (e) {
       ref.read(firebaseInitErrorProvider.notifier).state = e;

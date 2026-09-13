@@ -262,8 +262,14 @@ class ChargingPredictionAdapter {
     if (powerW <= 0 || efficiency <= 0 || efficiency > 1) {
       throw StateError('Cấu hình công suất/hiệu suất bộ sạc không hợp lệ.');
     }
-    final capacityWh =
-        draft.estimatedCapacityWh > 0 ? draft.estimatedCapacityWh : 2600.0;
+    final capacityWh = draft.estimatedCapacityWh;
+    if (capacityWh <= 0) {
+      throw SmartChargePredictionException(
+        message:
+            'Xe chưa có dung lượng pin đã được xác minh; không thể tạo kế hoạch theo SOC.',
+        debugCode: 'CAPACITY_UNAVAILABLE',
+      );
+    }
     final requiredWh = capacityWh * (draft.targetSoc - draft.currentSoc) / 100;
     final minutes = ((requiredWh / (powerW * efficiency)) * 60).ceil().clamp(
       1,

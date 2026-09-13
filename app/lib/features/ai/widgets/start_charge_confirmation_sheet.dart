@@ -75,6 +75,7 @@ class _StartChargeConfirmationSheetState
       border: Border.all(color: context.cockpit.border),
     ),
     child: SafeArea(
+      top: false,
       child: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
@@ -252,9 +253,9 @@ class _StartChargeConfirmationSheetState
               const SizedBox(height: 20),
 
               // Buttons
-              SizedBox(
+              ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 52),
                 width: double.infinity,
-                height: 52,
                 child: FilledButton.icon(
                   onPressed: _acknowledged
                       ? () => Navigator.pop(context, true)
@@ -313,30 +314,49 @@ class _InfoRow extends StatelessWidget {
   final Color? valueColor;
 
   @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Icon(icon, size: 18, color: CockpitColors.muted),
-      const SizedBox(width: 10),
-      Expanded(
-        child: Text(
-          label,
-          style: TextStyle(color: CockpitColors.muted, fontSize: 13),
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final stacked = constraints.maxWidth < 270 ||
+          MediaQuery.textScalerOf(context).textScaleFactor > 1.25;
+      final valueText = Text(
+        value,
+        style: CockpitTypography.numbers(
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+          color: valueColor ?? CockpitColors.text,
         ),
-      ),
-      const SizedBox(width: 8),
-      Flexible(
-        child: Text(
-          value,
-          style: CockpitTypography.numbers(
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: valueColor ?? CockpitColors.text,
-          ),
-          textAlign: TextAlign.end,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ),
-    ],
+        textAlign: stacked ? TextAlign.start : TextAlign.end,
+        maxLines: stacked ? 3 : 2,
+        overflow: TextOverflow.ellipsis,
+      );
+      if (stacked) {
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 18, color: CockpitColors.muted),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: TextStyle(color: CockpitColors.muted, fontSize: 13)),
+                  const SizedBox(height: 4),
+                  valueText,
+                ],
+              ),
+            ),
+          ],
+        );
+      }
+      return Row(
+        children: [
+          Icon(icon, size: 18, color: CockpitColors.muted),
+          const SizedBox(width: 10),
+          Expanded(child: Text(label, style: TextStyle(color: CockpitColors.muted, fontSize: 13))),
+          const SizedBox(width: 8),
+          Flexible(child: valueText),
+        ],
+      );
+    },
   );
 }

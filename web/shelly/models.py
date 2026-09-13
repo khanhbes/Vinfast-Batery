@@ -296,8 +296,16 @@ class ChargingSession:
     prediction_analyzed_at: datetime | None = None
     estimated_soc: float | None = None
     baseline_energy_wh: float | None = None
+    last_meter_energy_wh: float | None = None
     energy_used_wh: float = 0
     energy_quality: str = "good"
+    estimated_stored_energy_wh: float | None = None
+    charging_efficiency: float = 0.90
+    capacity_source: str | None = None
+    capacity_revision: int | None = None
+    soc_estimate_source: str | None = None
+    soc_estimate_quality: str = "unavailable"
+    soc_estimation_version: int = 1
     relay_verified: bool = False
     timer_verified: bool = False
     transport: str = "shelly_cloud"
@@ -373,8 +381,16 @@ class ChargingSession:
             "relay_verified": self.relay_verified,
             "timer_verified": self.timer_verified,
             "baseline_energy_wh": self.baseline_energy_wh,
+            "last_meter_energy_wh": self.last_meter_energy_wh,
             "energy_used_wh": self.energy_used_wh,
             "energy_quality": self.energy_quality,
+            "estimated_stored_energy_wh": self.estimated_stored_energy_wh,
+            "charging_efficiency": self.charging_efficiency,
+            "capacity_source": self.capacity_source,
+            "capacity_revision": self.capacity_revision,
+            "soc_estimate_source": self.soc_estimate_source,
+            "soc_estimate_quality": self.soc_estimate_quality,
+            "soc_estimation_version": self.soc_estimation_version,
             "shadow_mode": False,
             "transport": self.transport,
             "version": self.version,

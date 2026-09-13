@@ -83,6 +83,7 @@ class AppTheme {
         error: AppColorsLight.error,
         onError: Colors.white,
         outline: AppColorsLight.border,
+        outlineVariant: AppColorsLight.borderLight,
       ),
       textTheme: GoogleFonts.interTextTheme(
         TextTheme(
@@ -272,6 +273,9 @@ class AppTheme {
         error: AppColorsDark.error,
         onError: Color(0xFF690005),
         outline: AppColorsDark.borderLight,
+        // ColorScheme.dark otherwise falls back outlineVariant to white.
+        // AppUiColors.border is used by every surface in the cockpit.
+        outlineVariant: AppColorsDark.border,
       ),
       textTheme: GoogleFonts.interTextTheme(
         const TextTheme(

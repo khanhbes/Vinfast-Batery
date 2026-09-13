@@ -73,6 +73,10 @@ services:
     command: ["python", "catalog_research_worker.py"]
     container_name: vinfast_catalog_worker
     restart: unless-stopped
+    # The shared API image has an HTTP healthcheck on :5000; a worker has no
+    # HTTP listener, so inheriting it would falsely mark a healthy worker down.
+    healthcheck:
+      disable: true
     depends_on:
       api:
         condition: service_healthy
@@ -88,8 +92,8 @@ services:
   # ── React Dashboard → Nginx (internal; Caddy terminates TLS) ──
   dashboard:
     build:
-      context: .
-      dockerfile: Dockerfile.dashboard
+      context: ./dashboard
+      dockerfile: Dockerfile.production
       args:
         VITE_API_BASE_URL: /api
         VITE_FIREBASE_API_KEY: ${VITE_FIREBASE_API_KEY:?Set VITE_FIREBASE_API_KEY in the environment}

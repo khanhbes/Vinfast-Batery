@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'firebase_options.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import 'dart:ui';
@@ -17,7 +14,7 @@ import 'core/services/app_error_reporter.dart';
 import 'data/services/charging_prediction_adapter.dart';
 import 'data/services/shelly_clients.dart';
 import 'data/services/smart_charger_service.dart';
-import 'data/services/push_notification_service.dart';
+import 'core/services/firebase_bootstrap_coordinator.dart';
 
 /// Provider toàn cục cho trạng thái recovery cần hiển thị dialog
 final pendingRecoveryProvider = StateProvider<String?>((ref) => null);
@@ -63,12 +60,12 @@ void main() async {
 
   await runZonedGuarded(
     () async {
-      // Khởi tạo Firebase
+      // Android may already initialize Firebase before Dart starts. The
+      // coordinator also resolves a normal duplicate-app startup race.
       Object? firebaseInitError;
       try {
-        await Firebase.initializeApp(
-          options: DefaultFirebaseOptions.currentPlatform,
-        );
+        await FirebaseBootstrapCoordinator.ensureInitialized();
+        await FirebaseBootstrapCoordinator.initializePushServices();
       } catch (e, stack) {
         AppErrorReporter.report(e, stack, source: 'Firebase');
         firebaseInitError = e;
@@ -80,12 +77,7 @@ void main() async {
       } catch (e, stack) {
         AppErrorReporter.report(e, stack, source: 'NotificationService');
       }
-      try {
-        FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-        await PushNotificationService.instance.initialize();
-      } catch (e, stack) {
-        AppErrorReporter.report(e, stack, source: 'PushNotifications');
-      }
+      // Push is started only after Firebase succeeds above.
 
       // Khởi tạo Background Service
       try {

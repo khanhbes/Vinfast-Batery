@@ -127,6 +127,12 @@ class SmartChargeService:
         if not 0 <= current < target <= 100:
             raise SmartChargeError("invalidSoc", "Target SOC phải lớn hơn SOC hiện tại và không quá 100%")
         trusted_payload = self._prediction_payload(payload, vehicle)
+        if not _optional_float(trusted_payload.get("estimatedCapacityWh")):
+            raise SmartChargeError(
+                "capacityUnavailable",
+                "Xe chưa có dung lượng pin đã được xác minh; hãy cập nhật catalog hoặc dùng Sạc hẹn giờ.",
+                409,
+            )
         result = self.predictor(trusted_payload)
         global_seconds = int(round(float(
             result.get("predictedDurationSeconds")
@@ -258,6 +264,12 @@ class SmartChargeService:
             absolute_safety_stop_at=now + timedelta(minutes=self.max_minutes),
             idempotency_key=idempotency_key,
             baseline_energy_wh=status.energy_wh,
+            last_meter_energy_wh=status.energy_wh,
+            charging_efficiency=.90,
+            capacity_source="personal_calibration" if preview.personalization_stage == "personal" else "vehicle_catalog",
+            soc_estimate_source="shelly_energy" if preview.effective_capacity_wh else "unavailable",
+            soc_estimate_quality="live" if preview.effective_capacity_wh else "unavailable",
+            soc_estimation_version=2,
             eta_candidates=list(preview.eta_candidates),
             fusion_reason=preview.fusion_reason,
             profile_version=preview.profile_version,
@@ -383,7 +395,7 @@ class SmartChargeService:
             session.stopped_at = now
             session.updated_at = now
             session.relay_verified = True
-            session.energy_used_wh = max(0, verified.energy_wh - (session.baseline_energy_wh or verified.energy_wh))
+            self._ingest_energy(session, verified.energy_wh)
             session.version += 1
             self.repository.save_session(uid, session)
             self.repository.upsert_charge_log(uid, session)
@@ -526,6 +538,7 @@ class SmartChargeService:
         last = self._last_telemetry_at.get(session_id)
         if last and (now - last).total_seconds() < 25:
             return {"recorded": False, "reason": "aggregating"}
+        self._ingest_energy(session, float(payload.get("energyWh") or 0))
         point = {
             "sessionId": session_id,
             "timestamp": now.isoformat(),
@@ -540,7 +553,7 @@ class SmartChargeService:
             "batteryTemperatureC": payload.get("batteryTemperatureC"),
             "energyWh": float(payload.get("energyWh") or 0),
             "estimatedSoc": session.estimated_soc,
-            "socSource": str(payload.get("socSource") or "estimated"),
+            "socSource": session.soc_estimate_source or "unavailable",
             "targetSoc": session.target_soc,
             "relay": bool(payload.get("relay")),
             "timerRemainingSeconds": int(payload.get("timerRemainingSeconds") or 0),
@@ -553,7 +566,6 @@ class SmartChargeService:
         count = len(self.repository.telemetry(uid, session_id))
         expected = max(1, math.ceil(max(1, point["elapsedSeconds"]) / 30))
         session.telemetry_coverage = min(1.0, count / expected)
-        session.energy_used_wh = max(0, point["energyWh"] - (session.baseline_energy_wh or point["energyWh"]))
         session.shelly_temperature_c = _optional_float(point.get("shellyTemperatureC"))
         session.battery_temperature_c = _optional_float(point.get("batteryTemperatureC"))
         session.average_power_w = _running_average(session.average_power_w, point["powerAverageW"], count)
@@ -674,6 +686,42 @@ class SmartChargeService:
             result["estimatedCapacityWh"] = vehicle["nominalCapacityWh"]
         return result
 
+    def _ingest_energy(self, session: ChargingSession, meter_energy_wh: float) -> None:
+        """Accumulate Shelly's lifetime meter without losing energy on reset."""
+        reading = max(0.0, float(meter_energy_wh or 0))
+        if session.baseline_energy_wh is None:
+            session.baseline_energy_wh = reading
+            session.last_meter_energy_wh = reading
+            return
+        last = (session.last_meter_energy_wh
+                if session.last_meter_energy_wh is not None
+                else session.baseline_energy_wh)
+        if reading >= last:
+            session.energy_used_wh = max(0.0, session.energy_used_wh) + reading - last
+            session.last_meter_energy_wh = reading
+        else:
+            threshold = max(25.0, abs(last) * .20)
+            if reading < last - threshold:
+                session.last_meter_energy_wh = reading
+                session.baseline_energy_wh = reading
+                session.energy_quality = "meter_reset"
+        capacity = session.effective_capacity_wh or session.nominal_capacity_wh
+        if capacity is None or capacity <= 0:
+            session.estimated_soc = None
+            session.estimated_stored_energy_wh = None
+            session.soc_estimate_source = "unavailable"
+            session.soc_estimate_quality = "unavailable"
+            session.soc_estimation_version = 2
+            return
+        efficiency = min(.98, max(.65, session.charging_efficiency or .90))
+        stored = session.energy_used_wh * efficiency
+        session.estimated_stored_energy_wh = stored
+        session.estimated_soc = min(100.0, max(session.start_soc,
+            session.start_soc + stored / capacity * 100))
+        session.soc_estimate_source = "shelly_energy"
+        session.soc_estimate_quality = "live" if session.energy_quality == "good" else "partial"
+        session.soc_estimation_version = 2
+
     def _apply_safety(self, uid: str, binding: DeviceBinding, status) -> None:
         if not status.relay:
             self._unsafe_samples.pop((uid, binding.device_id), None)
@@ -710,9 +758,11 @@ class SmartChargeService:
             session.stopped_at = self.clock()
             session.updated_at = session.stopped_at
             session.relay_verified = True
+            self._ingest_energy(session, readback.energy_wh)
             session.version += 1
             self.repository.save_session(uid, session)
             self.repository.upsert_charge_log(uid, session)
+            self._emit_push(uid, session)
 
     def manual_on(
         self,
@@ -767,6 +817,12 @@ class SmartChargeService:
             idempotency_key=idempotency_key,
             estimated_soc=max(0, min(100, float(current_soc))),
             baseline_energy_wh=before.energy_wh,
+            last_meter_energy_wh=before.energy_wh,
+            charging_efficiency=.90,
+            capacity_source="vehicle_catalog" if vehicle else None,
+            soc_estimate_source="unavailable",
+            soc_estimate_quality="unavailable",
+            soc_estimation_version=2,
             owner_uid=uid,
             nominal_capacity_wh=_optional_float(vehicle.get("nominalCapacityWh")),
             state_of_health=_optional_float(vehicle.get("stateOfHealth")),
@@ -837,7 +893,7 @@ class SmartChargeService:
             session.stopped_at = now
             session.updated_at = now
             session.relay_verified = True
-            session.energy_used_wh = max(0, status.energy_wh - (session.baseline_energy_wh or status.energy_wh))
+            self._ingest_energy(session, status.energy_wh)
             session.version += 1
             self.repository.save_session(uid, session)
             self.repository.upsert_charge_log(uid, session)
@@ -862,6 +918,8 @@ class SmartChargeService:
             return None
         now = self.clock()
         if status.relay:
+            self._ingest_energy(session, status.energy_wh)
+            session.updated_at = now
             if status.timer_remaining <= 0:
                 binding = self.binding(uid, session.vehicle_id)
                 try:
@@ -878,6 +936,9 @@ class SmartChargeService:
                 self.repository.save_session(uid, session)
                 self.repository.upsert_charge_log(uid, session)
                 self._emit_push(uid, session)
+            else:
+                self.repository.save_session(uid, session)
+                self.repository.upsert_charge_log(uid, session)
             return session
         near_planned = abs((now - session.effective_stop_at).total_seconds()) <= 120
         session.state = "completed" if near_planned else "interrupted"
@@ -885,7 +946,7 @@ class SmartChargeService:
         session.stopped_at = now
         session.updated_at = now
         session.relay_verified = True
-        session.energy_used_wh = max(0, status.energy_wh - (session.baseline_energy_wh or status.energy_wh))
+        self._ingest_energy(session, status.energy_wh)
         session.version += 1
         self.repository.save_session(uid, session)
         self.repository.upsert_charge_log(uid, session)

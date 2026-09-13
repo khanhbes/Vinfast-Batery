@@ -10,12 +10,15 @@ const AuditSystem = lazy(() => import('@/pages/AuditSystem'));
 const Settings = lazy(() => import('@/pages/Settings'));
 const DataExplorer = lazy(() => import('@/pages/DataExplorer'));
 const VehicleCatalog = lazy(() => import('@/pages/VehicleCatalog'));
+const DeveloperHub = lazy(() => import('@/pages/DeveloperHub'));
 import Login from '@/pages/Login';
 import { Toaster } from '@/components/ui/sonner';
 import { auth } from '@/firebase';
 import { onIdTokenChanged, signOut, type User } from 'firebase/auth';
 import { AdminAccessGate } from '@/components/AdminAccessGate';
 import { AdminDataProvider } from '@/data/AdminDataContext';
+import { DevelopModeProvider } from '@/data/DevelopModeContext';
+import { DevelopModeGate } from '@/components/DevelopModeGate';
 
 function AppContent({ user, loading, sessionRevision }: { user: User | null; loading: boolean; sessionRevision: number }) {
   if (loading) {
@@ -36,7 +39,7 @@ function AppContent({ user, loading, sessionRevision }: { user: User | null; loa
   return (
     <>
       <AdminAccessGate key={`${user.uid}:${sessionRevision}`} uid={user.uid} onSignOut={() => { void signOut(auth).catch(() => toast.error('Sign out failed. Please try again.')); }}>
-      <AdminDataProvider>
+      <DevelopModeProvider><AdminDataProvider>
       <DashboardShell
         userName={auth.currentUser?.displayName}
         userEmail={auth.currentUser?.email}
@@ -46,16 +49,17 @@ function AppContent({ user, loading, sessionRevision }: { user: User | null; loa
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/users" element={<UserManagement />} />
-              <Route path="/data" element={<DataExplorer />} />
+              <Route path="/develop" element={<DevelopModeGate><DeveloperHub /></DevelopModeGate>} />
+              <Route path="/data" element={<DevelopModeGate><DataExplorer /></DevelopModeGate>} />
               <Route path="/catalog" element={<VehicleCatalog />} />
-              <Route path="/ai" element={<AiCenter />} />
-              <Route path="/audit" element={<AuditSystem />} />
-              <Route path="/settings" element={<Settings />} />
+              <Route path="/ai" element={<DevelopModeGate><AiCenter /></DevelopModeGate>} />
+              <Route path="/audit" element={<DevelopModeGate><AuditSystem /></DevelopModeGate>} />
+              <Route path="/settings" element={<DevelopModeGate><Settings /></DevelopModeGate>} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
             </Suspense>
       </DashboardShell>
-      </AdminDataProvider>
+      </AdminDataProvider></DevelopModeProvider>
       </AdminAccessGate>
       <Toaster position="top-right" />
     </>

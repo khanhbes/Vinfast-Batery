@@ -33,6 +33,8 @@ import random
 import functools
 import glob
 import warnings
+import time
+from concurrent.futures import ThreadPoolExecutor, wait
 import numpy as np
 from datetime import datetime, timedelta, timezone
 from flask import Flask, request, jsonify, Response, redirect, send_file
@@ -420,7 +422,10 @@ def _verify_token():
         return None, None, None
 
     try:
-        decoded = _firebase_auth.verify_id_token(token)
+        try:
+            decoded = _firebase_auth.verify_id_token(token, check_revoked=True)
+        except TypeError:  # lightweight test doubles retain the old signature
+            decoded = _firebase_auth.verify_id_token(token)
         uid = decoded.get('uid', '')
         email = decoded.get('email', '')
         email_norm = (email or '').strip().lower()
@@ -428,6 +433,13 @@ def _verify_token():
         role = 'admin' if (
             decoded.get('admin') is True or email_norm in (set(ADMIN_EMAILS) - {'*'})
         ) else 'user'
+        # Firebase Auth owns authentication while this server-owned profile
+        # flag closes direct API access immediately after an admin disables an
+        # account. Missing legacy profiles remain active by design.
+        if _firestore_db:
+            profile = _firestore_db.collection('users').document(uid).get()
+            if profile.exists and (profile.to_dict() or {}).get('accountStatus') == 'disabled':
+                return None, None, None
         return uid, email, role
     except Exception:
         return None, None, None
@@ -986,6 +998,190 @@ def admin_users():
     return jsonify({'success': True, 'data': users})
 
 
+def _account_record(auth_user, profile: dict | None = None) -> dict:
+    profile = profile or {}
+    metadata = getattr(auth_user, 'user_metadata', None)
+    email = (getattr(auth_user, 'email', None) or profile.get('email') or '').strip()
+    uid = str(getattr(auth_user, 'uid', '') or profile.get('uid') or '')
+    is_admin = bool((getattr(auth_user, 'custom_claims', None) or {}).get('admin')) or email.lower() in (ADMIN_EMAILS - {'*'})
+    return {
+        'uid': uid,
+        'email': email,
+        'displayName': getattr(auth_user, 'display_name', None) or profile.get('displayName') or profile.get('name') or '',
+        'phone': getattr(auth_user, 'phone_number', None) or profile.get('phone') or '',
+        'disabled': bool(getattr(auth_user, 'disabled', False)),
+        'status': 'disabled' if getattr(auth_user, 'disabled', False) or profile.get('accountStatus') == 'disabled' else 'active',
+        'accountStatus': 'disabled' if getattr(auth_user, 'disabled', False) or profile.get('accountStatus') == 'disabled' else 'active',
+        'isAdmin': is_admin,
+        'authOnly': not bool(profile),
+        'authRecordMissing': False,
+        'createdAt': getattr(metadata, 'creation_timestamp', None),
+        'lastSignIn': getattr(metadata, 'last_sign_in_timestamp', None),
+        'profileUpdatedAt': profile.get('updatedAt'),
+    }
+
+
+def _admin_account_or_404(uid: str):
+    if not _firebase_available or not _firebase_auth:
+        return None, (jsonify({'success': False, 'error': 'Firebase Auth is unavailable', 'code': 'authUnavailable'}), 503)
+    try:
+        user = _firebase_auth.get_user(uid)
+    except Exception:
+        return None, (jsonify({'success': False, 'error': 'Account not found', 'code': 'accountNotFound'}), 404)
+    profile = {}
+    if _fs():
+        snapshot = _fs().collection('users').document(uid).get()
+        profile = snapshot.to_dict() if snapshot.exists else {}
+    return (user, profile), None
+
+
+@app.route('/api/admin/accounts', methods=['GET'])
+@require_admin
+def admin_accounts():
+    """Paged Firebase Auth directory merged with the app profile document."""
+    if not _firebase_available or not _firebase_auth:
+        return jsonify({'success': False, 'error': 'Firebase Auth is unavailable', 'code': 'authUnavailable'}), 503
+    try:
+        limit = max(1, min(int(request.args.get('limit', 30)), 100))
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'limit must be an integer', 'code': 'invalidLimit'}), 400
+    cursor = str(request.args.get('cursor') or '').strip() or None
+    query = str(request.args.get('query') or '').strip().lower()
+    status = str(request.args.get('status') or 'all').strip().lower()
+    if status == 'auth_only':
+        status = 'profile-missing'
+    if status not in {'all', 'active', 'disabled', 'profile-missing'}:
+        return jsonify({'success': False, 'error': 'status is invalid', 'code': 'invalidStatus'}), 400
+
+    try:
+        page = _firebase_auth.list_users(page_token=cursor, max_results=limit)
+        auth_users = list(getattr(page, 'users', []) or [])
+        next_cursor = getattr(page, 'next_page_token', None)
+    except Exception as exc:
+        print(f'Admin accounts list failed: {exc}')
+        return jsonify({'success': False, 'error': 'Account directory could not be loaded', 'code': 'accountDirectoryUnavailable'}), 503
+    items = []
+    for user in auth_users:
+        profile = {}
+        if _fs():
+            document = _fs().collection('users').document(user.uid).get()
+            profile = document.to_dict() if document.exists else {}
+        item = _account_record(user, profile)
+        if _fs():
+            item['vehicleCount'] = len(list(_fs().collection('Vehicles').where('ownerUid', '==', user.uid).limit(3).stream()))
+        if status == 'active' and item['status'] != 'active':
+            continue
+        if status == 'disabled' and item['status'] != 'disabled':
+            continue
+        if status == 'profile-missing' and profile:
+            continue
+        if query and query not in ' '.join(str(item.get(key) or '').lower() for key in ('uid', 'email', 'displayName')):
+            continue
+        items.append(item)
+    return jsonify({'success': True, 'data': items, 'nextCursor': next_cursor, 'limit': limit})
+
+
+@app.route('/api/admin/accounts/<uid>', methods=['GET'])
+@require_admin
+def admin_account_detail(uid: str):
+    resolved, failure = _admin_account_or_404(uid)
+    if failure:
+        return failure
+    user, profile = resolved
+    record = _account_record(user, profile)
+    summary = {'vehicles': 0, 'chargeLogs': 0, 'tripLogs': 0, 'notifications': 0}
+    if _fs():
+        for key, collection in {'vehicles': 'Vehicles', 'chargeLogs': 'ChargeLogs', 'tripLogs': 'TripLogs', 'notifications': 'UserNotifications'}.items():
+            field = 'userId' if collection == 'UserNotifications' else 'ownerUid'
+            summary[key] = len(list(_fs().collection(collection).where(field, '==', uid).limit(101).stream()))
+    return jsonify({'success': True, 'data': {'account': record, 'profile': _redact_admin_snapshot(profile), 'summary': summary}})
+
+
+_ACCOUNT_DATASETS = {
+    'vehicles': ('Vehicles', 'ownerUid'), 'chargeLogs': ('ChargeLogs', 'ownerUid'),
+    'tripLogs': ('TripLogs', 'ownerUid'), 'telemetry': ('TelemetryPoints', 'ownerUid'),
+    'aiInsights': ('AiVehicleInsights', 'ownerUid'), 'aiProfiles': ('AiVehicleProfiles', 'ownerUid'),
+    'notifications': ('UserNotifications', 'userId'),
+}
+
+
+@app.route('/api/admin/accounts/<uid>/data', methods=['GET'])
+@require_admin
+def admin_account_data(uid: str):
+    _, failure = _admin_account_or_404(uid)
+    if failure:
+        return failure
+    dataset = str(request.args.get('dataset') or '').strip()
+    if dataset not in {*_ACCOUNT_DATASETS, 'ai'}:
+        return jsonify({'success': False, 'error': 'dataset is invalid', 'code': 'invalidDataset'}), 400
+    try:
+        limit = max(1, min(int(request.args.get('limit', 100)), 500))
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'limit must be an integer', 'code': 'invalidLimit'}), 400
+    if dataset == 'ai':
+        docs = [*list(_fs().collection('AiVehicleInsights').where('ownerUid', '==', uid).limit(limit + 1).stream()), *list(_fs().collection('AiVehicleProfiles').where('ownerUid', '==', uid).limit(limit + 1).stream())]
+    else:
+        collection, field = _ACCOUNT_DATASETS[dataset]
+        docs = list(_fs().collection(collection).where(field, '==', uid).limit(limit + 1).stream())
+    return jsonify({'success': True, 'data': [_redact_admin_snapshot(_doc_to_json(doc, 'id')) for doc in docs[:limit]], 'truncated': len(docs) > limit})
+
+
+@app.route('/api/admin/accounts/<uid>/status', methods=['PATCH'])
+@require_admin
+def admin_account_status(uid: str):
+    resolved, failure = _admin_account_or_404(uid)
+    if failure:
+        return failure
+    user, profile = resolved
+    target = _account_record(user, profile)
+    requested = str((request.get_json(silent=True) or {}).get('status') or '').lower()
+    if requested not in {'active', 'disabled'}:
+        return jsonify({'success': False, 'error': 'status must be active or disabled', 'code': 'invalidStatus'}), 400
+    if uid == request._uid or target['isAdmin']:
+        return jsonify({'success': False, 'error': 'Administrator accounts cannot be disabled here', 'code': 'protectedAccount'}), 403
+    disabled = requested == 'disabled'
+    try:
+        _firebase_auth.update_user(uid, disabled=disabled)
+        if disabled:
+            _firebase_auth.revoke_refresh_tokens(uid)
+        if _fs():
+            _fs().collection('users').document(uid).set({
+                'accountStatus': requested,
+                'disabledAt': _utcnow() if disabled else None,
+                'disabledBy': request._uid if disabled else None,
+                'updatedAt': _utcnow(),
+            }, merge=True)
+        _audit('account_disable' if disabled else 'account_enable', 'users', uid, request._uid, request._email, {'status': requested})
+        return jsonify({'success': True, 'data': {'uid': uid, 'status': requested}})
+    except Exception as exc:
+        print(f'Account status update failed for {uid}: {exc}')
+        return jsonify({'success': False, 'error': 'Account status could not be updated', 'code': 'accountStatusFailed'}), 503
+
+
+@app.route('/api/admin/accounts/<uid>/revoke-sessions', methods=['POST'])
+@require_admin
+def admin_account_revoke_sessions(uid: str):
+    resolved, failure = _admin_account_or_404(uid)
+    if failure:
+        return failure
+    user, profile = resolved
+    if uid == request._uid or _account_record(user, profile)['isAdmin']:
+        return jsonify({'success': False, 'error': 'Administrator sessions cannot be revoked here', 'code': 'protectedAccount'}), 403
+    _firebase_auth.revoke_refresh_tokens(uid)
+    _audit('account_revoke_sessions', 'users', uid, request._uid, request._email)
+    return jsonify({'success': True, 'data': {'uid': uid}})
+
+
+@app.route('/api/admin/accounts/<uid>/password-reset-audit', methods=['POST'])
+@require_admin
+def admin_account_password_reset_audit(uid: str):
+    _, failure = _admin_account_or_404(uid)
+    if failure:
+        return failure
+    _audit('account_password_reset_requested', 'users', uid, request._uid, request._email)
+    return jsonify({'success': True, 'data': {'uid': uid}})
+
+
 _ADMIN_SNAPSHOT_COLLECTIONS = {
     'profiles': ('users', 'uid'),
     'vehicleSpecs': ('VinFastModelSpecs', 'modelId'),
@@ -1014,6 +1210,23 @@ _ADMIN_SNAPSHOT_SUBCOLLECTIONS = {
     'vehicleChargerBindings': ('vehicleChargerBindings', 'id', 'ownerUid'),
     'smartChargeTelemetry': ('smartChargeTelemetry', 'id', 'sessionId'),
 }
+
+# A dashboard does not need every historical collection to render its first
+# view.  Keeping these groups explicit lets the API do a bounded, parallel
+# read and gives Data Explorer a way to request a single, heavier dataset.
+_ADMIN_SNAPSHOT_GROUPS = {
+    'core': ('profiles', 'vehicles', 'chargeLogs', 'tripLogs'),
+    'operations': ('telemetry', 'maintenance', 'notifications', 'auditLogs'),
+    'ai': ('aiProfiles', 'aiInsights', 'tripPredictions', 'socPredictions', 'aiDeployments'),
+    'explorer': (
+        'vehicleSpecs', 'chargeSamples', 'chargeFeedback', 'legacyTripLogs',
+        'batteryStates', 'smartChargingSessions', 'chargingTrainingSamples',
+        'smartChargePreferences', 'vehicleChargerBindings', 'smartChargeTelemetry',
+    ),
+}
+_ADMIN_SNAPSHOT_DEFAULT_GROUPS = ('core', 'operations', 'ai')
+_ADMIN_SNAPSHOT_MAX_WORKERS = 8
+_ADMIN_SNAPSHOT_TIMEOUT_SECONDS = 12
 
 _SNAPSHOT_SECRET_FIELDS = {
     'password', 'localpassword', 'cloudauthkey', 'authkey', 'token',
@@ -1057,65 +1270,120 @@ def _admin_snapshot_collection_group(group_name: str, id_field: str,
     return {'items': items, 'loaded': len(items), 'truncated': truncated}
 
 
+def _admin_snapshot_selection(raw_datasets: str | None):
+    """Expand requested groups/keys while rejecting accidental full scans."""
+    all_keys = set(_ADMIN_SNAPSHOT_COLLECTIONS) | set(_ADMIN_SNAPSHOT_SUBCOLLECTIONS)
+    requested = [item.strip() for item in (raw_datasets or '').split(',') if item.strip()]
+    if not requested:
+        requested = list(_ADMIN_SNAPSHOT_DEFAULT_GROUPS)
+    if 'all' in requested:
+        requested = list(_ADMIN_SNAPSHOT_GROUPS) + [key for key in all_keys if key not in {
+            item for group in _ADMIN_SNAPSHOT_GROUPS.values() for item in group
+        }]
+
+    unknown = [item for item in requested if item not in _ADMIN_SNAPSHOT_GROUPS and item not in all_keys and item != 'accounts']
+    if unknown:
+        raise ValueError('Unknown dataset: ' + ', '.join(sorted(set(unknown))))
+
+    selected = []
+    for item in requested:
+        expanded = _ADMIN_SNAPSHOT_GROUPS.get(item, (item,))
+        for key in expanded:
+            if key in all_keys and key not in selected:
+                selected.append(key)
+    # Accounts are a projection of Auth + profiles.  They are always useful
+    # with profiles and are cheap to derive after the parallel reads finish.
+    include_accounts = 'accounts' in requested or 'profiles' in selected
+    if include_accounts and 'profiles' not in selected:
+        selected.insert(0, 'profiles')
+    return selected, include_accounts
+
+
 @app.route('/api/admin/data-snapshot', methods=['GET'])
 @require_admin
 @rate_limit(30, 60)
 def admin_data_snapshot():
-    """One consistent, admin-only view of data written by the app and backend."""
+    """A bounded, partial-tolerant view of data written by the app/backend."""
     if not _fs():
         return jsonify({'success': False, 'error': 'Firestore unavailable'}), 503
 
     try:
-        limit = int(request.args.get('limit', 500))
+        limit = int(request.args.get('limit', 100))
     except (TypeError, ValueError):
         return jsonify({'success': False, 'error': 'limit must be an integer'}), 400
-    limit = max(1, min(limit, 1000))
+    limit = max(1, min(limit, 500))
+    try:
+        selected, include_accounts = _admin_snapshot_selection(request.args.get('datasets'))
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
 
     datasets = {}
     errors = {}
-    for key, (collection_name, id_field) in _ADMIN_SNAPSHOT_COLLECTIONS.items():
-        try:
-            datasets[key] = _admin_snapshot_collection(collection_name, id_field, limit)
-        except Exception as exc:
-            datasets[key] = {'items': [], 'loaded': 0, 'truncated': False}
-            errors[key] = 'Dataset could not be loaded.'
-            print(f'Admin snapshot failed for {collection_name}: {exc}')
-
-    for key, (group_name, id_field, parent_id_field) in _ADMIN_SNAPSHOT_SUBCOLLECTIONS.items():
-        try:
-            datasets[key] = _admin_snapshot_collection_group(
-                group_name, id_field, parent_id_field, limit)
-        except Exception as exc:
-            datasets[key] = {'items': [], 'loaded': 0, 'truncated': False}
-            errors[key] = 'Dataset could not be loaded.'
-            print(f'Admin snapshot failed for collection group {group_name}: {exc}')
-
-    profiles_by_uid = {
-        str(item.get('uid') or item.get('ownerUid')): item
-        for item in datasets['profiles']['items']
-        if item.get('uid') or item.get('ownerUid')
-    }
-    accounts = []
+    request_id = uuid.uuid4().hex
+    started = time.monotonic()
+    executor = ThreadPoolExecutor(max_workers=min(_ADMIN_SNAPSHOT_MAX_WORKERS, max(1, len(selected) + int(include_accounts))))
+    futures = {}
     try:
-        auth_users = _list_auth_users()
-    except Exception as exc:
-        auth_users = []
-        errors['accounts'] = 'Firebase Auth directory could not be loaded.'
-        print(f'Admin snapshot failed for Firebase Auth accounts: {exc}')
-    for auth_user in auth_users:
-        uid = str(auth_user.get('uid') or '')
-        accounts.append({**profiles_by_uid.get(uid, {}), **auth_user, 'uid': uid})
-    known_uids = {item['uid'] for item in accounts}
-    for uid, profile in profiles_by_uid.items():
-        if uid not in known_uids:
-            accounts.append({**profile, 'uid': uid, 'authRecordMissing': True})
+        for key in selected:
+            if key in _ADMIN_SNAPSHOT_COLLECTIONS:
+                collection_name, id_field = _ADMIN_SNAPSHOT_COLLECTIONS[key]
+                futures[executor.submit(_admin_snapshot_collection, collection_name, id_field, limit)] = key
+            else:
+                group_name, id_field, parent_id_field = _ADMIN_SNAPSHOT_SUBCOLLECTIONS[key]
+                futures[executor.submit(
+                    _admin_snapshot_collection_group, group_name, id_field, parent_id_field, limit
+                )] = key
+        auth_future = executor.submit(_list_auth_users) if include_accounts else None
+        wait_set = set(futures)
+        if auth_future is not None:
+            wait_set.add(auth_future)
+        done, pending = wait(wait_set, timeout=_ADMIN_SNAPSHOT_TIMEOUT_SECONDS)
+        for future, key in futures.items():
+            if future not in done:
+                datasets[key] = {'items': [], 'loaded': 0, 'truncated': False}
+                errors[key] = 'Dataset timed out. Refresh this dataset to try again.'
+                continue
+            try:
+                datasets[key] = future.result()
+            except Exception as exc:
+                datasets[key] = {'items': [], 'loaded': 0, 'truncated': False}
+                errors[key] = 'Dataset could not be loaded.'
+                print(f'Admin snapshot [{request_id}] failed for {key}: {exc}')
+        if auth_future is not None:
+            auth_users = []
+            if auth_future in done:
+                try:
+                    auth_users = auth_future.result()
+                except Exception as exc:
+                    errors['accounts'] = 'Firebase Auth directory could not be loaded.'
+                    print(f'Admin snapshot [{request_id}] failed for Firebase Auth accounts: {exc}')
+            else:
+                errors['accounts'] = 'Firebase Auth directory timed out.'
+    finally:
+        # Firestore streams cannot always be cancelled.  Do not wait for a
+        # straggler and make a healthy subset available to the dashboard.
+        executor.shutdown(wait=False, cancel_futures=True)
 
-    datasets['accounts'] = {
-        'items': accounts,
-        'loaded': len(accounts),
-        'truncated': False,
-    }
+    if include_accounts:
+        profiles_by_uid = {
+            str(item.get('uid') or item.get('ownerUid')): item
+            for item in datasets.get('profiles', {}).get('items', [])
+            if item.get('uid') or item.get('ownerUid')
+        }
+        accounts = []
+        for auth_user in auth_users:
+            uid = str(auth_user.get('uid') or '')
+            accounts.append({**profiles_by_uid.get(uid, {}), **auth_user, 'uid': uid})
+        known_uids = {item['uid'] for item in accounts}
+        for uid, profile in profiles_by_uid.items():
+            if uid not in known_uids:
+                accounts.append({**profile, 'uid': uid, 'authRecordMissing': True})
+        datasets['accounts'] = {'items': accounts, 'loaded': len(accounts), 'truncated': False}
+
     totals = {key: dataset['loaded'] for key, dataset in datasets.items()}
+    duration_ms = round((time.monotonic() - started) * 1000)
+    if errors or duration_ms > 5000:
+        print(f'Admin snapshot [{request_id}] datasets={",".join(selected)} durationMs={duration_ms} partial={bool(errors)}')
     return jsonify({
         'success': True,
         'data': {
@@ -1126,6 +1394,9 @@ def admin_data_snapshot():
             'totals': totals,
             'partial': bool(errors),
             'errors': errors,
+            'requestId': request_id,
+            'durationMs': duration_ms,
+            'requestedDatasets': selected,
         },
     })
 
@@ -2751,10 +3022,12 @@ def migrate_legacy():
 @app.errorhandler(HTTPException)
 def handle_http_exception(err: HTTPException):
     if request.path.startswith('/api/'):
+        request_id = str(uuid.uuid4())[:8]
         return jsonify({
             'success': False,
             'error': err.description or 'HTTP error',
             'code': err.code,
+            'requestId': request_id,
         }), err.code
     return err
 

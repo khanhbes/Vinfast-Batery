@@ -76,6 +76,20 @@ class CatalogNotFoundError(ValueError):
     pass
 
 
+def catalog_field_errors(errors: list[str]) -> dict[str, str]:
+    """Turn the stable validator messages into editor-addressable paths."""
+    result: dict[str, str] = {}
+    for message in errors:
+        match = re.match(r"^([A-Za-z][\w.\[\]]*) (?:is|required|must)", message)
+        if match:
+            result[match.group(1)] = message
+        elif message.startswith("at least one official source"):
+            result["sources"] = message
+        elif message.startswith("all source conflicts"):
+            result["conflicts"] = message
+    return result
+
+
 def utcnow() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -879,12 +893,13 @@ def create_catalog_blueprint(
         catalog_id = _clean_text(payload.get("catalogId"), 160) or slugify("-".join(str(payload.get(key) or "") for key in ("brandName", "model", "variant", "modelYear", "market")))
         ref = db.collection(DRAFT_COLLECTION).document(catalog_id)
         if ref.get().exists or db.collection(CATALOG_COLLECTION).document(catalog_id).get().exists:
-            return jsonify({"success": False, "error": "catalogId already exists"}), 409
+            return jsonify({"success": False, "error": "This catalog ID already exists", "code": "catalog_id_conflict", "fieldErrors": {"catalogId": "Choose a different catalog ID or edit the existing draft."}}), 409
         data = normalize_catalog_document(payload)
         data.update({"catalogId": catalog_id, "status": "draft", "revision": 0, "createdAt": utcnow(), "updatedAt": utcnow(), "createdBy": getattr(request, "_uid", "")})
         ref.set(data)
         audit("catalog_draft_create", DRAFT_COLLECTION, catalog_id, request._uid, request._email)
-        return jsonify({"success": True, "data": _jsonable(data)}), 201
+        validation_errors = validate_catalog_document(data, for_publish=True)
+        return jsonify({"success": True, "data": _jsonable(data), "validationErrors": validation_errors, "fieldErrors": catalog_field_errors(validation_errors)}), 201
 
     @bp.get("/api/admin/vehicle-catalog/<catalog_id>")
     @require_admin
@@ -911,7 +926,8 @@ def create_catalog_blueprint(
         data.update({"catalogId": catalog_id, "status": "draft", "updatedAt": utcnow(), "updatedBy": request._uid})
         ref.set(data)
         audit("catalog_draft_update", DRAFT_COLLECTION, catalog_id, request._uid, request._email)
-        return jsonify({"success": True, "data": _jsonable(data), "validationErrors": validate_catalog_document(data, for_publish=True)})
+        validation_errors = validate_catalog_document(data, for_publish=True)
+        return jsonify({"success": True, "data": _jsonable(data), "validationErrors": validation_errors, "fieldErrors": catalog_field_errors(validation_errors)})
 
     @bp.post("/api/admin/vehicle-catalog/<catalog_id>/publish")
     @require_admin
@@ -927,10 +943,12 @@ def create_catalog_blueprint(
             return jsonify({
                 "success": False,
                 "error": "Catalog validation failed",
+                "code": "catalog_validation_failed",
                 "validationErrors": exc.errors,
+                "fieldErrors": catalog_field_errors(exc.errors),
             }), 422
         except CatalogConflictError as exc:
-            return jsonify({"success": False, "error": str(exc)}), 409
+            return jsonify({"success": False, "error": str(exc), "code": "catalog_identity_conflict", "fieldErrors": {"identity": str(exc)}}), 409
         revision = _integer(published.get("revision"), 1) or 1
         now = published["publishedAt"]
         # Materialize compatibility fields for current clients while preserving

@@ -18,7 +18,7 @@ class AppUiColors {
   Color get surfaceSoft => dark ? const Color(0xFF1D2128) : const Color(0xFFE2E8F0);
   Color get cardBackground => dark ? const Color(0xFF101216) : Colors.white;
   Color get dim => dark ? const Color(0xFF64748B) : const Color(0xFF94A3B8);
-  Color get borderStrong => dark ? const Color(0x24FFFFFF) : const Color(0xFFCBD5E1);
+  Color get borderStrong => theme.colorScheme.outline;
   Color get emerald => const Color(0xFF10B981);
   Color get emeraldGlow => const Color(0x3310B981);
   Color get amber => dark ? const Color(0xFFFBBF24) : const Color(0xFFD97706);

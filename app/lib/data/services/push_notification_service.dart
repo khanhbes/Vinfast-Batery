@@ -29,6 +29,8 @@ class PushNotificationService {
   StreamSubscription<String>? _tokenRefresh;
   StreamSubscription<User?>? _authSubscription;
   String? _registeredUid;
+  bool _initialized = false;
+  Future<void>? _initializing;
   void Function(Map<String, dynamic>)? _deepLinkHandler;
   final List<Map<String, dynamic>> _pendingDeepLinks = [];
 
@@ -43,6 +45,21 @@ class PushNotificationService {
   }
 
   Future<void> initialize({void Function(Map<String, dynamic>)? onDeepLink}) async {
+    if (onDeepLink != null) setDeepLinkHandler(onDeepLink);
+    if (_initialized) return;
+    final active = _initializing;
+    if (active != null) return active;
+    final task = _initializeInternal();
+    _initializing = task;
+    try {
+      await task;
+      _initialized = true;
+    } finally {
+      _initializing = null;
+    }
+  }
+
+  Future<void> _initializeInternal() async {
     if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) return;
     if (Platform.isIOS) {
       await _messaging.requestPermission(alert: true, badge: true, sound: true);
@@ -52,7 +69,7 @@ class PushNotificationService {
         sound: true,
       );
     }
-    final handler = onDeepLink ?? _deepLinkHandler;
+    final handler = _deepLinkHandler;
     FirebaseMessaging.onMessageOpenedApp.listen((message) {
       if (handler != null) {
         handler(message.data);

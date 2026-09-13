@@ -388,9 +388,17 @@ class SmartChargingSession {
     this.stopReason,
     this.relayVerified = false,
     this.baselineEnergyWh,
+    this.lastMeterEnergyWh,
     this.energyUsedWh = 0,
     this.energyQuality = 'good',
     this.estimatedSoc,
+    this.estimatedStoredEnergyWh,
+    this.chargingEfficiency,
+    this.capacitySource,
+    this.capacityRevision,
+    this.socEstimateSource,
+    this.socEstimateQuality = 'unavailable',
+    this.socEstimationVersion = 1,
     this.wouldHaveTurnedOffAt,
     this.lastError,
     this.deviceId,
@@ -461,9 +469,17 @@ class SmartChargingSession {
   final ChargingStopReason? stopReason;
   final bool relayVerified;
   final double? baselineEnergyWh;
+  final double? lastMeterEnergyWh;
   final double energyUsedWh;
   final String energyQuality;
   final double? estimatedSoc;
+  final double? estimatedStoredEnergyWh;
+  final double? chargingEfficiency;
+  final String? capacitySource;
+  final int? capacityRevision;
+  final String? socEstimateSource;
+  final String socEstimateQuality;
+  final int socEstimationVersion;
   final bool shadowMode;
   final DateTime? wouldHaveTurnedOffAt;
   final int version;
@@ -559,9 +575,20 @@ class SmartChargingSession {
       stopReason: ChargingStopReason.fromJson(json['stop_reason']),
       relayVerified: json['relay_verified'] == true,
       baselineEnergyWh: (json['baseline_energy_wh'] as num?)?.toDouble(),
+      lastMeterEnergyWh: (json['last_meter_energy_wh'] as num?)?.toDouble(),
       energyUsedWh: number('energy_used_wh'),
       energyQuality: json['energy_quality']?.toString() ?? 'good',
       estimatedSoc: (json['estimated_soc'] as num?)?.toDouble(),
+      estimatedStoredEnergyWh:
+          (json['estimated_stored_energy_wh'] as num?)?.toDouble(),
+      chargingEfficiency: (json['charging_efficiency'] as num?)?.toDouble(),
+      capacitySource: json['capacity_source']?.toString(),
+      capacityRevision: (json['capacity_revision'] as num?)?.toInt(),
+      socEstimateSource: json['soc_estimate_source']?.toString(),
+      socEstimateQuality:
+          json['soc_estimate_quality']?.toString() ?? 'unavailable',
+      socEstimationVersion:
+          (json['soc_estimation_version'] as num?)?.toInt() ?? 1,
       shadowMode: json['shadow_mode'] != false,
       wouldHaveTurnedOffAt: DateTime.tryParse(
         json['would_have_turned_off_at']?.toString() ?? '',
@@ -678,9 +705,19 @@ class SmartChargingSession {
     if (stopReason != null) 'stop_reason': stopReason!.wireValue,
     'relay_verified': relayVerified,
     if (baselineEnergyWh != null) 'baseline_energy_wh': baselineEnergyWh,
+    if (lastMeterEnergyWh != null)
+      'last_meter_energy_wh': lastMeterEnergyWh,
     'energy_used_wh': energyUsedWh,
     'energy_quality': energyQuality,
     if (estimatedSoc != null) 'estimated_soc': estimatedSoc,
+    if (estimatedStoredEnergyWh != null)
+      'estimated_stored_energy_wh': estimatedStoredEnergyWh,
+    if (chargingEfficiency != null) 'charging_efficiency': chargingEfficiency,
+    if (capacitySource != null) 'capacity_source': capacitySource,
+    if (capacityRevision != null) 'capacity_revision': capacityRevision,
+    if (socEstimateSource != null) 'soc_estimate_source': socEstimateSource,
+    'soc_estimate_quality': socEstimateQuality,
+    'soc_estimation_version': socEstimationVersion,
     'shadow_mode': shadowMode,
     if (wouldHaveTurnedOffAt != null)
       'would_have_turned_off_at': wouldHaveTurnedOffAt!.toIso8601String(),
@@ -770,8 +807,17 @@ class SmartChargingSession {
     ChargingStopReason? stopReason,
     bool? relayVerified,
     double? baselineEnergyWh,
+    double? lastMeterEnergyWh,
     double? energyUsedWh,
     double? estimatedSoc,
+    double? estimatedStoredEnergyWh,
+    double? chargingEfficiency,
+    String? capacitySource,
+    int? capacityRevision,
+    String? socEstimateSource,
+    String? socEstimateQuality,
+    int? socEstimationVersion,
+    String? energyQuality,
     int? version,
     String? lastError,
     String? transport,
@@ -805,9 +851,18 @@ class SmartChargingSession {
     stopReason: stopReason ?? this.stopReason,
     relayVerified: relayVerified ?? this.relayVerified,
     baselineEnergyWh: baselineEnergyWh ?? this.baselineEnergyWh,
+    lastMeterEnergyWh: lastMeterEnergyWh ?? this.lastMeterEnergyWh,
     energyUsedWh: energyUsedWh ?? this.energyUsedWh,
-    energyQuality: energyQuality,
+    energyQuality: energyQuality ?? this.energyQuality,
     estimatedSoc: estimatedSoc ?? this.estimatedSoc,
+    estimatedStoredEnergyWh:
+        estimatedStoredEnergyWh ?? this.estimatedStoredEnergyWh,
+    chargingEfficiency: chargingEfficiency ?? this.chargingEfficiency,
+    capacitySource: capacitySource ?? this.capacitySource,
+    capacityRevision: capacityRevision ?? this.capacityRevision,
+    socEstimateSource: socEstimateSource ?? this.socEstimateSource,
+    socEstimateQuality: socEstimateQuality ?? this.socEstimateQuality,
+    socEstimationVersion: socEstimationVersion ?? this.socEstimationVersion,
     shadowMode: shadowMode,
     wouldHaveTurnedOffAt: wouldHaveTurnedOffAt,
     version: version ?? this.version,
