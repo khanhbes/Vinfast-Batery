@@ -11,6 +11,7 @@ import '../models/smart_charge_history.dart';
 import '../models/smart_charge_cost.dart';
 import '../models/smart_charger_status.dart';
 import '../models/smart_charging_session.dart';
+import 'smart_charge_energy_accumulator.dart';
 
 class ShellyChargeLogService {
   ShellyChargeLogService({
@@ -81,18 +82,28 @@ class ShellyChargeLogService {
       terminal: true,
     );
     final finalSession = session.copyWith(
+      estimatedSoc: summary.estimatedEndSoc,
+      estimatedStoredEnergyWh: summary.estimatedStoredWh,
+      socEstimateSource: summary.estimatedEndSoc == null
+          ? 'unavailable'
+          : 'shelly_energy',
+      socEstimateQuality: summary.estimatedEndSoc == null
+          ? 'unavailable'
+          : (summary.energyQuality == 'good' ? 'final' : 'partial'),
+      socEstimationVersion: 2,
       estimatedCostVnd: cost.costVnd,
       costQuality: cost.quality.wireValue,
     );
     await _firestore.collection('ChargeLogs').doc(session.sessionId).set({
-      ..._basePayload(session, uid),
+      ..._basePayload(finalSession, uid),
       'endTime': Timestamp.fromDate(session.stoppedAt ?? session.updatedAt),
       'actualStopAt': Timestamp.fromDate(
         session.stoppedAt ?? session.updatedAt,
       ),
-      'endBatteryPercent':
-          (summary.estimatedEndSoc ?? session.estimatedSoc ?? session.targetSoc)
-              .round(),
+      // The target and starting SOC are never substituted for an estimate.
+      'endBatteryPercent': (session.actualEndSoc ?? summary.estimatedEndSoc)
+          ?.round(),
+      'socEstimateAvailable': summary.estimatedEndSoc != null,
       'stopReason': session.stopReason?.wireValue,
       'status': 'terminal',
       'sessionState': session.state.wireValue,
@@ -117,6 +128,14 @@ class ShellyChargeLogService {
       'smartChargingSession': finalSession.toJson(),
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
+    final estimated = finalSession.estimatedSoc;
+    if (estimated != null) {
+      await _updateVehicleSocIfCurrent(
+        finalSession,
+        soc: estimated,
+        source: 'smart_charge_estimated',
+      );
+    }
     await _removeQueuedTerminalSession(session.sessionId);
   }
 
@@ -127,7 +146,8 @@ class ShellyChargeLogService {
   }) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
-    await _firestore.collection('ChargeLogs').doc(sessionId).set({
+    final log = _firestore.collection('ChargeLogs').doc(sessionId);
+    await log.set({
       'actualEndSoc': actualSoc,
       'actual_end_soc': actualSoc,
       'actualEndSocSource': 'user_confirmed',
@@ -136,6 +156,64 @@ class ShellyChargeLogService {
       'training_eligible': true,
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
+    final data = (await log.get()).data();
+    final vehicleId = data?['vehicleId']?.toString() ?? '';
+    final observedAt = (data?['actualStopAt'] as Timestamp?)?.toDate() ??
+        DateTime.now();
+    if (vehicleId.isNotEmpty) {
+      await _updateVehicleSocIfCurrent(
+        SmartChargingSession.fromJson({
+          'session_id': sessionId,
+          'vehicle_id': vehicleId,
+          'state': 'completed',
+          'strategy': 'manual_timed',
+          'start_soc': 0,
+          'target_soc': actualSoc,
+          'predicted_minutes': 1,
+          'prediction_source': 'confirmed',
+          'created_at': observedAt.toIso8601String(),
+          'updated_at': observedAt.toIso8601String(),
+          'ai_stop_at': observedAt.toIso8601String(),
+          'hard_deadline_at': observedAt.toIso8601String(),
+          'effective_stop_at': observedAt.toIso8601String(),
+          'absolute_safety_stop_at': observedAt.toIso8601String(),
+          'stopped_at': observedAt.toIso8601String(),
+        }),
+        soc: actualSoc,
+        source: 'user_confirmed',
+      );
+    }
+  }
+
+  /// Do not overwrite a newer vehicle reading (for example, one the owner
+  /// entered after unplugging). This estimate belongs to the terminal session
+  /// and remains traceable through [batteryDataSessionId].
+  Future<void> _updateVehicleSocIfCurrent(
+    SmartChargingSession session, {
+    required double soc,
+    required String source,
+  }) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null || session.vehicleId.isEmpty) return;
+    final observedAt = session.stoppedAt ?? session.updatedAt;
+    final vehicle = _firestore.collection('Vehicles').doc(session.vehicleId);
+    await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(vehicle);
+      final data = snapshot.data();
+      if (data == null || data['ownerUid'] != uid) return;
+      final existing = data['batteryDataUpdatedAt'];
+      final existingAt = existing is Timestamp ? existing.toDate() : null;
+      if (existingAt != null && existingAt.isAfter(observedAt)) return;
+      transaction.set(vehicle, {
+        'currentBattery': soc.round(),
+        'lastBatteryPercent': soc.round(),
+        'hasBatteryData': true,
+        'batteryDataSource': source,
+        'batteryDataSessionId': session.sessionId,
+        'batteryDataUpdatedAt': Timestamp.fromDate(observedAt),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    });
   }
 
   /// Reversible history action. The canonical ChargeLog remains available for
@@ -265,7 +343,7 @@ class ShellyChargeLogService {
           ? null
           : temperatures.reduce((a, b) => a > b ? a : b),
       energyWh: latest.energyWh,
-      estimatedSoc: _estimatedSoc(session, latest.energyWh),
+      estimatedSoc: _estimatedSoc(session),
       relay: latest.relay,
       timerRemainingSeconds: latest.timerRemaining?.inSeconds,
       transport: latest.transport?.name,
@@ -310,16 +388,11 @@ class ShellyChargeLogService {
     }, SetOptions(merge: true));
   }
 
-  double? _estimatedSoc(SmartChargingSession session, double energyWh) {
-    final capacity = session.estimatedCapacityWh ?? 0;
-    final baseline = session.baselineEnergyWh;
-    if (capacity <= 0 || baseline == null) return null;
-    return (session.startSoc +
-            (energyWh - baseline).clamp(0, double.infinity) /
-                capacity *
-                100)
-        .clamp(0, 100)
-        .toDouble();
+  double? _estimatedSoc(SmartChargingSession session) {
+    // Callers pass the session after the accumulator has consumed this
+    // reading. Recalculating with `reading - baseline` would discard energy
+    // after a counter reset and diverge from the terminal calculation.
+    return session.estimatedSoc;
   }
 
   Future<void> flushPendingTelemetry(String sessionId) async {

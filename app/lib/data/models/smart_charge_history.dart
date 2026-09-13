@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'smart_charger_status.dart';
 import 'smart_charging_session.dart';
+import '../services/smart_charge_energy_accumulator.dart';
 
 enum SmartChargeHistoryStatus { loading, ready, empty, stale, error }
 
@@ -177,14 +178,13 @@ class SmartChargeEnergySummary {
     }
     if (gridWh < 0) gridWh = 0;
 
-    final storedWh = gridWh * 0.90;
-    final capacity =
-        session.effectiveCapacityWh ?? session.estimatedCapacityWh ?? 0;
-    final estimatedEndSoc = capacity > 0
-        ? (session.startSoc + storedWh / capacity * 100)
-              .clamp(0, 100)
-              .toDouble()
-        : null;
+    final estimate = SmartChargeEnergyAccumulator.estimate(
+      session,
+      energyUsedWh: gridWh,
+    );
+    final storedWh = estimate.available ? estimate.storedEnergyWh : 0.0;
+    final capacity = estimate.capacityWh;
+    final estimatedEndSoc = estimate.soc;
     final remainingWh = estimatedEndSoc == null
         ? null
         : capacity * estimatedEndSoc / 100;

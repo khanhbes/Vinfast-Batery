@@ -57,7 +57,10 @@ class VehicleSwitcher extends ConsumerWidget {
           child: Tooltip(
             message: 'Đổi xe: ${current.vehicleName}',
             child: SizedBox(
-              width: 160,
+              // Keep room for the navigation actions on 320–360dp devices.
+              // TextButton.icon gives its label the remaining constrained
+              // width, so the existing ellipsis remains effective.
+              width: MediaQuery.sizeOf(context).width < 380 ? 104 : 160,
               child: TextButton.icon(
                 onPressed: () => VehiclePickerSheet.show(context, ref),
                 style: TextButton.styleFrom(

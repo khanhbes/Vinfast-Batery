@@ -1,17 +1,17 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math';
 import 'dart:ui';
 
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import '../../core/services/platform_capability_adapter.dart';
+import '../../core/services/firebase_bootstrap_coordinator.dart';
 
 import '../models/smart_charger_status.dart';
 import '../models/smart_charging_session.dart';
 import 'shelly_charge_log_service.dart';
 import 'smart_charger_service.dart';
+import 'smart_charge_energy_accumulator.dart';
 
 /// Dedicated Android foreground worker for Smart Charge telemetry.
 ///
@@ -131,7 +131,7 @@ class _SmartChargeTelemetryTaskHandler extends TaskHandler {
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
     DartPluginRegistrant.ensureInitialized();
-    if (Firebase.apps.isEmpty) await Firebase.initializeApp();
+    await FirebaseBootstrapCoordinator.ensureInitialized();
     _charger = SmartChargerService();
     _logs = ShellyChargeLogService();
     await _poll(timestamp);
@@ -165,14 +165,40 @@ class _SmartChargeTelemetryTaskHandler extends TaskHandler {
       // Never monitor beyond the immutable 10-hour safety boundary. The OFF
       // command is idempotent and verified by the direct service.
       if (!timestamp.isBefore(session.absoluteSafetyStopAt)) {
-        await charger.turnOffAndVerify();
+        final terminal = await charger.turnOffAndVerify(
+          reason: ChargingStopReason.safetyCutoff,
+        );
+        if (terminal != null) await logs.saveTerminalSession(terminal);
         await logs.flushPendingTelemetry(session.sessionId);
         await FlutterForegroundTask.stopService();
         return;
       }
 
       final status = await charger.getStatus();
-      await logs.recordStatusSample(session, status);
+      final meter = SmartChargeEnergyAccumulator.ingest(session, status.energyWh);
+      final measured = session.copyWith(
+        baselineEnergyWh: meter.baselineEnergyWh,
+        lastMeterEnergyWh: meter.lastMeterEnergyWh,
+        energyUsedWh: meter.energyUsedWh,
+        energyQuality: meter.energyQuality,
+      );
+      final estimate = SmartChargeEnergyAccumulator.estimate(measured);
+      final updated = measured.copyWith(
+        estimatedSoc: estimate.soc,
+        estimatedStoredEnergyWh:
+            estimate.available ? estimate.storedEnergyWh : null,
+        socEstimateSource: estimate.available ? 'shelly_energy' : 'unavailable',
+        socEstimateQuality: estimate.available
+            ? (meter.energyQuality == 'good' ? 'live' : 'partial')
+            : 'unavailable',
+        socEstimationVersion: 2,
+      );
+      await charger.persistActiveTelemetry(updated);
+      await FlutterForegroundTask.saveData(
+        key: _sessionPayloadKey,
+        value: jsonEncode(updated.toJson()),
+      );
+      await logs.recordStatusSample(updated, status);
       FlutterForegroundTask.sendDataToMain({
         'status': {
           'online': status.online,
@@ -198,21 +224,7 @@ class _SmartChargeTelemetryTaskHandler extends TaskHandler {
               : 'còn khoảng $minutes phút')
           : 'đang sạc';
 
-      final capacity =
-          session.effectiveCapacityWh ??
-          session.estimatedCapacityWh ??
-          2600.0;
-      final baseline = session.baselineEnergyWh;
-      final energyUsed = (baseline != null && status.energyWh >= baseline)
-          ? max(session.energyUsedWh, status.energyWh - baseline)
-          : session.energyUsedWh;
-      final estimatedSoc = capacity > 0
-          ? (session.startSoc + energyUsed / capacity * 100).clamp(
-              session.startSoc,
-              100.0,
-            )
-          : session.startSoc;
-      final socText = '${estimatedSoc.round()}%';
+      final socText = estimate.available ? '${estimate.soc!.round()}%' : '—';
 
       await FlutterForegroundTask.updateService(
         notificationTitle: 'Đang sạc $socText · $power W',
@@ -220,6 +232,10 @@ class _SmartChargeTelemetryTaskHandler extends TaskHandler {
       );
 
       if (!status.relay) {
+        final terminal = await charger.reconcileActiveSession();
+        if (terminal?.state.isTerminal == true) {
+          await logs.saveTerminalSession(terminal!);
+        }
         await logs.flushPendingTelemetry(session.sessionId);
         await FlutterForegroundTask.stopService();
       }

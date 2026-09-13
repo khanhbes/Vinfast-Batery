@@ -14,6 +14,7 @@ import 'shelly_charge_log_service.dart';
 import 'shelly_clients.dart';
 import 'shelly_discovery_service.dart';
 import 'smart_charger_credentials_service.dart';
+import 'smart_charge_energy_accumulator.dart';
 import '../../core/constants/app_constants.dart';
 
 class SmartChargerException implements Exception {
@@ -428,6 +429,13 @@ class SmartChargerService {
       relayVerified: true,
       timerVerified: true,
       baselineEnergyWh: verified.energyWh,
+      lastMeterEnergyWh: verified.energyWh,
+      estimatedSoc: plan.currentSoc,
+      chargingEfficiency: SmartChargeEnergyAccumulator.defaultChargingEfficiency,
+      capacitySource: plan.estimatedCapacityWh > 0 ? 'vehicle_catalog' : null,
+      socEstimateSource: plan.estimatedCapacityWh > 0 ? 'shelly_energy' : null,
+      socEstimateQuality: plan.estimatedCapacityWh > 0 ? 'live' : 'unavailable',
+      socEstimationVersion: 2,
       transport: verified.transport?.name ?? _lastTransport?.name,
       version: 2,
     );
@@ -505,7 +513,8 @@ class SmartChargerService {
     }
     final active = await _readActive();
     if (active == null) return null;
-    final stopped = active.copyWith(
+    final measured = _withMeterReading(active, status);
+    final stopped = measured.copyWith(
       state: reason == ChargingStopReason.manual
           ? ChargingSessionState.cancelled
           : reason == ChargingStopReason.safetyCutoff
@@ -517,10 +526,6 @@ class SmartChargerService {
       updatedAt: _clock(),
       stopReason: reason,
       relayVerified: true,
-      energyUsedWh: max(
-        0,
-        status.energyWh - (active.baselineEnergyWh ?? status.energyWh),
-      ),
       transport: status.transport?.name,
       version: active.version + 1,
     );
@@ -543,15 +548,10 @@ class SmartChargerService {
           await _clearActive();
         }
       }
-      final updated = active.copyWith(
+      final updated = _withMeterReading(active, status).copyWith(
         state: ChargingSessionState.active,
         updatedAt: now,
         effectiveStopAt: now.add(status.timerRemaining!),
-        estimatedSoc: _estimatedSoc(active, status),
-        energyUsedWh: max(
-          0,
-          status.energyWh - (active.baselineEnergyWh ?? status.energyWh),
-        ),
         transport: status.transport?.name,
       );
       await _saveActive(updated);
@@ -560,7 +560,7 @@ class SmartChargerService {
     final nearPlanned =
         now.difference(active.effectiveStopAt).abs() <=
         const Duration(minutes: 2);
-    final stopped = active.copyWith(
+    final stopped = _withMeterReading(active, status).copyWith(
       state: nearPlanned
           ? ChargingSessionState.completed
           : ChargingSessionState.interrupted,
@@ -570,11 +570,6 @@ class SmartChargerService {
           ? ChargingStopReason.plannedTimer
           : ChargingStopReason.relayOff,
       relayVerified: true,
-      energyUsedWh: max(
-        0,
-        status.energyWh - (active.baselineEnergyWh ?? status.energyWh),
-      ),
-      estimatedSoc: _estimatedSoc(active, status),
       transport: status.transport?.name,
     );
     await _clearActive();
@@ -777,23 +772,37 @@ class SmartChargerService {
     );
   }
 
+  /// Persists the latest meter-derived state for the Android foreground
+  /// isolate. This is deliberately separate from the history writer.
+  Future<void> persistActiveTelemetry(SmartChargingSession session) =>
+      _saveActive(session);
+
   Future<void> _clearActive() async {
     await (await _preferences()).remove(_activeSessionKey);
   }
 
-  double _estimatedSoc(
+  SmartChargingSession _withMeterReading(
     SmartChargingSession session,
     SmartChargerStatus status,
   ) {
-    final capacity = session.estimatedCapacityWh ?? 0;
-    if (capacity <= 0) return session.startSoc;
-    final used = max(
-      0,
-      status.energyWh - (session.baselineEnergyWh ?? status.energyWh),
+    final meter = SmartChargeEnergyAccumulator.ingest(session, status.energyWh);
+    final measured = session.copyWith(
+      baselineEnergyWh: meter.baselineEnergyWh,
+      lastMeterEnergyWh: meter.lastMeterEnergyWh,
+      energyUsedWh: meter.energyUsedWh,
+      energyQuality: meter.energyQuality,
     );
-    return min(
-      session.targetSoc,
-      session.startSoc + used / capacity * 100,
+    final estimate = SmartChargeEnergyAccumulator.estimate(measured);
+    return measured.copyWith(
+      estimatedSoc: estimate.soc,
+      estimatedStoredEnergyWh: estimate.available
+          ? estimate.storedEnergyWh
+          : null,
+      socEstimateSource: estimate.available ? 'shelly_energy' : 'unavailable',
+      socEstimateQuality: estimate.available
+          ? (meter.energyQuality == 'good' ? 'live' : 'partial')
+          : 'unavailable',
+      socEstimationVersion: 2,
     );
   }
 

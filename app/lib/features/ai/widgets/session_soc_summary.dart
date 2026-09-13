@@ -26,12 +26,16 @@ class SessionSocSummary extends StatelessWidget {
     final startSoc = (session.startSoc >= 0 && session.startSoc <= 100)
         ? session.startSoc
         : 0.0;
-    final endSoc = actualValid
-        ? confirmed
-        : (estimated != null && estimated >= 0 && estimated <= 100
-            ? estimated
-            : startSoc);
-    final gain = (endSoc - startSoc).clamp(-100.0, 100.0);
+    final estimatedValid =
+        session.socEstimateQuality != 'unavailable' &&
+        estimated != null &&
+        estimated.isFinite &&
+        estimated >= 0 &&
+        estimated <= 100;
+    final double? endSoc = actualValid ? confirmed : (estimatedValid ? estimated : null);
+    final gain = endSoc == null
+        ? 0.0
+        : (endSoc - startSoc).clamp(-100.0, 100.0);
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -182,7 +186,7 @@ class SessionSocSummary extends StatelessWidget {
               ),
               // Filled progress
               FractionallySizedBox(
-                widthFactor: (endSoc / 100.0).clamp(0.0, 1.0),
+                widthFactor: ((endSoc ?? startSoc) / 100.0).clamp(0.0, 1.0),
                 child: Container(
                   height: 10,
                   decoration: BoxDecoration(

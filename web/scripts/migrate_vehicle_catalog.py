@@ -31,7 +31,10 @@ from vehicle_catalog import (  # noqa: E402
     normalize_catalog_document,
 )
 
-DEFAULT_SOURCE = REPO_ROOT / "app" / "assets" / "vinfast_specs_fallback.json"
+DEFAULT_SOURCE = WEB_ROOT / "assets" / "vinfast_specs_fallback.json"
+if not DEFAULT_SOURCE.is_file():
+    # Preserve the developer-machine path when the script is run from source.
+    DEFAULT_SOURCE = REPO_ROOT / "app" / "assets" / "vinfast_specs_fallback.json"
 
 
 def initialize_firestore():

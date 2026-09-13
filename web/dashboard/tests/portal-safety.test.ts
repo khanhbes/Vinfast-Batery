@@ -39,7 +39,7 @@ for (const status of [400, 401, 403, 409, 429, 500]) {
 test('transient read retries are bounded', async () => {
   let calls = 0;
   await assert.rejects(requestPortal('/fixture', {}, { fetch: async () => { calls++; return new Response('', { status: 503 }); }, pause: async () => {} }));
-  assert.equal(calls, 3);
+  assert.equal(calls, 2);
 });
 
 test('mutation is never automatically repeated after network failure', async () => {

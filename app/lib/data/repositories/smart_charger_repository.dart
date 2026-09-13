@@ -13,6 +13,7 @@ import '../services/shelly_charge_log_service.dart';
 
 abstract interface class SmartChargerRepository {
   bool get calibrationIsServerOwned;
+  SmartChargeTelemetryOwner get telemetryOwner;
   Future<SmartChargerBinding?> binding({String? vehicleId});
   Future<SmartChargerCapabilities> capabilities({String? vehicleId});
   Future<SmartChargerStatus> status({String? vehicleId});
@@ -56,6 +57,8 @@ abstract interface class SmartChargerRepository {
   });
 }
 
+enum SmartChargeTelemetryOwner { clientDirect, server }
+
 class DirectSmartChargerRepository implements SmartChargerRepository {
   DirectSmartChargerRepository(
     this.service,
@@ -70,6 +73,9 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
   final ShellyChargeLogService? _chargeLogs;
   @override
   bool get calibrationIsServerOwned => false;
+  @override
+  SmartChargeTelemetryOwner get telemetryOwner =>
+      SmartChargeTelemetryOwner.clientDirect;
 
   @override
   Future<SmartChargerBinding?> binding({String? vehicleId}) async {
@@ -301,6 +307,8 @@ class ServerSmartChargerRepository implements SmartChargerRepository {
   final ShellyChargeLogService? _chargeLogs;
   @override
   bool get calibrationIsServerOwned => true;
+  @override
+  SmartChargeTelemetryOwner get telemetryOwner => SmartChargeTelemetryOwner.server;
   @override
   Future<SmartChargerBinding?> binding({String? vehicleId}) =>
       service.getBinding(vehicleId: vehicleId);

@@ -1,7 +1,16 @@
 import { auth } from './firebase.js'
 import { requestPortal } from './lib/httpClient'
 
-const BASE = ''  // same origin via proxy
+// Production normally reaches the API through the same-origin Caddy proxy.
+// Accept an origin or a legacy `/api` value without producing `/api/api/...`.
+const configuredApiBase = String(import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '')
+const BASE = configuredApiBase.replace(/\/api$/i, '')
+
+function endpointTimeout(path, method = 'GET') {
+  if (/\/api\/admin\/data-snapshot(?:\?|$)/.test(path)) return 30_000
+  if (/(?:import|upload|research)/i.test(path)) return 120_000
+  return 15_000
+}
 
 function emitPortalError(message) {
   window.dispatchEvent(new CustomEvent('vf:error', { detail: { message } }))
@@ -23,7 +32,11 @@ async function apiFetch(path, options = {}) {
   if (token) headers['Authorization'] = `Bearer ${token}`
 
   try {
-    return await requestPortal(`${BASE}${path}`, { ...options, headers })
+    return await requestPortal(`${BASE}${path}`, {
+      ...options,
+      headers,
+      timeoutMs: options.timeoutMs ?? endpointTimeout(path, options.method),
+    })
   } catch (error) {
     const message = error?.message || 'The server could not be reached'
     emitPortalError(message)
@@ -63,8 +76,26 @@ export const adminBulkDelete = (entity, ids) =>
 
 // ── Users ──
 export const adminUsers = () => apiFetch('/api/admin/users')
-export const adminDataSnapshot = (limit = 500) =>
-  apiFetch(`/api/admin/data-snapshot?limit=${encodeURIComponent(limit)}`)
+export const adminAccounts = (params = {}) => {
+  const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== '' && value != null)).toString()
+  return apiFetch(`/api/admin/accounts${query ? `?${query}` : ''}`)
+}
+export const adminAccount = (uid) => apiFetch(`/api/admin/accounts/${encodeURIComponent(uid)}`)
+export const adminAccountData = (uid, params = {}) => {
+  const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== '' && value != null)).toString()
+  return apiFetch(`/api/admin/accounts/${encodeURIComponent(uid)}/data${query ? `?${query}` : ''}`)
+}
+export const adminSetAccountStatus = (uid, status) =>
+  apiFetch(`/api/admin/accounts/${encodeURIComponent(uid)}/status`, { method: 'PATCH', body: JSON.stringify({ status }) })
+export const adminRevokeAccountSessions = (uid) =>
+  apiFetch(`/api/admin/accounts/${encodeURIComponent(uid)}/revoke-sessions`, { method: 'POST' })
+export const adminPasswordResetAudit = (uid) =>
+  apiFetch(`/api/admin/accounts/${encodeURIComponent(uid)}/password-reset-audit`, { method: 'POST' })
+export const adminDataSnapshot = (limit = 100, datasets = []) => {
+  const query = new URLSearchParams({ limit: String(limit) })
+  if (datasets.length) query.set('datasets', datasets.join(','))
+  return apiFetch(`/api/admin/data-snapshot?${query}`)
+}
 export const setAdmin = (email) =>
   apiFetch('/api/auth/set-admin', { method: 'POST', body: JSON.stringify({ email }) })
 
@@ -97,7 +128,7 @@ export async function catalogUploadMedia(catalogId, file, metadata) {
   form.append('file', file)
   Object.entries(metadata).forEach(([key, value]) => form.append(key, String(value)))
   return requestPortal(`${BASE}/api/admin/vehicle-catalog/${encodeURIComponent(catalogId)}/media`, {
-    method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {}, body: form,
+    method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {}, body: form, timeoutMs: 120_000,
   })
 }
 
@@ -230,6 +261,7 @@ export async function aiUploadModel(typeKey, file, version, note = '', skipSmoke
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: form,
+      timeoutMs: 120_000,
     })
   } catch (err) {
     emitPortalError(err?.message || 'Model upload failed')

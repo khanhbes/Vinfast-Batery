@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import time
+import base64
 
 import firebase_admin
 from firebase_admin import credentials, firestore
@@ -16,7 +17,10 @@ def initialize_firestore():
     if not firebase_admin._apps:
         raw = os.environ.get("FIREBASE_CREDENTIALS_JSON", "").strip()
         if raw:
-            firebase_admin.initialize_app(credentials.Certificate(json.loads(raw)))
+            # Compose production supplies the same base64 value used by the
+            # API; local development may use raw JSON. Never log either form.
+            payload = raw if raw.startswith("{") else base64.b64decode(raw, validate=True).decode("utf-8")
+            firebase_admin.initialize_app(credentials.Certificate(json.loads(payload)))
         else:
             path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
             if path:

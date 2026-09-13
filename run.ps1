@@ -249,8 +249,8 @@ function Start-ServerDocker {
     Write-Ok "Docker Desktop dang hoat dong."
 
     $compose = @('--env-file', '.env.laptop', '-f', 'docker-compose.yml', '-f', 'docker-compose.laptop.yml')
-    $buildServices = @('ai', 'api', 'dashboard')
-    $upServices = @('ai', 'api', 'dashboard', 'laptop_gateway')
+    $buildServices = @('ai', 'api', 'dashboard', 'catalog-worker')
+    $upServices = @('ai', 'api', 'dashboard', 'catalog-worker', 'laptop_gateway')
 
     Push-Location $webDir
     try {
