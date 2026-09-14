@@ -1176,21 +1176,31 @@ class SmartChargeRepository:
             (self.db.collection("ChargeLogs").document(session_id)
              .collection("smartChargeTelemetry").document(doc_id).set(value, merge=True))
 
-    def telemetry(self, uid: str, session_id: str) -> list[dict]:
+    def telemetry(self, uid: str, session_id: str, *, after: str | None = None,
+                  limit: int = 120) -> list[dict]:
+        limit = min(120, max(1, int(limit)))
         with self._lock:
             cached = list(self._telemetry.get((uid, session_id), []))
             cached_session = self._sessions.get(uid, {}).get(session_id)
         if cached_session and cached_session.telemetry_samples:
-            return [_expand_compact_sample(item, cached_session.transport) for item in cached_session.telemetry_samples]
+            values = [_expand_compact_sample(item, cached_session.transport, session_id)
+                      for item in cached_session.telemetry_samples]
+            return [item for item in values
+                    if not after or str(item.get("timestamp", "")) > after][-limit:]
         if cached or not self.db:
-            return cached
+            values = [dict(item) for item in cached if isinstance(item, dict)]
+            values.sort(key=lambda value: str(value.get("timestamp") or value.get("startedAt") or ""))
+            return [item for item in values
+                    if not after or str(item.get("timestamp") or item.get("startedAt") or "") > after][-limit:]
         runtime = (self.db.collection("users").document(uid)
                    .collection("smartChargingSessions").document(session_id).get())
         runtime_data = runtime.to_dict() or {} if runtime.exists else {}
         compact = runtime_data.get("telemetry_samples") or runtime_data.get("telemetrySamples")
         if isinstance(compact, list) and compact:
-            return [_expand_compact_sample(item, runtime_data.get("transport"))
-                    for item in compact if isinstance(item, dict)]
+            values = [_expand_compact_sample(item, runtime_data.get("transport"), session_id)
+                      for item in compact if isinstance(item, dict)]
+            return [item for item in values
+                    if not after or str(item.get("timestamp", "")) > after][-limit:]
         parent = self.db.collection("ChargeLogs").document(session_id).get()
         parent_data = parent.to_dict() or {}
         if not parent.exists or parent_data.get("ownerUid") != uid:
@@ -1200,7 +1210,7 @@ class SmartChargeRepository:
         # (`points`). Easy/Server and Direct must expose the same point-level
         # contract to charts and reconciliation. Keep supporting the older
         # flat-document format as a compatibility path.
-        chunks = parent.reference.collection("smartChargeTelemetry").stream()
+        chunks = parent.reference.collection("smartChargeTelemetry").limit(limit).stream()
         for item in chunks:
             data = item.to_dict() or {}
             if data.get("ownerUid") not in (None, uid):
@@ -1219,15 +1229,17 @@ class SmartChargeRepository:
             elif data:
                 values.append(data)
         values.sort(key=lambda value: str(value.get("timestamp") or value.get("startedAt") or ""))
-        return values
+        return [item for item in values
+                if not after or str(item.get("timestamp") or item.get("startedAt") or "") > after][-limit:]
 
-def _expand_compact_sample(value: dict, transport=None) -> dict:
+def _expand_compact_sample(value: dict, transport=None, session_id=None) -> dict:
     """Expand minute-level runtime samples to the chart API contract."""
     timestamp = value.get("timestamp") or value.get("t")
     if isinstance(timestamp, (int, float)):
         timestamp = datetime.fromtimestamp(timestamp, timezone.utc).isoformat()
     power = float(value.get("powerAverageW", value.get("p", 0)) or 0)
     return {
+        "sessionId": value.get("sessionId", session_id),
         "timestamp": str(timestamp or datetime.now(timezone.utc).isoformat()),
         "elapsedSeconds": int(value.get("elapsedSeconds", value.get("elapsed_s", 0)) or 0),
         "powerAverageW": power,
@@ -1322,6 +1334,9 @@ def _session(data: dict) -> ChargingSession:
         average_current_a=data.get("average_current_a"), user_stop_reason=str(data.get("user_stop_reason") or "none"),
         training_state=str(data.get("personal_ai_training_state") or "pending"),
         training_reason=data.get("personal_ai_training_reason"),
+        telemetry_samples=[dict(item) for item in
+                           (data.get("telemetry_samples") or data.get("telemetrySamples") or [])
+                           if isinstance(item, dict)][-600:],
         hidden_at=_date(data.get("hidden_at")),
         safety_policy_version=str(data.get("safety_policy_version") or "v4-default"),
     )

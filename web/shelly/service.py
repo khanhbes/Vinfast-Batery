@@ -246,7 +246,10 @@ class SmartChargeService:
             state="arming",
             start_soc=preview.current_soc,
             target_soc=preview.target_soc,
-            estimated_soc=preview.current_soc,
+            # Do not present the starting SOC as an estimate when no trusted
+            # capacity is available. Target-SOC mode is blocked by preview;
+            # timed charging remains usable with an explicitly unavailable SOC.
+            estimated_soc=preview.current_soc if preview.effective_capacity_wh else None,
             predicted_minutes=preview.predicted_minutes,
             predicted_duration_seconds=preview.predicted_duration_seconds,
             prediction_source=preview.model_source,
@@ -345,6 +348,26 @@ class SmartChargeService:
             return status
         except ProviderError as exc:
             raise self._provider_error(exc) from exc
+
+    def live(self, uid: str, vehicle_id: str | None = None) -> dict:
+        """Single live request for charger status and active session."""
+        # Keep status and session reconciliation in one provider read. Calling
+        # ``status`` and then ``current_session`` separately caused duplicate
+        # Firestore reads on every foreground poll.
+        binding = self.binding(uid, vehicle_id)
+        if not binding:
+            raise SmartChargeError("notConfigured", "Shelly chÆ°a Ä‘Æ°á»£c káº¿t ná»‘i", 404)
+        try:
+            status = self.provider.get_status(binding)
+            self._apply_safety(uid, binding, status)
+            session = self._reconcile_with_status(uid, status, vehicle_id)
+        except ProviderError as exc:
+            raise self._provider_error(exc) from exc
+        return {
+            "status": status.to_dict() if hasattr(status, "to_dict") else status,
+            "session": session.to_dict() if session else None,
+            "active": bool(session and session.state in ("arming", "active")),
+        }
 
     def stop(
         self,
@@ -538,9 +561,16 @@ class SmartChargeService:
             raise SmartChargeError("sessionNotFound", "Không tìm thấy phiên sạc đang hoạt động", 404)
         now = self.clock()
         last = self._last_telemetry_at.get(session_id)
-        if last and (now - last).total_seconds() < 60:
-            return {"recorded": False, "reason": "aggregating"}
+        # Ingest every meter sample in memory so SOC keeps advancing between
+        # durable checkpoints. Only retain one compact chart sample per minute.
+        sample_due = (
+            last is None
+            or (now - last).total_seconds() >= 60
+            or payload.get("relay") is False
+        )
         self._ingest_energy(session, float(payload.get("energyWh") or 0))
+        relay_value = payload.get("relay")
+        relay_on = True if relay_value is None else bool(relay_value)
         point = {
             "sessionId": session_id,
             "timestamp": now.isoformat(),
@@ -557,13 +587,12 @@ class SmartChargeService:
             "estimatedSoc": session.estimated_soc,
             "socSource": session.soc_estimate_source or "unavailable",
             "targetSoc": session.target_soc,
-            "relay": bool(payload.get("relay")),
+            "relay": relay_on,
             "timerRemainingSeconds": int(payload.get("timerRemainingSeconds") or 0),
             "transport": str(payload.get("transport") or session.transport),
             "quality": "good",
             "expireAt": now + timedelta(days=365),
         }
-        self._last_telemetry_at[session_id] = now
         # Compact samples live on the runtime session and are checkpointed
         # once per minute; counting them avoids a Firestore read/write pair on
         # every status sample.
@@ -576,20 +605,36 @@ class SmartChargeService:
         session.peak_power_w = max(session.peak_power_w or 0, point["powerMaximumW"])
         session.average_voltage_v = _running_average(session.average_voltage_v, point["voltageV"], count)
         session.average_current_a = _running_average(session.average_current_a, point["currentA"], count)
-        sample = {
-            "t": int(now.timestamp()),
-            "elapsed_s": point["elapsedSeconds"],
-            "v": point["voltageV"],
-            "a": point["currentA"],
-            "p": point["powerAverageW"],
-            "e_wh": point["energyWh"],
-            "temp_shelly": point.get("shellyTemperatureC"),
-            "temp_bat": point.get("batteryTemperatureC"),
-            "est_soc": point.get("estimatedSoc"),
-        }
-        session.telemetry_samples = [*session.telemetry_samples[-999:], sample]
-        self._checkpoint_session(uid, session)
-        return {"recorded": True, "coverage": session.telemetry_coverage}
+        if sample_due:
+            sample = {
+                "t": int(now.timestamp()),
+                "elapsed_s": point["elapsedSeconds"],
+                "v": point["voltageV"],
+                "a": point["currentA"],
+                "p": point["powerAverageW"],
+                "e_wh": point["energyWh"],
+                "temp_shelly": point.get("shellyTemperatureC"),
+                "temp_bat": point.get("batteryTemperatureC"),
+                "est_soc": point.get("estimatedSoc"),
+                "relay": point["relay"],
+                "transport": point["transport"],
+            }
+            session.telemetry_samples = [*session.telemetry_samples[-599:], sample]
+            self._last_telemetry_at[session_id] = now
+        session.updated_at = now
+        if not relay_on:
+            near_planned = abs((now - session.effective_stop_at).total_seconds()) <= 120
+            session.state = "completed" if near_planned else "interrupted"
+            session.stop_reason = "planned_timer" if near_planned else "relay_off"
+            session.stopped_at = now
+            session.relay_verified = True
+            session.version += 1
+            self._checkpoint_session(uid, session, force=True)
+            self.repository.upsert_charge_log(uid, session)
+            self._emit_push(uid, session)
+        else:
+            self._checkpoint_session(uid, session)
+        return {"recorded": sample_due, "coverage": session.telemetry_coverage}
 
     def _checkpoint_session(self, uid: str, session: ChargingSession, *, force: bool = False) -> bool:
         """Persist one compact runtime snapshot at most once per minute."""
@@ -951,8 +996,7 @@ class SmartChargeService:
                 self.repository.upsert_charge_log(uid, session)
                 self._emit_push(uid, session)
             else:
-                self.repository.save_session(uid, session)
-                self.repository.upsert_charge_log(uid, session)
+                self._checkpoint_session(uid, session)
             return session
         near_planned = abs((now - session.effective_stop_at).total_seconds()) <= 120
         session.state = "completed" if near_planned else "interrupted"
@@ -964,6 +1008,9 @@ class SmartChargeService:
         session.version += 1
         self.repository.save_session(uid, session)
         self.repository.upsert_charge_log(uid, session)
+        # Push only after the terminal session and vehicle SOC projection are
+        # durable, so opening a notification always finds the final state.
+        self._emit_push(uid, session)
         return session
 
     def _provider_error(self, exc: ProviderError) -> SmartChargeError:

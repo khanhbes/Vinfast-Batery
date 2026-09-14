@@ -117,10 +117,18 @@ def repair_candidate(db, data: dict) -> tuple[dict | None, str]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--apply", action="store_true", help="Persist safe eligible repairs")
+    parser.add_argument("--limit", type=int, default=200,
+                        help="Maximum ChargeLogs to scan per run (keeps Spark reads bounded)")
     args = parser.parse_args()
+    scan_limit = max(1, min(args.limit, 500))
     db = initialize_firestore()
-    report = {"mode": "apply" if args.apply else "dry-run", "eligible": 0, "updated": 0, "skipped": {}}
-    for snapshot in db.collection("ChargeLogs").where("source", "==", "shelly_smart_charging").stream():
+    report = {"mode": "apply" if args.apply else "dry-run", "eligible": 0,
+              "updated": 0, "scanned": 0, "scanLimit": scan_limit, "skipped": {}}
+    snapshots = db.collection("ChargeLogs").where(
+        "source", "==", "shelly_smart_charging"
+    ).limit(scan_limit).stream()
+    for snapshot in snapshots:
+        report["scanned"] += 1
         patch, reason = repair_candidate(db, snapshot.to_dict() or {})
         if patch is None:
             report["skipped"][reason] = report["skipped"].get(reason, 0) + 1

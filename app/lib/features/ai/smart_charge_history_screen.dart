@@ -86,7 +86,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
   void initState() {
     super.initState();
     _load(reset: true);
-    _liveTimer = Timer.periodic(Duration(seconds: 5), (_) {
+    _liveTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (_items.any((item) => !item.state.isTerminal)) _load(reset: true);
     });
   }
@@ -1078,7 +1078,7 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
     _session = widget.session;
     _load();
     if (!_session.state.isTerminal) {
-      _liveTimer = Timer.periodic(Duration(seconds: 5), (_) => _load());
+      _liveTimer = Timer.periodic(const Duration(seconds: 15), (_) => _load());
     }
   }
 
@@ -1092,11 +1092,33 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
     if (_loadingTelemetry) return;
     _loadingTelemetry = true;
     try {
-      final points = await widget.controller.getTelemetry(_session.sessionId);
+      final existing = _points;
+      final after = existing == null || existing.isEmpty
+          ? null
+          : existing.last.timestamp.toUtc().toIso8601String();
+      final incoming = await widget.controller.getTelemetry(
+        _session.sessionId,
+        after: after,
+        limit: 120,
+      );
       if (!mounted) return;
       setState(() {
         final live = widget.controller.currentUiState.session;
         if (live?.sessionId == _session.sessionId) _session = live!;
+        final merged = after == null
+            ? incoming
+            : <SmartChargeTelemetryPoint>[...existing!, ...incoming];
+        // A retry or a backend cache can return an overlapping sample. Keep
+        // the chart bounded and deterministic by timestamp.
+        final byTimestamp = <String, SmartChargeTelemetryPoint>{
+          for (final point in merged)
+            point.timestamp.toUtc().toIso8601String(): point,
+        };
+        final points = byTimestamp.values.toList()
+          ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+        if (points.length > 600) {
+          points.removeRange(0, points.length - 600);
+        }
         _points = points;
         _error = null;
         _summary = SmartChargeEnergySummary.calculate(

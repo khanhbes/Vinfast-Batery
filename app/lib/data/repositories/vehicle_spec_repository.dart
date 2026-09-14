@@ -57,8 +57,6 @@ class VehicleSpecRepository {
       if (cached.isNotEmpty) {
         _memoryCache = cached;
         _lastRemoteCheck = now;
-        _memoryCache = cached;
-        _lastRemoteCheck = now;
         return cached;
       }
     }

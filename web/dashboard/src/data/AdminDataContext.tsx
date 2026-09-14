@@ -22,6 +22,7 @@ export interface AdminDataSnapshot {
   requestId?: string;
   durationMs?: number;
   requestedDatasets?: string[];
+  usage?: { firestoreReads: number; firestoreWrites: number; cacheHits: number };
 }
 
 interface AdminDataContextValue {
@@ -67,6 +68,11 @@ function normalizeSnapshot(value: unknown): AdminDataSnapshot {
     requestId: typeof raw.requestId === 'string' ? raw.requestId : undefined,
     durationMs: typeof raw.durationMs === 'number' ? raw.durationMs : undefined,
     requestedDatasets: Array.isArray(raw.requestedDatasets) ? raw.requestedDatasets.filter(value => typeof value === 'string') as string[] : undefined,
+    usage: raw.usage && typeof raw.usage === 'object' ? {
+      firestoreReads: Number((raw.usage as Record<string, unknown>).firestoreReads || 0),
+      firestoreWrites: Number((raw.usage as Record<string, unknown>).firestoreWrites || 0),
+      cacheHits: Number((raw.usage as Record<string, unknown>).cacheHits || 0),
+    } : undefined,
   };
 }
 

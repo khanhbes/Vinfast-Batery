@@ -285,13 +285,5 @@
         { "fieldPath": "catalogId", "order": "ASCENDING" }
       ]
     }
-  ],
-  "fieldOverrides": [
-    {
-      "collectionGroup": "smartChargeTelemetry",
-      "fieldPath": "expireAt",
-      "ttl": true,
-      "indexes": []
-    }
   ]
 }

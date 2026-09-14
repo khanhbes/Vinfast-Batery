@@ -234,6 +234,11 @@ class ServerSmartChargerService {
     );
   }
 
+  Future<Map<String, dynamic>> getLive({String? vehicleId}) => _request(
+        'GET',
+        '/api/smart-charging/live${vehicleId == null || vehicleId.isEmpty ? '' : '?vehicleId=${Uri.encodeQueryComponent(vehicleId)}'}',
+      );
+
   Future<SmartChargingPlanPreview> createPreview(
     SmartChargingPlanDraft draft,
   ) async {
@@ -514,10 +519,17 @@ class ServerSmartChargerService {
         body: {'sessionId': sessionId},
       );
 
-  Future<List<SmartChargeTelemetryPoint>> telemetry(String sessionId) async {
+  Future<List<SmartChargeTelemetryPoint>> telemetry(
+    String sessionId, {
+    String? after,
+    int limit = 120,
+  }) async {
+    final params = <String, String>{'limit': '$limit'};
+    if (after != null && after.isNotEmpty) params['after'] = after;
+    final query = Uri(queryParameters: params).query;
     final data = await _request(
       'GET',
-      '/api/smart-charging/sessions/$sessionId/telemetry',
+      '/api/smart-charging/sessions/$sessionId/telemetry?$query',
     );
     return ((data['items'] as List?) ?? const [])
         .whereType<Map>()

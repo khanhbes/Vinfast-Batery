@@ -282,6 +282,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
   Timer? _sessionTimer;
   Timer? _countdownTimer;
   bool _statusRequestRunning = false;
+  DateTime? _lastScheduledStatusPollAt;
   bool _sessionRequestRunning = false;
   bool _disposed = false;
   String? _idempotencyKey;
@@ -499,12 +500,24 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
   }
 
   void _startPolling() {
-    _statusTimer ??= Timer.periodic(
-      const Duration(seconds: 5),
-      (_) => unawaited(_refreshStatus()),
-    );
+    _statusTimer ??= Timer.periodic(const Duration(seconds: 5), (_) {
+      final now = _clock();
+      final charging = state.session != null &&
+          !state.session!.state.isTerminal &&
+          state.chargerStatus?.relay == true;
+      final cadence = charging
+          ? const Duration(seconds: 5)
+          : const Duration(seconds: 15);
+      final last = _lastScheduledStatusPollAt;
+      if (last != null && now.difference(last) < cadence) return;
+      _lastScheduledStatusPollAt = now;
+      unawaited(_refreshStatus());
+    });
     _sessionTimer ??= Timer.periodic(
-      const Duration(seconds: 3),
+      // The live endpoint already returns status + active session together.
+      // Keep this as a slow recovery path for deployments that cannot expose
+      // the combined endpoint, instead of issuing a second query every poll.
+      const Duration(seconds: 60),
       (_) => unawaited(_refreshSession()),
     );
     _countdownTimer ??= Timer.periodic(const Duration(seconds: 1), (_) {
@@ -543,14 +556,15 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     if (_statusRequestRunning || _disposed) return;
     _statusRequestRunning = true;
     try {
-      final status = await _repository!.status(
+      final live = await _repository!.live(
         vehicleId: state.draft.vehicleId,
       );
+      final status = live.status;
       _connectionCoordinator.markStatusSuccess(shellyReachable: status.online);
       if (!_disposed) {
         state = state.copyWith(
           chargerStatus: status,
-          session: _sessionWithStatus(state.session, status),
+          session: _sessionWithStatus(live.session ?? state.session, status),
           livePowerSamples: _appendPower(status.powerW),
           statusSyncedAt: _clock(),
           gatewayError: null,
@@ -1367,9 +1381,13 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     );
   }
 
-  Future<List<SmartChargeTelemetryPoint>> getTelemetry(String sessionId) async {
+  Future<List<SmartChargeTelemetryPoint>> getTelemetry(
+    String sessionId, {
+    String? after,
+    int limit = 120,
+  }) async {
     _repository ??= await SmartChargerRepositoryFactory.create();
-    return _repository!.getTelemetry(sessionId);
+    return _repository!.getTelemetry(sessionId, after: after, limit: limit);
   }
 
   Future<void> hideSession(String sessionId) async {

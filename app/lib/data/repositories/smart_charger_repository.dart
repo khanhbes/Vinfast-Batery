@@ -17,6 +17,7 @@ abstract interface class SmartChargerRepository {
   Future<SmartChargerBinding?> binding({String? vehicleId});
   Future<SmartChargerCapabilities> capabilities({String? vehicleId});
   Future<SmartChargerStatus> status({String? vehicleId});
+  Future<SmartChargerLiveSnapshot> live({String? vehicleId});
   Future<SmartChargingPlanPreview> preview(SmartChargingPlanDraft draft);
   Future<SmartChargingSession> start(
     SmartChargingPlanPreview preview,
@@ -29,7 +30,11 @@ abstract interface class SmartChargerRepository {
     ChargingStrategy? strategy,
     String? vehicleId,
   });
-  Future<List<SmartChargeTelemetryPoint>> getTelemetry(String sessionId);
+  Future<List<SmartChargeTelemetryPoint>> getTelemetry(
+    String sessionId, {
+    String? after,
+    int limit = 120,
+  });
   Future<SmartChargeEnergySummary> confirmActualEndSoc(
     SmartChargingSession session,
     double soc,
@@ -55,6 +60,12 @@ abstract interface class SmartChargerRepository {
     required String vehicleId,
     required double currentSoc,
   });
+}
+
+class SmartChargerLiveSnapshot {
+  const SmartChargerLiveSnapshot({required this.status, this.session});
+  final SmartChargerStatus status;
+  final SmartChargingSession? session;
 }
 
 enum SmartChargeTelemetryOwner { clientDirect, server }
@@ -96,6 +107,11 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
 
   @override
   Future<SmartChargerStatus> status({String? vehicleId}) => service.getStatus();
+  @override
+  Future<SmartChargerLiveSnapshot> live({String? vehicleId}) async {
+    final status = await service.getStatus();
+    return SmartChargerLiveSnapshot(status: status);
+  }
   @override
   Future<SmartChargingPlanPreview> preview(SmartChargingPlanDraft draft) async {
     if (_previewService != null) {
@@ -196,8 +212,11 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
   }
 
   @override
-  Future<List<SmartChargeTelemetryPoint>> getTelemetry(String sessionId) =>
-      _chargeLogs?.getTelemetry(sessionId) ?? Future.value(const []);
+  Future<List<SmartChargeTelemetryPoint>> getTelemetry(
+    String sessionId, {
+    String? after,
+    int limit = 120,
+  }) => _chargeLogs?.getTelemetry(sessionId) ?? Future.value(const []);
 
   @override
   Future<SmartChargeEnergySummary> confirmActualEndSoc(
@@ -319,6 +338,20 @@ class ServerSmartChargerRepository implements SmartChargerRepository {
   Future<SmartChargerStatus> status({String? vehicleId}) =>
       service.getStatus(vehicleId: vehicleId);
   @override
+  Future<SmartChargerLiveSnapshot> live({String? vehicleId}) async {
+    final data = await service.getLive(vehicleId: vehicleId);
+    final status = SmartChargerStatus.fromJson(
+      Map<String, dynamic>.from(data['status'] as Map? ?? const {}),
+    );
+    final rawSession = data['session'];
+    return SmartChargerLiveSnapshot(
+      status: status,
+      session: rawSession is Map
+          ? SmartChargingSession.fromJson(Map<String, dynamic>.from(rawSession))
+          : null,
+    );
+  }
+  @override
   Future<SmartChargingPlanPreview> preview(SmartChargingPlanDraft draft) =>
       service.createPreview(draft);
   @override
@@ -360,8 +393,11 @@ class ServerSmartChargerRepository implements SmartChargerRepository {
   }
 
   @override
-  Future<List<SmartChargeTelemetryPoint>> getTelemetry(String sessionId) =>
-      service.telemetry(sessionId);
+  Future<List<SmartChargeTelemetryPoint>> getTelemetry(
+    String sessionId, {
+    String? after,
+    int limit = 120,
+  }) => service.telemetry(sessionId, after: after, limit: limit);
 
   @override
   Future<SmartChargeEnergySummary> confirmActualEndSoc(
