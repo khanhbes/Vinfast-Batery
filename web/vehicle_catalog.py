@@ -41,6 +41,11 @@ except Exception:  # pragma: no cover
     Image = None
     ImageOps = None
 
+try:
+    from firebase_admin import messaging as _firebase_messaging
+except Exception:  # pragma: no cover - optional in isolated tests.
+    _firebase_messaging = None
+
 
 CATALOG_COLLECTION = "VehicleCatalog"
 DRAFT_COLLECTION = "VehicleCatalogDrafts"
@@ -979,6 +984,16 @@ def create_catalog_blueprint(
                 vehicle_batch.update(vehicle_snapshot.reference, updates)
             vehicle_batch.commit()
         audit("catalog_publish", CATALOG_COLLECTION, catalog_id, request._uid, request._email, {"revision": revision, "catalogRevision": meta_revision, "affectedVehicles": len(linked)})
+        if _firebase_messaging:
+            try:
+                _firebase_messaging.send(_firebase_messaging.Message(
+                    topic="vehicle_catalog",
+                    data={"event": "catalog_updated", "catalogRevision": str(meta_revision)},
+                ))
+            except Exception as exc:
+                # Push is an invalidation hint only; publishing remains
+                # successful because foreground bootstrap is authoritative.
+                print(f"[catalog] FCM invalidation deferred: {type(exc).__name__}")
         return jsonify({"success": True, "data": _jsonable(published), "catalogRevision": meta_revision, "affectedVehicles": len(linked)})
 
     def set_archive_state(catalog_id: str, archived: bool):

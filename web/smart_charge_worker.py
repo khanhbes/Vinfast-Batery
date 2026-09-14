@@ -63,11 +63,36 @@ def _reconcile_session(service, uid: str, session, binding):
     return session
 
 
-def run_forever(service, user_ids, interval_seconds: int = 15):
+def run_forever(service, user_ids=None, interval_seconds: int = 60):
+    """Reconcile only active sessions; never enumerate every account.
+
+    Collection-group reads are bounded and run once per minute.  The legacy
+    ``user_ids`` callback remains supported for tests and local deployments.
+    """
+    interval_seconds = max(60, int(interval_seconds))
+    backoff = interval_seconds
     while True:
-        for uid in user_ids():
-            reconcile_once(service, uid)
-        process_personal_training_jobs_once(service)
+        try:
+            if user_ids is not None:
+                for uid in user_ids():
+                    reconcile_once(service, uid)
+            else:
+                db = service.repository.db
+                if db:
+                    query = (db.collection_group("smartChargingSessions")
+                             .where("state", "in", ["arming", "active"])
+                             .limit(100))
+                    for snapshot in query.stream():
+                        parts = snapshot.reference.path.split('/')
+                        if len(parts) >= 4 and parts[0] == 'users':
+                            reconcile_once(service, parts[1])
+            process_personal_training_jobs_once(service)
+            backoff = interval_seconds
+        except Exception as error:
+            print(f"[smart-charge-worker] transient error: {type(error).__name__}")
+            time.sleep(min(900, backoff))
+            backoff = min(900, backoff * 2)
+            continue
         time.sleep(interval_seconds)
 
 

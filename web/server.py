@@ -444,6 +444,9 @@ def _verify_token():
         role = 'admin' if (
             decoded.get('admin') is True or email_norm in (set(ADMIN_EMAILS) - {'*'})
         ) else 'user'
+        if decoded.get('accountDisabled') is True:
+            request._auth_failure = 'accountDisabled'
+            return None, None, None
         # Firebase Auth is authoritative here.  Reading the Firestore profile
         # on every request both burns quota and can turn a temporary
         # RESOURCE_EXHAUSTED error into a misleading 401.  Account disable
@@ -1357,6 +1360,12 @@ def admin_account_status(uid: str):
     disabled = requested == 'disabled'
     try:
         _firebase_auth.update_user(uid, disabled=disabled)
+        claims = dict(getattr(user, 'custom_claims', None) or {})
+        if disabled:
+            claims['accountDisabled'] = True
+        else:
+            claims.pop('accountDisabled', None)
+        _firebase_auth.set_custom_user_claims(uid, claims)
         if disabled:
             _firebase_auth.revoke_refresh_tokens(uid)
         if _fs():
@@ -1561,6 +1570,7 @@ def admin_data_snapshot():
     errors = {}
     error_details = {}
     cache_hits = 0
+    cache_dataset_keys = set()
     stale_datasets = []
     request_id = uuid.uuid4().hex
     started = time.monotonic()
@@ -1585,6 +1595,7 @@ def admin_data_snapshot():
             if cached is not None and (fresh and not force_refresh or refresh_throttled):
                 datasets[key] = cached
                 cache_hits += 1
+                cache_dataset_keys.add(key)
                 if not fresh:
                     stale_datasets.append(key)
                 continue
@@ -1660,6 +1671,11 @@ def admin_data_snapshot():
         datasets['accounts'] = {'items': accounts, 'loaded': len(accounts), 'truncated': False}
 
     totals = {key: dataset['loaded'] for key, dataset in datasets.items()}
+    estimated_reads = sum(
+        int(dataset.get('loaded') or 0) + (1 if dataset.get('truncated') else 0)
+        for key, dataset in datasets.items()
+        if key not in cache_dataset_keys
+    )
     duration_ms = round((time.monotonic() - started) * 1000)
     if errors or duration_ms > 5000:
         print(f'Admin snapshot [{request_id}] datasets={",".join(selected)} durationMs={duration_ms} partial={bool(errors)}')
@@ -1683,6 +1699,13 @@ def admin_data_snapshot():
             'requestId': request_id,
             'durationMs': duration_ms,
             'requestedDatasets': selected,
+            # Approximate usage for Developer Hub; cached datasets contribute
+            # zero new reads and writes are always zero for this GET.
+            'usage': {
+                'firestoreReads': estimated_reads,
+                'firestoreWrites': 0,
+                'cacheHits': cache_hits,
+            },
         },
     })
 

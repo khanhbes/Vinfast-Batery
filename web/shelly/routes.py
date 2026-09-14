@@ -296,6 +296,11 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
     def status(uid):
         return execute(lambda: ok(service.status(uid, request.args.get("vehicleId") or None).to_dict()))
 
+    @bp.get("/api/smart-charging/live")
+    @authenticated
+    def live(uid):
+        return execute(lambda: ok(service.live(uid, request.args.get("vehicleId") or None)))
+
     @bp.get("/api/smart-charging/session/current")
     @authenticated
     def current(uid):
@@ -411,7 +416,16 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
     @authenticated
     def telemetry(uid, session_id):
         # Repository verifies the ChargeLog owner before returning Firestore data.
-        return ok(repository.telemetry(uid, session_id))
+        try:
+            limit = min(120, max(1, int(request.args.get("limit", "120"))))
+        except ValueError:
+            return jsonify({"success": False, "error": {"code": "invalidLimit", "message": "limit không hợp lệ"}}), 400
+        return ok(repository.telemetry(
+            uid,
+            session_id,
+            after=request.args.get("after") or None,
+            limit=limit,
+        ))
 
     @bp.delete("/api/smart-charging/sessions/<session_id>/privacy-erase")
     @authenticated
