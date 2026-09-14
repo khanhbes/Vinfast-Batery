@@ -1,6 +1,10 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/services/dashboard_preferences_service.dart';
+import '../../core/services/guide_registry.dart';
 import '../../core/theme/app_motion.dart';
 import '../../core/theme/cockpit_design_system.dart';
 import '../../core/theme/app_ui_colors.dart';
@@ -14,6 +18,7 @@ import '../../data/services/battery_state_service.dart';
 import 'widgets/range_prediction_card.dart';
 import 'widgets/recent_charging_chart.dart';
 import '../dashboard/dashboard_screen.dart';
+import '../smart_charging/shelly_setup_screen.dart';
 import '../trip_planner/trip_planner_wrapper.dart';
 import '../maintenance/maintenance_screen.dart';
 
@@ -30,6 +35,8 @@ class HomeScreen extends ConsumerWidget {
     final vehicleAsync = ref.watch(vehicleProvider(vehicleId));
     final allVehiclesAsync = ref.watch(allVehiclesProvider);
     final restoredId = ref.watch(restoreVehicleIdProvider);
+    final prefService = ref.watch(dashboardPreferencesProvider);
+    final visibleWidgets = prefService.visibleWidgets;
 
     // ── Auto-select / auto-clear vehicle ID ────────────────────────────────
     // 1. Khi danh sách xe load xong và chưa có xe được chọn → chọn xe đầu
@@ -121,96 +128,18 @@ class HomeScreen extends ConsumerWidget {
                 ),
               ),
 
-              // ── Quick Actions ──
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(20, 20, 20, 0),
-                  child: vehicleAsync.when(
-                    data: (vehicle) => _QuickActionsRow(
-                      vehicleId: vehicle?.vehicleId ?? '',
-                      onSync: () => _showSyncDialog(context),
-                    ),
-                    loading: () => _QuickActionsShimmer(),
-                    error: (_, __) => _QuickActionsRow(
-                      vehicleId: '',
-                      onSync: () => _showSyncDialog(context),
-                    ),
-                  ),
-                ),
-              ),
+              // ── Shelly checklist banner if skipped in onboarding ──
+              const _ShellyChecklistSliver(),
 
-              // ── Stat Cards Row ──
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(20, 20, 20, 0),
-                  child: vehicleAsync.when(
-                    data: (vehicle) => _StatCardsRow(vehicle: vehicle),
-                    loading: () => _StatCardsRowShimmer(),
-                    error: (_, __) => _StatCardsRow(vehicle: null),
-                  ),
+              // ── Dynamic Customizable Widgets ──
+              for (final id in visibleWidgets)
+                _buildDashboardWidget(
+                  id: id,
+                  vehicleAsync: vehicleAsync,
+                  vehicleId: vehicleId,
+                  context: context,
+                  ref: ref,
                 ),
-              ),
-
-              // ── Range Prediction Card ──
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(20, 20, 20, 0),
-                  child: vehicleAsync.when(
-                    data: (vehicle) => vehicle == null
-                        ? SizedBox.shrink()
-                        : vehicle.hasBatteryData &&
-                              vehicle.hasSohData &&
-                              vehicle.hasEfficiencyData
-                        ? RangePredictionCard(vehicle: vehicle)
-                        : _MissingVehicleDataCard(
-                            message:
-                                'Cần thêm dữ liệu pin để dự đoán quãng đường',
-                          ),
-                    loading: () => SizedBox.shrink(),
-                    error: (_, __) => SizedBox.shrink(),
-                  ),
-                ),
-              ),
-
-              // ── Battery Health Score ──
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(20, 24, 20, 0),
-                  child: vehicleAsync.when(
-                    data: (vehicle) => _BatteryHealthCard(
-                      soh: vehicle?.hasSohData == true
-                          ? vehicle?.stateOfHealth
-                          : null,
-                      vehicleId: vehicle?.vehicleId ?? '',
-                    ),
-                    loading: () => _BatteryHealthShimmer(),
-                    error: (_, __) =>
-                        _BatteryHealthCard(soh: null, vehicleId: ''),
-                  ),
-                ),
-              ),
-
-              // ── Recent Charging Trend Chart ──
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-                  child: RecentChargingChart(
-                    onViewHistory: () =>
-                        ref.read(currentTabProvider.notifier).state = 2,
-                  ),
-                ),
-              ),
-
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(20, 24, 20, 0),
-                  child: vehicleAsync.when(
-                    data: (vehicle) => _EfficiencyReference(vehicle: vehicle),
-                    loading: () => SizedBox.shrink(),
-                    error: (_, __) => SizedBox.shrink(),
-                  ),
-                ),
-              ),
 
               SliverToBoxAdapter(child: SizedBox(height: 100)),
             ],
@@ -222,8 +151,223 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
+  Widget _buildDashboardWidget({
+    required String id,
+    required AsyncValue<VehicleModel?> vehicleAsync,
+    required String vehicleId,
+    required BuildContext context,
+    required WidgetRef ref,
+  }) {
+    switch (id) {
+      case DashboardWidgetId.quickActions:
+        return SliverToBoxAdapter(
+          key: const ValueKey('widget_quick_actions'),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+            child: vehicleAsync.when(
+              data: (vehicle) => _QuickActionsRow(
+                vehicleId: vehicle?.vehicleId ?? '',
+                onSync: () => _showSyncDialog(context),
+              ),
+              loading: () => const _QuickActionsShimmer(),
+              error: (_, __) => _QuickActionsRow(
+                vehicleId: '',
+                onSync: () => _showSyncDialog(context),
+              ),
+            ),
+          ),
+        );
+
+      case DashboardWidgetId.batteryStatistics:
+        return SliverToBoxAdapter(
+          key: const ValueKey('widget_battery_statistics'),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+            child: vehicleAsync.when(
+              data: (vehicle) => _StatCardsRow(vehicle: vehicle),
+              loading: () => const _StatCardsRowShimmer(),
+              error: (_, __) => const _StatCardsRow(vehicle: null),
+            ),
+          ),
+        );
+
+      case DashboardWidgetId.rangePrediction:
+        return SliverToBoxAdapter(
+          key: const ValueKey('widget_range_prediction'),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+            child: vehicleAsync.when(
+              data: (vehicle) => vehicle == null
+                  ? const SizedBox.shrink()
+                  : vehicle.hasBatteryData &&
+                          vehicle.hasSohData &&
+                          vehicle.hasEfficiencyData
+                      ? RangePredictionCard(vehicle: vehicle)
+                      : const _MissingVehicleDataCard(
+                          message: 'Cần thêm dữ liệu pin để dự đoán quãng đường',
+                        ),
+              loading: () => const SizedBox.shrink(),
+              error: (_, __) => const SizedBox.shrink(),
+            ),
+          ),
+        );
+
+      case DashboardWidgetId.batteryHealth:
+        return SliverToBoxAdapter(
+          key: const ValueKey('widget_battery_health'),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+            child: vehicleAsync.when(
+              data: (vehicle) => _BatteryHealthCard(
+                key: GuideRegistry.keyBatteryHealthCard,
+                soh: vehicle?.hasSohData == true
+                    ? vehicle?.stateOfHealth
+                    : null,
+                vehicleId: vehicle?.vehicleId ?? '',
+              ),
+              loading: () => const _BatteryHealthShimmer(),
+              error: (_, __) => const _BatteryHealthCard(soh: null, vehicleId: ''),
+            ),
+          ),
+        );
+
+      case DashboardWidgetId.recentCharging:
+        return SliverToBoxAdapter(
+          key: const ValueKey('widget_recent_charging'),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+            child: RecentChargingChart(
+              onViewHistory: () =>
+                  ref.read(currentTabProvider.notifier).state = 2,
+            ),
+          ),
+        );
+
+      case DashboardWidgetId.efficiencyReference:
+        return SliverToBoxAdapter(
+          key: const ValueKey('widget_efficiency_reference'),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+            child: vehicleAsync.when(
+              data: (vehicle) => _EfficiencyReference(vehicle: vehicle),
+              loading: () => const SizedBox.shrink(),
+              error: (_, __) => const SizedBox.shrink(),
+            ),
+          ),
+        );
+
+      default:
+        return const SliverToBoxAdapter(child: SizedBox.shrink());
+    }
+  }
+
   void _showSyncDialog(BuildContext context) {
     showDialog(context: context, builder: (context) => _SyncDialog());
+  }
+}
+
+class _ShellyChecklistSliver extends StatelessWidget {
+  const _ShellyChecklistSliver();
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return const SliverToBoxAdapter(child: SizedBox.shrink());
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .snapshots(),
+      builder: (context, snapshot) {
+        final data = snapshot.data?.data();
+        final shellyStatus = data?['shellyOnboardingStatus'];
+        if (shellyStatus == 'skipped') {
+          return SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF151C26),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.3),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.power_rounded,
+                        color: Color(0xFF10B981),
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text(
+                            'Thiết lập bộ sạc thông minh Shelly',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Kích hoạt điều khiển relay tự động và ngắt sạc an toàn.',
+                            style: TextStyle(
+                              color: Color(0xFF94A3B8),
+                              fontSize: 11.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton.tonal(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const ShellySetupScreen(),
+                          ),
+                        );
+                      },
+                      style: FilledButton.styleFrom(
+                        backgroundColor:
+                            const Color(0xFF10B981).withValues(alpha: 0.2),
+                        foregroundColor: const Color(0xFF10B981),
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: const Text('Thiết lập',
+                          style: TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w700)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+        return const SliverToBoxAdapter(child: SizedBox.shrink());
+      },
+    );
   }
 }
 
@@ -612,7 +756,7 @@ class _BatteryHealthCard extends StatefulWidget {
   final double? soh;
   final String vehicleId;
 
-  const _BatteryHealthCard({required this.soh, required this.vehicleId});
+  const _BatteryHealthCard({super.key, required this.soh, required this.vehicleId});
 
   @override
   State<_BatteryHealthCard> createState() => _BatteryHealthCardState();
@@ -797,6 +941,7 @@ class _QuickActionsRow extends StatelessWidget {
       minCardWidth: 100,
       children: [
         _AnimatedActionButton(
+          key: GuideRegistry.keyTripPlannerAction,
           icon: Icons.map_outlined,
           label: 'Trip Planner',
           color: AppUiColors.of(context).primary,
@@ -832,6 +977,7 @@ class _AnimatedActionButton extends StatefulWidget {
   final VoidCallback onTap;
 
   const _AnimatedActionButton({
+    super.key,
     required this.icon,
     required this.label,
     required this.color,

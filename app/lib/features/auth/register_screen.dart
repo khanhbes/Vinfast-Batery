@@ -56,7 +56,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     if (result['success'] == true) {
       AppPopup.showSuccess('Đăng ký thành công!');
-      Navigator.pop(context); // Return to login
+      Navigator.of(context).popUntil((route) => route.isFirst);
     } else {
       final msg = result['error'] ?? 'Đăng ký thất bại';
       setState(() => _error = msg);

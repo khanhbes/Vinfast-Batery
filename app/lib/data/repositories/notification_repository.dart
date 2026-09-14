@@ -13,6 +13,8 @@ class NotificationRepository {
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  int? _cachedUnread;
+  DateTime? _cachedUnreadAt;
 
   String? get _uid => _auth.currentUser?.uid;
 
@@ -31,16 +33,7 @@ class NotificationRepository {
     final uid = _uid;
     if (uid == null) return Stream.value(const <UserNotification>[]);
 
-    return _notificationsRef.where('userId', isEqualTo: uid).snapshots().map((
-      snapshot,
-    ) {
-      final list = snapshot.docs
-          .map((doc) => UserNotification.fromFirestore(doc))
-          .where((n) => n.status != NotificationStatus.archived)
-          .toList();
-      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      return list.take(limit).toList();
-    });
+    return Stream.fromFuture(getNotifications(limit: limit));
   }
 
   /// Lấy danh sách thông báo một lần.
@@ -73,6 +66,7 @@ class NotificationRepository {
       try {
         final snapshot = await _notificationsRef
             .where('userId', isEqualTo: uid)
+            .limit(limit)
             .get();
         final list = snapshot.docs
             .map((doc) => UserNotification.fromFirestore(doc))
@@ -90,24 +84,33 @@ class NotificationRepository {
   ///
   /// Dùng 1 where filter rồi đếm `status == 'unread'` ở client (tránh composite
   /// index khi backend chưa deploy). Lỗi không spam UI (badge fallback 0).
-  Stream<int> watchUnreadCount() {
-    final uid = _uid;
-    if (uid == null) return Stream.value(0);
+  Stream<int> watchUnreadCount() => Stream.fromFuture(getUnreadCount());
 
-    return _notificationsRef
-        .where('userId', isEqualTo: uid)
-        .snapshots()
-        .map((snapshot) {
-          var count = 0;
-          for (final doc in snapshot.docs) {
-            final data = doc.data() as Map<String, dynamic>?;
-            if (data?['status'] == 'unread') count++;
-          }
-          return count;
-        })
-        .handleError((Object error, StackTrace st) {
-          debugPrint('[NotificationRepo] Unread count error: $error');
-        });
+  Future<int> getUnreadCount({bool force = false}) async {
+    final uid = _uid;
+    if (uid == null) return 0;
+    final now = DateTime.now();
+    if (!force && _cachedUnread != null && _cachedUnreadAt != null &&
+        now.difference(_cachedUnreadAt!) < const Duration(minutes: 1)) {
+      return _cachedUnread!;
+    }
+    try {
+      final snapshot = await _notificationsRef
+          .where('userId', isEqualTo: uid)
+          .where('status', isEqualTo: 'unread')
+          .limit(1000)
+          .get();
+      _cachedUnread = snapshot.size;
+      _cachedUnreadAt = now;
+      return snapshot.size;
+    } catch (e) {
+      debugPrint('[NotificationRepo] Unread count error: $e');
+      return _cachedUnread ?? 0;
+    }
+  }
+
+  void invalidateUnread() {
+    _cachedUnreadAt = null;
   }
 
   /// Đánh dấu đã đọc
@@ -117,6 +120,7 @@ class NotificationRepository {
         'status': 'read',
         'readAt': Timestamp.now(),
       });
+      invalidateUnread();
       return true;
     } catch (e) {
       debugPrint('[NotificationRepo] Mark read error: $e');
@@ -163,6 +167,7 @@ class NotificationRepository {
       await _notificationsRef.doc(notificationId).update({
         'status': 'archived',
       });
+      invalidateUnread();
       return true;
     } catch (e) {
       debugPrint('[NotificationRepo] Archive error: $e');

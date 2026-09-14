@@ -254,8 +254,7 @@ class _StartChargeConfirmationSheetState
 
               // Buttons
               ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 52),
-                width: double.infinity,
+                constraints: const BoxConstraints(minHeight: 52, minWidth: double.infinity),
                 child: FilledButton.icon(
                   onPressed: _acknowledged
                       ? () => Navigator.pop(context, true)

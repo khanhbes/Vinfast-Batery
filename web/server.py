@@ -34,6 +34,7 @@ import functools
 import glob
 import warnings
 import time
+import threading
 from concurrent.futures import ThreadPoolExecutor, wait
 import numpy as np
 from datetime import datetime, timedelta, timezone
@@ -404,6 +405,13 @@ _local_audit: list = []
 _local_push_tokens: dict = {}
 _local_push_deliveries: set = set()
 
+# Mobile foreground bootstrap is intentionally cheap.  Catalog metadata is
+# shared by all users and notification counts are cached per user so opening
+# the app repeatedly does not issue the same Firestore reads.
+_mobile_catalog_meta_cache: tuple[float, int] | None = None
+_mobile_unread_cache: dict[str, tuple[float, int]] = {}
+_mobile_bootstrap_lock = threading.RLock()
+
 
 # ═══════════════════════════════════════════════════════════════
 # AUTH MIDDLEWARE
@@ -413,12 +421,15 @@ def _verify_token():
     Verify Firebase ID token từ Authorization header.
     Trả (uid, email, role) hoặc (None, None, None) nếu không xác thực được.
     """
+    request._auth_failure = None
     auth_header = request.headers.get('Authorization', '')
     if not auth_header.startswith('Bearer '):
+        request._auth_failure = 'unauthorized'
         return None, None, None
 
     token = auth_header[7:]
     if not _firebase_available or not _firebase_auth:
+        request._auth_failure = 'authUnavailable'
         return None, None, None
 
     try:
@@ -433,15 +444,19 @@ def _verify_token():
         role = 'admin' if (
             decoded.get('admin') is True or email_norm in (set(ADMIN_EMAILS) - {'*'})
         ) else 'user'
-        # Firebase Auth owns authentication while this server-owned profile
-        # flag closes direct API access immediately after an admin disables an
-        # account. Missing legacy profiles remain active by design.
-        if _firestore_db:
-            profile = _firestore_db.collection('users').document(uid).get()
-            if profile.exists and (profile.to_dict() or {}).get('accountStatus') == 'disabled':
-                return None, None, None
+        # Firebase Auth is authoritative here.  Reading the Firestore profile
+        # on every request both burns quota and can turn a temporary
+        # RESOURCE_EXHAUSTED error into a misleading 401.  Account disable
+        # operations disable Auth and revoke refresh tokens, which is checked
+        # by verify_id_token(check_revoked=True).
         return uid, email, role
-    except Exception:
+    except Exception as exc:
+        error_name = type(exc).__name__
+        token_errors = {
+            'InvalidIdTokenError', 'ExpiredIdTokenError', 'RevokedIdTokenError',
+            'UserDisabledError', 'CertificateFetchError', 'InvalidArgumentError',
+        }
+        request._auth_failure = 'invalidToken' if error_name in token_errors else 'authUnavailable'
         return None, None, None
 
 
@@ -451,7 +466,9 @@ def require_auth(f):
     def decorated(*args, **kwargs):
         uid, email, role = _verify_token()
         if not uid:
-            return jsonify({'success': False, 'error': 'Unauthorized — cần đăng nhập'}), 401
+            if getattr(request, '_auth_failure', None) == 'authUnavailable':
+                return jsonify({'success': False, 'error': 'Authentication service is temporarily unavailable.', 'code': 'authUnavailable'}), 503
+            return jsonify({'success': False, 'error': 'Unauthorized — cần đăng nhập', 'code': getattr(request, '_auth_failure', None) or 'unauthorized'}), 401
         request._uid = uid
         request._email = email
         request._role = role
@@ -485,9 +502,11 @@ def require_admin(f):
 
         uid, email, role = _verify_token()
         if not uid:
-            return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+            if getattr(request, '_auth_failure', None) == 'authUnavailable':
+                return jsonify({'success': False, 'error': 'Authentication service is temporarily unavailable.', 'code': 'authUnavailable'}), 503
+            return jsonify({'success': False, 'error': 'Unauthorized', 'code': getattr(request, '_auth_failure', None) or 'unauthorized'}), 401
         if role != 'admin':
-            return jsonify({'success': False, 'error': 'Forbidden — cần quyền admin'}), 403
+            return jsonify({'success': False, 'error': 'Forbidden — cần quyền admin', 'code': 'forbidden'}), 403
         request._uid = uid
         request._email = email
         request._role = role
@@ -637,6 +656,199 @@ def set_admin():
 
     ADMIN_EMAILS.add(target_email)
     return jsonify({'success': True, 'message': f'{target_email} → admin (local)'})
+
+
+# ═══════════════════════════════════════════════════════════════
+# USER PROFILE & ONBOARDING APIs
+# ═══════════════════════════════════════════════════════════════
+def validate_date_of_birth(dob_str: str) -> tuple[bool, str | None]:
+    """Validate date of birth format YYYY-MM-DD, non-future, age <= 120."""
+    if not isinstance(dob_str, str):
+        return False, "Ngày sinh phải là chuỗi định dạng YYYY-MM-DD"
+    dob_str = dob_str.strip()
+    if not re.match(r'^\d{4}-\d{2}-\d{2}$', dob_str):
+        return False, "Định dạng ngày sinh phải là YYYY-MM-DD"
+    try:
+        dt = datetime.strptime(dob_str, "%Y-%m-%d")
+    except ValueError:
+        return False, "Ngày sinh không hợp lệ"
+    today = datetime.now(timezone.utc).date()
+    dob_date = dt.date()
+    if dob_date > today:
+        return False, "Ngày sinh không thể ở tương lai"
+    age = today.year - dob_date.year - ((today.month, today.day) < (dob_date.month, dob_date.day))
+    if age > 120:
+        return False, "Tuổi không hợp lệ (vượt quá 120 tuổi)"
+    return True, None
+
+
+@app.route('/api/user/profile', methods=['PATCH'])
+@require_auth
+def patch_user_profile():
+    """Cập nhật thông tin cá nhân của user (name, phone, dateOfBirth)."""
+    uid = request._uid
+    if not _fs():
+        return jsonify({'success': False, 'error': 'Firestore không khả dụng'}), 503
+    body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict):
+        return jsonify({'success': False, 'error': 'JSON object bắt buộc'}), 400
+
+    updates = {}
+    if 'name' in body:
+        name = str(body['name']).strip()
+        if not name or len(name) > 100:
+            return jsonify({'success': False, 'error': 'Họ tên không được để trống và tối đa 100 ký tự'}), 400
+        updates['name'] = name
+        updates['displayName'] = name
+
+    if 'phone' in body:
+        phone = body['phone']
+        if phone is not None:
+            phone = str(phone).strip()
+            if len(phone) > 20:
+                return jsonify({'success': False, 'error': 'Số điện thoại tối đa 20 ký tự'}), 400
+            updates['phone'] = phone
+        else:
+            updates['phone'] = ''
+
+    if 'dateOfBirth' in body:
+        dob = body['dateOfBirth']
+        if dob:
+            is_valid, err = validate_date_of_birth(str(dob))
+            if not is_valid:
+                return jsonify({'success': False, 'error': err}), 400
+            updates['dateOfBirth'] = str(dob).strip()
+        else:
+            updates['dateOfBirth'] = None
+
+    if not updates:
+        return jsonify({'success': False, 'error': 'Không có trường thông tin nào để cập nhật'}), 400
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    updates['updatedAt'] = now_iso
+
+    try:
+        user_ref = _fs().collection('users').document(uid)
+        user_ref.set(updates, merge=True)
+        updated_doc = user_ref.get()
+        data = updated_doc.to_dict() if (updated_doc and updated_doc.exists) else updates
+        data['uid'] = uid
+        return jsonify({'success': True, 'data': data})
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Lỗi cập nhật hồ sơ: {e}'}), 500
+
+
+@app.route('/api/user/onboarding', methods=['GET'])
+@require_auth
+def get_user_onboarding():
+    """Kiểm tra tiến độ onboarding của user hiện tại."""
+    uid = request._uid
+    if not _fs():
+        return jsonify({'success': False, 'error': 'Firestore không khả dụng'}), 503
+
+    try:
+        user_doc = _fs().collection('users').document(uid).get()
+        user_data = user_doc.to_dict() if (user_doc and user_doc.exists) else {}
+
+        # Active vehicles
+        active_vehicles = []
+        veh_docs = _fs().collection('Vehicles').where('ownerUid', '==', uid).stream()
+        for doc in veh_docs:
+            d = doc.to_dict() or {}
+            if d.get('isDeleted') is not True and d.get('isArchived') is not True:
+                d['vehicleId'] = doc.id
+                active_vehicles.append(d)
+
+        name = user_data.get('name') or user_data.get('displayName') or ''
+        is_profile_complete = bool(name and name.strip())
+        onboarding_completed_at = user_data.get('onboardingCompletedAt')
+        reg_version = user_data.get('registrationFlowVersion', 1)
+        shelly_status = user_data.get(
+            'shellyOnboardingStatus',
+            'skipped' if onboarding_completed_at else 'pending'
+        )
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'registrationFlowVersion': reg_version,
+                'isCompleted': bool(onboarding_completed_at),
+                'onboardingCompletedAt': onboarding_completed_at,
+                'profile': {
+                    'name': name,
+                    'phone': user_data.get('phone', ''),
+                    'dateOfBirth': user_data.get('dateOfBirth'),
+                    'isComplete': is_profile_complete,
+                },
+                'vehicle': {
+                    'hasVehicle': len(active_vehicles) > 0,
+                    'count': len(active_vehicles),
+                    'vehicles': active_vehicles,
+                },
+                'shelly': {
+                    'status': shelly_status,
+                },
+            },
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Lỗi kiểm tra onboarding: {e}'}), 500
+
+
+@app.route('/api/user/onboarding/complete', methods=['POST'])
+@require_auth
+def complete_user_onboarding():
+    """Xác nhận hoàn thành onboarding khi thỏa mãn họ tên + ít nhất 1 xe active."""
+    uid = request._uid
+    if not _fs():
+        return jsonify({'success': False, 'error': 'Firestore không khả dụng'}), 503
+
+    try:
+        user_ref = _fs().collection('users').document(uid)
+        user_doc = user_ref.get()
+        user_data = user_doc.to_dict() if (user_doc and user_doc.exists) else {}
+
+        name = user_data.get('name') or user_data.get('displayName') or ''
+        if not name or not name.strip():
+            return jsonify({'success': False, 'error': 'Hồ sơ phải có họ tên trước khi hoàn tất onboarding'}), 400
+
+        # Check at least 1 active vehicle
+        veh_docs = _fs().collection('Vehicles').where('ownerUid', '==', uid).stream()
+        active_count = 0
+        for doc in veh_docs:
+            d = doc.to_dict() or {}
+            if d.get('isDeleted') is not True and d.get('isArchived') is not True:
+                active_count += 1
+
+        if active_count == 0:
+            return jsonify({'success': False, 'error': 'Bạn phải chọn ít nhất một xe trước khi hoàn tất onboarding'}), 400
+
+        body = request.get_json(silent=True) or {}
+        shelly_status = body.get('shellyStatus', 'skipped')
+        if shelly_status not in ('connected', 'skipped'):
+            shelly_status = 'skipped'
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        current_flow_ver = user_data.get('registrationFlowVersion')
+        try:
+            current_flow_ver = int(current_flow_ver) if current_flow_ver is not None else 2
+        except (ValueError, TypeError):
+            current_flow_ver = 2
+
+        update_payload = {
+            'onboardingCompletedAt': now_iso,
+            'registrationFlowVersion': max(current_flow_ver, 2),
+            'shellyOnboardingStatus': shelly_status,
+            'updatedAt': now_iso,
+        }
+        user_ref.set(update_payload, merge=True)
+
+        return jsonify({
+            'success': True,
+            'message': 'Onboarding completed successfully',
+            'data': update_payload,
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Lỗi hoàn tất onboarding: {e}'}), 500
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -1067,8 +1279,11 @@ def admin_accounts():
             document = _fs().collection('users').document(user.uid).get()
             profile = document.to_dict() if document.exists else {}
         item = _account_record(user, profile)
-        if _fs():
-            item['vehicleCount'] = len(list(_fs().collection('Vehicles').where('ownerUid', '==', user.uid).limit(3).stream()))
+        # Do not issue a vehicle query for every account in the list.  The
+        # inspector loads account-owned datasets on demand; older profiles
+        # without a denormalized count remain explicitly unknown.
+        if 'activeVehicleCount' in profile:
+            item['vehicleCount'] = profile.get('activeVehicleCount')
         if status == 'active' and item['status'] != 'active':
             continue
         if status == 'disabled' and item['status'] != 'disabled':
@@ -1224,15 +1439,40 @@ _ADMIN_SNAPSHOT_GROUPS = {
         'smartChargePreferences', 'vehicleChargerBindings', 'smartChargeTelemetry',
     ),
 }
-_ADMIN_SNAPSHOT_DEFAULT_GROUPS = ('core', 'operations', 'ai')
+_ADMIN_SNAPSHOT_DEFAULT_GROUPS = ('core',)
 _ADMIN_SNAPSHOT_MAX_WORKERS = 8
 _ADMIN_SNAPSHOT_TIMEOUT_SECONDS = 12
+_ADMIN_SNAPSHOT_CACHE_TTL_SECONDS = max(30, int(os.environ.get('ADMIN_SNAPSHOT_CACHE_TTL_SECONDS', '300')))
+_ADMIN_SNAPSHOT_CACHE = {}
+_ADMIN_SNAPSHOT_CACHE_LOCK = threading.Lock()
+_ADMIN_SNAPSHOT_REFRESH_AT = {}
 
 _SNAPSHOT_SECRET_FIELDS = {
     'password', 'localpassword', 'cloudauthkey', 'authkey', 'token',
     'accesstoken', 'refreshtoken', 'secret', 'privatekey', 'credential',
     'credentials', 'authorization',
 }
+
+
+def _snapshot_cache_get(key, limit, allow_stale=True):
+    cache_key = (key, int(limit))
+    with _ADMIN_SNAPSHOT_CACHE_LOCK:
+        entry = _ADMIN_SNAPSHOT_CACHE.get(cache_key)
+    if not entry:
+        return None, False
+    age = max(0.0, time.monotonic() - entry['stored_at'])
+    if age <= _ADMIN_SNAPSHOT_CACHE_TTL_SECONDS:
+        return entry['data'], True
+    return (entry['data'], False) if allow_stale else (None, False)
+
+
+def _snapshot_cache_put(key, limit, data):
+    with _ADMIN_SNAPSHOT_CACHE_LOCK:
+        _ADMIN_SNAPSHOT_CACHE[(key, int(limit))] = {
+            'data': data,
+            'stored_at': time.monotonic(),
+            'generated_at': _utcnow(),
+        }
 
 
 def _redact_admin_snapshot(value):
@@ -1311,7 +1551,7 @@ def admin_data_snapshot():
         limit = int(request.args.get('limit', 100))
     except (TypeError, ValueError):
         return jsonify({'success': False, 'error': 'limit must be an integer'}), 400
-    limit = max(1, min(limit, 500))
+    limit = max(1, min(limit, 100))
     try:
         selected, include_accounts = _admin_snapshot_selection(request.args.get('datasets'))
     except ValueError as exc:
@@ -1319,12 +1559,35 @@ def admin_data_snapshot():
 
     datasets = {}
     errors = {}
+    error_details = {}
+    cache_hits = 0
+    stale_datasets = []
     request_id = uuid.uuid4().hex
     started = time.monotonic()
+    force_requested = str(request.args.get('force', '')).lower() in ('1', 'true', 'yes')
+    force_refresh = force_requested
+    refresh_key = str(getattr(request, '_uid', '') or request.remote_addr or 'anonymous')
+    refresh_allowed = True
+    if force_refresh:
+        with _ADMIN_SNAPSHOT_CACHE_LOCK:
+            last_refresh = _ADMIN_SNAPSHOT_REFRESH_AT.get(refresh_key, 0.0)
+            refresh_allowed = (time.monotonic() - last_refresh) >= 60.0
+            if refresh_allowed:
+                _ADMIN_SNAPSHOT_REFRESH_AT[refresh_key] = time.monotonic()
+    refresh_throttled = force_requested and not refresh_allowed
+    if refresh_throttled:
+        force_refresh = False
     executor = ThreadPoolExecutor(max_workers=min(_ADMIN_SNAPSHOT_MAX_WORKERS, max(1, len(selected) + int(include_accounts))))
     futures = {}
     try:
         for key in selected:
+            cached, fresh = _snapshot_cache_get(key, limit, allow_stale=True)
+            if cached is not None and (fresh and not force_refresh or refresh_throttled):
+                datasets[key] = cached
+                cache_hits += 1
+                if not fresh:
+                    stale_datasets.append(key)
+                continue
             if key in _ADMIN_SNAPSHOT_COLLECTIONS:
                 collection_name, id_field = _ADMIN_SNAPSHOT_COLLECTIONS[key]
                 futures[executor.submit(_admin_snapshot_collection, collection_name, id_field, limit)] = key
@@ -1340,14 +1603,28 @@ def admin_data_snapshot():
         done, pending = wait(wait_set, timeout=_ADMIN_SNAPSHOT_TIMEOUT_SECONDS)
         for future, key in futures.items():
             if future not in done:
-                datasets[key] = {'items': [], 'loaded': 0, 'truncated': False}
+                stale, _ = _snapshot_cache_get(key, limit, allow_stale=True)
+                datasets[key] = stale or {'items': [], 'loaded': 0, 'truncated': False}
                 errors[key] = 'Dataset timed out. Refresh this dataset to try again.'
+                error_details[key] = {'code': 'datasetTimeout', 'message': errors[key], 'retryable': True}
+                if stale is not None:
+                    stale_datasets.append(key)
                 continue
             try:
                 datasets[key] = future.result()
+                _snapshot_cache_put(key, limit, datasets[key])
             except Exception as exc:
-                datasets[key] = {'items': [], 'loaded': 0, 'truncated': False}
-                errors[key] = 'Dataset could not be loaded.'
+                stale, _ = _snapshot_cache_get(key, limit, allow_stale=True)
+                datasets[key] = stale or {'items': [], 'loaded': 0, 'truncated': False}
+                is_quota = 'quota' in str(exc).lower() or 'resourceexhausted' in type(exc).__name__.lower()
+                errors[key] = 'Firestore daily read quota exhausted.' if is_quota else 'Dataset could not be loaded.'
+                error_details[key] = {
+                    'code': 'firestoreQuotaExceeded' if is_quota else 'datasetUnavailable',
+                    'message': errors[key],
+                    'retryable': True,
+                }
+                if stale is not None:
+                    stale_datasets.append(key)
                 print(f'Admin snapshot [{request_id}] failed for {key}: {exc}')
         if auth_future is not None:
             auth_users = []
@@ -1356,9 +1633,11 @@ def admin_data_snapshot():
                     auth_users = auth_future.result()
                 except Exception as exc:
                     errors['accounts'] = 'Firebase Auth directory could not be loaded.'
+                    error_details['accounts'] = {'code': 'authDirectoryUnavailable', 'message': errors['accounts'], 'retryable': True}
                     print(f'Admin snapshot [{request_id}] failed for Firebase Auth accounts: {exc}')
             else:
                 errors['accounts'] = 'Firebase Auth directory timed out.'
+                error_details['accounts'] = {'code': 'datasetTimeout', 'message': errors['accounts'], 'retryable': True}
     finally:
         # Firestore streams cannot always be cancelled.  Do not wait for a
         # straggler and make a healthy subset available to the dashboard.
@@ -1394,11 +1673,90 @@ def admin_data_snapshot():
             'totals': totals,
             'partial': bool(errors),
             'errors': errors,
+            'errorDetails': error_details,
+            'cache': {
+                'hit': cache_hits > 0,
+                'stale': sorted(set(stale_datasets)),
+                'generatedAt': _utcnow(),
+                'refreshThrottled': refresh_throttled,
+            },
             'requestId': request_id,
             'durationMs': duration_ms,
             'requestedDatasets': selected,
         },
     })
+
+
+# ============================================================================
+# MOBILE FOREGROUND BOOTSTRAP
+# ============================================================================
+@app.route('/api/mobile/bootstrap', methods=['GET'])
+@require_auth
+def mobile_bootstrap():
+    """Return the small set of invalidation state needed on foreground.
+
+    Authentication is deliberately resolved by Firebase Auth only.  The
+    endpoint reads catalog metadata and the user's unread count at most once
+    per cache window, allowing the app to stop maintaining expensive realtime
+    listeners while retaining a fresh badge and catalog revision.
+    """
+    global _mobile_catalog_meta_cache
+    now = time.monotonic()
+    catalog_revision = 0
+    unread_count = 0
+    catalog_cache_hit = False
+    unread_cache_hit = False
+    try:
+        with _mobile_bootstrap_lock:
+            if _mobile_catalog_meta_cache and now - _mobile_catalog_meta_cache[0] < 300:
+                catalog_revision = _mobile_catalog_meta_cache[1]
+                catalog_cache_hit = True
+            elif _fs():
+                meta = _fs().collection('VehicleCatalogMeta').document('current').get()
+                raw = meta.to_dict() if meta.exists else {}
+                catalog_revision = int(raw.get('revision') or 0)
+                _mobile_catalog_meta_cache = (now, catalog_revision)
+
+            cached_unread = _mobile_unread_cache.get(request._uid)
+            if cached_unread and now - cached_unread[0] < 60:
+                unread_count = cached_unread[1]
+                unread_cache_hit = True
+            elif _fs():
+                query = (_fs().collection('UserNotifications')
+                         .where('userId', '==', request._uid)
+                         .where('status', '==', 'unread'))
+                try:
+                    from google.cloud.firestore_v1 import aggregation
+                    aggregate = aggregation.AggregationQuery(query)
+                    aggregate.count(alias='unread')
+                    result = list(aggregate.get())
+                    unread_count = int(result[0][0].value) if result else 0
+                except Exception:
+                    # Compatibility with older SDKs; cap the fallback so a
+                    # corrupt account cannot turn foreground into a full scan.
+                    unread_count = len(list(query.limit(1000).stream()))
+                _mobile_unread_cache[request._uid] = (now, unread_count)
+    except Exception as exc:
+        # Bootstrap must never log a user out because Firestore is temporarily
+        # unavailable.  The app keeps its local cache and retries later.
+        print(f'[mobile-bootstrap] Firestore unavailable: {type(exc).__name__}')
+        return jsonify({'success': True, 'data': {
+            'serverTime': _utcnow(),
+            'catalogRevision': catalog_revision,
+            'unreadNotificationCount': unread_count,
+            'accountState': 'active',
+            'stale': True,
+        }})
+    return jsonify({'success': True, 'data': {
+        'serverTime': _utcnow(),
+        'catalogRevision': catalog_revision,
+        'unreadNotificationCount': unread_count,
+        'accountState': 'active',
+        'cache': {
+            'catalogHit': catalog_cache_hit,
+            'unreadHit': unread_cache_hit,
+        },
+    }})
 
 
 # ============================================================================
@@ -5281,11 +5639,17 @@ def sync_full():
     writes = []
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    # Upsert profile
+    # Upsert profile (whitelisted to prevent injecting accountStatus, role, quota, onboarding)
     if 'profile' in body:
         if not isinstance(body['profile'], dict):
             return jsonify({'success': False, 'error': 'profile phải là object'}), 400
-        profile = dict(body['profile'])
+        raw_profile = dict(body['profile'])
+        allowed_profile_fields = {
+            'name', 'displayName', 'phone', 'phoneNumber', 'photoURL',
+            'dateOfBirth', 'updatedAt', 'lastLogin', 'lastLoginSource', 'source',
+            'syncedToWeb', 'lastWebSync'
+        }
+        profile = {k: v for k, v in raw_profile.items() if k in allowed_profile_fields}
         profile['ownerUid'] = uid
         profile.setdefault('email', email)
         profile['syncedAt'] = now_iso

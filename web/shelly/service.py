@@ -55,6 +55,7 @@ class SmartChargeService:
         self.safety_policy = SmartChargeSafetyPolicy()
         self._unsafe_samples: dict[tuple[str, str], int] = {}
         self._last_telemetry_at: dict[str, datetime] = {}
+        self._last_checkpoint_at: dict[str, datetime] = {}
         self.push_notifier = push_notifier
 
     def _emit_push(self, uid, session):
@@ -312,7 +313,8 @@ class SmartChargeService:
             session.updated_at = self.clock()
             session.version += 1
             self.repository.save_session(uid, session)
-            self.repository.upsert_charge_log(uid, session)
+            # ChargeLogs are materialized at terminal state; the runtime
+            # session is the single active source during charging.
             self.repository.append_audit(uid, "session_started", session_id=session.session_id, device_id=binding.device_id)
             return session
         except ProviderError as exc:
@@ -536,7 +538,7 @@ class SmartChargeService:
             raise SmartChargeError("sessionNotFound", "Không tìm thấy phiên sạc đang hoạt động", 404)
         now = self.clock()
         last = self._last_telemetry_at.get(session_id)
-        if last and (now - last).total_seconds() < 25:
+        if last and (now - last).total_seconds() < 60:
             return {"recorded": False, "reason": "aggregating"}
         self._ingest_energy(session, float(payload.get("energyWh") or 0))
         point = {
@@ -561,9 +563,11 @@ class SmartChargeService:
             "quality": "good",
             "expireAt": now + timedelta(days=365),
         }
-        self.repository.save_telemetry(uid, session_id, point)
         self._last_telemetry_at[session_id] = now
-        count = len(self.repository.telemetry(uid, session_id))
+        # Compact samples live on the runtime session and are checkpointed
+        # once per minute; counting them avoids a Firestore read/write pair on
+        # every status sample.
+        count = len(session.telemetry_samples)
         expected = max(1, math.ceil(max(1, point["elapsedSeconds"]) / 30))
         session.telemetry_coverage = min(1.0, count / expected)
         session.shelly_temperature_c = _optional_float(point.get("shellyTemperatureC"))
@@ -584,9 +588,19 @@ class SmartChargeService:
             "est_soc": point.get("estimatedSoc"),
         }
         session.telemetry_samples = [*session.telemetry_samples[-999:], sample]
-        self.repository.save_session(uid, session)
-        self.repository.upsert_charge_log(uid, session)
+        self._checkpoint_session(uid, session)
         return {"recorded": True, "coverage": session.telemetry_coverage}
+
+    def _checkpoint_session(self, uid: str, session: ChargingSession, *, force: bool = False) -> bool:
+        """Persist one compact runtime snapshot at most once per minute."""
+        now = self.clock()
+        last = self._last_checkpoint_at.get(session.session_id)
+        terminal = session.state not in ("arming", "active")
+        if not force and not terminal and last and (now - last).total_seconds() < 60:
+            return False
+        self.repository.save_session(uid, session)
+        self._last_checkpoint_at[session.session_id] = now
+        return True
 
 
     def _update_personal_calibration(self, uid: str, session: ChargingSession, decision) -> None:

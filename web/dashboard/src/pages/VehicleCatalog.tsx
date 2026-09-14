@@ -36,6 +36,7 @@ const emptyDraft = (): CatalogEntry => ({
 const valueAt = (entry: CatalogEntry, group: string, field: string) => (entry[group] as Dictionary | undefined)?.[field] ?? '';
 const localizedAt = (entry: CatalogEntry, locale: string, field: string) => entry.localized?.[locale]?.[field] ?? '';
 const numberOrNull = (value: string) => value.trim() === '' ? null : Number(value);
+const fieldDomId = (path: string) => `catalog-${path.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
 const displayName = (entry: CatalogEntry) => String(localizedAt(entry, 'en', 'displayName') || localizedAt(entry, 'vi', 'displayName') || `${entry.brandName || ''} ${entry.model || ''}`.trim());
 const formatPower = (value: unknown) => typeof value === 'number' && value > 0 ? value >= 1000 ? `${(value / 1000).toFixed(value % 1000 ? 1 : 0)} kW` : `${value} W` : '—';
 const formatCapacity = (value: unknown) => typeof value === 'number' && value > 0 ? value >= 1000 ? `${(value / 1000).toFixed(2)} kWh` : `${value} Wh` : '—';
@@ -62,6 +63,8 @@ function Editor({ initial, onClose, onSaved }: { initial: CatalogEntry; onClose:
   const [busy, setBusy] = useState('');
   const [errors, setErrors] = useState<string[]>([]);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [errorMessage, setErrorMessage] = useState('');
+  const [requestId, setRequestId] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const updateTop = (field: string, value: unknown) => setDraft(current => ({ ...current, [field]: value }));
   const updateGroup = (group: string, field: string, value: unknown) => setDraft(current => ({ ...current, [group]: { ...(current[group] as Dictionary || {}), [field]: value } }));
@@ -75,16 +78,18 @@ function Editor({ initial, onClose, onSaved }: { initial: CatalogEntry; onClose:
     const data = (portal?.data || {}) as { validationErrors?: string[]; fieldErrors?: Record<string, string> };
     const nextFields = data.fieldErrors || {};
     setErrors(data.validationErrors || []); setFieldErrors(nextFields);
+    setErrorMessage(portal?.message || 'Catalog validation failed');
+    setRequestId(portal?.requestId || '');
     const first = Object.keys(nextFields)[0];
-    if (first) window.setTimeout(() => document.getElementById(`catalog-${first.replaceAll('.', '-')}`)?.focus(), 0);
-    toast.error(portal?.message || 'Could not save catalog draft');
+    if (first) window.setTimeout(() => document.getElementById(fieldDomId(first))?.focus(), 0);
   };
   const save = async () => {
-    setBusy('save'); setErrors([]); setFieldErrors({});
+    setBusy('save'); setErrors([]); setFieldErrors({}); setErrorMessage(''); setRequestId('');
     try {
       const result = draft.catalogId ? await catalogUpdate(draft.catalogId, payload()) : await catalogCreate(payload());
       setDraft(result.data as CatalogEntry);
       setErrors(result.validationErrors || []); setFieldErrors(result.fieldErrors || {});
+      setErrorMessage(result.validationErrors?.length ? 'Draft saved — complete these checks before publishing' : '');
       toast.success('Draft saved');
       await onSaved();
     } catch (error) { showError(error); }
@@ -92,7 +97,7 @@ function Editor({ initial, onClose, onSaved }: { initial: CatalogEntry; onClose:
   };
   const publish = async () => {
     if (!draft.catalogId) { toast.error('Save the draft before publishing'); return; }
-    setBusy('publish'); setErrors([]); setFieldErrors({});
+    setBusy('publish'); setErrors([]); setFieldErrors({}); setErrorMessage(''); setRequestId('');
     try { await catalogPublish(draft.catalogId); toast.success('Catalog configuration published'); await onSaved(); onClose(); }
     catch (error) { showError(error); } finally { setBusy(''); }
   };
@@ -110,9 +115,9 @@ function Editor({ initial, onClose, onSaved }: { initial: CatalogEntry; onClose:
   };
   return <ModalSurface drawer label="Vehicle catalog editor" onClose={onClose} busy={Boolean(busy)}>
     <div className="min-h-full bg-slate-950 text-slate-100">
-      <header className="sticky top-0 z-10 flex items-start justify-between border-b border-slate-800 bg-slate-950/95 px-5 py-5 backdrop-blur sm:px-8">
-        <div><p className="text-xs font-semibold uppercase tracking-[.18em] text-emerald-400">Catalog draft</p><h2 className="mt-2 text-2xl font-semibold">{displayName(draft) || 'New configuration'}</h2><p className="mt-1 text-sm text-slate-400">Technical fields remain server-managed after publication.</p></div>
-        <Button variant="ghost" size="icon" className="text-slate-300 hover:bg-slate-800 hover:text-white" onClick={onClose}><X /></Button>
+      <header className="sticky top-0 z-20 border-b border-slate-800 bg-slate-950/95 px-5 py-5 backdrop-blur sm:px-8">
+        <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[.18em] text-emerald-400">Catalog draft</p><h2 className="mt-2 text-2xl font-semibold">{displayName(draft) || 'New configuration'}</h2><p className="mt-1 text-sm text-slate-400">Technical fields remain server-managed after publication.</p></div><Button variant="ghost" size="icon" className="shrink-0 text-slate-300 hover:bg-slate-800 hover:text-white" onClick={onClose}><X /></Button></div>
+        <AnimatePresence initial={false}>{errorMessage && <motion.div key="catalog-review-errors" role="alert" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="mt-4 border-l-2 border-amber-400 bg-amber-400/10 px-4 py-3 text-left"><div className="flex items-start justify-between gap-3"><div><p className="font-medium text-amber-200">{errorMessage}</p>{errors.length > 0 && <ul className="mt-1.5 max-h-28 list-disc space-y-1 overflow-y-auto pl-5 text-xs text-amber-100/90">{errors.map(error => <li key={error}>{error}</li>)}</ul>}{requestId && <p className="mt-2 font-mono text-[11px] text-slate-400">Request ID: {requestId}</p>}</div><Button variant="ghost" size="icon" aria-label="Dismiss validation message" className="h-8 w-8 shrink-0 text-amber-100 hover:bg-amber-400/10" onClick={() => setErrorMessage('')}><X className="h-4 w-4" /></Button></div></motion.div>}</AnimatePresence>
       </header>
       <div className="space-y-9 p-5 sm:p-8">
         <section className="space-y-4"><h3 className="border-b border-slate-800 pb-3 font-semibold">Identity</h3><div className="grid gap-4 sm:grid-cols-2">
@@ -146,11 +151,10 @@ function Editor({ initial, onClose, onSaved }: { initial: CatalogEntry; onClose:
           <Field label="Peak motor power (W)" type="number" value={valueAt(draft,'performance','peakMotorPowerW')} onChange={value => updateGroup('performance','peakMotorPowerW',numberOrNull(value))} />
         </div></section>
         <section className="space-y-4"><div className="flex items-center justify-between border-b border-slate-800 pb-3"><h3 className="font-semibold">Official evidence</h3><Button variant="outline" className="border-slate-700 bg-transparent text-slate-100 hover:bg-slate-900" onClick={() => updateTop('sources',[...(draft.sources || []),{url:'',publisher:draft.brandName || '',type:'manufacturer'}])}><Plus />Source</Button></div>
-          {(draft.sources || []).map((source,index) => <div key={index} className="grid gap-3 sm:grid-cols-[1fr_10rem_auto]"><Input aria-label={`Source URL ${index + 1}`} placeholder="https://official.example/spec" value={String(source.url || '')} onChange={event => { const sources=[...(draft.sources || [])]; sources[index]={...sources[index],url:event.target.value}; updateTop('sources',sources); }} /><Input aria-label={`Publisher ${index + 1}`} placeholder="Publisher" value={String(source.publisher || '')} onChange={event => { const sources=[...(draft.sources || [])]; sources[index]={...sources[index],publisher:event.target.value}; updateTop('sources',sources); }} /><Button variant="ghost" size="icon" onClick={() => updateTop('sources',(draft.sources || []).filter((_,itemIndex)=>itemIndex!==index))}><X /></Button></div>)}
+          {(draft.sources || []).map((source,index) => { const sourcePath=`sources[${index}].url`; const sourceError=fieldErrors[sourcePath]; return <div key={index} className="space-y-1.5"><div className="grid gap-3 sm:grid-cols-[1fr_10rem_auto]"><Input id={fieldDomId(sourcePath)} aria-label={`Source URL ${index + 1}`} aria-invalid={Boolean(sourceError)} aria-describedby={sourceError ? `${fieldDomId(sourcePath)}-error` : undefined} className={sourceError ? 'border-destructive focus-visible:ring-destructive' : ''} placeholder="https://official-manufacturer.example/spec" value={String(source.url || '')} onChange={event => { const sources=[...(draft.sources || [])]; sources[index]={...sources[index],url:event.target.value}; updateTop('sources',sources); setFieldErrors(current => { const next={...current}; delete next[sourcePath]; return next; }); }} /><Input aria-label={`Publisher ${index + 1}`} placeholder="Publisher" value={String(source.publisher || '')} onChange={event => { const sources=[...(draft.sources || [])]; sources[index]={...sources[index],publisher:event.target.value}; updateTop('sources',sources); }} /><Button variant="ghost" size="icon" onClick={() => updateTop('sources',(draft.sources || []).filter((_,itemIndex)=>itemIndex!==index))}><X /></Button></div>{sourceError && <p id={`${fieldDomId(sourcePath)}-error`} className="text-xs text-destructive">{sourceError}</p>}</div>; })}
           <input ref={fileRef} className="hidden" type="file" accept="image/jpeg,image/png,image/webp" onChange={event => { const file=event.target.files?.[0]; if(file) void upload(file); }} />
           <Button variant="outline" className="border-slate-700 bg-transparent text-slate-100 hover:bg-slate-900" disabled={!draft.catalogId || busy === 'media'} onClick={() => fileRef.current?.click()}>{busy === 'media' ? <Loader2 className="animate-spin" /> : <ImagePlus />}Upload approved image</Button>
         </section>
-        {errors.length > 0 && <div role="alert" className="border-l-2 border-amber-400 bg-amber-400/5 p-4"><p className="font-medium text-amber-300">Publish checks</p><ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-100">{errors.map(error => <li key={error}>{error}</li>)}</ul></div>}
       </div>
       <footer className="sticky bottom-0 flex flex-wrap justify-end gap-3 border-t border-slate-800 bg-slate-950/95 px-5 py-4 backdrop-blur sm:px-8"><Button variant="outline" className="border-slate-700 bg-transparent text-slate-100 hover:bg-slate-900" onClick={onClose}>Cancel</Button><Button variant="secondary" disabled={Boolean(busy)} onClick={() => void save()}>{busy === 'save' && <Loader2 className="animate-spin" />}Save draft</Button><Button disabled={Boolean(busy) || !draft.catalogId} onClick={() => void publish()}>{busy === 'publish' && <Loader2 className="animate-spin" />}Review & publish</Button></footer>
     </div>

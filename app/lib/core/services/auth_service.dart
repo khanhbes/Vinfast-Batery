@@ -7,6 +7,7 @@ import 'sync_service.dart';
 import '../../data/services/push_notification_service.dart';
 import 'vehicle_policy.dart';
 import 'api_service.dart';
+import '../../data/repositories/vehicle_spec_repository.dart';
 
 /// AuthService - Xử lý đăng ký/đăng nhập đồng bộ với Web Dashboard
 class AuthService {
@@ -31,6 +32,63 @@ class AuthService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final SyncService _syncService = SyncService();
   final SessionService _session = SessionService();
+  DateTime? _lastForegroundBootstrap;
+  Future<bool>? _foregroundBootstrapTask;
+
+  /// Revalidates Firebase Auth and the small amount of server state needed by
+  /// the foreground app. This deliberately avoids a profile Firestore read on
+  /// every request and is throttled to protect the free quota.
+  Future<bool> checkForegroundAccount({bool force = false}) async {
+    final active = _foregroundBootstrapTask;
+    if (active != null) return active;
+    final now = DateTime.now();
+    if (!force && _lastForegroundBootstrap != null &&
+        now.difference(_lastForegroundBootstrap!) < const Duration(minutes: 15)) {
+      return true;
+    }
+    final task = _checkForegroundAccountInternal();
+    _foregroundBootstrapTask = task;
+    try {
+      return await task;
+    } finally {
+      _foregroundBootstrapTask = null;
+    }
+  }
+
+  Future<bool> _checkForegroundAccountInternal() async {
+    final user = _auth.currentUser;
+    if (user == null) return false;
+    try {
+      await user.getIdToken(true);
+      final response = await ApiService().get('/api/mobile/bootstrap');
+      final status = response['statusCode'];
+      if (status == 401 || response['debugCode'] == 'user-disabled' ||
+          response['debugCode'] == 'token-revoked') {
+        await _auth.signOut();
+        return false;
+      }
+      if (response['success'] == true) {
+        _lastForegroundBootstrap = DateTime.now();
+        final data = response['data'];
+        final revision = data is Map ? data['catalogRevision'] : null;
+        if (revision is num) {
+          final specs = VehicleSpecRepository();
+          specs.applyRemoteRevision(revision.toInt());
+          if (specs.needsRemoteRefresh) {
+            await specs.getAllSpecs(forceRemote: true);
+          }
+        }
+        return true;
+      }
+      // Service failures are retryable and must not terminate an offline
+      // session.
+      return true;
+    } catch (error, stack) {
+      debugPrint('[AuthService] foreground bootstrap deferred: $error');
+      if (kDebugMode) debugPrintStack(stackTrace: stack);
+      return true;
+    }
+  }
 
   /// Đảm bảo document users/{uid} luôn tồn tại.
   /// Dùng set(merge: true) để không ghi đè dữ liệu cũ nếu doc đã có.
@@ -85,6 +143,7 @@ class AuthService {
         'updatedAt': FieldValue.serverTimestamp(),
         'source': 'flutter_app',
         'syncedToWeb': false,
+        'registrationFlowVersion': 2,
       });
 
       // 4. Đồng bộ với web dashboard

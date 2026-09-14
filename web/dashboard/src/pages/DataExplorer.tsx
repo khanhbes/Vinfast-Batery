@@ -93,7 +93,7 @@ function RecordDrawer({ record, dataset, ownerName, onClose }: {
 }
 
 export default function DataExplorer() {
-  const { snapshot, loading, refreshing, error, refresh, loadDataset } = useAdminData();
+  const { snapshot, loading, refreshing, refresh, loadDataset } = useAdminData();
   const [params, setParams] = useSearchParams();
   const requested = params.get('dataset');
   const activeKey = datasetDefinitions.some(item => item.key === requested) ? requested! : 'vehicles';
@@ -120,6 +120,8 @@ export default function DataExplorer() {
     return Array.from(available).filter(key => !['isDeleted', 'deletedAt', 'deletedBy'].includes(key)).slice(0, 7);
   }, [activeKey, records]);
   const currentDataset = snapshot?.datasets[activeKey];
+  const datasetError = snapshot?.errorDetails?.[activeKey];
+  const quotaExceeded = Object.values(snapshot?.errorDetails ?? {}).some(item => item.code === 'firestoreQuotaExceeded');
 
   useEffect(() => {
     // Historical collection groups are deliberately lazy: they are useful in
@@ -133,8 +135,7 @@ export default function DataExplorer() {
       <Button variant="outline" onClick={() => void refresh()} disabled={refreshing} className="gap-2"><RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />Refresh snapshot</Button>
     </div>
 
-    {error && <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">{error}</div>}
-    {snapshot?.partial && <div role="status" className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-amber-700 dark:text-amber-300">Some datasets could not be read. Available data is still shown; check the dataset status and server logs.</div>}
+    {snapshot?.partial && <div role="status" className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-amber-700 dark:text-amber-300"><p className="font-medium">{quotaExceeded ? 'Firestore daily read quota exhausted' : 'Some datasets could not be read'}</p><p className="mt-1">Available data is still shown. {quotaExceeded ? 'Cached data will remain available until the quota resets.' : 'Check the dataset status and server logs.'}</p>{snapshot.requestId && <p className="mt-2 font-mono text-xs opacity-80">Request ID: {snapshot.requestId}</p>}</div>}
 
     <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border bg-border sm:grid-cols-4">
       {[
@@ -160,7 +161,7 @@ export default function DataExplorer() {
           <div className="relative w-full sm:w-72"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={event => setSearch(event.target.value)} aria-label={`Search ${definition.label}`} placeholder="Search current dataset" className="pl-10" /></div>
         </div>
 
-        {loading && !snapshot ? <div className="grid min-h-64 place-items-center text-sm text-muted-foreground" role="status">Loading synchronized data...</div> : !currentDataset && error ? <div className="grid min-h-64 place-items-center border-b text-center"><div><Database className="mx-auto h-8 w-8 text-destructive" /><p className="mt-3 font-medium">This dataset could not be loaded</p><p className="mt-1 text-sm text-muted-foreground">Your existing dashboard data has been kept. Retry this dataset when the connection is available.</p><Button className="mt-4" variant="outline" onClick={() => void loadDataset(activeKey)}>Retry dataset</Button></div></div> : filtered.length === 0 ? <div className="grid min-h-64 place-items-center border-b text-center"><div><Database className="mx-auto h-8 w-8 text-muted-foreground" /><p className="mt-3 font-medium">{records.length ? 'No matching records' : 'No records in this dataset'}</p><p className="mt-1 text-sm text-muted-foreground">{records.length ? 'Try a different search term.' : 'New app data will appear after the next refresh.'}</p></div></div> : <div className="overflow-x-auto">
+        {loading && !snapshot ? <div className="grid min-h-64 place-items-center text-sm text-muted-foreground" role="status">Loading synchronized data...</div> : datasetError && !currentDataset ? <div className="grid min-h-64 place-items-center border-b text-center"><div><Database className="mx-auto h-8 w-8 text-destructive" /><p className="mt-3 font-medium">This dataset could not be loaded</p><p className="mt-1 text-sm text-muted-foreground">{datasetError.message} Retry after the service is available.</p><Button className="mt-4" variant="outline" onClick={() => void loadDataset(activeKey)}>Retry dataset</Button></div></div> : filtered.length === 0 ? <div className="grid min-h-64 place-items-center border-b text-center"><div><Database className="mx-auto h-8 w-8 text-muted-foreground" /><p className="mt-3 font-medium">{records.length ? 'No matching records' : datasetError ? 'Dataset unavailable' : 'No records in this dataset'}</p><p className="mt-1 text-sm text-muted-foreground">{records.length ? 'Try a different search term.' : datasetError ? datasetError.message : 'New app data will appear after the next refresh.'}</p>{datasetError && <Button className="mt-4" variant="outline" onClick={() => void loadDataset(activeKey)}>Retry dataset</Button>}</div></div> : <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-sm"><thead><tr className="border-b text-left text-xs text-muted-foreground">{columns.map(column => <th key={column} className="px-3 py-3 font-medium">{labelFor(column)}</th>)}<th className="px-3 py-3 text-right font-medium">Details</th></tr></thead>
             <tbody>{filtered.map((record, index) => <tr key={`${recordId(record)}:${index}`} className="border-b border-border/60 transition-colors hover:bg-muted/45">{columns.map(column => <td key={column} className="max-w-56 truncate px-3 py-3" title={textValue(record[column])}>{column === 'ownerUid' ? ownerNames.get(String(record[column] || '')) || textValue(record[column]) : textValue(record[column])}</td>)}<td className="px-3 py-2 text-right"><Button variant="ghost" size="sm" onClick={() => setSelected(record)}>Open</Button></td></tr>)}</tbody>
           </table>

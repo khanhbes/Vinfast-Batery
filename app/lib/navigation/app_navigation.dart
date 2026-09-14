@@ -13,6 +13,8 @@ import '../core/widgets/global_charging_pill.dart';
 import '../features/ai/smart_charge_history_screen.dart';
 import '../features/ai/controllers/smart_charging_controller.dart';
 import '../features/notifications/notification_center_screen.dart';
+import '../core/services/guide_registry.dart';
+import '../features/overview/widgets/dashboard_customization_sheet.dart';
 import '../features/overview/overview_screen.dart';
 import '../features/charge/charge_screen.dart';
 import '../features/more/more_screen.dart';
@@ -124,7 +126,16 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
               ),
             ),
       actions: [
-        VehicleSwitcher(),
+        if (currentIndex == 0) ...[
+          IconButton(
+            key: GuideRegistry.keyCustomizeDashboard,
+            tooltip: 'Tùy chỉnh bố cục',
+            icon: const Icon(Icons.tune_rounded, size: 21),
+            color: AppUiColors.of(context).text,
+            onPressed: () => DashboardCustomizationSheet.show(context),
+          ),
+        ],
+        VehicleSwitcher(key: GuideRegistry.keyVehicleSwitcher),
         // Notification bell with badge
         StreamBuilder<int>(
           stream: NotificationCenterService().watchUnreadCount(),

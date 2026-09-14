@@ -1,5 +1,5 @@
 import { auth } from './firebase.js'
-import { requestPortal } from './lib/httpClient'
+import { requestPortal, PortalHttpError } from './lib/httpClient'
 
 // Production normally reaches the API through the same-origin Caddy proxy.
 // Accept an origin or a legacy `/api` value without producing `/api/api/...`.
@@ -20,27 +20,37 @@ function emitPortalSuccess(message) {
   window.dispatchEvent(new CustomEvent('vf:success', { detail: { message } }))
 }
 
-async function getToken() {
+async function getToken(forceRefresh = false) {
   const user = auth.currentUser
   if (!user) return null
-  return user.getIdToken()
+  return user.getIdToken(forceRefresh)
 }
 
 async function apiFetch(path, options = {}) {
-  const token = await getToken()
-  const headers = { 'Content-Type': 'application/json', ...options.headers }
-  if (token) headers['Authorization'] = `Bearer ${token}`
-
-  try {
-    return await requestPortal(`${BASE}${path}`, {
-      ...options,
-      headers,
-      timeoutMs: options.timeoutMs ?? endpointTimeout(path, options.method),
-    })
-  } catch (error) {
-    const message = error?.message || 'The server could not be reached'
-    emitPortalError(message)
-    throw error
+  const { silent = false, ...requestOptions } = options
+  const retryableAuth = ['GET', 'HEAD'].includes((requestOptions.method ?? 'GET').toUpperCase())
+  let refreshed = false
+  for (;;) {
+    const token = await getToken(refreshed)
+    const headers = { 'Content-Type': 'application/json', ...requestOptions.headers }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    try {
+      return await requestPortal(`${BASE}${path}`, {
+        ...requestOptions,
+        headers,
+        timeoutMs: requestOptions.timeoutMs ?? endpointTimeout(path, requestOptions.method),
+      })
+    } catch (error) {
+      if (retryableAuth && !refreshed && error instanceof PortalHttpError && error.status === 401 && auth.currentUser) {
+        refreshed = true
+        continue
+      }
+      if (!silent) {
+        const message = error?.message || 'The server could not be reached'
+        emitPortalError(message)
+      }
+      throw error
+    }
   }
 }
 
@@ -91,10 +101,11 @@ export const adminRevokeAccountSessions = (uid) =>
   apiFetch(`/api/admin/accounts/${encodeURIComponent(uid)}/revoke-sessions`, { method: 'POST' })
 export const adminPasswordResetAudit = (uid) =>
   apiFetch(`/api/admin/accounts/${encodeURIComponent(uid)}/password-reset-audit`, { method: 'POST' })
-export const adminDataSnapshot = (limit = 100, datasets = []) => {
+export const adminDataSnapshot = (limit = 50, datasets = [], force = false) => {
   const query = new URLSearchParams({ limit: String(limit) })
   if (datasets.length) query.set('datasets', datasets.join(','))
-  return apiFetch(`/api/admin/data-snapshot?${query}`)
+  if (force) query.set('force', '1')
+  return apiFetch(`/api/admin/data-snapshot?${query}`, { silent: true })
 }
 export const setAdmin = (email) =>
   apiFetch('/api/auth/set-admin', { method: 'POST', body: JSON.stringify({ email }) })

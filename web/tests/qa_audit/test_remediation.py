@@ -258,7 +258,7 @@ def test_admin_data_snapshot_exposes_shared_datasets_without_secrets(client, mon
     monkeypatch.setattr(server, '_firestore_db', db)
     monkeypatch.setattr(server, '_verify_token', lambda: ('admin-a', 'admin@test.invalid', 'admin'))
 
-    response = client.get('/api/admin/data-snapshot?limit=25')
+    response = client.get('/api/admin/data-snapshot?limit=25&datasets=core,operations,ai')
     assert response.status_code == 200
     payload = response.get_json()['data']
     assert payload['schemaVersion'] == 'admin-data-snapshot-v1'

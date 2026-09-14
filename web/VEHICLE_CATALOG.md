@@ -38,7 +38,7 @@ Optional research configuration:
 GEMINI_API_KEY=...
 GEMINI_CATALOG_MODEL=gemini-2.5-flash
 CATALOG_RESEARCH_DAILY_LIMIT=50
-CATALOG_RESEARCH_POLL_SECONDS=4
+CATALOG_RESEARCH_POLL_SECONDS=60
 ```
 
 Without `GEMINI_API_KEY`, official HTTPS URL/PDF imports continue to work. Add a

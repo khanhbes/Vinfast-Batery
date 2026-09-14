@@ -22,6 +22,7 @@ import '../../data/models/smart_charger_binding.dart';
 import '../../main.dart' show firebaseInitErrorProvider;
 import '../../navigation/app_navigation.dart';
 import 'login_screen.dart';
+import 'onboarding_flow_screen.dart';
 
 /// AuthGate: gate có trạng thái khởi động rõ ràng.
 ///
@@ -97,7 +98,7 @@ class _AuthGateState extends ConsumerState<AuthGate> {
         onTimeout: () => null,
       );
     } finally {
-      await sub?.cancel();
+      await sub.cancel();
     }
 
     // Nếu lần trước đã đăng nhập và chưa bấm Đăng xuất, nhưng Firebase vẫn
@@ -307,6 +308,7 @@ class _AuthenticatedRoot extends ConsumerStatefulWidget {
 
 class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
     with WidgetsBindingObserver {
+  Future<DocumentSnapshot<Map<String, dynamic>>>? _profileFuture;
   @override
   void dispose() {
     // Khi logout / unmount: gỡ lifecycle observer của AppUpdateService.
@@ -326,12 +328,15 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
 
       // Authenticated bootstrap (di chuyển từ main.dart — chạy SAU khi auth sẵn sàng)
       await _runAuthenticatedBootstrap();
+      await AuthService().checkForegroundAccount(force: true);
     });
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
+    // ignore: discarded_futures
+    AuthService().checkForegroundAccount();
     // Five-minute cooldown is enforced inside the credentials service.
     // ignore: discarded_futures
     _syncSmartChargerOnForeground();
@@ -446,6 +451,35 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
         _syncSmartChargerOnForeground();
       }
     });
-    return const AppNavigation();
+
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) return const AppNavigation();
+
+    _profileFuture ??= FirebaseFirestore.instance
+        .collection('users')
+        .doc(currentUser.uid)
+        .get();
+    return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      future: _profileFuture,
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const AppNavigation();
+        }
+
+        final data = snapshot.data?.data();
+        if (data != null) {
+          final flowVer = data['registrationFlowVersion'] as int? ?? 1;
+          final completedAt = data['onboardingCompletedAt'];
+
+          // Chỉ account có registrationFlowVersion >= 2 mới bị bắt buộc onboarding.
+          // Tài khoản cũ không bị chặn.
+          if (flowVer >= 2 && completedAt == null) {
+            return const OnboardingFlowScreen();
+          }
+        }
+
+        return const AppNavigation();
+      },
+    );
   }
 }

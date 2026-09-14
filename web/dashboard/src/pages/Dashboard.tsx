@@ -37,15 +37,15 @@ function timestamp(record: DataRecord): number {
 export default function Dashboard() {
   const navigate = useNavigate();
   const { snapshot, loading, refreshing, error, refresh } = useAdminData();
-  const accounts = datasetItems(snapshot, 'accounts');
   const vehicles = datasetItems(snapshot, 'vehicles');
   const chargeLogs = datasetItems(snapshot, 'chargeLogs');
   const trips = datasetItems(snapshot, 'tripLogs');
-  const telemetry = datasetItems(snapshot, 'telemetry');
   const maintenance = datasetItems(snapshot, 'maintenance');
   const aiInsights = datasetItems(snapshot, 'aiInsights');
   const aiProfiles = datasetItems(snapshot, 'aiProfiles');
   const predictions = [...datasetItems(snapshot, 'tripPredictions'), ...datasetItems(snapshot, 'socPredictions')];
+  const datasetLoaded = (key: string) => Boolean(snapshot?.datasets[key]);
+  const count = (key: string) => datasetLoaded(key) ? datasetItems(snapshot, key).length : '—';
 
   const summary = useMemo(() => {
     const sohValues = vehicles.map(vehicle => firstNumber(vehicle, ['stateOfHealth', 'soh'])).filter((value): value is number => value !== null && value >= 0 && value <= 100);
@@ -66,12 +66,12 @@ export default function Dashboard() {
   ].sort((a, b) => b.at - a.at).slice(0, 8), [chargeLogs, trips, predictions]);
 
   const metrics = [
-    { label: 'User accounts', value: accounts.length, icon: Users, action: () => navigate('/users') },
-    { label: 'Registered vehicles', value: vehicles.length, icon: Car, action: () => navigate('/data?dataset=vehicles') },
-    { label: 'Charging sessions', value: chargeLogs.length, icon: Zap, action: () => navigate('/data?dataset=chargeLogs') },
-    { label: 'Recorded trips', value: trips.length, icon: Route, action: () => navigate('/data?dataset=tripLogs') },
-    { label: 'Telemetry points', value: telemetry.length, icon: Activity, action: () => navigate('/data?dataset=telemetry') },
-    { label: 'AI records', value: aiInsights.length + aiProfiles.length + predictions.length, icon: BrainCircuit, action: () => navigate('/data?dataset=aiInsights') },
+    { label: 'User accounts', value: count('accounts'), icon: Users, action: () => navigate('/users') },
+    { label: 'Registered vehicles', value: count('vehicles'), icon: Car, action: () => navigate('/data?dataset=vehicles') },
+    { label: 'Charging sessions', value: count('chargeLogs'), icon: Zap, action: () => navigate('/data?dataset=chargeLogs') },
+    { label: 'Recorded trips', value: count('tripLogs'), icon: Route, action: () => navigate('/data?dataset=tripLogs') },
+    { label: 'Telemetry points', value: count('telemetry'), icon: Activity, action: () => navigate('/data?dataset=telemetry') },
+    { label: 'AI records', value: datasetLoaded('aiInsights') ? aiInsights.length + aiProfiles.length + predictions.length : '—', icon: BrainCircuit, action: () => navigate('/data?dataset=aiInsights') },
   ];
 
   if (loading && !snapshot) return <div className="grid min-h-[60vh] place-items-center"><div className="text-center"><div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-primary/20 border-t-primary" /><p className="mt-4 text-sm font-medium text-muted-foreground">Loading synchronized app data...</p></div></div>;
@@ -83,6 +83,7 @@ export default function Dashboard() {
     </div>
 
     {error && <div role="alert" className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><span>{error}</span></div>}
+    {snapshot?.cache?.stale?.length ? <div role="status" className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-700 dark:text-amber-300">Showing cached data for {snapshot.cache.stale.join(', ')} while Firestore is unavailable.</div> : null}
 
     <section className="overflow-hidden rounded-2xl border bg-slate-950 text-slate-100 shadow-sm">
       <div className="grid gap-px bg-slate-800 lg:grid-cols-[1.35fr_.65fr]">
@@ -91,7 +92,7 @@ export default function Dashboard() {
       </div>
     </section>
 
-    <section aria-labelledby="coverage-title"><div className="mb-3 flex items-end justify-between"><div><h2 id="coverage-title" className="text-lg font-semibold">Data coverage</h2><p className="text-sm text-muted-foreground">Select a metric to open the synchronized records.</p></div><Badge variant={snapshot?.partial ? 'destructive' : 'secondary'}>{snapshot?.partial ? 'Partial snapshot' : 'All datasets available'}</Badge></div><div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border bg-border md:grid-cols-3 xl:grid-cols-6">{metrics.map((metric, index) => <motion.button key={metric.label} type="button" onClick={metric.action} initial={{ opacity: .7, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * .035 }} className="group min-h-32 bg-card p-4 text-left transition-colors hover:bg-muted"><metric.icon className="h-5 w-5 text-primary" /><p className="mt-5 text-2xl font-semibold tabular-nums">{metric.value}</p><p className="mt-1 text-xs text-muted-foreground group-hover:text-foreground">{metric.label}</p></motion.button>)}</div></section>
+    <section aria-labelledby="coverage-title"><div className="mb-3 flex items-end justify-between"><div><h2 id="coverage-title" className="text-lg font-semibold">Data coverage</h2><p className="text-sm text-muted-foreground">Select a metric to open the synchronized records.</p></div><Badge variant={snapshot?.partial ? 'destructive' : 'secondary'}>{snapshot?.partial ? 'Partial snapshot' : 'Core datasets loaded'}</Badge></div><div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border bg-border md:grid-cols-3 xl:grid-cols-6">{metrics.map((metric, index) => <motion.button key={metric.label} type="button" onClick={metric.action} initial={{ opacity: .7, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * .035 }} className="group min-h-32 bg-card p-4 text-left transition-colors hover:bg-muted"><metric.icon className="h-5 w-5 text-primary" /><p className="mt-5 text-2xl font-semibold tabular-nums">{metric.value}</p><p className="mt-1 text-xs text-muted-foreground group-hover:text-foreground">{metric.label}</p></motion.button>)}</div></section>
 
     <div className="grid gap-6 lg:grid-cols-[1.45fr_.55fr]">
       <Card className="border-border/70"><CardHeader><CardTitle className="flex items-center gap-2 text-lg"><Clock3 className="h-5 w-5 text-primary" />Recent app activity</CardTitle><CardDescription>Newest charging, trip and prediction records in the shared database.</CardDescription></CardHeader><CardContent>{recentActivity.length === 0 ? <div className="py-12 text-center text-sm text-muted-foreground">No recent activity has been synchronized.</div> : <div className="divide-y">{recentActivity.map((activity, index) => <button key={`${activity.kind}:${activity.at}:${index}`} type="button" onClick={() => navigate(`/data?dataset=${activity.kind === 'Charge' ? 'chargeLogs' : activity.kind === 'Trip' ? 'tripLogs' : 'tripPredictions'}`)} className="flex min-h-16 w-full items-center gap-4 py-3 text-left"><span className={`h-2.5 w-2.5 shrink-0 rounded-full ${activity.kind === 'Charge' ? 'bg-emerald-500' : activity.kind === 'Trip' ? 'bg-sky-500' : 'bg-violet-500'}`} /><span className="min-w-0 flex-1"><span className="block text-sm font-medium">{activity.kind}</span><span className="block truncate font-mono text-xs text-muted-foreground">{activity.label || 'Unidentified record'}</span></span><span className="shrink-0 text-xs text-muted-foreground">{activity.at ? new Date(activity.at).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' }) : 'No timestamp'}</span></button>)}</div>}</CardContent></Card>

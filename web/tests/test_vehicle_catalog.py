@@ -134,7 +134,7 @@ def test_publish_sources_must_use_approved_official_https_domains():
     ]
     data['sources'][0]['url'] = 'https://untrusted.example/spec'
     assert validate_official_sources(data, ['vinfastauto.com']) == [
-        'sources[0].url must use an approved official HTTPS domain'
+        'sources[0].url must use HTTPS on an approved official domain: vinfastauto.com'
     ]
 
 
