@@ -14,7 +14,7 @@ class SmartChargeEnergyAccumulator {
     SmartChargingSession session,
     double meterEnergyWh,
   ) {
-    final reading = math.max(0, meterEnergyWh);
+    final reading = math.max(0, meterEnergyWh).toDouble();
     final baseline = session.baselineEnergyWh;
     if (baseline == null) {
       return SmartChargeMeterUpdate(
@@ -26,7 +26,7 @@ class SmartChargeEnergyAccumulator {
     }
 
     final last = session.lastMeterEnergyWh ?? baseline;
-    var used = math.max(0, session.energyUsedWh);
+    var used = math.max(0, session.energyUsedWh).toDouble();
     var quality = session.energyQuality;
     var nextBaseline = baseline;
     var nextLast = last;
@@ -34,7 +34,7 @@ class SmartChargeEnergyAccumulator {
       used += reading - last;
       nextLast = reading;
     } else {
-      final resetThreshold = math.max(25, last.abs() * .20);
+      final resetThreshold = math.max(25, last.abs() * .20).toDouble();
       if (reading < last - resetThreshold) {
         // The lifetime counter reset. Preserve previously accumulated energy
         // and use the new reading as the base for subsequent deltas.
@@ -66,7 +66,7 @@ class SmartChargeEnergyAccumulator {
     ]);
     if (capacity == null) return const SmartChargeSocEstimate.unavailable();
     final efficiency = _validEfficiency(session.chargingEfficiency);
-    final gridEnergy = math.max(0, energyUsedWh ?? session.energyUsedWh);
+    final gridEnergy = math.max(0, energyUsedWh ?? session.energyUsedWh).toDouble();
     final stored = gridEnergy * efficiency;
     final soc = (session.startSoc + stored / capacity * 100)
         .clamp(session.startSoc, 100.0)

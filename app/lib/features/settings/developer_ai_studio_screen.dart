@@ -619,7 +619,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
           preferredSize: const Size.fromHeight(54),
           child: Container(
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            height: 44,
+            height: 52,
             decoration: BoxDecoration(
               color: _ui.surface,
               borderRadius: BorderRadius.circular(CockpitRadius.medium),
@@ -650,23 +650,29 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
               ),
               tabs: const [
                 Tab(
-                  child: Row(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(Icons.dataset_rounded, size: 16),
                       SizedBox(width: 6),
                       Text('Tập dữ liệu'),
                     ],
+                    ),
                   ),
                 ),
                 Tab(
-                  child: Row(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(Icons.model_training_rounded, size: 16),
                       SizedBox(width: 6),
                       Text('Huấn luyện AI'),
                     ],
+                    ),
                   ),
                 ),
               ],
