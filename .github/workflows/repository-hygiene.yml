@@ -1,0 +1,48 @@
+name: Repository hygiene
+
+on:
+  pull_request:
+  push:
+    branches: [main, feature/ios-platform]
+
+permissions:
+  contents: read
+
+jobs:
+  tracked-files:
+    name: Block generated files, secrets and oversized blobs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Validate tracked file allowlist
+        shell: python
+        run: |
+          import os
+          import re
+          import subprocess
+          import sys
+
+          paths = subprocess.check_output(["git", "ls-files", "-z"]).decode().split("\0")
+          paths = [p for p in paths if p]
+          forbidden = re.compile(
+              r"(^|/)(build|node_modules|\.venv|\.dart_tool|state/telemetry)(/|$)"
+          )
+          secret = re.compile(
+              r"(^|/)(serviceAccountKey|service-account-key|firebase-adminsdk|.*\.jks$|.*\.keystore$)"
+          , re.IGNORECASE)
+          failures = []
+          for path in paths:
+              if forbidden.search(path):
+                  failures.append(f"generated/runtime path: {path}")
+              if secret.search(path):
+                  failures.append(f"secret/signing path: {path}")
+              size = os.path.getsize(path)
+              if size > 10 * 1024 * 1024:
+                  failures.append(f"oversized tracked file ({size} bytes): {path}")
+          if failures:
+              print("\n".join(failures), file=sys.stderr)
+              raise SystemExit(1)
+          print(f"Checked {len(paths)} tracked files")
