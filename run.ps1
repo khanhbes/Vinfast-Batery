@@ -356,9 +356,7 @@ function Build-AndroidApp {
             throw "Khong tim thay file APK nao trong $outputDir"
         }
 
-        $appReleasesDir = Join-Path $appDir "releases"
         $webApkDir = Join-Path $webDir "apk"
-        if (-not (Test-Path $appReleasesDir)) { New-Item -ItemType Directory -Path $appReleasesDir -Force | Out-Null }
         if (-not (Test-Path $webApkDir)) { New-Item -ItemType Directory -Path $webApkDir -Force | Out-Null }
 
         Write-Step "Tong ket file APK da tao:"
@@ -366,8 +364,6 @@ function Build-AndroidApp {
             $sizeMB = [math]::Round($apk.Length / 1MB, 2)
             Write-Host "  [APK] $($apk.Name) ($sizeMB MB)" -ForegroundColor Green
             Write-Host "        Duong dan: $($apk.FullName)" -ForegroundColor DarkGray
-
-            Copy-Item -Path $apk.FullName -Destination (Join-Path $appReleasesDir $apk.Name) -Force
 
             if ($apk.Name -match 'app-release.apk' -or $apk.Name -match 'app-arm64-v8a-release.apk') {
                 $latestTarget = Join-Path $webApkDir "VinFastBattery_latest.apk"

@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/images/app-icon.png" alt="VinFast Battery application icon" width="112" />
+  <img src="app/assets/icons/app_icon.png" alt="VinFast Battery application icon" width="112" />
 
   # VinFast Battery
 
