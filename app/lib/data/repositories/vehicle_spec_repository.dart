@@ -15,8 +15,13 @@ class VehicleSpecRepository {
   static const _cacheKey = 'global_ev_catalog_cache_v4';
   static const _cacheTimestampKey = 'global_ev_catalog_cache_ts_v4';
   static const _cacheTtlHours = 24;
+  static const _remoteCheckInterval = Duration(minutes: 15);
 
   final FirebaseFirestore _firestore;
+  List<VinFastModelSpec>? _memoryCache;
+  DateTime? _lastRemoteCheck;
+  bool _catalogInvalidated = false;
+  int? _knownCatalogRevision;
 
   VehicleSpecRepository({FirebaseFirestore? firestore})
     : _firestore = firestore ?? FirebaseFirestore.instance;
@@ -25,20 +30,46 @@ class VehicleSpecRepository {
   CollectionReference get _legacySpecsRef =>
       _firestore.collection('VinFastModelSpecs');
 
-  Stream<int> watchCatalogRevision() => _firestore
-      .collection('VehicleCatalogMeta')
-      .doc('current')
-      .snapshots()
-      .map((snapshot) => (snapshot.data()?['revision'] as num?)?.toInt() ?? 0)
-      .distinct();
+  /// Compatibility API; invalidation is now driven by FCM and foreground
+  /// bootstrap rather than a permanent Firestore listener.
+  Stream<int> watchCatalogRevision() => Stream<int>.value(0);
+
+  bool get needsRemoteRefresh => _catalogInvalidated || _memoryCache == null;
+
+  void invalidateRemoteCache() => _catalogInvalidated = true;
+
+  void applyRemoteRevision(int revision) {
+    final previous = _knownCatalogRevision;
+    _knownCatalogRevision = revision;
+    if (previous != null && previous != revision) _catalogInvalidated = true;
+  }
 
   /// Lấy tất cả specs, ưu tiên Firestore → cache → local
-  Future<List<VinFastModelSpec>> getAllSpecs() async {
+  Future<List<VinFastModelSpec>> getAllSpecs({bool forceRemote = false}) async {
+    final now = DateTime.now();
+    if (!forceRemote && !_catalogInvalidated && _memoryCache != null &&
+        _lastRemoteCheck != null &&
+        now.difference(_lastRemoteCheck!) < _remoteCheckInterval) {
+      return List.unmodifiable(_memoryCache!);
+    }
+    if (!forceRemote && !_catalogInvalidated) {
+      final cached = await _loadFromCache();
+      if (cached.isNotEmpty) {
+        _memoryCache = cached;
+        _lastRemoteCheck = now;
+        _memoryCache = cached;
+        _lastRemoteCheck = now;
+        return cached;
+      }
+    }
     // 1. Thử Firestore
     try {
       final specs = await _fetchFromFirestore();
       if (specs.isNotEmpty) {
         await _saveToCache(specs);
+        _memoryCache = specs;
+        _lastRemoteCheck = now;
+        _catalogInvalidated = false;
         return specs;
       }
     } catch (e) {
@@ -58,7 +89,9 @@ class VehicleSpecRepository {
 
     // 3. Fallback local asset
     debugPrint('📄 VehicleSpecRepository: Using local fallback');
-    return _loadFromAsset();
+    final fallback = await _loadFromAsset();
+    _memoryCache = fallback;
+    return fallback;
   }
 
   /// Lấy 1 spec theo modelId

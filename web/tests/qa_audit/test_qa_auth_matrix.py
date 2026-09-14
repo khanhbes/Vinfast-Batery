@@ -84,4 +84,4 @@ class TestAuthMatrix:
             "/api/admin/ai/status",
             headers={"Authorization": "Bearer some-token"}
         )
-        assert response.status_code == 401, "Should fail-closed with 401 Unauthorized"
+        assert response.status_code == 503, "Firebase outage should be reported as service unavailable"

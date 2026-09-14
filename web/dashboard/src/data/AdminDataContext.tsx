@@ -17,6 +17,8 @@ export interface AdminDataSnapshot {
   totals: Record<string, number>;
   partial: boolean;
   errors: Record<string, string>;
+  errorDetails: Record<string, { code: string; message: string; retryable: boolean }>;
+  cache?: { hit: boolean; stale: string[]; generatedAt?: string; refreshThrottled?: boolean };
   requestId?: string;
   durationMs?: number;
   requestedDatasets?: string[];
@@ -60,6 +62,8 @@ function normalizeSnapshot(value: unknown): AdminDataSnapshot {
     totals: raw.totals && typeof raw.totals === 'object' ? raw.totals as Record<string, number> : {},
     partial: raw.partial === true,
     errors: raw.errors && typeof raw.errors === 'object' ? raw.errors as Record<string, string> : {},
+    errorDetails: raw.errorDetails && typeof raw.errorDetails === 'object' ? raw.errorDetails as AdminDataSnapshot['errorDetails'] : {},
+    cache: raw.cache && typeof raw.cache === 'object' ? raw.cache as AdminDataSnapshot['cache'] : undefined,
     requestId: typeof raw.requestId === 'string' ? raw.requestId : undefined,
     durationMs: typeof raw.durationMs === 'number' ? raw.durationMs : undefined,
     requestedDatasets: Array.isArray(raw.requestedDatasets) ? raw.requestedDatasets.filter(value => typeof value === 'string') as string[] : undefined,
@@ -67,7 +71,7 @@ function normalizeSnapshot(value: unknown): AdminDataSnapshot {
 }
 
 const SNAPSHOT_CACHE_KEY = 'vinfast-admin-snapshot-v2';
-const INITIAL_DATASETS = ['core', 'operations', 'ai'];
+const INITIAL_DATASETS = ['core'];
 
 function readCachedSnapshot(): AdminDataSnapshot | null {
   try {
@@ -90,7 +94,9 @@ function mergeSnapshot(previous: AdminDataSnapshot | null, incoming: AdminDataSn
     if (!incoming.errors[key] || !datasets[key]) datasets[key] = dataset;
   }
   const errors = { ...previous.errors, ...incoming.errors };
+  const errorDetails = { ...previous.errorDetails, ...incoming.errorDetails };
   for (const key of Object.keys(incoming.datasets)) if (!incoming.errors[key]) delete errors[key];
+  for (const key of Object.keys(incoming.datasets)) if (!incoming.errors[key]) delete errorDetails[key];
   return {
     ...previous,
     ...incoming,
@@ -98,6 +104,7 @@ function mergeSnapshot(previous: AdminDataSnapshot | null, incoming: AdminDataSn
     totals: { ...previous.totals, ...incoming.totals },
     partial: Object.keys(errors).length > 0,
     errors,
+    errorDetails,
   };
 }
 
@@ -108,13 +115,13 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState('');
   const requestInFlight = useRef(new Set<string>());
 
-  const load = useCallback(async (datasets: string[], limit: number, key: string) => {
+  const load = useCallback(async (datasets: string[], limit: number, key: string, force = false) => {
     if (requestInFlight.current.has(key)) return;
     requestInFlight.current.add(key);
     setError('');
     setRefreshing(true);
     try {
-      const incoming = normalizeSnapshot((await adminDataSnapshot(limit, datasets))?.data);
+      const incoming = normalizeSnapshot((await adminDataSnapshot(limit, datasets, force))?.data);
       setSnapshot(previous => {
         const next = mergeSnapshot(previous, incoming);
         cacheSnapshot(next);
@@ -129,24 +136,10 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const refresh = useCallback(() => load(INITIAL_DATASETS, 100, 'overview'), [load]);
-  const loadDataset = useCallback((dataset: string) => load([dataset], 500, `dataset:${dataset}`), [load]);
+  const refresh = useCallback(() => load(INITIAL_DATASETS, 50, 'overview', true), [load]);
+  const loadDataset = useCallback((dataset: string) => load([dataset], 50, `dataset:${dataset}`, true), [load]);
 
-  useEffect(() => { void refresh(); }, [refresh]);
-
-  useEffect(() => {
-    const refreshVisibleData = () => {
-      if (document.visibilityState === 'visible') void refresh();
-    };
-    const timer = window.setInterval(refreshVisibleData, 60_000);
-    window.addEventListener('focus', refreshVisibleData);
-    document.addEventListener('visibilitychange', refreshVisibleData);
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener('focus', refreshVisibleData);
-      document.removeEventListener('visibilitychange', refreshVisibleData);
-    };
-  }, [refresh]);
+  useEffect(() => { void load(INITIAL_DATASETS, 50, 'overview'); }, [load]);
 
   const value = useMemo(() => ({ snapshot, loading, refreshing, error, refresh, loadDataset }), [snapshot, loading, refreshing, error, refresh, loadDataset]);
   return <AdminDataContext.Provider value={value}>{children}</AdminDataContext.Provider>;

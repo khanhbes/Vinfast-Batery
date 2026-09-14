@@ -11,6 +11,8 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../repositories/vehicle_spec_repository.dart';
+import '../repositories/notification_repository.dart';
 
 /// FCM/APNs token lifecycle. Push token documents are server-only; the app
 /// communicates through authenticated REST endpoints and never touches them in
@@ -27,8 +29,10 @@ class PushNotificationService {
     ),
   );
   StreamSubscription<String>? _tokenRefresh;
+  StreamSubscription<RemoteMessage>? _foregroundMessages;
   StreamSubscription<User?>? _authSubscription;
   String? _registeredUid;
+  String? _lastRegisteredFingerprint;
   bool _initialized = false;
   Future<void>? _initializing;
   void Function(Map<String, dynamic>)? _deepLinkHandler;
@@ -70,6 +74,12 @@ class PushNotificationService {
       );
     }
     final handler = _deepLinkHandler;
+    try {
+      await _messaging.subscribeToTopic('vehicle_catalog');
+    } catch (error) {
+      debugPrint('[Push] catalog topic subscription deferred: $error');
+    }
+    _foregroundMessages ??= FirebaseMessaging.onMessage.listen(_handleMessage);
     FirebaseMessaging.onMessageOpenedApp.listen((message) {
       if (handler != null) {
         handler(message.data);
@@ -92,6 +102,20 @@ class PushNotificationService {
     await syncCurrentUser();
   }
 
+  void _handleMessage(RemoteMessage message) {
+    final event = message.data['event']?.toString();
+    if (event == 'catalog_updated' || message.data['catalogUpdated'] == 'true') {
+      VehicleSpecRepository().invalidateRemoteCache();
+    }
+    if (event == 'notification_updated' || message.data['notificationUpdated'] == 'true') {
+      NotificationRepository().invalidateUnread();
+    }
+    final handler = _deepLinkHandler;
+    if (handler != null && message.data.isNotEmpty) {
+      handler(message.data);
+    }
+  }
+
   Future<String> _deviceId() async {
     final existing = await _storage.read(key: _deviceIdKey);
     if (existing != null && existing.isNotEmpty) return existing;
@@ -111,6 +135,10 @@ class PushNotificationService {
     final info = await PackageInfo.fromPlatform();
     final deviceId = await _deviceId();
     final idToken = await user.getIdToken();
+    final fingerprint = '${user.uid}|$token|${info.version}+${info.buildNumber}|${Platform.localeName}';
+    if (_registeredUid == user.uid && _lastRegisteredFingerprint == fingerprint) {
+      return;
+    }
     final response = await http.put(
       Uri.parse('${AppConstants.apiBaseUrl}/api/mobile/push-tokens/$deviceId'),
       headers: {
@@ -127,6 +155,7 @@ class PushNotificationService {
     );
     if (response.statusCode >= 200 && response.statusCode < 300) {
       _registeredUid = user.uid;
+      _lastRegisteredFingerprint = fingerprint;
     } else {
       debugPrint('[Push] token registration failed ${response.statusCode}');
     }
@@ -142,10 +171,12 @@ class PushNotificationService {
       headers: {'Authorization': 'Bearer $idToken'},
     );
     _registeredUid = null;
+    _lastRegisteredFingerprint = null;
   }
 
   void dispose() {
     _tokenRefresh?.cancel();
+    _foregroundMessages?.cancel();
     _authSubscription?.cancel();
   }
 }

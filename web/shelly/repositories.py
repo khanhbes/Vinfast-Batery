@@ -874,10 +874,7 @@ class SmartChargeRepository:
                 query = query.where("vehicleId", "==", vehicle_id)
             if cursor is not None:
                 query = query.where("startTime", "<", cursor)
-            # Hidden records must be removed before slicing the page. Reading
-            # the filtered query without a server limit avoids short pages when
-            # older documents contain hidden_at; the result is still bounded by
-            # the requested page below and preserves cursor correctness.
+            query = query.where("isDeleted", "==", False).limit(limit + 1)
             from_charge_logs = True
             try:
                 snapshots = list(query.stream())
@@ -894,7 +891,7 @@ class SmartChargeRepository:
                     query = query.where("vehicle_id", "==", vehicle_id)
                 if cursor is not None:
                     query = query.where("created_at", "<", cursor)
-                snapshots = list(query.stream())
+                snapshots = list(query.limit(limit + 1).stream())
             values = []
             skipped = 0
             for item in snapshots:
@@ -925,7 +922,7 @@ class SmartChargeRepository:
                         legacy_query = legacy_query.where("vehicle_id", "==", vehicle_id)
                     if cursor is not None:
                         legacy_query = legacy_query.where("created_at", "<", cursor)
-                    for item in legacy_query.stream():
+                    for item in legacy_query.limit(limit + 1).stream():
                         try:
                             values.append(_session(item.to_dict() or {}))
                         except (KeyError, TypeError, ValueError):
@@ -1182,8 +1179,18 @@ class SmartChargeRepository:
     def telemetry(self, uid: str, session_id: str) -> list[dict]:
         with self._lock:
             cached = list(self._telemetry.get((uid, session_id), []))
+            cached_session = self._sessions.get(uid, {}).get(session_id)
+        if cached_session and cached_session.telemetry_samples:
+            return [_expand_compact_sample(item, cached_session.transport) for item in cached_session.telemetry_samples]
         if cached or not self.db:
             return cached
+        runtime = (self.db.collection("users").document(uid)
+                   .collection("smartChargingSessions").document(session_id).get())
+        runtime_data = runtime.to_dict() or {} if runtime.exists else {}
+        compact = runtime_data.get("telemetry_samples") or runtime_data.get("telemetrySamples")
+        if isinstance(compact, list) and compact:
+            return [_expand_compact_sample(item, runtime_data.get("transport"))
+                    for item in compact if isinstance(item, dict)]
         parent = self.db.collection("ChargeLogs").document(session_id).get()
         parent_data = parent.to_dict() or {}
         if not parent.exists or parent_data.get("ownerUid") != uid:
@@ -1213,6 +1220,29 @@ class SmartChargeRepository:
                 values.append(data)
         values.sort(key=lambda value: str(value.get("timestamp") or value.get("startedAt") or ""))
         return values
+
+def _expand_compact_sample(value: dict, transport=None) -> dict:
+    """Expand minute-level runtime samples to the chart API contract."""
+    timestamp = value.get("timestamp") or value.get("t")
+    if isinstance(timestamp, (int, float)):
+        timestamp = datetime.fromtimestamp(timestamp, timezone.utc).isoformat()
+    power = float(value.get("powerAverageW", value.get("p", 0)) or 0)
+    return {
+        "timestamp": str(timestamp or datetime.now(timezone.utc).isoformat()),
+        "elapsedSeconds": int(value.get("elapsedSeconds", value.get("elapsed_s", 0)) or 0),
+        "powerAverageW": power,
+        "powerMinimumW": float(value.get("powerMinimumW", power) or 0),
+        "powerMaximumW": float(value.get("powerMaximumW", power) or 0),
+        "voltageV": float(value.get("voltageV", value.get("v", 0)) or 0),
+        "currentA": float(value.get("currentA", value.get("a", 0)) or 0),
+        "temperatureC": value.get("temperatureC", value.get("temp_bat")),
+        "energyWh": float(value.get("energyWh", value.get("e_wh", 0)) or 0),
+        "estimatedSoc": value.get("estimatedSoc", value.get("est_soc")),
+        "relay": bool(value.get("relay", True)),
+        "timerRemainingSeconds": value.get("timerRemainingSeconds"),
+        "transport": value.get("transport", transport),
+        "quality": value.get("quality", "good"),
+    }
 
 
 def _date(value):

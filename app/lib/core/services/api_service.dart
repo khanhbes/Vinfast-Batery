@@ -285,7 +285,9 @@ class ApiService {
         parsedJson?['error']?.toString() ??
         'HTTP ${response.statusCode}: ${response.body}';
     final debugCode =
-        parsedJson?['debugCode']?.toString() ?? 'HTTP_${response.statusCode}';
+        parsedJson?['debugCode']?.toString() ??
+        parsedJson?['code']?.toString() ??
+        'HTTP_${response.statusCode}';
     final debugDetail = parsedJson?['debugDetail']?.toString();
 
     final apiError = ApiException(
@@ -312,6 +314,8 @@ class ApiService {
       'statusCode': response.statusCode,
       'error': errorMessage,
       'debugCode': debugCode,
+      if (parsedJson?['requestId'] != null)
+        'requestId': parsedJson!['requestId'],
       if (debugDetail != null) 'debugDetail': debugDetail,
     };
   }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/guide_registry.dart';
 import '../theme/cockpit_design_system.dart';
 import '../theme/app_ui_colors.dart';
 
@@ -62,7 +63,11 @@ class AppNavigationBar extends StatelessWidget {
                       hint: 'Chuyển sang màn hình ${destinations[i].$2}',
                       onTap: () => onSelected(i),
                       child: InkWell(
-                        key: ValueKey('navigation-destination-$i'),
+                        key: i == 1
+                            ? GuideRegistry.keyChargeTab
+                            : (i == 3
+                                ? GuideRegistry.keyMoreSettingsTab
+                                : ValueKey('navigation-destination-$i')),
                         onTap: () => onSelected(i),
                         borderRadius:
                             BorderRadius.circular(CockpitRadius.medium),

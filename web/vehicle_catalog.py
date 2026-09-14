@@ -265,6 +265,7 @@ def validate_official_sources(
     if not allowed_domains:
         return ["manufacturer official domains must be configured before publishing"]
     errors: list[str] = []
+    allowed_label = ", ".join(sorted(set(allowed_domains)))
     for index, source in enumerate(data.get("sources", [])):
         url = _clean_text(source.get("url") if isinstance(source, dict) else "", 1200)
         parsed = urlparse(url)
@@ -275,7 +276,9 @@ def validate_official_sources(
             or parsed.password
             or not _allowed_host(parsed.hostname, allowed_domains)
         ):
-            errors.append(f"sources[{index}].url must use an approved official HTTPS domain")
+            errors.append(
+                f"sources[{index}].url must use HTTPS on an approved official domain: {allowed_label}"
+            )
     return errors
 
 

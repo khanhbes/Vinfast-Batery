@@ -4,12 +4,13 @@ service cloud.firestore {
 
     // ── Helper functions ──
     // A disabled account must be unable to keep using an already-open app.
-    // Missing legacy profiles intentionally remain active until the server
-    // creates/merges them after their next sign-in.
+    // Firebase Auth/custom claims are authoritative. The app refreshes its
+    // token on foreground so disabling/revoking an account takes effect when
+    // the user returns to the app, without a billed profile lookup on every
+    // Firestore request.
     function isActiveAccount() {
       return request.auth != null &&
-        (!exists(/databases/$(database)/documents/users/$(request.auth.uid)) ||
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountStatus != 'disabled');
+        request.auth.token.accountDisabled != true;
     }
     function isAuth() {
       return isActiveAccount();
@@ -18,7 +19,9 @@ service cloud.firestore {
       return isAuth() && request.auth.uid == ownerUid;
     }
     function activeVehicleLimit(uid) {
-      let configured = get(/databases/$(database)/documents/users/$(uid)).data.maxActiveVehicles;
+      // Quota is enforced by the API and, when present, a Firebase custom
+      // claim. Never read users/{uid} from a rule evaluation.
+      let configured = request.auth.token.maxActiveVehicles;
       return configured is int && configured >= 1 && configured <= 10 ? configured : 2;
     }
     function notDeleted() {
@@ -55,14 +58,13 @@ service cloud.firestore {
         !('local_password' in request.resource.data) &&
         !('authorizationKey' in request.resource.data);
     }
-
     // ── Users (profile sync từ app) ──
     match /users/{uid} {
       allow read: if isAuth() && request.auth.uid == uid;
       allow update: if isAuth() && request.auth.uid == uid &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'email', 'name', 'displayName', 'phone', 'phoneNumber', 'photoURL',
-          'vehicles', 'activeVehicleCount', 'updatedAt', 'lastLogin',
+          'dateOfBirth', 'vehicles', 'activeVehicleCount', 'updatedAt', 'lastLogin',
           'lastLoginSource', 'source', 'syncedToWeb', 'lastWebSync'
         ]) &&
         (!('vehicles' in request.resource.data) ||
@@ -70,11 +72,14 @@ service cloud.firestore {
       allow create: if isAuth() && request.auth.uid == uid &&
         request.resource.data.keys().hasOnly([
           'uid', 'email', 'name', 'displayName', 'phone', 'phoneNumber',
-          'photoURL', 'vehicles', 'activeVehicleCount', 'createdAt',
-          'updatedAt', 'lastLogin', 'lastLoginSource', 'source',
-          'syncedToWeb', 'lastWebSync'
+          'photoURL', 'dateOfBirth', 'registrationFlowVersion', 'vehicles',
+          'activeVehicleCount', 'createdAt', 'updatedAt', 'lastLogin',
+          'lastLoginSource', 'source', 'syncedToWeb', 'lastWebSync'
         ]) &&
         (!('uid' in request.resource.data) || request.resource.data.uid == uid) &&
+        (!('registrationFlowVersion' in request.resource.data) ||
+         (request.resource.data.registrationFlowVersion is int &&
+          request.resource.data.registrationFlowVersion <= 5)) &&
         !('accountStatus' in request.resource.data) &&
         !('disabledAt' in request.resource.data) &&
         !('disabledBy' in request.resource.data) &&
@@ -87,6 +92,28 @@ service cloud.firestore {
       // or mutate token documents directly.
       match /pushTokens/{deviceId} {
         allow read, write: if false;
+      }
+
+      match /appPreferences/{prefDoc} {
+        allow read: if isAuth() && request.auth.uid == uid;
+        allow write: if isAuth() && request.auth.uid == uid && prefDoc == 'ui' &&
+          request.resource.data.keys().hasOnly([
+            'dashboardOrder', 'hiddenDashboardWidgets', 'completedTours',
+            'guideSchemaVersion', 'updatedAt'
+          ]) &&
+          (!('dashboardOrder' in request.resource.data) || (
+            request.resource.data.dashboardOrder is list &&
+            request.resource.data.dashboardOrder.size() <= 20
+          )) &&
+          (!('hiddenDashboardWidgets' in request.resource.data) || (
+            request.resource.data.hiddenDashboardWidgets is list &&
+            request.resource.data.hiddenDashboardWidgets.size() <= 20
+          )) &&
+          (!('completedTours' in request.resource.data) || (
+            request.resource.data.completedTours is list &&
+            request.resource.data.completedTours.size() <= 50
+          )) &&
+          (!('guideSchemaVersion' in request.resource.data) || request.resource.data.guideSchemaVersion is int);
       }
 
       match /vehicleChargerBindings/{vehicleId} {
