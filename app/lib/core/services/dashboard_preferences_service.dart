@@ -84,10 +84,10 @@ class DashboardWidgetId {
 
 /// Dịch vụ quản lý tùy biến bố cục Dashboard & Spotlight tours
 class DashboardPreferencesService extends ChangeNotifier {
-  static final DashboardPreferencesService _instance =
-      DashboardPreferencesService._internal();
-  factory DashboardPreferencesService() => _instance;
-  DashboardPreferencesService._internal();
+  /// Scoped instances avoid a disposed singleton leaking across Riverpod
+  /// containers (notably after a widget test or a hot restart). The provider
+  /// owns this notifier and safely disposes it with its scope.
+  DashboardPreferencesService();
 
   static const _prefOrderKey = 'dashboard_order';
   static const _prefHiddenKey = 'dashboard_hidden';

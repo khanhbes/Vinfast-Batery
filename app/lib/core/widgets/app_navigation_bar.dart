@@ -24,6 +24,10 @@ class AppNavigationBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ui = AppUiColors.of(context);
+    // Keep the navigation label readable at large system text sizes. A fixed
+    // 58dp viewport clips labels at 200% and causes a RenderFlex overflow.
+    final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
+    final barHeight = (58 * textScale).clamp(58.0, 104.0);
     final duration = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
         : const Duration(milliseconds: 240);
@@ -49,7 +53,7 @@ class AppNavigationBar extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           child: SizedBox(
-            height: 58,
+            height: barHeight,
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -62,12 +66,12 @@ class AppNavigationBar extends StatelessWidget {
                       label: 'Tab ${destinations[i].$2}',
                       hint: 'Chuyển sang màn hình ${destinations[i].$2}',
                       onTap: () => onSelected(i),
-                      child: InkWell(
+                      child: KeyedSubtree(
+                        key: ValueKey('navigation-destination-$i'),
+                        child: InkWell(
                         key: i == 1
                             ? GuideRegistry.keyChargeTab
-                            : (i == 3
-                                ? GuideRegistry.keyMoreSettingsTab
-                                : ValueKey('navigation-destination-$i')),
+                            : (i == 3 ? GuideRegistry.keyMoreSettingsTab : null),
                         onTap: () => onSelected(i),
                         borderRadius:
                             BorderRadius.circular(CockpitRadius.medium),
@@ -125,6 +129,7 @@ class AppNavigationBar extends StatelessWidget {
                               ),
                             ],
                           ),
+                        ),
                         ),
                       ),
                     ),

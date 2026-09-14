@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -271,6 +272,12 @@ class _ShellyChecklistSliver extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Home can be rendered by the offline shell (and by widget tests) before
+    // Firebase bootstrap completes. Accessing FirebaseAuth.instance before a
+    // default app exists throws and cascades into framework build-scope errors.
+    if (Firebase.apps.isEmpty) {
+      return const SliverToBoxAdapter(child: SizedBox.shrink());
+    }
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return const SliverToBoxAdapter(child: SizedBox.shrink());
 
@@ -490,6 +497,8 @@ class _VehicleBanner extends StatelessWidget {
                   ),
                   child: Text(
                     vehicle?.vinfastModelName?.toUpperCase() ?? 'VF COCKPIT',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: CockpitTypography.label(
                       color: Colors.white70,
                       fontSize: 10,
