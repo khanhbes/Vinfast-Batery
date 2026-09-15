@@ -171,8 +171,8 @@ class ServerSmartChargerService {
     body: {
       ...profile.toJson(),
       if (vehicleId != null && vehicleId.isNotEmpty) 'vehicleId': vehicleId,
-      if (expectedRevision != null) 'expectedRevision': expectedRevision,
-      if (verification != null) 'verification': verification,
+      'expectedRevision': ?expectedRevision,
+      'verification': ?verification,
       'source': Platform.operatingSystem,
     },
   );

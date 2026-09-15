@@ -1,3 +1,6 @@
+// Legacy AI diagnostics remain visible to the local support console.
+// ignore_for_file: avoid_print, avoid_types_as_parameter_names
+
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';

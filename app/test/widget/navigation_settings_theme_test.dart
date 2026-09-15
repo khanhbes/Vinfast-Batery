@@ -22,7 +22,7 @@ void main() {
     );
     final node = tester.getSemantics(find.bySemanticsLabel('Lịch sử'));
     expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
-    tester.binding.pipelineOwner.semanticsOwner!.performAction(
+    tester.binding.rootPipelineOwner.semanticsOwner!.performAction(
       node.id,
       SemanticsAction.tap,
     );

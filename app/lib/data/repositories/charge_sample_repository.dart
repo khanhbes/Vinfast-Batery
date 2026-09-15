@@ -53,8 +53,10 @@ class ChargeSampleRepository {
     Position? position;
     try {
       position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.low,
-        timeLimit: const Duration(seconds: 5),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.low,
+          timeLimit: Duration(seconds: 5),
+        ),
       );
     } catch (e) {
       debugPrint('📍 Location not available: $e');
@@ -73,9 +75,7 @@ class ChargeSampleRepository {
       modelVersion: modelVersion,
       actualEndBatteryPercent: actualStopBatteryPercent,
       actualEndTime: actualStopAt,
-      actualDurationSec: actualStopAt != null
-          ? actualStopAt.difference(requestedAt).inSeconds.toDouble()
-          : null,
+      actualDurationSec: actualStopAt?.difference(requestedAt).inSeconds.toDouble(),
       latitude: position?.latitude,
       longitude: position?.longitude,
       eligibleForTraining: eligibleForTraining,

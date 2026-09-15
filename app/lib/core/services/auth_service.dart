@@ -134,20 +134,10 @@ class AuthService {
       await user.updateDisplayName(name);
 
       // 3. Tạo user document trong Firestore
-      await _firestore.collection('users').doc(user.uid).set({
-        'uid': user.uid,
-        'email': email,
-        'name': name,
-        'phone': phone ?? '',
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-        'source': 'flutter_app',
-        'syncedToWeb': false,
-        'registrationFlowVersion': 2,
-      });
+      var bootstrapPending = false;
 
       // 4. Đồng bộ với web dashboard
-      final syncResult = await _syncService.syncUserToWeb();
+      bool? syncResult;
 
       // 5. Lưu thông tin đăng nhập locally (secure)
       await _session.setLastLoginEmail(email);
@@ -158,10 +148,42 @@ class AuthService {
       await _session.markUserSynced();
       await _session.markAuthenticated();
 
+      try {
+        await _firestore.collection('users').doc(user.uid).set({
+          'uid': user.uid,
+          'email': email,
+          'name': name,
+          'phone': phone ?? '',
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+          'source': 'flutter_app',
+          'syncedToWeb': false,
+          'registrationFlowVersion': 2,
+        }, SetOptions(merge: true));
+      } catch (error) {
+        bootstrapPending = true;
+        debugPrint('[AuthService] profile bootstrap deferred: $error');
+      }
+      try {
+        final response = await ApiService().post('/api/mobile/registration-bootstrap', {
+          'name': name.trim(),
+          if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
+        });
+        bootstrapPending = bootstrapPending || response['success'] != true;
+      } catch (_) {
+        bootstrapPending = true;
+      }
+      try {
+        syncResult = await _syncService.syncUserToWeb();
+      } catch (_) {
+        bootstrapPending = true;
+      }
+
       return {
         'success': true,
         'user': user,
         'synced': syncResult,
+        'bootstrapPending': bootstrapPending,
         'message': 'Registration successful',
       };
     } on FirebaseAuthException catch (e) {

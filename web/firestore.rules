@@ -64,11 +64,9 @@ service cloud.firestore {
       allow update: if isAuth() && request.auth.uid == uid &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'email', 'name', 'displayName', 'phone', 'phoneNumber', 'photoURL',
-          'dateOfBirth', 'vehicles', 'activeVehicleCount', 'updatedAt', 'lastLogin',
+          'dateOfBirth', 'updatedAt', 'lastLogin',
           'lastLoginSource', 'source', 'syncedToWeb', 'lastWebSync'
-        ]) &&
-        (!('vehicles' in request.resource.data) ||
-         request.resource.data.vehicles.size() <= activeVehicleLimit(uid));
+        ]);
       allow create: if isAuth() && request.auth.uid == uid &&
         request.resource.data.keys().hasOnly([
           'uid', 'email', 'name', 'displayName', 'phone', 'phoneNumber',

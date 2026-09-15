@@ -316,7 +316,7 @@ class _InfoRow extends StatelessWidget {
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
       final stacked = constraints.maxWidth < 270 ||
-          MediaQuery.textScalerOf(context).textScaleFactor > 1.25;
+          MediaQuery.textScalerOf(context).scale(1) > 1.25;
       final valueText = Text(
         value,
         style: CockpitTypography.numbers(

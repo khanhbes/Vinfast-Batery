@@ -462,20 +462,34 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
     return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       future: _profileFuture,
       builder: (context, snapshot) {
+        final createdAt = currentUser.metadata.creationTime;
+        final isNew = createdAt != null &&
+            DateTime.now().difference(createdAt) < const Duration(minutes: 15);
+
+        // Auth can succeed before the first profile write reaches Firestore.
+        // Route a new account through its retryable onboarding bootstrap,
+        // rather than treating a transient read failure as permission to enter.
+        if (snapshot.hasError) {
+          return isNew ? const OnboardingFlowScreen() : const AppNavigation();
+        }
         if (!snapshot.hasData) {
-          return const AppNavigation();
+          if (!isNew) return const AppNavigation();
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
         }
 
         final data = snapshot.data?.data();
-        if (data != null) {
-          final flowVer = data['registrationFlowVersion'] as int? ?? 1;
-          final completedAt = data['onboardingCompletedAt'];
+        if (data == null) {
+          return isNew ? const OnboardingFlowScreen() : const AppNavigation();
+        }
+        final flowVer = data['registrationFlowVersion'] as int? ?? 1;
+        final completedAt = data['onboardingCompletedAt'];
 
           // Chỉ account có registrationFlowVersion >= 2 mới bị bắt buộc onboarding.
           // Tài khoản cũ không bị chặn.
-          if (flowVer >= 2 && completedAt == null) {
-            return const OnboardingFlowScreen();
-          }
+        if (flowVer >= 2 && completedAt == null) {
+          return const OnboardingFlowScreen();
         }
 
         return const AppNavigation();

@@ -505,10 +505,33 @@ class SmartChargeRepository:
     def save_preview(self, uid: str, preview: ChargePreview) -> None:
         with self._lock:
             self._previews.setdefault(uid, {})[preview.preview_id] = preview
+        # A preview is part of the arming contract.  Keeping it only in the
+        # API process meant a normal restart between Preview and Start made a
+        # safe request look expired.  The server-owned TTL document lets a
+        # restarted worker recover exactly the same prediction.
+        if self.db:
+            self.db.collection("users").document(uid).collection(
+                "smartChargePreviews"
+            ).document(preview.preview_id).set(preview.to_dict(), merge=True)
 
     def get_preview(self, uid: str, preview_id: str) -> ChargePreview | None:
         with self._lock:
-            return self._previews.get(uid, {}).get(preview_id)
+            cached = self._previews.get(uid, {}).get(preview_id)
+        if cached is not None or not self.db:
+            return cached
+        snapshot = (self.db.collection("users").document(uid)
+                    .collection("smartChargePreviews").document(preview_id).get())
+        if not snapshot.exists:
+            return None
+        try:
+            preview = _preview(snapshot.to_dict() or {})
+        except (KeyError, TypeError, ValueError):
+            return None
+        if preview.expires_at <= datetime.now(timezone.utc):
+            return None
+        with self._lock:
+            self._previews.setdefault(uid, {})[preview.preview_id] = preview
+        return preview
 
     def save_session(self, uid: str, session: ChargingSession) -> None:
         with self._lock:
@@ -522,6 +545,11 @@ class SmartChargeRepository:
             payload = session.to_dict()
             payload["idempotency_key"] = session.idempotency_key
             self.db.collection("users").document(uid).collection("smartChargingSessions").document(session.session_id).set(payload, merge=True)
+        # A terminal session must release both lock layers.  Leaving the
+        # Firestore lease until its 12-hour expiry prevented a legitimate next
+        # charging session after a successful OFF verification.
+        if session.state not in ("arming", "active"):
+            self.release_device_session(uid, session.device_id, session.session_id)
 
     def claim_device_session(self, uid: str, device_id: str, session_id: str) -> bool:
         """Atomically reserve a physical Shelly for one active session.
@@ -694,7 +722,10 @@ class SmartChargeRepository:
         return None
 
     def current_session(self, uid: str, vehicle_id: str | None = None, device_id: str | None = None) -> ChargingSession | None:
-        active = [s for s in self.history(uid, 100) if s.state in ("arming", "active")]
+        # A history page may be stale or limited.  Live state must come from
+        # the active-session query, otherwise a new charge can disappear after
+        # another terminal record has been written.
+        active = self.active_sessions(uid)
         if vehicle_id:
             active = [s for s in active if s.vehicle_id == vehicle_id]
         if device_id:
@@ -703,8 +734,54 @@ class SmartChargeRepository:
 
     def active_sessions(self, uid: str) -> list[ChargingSession]:
         """Return every active vehicle session, not only the legacy first one."""
-        return [s for s in self.history(uid, 100)
-                if s.state in ("arming", "active")]
+        if self.db:
+            try:
+                snapshots = (self.db.collection("users").document(uid)
+                             .collection("smartChargingSessions")
+                             .where("state", "in", ["arming", "active"])
+                             .limit(20).stream())
+                values = []
+                for snapshot in snapshots:
+                    session = _session(snapshot.to_dict() or {})
+                    if session.owner_uid in (None, uid):
+                        values.append(session)
+                with self._lock:
+                    for session in values:
+                        self._sessions.setdefault(uid, {})[session.session_id] = session
+                return values
+            except Exception:
+                # A missing index must not make the safety path unsafe; the
+                # bounded in-memory fallback is still preferable to a broad
+                # history scan in a request path.
+                pass
+        with self._lock:
+            return [s for s in self._sessions.get(uid, {}).values()
+                    if s.state in ("arming", "active")]
+
+    def list_all_active_sessions(self) -> list[dict]:
+        """Bounded collection-group scan used only by the reconciliation worker."""
+        if not self.db:
+            with self._lock:
+                return [
+                    {"uid": uid, "vehicle_id": item.vehicle_id}
+                    for uid, items in self._sessions.items()
+                    for item in items.values()
+                    if item.state in ("arming", "active")
+                ]
+        try:
+            snapshots = (self.db.collection_group("smartChargingSessions")
+                         .where("state", "in", ["arming", "active"])
+                         .limit(100).stream())
+            result = []
+            for snapshot in snapshots:
+                parts = snapshot.reference.path.split("/")
+                if len(parts) < 4 or parts[0] != "users":
+                    continue
+                data = snapshot.to_dict() or {}
+                result.append({"uid": parts[1], "vehicle_id": data.get("vehicle_id") or data.get("vehicleId")})
+            return result
+        except Exception:
+            return []
 
     def get_session(self, uid: str, session_id: str) -> ChargingSession | None:
         with self._lock:
@@ -720,6 +797,31 @@ class SmartChargeRepository:
             return None
         with self._lock:
             self._sessions.setdefault(uid, {})[session_id] = session
+        return session
+
+    def get_session_or_charge_log(self, uid: str, session_id: str) -> ChargingSession | None:
+        """Resolve Cloud runtime sessions and verified Direct-mode summaries.
+
+        Direct mode owns hardware credentials locally, but its terminal
+        ChargeLog is still an authenticated, owner-scoped input to personal
+        calibration.  This compatibility resolver removes the old
+        ``sessionNotFound`` dead-end without widening ownership.
+        """
+        session = self.get_session(uid, session_id)
+        if session is not None or not self.db:
+            return session
+        snapshot = self.db.collection("ChargeLogs").document(session_id).get()
+        if not snapshot.exists:
+            return None
+        data = snapshot.to_dict() or {}
+        if data.get("ownerUid") != uid or data.get("source") != "shelly_smart_charging":
+            return None
+        try:
+            session = _session_from_charge_log(data, snapshot.id, uid)
+        except (KeyError, TypeError, ValueError):
+            return None
+        with self._lock:
+            self._sessions.setdefault(uid, {})[session.session_id] = session
         return session
 
     def erase_session(self, uid: str, session_id: str) -> bool:
@@ -1339,6 +1441,49 @@ def _session(data: dict) -> ChargingSession:
                            if isinstance(item, dict)][-600:],
         hidden_at=_date(data.get("hidden_at")),
         safety_policy_version=str(data.get("safety_policy_version") or "v4-default"),
+    )
+
+
+def _preview(data: dict) -> ChargePreview:
+    """Read the durable preview form written by :meth:`save_preview`."""
+    def value(snake: str, camel: str | None = None, default=None):
+        return data.get(snake, data.get(camel or snake, default))
+
+    return ChargePreview(
+        preview_id=str(value("preview_id", "previewId")),
+        vehicle_id=str(value("vehicle_id", "vehicleId")),
+        current_soc=float(value("current_soc", "currentSoc")),
+        target_soc=float(value("target_soc", "targetSoc")),
+        predicted_minutes=int(value("predicted_minutes", "predictedMinutes")),
+        predicted_duration_seconds=int(value("predicted_duration_seconds", "predictedDurationSeconds")),
+        predicted_stop_at=_date(value("predicted_stop_at", "predictedStopAt")) or datetime.now(timezone.utc),
+        model_source=str(value("model_source", "modelSource") or "unknown"),
+        model_key=str(value("model_key", "modelKey") or "charging_time"),
+        model_version=str(value("model_version", "modelVersion") or "unknown"),
+        runtime_health=str(value("runtime_health", "runtimeHealth") or "unknown"),
+        confidence=value("confidence"),
+        warnings=list(value("warnings", default=[]) or []),
+        fallback_reason=value("fallback_reason", "fallbackReason"),
+        analyzed_at=_date(value("analyzed_at", "analyzedAt")) or datetime.now(timezone.utc),
+        ai_charge_eligible=bool(value("ai_charge_eligible", "aiChargeEligible")),
+        expires_at=_date(value("expires_at", "expiresAt")) or datetime.now(timezone.utc),
+        eta_candidates=[EtaCandidate(
+            source=str(item.get("source") or "unknown"),
+            duration_seconds=int(item.get("durationSeconds") or item.get("duration_seconds") or 0),
+            weight=float(item.get("weight") or 0),
+            confidence=float(item.get("confidence") or 0),
+            available=bool(item.get("available", True)),
+            reason=item.get("reason"),
+        ) for item in (value("eta_candidates", "etaCandidates", []) or []) if isinstance(item, dict)],
+        fusion_reason=str(value("fusion_reason", "fusionReason") or "global_ai_only"),
+        profile_version=value("profile_version", "profileVersion"),
+        adapter_version=value("adapter_version", "adapterVersion"),
+        capacity_confidence=value("capacity_confidence", "capacityConfidence"),
+        efficiency_confidence=value("efficiency_confidence", "efficiencyConfidence"),
+        effective_capacity_wh=value("effective_capacity_wh", "effectiveCapacityWh"),
+        personalization_stage=str(value("personalization_stage", "personalizationStage") or "base"),
+        guardrail_clamped=bool(value("guardrail_clamped", "guardrailClamped", False)),
+        guardrail_warnings=list(value("guardrail_warnings", "guardrailWarnings", []) or []),
     )
 
 

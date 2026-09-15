@@ -75,7 +75,7 @@ class DebugErrorSheet extends StatelessWidget {
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
+            color: Colors.black.withValues(alpha: 0.2),
             blurRadius: 16,
             offset: const Offset(0, -4),
           ),
@@ -185,13 +185,13 @@ class DebugErrorSheet extends StatelessWidget {
                               ),
                               decoration: BoxDecoration(
                                 color: entry.statusCode! >= 500
-                                    ? Colors.red.withOpacity(0.15)
-                                    : Colors.orange.withOpacity(0.15),
+                                    ? Colors.red.withValues(alpha: 0.15)
+                                    : Colors.orange.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(6),
                                 border: Border.all(
                                   color: entry.statusCode! >= 500
-                                      ? Colors.redAccent.withOpacity(0.5)
-                                      : Colors.orangeAccent.withOpacity(0.5),
+                                      ? Colors.redAccent.withValues(alpha: 0.5)
+                                      : Colors.orangeAccent.withValues(alpha: 0.5),
                                 ),
                               ),
                               child: Text(
@@ -213,10 +213,10 @@ class DebugErrorSheet extends StatelessWidget {
                                 vertical: 4,
                               ),
                               decoration: BoxDecoration(
-                                color: Colors.purple.withOpacity(0.15),
+                                color: Colors.purple.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(6),
                                 border: Border.all(
-                                  color: Colors.purpleAccent.withOpacity(0.5),
+                                  color: Colors.purpleAccent.withValues(alpha: 0.5),
                                 ),
                               ),
                               child: Text(
@@ -281,10 +281,10 @@ class DebugErrorSheet extends StatelessWidget {
                     width: double.infinity,
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.08),
+                      color: Colors.red.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: Colors.redAccent.withOpacity(0.3),
+                        color: Colors.redAccent.withValues(alpha: 0.3),
                       ),
                     ),
                     child: Text(

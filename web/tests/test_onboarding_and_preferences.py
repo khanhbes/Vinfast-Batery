@@ -199,6 +199,35 @@ def test_onboarding_flow(client, mock_fs, monkeypatch):
         assert res.json['data']['shelly']['status'] == 'skipped'
 
 
+def test_registration_bootstrap_is_idempotent(client, mock_fs, monkeypatch):
+    """An Auth-created account can recover a failed initial profile write."""
+    uid = "bootstrap-uid"
+    monkeypatch.setattr(server, "_verify_token", lambda: (uid, "new@test.vn", "user"))
+
+    with client.application.test_request_context(
+        '/api/mobile/registration-bootstrap', method='POST',
+        json={'name': 'New Owner', 'phone': '0900000000'},
+    ):
+        res, code = _unpack(server.registration_bootstrap())
+        assert code == 200
+        assert res.json['data']['isCompleted'] is False
+
+    # Retrying after a network failure must merge instead of resetting the
+    # profile or creating a second account record.
+    mock_fs.collection('users').document(uid).set(
+        {'onboardingCompletedAt': '2026-09-15T00:00:00Z'}, merge=True,
+    )
+    with client.application.test_request_context(
+        '/api/mobile/registration-bootstrap', method='POST', json={},
+    ):
+        res, code = _unpack(server.registration_bootstrap())
+        assert code == 200
+        assert res.json['data']['isCompleted'] is True
+    saved = mock_fs.collection('users').document(uid).get().to_dict()
+    assert saved['email'] == 'new@test.vn'
+    assert saved['registrationFlowVersion'] == 2
+
+
 def test_sync_batch_profile_whitelist(client, mock_fs, monkeypatch):
     uid = "test-sync-uid"
     monkeypatch.setattr(server, "_require_user_or_admin", lambda: (uid, "sync@test.vn"))

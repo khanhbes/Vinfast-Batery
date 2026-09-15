@@ -37,7 +37,6 @@ def _reconcile_session(service, uid: str, session, binding):
         status = service.provider.get_status(binding)
     except ProviderError:
         return session
-    now = utcnow()
     if status.relay and status.timer_remaining <= 0:
         try:
             service.provider.turn_off(binding)
@@ -45,7 +44,16 @@ def _reconcile_session(service, uid: str, session, binding):
             session.last_error = "relayUnverified"
             service.repository.save_session(uid, session)
             return session
-    if not status.relay:
+    # Reuse the service terminal path so the last meter reading, lease release,
+    # vehicle SOC projection and post-commit notification stay identical for
+    # manual stop, app polling, restart recovery and this worker.
+    reconcile = getattr(service, "_reconcile_with_status", None)
+    if callable(reconcile):
+        session = reconcile(uid, status, session.vehicle_id) or session
+    elif not status.relay:
+        # Lightweight test/local service compatibility. Production always
+        # supplies the canonical service method above.
+        now = utcnow()
         session.state = "completed" if now >= session.effective_stop_at else "interrupted"
         session.stop_reason = "planned_timer" if session.state == "completed" else "relay_off"
         session.stopped_at = now
@@ -54,6 +62,7 @@ def _reconcile_session(service, uid: str, session, binding):
         session.version += 1
         service.repository.save_session(uid, session)
         service.repository.upsert_charge_log(uid, session)
+    if getattr(session, "state", "active") not in ("arming", "active"):
         try:
             service.ingest_personal_session(uid, session.session_id)
         except Exception:
@@ -74,7 +83,7 @@ def run_forever(service, user_ids=None, interval_seconds: int = 60):
     while True:
         try:
             if user_ids is not None:
-                for uid in user_ids():
+                for uid in set(user_ids()):
                     reconcile_once(service, uid)
             else:
                 db = service.repository.db
@@ -82,10 +91,13 @@ def run_forever(service, user_ids=None, interval_seconds: int = 60):
                     query = (db.collection_group("smartChargingSessions")
                              .where("state", "in", ["arming", "active"])
                              .limit(100))
+                    owners = set()
                     for snapshot in query.stream():
                         parts = snapshot.reference.path.split('/')
                         if len(parts) >= 4 and parts[0] == 'users':
-                            reconcile_once(service, parts[1])
+                            owners.add(parts[1])
+                    for uid in owners:
+                        reconcile_once(service, uid)
             process_personal_training_jobs_once(service)
             backoff = interval_seconds
         except Exception as error:

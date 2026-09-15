@@ -1,3 +1,6 @@
+// Model-loading diagnostics are intentionally available to local operators.
+// ignore_for_file: avoid_print
+
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';

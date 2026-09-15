@@ -88,9 +88,9 @@ class AiPredictionData {
     final hours = (seconds / 3600).floor();
     final mins = ((seconds % 3600) / 60).floor();
     if (hours > 0) {
-      return '${hours} giờ ${mins} phút';
+      return '$hours giờ $mins phút';
     }
-    return '${mins} phút';
+    return '$mins phút';
   }
 
   /// Calculate prediction error after session ends

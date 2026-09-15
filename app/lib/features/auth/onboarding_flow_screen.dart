@@ -62,17 +62,27 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
   }
 
   Future<void> _loadUserInitialData() async {
-    final status = await ref.read(onboardingServiceProvider).fetchOnboardingStatus();
-    if (status != null && mounted) {
+    final service = ref.read(onboardingServiceProvider);
+    var status = await service.fetchOnboardingStatus();
+    if (status == null) {
+      final user = AuthService().currentUser;
+      await service.bootstrapRegistration(
+        name: user?.displayName ?? '',
+      );
+      status = await service.fetchOnboardingStatus();
+    }
+    if (!mounted || status == null) return;
+    final loadedStatus = status;
+    if (mounted) {
       setState(() {
-        if (status.name.isNotEmpty) _nameCtrl.text = status.name;
-        if (status.phone.isNotEmpty) _phoneCtrl.text = status.phone;
-        if (status.dateOfBirth != null) {
-          _dobCtrl.text = status.dateOfBirth!;
-          _selectedDob = DateTime.tryParse(status.dateOfBirth!);
+        if (loadedStatus.name.isNotEmpty) _nameCtrl.text = loadedStatus.name;
+        if (loadedStatus.phone.isNotEmpty) _phoneCtrl.text = loadedStatus.phone;
+        if (loadedStatus.dateOfBirth != null) {
+          _dobCtrl.text = loadedStatus.dateOfBirth!;
+          _selectedDob = DateTime.tryParse(loadedStatus.dateOfBirth!);
         }
-        if (status.hasVehicle && status.vehicles.isNotEmpty) {
-          _createdVehicleId = status.vehicles.first['vehicleId']?.toString();
+        if (loadedStatus.hasVehicle && loadedStatus.vehicles.isNotEmpty) {
+          _createdVehicleId = loadedStatus.vehicles.first['vehicleId']?.toString();
         }
       });
     }
@@ -114,6 +124,7 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
           phone: _phoneCtrl.text.trim().isNotEmpty ? _phoneCtrl.text.trim() : null,
           dateOfBirth: _dobCtrl.text.trim().isNotEmpty ? _dobCtrl.text.trim() : null,
         );
+    if (!mounted) return;
     setState(() => _isLoading = false);
 
     if (res['success'] == true) {
@@ -148,6 +159,7 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
       licensePlate: _plateCtrl.text.trim().isNotEmpty ? _plateCtrl.text.trim() : null,
       initialOdo: odo,
     );
+    if (!mounted) return;
     setState(() => _isLoading = false);
 
     if (res['success'] == true) {
@@ -163,11 +175,14 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
     final res = await ref.read(onboardingServiceProvider).completeOnboarding(
           shellyStatus: _shellyStatus,
         );
+    if (!mounted) return;
     setState(() => _isLoading = false);
 
-    if (res['success'] == true && mounted) {
+    if (res['success'] == true) {
       // Điều hướng vào màn chính AppNavigation
-      Navigator.of(context).pushAndRemoveUntil(
+      final navigator = Navigator.of(context, rootNavigator: true);
+      final preferences = ref.read(dashboardPreferencesProvider);
+      navigator.pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const AppNavigation()),
         (route) => false,
       );
@@ -175,17 +190,16 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
       // Tự động khởi chạy Spotlight tour lần đầu sau khi frame render
       WidgetsBinding.instance.addPostFrameCallback((_) {
         // Chỉ chạy nếu chưa từng hoàn thành
-        final pref = ref.read(dashboardPreferencesProvider);
-        if (!pref.isTourCompleted(GuideRegistry.overviewTourId)) {
+        if (!preferences.isTourCompleted(GuideRegistry.overviewTourId)) {
           CoachMarkOverlay.show(
-            context: context,
+            context: navigator.context,
             steps: GuideRegistry.getOverviewTourSteps(),
             onFinish: () {
-              pref.markTourCompleted(GuideRegistry.overviewTourId);
+              preferences.markTourCompleted(GuideRegistry.overviewTourId);
             },
             onDontShowAgain: (dontShow) {
               if (dontShow) {
-                pref.markTourCompleted(GuideRegistry.overviewTourId);
+                preferences.markTourCompleted(GuideRegistry.overviewTourId);
               }
             },
           );

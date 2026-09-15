@@ -82,7 +82,7 @@ void main() {
 
       expect(session.startSoc, 20.0);
       expect(session.targetSoc, 80.0);
-      expect(session.targetSoc, greaterThan(session.startSoc!));
+      expect(session.targetSoc, greaterThan(session.startSoc));
     });
 
     test('Division by zero protection in efficiency and charging speed math', () {
