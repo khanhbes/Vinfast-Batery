@@ -1078,6 +1078,10 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
   Future<bool> start({required bool confirmed}) async {
     final preview = state.preview;
     if (!confirmed || preview == null) return false;
+    if (state.phase == SmartChargingViewPhase.starting ||
+        state.phase == SmartChargingViewPhase.stopping) {
+      return false;
+    }
     if (!preview.aiChargeEligible && !preview.isPhysicsFallback) {
       state = state.copyWith(
         actionError: 'Model AI chưa sẵn sàng. Không thể bắt đầu sạc theo AI.',
@@ -1194,6 +1198,10 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
 
   Future<bool> stop({UserStopReason reason = UserStopReason.none}) async {
     final session = state.session;
+    if (state.phase == SmartChargingViewPhase.starting ||
+        state.phase == SmartChargingViewPhase.stopping) {
+      return false;
+    }
     if (session == null) return manualOff();
     state = state.copyWith(
       phase: SmartChargingViewPhase.stopping,
@@ -1281,6 +1289,10 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
   }
 
   Future<bool> manualOn(Duration duration) async {
+    if (state.phase == SmartChargingViewPhase.starting ||
+        state.phase == SmartChargingViewPhase.stopping) {
+      return false;
+    }
     if (!state.capabilities.readyForControl &&
         !state.capabilities.supportsDeviceTimer &&
         !state.capabilities.cloudAvailable &&
@@ -1408,7 +1420,13 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     double soc,
   ) async {
     _repository ??= await SmartChargerRepositoryFactory.create();
-    return _repository!.confirmActualEndSoc(session, soc);
+    final summary = await _repository!.confirmActualEndSoc(session, soc);
+    await _trainingSyncService.enqueueActualSoc(session.sessionId, soc);
+    // A confirmed label can make a previously power-only Direct session
+    // eligible for personal ETA training. Keep it durable while offline.
+    await _trainingSyncService.enqueue(session.sessionId);
+    unawaited(_trainingSyncService.flush());
+    return summary;
   }
 
   Future<SmartChargePreferences> saveTariff(double? tariffVndPerKwh) async {

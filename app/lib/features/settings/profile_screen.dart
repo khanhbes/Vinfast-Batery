@@ -21,6 +21,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _authService = AuthService();
   bool _isLoading = true;
   bool _isEditing = false;
+  // ignore: unused_field
   bool _isSaving = false;
 
   // Profile data

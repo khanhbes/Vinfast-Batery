@@ -316,7 +316,7 @@ class ApiService {
       'debugCode': debugCode,
       if (parsedJson?['requestId'] != null)
         'requestId': parsedJson!['requestId'],
-      if (debugDetail != null) 'debugDetail': debugDetail,
+      'debugDetail': ?debugDetail,
     };
   }
 
@@ -331,7 +331,7 @@ class ApiService {
   ///   'modelVersion': string,
   ///   'isBeta': bool,
   ///   'confidence': double,
-  ///   'warnings': List<String>,
+  ///   'warnings': a list of strings,
   ///   // Backward compat
   ///   'estimatedMinutes': double,
   ///   'formattedTime': string,

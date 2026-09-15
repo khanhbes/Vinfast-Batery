@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:vinfast_battery/core/models/feature_availability.dart';
 import 'package:vinfast_battery/core/services/feature_availability_registry.dart';
 

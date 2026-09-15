@@ -472,6 +472,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     }
   }
 
+  // ignore: unused_element
   Future<void> _manualOn(SmartChargingController controller) async {
     const defaultDuration = Duration(hours: 1);
     final duration = await showModalBottomSheet<Duration>(
@@ -607,6 +608,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     }
   }
 
+  // ignore: unused_element
   Future<void> _aiStart(
     SmartChargingUiState state,
     SmartChargingController controller,
@@ -708,6 +710,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
   }
 }
 
+// ignore: unused_element
 class _ChargeModeSwitch extends StatelessWidget {
   const _ChargeModeSwitch({required this.aiMode, required this.onChanged});
 
@@ -1229,9 +1232,9 @@ class _SmartChargeHeaderState extends State<_SmartChargeHeader>
 }
 
 /// Target battery planning workspace
+// ignore: unused_element
 class _PlanSection extends StatelessWidget {
   const _PlanSection({
-    super.key,
     required this.state,
     required this.controller,
     required this.onStart,
@@ -1698,9 +1701,9 @@ class _PreviewRow extends StatelessWidget {
 }
 
 /// Active Charging view when relay is ON
+// ignore: unused_element
 class _ActiveChargingView extends StatelessWidget {
   const _ActiveChargingView({
-    super.key,
     required this.state,
     required this.onStop,
   });
@@ -1988,9 +1991,9 @@ class _LivePowerSparkline extends StatelessWidget {
 }
 
 /// Manual controls section
+// ignore: unused_element
 class _ManualControlsSection extends StatelessWidget {
   const _ManualControlsSection({
-    super.key,
     required this.state,
     required this.onOn,
     required this.onOff,
@@ -2070,6 +2073,7 @@ class _ManualControlsSection extends StatelessWidget {
 }
 
 /// History section showing previous charging sessions
+// ignore: unused_element
 class _HistorySection extends StatelessWidget {
   const _HistorySection({
     required this.sessions,

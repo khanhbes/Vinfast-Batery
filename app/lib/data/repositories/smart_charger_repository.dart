@@ -116,7 +116,7 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
   Future<SmartChargingPlanPreview> preview(SmartChargingPlanDraft draft) async {
     if (_previewService != null) {
       try {
-        return await _previewService!.createPreview(draft);
+        return await _previewService.createPreview(draft);
       } catch (_) {
         // Remote server preview failed; fall back to local predictor
       }

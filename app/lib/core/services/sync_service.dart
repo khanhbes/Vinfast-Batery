@@ -1,3 +1,7 @@
+// Network synchronization diagnostics are intentionally emitted in debug and
+// command-line support builds.
+// ignore_for_file: avoid_print
+
 import 'dart:convert';
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';

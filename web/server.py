@@ -685,6 +685,47 @@ def validate_date_of_birth(dob_str: str) -> tuple[bool, str | None]:
     return True, None
 
 
+@app.route('/api/mobile/registration-bootstrap', methods=['POST'])
+@require_auth
+def registration_bootstrap():
+    """Idempotently create the profile required by the new-account flow.
+
+    Firebase Auth is the account authority.  This endpoint deliberately does
+    not create another Auth user, so a transient Firestore failure can safely
+    be retried after registration without asking the owner to sign up again.
+    """
+    if not _fs():
+        return jsonify({'success': False, 'error': 'Firestore unavailable', 'code': 'firestoreUnavailable'}), 503
+    body = request.get_json(silent=True) or {}
+    name = str(body.get('name') or '').strip()
+    phone = str(body.get('phone') or '').strip()
+    if len(name) > 100 or len(phone) > 20:
+        return jsonify({'success': False, 'error': 'Invalid registration profile', 'code': 'invalidProfile'}), 400
+    now_iso = datetime.now(timezone.utc).isoformat()
+    payload = {
+        'uid': request._uid,
+        'email': request._email,
+        'registrationFlowVersion': 2,
+        'source': 'flutter_app',
+        'updatedAt': now_iso,
+    }
+    if name:
+        payload.update({'name': name, 'displayName': name})
+    if phone:
+        payload['phone'] = phone
+    try:
+        ref = _fs().collection('users').document(request._uid)
+        ref.set(payload, merge=True)
+        data = ref.get().to_dict() or payload
+        return jsonify({'success': True, 'data': {
+            'registrationFlowVersion': int(data.get('registrationFlowVersion') or 2),
+            'isCompleted': bool(data.get('onboardingCompletedAt')),
+            'onboardingCompletedAt': data.get('onboardingCompletedAt'),
+        }})
+    except Exception as exc:
+        return jsonify({'success': False, 'error': f'Registration bootstrap failed: {exc}', 'code': 'bootstrapFailed'}), 503
+
+
 @app.route('/api/user/profile', methods=['PATCH'])
 @require_auth
 def patch_user_profile():

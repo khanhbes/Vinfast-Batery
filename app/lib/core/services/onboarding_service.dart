@@ -127,6 +127,20 @@ class OnboardingService {
     return null;
   }
 
+  Future<Map<String, dynamic>> bootstrapRegistration({
+    required String name,
+    String? phone,
+  }) async {
+    try {
+      return await _api.post('/api/mobile/registration-bootstrap', {
+        'name': name.trim(),
+        if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
+      });
+    } catch (e) {
+      return {'success': false, 'error': 'Unable to bootstrap account: $e'};
+    }
+  }
+
   /// Cập nhật thông tin profile (họ tên bắt buộc, phone và ngày sinh tùy chọn)
   Future<Map<String, dynamic>> updateProfile({
     required String name,

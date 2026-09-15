@@ -1,5 +1,6 @@
 /// Firebase Emulator and Mock Data Fixtures for VinFast Battery App QA Audit.
 /// Includes User A/B isolation trees and malformed Firestore fixtures.
+library;
 
 class QaUserFixture {
   const QaUserFixture({

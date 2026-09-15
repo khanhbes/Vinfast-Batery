@@ -272,7 +272,7 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -382,7 +382,7 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -507,8 +507,8 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
                       isCurved: true,
                       gradient: LinearGradient(
                         colors: [
-                          Colors.blue.withOpacity(0.8),
-                          Colors.blue.withOpacity(0.2),
+                          Colors.blue.withValues(alpha: 0.8),
+                          Colors.blue.withValues(alpha: 0.2),
                         ],
                       ),
                       barWidth: 3,
@@ -528,8 +528,8 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
                         show: true,
                         gradient: LinearGradient(
                           colors: [
-                            Colors.blue.withOpacity(0.3),
-                            Colors.blue.withOpacity(0.1),
+                            Colors.blue.withValues(alpha: 0.3),
+                            Colors.blue.withValues(alpha: 0.1),
                           ],
                         ),
                       ),

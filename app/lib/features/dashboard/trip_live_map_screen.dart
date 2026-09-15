@@ -348,10 +348,11 @@ class _TripLiveMapScreenState extends State<TripLiveMapScreen> {
     try {
       await _tripService.stopTrip();
       BackgroundServiceConfig.sendCommand('stopTrip');
-      if (mounted)
+      if (mounted) {
         Navigator.of(
           context,
         ).pop(true); // pop với result=true báo Dashboard refresh
+      }
     } catch (e) {
       AppPopup.showError('Kết thúc chuyến đi thất bại: $e');
     }

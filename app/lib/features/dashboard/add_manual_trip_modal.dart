@@ -359,11 +359,13 @@ class _AddManualTripModalState extends ConsumerState<AddManualTripModal> {
     final startOdo = int.tryParse(_startOdoCtrl.text) ?? 0;
     final endOdo = int.tryParse(_endOdoCtrl.text) ?? 0;
 
-    if (startBat <= endBat)
+    if (startBat <= endBat) {
       return 'Pin đầu phải lớn hơn pin cuối (vì tiêu hao)';
+    }
     if (endOdo <= startOdo) return 'ODO cuối phải lớn hơn ODO đầu';
-    if (!_endTime.isAfter(_startTime))
+    if (!_endTime.isAfter(_startTime)) {
       return 'Giờ kết thúc phải sau giờ xuất phát';
+    }
     return null;
   }
 

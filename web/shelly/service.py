@@ -369,6 +369,48 @@ class SmartChargeService:
             "active": bool(session and session.state in ("arming", "active")),
         }
 
+    def _finalize_session(
+        self,
+        uid: str,
+        session: ChargingSession,
+        *,
+        state: str,
+        stop_reason: str,
+        status=None,
+        meter_energy_wh: float | None = None,
+        user_stop_reason: str | None = None,
+    ) -> ChargingSession:
+        """Apply every terminal transition through one durable, idempotent path.
+
+        Hardware commands and readback happen before this method.  This method
+        only records the observed result, includes the final meter reading,
+        releases the device lease through the repository and emits push after
+        persistence.  A repeated terminal callback therefore cannot create a
+        second history item or move the vehicle SOC backwards.
+        """
+        if session.state not in ("arming", "active"):
+            return session
+        now = self.clock()
+        # Zero is a valid meter reading, so never use a truthy fallback here.
+        final_energy = meter_energy_wh
+        if final_energy is None and status is not None:
+            final_energy = status.energy_wh
+        if final_energy is not None:
+            self._ingest_energy(session, final_energy)
+        session.state = state
+        session.stop_reason = stop_reason
+        if user_stop_reason is not None:
+            session.user_stop_reason = user_stop_reason
+        session.stopped_at = now
+        session.updated_at = now
+        session.relay_verified = True
+        session.version += 1
+        self.repository.save_session(uid, session)
+        self.repository.upsert_charge_log(uid, session)
+        # save_session releases both the in-memory and Firestore device lease.
+        self._emit_push(uid, session)
+        return session
+
     def stop(
         self,
         uid: str,
@@ -413,19 +455,11 @@ class SmartChargeService:
         except ProviderError as exc:
             raise self._provider_error(exc) from exc
         if session:
-            now = self.clock()
-            session.state = "cancelled"
-            session.stop_reason = "manual"
-            session.user_stop_reason = user_stop_reason
-            session.stopped_at = now
-            session.updated_at = now
-            session.relay_verified = True
-            self._ingest_energy(session, verified.energy_wh)
-            session.version += 1
-            self.repository.save_session(uid, session)
-            self.repository.upsert_charge_log(uid, session)
+            self._finalize_session(
+                uid, session, state="cancelled", stop_reason="manual",
+                status=verified, user_stop_reason=user_stop_reason,
+            )
             self.repository.append_audit(uid, "relay_off_verified", session_id=session.session_id, reason="manual")
-            self._emit_push(uid, session)
         return session
 
     def personal_profile(self, uid: str, vehicle_id: str) -> PersonalChargingProfile:
@@ -501,7 +535,7 @@ class SmartChargeService:
     def confirm_actual_soc(self, uid: str, session_id: str, actual_soc: float) -> ChargingSession:
         if not 0 <= actual_soc <= 100:
             raise SmartChargeError("invalidSoc", "SOC thực tế phải từ 0–100%")
-        session = next((item for item in self.repository.history(uid, 100) if item.session_id == session_id), None)
+        session = self.repository.get_session_or_charge_log(uid, session_id)
         if session is None:
             raise SmartChargeError("sessionNotFound", "Không tìm thấy phiên sạc", 404)
         session.actual_end_soc = float(actual_soc)
@@ -530,7 +564,7 @@ class SmartChargeService:
 
 
     def ingest_personal_session(self, uid: str, session_id: str) -> dict:
-        session = self.repository.get_session(uid, session_id)
+        session = self.repository.get_session_or_charge_log(uid, session_id)
         if session is None:
             raise SmartChargeError("sessionNotFound", "Không tìm thấy phiên sạc", 404)
         self._owned_vehicle(uid, session.vehicle_id)
@@ -624,14 +658,12 @@ class SmartChargeService:
         session.updated_at = now
         if not relay_on:
             near_planned = abs((now - session.effective_stop_at).total_seconds()) <= 120
-            session.state = "completed" if near_planned else "interrupted"
-            session.stop_reason = "planned_timer" if near_planned else "relay_off"
-            session.stopped_at = now
-            session.relay_verified = True
-            session.version += 1
-            self._checkpoint_session(uid, session, force=True)
-            self.repository.upsert_charge_log(uid, session)
-            self._emit_push(uid, session)
+            self._finalize_session(
+                uid, session,
+                state="completed" if near_planned else "interrupted",
+                stop_reason="planned_timer" if near_planned else "relay_off",
+                meter_energy_wh=float(payload.get("energyWh", 0)),
+            )
         else:
             self._checkpoint_session(uid, session)
         return {"recorded": sample_due, "coverage": session.telemetry_coverage}
@@ -812,16 +844,10 @@ class SmartChargeService:
             readback = self.provider.get_status(binding)
             if readback.relay:
                 raise SmartChargeError("relayUnverified", "Không xác minh được OFF an toàn", 503)
-            session.state = "interrupted"
-            session.stop_reason = "safety_cutoff"
-            session.stopped_at = self.clock()
-            session.updated_at = session.stopped_at
-            session.relay_verified = True
-            self._ingest_energy(session, readback.energy_wh)
-            session.version += 1
-            self.repository.save_session(uid, session)
-            self.repository.upsert_charge_log(uid, session)
-            self._emit_push(uid, session)
+            self._finalize_session(
+                uid, session, state="interrupted", stop_reason="safety_cutoff",
+                status=readback,
+            )
 
     def manual_on(
         self,
@@ -947,17 +973,12 @@ class SmartChargeService:
         now = self.clock()
         if not status.relay:
             near_planned = abs((now - session.effective_stop_at).total_seconds()) <= 120
-            session.state = "completed" if near_planned else "interrupted"
-            session.stop_reason = "planned_timer" if near_planned else "relay_off"
-            session.stopped_at = now
-            session.updated_at = now
-            session.relay_verified = True
-            self._ingest_energy(session, status.energy_wh)
-            session.version += 1
-            self.repository.save_session(uid, session)
-            self.repository.upsert_charge_log(uid, session)
-            self._emit_push(uid, session)
-            return session
+            return self._finalize_session(
+                uid, session,
+                state="completed" if near_planned else "interrupted",
+                stop_reason="planned_timer" if near_planned else "relay_off",
+                status=status,
+            )
         if status.timer_remaining <= 0 and session.state in ("arming", "active"):
             try:
                 self.provider.turn_off(binding)
@@ -986,32 +1007,21 @@ class SmartChargeService:
                         self.provider.turn_off(binding)
                 except ProviderError:
                     pass
-                session.state = "failed"
-                session.stop_reason = "command_failed"
                 session.last_error = "timerNotArmed"
-                session.stopped_at = now
-                session.updated_at = now
-                session.version += 1
-                self.repository.save_session(uid, session)
-                self.repository.upsert_charge_log(uid, session)
-                self._emit_push(uid, session)
+                self._finalize_session(
+                    uid, session, state="failed", stop_reason="command_failed",
+                    status=status,
+                )
             else:
                 self._checkpoint_session(uid, session)
             return session
         near_planned = abs((now - session.effective_stop_at).total_seconds()) <= 120
-        session.state = "completed" if near_planned else "interrupted"
-        session.stop_reason = "planned_timer" if near_planned else "relay_off"
-        session.stopped_at = now
-        session.updated_at = now
-        session.relay_verified = True
-        self._ingest_energy(session, status.energy_wh)
-        session.version += 1
-        self.repository.save_session(uid, session)
-        self.repository.upsert_charge_log(uid, session)
-        # Push only after the terminal session and vehicle SOC projection are
-        # durable, so opening a notification always finds the final state.
-        self._emit_push(uid, session)
-        return session
+        return self._finalize_session(
+            uid, session,
+            state="completed" if near_planned else "interrupted",
+            stop_reason="planned_timer" if near_planned else "relay_off",
+            status=status,
+        )
 
     def _provider_error(self, exc: ProviderError) -> SmartChargeError:
         status = 401 if exc.code == "needsReauthentication" else 503

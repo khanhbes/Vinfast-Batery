@@ -222,8 +222,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       icon: Icons.person_outline_rounded,
                     ),
                     validator: (v) {
-                      if (v == null || v.trim().isEmpty)
+                      if (v == null || v.trim().isEmpty) {
                         return 'Vui lòng nhập họ tên';
+                      }
                       if (v.trim().length < 2) return 'Họ tên quá ngắn';
                       return null;
                     },
@@ -243,10 +244,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       icon: Icons.email_outlined,
                     ),
                     validator: (v) {
-                      if (v == null || v.trim().isEmpty)
+                      if (v == null || v.trim().isEmpty) {
                         return 'Vui lòng nhập email';
-                      if (!v.contains('@') || !v.contains('.'))
+                      }
+                      if (!v.contains('@') || !v.contains('.')) {
                         return 'Email không hợp lệ';
+                      }
                       return null;
                     },
                   ).appFadeSlideIn(index: 2),
@@ -265,10 +268,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       icon: Icons.phone_outlined,
                     ),
                     validator: (v) {
-                      if (v == null || v.trim().isEmpty)
+                      if (v == null || v.trim().isEmpty) {
                         return 'Vui lòng nhập số điện thoại';
-                      if (v.trim().length < 9)
+                      }
+                      if (v.trim().length < 9) {
                         return 'Số điện thoại không hợp lệ';
+                      }
                       return null;
                     },
                   ).appFadeSlideIn(index: 3),
@@ -298,8 +303,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                     ),
                     validator: (v) {
-                      if (v == null || v.isEmpty)
+                      if (v == null || v.isEmpty) {
                         return 'Vui lòng nhập mật khẩu';
+                      }
                       if (v.length < 6) return 'Mật khẩu tối thiểu 6 ký tự';
                       return null;
                     },
@@ -330,8 +336,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                     ),
                     validator: (v) {
-                      if (v == null || v.isEmpty)
+                      if (v == null || v.isEmpty) {
                         return 'Vui lòng xác nhận mật khẩu';
+                      }
                       if (v != _passCtrl.text) return 'Mật khẩu không khớp';
                       return null;
                     },

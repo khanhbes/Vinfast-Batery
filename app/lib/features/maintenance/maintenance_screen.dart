@@ -473,7 +473,7 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
                 scheduledDate: newTask.scheduledDate,
               );
             }
-            if (mounted) {
+            if (context.mounted) {
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -486,7 +486,7 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
               );
             }
           } catch (e) {
-            if (mounted) {
+            if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('Lỗi: $e'),
@@ -1494,7 +1494,7 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: entry.value.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
               itemBuilder: (_, i) {
                 final preset = entry.value[i];
                 final meta = _ServiceTypeMeta.of(preset.type);

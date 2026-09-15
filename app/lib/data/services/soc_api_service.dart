@@ -1,3 +1,6 @@
+// This command-line HTTP bridge intentionally logs request lifecycle events.
+// ignore_for_file: avoid_print
+
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

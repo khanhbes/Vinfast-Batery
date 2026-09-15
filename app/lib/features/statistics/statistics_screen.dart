@@ -1588,11 +1588,12 @@ class _AiCapacityDetailPanelState
         insight: insight,
       );
 
-      if (mounted)
+      if (mounted) {
         setState(() {
           _result = result;
           _loading = false;
         });
+      }
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }

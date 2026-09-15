@@ -11,7 +11,6 @@ import '../models/smart_charge_history.dart';
 import '../models/smart_charge_cost.dart';
 import '../models/smart_charger_status.dart';
 import '../models/smart_charging_session.dart';
-import 'smart_charge_energy_accumulator.dart';
 
 class ShellyChargeLogService {
   ShellyChargeLogService({
@@ -730,8 +729,8 @@ class ShellyChargeLogService {
     SmartChargingSession session,
     double soc,
   ) async {
-    if (soc <= session.startSoc || soc > 100) {
-      throw ArgumentError.value(soc, 'soc', 'SOC cuối phải lớn hơn SOC đầu.');
+    if (soc < 0 || soc > 100) {
+      throw ArgumentError.value(soc, 'soc', 'SOC cuối phải nằm trong khoảng 0–100.');
     }
     final points = await getTelemetry(session.sessionId);
     final summary = SmartChargeEnergySummary.calculate(
@@ -741,6 +740,9 @@ class ShellyChargeLogService {
     );
     await _firestore.collection('ChargeLogs').doc(session.sessionId).update({
       'confirmedEndSoc': soc,
+      'actualEndSoc': soc,
+      'actual_end_soc': soc,
+      'actualEndSocSource': 'user_confirmed',
       'estimatedUsableCapacityWh': summary.estimatedUsableCapacityWh,
       'updatedAt': FieldValue.serverTimestamp(),
     });

@@ -171,7 +171,7 @@ class HomeScreen extends ConsumerWidget {
                 onSync: () => _showSyncDialog(context),
               ),
               loading: () => const _QuickActionsShimmer(),
-              error: (_, __) => _QuickActionsRow(
+              error: (_, _) => _QuickActionsRow(
                 vehicleId: '',
                 onSync: () => _showSyncDialog(context),
               ),
@@ -187,7 +187,7 @@ class HomeScreen extends ConsumerWidget {
             child: vehicleAsync.when(
               data: (vehicle) => _StatCardsRow(vehicle: vehicle),
               loading: () => const _StatCardsRowShimmer(),
-              error: (_, __) => const _StatCardsRow(vehicle: null),
+              error: (_, _) => const _StatCardsRow(vehicle: null),
             ),
           ),
         );
@@ -208,7 +208,7 @@ class HomeScreen extends ConsumerWidget {
                           message: 'Cần thêm dữ liệu pin để dự đoán quãng đường',
                         ),
               loading: () => const SizedBox.shrink(),
-              error: (_, __) => const SizedBox.shrink(),
+              error: (_, _) => const SizedBox.shrink(),
             ),
           ),
         );
@@ -227,7 +227,7 @@ class HomeScreen extends ConsumerWidget {
                 vehicleId: vehicle?.vehicleId ?? '',
               ),
               loading: () => const _BatteryHealthShimmer(),
-              error: (_, __) => const _BatteryHealthCard(soh: null, vehicleId: ''),
+              error: (_, _) => const _BatteryHealthCard(soh: null, vehicleId: ''),
             ),
           ),
         );
@@ -252,7 +252,7 @@ class HomeScreen extends ConsumerWidget {
             child: vehicleAsync.when(
               data: (vehicle) => _EfficiencyReference(vehicle: vehicle),
               loading: () => const SizedBox.shrink(),
-              error: (_, __) => const SizedBox.shrink(),
+              error: (_, _) => const SizedBox.shrink(),
             ),
           ),
         );
@@ -407,7 +407,7 @@ class _VehicleBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(28),
         color: CockpitColors.surface,
         image: DecorationImage(
-          onError: (_, __) {},
+          onError: (_, _) {},
           image: const NetworkImage(
             'https://images.unsplash.com/photo-1617788138017-80ad40651399?w=800',
           ),
@@ -775,6 +775,7 @@ class _BatteryHealthCardState extends State<_BatteryHealthCard>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
+  // ignore: unused_field
   bool _isLoading = false;
 
   @override
@@ -796,6 +797,7 @@ class _BatteryHealthCardState extends State<_BatteryHealthCard>
     super.dispose();
   }
 
+  // ignore: unused_element
   Future<void> _syncBatteryState() async {
     if (widget.vehicleId.isEmpty) return;
 
@@ -1235,6 +1237,7 @@ class _SyncDialogState extends State<_SyncDialog>
   }
 
   // Efficiency Card Widget
+  // ignore: unused_element
   Widget _buildEfficiencyCard({required double efficiency}) {
     return Container(
       padding: EdgeInsets.all(20),
@@ -1299,6 +1302,7 @@ class _SyncDialogState extends State<_SyncDialog>
   }
 
   // Achievement Card Widget
+  // ignore: unused_element
   Widget _buildAchievementCard({required double efficiency}) {
     return Container(
       padding: EdgeInsets.all(20),

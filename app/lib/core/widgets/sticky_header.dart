@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../../core/theme/app_colors.dart';
 
 class StickyHeaderDelegate extends SliverPersistentHeaderDelegate {
@@ -19,11 +18,11 @@ class StickyHeaderDelegate extends SliverPersistentHeaderDelegate {
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.background.withOpacity(opacity > 0.3 ? 1.0 : 0.0),
+        color: AppColors.background.withValues(alpha: opacity > 0.3 ? 1.0 : 0.0),
         boxShadow: opacity > 0.3
             ? [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.15),
+                  color: Colors.black.withValues(alpha: 0.15),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),

@@ -90,6 +90,34 @@ services:
     networks:
       - vinfast_net
 
+  smart-charge-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    command: ["python", "smart_charge_worker_entry.py"]
+    container_name: vinfast_smart_charge_worker
+    restart: unless-stopped
+    healthcheck:
+      disable: true
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      FIREBASE_CREDENTIALS_JSON: ${FIREBASE_CREDENTIALS_JSON:?Set FIREBASE_CREDENTIALS_JSON in the environment}
+      AI_SERVER_URL: http://ai:8001
+      AI_SERVER_INTERNAL_TOKEN: ${AI_SERVER_INTERNAL_TOKEN:?Set AI_SERVER_INTERNAL_TOKEN in the environment}
+      SHELLY_PROVIDER: ${SHELLY_PROVIDER:-integrator}
+      SHELLY_LEGACY_HOST: ${SHELLY_LEGACY_HOST:-}
+      SHELLY_LEGACY_AUTH_KEY: ${SHELLY_LEGACY_AUTH_KEY:-}
+      SHELLY_LEGACY_DEVICE_ID: ${SHELLY_LEGACY_DEVICE_ID:-}
+      SHELLY_INTEGRATOR_TAG: ${SHELLY_INTEGRATOR_TAG:-}
+      SHELLY_PROFILE_MASTER_KEY: ${SHELLY_PROFILE_MASTER_KEY:-}
+      SMART_CHARGE_MAX_MINUTES: ${SMART_CHARGE_MAX_MINUTES:-600}
+      SMART_CHARGE_WORKER_POLL_SECONDS: ${SMART_CHARGE_WORKER_POLL_SECONDS:-60}
+    networks:
+      - vinfast_net
+
   # ── React Dashboard → Nginx (internal; Caddy terminates TLS) ──
   dashboard:
     build:
