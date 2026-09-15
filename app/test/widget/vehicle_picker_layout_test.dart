@@ -89,4 +89,41 @@ void main() {
     expect(find.byType(VehiclePickerSheet), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('Vehicle switcher remains compact in a 393dp app bar', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          allVehiclesProvider.overrideWith((ref) async => [current]),
+          selectedVehicleIdProvider.overrideWith((ref) => current.vehicleId),
+        ],
+        child: MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: const TextScaler.linear(1.3),
+            ),
+            child: child!,
+          ),
+          home: Scaffold(
+            appBar: AppBar(
+              title: const Text('Tá»•ng quan'),
+              actions: const [
+                IconButton(onPressed: null, icon: Icon(Icons.tune_rounded)),
+                VehicleSwitcher(),
+                SizedBox(width: 48, height: 48),
+                SizedBox(width: 8),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.getSize(find.byType(VehicleSwitcher)).width, 96);
+    expect(tester.takeException(), isNull);
+  });
 }

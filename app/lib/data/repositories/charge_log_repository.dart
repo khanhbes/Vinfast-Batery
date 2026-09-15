@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/utils/firestore_safe_query.dart';
+import '../../core/services/api_service.dart';
 import '../models/charge_log_model.dart';
 import '../models/vehicle_model.dart';
 
@@ -55,6 +56,12 @@ class ChargeLogRepository {
     } on FirebaseException catch (e) {
       // Bad selectedVehicleId (xe đã bị xoá / không thuộc user) → null thay vì throw.
       if (e.code == 'permission-denied' || e.code == 'not-found') {
+        if (e.code == 'permission-denied') {
+          final vehicles = await _getVehiclesFromApi();
+          for (final vehicle in vehicles ?? const <VehicleModel>[]) {
+            if (vehicle.vehicleId == vehicleId) return vehicle;
+          }
+        }
         debugPrint('[ChargeLogRepo] getVehicle($vehicleId) ${e.code} → null');
         return null;
       }
@@ -88,12 +95,30 @@ class ChargeLogRepository {
           })
           .map((doc) => VehicleModel.fromFirestore(doc))
           .toList();
+    } on FirebaseException catch (error) {
+      if (error.code == 'permission-denied') {
+        final fallback = await _getVehiclesFromApi();
+        if (fallback != null) return fallback;
+      }
+      rethrow;
     } on TimeoutException {
       throw TimeoutException(
         'Không kết nối được Firestore (8s). Kiểm tra mạng hoặc thử lại.',
         _kFirestoreReadTimeout,
       );
     }
+  }
+
+  Future<List<VehicleModel>?> _getVehiclesFromApi() async {
+    final response = await ApiService().get('/api/user/vehicles');
+    if (response['success'] != true || response['data'] is! List) {
+      return null;
+    }
+    return (response['data'] as List)
+        .whereType<Map>()
+        .map((item) => VehicleModel.fromMap(Map<String, dynamic>.from(item)))
+        .where((vehicle) => !vehicle.isArchived)
+        .toList();
   }
 
   /// Thêm xe mới vào Firestore

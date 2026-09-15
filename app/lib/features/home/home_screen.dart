@@ -1558,6 +1558,11 @@ class _InlineErrorBanner extends StatelessWidget {
                   size: 20,
                 ),
                 visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.all(4),
+                constraints: const BoxConstraints.tightFor(
+                  width: 36,
+                  height: 36,
+                ),
                 tooltip: 'Thử lại',
               ),
             ],

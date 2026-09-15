@@ -905,13 +905,16 @@ def user_vehicles():
     uid = request._uid
     if not _fs():
         return jsonify({'success': True, 'data': []})
+    # Legacy records may not contain isDeleted. Keep the Firestore query
+    # owner-scoped and apply archive filtering without excluding those rows.
     docs = _fs().collection('Vehicles') \
         .where('ownerUid', '==', uid) \
-        .where('isDeleted', '==', False) \
         .stream()
     vehicles = []
     for doc in docs:
         d = doc.to_dict()
+        if d.get('isDeleted') is True or d.get('isArchived') is True or d.get('archivedAt') is not None:
+            continue
         d['vehicleId'] = doc.id
         vehicles.append(d)
     return jsonify({'success': True, 'data': vehicles})
