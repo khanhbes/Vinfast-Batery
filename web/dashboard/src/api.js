@@ -27,9 +27,11 @@ async function getToken(forceRefresh = false) {
 }
 
 async function apiFetch(path, options = {}) {
-  const { silent = false, ...requestOptions } = options
+  const { silent = false, retries = 2, ...requestOptions } = options
   const retryableAuth = ['GET', 'HEAD'].includes((requestOptions.method ?? 'GET').toUpperCase())
+  const retryableMethods = retryableAuth // only retry idempotent methods for network errors
   let refreshed = false
+  let attempt = 0
   for (;;) {
     const token = await getToken(refreshed)
     const headers = { 'Content-Type': 'application/json', ...requestOptions.headers }
@@ -41,8 +43,18 @@ async function apiFetch(path, options = {}) {
         timeoutMs: requestOptions.timeoutMs ?? endpointTimeout(path, requestOptions.method),
       })
     } catch (error) {
+      // Retry once with a refreshed token on 401
       if (retryableAuth && !refreshed && error instanceof PortalHttpError && error.status === 401 && auth.currentUser) {
         refreshed = true
+        continue
+      }
+      // Exponential backoff for transient network errors (5xx, timeouts, network failures)
+      const isTransient = error instanceof PortalHttpError
+        ? error.status >= 500
+        : error?.name === 'AbortError' || error?.message?.includes('fetch')
+      if (retryableMethods && isTransient && attempt < retries) {
+        attempt++
+        await new Promise(resolve => setTimeout(resolve, attempt * 750))
         continue
       }
       if (!silent) {
@@ -53,6 +65,7 @@ async function apiFetch(path, options = {}) {
     }
   }
 }
+
 
 // ── Auth ──
 export const authMe = () => apiFetch('/api/auth/me')

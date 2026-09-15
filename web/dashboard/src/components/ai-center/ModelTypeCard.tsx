@@ -1,6 +1,7 @@
 import { ChevronRight, Package, Clock, Sparkles } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ResponsiveText } from '@/components/ui/ResponsiveText';
 import { LIGHT_ACCENT_CLASSES, ModelTypeMeta, formatDate } from './types';
 import { getModelAvailability, getActiveVersion } from './modelAvailability';
 import { getModelIcon } from './modelIcons';
@@ -67,8 +68,8 @@ export default function ModelTypeCard({ meta, selected, onSelect }: Props) {
               <StatusIcon className="w-3 h-3" />
               {availability.label}
             </div>
-            <div className="font-mono font-medium truncate mt-0.5 text-muted-foreground">
-              {activeVersion || (rt.versionsCount > 0 ? `${rt.versionsCount} versions` : '—')}
+            <div className="font-mono font-medium mt-0.5 text-muted-foreground">
+              <ResponsiveText strategy="monoId" className="text-xs" alwaysTooltip>{activeVersion || (rt.versionsCount > 0 ? `${rt.versionsCount} versions` : '—')}</ResponsiveText>
             </div>
           </div>
           <div>
@@ -83,7 +84,7 @@ export default function ModelTypeCard({ meta, selected, onSelect }: Props) {
         </div>
 
         <div className="mt-4 pt-3 border-t flex items-center justify-between text-xs text-muted-foreground">
-          <span className="truncate">Load: {formatDate(rt.lastLoadAt)}</span>
+          <ResponsiveText strategy="auto" className="text-xs text-muted-foreground">{`Load: ${formatDate(rt.lastLoadAt)}`}</ResponsiveText>
           <ChevronRight className="w-4 h-4 shrink-0" />
         </div>
       </div>

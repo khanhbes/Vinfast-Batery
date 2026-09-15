@@ -1,5 +1,6 @@
 import { Upload, CheckCircle2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { ResponsiveText } from '@/components/ui/ResponsiveText';
 import { ModelVersion, formatBytes, formatDate } from '../types';
 import ModelVersionActions from './ModelVersionActions';
 
@@ -97,8 +98,8 @@ export default function ModelVersionsList({
               <td className="py-3 px-3 text-slate-400 text-xs">
                 {v.sizeBytes == null ? '—' : formatBytes(v.sizeBytes)}
               </td>
-              <td className="py-3 px-3 text-slate-400 text-xs truncate max-w-[200px]" title={v.note || ''}>
-                {v.note || '—'}
+              <td className="py-3 px-3 text-slate-400 text-xs max-w-[200px]">
+                <ResponsiveText strategy="auto" className="text-xs text-slate-400" maxLines={2} alwaysTooltip>{v.note || '—'}</ResponsiveText>
               </td>
               <td className="py-3 px-3 text-right">
                 <ModelVersionActions

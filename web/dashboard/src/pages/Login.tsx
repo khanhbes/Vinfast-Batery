@@ -51,18 +51,22 @@ export default function Login() {
 
   return (
     <>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-4">
-        <div className="page-enter w-full max-w-md">
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-primary/10 rounded-2xl mb-4 border border-primary/20 shadow-[0_0_20px_rgba(0,209,255,0.2)]">
-              <BatteryCharging className="w-8 h-8 text-primary" />
+      <div className="login-bg relative flex min-h-screen items-center justify-center overflow-hidden p-4">
+        {/* Animated gradient orbs */}
+        <div className="pointer-events-none absolute -left-40 -top-40 h-96 w-96 animate-[pulse_8s_ease-in-out_infinite] rounded-full bg-emerald-500/15 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-40 -right-40 h-96 w-96 animate-[pulse_10s_ease-in-out_infinite_2s] rounded-full bg-primary/10 blur-3xl" />
+
+        <div className="page-enter relative z-10 w-full max-w-md">
+          <div className="mb-8 text-center">
+            <div className="relative mx-auto mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 shadow-[0_0_30px_rgba(16,185,129,0.25)]">
+              <BatteryCharging className="h-8 w-8 text-emerald-400" />
             </div>
             <h1 className="text-2xl font-bold text-foreground">VinFast BMS</h1>
-            <p className="text-muted-foreground mt-2">Battery operations and AI workspace</p>
+            <p className="mt-2 text-sm text-muted-foreground">Battery operations and AI workspace</p>
           </div>
 
-          <Card className="border-border/50 bg-surface/50 backdrop-blur-sm shadow-xl">
-            <CardHeader className="text-center pb-4">
+          <Card className="border-border/30 bg-card/80 shadow-2xl backdrop-blur-xl">
+            <CardHeader className="pb-4 text-center">
               <CardTitle className="text-xl">Administrator sign in</CardTitle>
             </CardHeader>
             <CardContent>
@@ -77,7 +81,7 @@ export default function Login() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
-                    className="bg-surface-light/50 border-border/50"
+                    className="border-border/40 bg-background/60"
                   />
                 </div>
 
@@ -92,7 +96,7 @@ export default function Login() {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
-                      className="bg-surface-light/50 border-border/50 pr-10"
+                      className="border-border/40 bg-background/60 pr-10"
                     />
                     <Button
                       type="button"
@@ -103,19 +107,19 @@ export default function Login() {
                       className="absolute right-0 top-0 h-full px-3 text-muted-foreground hover:text-foreground"
                       onClick={() => setShowPassword(!showPassword)}
                     >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </Button>
                   </div>
                 </div>
 
                 <Button
                   type="submit"
-                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+                  className="w-full bg-emerald-500 text-slate-950 hover:bg-emerald-400"
                   disabled={loading}
                 >
                   {loading ? (
                     <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       Signing in...
                     </>
                   ) : (
@@ -123,9 +127,12 @@ export default function Login() {
                   )}
                 </Button>
               </form>
-
             </CardContent>
           </Card>
+
+          <p className="mt-6 text-center text-xs text-muted-foreground/60">
+            Authorized administrators only. Activity is logged.
+          </p>
         </div>
       </div>
       <Toaster position="top-right" />

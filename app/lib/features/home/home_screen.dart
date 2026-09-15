@@ -22,6 +22,7 @@ import '../dashboard/dashboard_screen.dart';
 import '../smart_charging/shelly_setup_screen.dart';
 import '../trip_planner/trip_planner_wrapper.dart';
 import '../maintenance/maintenance_screen.dart';
+import '../../core/widgets/responsive_text.dart';
 
 // =============================================================================
 // Home Screen V4 — Modern Dashboard Design
@@ -521,10 +522,10 @@ class _VehicleBanner extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
                     ),
-                    child: Text(
+                    child: ResponsiveText(
                       vehicle?.vinfastModelName?.toUpperCase() ?? 'VF COCKPIT',
                       maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      strategy: ResponsiveTextStrategy.name,
                       style: CockpitTypography.label(
                         color: Colors.white70,
                         fontSize: 10,
@@ -551,10 +552,10 @@ class _VehicleBanner extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
+                      ResponsiveText(
                         name,
                         maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                        strategy: ResponsiveTextStrategy.name,
                         style: CockpitTypography.heading(
                           color: Colors.white,
                           fontSize: 22,
