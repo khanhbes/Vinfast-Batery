@@ -30,11 +30,13 @@ class RecentChargingChart extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header Row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
+          // Header: responsive layout
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+              final isNarrow = constraints.maxWidth < 280 || scale > 1.3;
+
+              final titleContent = Row(
                 children: [
                   Container(
                     padding: const EdgeInsets.all(8),
@@ -49,54 +51,97 @@ class RecentChargingChart extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Xu hướng sạc gần đây',
-                        style: CockpitTypography.heading(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: CockpitColors.text,
-                        ),
-                      ),
-                      Text(
-                        'Công suất nạp thực tế theo thời gian',
-                        style: CockpitTypography.label(
-                          fontSize: 11,
-                          color: CockpitColors.dim,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              if (onViewHistory != null)
-                InkWell(
-                  onTap: onViewHistory,
-                  borderRadius: BorderRadius.circular(8),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    child: Row(
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Xem tất cả',
-                          style: CockpitTypography.label(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: CockpitColors.emeraldStrong,
+                          'Xu hướng sạc gần đây',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: CockpitTypography.heading(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: CockpitColors.text,
                           ),
                         ),
-                        const Icon(
-                          Icons.chevron_right_rounded,
-                          size: 16,
-                          color: CockpitColors.emeraldStrong,
+                        Text(
+                          'Công suất nạp thực tế theo thời gian',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: CockpitTypography.label(
+                            fontSize: 11,
+                            color: CockpitColors.dim,
+                          ),
                         ),
                       ],
                     ),
                   ),
-                ),
-            ],
+                ],
+              );
+
+              final historyButton = onViewHistory != null
+                  ? InkWell(
+                      onTap: onViewHistory,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                'Xem tất cả',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: CockpitTypography.label(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: CockpitColors.emeraldStrong,
+                                ),
+                              ),
+                            ),
+                            const Icon(
+                              Icons.chevron_right_rounded,
+                              size: 16,
+                              color: CockpitColors.emeraldStrong,
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : null;
+
+              if (isNarrow) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    titleContent,
+                    if (historyButton != null) ...[
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: historyButton,
+                      ),
+                    ],
+                  ],
+                );
+              }
+
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(child: titleContent),
+                  if (historyButton != null) ...[
+                    const SizedBox(width: 8),
+                    historyButton,
+                  ],
+                ],
+              );
+            },
           ),
 
           const SizedBox(height: 20),

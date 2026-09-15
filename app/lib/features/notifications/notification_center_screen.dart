@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/notification_center_service.dart';
 import '../../core/providers/app_providers.dart';
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_ui_colors.dart';
+import '../../core/widgets/app_screen_header.dart';
+import '../../core/widgets/empty_state.dart';
+import '../../core/widgets/error_state.dart';
+import '../../core/widgets/loading_skeleton.dart';
 import '../../data/models/user_notification.dart';
 import '../../navigation/app_navigation.dart';
 
@@ -29,60 +32,93 @@ class NotificationCenterScreen extends ConsumerStatefulWidget {
 class _NotificationCenterScreenState
     extends ConsumerState<NotificationCenterScreen> {
   final _service = NotificationCenterService();
+  bool _isDeletingAll = false;
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppUiColors.of(context);
     final notificationsAsync = ref.watch(notificationsProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: AppColors.textPrimary),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          'Thông báo',
-          style: TextStyle(
-            color: AppColors.textPrimary,
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        actions: [
-          // Mark all read button
-          TextButton.icon(
-            onPressed: () => _markAllAsRead(),
-            icon: const Icon(Icons.done_all, size: 18),
-            label: const Text('Đọc tất cả'),
-            style: TextButton.styleFrom(foregroundColor: AppColors.primary),
-          ),
-        ],
-      ),
-      body: RefreshIndicator(
-        color: AppColors.primary,
-        onRefresh: () async {
-          // Invalidate provider để tạo lại stream → retry query
-          ref.invalidate(notificationsProvider);
-          // Đợi 1 frame để stream re-subscribe
-          await Future<void>.delayed(const Duration(milliseconds: 200));
-        },
-        child: notificationsAsync.when(
-          data: (notifications) {
-            if (notifications.isEmpty) {
-              return _buildScrollableState(_buildEmptyState());
-            }
-            return _buildNotificationList(notifications);
-          },
-          loading: () => const Center(
-            child: CircularProgressIndicator(color: AppColors.primary),
-          ),
-          error: (error, stack) {
-            debugPrint('[NotificationCenter] Stream error: $error');
-            return _buildScrollableState(_buildErrorState(error));
-          },
+      backgroundColor: colors.background,
+      body: SafeArea(
+        child: Column(
+          children: [
+            AppScreenHeader(
+              icon: Icons.notifications_rounded,
+              title: 'Thông báo',
+              subtitle: 'Cập nhật hệ thống & model AI',
+              showBackButton: true,
+              iconColor: colors.primary,
+              actions: [
+                IconButton(
+                  tooltip: 'Đánh dấu tất cả là đã đọc',
+                  onPressed: () => _markAllAsRead(),
+                  icon: Icon(
+                    Icons.done_all_rounded,
+                    size: 20,
+                    color: colors.primary,
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Xóa tất cả thông báo',
+                  onPressed:
+                      notificationsAsync.asData?.value.isNotEmpty == true &&
+                          !_isDeletingAll
+                      ? _confirmDeleteAll
+                      : null,
+                  icon: _isDeletingAll
+                      ? SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: colors.danger,
+                          ),
+                        )
+                      : Icon(
+                          Icons.delete_sweep_outlined,
+                          color: colors.muted,
+                        ),
+                ),
+                const SizedBox(width: 4),
+              ],
+            ),
+            Expanded(
+              child: RefreshIndicator(
+                color: colors.primary,
+                backgroundColor: colors.surface,
+                onRefresh: () async {
+                  // Invalidate provider để tạo lại stream → retry query
+                  ref.invalidate(notificationsProvider);
+                  // Đợi 1 frame để stream re-subscribe
+                  await Future<void>.delayed(const Duration(milliseconds: 200));
+                },
+                child: notificationsAsync.when(
+                  data: (notifications) {
+                    if (notifications.isEmpty) {
+                      return _buildScrollableState(
+                        const EmptyState(
+                          icon: Icons.notifications_off_outlined,
+                          title: 'Chưa có thông báo',
+                          message:
+                              'Các thông báo về model AI, bảo dưỡng và cảnh báo pin sẽ xuất hiện ở đây',
+                        ),
+                      );
+                    }
+                    return _buildNotificationList(notifications);
+                  },
+                  loading: () => const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: LoadingSkeleton(layout: SkeletonLayout.list),
+                  ),
+                  error: (error, stack) {
+                    debugPrint('[NotificationCenter] Stream error: $error');
+                    return _buildScrollableState(_buildErrorState(error));
+                  },
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -102,95 +138,14 @@ class _NotificationCenterScreenState
   }
 
   Widget _buildErrorState(Object error) {
-    final message = error.toString();
-    final isIndex =
-        message.contains('failed-precondition') ||
-        message.toLowerCase().contains('index');
-    final isPermission =
-        message.contains('permission-denied') ||
-        message.toLowerCase().contains('permission');
-
-    final hint = isIndex
-        ? 'Query Firestore cần composite index. Hãy deploy `firestore.indexes.json` mới nhất.'
-        : isPermission
-        ? 'Bạn không có quyền đọc thông báo. Vui lòng đăng nhập lại.'
-        : 'Đã xảy ra lỗi khi tải thông báo. Vui lòng thử lại.';
-
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.error_outline, size: 56, color: Colors.red.withAlpha(180)),
-          const SizedBox(height: 16),
-          Text(
-            'Không tải được thông báo',
-            style: TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            hint,
-            textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-          ),
-          const SizedBox(height: 16),
-          if (kDebugMode)
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: AppColors.textSecondary.withAlpha(140),
-                fontSize: 11,
-              ),
-            ),
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: () => ref.invalidate(notificationsProvider),
-            icon: const Icon(Icons.refresh),
-            label: const Text('Thử lại'),
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyState() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.notifications_off_outlined,
-            size: 64,
-            color: AppColors.textSecondary.withAlpha(100),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Chưa có thông báo',
-            style: TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Các thông báo về model AI, bảo dưỡng\nvà cảnh báo pin sẽ xuất hiện ở đây',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: AppColors.textSecondary.withAlpha(150),
-              fontSize: 13,
-            ),
-          ),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: ErrorState.fromError(
+          error: error,
+          prefix: 'Không tải được thông báo',
+          onRetry: () => ref.invalidate(notificationsProvider),
+        ),
       ),
     );
   }
@@ -217,6 +172,59 @@ class _NotificationCenterScreenState
         const SnackBar(content: Text('Đã đánh dấu tất cả là đã đọc')),
       );
     }
+  }
+
+  Future<void> _confirmDeleteAll() async {
+    final colors = AppUiColors.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: colors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Xóa tất cả thông báo?',
+          style: TextStyle(color: colors.text, fontWeight: FontWeight.w600),
+        ),
+        content: Text(
+          'Tất cả thông báo trong tài khoản này sẽ bị xóa vĩnh viễn.',
+          style: TextStyle(color: colors.muted),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text('Hủy', style: TextStyle(color: colors.muted)),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            icon: const Icon(Icons.delete_sweep_outlined),
+            label: const Text('Xóa tất cả'),
+            style: FilledButton.styleFrom(
+              backgroundColor: colors.danger,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isDeletingAll = true);
+    final deleted = await _service.deleteAll();
+    if (!mounted) return;
+    setState(() => _isDeletingAll = false);
+    if (deleted) {
+      ref.invalidate(notificationsProvider);
+      ref.invalidate(unreadCountProvider);
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          deleted
+              ? 'Đã xóa tất cả thông báo'
+              : 'Không thể xóa thông báo. Vui lòng thử lại.',
+        ),
+      ),
+    );
   }
 
   Future<void> _onNotificationTap(UserNotification notification) async {
@@ -251,9 +259,14 @@ class _NotificationCenterScreenState
       final uri = Uri.tryParse(target);
       final vehicleId = uri?.queryParameters['vehicleId'];
       final sessionId = uri?.queryParameters['sessionId'];
-      if (vehicleId != null && vehicleId.isNotEmpty && sessionId != null && sessionId.isNotEmpty) {
-        ref.read(pendingSmartChargeTargetProvider.notifier).state =
-            (vehicleId: vehicleId, sessionId: sessionId);
+      if (vehicleId != null &&
+          vehicleId.isNotEmpty &&
+          sessionId != null &&
+          sessionId.isNotEmpty) {
+        ref.read(pendingSmartChargeTargetProvider.notifier).state = (
+          vehicleId: vehicleId,
+          sessionId: sessionId,
+        );
       }
       AppNavigation.navigateToTab(context, 1);
       if (Navigator.canPop(context)) Navigator.pop(context);
@@ -287,31 +300,33 @@ class _NotificationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppUiColors.of(context);
+
     return Dismissible(
       key: Key(notification.id),
       direction: DismissDirection.endToStart,
       background: Container(
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          color: Colors.red.withAlpha(50),
-          borderRadius: BorderRadius.circular(12),
+          color: colors.danger.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(14),
         ),
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
-        child: const Icon(Icons.archive_outlined, color: Colors.red),
+        child: Icon(Icons.archive_outlined, color: colors.danger),
       ),
       onDismissed: (_) => onDismiss(),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
           color: notification.isUnread
-              ? AppColors.primary.withAlpha(20)
-              : AppColors.cardBackground,
-          borderRadius: BorderRadius.circular(12),
+              ? colors.primary.withValues(alpha: 0.08)
+              : colors.surface,
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: notification.isUnread
-                ? AppColors.primary.withAlpha(50)
-                : AppColors.cardBackground,
+                ? colors.primary.withValues(alpha: 0.3)
+                : colors.border,
             width: 1,
           ),
         ),
@@ -322,18 +337,18 @@ class _NotificationCard extends StatelessWidget {
             vertical: 8,
           ),
           leading: Container(
-            width: 48,
-            height: 48,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
               color: _getIconBackgroundColor(),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(_getIcon(), color: _getIconColor(), size: 24),
+            child: Icon(_getIcon(), color: _getIconColor(), size: 22),
           ),
           title: Text(
             notification.title,
             style: TextStyle(
-              color: AppColors.textPrimary,
+              color: colors.text,
               fontSize: 15,
               fontWeight: notification.isUnread
                   ? FontWeight.w700
@@ -346,7 +361,7 @@ class _NotificationCard extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 notification.message,
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                style: TextStyle(color: colors.muted, fontSize: 13),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -354,7 +369,7 @@ class _NotificationCard extends StatelessWidget {
               Text(
                 _formatTime(notification.createdAt),
                 style: TextStyle(
-                  color: AppColors.textSecondary.withAlpha(150),
+                  color: colors.muted.withValues(alpha: 0.7),
                   fontSize: 11,
                 ),
               ),
@@ -365,7 +380,7 @@ class _NotificationCard extends StatelessWidget {
                   width: 8,
                   height: 8,
                   decoration: BoxDecoration(
-                    color: AppColors.primary,
+                    color: colors.primary,
                     shape: BoxShape.circle,
                   ),
                 )
@@ -460,6 +475,7 @@ class _NotificationDetailSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppUiColors.of(context);
     final screenHeight = MediaQuery.sizeOf(context).height;
     final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
 
@@ -470,8 +486,9 @@ class _NotificationDetailSheet extends StatelessWidget {
         margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
         padding: EdgeInsets.fromLTRB(20, 16, 20, 20 + bottomPadding),
         decoration: BoxDecoration(
-          color: AppColors.cardBackground,
+          color: colors.surface,
           borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: colors.border),
         ),
         child: SingleChildScrollView(
           child: Column(
@@ -484,7 +501,7 @@ class _NotificationDetailSheet extends StatelessWidget {
                   width: 36,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: AppColors.textSecondary.withAlpha(80),
+                    color: colors.border,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -530,7 +547,7 @@ class _NotificationDetailSheet extends StatelessWidget {
                         Text(
                           _formatTime(notification.createdAt),
                           style: TextStyle(
-                            color: AppColors.textSecondary.withAlpha(160),
+                            color: colors.muted,
                             fontSize: 12,
                           ),
                         ),
@@ -544,8 +561,8 @@ class _NotificationDetailSheet extends StatelessWidget {
               // Full title
               Text(
                 notification.title,
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
+                style: TextStyle(
+                  color: colors.text,
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
                   height: 1.3,
@@ -556,28 +573,29 @@ class _NotificationDetailSheet extends StatelessWidget {
               // Full message — no maxLines truncation
               Text(
                 notification.message,
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
+                style: TextStyle(
+                  color: colors.text.withValues(alpha: 0.85),
                   fontSize: 14,
                   height: 1.6,
                 ),
               ),
 
-              // Optional user-facing context. Internal debug payload keys are
-              // intentionally hidden from the notification surface.
-              if (_metadataRows().isNotEmpty) ...[
+              // Optional user-facing context
+              if (_metadataRows(colors).isNotEmpty) ...[
                 const SizedBox(height: 16),
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withAlpha(15),
+                    color: colors.primary.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.primary.withAlpha(40)),
+                    border: Border.all(
+                      color: colors.primary.withValues(alpha: 0.2),
+                    ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: _metadataRows(),
+                    children: _metadataRows(colors),
                   ),
                 ),
               ],
@@ -593,8 +611,8 @@ class _NotificationDetailSheet extends StatelessWidget {
                     icon: const Icon(Icons.open_in_new_rounded, size: 18),
                     label: const Text('Xem chi tiết'),
                     style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: AppColors.background,
+                      backgroundColor: colors.primary,
+                      foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
@@ -608,10 +626,10 @@ class _NotificationDetailSheet extends StatelessWidget {
                   child: OutlinedButton(
                     onPressed: () => Navigator.pop(context),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.textSecondary,
+                      foregroundColor: colors.muted,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       side: BorderSide(
-                        color: AppColors.textSecondary.withAlpha(60),
+                        color: colors.border,
                       ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
@@ -627,7 +645,7 @@ class _NotificationDetailSheet extends StatelessWidget {
     );
   }
 
-  List<Widget> _metadataRows() {
+  List<Widget> _metadataRows(AppUiColors colors) {
     final payload = notification.payload;
     if (payload == null || payload.isEmpty) return const [];
 
@@ -705,7 +723,7 @@ class _NotificationDetailSheet extends StatelessWidget {
                 child: Text(
                   rows[i].label,
                   style: TextStyle(
-                    color: AppColors.textSecondary,
+                    color: colors.muted,
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
@@ -714,8 +732,8 @@ class _NotificationDetailSheet extends StatelessWidget {
               Expanded(
                 child: Text(
                   rows[i].value,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
+                  style: TextStyle(
+                    color: colors.text,
                     fontSize: 12,
                     height: 1.35,
                   ),

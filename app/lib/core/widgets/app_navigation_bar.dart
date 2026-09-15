@@ -63,7 +63,7 @@ class AppNavigationBar extends StatelessWidget {
                     child: Semantics(
                       selected: selectedIndex == i,
                       button: true,
-                      label: 'Tab ${destinations[i].$2}',
+                      label: destinations[i].$2,
                       hint: 'Chuyển sang màn hình ${destinations[i].$2}',
                       onTap: () => onSelected(i),
                       child: KeyedSubtree(
@@ -112,19 +112,21 @@ class AppNavigationBar extends StatelessWidget {
                                 ),
                               ),
                               const SizedBox(height: 3),
-                              Text(
-                                destinations[i].$2,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                textAlign: TextAlign.center,
-                                style: CockpitTypography.label(
-                                  fontSize: 11,
-                                  fontWeight: selectedIndex == i
-                                      ? FontWeight.w700
-                                      : FontWeight.w500,
-                                  color: selectedIndex == i
-                                      ? CockpitColors.emeraldStrong
-                                      : ui.muted,
+                              ExcludeSemantics(
+                                child: Text(
+                                  destinations[i].$2,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.center,
+                                  style: CockpitTypography.label(
+                                    fontSize: 11,
+                                    fontWeight: selectedIndex == i
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                    color: selectedIndex == i
+                                        ? CockpitColors.emeraldStrong
+                                        : ui.muted,
+                                  ),
                                 ),
                               ),
                             ],

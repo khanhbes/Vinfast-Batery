@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/app_ui_colors.dart';
 
 /// Widget hiển thị trạng thái rỗng — Dark Premium V3
 class EmptyState extends StatelessWidget {
@@ -21,6 +22,7 @@ class EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppUiColors.of(context);
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
@@ -31,19 +33,19 @@ class EmptyState extends StatelessWidget {
               width: 72,
               height: 72,
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.12),
+                color: colors.primary.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Icon(icon, size: 36, color: AppColors.primary),
+              child: Icon(icon, size: 36, color: colors.primary),
             ),
             const SizedBox(height: 16),
             Text(
               title,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
+                color: colors.text,
               ),
             ),
             if (message != null) ...[
@@ -51,9 +53,9 @@ class EmptyState extends StatelessWidget {
               Text(
                 message!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
-                  color: AppColors.textTertiary,
+                  color: colors.muted,
                   height: 1.4,
                 ),
               ),

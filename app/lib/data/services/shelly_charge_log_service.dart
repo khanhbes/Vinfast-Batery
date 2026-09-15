@@ -157,8 +157,8 @@ class ShellyChargeLogService {
     }, SetOptions(merge: true));
     final data = (await log.get()).data();
     final vehicleId = data?['vehicleId']?.toString() ?? '';
-    final observedAt = (data?['actualStopAt'] as Timestamp?)?.toDate() ??
-        DateTime.now();
+    final observedAt =
+        (data?['actualStopAt'] as Timestamp?)?.toDate() ?? DateTime.now();
     if (vehicleId.isNotEmpty) {
       await _updateVehicleSocIfCurrent(
         SmartChargingSession.fromJson({
@@ -460,8 +460,7 @@ class ShellyChargeLogService {
       Query<Map<String, dynamic>> query = _firestore
           .collection('ChargeLogs')
           .where('ownerUid', isEqualTo: uid)
-          .where('source', isEqualTo: _source)
-          .where('isDeleted', isEqualTo: false);
+          .where('source', isEqualTo: _source);
       if (vehicleId != null && vehicleId.isNotEmpty) {
         query = query.where('vehicleId', isEqualTo: vehicleId);
       }
@@ -493,7 +492,10 @@ class ShellyChargeLogService {
       // available (or may not have been deployed yet). History must remain
       // usable, so fall back to the security-rule-compatible equality query
       // and perform source/strategy/order/pagination locally.
-      if (error.code != 'failed-precondition') rethrow;
+      if (error.code != 'failed-precondition' &&
+          error.code != 'permission-denied') {
+        rethrow;
+      }
       return _getHistoryPageWithoutCompositeIndex(
         uid: uid,
         limit: limit,
@@ -514,13 +516,15 @@ class ShellyChargeLogService {
     final snapshot = await _firestore
         .collection('ChargeLogs')
         .where('ownerUid', isEqualTo: uid)
-        .where('isDeleted', isEqualTo: false)
         .limit(200)
         .get();
     final documents =
         snapshot.docs.where((document) {
           final data = document.data();
-          if (data['source'] != _source ||
+          if (data['isDeleted'] == true ||
+              data['isArchived'] == true ||
+              data['archivedAt'] != null ||
+              data['source'] != _source ||
               data['hiddenByUserAt'] != null ||
               !_matchesStrategy(data, strategy)) {
             return false;
@@ -570,12 +574,16 @@ class ShellyChargeLogService {
     final sessions = <SmartChargingSession>[];
     var skipped = 0;
     for (final document in documents) {
-      if (document.data()['hiddenByUserAt'] != null) {
+      final documentData = document.data();
+      if (documentData['isDeleted'] == true ||
+          documentData['isArchived'] == true ||
+          documentData['archivedAt'] != null ||
+          documentData['hiddenByUserAt'] != null) {
         skipped++;
         continue;
       }
       try {
-        final data = document.data();
+        final data = documentData;
         final raw = data['smartChargingSession'];
         final session = raw is Map
             ? SmartChargingSession.fromJson(Map<String, dynamic>.from(raw))
@@ -730,7 +738,11 @@ class ShellyChargeLogService {
     double soc,
   ) async {
     if (soc < 0 || soc > 100) {
-      throw ArgumentError.value(soc, 'soc', 'SOC cuối phải nằm trong khoảng 0–100.');
+      throw ArgumentError.value(
+        soc,
+        'soc',
+        'SOC cuối phải nằm trong khoảng 0–100.',
+      );
     }
     final points = await getTelemetry(session.sessionId);
     final summary = SmartChargeEnergySummary.calculate(
@@ -747,7 +759,10 @@ class ShellyChargeLogService {
       'updatedAt': FieldValue.serverTimestamp(),
     });
     try {
-      await ServerSmartChargerService().confirmActualSoc(session.sessionId, soc);
+      await ServerSmartChargerService().confirmActualSoc(
+        session.sessionId,
+        soc,
+      );
     } catch (e) {
       debugPrint('⚠️ Sync actual SOC to server dataset failed: $e');
     }
@@ -793,17 +808,19 @@ class ShellyChargeLogService {
     await preferences.setStringList(_pendingIndexKey, index.toList());
   }
 
-  Future<void> flushAllPending() async {
+  Future<bool> flushAllPending() async {
+    var allSucceeded = true;
     final ids =
         (await _preferences()).getStringList(_pendingIndexKey) ?? const [];
     for (final id in ids) {
       try {
         await flushPendingTelemetry(id);
       } on Object {
+        allSucceeded = false;
         // Keep the durable queue for the next foreground/login sync.
       }
     }
-    await _flushQueuedTerminalSessions();
+    return await _flushQueuedTerminalSessions() && allSucceeded;
   }
 
   Future<void> _queueTerminalSession(SmartChargingSession session) async {
@@ -824,8 +841,9 @@ class ShellyChargeLogService {
     );
   }
 
-  Future<void> _flushQueuedTerminalSessions() async {
-    if (_auth.currentUser == null) return;
+  Future<bool> _flushQueuedTerminalSessions() async {
+    if (_auth.currentUser == null) return false;
+    var allSucceeded = true;
     final preferences = await _preferences();
     final ids =
         preferences.getStringList(
@@ -842,9 +860,11 @@ class ShellyChargeLogService {
           ),
         );
       } on Object {
+        allSucceeded = false;
         // Retry on the next sync.
       }
     }
+    return allSucceeded;
   }
 
   Future<void> _removeQueuedTerminalSession(String sessionId) async {

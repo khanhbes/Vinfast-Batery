@@ -35,40 +35,59 @@ class HomeScreen extends ConsumerWidget {
     final vehicleId = ref.watch(selectedVehicleIdProvider);
     final vehicleAsync = ref.watch(vehicleProvider(vehicleId));
     final allVehiclesAsync = ref.watch(allVehiclesProvider);
-    final restoredId = ref.watch(restoreVehicleIdProvider);
     final prefService = ref.watch(dashboardPreferencesProvider);
     final visibleWidgets = prefService.visibleWidgets;
 
-    // ── Auto-select / auto-clear vehicle ID ────────────────────────────────
-    // 1. Khi danh sách xe load xong và chưa có xe được chọn → chọn xe đầu
-    //    (ưu tiên ID đã lưu trong session nếu vẫn còn trong list).
-    allVehiclesAsync.whenData((vehicles) {
-      if (vehicles.isNotEmpty && vehicleId.isEmpty) {
-        String targetId = vehicles.first.vehicleId;
-        restoredId.whenData((savedId) {
-          if (savedId.isNotEmpty &&
-              vehicles.any((v) => v.vehicleId == savedId)) {
+    // ── Initial auto-select on frame if vehicleId is not yet selected ──
+    final currentVehicles = allVehiclesAsync.valueOrNull;
+    if (currentVehicles != null && currentVehicles.isNotEmpty && vehicleId.isEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final currentId = ref.read(selectedVehicleIdProvider);
+        if (currentId.isEmpty) {
+          String targetId = currentVehicles.first.vehicleId;
+          final savedId = ref.read(restoreVehicleIdProvider).valueOrNull;
+          if (savedId != null &&
+              savedId.isNotEmpty &&
+              currentVehicles.any((v) => v.vehicleId == savedId)) {
             targetId = savedId;
           }
-        });
-        Future.microtask(() {
           ref.read(selectedVehicleIdProvider.notifier).state = targetId;
           SessionService().setSelectedVehicleId(targetId);
-        });
-      }
-    });
-
-    // 2. Nếu vehicleId đang chọn KHÔNG resolve được (stale: xe đã xoá / không
-    //    thuộc user / firestore từ chối quyền) → reset về '' để build sau
-    //    tự pick lại từ allVehicles.
-    if (vehicleId.isNotEmpty &&
-        vehicleAsync.hasValue &&
-        vehicleAsync.value == null) {
-      Future.microtask(() {
-        ref.read(selectedVehicleIdProvider.notifier).state = '';
-        SessionService().setSelectedVehicleId(null);
+        }
       });
     }
+
+    // ── Auto-select / auto-clear vehicle ID on provider changes ─────────
+    ref.listen<AsyncValue<List<VehicleModel>>>(
+      allVehiclesProvider,
+      (previous, next) {
+        next.whenData((vehicles) {
+          final currentId = ref.read(selectedVehicleIdProvider);
+          if (vehicles.isNotEmpty && currentId.isEmpty) {
+            String targetId = vehicles.first.vehicleId;
+            final savedId = ref.read(restoreVehicleIdProvider).valueOrNull;
+            if (savedId != null &&
+                savedId.isNotEmpty &&
+                vehicles.any((v) => v.vehicleId == savedId)) {
+              targetId = savedId;
+            }
+            ref.read(selectedVehicleIdProvider.notifier).state = targetId;
+            SessionService().setSelectedVehicleId(targetId);
+          }
+        });
+      },
+    );
+
+    ref.listen<AsyncValue<VehicleModel?>>(
+      vehicleProvider(vehicleId),
+      (previous, next) {
+        final currentId = ref.read(selectedVehicleIdProvider);
+        if (currentId.isNotEmpty && next.hasValue && next.value == null) {
+          ref.read(selectedVehicleIdProvider.notifier).state = '';
+          SessionService().setSelectedVehicleId(null);
+        }
+      },
+    );
 
     return Scaffold(
       backgroundColor: AppUiColors.of(context).background,
@@ -447,63 +466,71 @@ class _VehicleBanner extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 // Active badge
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.65),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: CockpitColors.emeraldStrong.withValues(alpha: 0.4),
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.65),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: CockpitColors.emeraldStrong.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: const BoxDecoration(
+                            color: CockpitColors.emeraldStrong,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: CockpitColors.emeraldStrong,
+                                blurRadius: 6,
+                                spreadRadius: 1,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            'Đã kết nối',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: CockpitTypography.label(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 7,
-                        height: 7,
-                        decoration: const BoxDecoration(
-                          color: CockpitColors.emeraldStrong,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: CockpitColors.emeraldStrong,
-                              blurRadius: 6,
-                              spreadRadius: 1,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Đã kết nối',
-                        style: CockpitTypography.label(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
-
+                const SizedBox(width: 8),
                 // Model tag
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-                  ),
-                  child: Text(
-                    vehicle?.vinfastModelName?.toUpperCase() ?? 'VF COCKPIT',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: CockpitTypography.label(
-                      color: Colors.white70,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.5,
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                    ),
+                    child: Text(
+                      vehicle?.vinfastModelName?.toUpperCase() ?? 'VF COCKPIT',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: CockpitTypography.label(
+                        color: Colors.white70,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                      ),
                     ),
                   ),
                 ),

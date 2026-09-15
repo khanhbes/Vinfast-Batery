@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import '../../core/services/api_service.dart';
 import '../models/user_notification.dart';
 
 /// Repository quản lý thông báo người dùng từ Firestore
@@ -90,7 +91,9 @@ class NotificationRepository {
     final uid = _uid;
     if (uid == null) return 0;
     final now = DateTime.now();
-    if (!force && _cachedUnread != null && _cachedUnreadAt != null &&
+    if (!force &&
+        _cachedUnread != null &&
+        _cachedUnreadAt != null &&
         now.difference(_cachedUnreadAt!) < const Duration(minutes: 1)) {
       return _cachedUnread!;
     }
@@ -182,6 +185,24 @@ class NotificationRepository {
       return true;
     } catch (e) {
       debugPrint('[NotificationRepo] Delete error: $e');
+      return false;
+    }
+  }
+
+  /// Xóa toàn bộ thông báo của tài khoản hiện tại qua API xác thực.
+  ///
+  /// Backend tự giới hạn truy vấn theo UID từ Firebase token và xóa theo các
+  /// batch nhỏ, tránh client phải tải rồi phát hàng trăm lệnh delete riêng lẻ.
+  Future<bool> deleteAll() async {
+    if (_uid == null) return false;
+    try {
+      final response = await ApiService().delete('/api/mobile/notifications');
+      if (response['success'] != true) return false;
+      _cachedUnread = 0;
+      _cachedUnreadAt = DateTime.now();
+      return true;
+    } catch (e) {
+      debugPrint('[NotificationRepo] Delete all error: $e');
       return false;
     }
   }

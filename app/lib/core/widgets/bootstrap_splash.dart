@@ -29,7 +29,7 @@ class _BootstrapSplashState extends State<BootstrapSplash>
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2400),
-    )..repeat(reverse: true);
+    );
 
     // Coordinated entrance animation
     _entranceController = AnimationController(
@@ -72,13 +72,27 @@ class _BootstrapSplashState extends State<BootstrapSplash>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      if (_pulseController.isAnimating) _pulseController.stop();
+      if (!_entranceController.isCompleted) _entranceController.value = 1.0;
+    } else {
+      if (!_pulseController.isAnimating) _pulseController.repeat(reverse: true);
+    }
+  }
+
+  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden ||
         state == AppLifecycleState.inactive) {
       if (_pulseController.isAnimating) _pulseController.stop();
     } else if (state == AppLifecycleState.resumed) {
-      if (!_pulseController.isAnimating) _pulseController.repeat(reverse: true);
+      if (!MediaQuery.disableAnimationsOf(context) &&
+          !_pulseController.isAnimating) {
+        _pulseController.repeat(reverse: true);
+      }
     }
   }
 
@@ -216,13 +230,13 @@ class _BootstrapSplashState extends State<BootstrapSplash>
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            'VINFAST BATTERY',
+                            'VinFast Battery',
                             textAlign: TextAlign.center,
                             style: CockpitTypography.heading(
                               fontSize: 24,
                               fontWeight: FontWeight.w800,
                               color: CockpitColors.text,
-                              letterSpacing: 2.5,
+                              letterSpacing: 1.5,
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -240,34 +254,36 @@ class _BootstrapSplashState extends State<BootstrapSplash>
                       ),
                     ),
 
-                    const SizedBox(height: 48),
+                    if (!reducedMotion) ...[
+                      const SizedBox(height: 48),
 
-                    // Sleek glowing progress indicator
-                    Container(
-                      width: 140,
-                      height: 4,
-                      clipBehavior: Clip.antiAlias,
-                      decoration: BoxDecoration(
-                        color: CockpitColors.surfaceSoft,
-                        borderRadius: BorderRadius.circular(999),
-                        boxShadow: [
-                          BoxShadow(
-                            color: CockpitColors.emeraldStrong.withValues(
-                              alpha: 0.35,
+                      // Sleek glowing progress indicator
+                      Container(
+                        width: 140,
+                        height: 4,
+                        clipBehavior: Clip.antiAlias,
+                        decoration: BoxDecoration(
+                          color: CockpitColors.surfaceSoft,
+                          borderRadius: BorderRadius.circular(999),
+                          boxShadow: [
+                            BoxShadow(
+                              color: CockpitColors.emeraldStrong.withValues(
+                                alpha: 0.35,
+                              ),
+                              blurRadius: 8,
+                              spreadRadius: 1,
                             ),
-                            blurRadius: 8,
-                            spreadRadius: 1,
-                          ),
-                        ],
-                      ),
-                      child: LinearProgressIndicator(
-                        backgroundColor: Colors.transparent,
-                        valueColor: const AlwaysStoppedAnimation<Color>(
-                          CockpitColors.emeraldStrong,
+                          ],
                         ),
-                        minHeight: 4,
+                        child: LinearProgressIndicator(
+                          backgroundColor: Colors.transparent,
+                          valueColor: const AlwaysStoppedAnimation<Color>(
+                            CockpitColors.emeraldStrong,
+                          ),
+                          minHeight: 4,
+                        ),
                       ),
-                    ),
+                    ],
 
                     const SizedBox(height: 18),
 

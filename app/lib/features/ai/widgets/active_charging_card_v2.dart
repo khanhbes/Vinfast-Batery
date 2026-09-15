@@ -19,6 +19,8 @@ class ActiveChargingCardV2 extends StatefulWidget {
     required this.timerVerified,
     required this.onStop,
     this.estimatedSoc,
+    this.isStopping = false,
+    this.isStarting = false,
   });
 
   final double currentPercent;
@@ -33,6 +35,8 @@ class ActiveChargingCardV2 extends StatefulWidget {
   final bool timerVerified;
   final VoidCallback onStop;
   final double? estimatedSoc;
+  final bool isStopping;
+  final bool isStarting;
 
   @override
   State<ActiveChargingCardV2> createState() => _ActiveChargingCardV2State();
@@ -127,11 +131,16 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
                     width: 10,
                     height: 10,
                     decoration: BoxDecoration(
-                      color: CockpitColors.emerald,
+                      color: widget.isStopping || widget.isStarting
+                          ? CockpitColors.amber
+                          : CockpitColors.emerald,
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: CockpitColors.emerald.withValues(alpha: .5),
+                          color: (widget.isStopping || widget.isStarting
+                                  ? CockpitColors.amber
+                                  : CockpitColors.emerald)
+                              .withValues(alpha: .5),
                           blurRadius: 8,
                         ),
                       ],
@@ -139,9 +148,15 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    'ĐANG SẠC',
+                    widget.isStopping
+                        ? 'ĐANG TẮT...'
+                        : widget.isStarting
+                        ? 'ĐANG XÁC NHẬN...'
+                        : 'ĐANG SẠC',
                     style: TextStyle(
-                      color: verifiedColor,
+                      color: widget.isStopping || widget.isStarting
+                          ? CockpitColors.amber
+                          : verifiedColor,
                       fontSize: 13,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 0.8,
@@ -358,7 +373,7 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
             width: double.infinity,
             height: 48,
             child: OutlinedButton.icon(
-              onPressed: widget.onStop,
+              onPressed: widget.isStopping ? null : widget.onStop,
               style: OutlinedButton.styleFrom(
                 foregroundColor: CockpitColors.danger,
                 side: BorderSide(
@@ -369,10 +384,19 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
                   borderRadius: BorderRadius.circular(16),
                 ),
               ),
-              icon: const Icon(Icons.power_settings_new_rounded, size: 18),
-              label: const Text(
-                'Dừng sạc',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+              icon: widget.isStopping
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: CockpitColors.danger,
+                      ),
+                    )
+                  : const Icon(Icons.power_settings_new_rounded, size: 18),
+              label: Text(
+                widget.isStopping ? 'Đang dừng sạc...' : 'Dừng sạc',
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
               ),
             ),
           ),

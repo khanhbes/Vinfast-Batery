@@ -10,6 +10,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/app_constants.dart';
 import 'api_service.dart';
+import '../../data/services/shelly_charge_log_service.dart';
 
 /// SyncService - Đồng bộ dữ liệu giữa App và Web Dashboard
 /// Xử lý: User sync, Vehicle sync, Battery state sync, Trip prediction sync
@@ -40,7 +41,9 @@ class SyncService {
     }
     if (value is DocumentReference) return value.path;
     if (value is Map) {
-      return value.map((key, item) => MapEntry(key.toString(), _jsonSafe(item)));
+      return value.map(
+        (key, item) => MapEntry(key.toString(), _jsonSafe(item)),
+      );
     }
     if (value is Iterable) return value.map(_jsonSafe).toList();
     return value;
@@ -286,6 +289,16 @@ class SyncService {
 
       final results = <String, dynamic>{};
 
+      // Flush durable Direct-mode telemetry and terminal sessions first. This
+      // is the actual charge-history synchronization path; profile/vehicle
+      // sync alone cannot recover a session queued while the app was offline.
+      try {
+        final synced = await ShellyChargeLogService().flushAllPending();
+        results['chargeHistory'] = {'synced': synced};
+      } catch (error) {
+        results['chargeHistory'] = {'synced': false, 'error': error.toString()};
+      }
+
       // 1. Sync user
       results['user'] = await syncUserToWeb();
 
@@ -311,7 +324,14 @@ class SyncService {
       await prefs.setString('last_full_sync', DateTime.now().toIso8601String());
 
       print('Full sync completed: $results');
-      return {'success': true, 'results': results};
+      final historySynced =
+          (results['chargeHistory'] as Map<String, dynamic>?)?['synced'] ==
+          true;
+      return {
+        'success': historySynced,
+        'results': results,
+        if (!historySynced) 'error': 'Không thể đồng bộ lịch sử sạc',
+      };
     } catch (e) {
       print('Error performing full sync: $e');
       return {'success': false, 'error': e.toString()};

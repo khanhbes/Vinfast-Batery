@@ -1,6 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
+
+import '../../core/theme/app_motion.dart';
+import '../../core/theme/app_ui_colors.dart';
+import '../../core/theme/cockpit_design_system.dart';
+import '../../core/widgets/app_screen_header.dart';
+import '../../core/widgets/error_state.dart';
+import '../../core/widgets/loading_skeleton.dart';
 import '../../data/models/battery_state_model.dart';
 import '../../data/models/vehicle_model.dart';
 import '../../data/services/battery_state_service.dart';
@@ -35,23 +42,21 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
     });
 
     try {
-      // Load current battery state
       final currentState = await BatteryStateService.getCurrentBatteryState(
         widget.vehicle.vehicleId,
       );
 
-      // Load battery history (last 24 hours)
       final history = await BatteryStateService.getBatteryHistory(
         vehicleId: widget.vehicle.vehicleId,
         limit: 24,
         timeRange: const Duration(hours: 24),
       );
 
-      // Load battery statistics
       final stats = await BatteryStateService.getBatteryStats(
         widget.vehicle.vehicleId,
       );
 
+      if (!mounted) return;
       setState(() {
         _currentBatteryState = currentState;
         _batteryHistory = history;
@@ -59,6 +64,7 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -72,75 +78,92 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppUiColors.of(context);
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Giám sát pin'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        actions: [
-          IconButton(onPressed: _refreshData, icon: const Icon(Icons.refresh)),
-        ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: _refreshData,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Current Battery Status
-              if (_currentBatteryState != null) ...[
-                _buildCurrentBatteryCard(),
-                const SizedBox(height: 16),
-              ],
+      backgroundColor: colors.background,
+      body: SafeArea(
+        child: RefreshIndicator(
+          color: colors.primary,
+          backgroundColor: colors.surface,
+          onRefresh: _refreshData,
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
+            ),
+            slivers: [
+              SliverToBoxAdapter(
+                child: AppScreenHeader(
+                  icon: Icons.battery_charging_full_rounded,
+                  title: 'Giám sát pin',
+                  subtitle: widget.vehicle.vehicleName,
+                  showBackButton: true,
+                  actions: [
+                    IconButton(
+                      tooltip: 'Làm mới',
+                      onPressed: _refreshData,
+                      icon: const Icon(Icons.refresh_rounded),
+                      color: colors.text,
+                      style: IconButton.styleFrom(
+                        backgroundColor: colors.surfaceSoft.withValues(alpha: 0.6),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
-              // Battery Statistics
-              if (_batteryStats != null) ...[
-                _buildBatteryStatsCard(),
-                const SizedBox(height: 16),
-              ],
-
-              // Battery Chart
-              if (_batteryHistory.isNotEmpty) ...[
-                _buildBatteryChart(),
-                const SizedBox(height: 16),
-              ],
-
-              // Error Message
-              if (_error != null) ...[
-                Card(
-                  color: Colors.red[50],
+              if (_error != null)
+                SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.error_outline, color: Colors.red),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _error!,
-                            style: const TextStyle(color: Colors.red),
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: _refreshData,
-                          icon: const Icon(Icons.refresh),
-                        ),
-                      ],
+                    padding: const EdgeInsets.all(20),
+                    child: ErrorState(
+                      message: _error!,
+                      onRetry: _refreshData,
                     ),
                   ),
+                )
+              else if (_isLoading)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.all(20),
+                    child: LoadingSkeleton(layout: SkeletonLayout.card),
+                  ),
+                )
+              else ...[
+                if (_currentBatteryState != null)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
+                      child: _buildCurrentBatteryCard(colors),
+                    ).appFadeSlideIn(index: 2),
+                  ),
+
+                if (_batteryStats != null)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                      child: _buildBatteryStatsCard(colors),
+                    ).appFadeSlideIn(index: 3),
+                  ),
+
+                if (_batteryHistory.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                      child: _buildBatteryChart(colors),
+                    ).appFadeSlideIn(index: 4),
+                  ),
+
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
+                    child: _buildSOCPredictionCard(colors),
+                  ).appFadeSlideIn(index: 5),
                 ),
-                const SizedBox(height: 16),
               ],
-
-              // Loading Indicator
-              if (_isLoading) ...[
-                const Center(child: CircularProgressIndicator()),
-                const SizedBox(height: 16),
-              ],
-
-              // SOC Prediction Button
-              _buildSOCPredictionCard(),
             ],
           ),
         ),
@@ -148,55 +171,67 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
     );
   }
 
-  Widget _buildCurrentBatteryCard() {
+  Widget _buildCurrentBatteryCard(AppUiColors colors) {
     final batteryState = _currentBatteryState!;
+    final safePercent = batteryState.percentage.isFinite
+        ? batteryState.percentage.clamp(0.0, 100.0)
+        : 0.0;
+    final safeSoh = batteryState.soh.isFinite
+        ? batteryState.soh.clamp(0.0, 100.0)
+        : 0.0;
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.battery_full,
-                  color: _getBatteryColor(batteryState.percentage),
-                  size: 24,
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(CockpitRadius.large),
+        border: Border.all(color: colors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.battery_full_rounded,
+                color: _getBatteryColor(safePercent, colors),
+                size: 22,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Trạng thái pin hiện tại',
+                style: TextStyle(
+                  color: colors.text,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  'Trạng thái pin hiện tại',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  'Cập nhật: ${_formatTime(batteryState.timestamp)}',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
+              ),
+              const Spacer(),
+              Text(
+                'Cập nhật: ${_formatTime(batteryState.timestamp)}',
+                style: TextStyle(color: colors.muted, fontSize: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
 
-            // Battery Percentage
-            SizedBox(
-              height: 120,
+          // Battery Percentage
+          Center(
+            child: SizedBox(
+              height: 140,
+              width: 140,
               child: Stack(
                 alignment: Alignment.center,
                 children: [
                   SizedBox(
-                    width: 120,
-                    height: 120,
+                    width: 140,
+                    height: 140,
                     child: CircularProgressIndicator(
-                      value: batteryState.percentage / 100,
+                      value: safePercent / 100,
                       strokeWidth: 12,
-                      backgroundColor: Colors.grey[200],
+                      backgroundColor: colors.surfaceSoft,
                       valueColor: AlwaysStoppedAnimation<Color>(
-                        _getBatteryColor(batteryState.percentage),
+                        _getBatteryColor(safePercent, colors),
                       ),
                     ),
                   ),
@@ -204,17 +239,19 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        '${batteryState.percentage.toStringAsFixed(1)}%',
-                        style: Theme.of(context).textTheme.headlineMedium
-                            ?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: _getBatteryColor(batteryState.percentage),
-                            ),
+                        '${safePercent.toStringAsFixed(1)}%',
+                        style: CockpitTypography.numbers(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w900,
+                          color: colors.text,
+                        ),
                       ),
                       Text(
                         batteryState.statusText,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: _getBatteryColor(batteryState.percentage),
+                        style: TextStyle(
+                          color: _getBatteryColor(safePercent, colors),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ],
@@ -222,372 +259,414 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-
-            // Battery Details
-            Row(
-              children: [
-                Expanded(
-                  child: _buildDetailItem(
-                    'Sức khỏe pin',
-                    '${batteryState.soh.toStringAsFixed(1)}%',
-                    _getHealthColor(batteryState.soh),
-                  ),
-                ),
-                Expanded(
-                  child: _buildDetailItem(
-                    'Tầm hoạt động',
-                    '${batteryState.estimatedRange.toStringAsFixed(1)} km',
-                    Colors.blue,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildDetailItem(
-                    'Nhiệt độ',
-                    '${batteryState.temp.toStringAsFixed(1)}°C',
-                    _getTemperatureColor(batteryState.temp),
-                  ),
-                ),
-                Expanded(
-                  child: _buildDetailItem(
-                    'Nguồn',
-                    batteryState.source ?? 'Unknown',
-                    Colors.grey,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDetailItem(String label, String value, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        children: [
-          Text(
-            label,
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
           ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: TextStyle(fontWeight: FontWeight.bold, color: color),
+          const SizedBox(height: 20),
+
+          // Battery Details
+          Row(
+            children: [
+              Expanded(
+                child: _buildDetailItem(
+                  'Sức khỏe pin',
+                  '${safeSoh.toStringAsFixed(1)}%',
+                  _getHealthColor(safeSoh, colors),
+                  colors,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildDetailItem(
+                  'Tầm hoạt động',
+                  '${batteryState.estimatedRange.toStringAsFixed(1)} km',
+                  colors.info,
+                  colors,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _buildDetailItem(
+                  'Nhiệt độ',
+                  '${batteryState.temp.toStringAsFixed(1)}°C',
+                  _getTemperatureColor(batteryState.temp, colors),
+                  colors,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildDetailItem(
+                  'Nguồn',
+                  batteryState.source ?? 'Tiêu chuẩn',
+                  colors.muted,
+                  colors,
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildBatteryStatsCard() {
+  Widget _buildDetailItem(
+    String label,
+    String value,
+    Color accentColor,
+    AppUiColors colors,
+  ) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: colors.surfaceSoft.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colors.border.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(color: colors.muted, fontSize: 12),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: CockpitTypography.numbers(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: accentColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBatteryStatsCard(AppUiColors colors) {
     final stats = _batteryStats!;
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.analytics, color: Colors.blue, size: 24),
-                const SizedBox(width: 8),
-                Text(
-                  'Thống kê pin (24h)',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            Row(
-              children: [
-                Expanded(
-                  child: _buildStatItem(
-                    'SOC trung bình',
-                    '${stats['avgSOC']?.toStringAsFixed(1) ?? 'N/A'}%',
-                    Colors.blue,
-                  ),
-                ),
-                Expanded(
-                  child: _buildStatItem(
-                    'SOC thấp nhất',
-                    '${stats['minSOC']?.toStringAsFixed(1) ?? 'N/A'}%',
-                    Colors.red,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildStatItem(
-                    'SOC cao nhất',
-                    '${stats['maxSOC']?.toStringAsFixed(1) ?? 'N/A'}%',
-                    Colors.green,
-                  ),
-                ),
-                Expanded(
-                  child: _buildStatItem(
-                    'Nhiệt độ TB',
-                    '${stats['avgTemp']?.toStringAsFixed(1) ?? 'N/A'}°C',
-                    Colors.orange,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildStatItem(
-                    'SoH TB',
-                    '${stats['avgSOH']?.toStringAsFixed(1) ?? 'N/A'}%',
-                    _getHealthColor(stats['avgSOH']?.toDouble() ?? 0),
-                  ),
-                ),
-                Expanded(
-                  child: _buildStatItem(
-                    'Xu hướng',
-                    _getTrendText(stats['consumptionTrend']),
-                    _getTrendColor(stats['consumptionTrend']),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatItem(String label, String value, Color color) {
     return Container(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(CockpitRadius.large),
+        border: Border.all(color: colors.border),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
-            textAlign: TextAlign.center,
+          Row(
+            children: [
+              Icon(Icons.analytics_rounded, color: colors.info, size: 22),
+              const SizedBox(width: 8),
+              Text(
+                'Thống kê pin (24h)',
+                style: TextStyle(
+                  color: colors.text,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: TextStyle(fontWeight: FontWeight.bold, color: color),
-            textAlign: TextAlign.center,
+          const SizedBox(height: 16),
+
+          Row(
+            children: [
+              Expanded(
+                child: _buildStatItem(
+                  'SOC trung bình',
+                  '${stats['avgSOC']?.toStringAsFixed(1) ?? 'N/A'}%',
+                  colors.info,
+                  colors,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildStatItem(
+                  'SOC thấp nhất',
+                  '${stats['minSOC']?.toStringAsFixed(1) ?? 'N/A'}%',
+                  colors.danger,
+                  colors,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _buildStatItem(
+                  'SOC cao nhất',
+                  '${stats['maxSOC']?.toStringAsFixed(1) ?? 'N/A'}%',
+                  colors.emerald,
+                  colors,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildStatItem(
+                  'Nhiệt độ TB',
+                  '${stats['avgTemp']?.toStringAsFixed(1) ?? 'N/A'}°C',
+                  colors.amber,
+                  colors,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _buildStatItem(
+                  'SoH TB',
+                  '${stats['avgSOH']?.toStringAsFixed(1) ?? 'N/A'}%',
+                  _getHealthColor(stats['avgSOH']?.toDouble() ?? 0, colors),
+                  colors,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildStatItem(
+                  'Xu hướng',
+                  _getTrendText(stats['consumptionTrend']),
+                  _getTrendColor(stats['consumptionTrend'], colors),
+                  colors,
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildBatteryChart() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.show_chart, color: Colors.blue, size: 24),
-                const SizedBox(width: 8),
-                Text(
-                  'Biểu đồ pin (24h)',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
+  Widget _buildStatItem(
+    String label,
+    String value,
+    Color accentColor,
+    AppUiColors colors,
+  ) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: colors.surfaceSoft.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colors.border.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(color: colors.muted, fontSize: 11),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: CockpitTypography.numbers(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: accentColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBatteryChart(AppUiColors colors) {
+    final validHistory = _batteryHistory
+        .where((s) => s.percentage.isFinite)
+        .toList();
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(CockpitRadius.large),
+        border: Border.all(color: colors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.show_chart_rounded, color: colors.emerald, size: 22),
+              const SizedBox(width: 8),
+              Text(
+                'Biểu đồ pin (24h)',
+                style: TextStyle(
+                  color: colors.text,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          SizedBox(
+            height: 200,
+            child: LineChart(
+              LineChartData(
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  horizontalInterval: 20,
+                  getDrawingHorizontalLine: (value) => FlLine(
+                    color: colors.border.withValues(alpha: 0.6),
+                    strokeWidth: 1,
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            SizedBox(
-              height: 200,
-              child: LineChart(
-                LineChartData(
-                  gridData: FlGridData(
-                    show: true,
-                    drawVerticalLine: true,
-                    horizontalInterval: 20,
-                    verticalInterval: 2,
-                    getDrawingHorizontalLine: (value) {
-                      return FlLine(color: Colors.grey[300], strokeWidth: 1);
-                    },
-                    getDrawingVerticalLine: (value) {
-                      return FlLine(color: Colors.grey[300], strokeWidth: 1);
-                    },
+                titlesData: FlTitlesData(
+                  show: true,
+                  rightTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
                   ),
-                  titlesData: FlTitlesData(
-                    show: true,
-                    rightTitles: AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
-                    topTitles: AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
-                    bottomTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        reservedSize: 30,
-                        interval: 4,
-                        getTitlesWidget: (value, meta) {
-                          final index = value.toInt();
-                          if (index >= 0 && index < _batteryHistory.length) {
-                            final time = _batteryHistory[index].timestamp;
-                            return SideTitleWidget(
-                              meta: meta,
-                              child: Text(
-                                '${time.hour}h',
-                                style: const TextStyle(fontSize: 10),
-                              ),
-                            );
-                          }
-                          return const Text('');
-                        },
-                      ),
-                    ),
-                    leftTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        reservedSize: 40,
-                        interval: 20,
-                        getTitlesWidget: (value, meta) {
+                  topTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 30,
+                      interval: 4,
+                      getTitlesWidget: (value, meta) {
+                        final index = value.toInt();
+                        if (index >= 0 && index < validHistory.length) {
+                          final time = validHistory[index].timestamp;
                           return SideTitleWidget(
                             meta: meta,
                             child: Text(
-                              '${value.toInt()}%',
-                              style: const TextStyle(fontSize: 10),
+                              '${time.hour}h',
+                              style: TextStyle(fontSize: 10, color: colors.dim),
                             ),
                           );
-                        },
-                      ),
+                        }
+                        return const Text('');
+                      },
                     ),
                   ),
-                  borderData: FlBorderData(
-                    show: true,
-                    border: Border.all(color: Colors.grey[300]!),
-                  ),
-                  minX: 0,
-                  maxX: (_batteryHistory.length - 1).toDouble(),
-                  minY: 0,
-                  maxY: 100,
-                  lineBarsData: [
-                    LineChartBarData(
-                      spots: _batteryHistory.asMap().entries.map((entry) {
-                        return FlSpot(
-                          entry.key.toDouble(),
-                          entry.value.percentage,
-                        );
-                      }).toList(),
-                      isCurved: true,
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.blue.withValues(alpha: 0.8),
-                          Colors.blue.withValues(alpha: 0.2),
-                        ],
-                      ),
-                      barWidth: 3,
-                      isStrokeCapRound: true,
-                      dotData: FlDotData(
-                        show: true,
-                        getDotPainter: (spot, percent, barData, index) {
-                          return FlDotCirclePainter(
-                            radius: 3,
-                            color: Colors.blue,
-                            strokeWidth: 1,
-                            strokeColor: Colors.white,
-                          );
-                        },
-                      ),
-                      belowBarData: BarAreaData(
-                        show: true,
-                        gradient: LinearGradient(
-                          colors: [
-                            Colors.blue.withValues(alpha: 0.3),
-                            Colors.blue.withValues(alpha: 0.1),
-                          ],
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 36,
+                      interval: 20,
+                      getTitlesWidget: (value, meta) => SideTitleWidget(
+                        meta: meta,
+                        child: Text(
+                          '${value.toInt()}%',
+                          style: TextStyle(fontSize: 10, color: colors.dim),
                         ),
                       ),
                     ),
-                  ],
+                  ),
                 ),
+                borderData: FlBorderData(show: false),
+                minX: 0,
+                maxX: (validHistory.length - 1).clamp(0, 999).toDouble(),
+                minY: 0,
+                maxY: 100,
+                lineBarsData: [
+                  LineChartBarData(
+                    spots: validHistory.asMap().entries.map((entry) {
+                      return FlSpot(
+                        entry.key.toDouble(),
+                        entry.value.percentage.clamp(0.0, 100.0),
+                      );
+                    }).toList(),
+                    isCurved: true,
+                    color: colors.emerald,
+                    barWidth: 3,
+                    isStrokeCapRound: true,
+                    dotData: FlDotData(
+                      show: validHistory.length <= 12,
+                      getDotPainter: (spot, percent, barData, index) =>
+                          FlDotCirclePainter(
+                        radius: 3,
+                        color: colors.emerald,
+                        strokeWidth: 1,
+                        strokeColor: colors.surface,
+                      ),
+                    ),
+                    belowBarData: BarAreaData(
+                      show: true,
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          colors.emerald.withValues(alpha: 0.3),
+                          colors.emerald.withValues(alpha: 0.0),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildSOCPredictionCard() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.auto_graph, color: Colors.purple, size: 24),
-                const SizedBox(width: 8),
-                Text(
-                  'Dự đoán SOC AI',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+  Widget _buildSOCPredictionCard(AppUiColors colors) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(CockpitRadius.large),
+        border: Border.all(color: colors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.auto_graph_rounded, color: colors.primary, size: 22),
+              const SizedBox(width: 8),
+              Text(
+                'Dự đoán SOC AI',
+                style: TextStyle(
+                  color: colors.text,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
                 ),
-              ],
-            ),
-            const SizedBox(height: 16),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
 
-            Text(
-              'Sử dụng AI model để dự đoán trạng thái pin trong 24 giờ tiếp theo',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 16),
+          Text(
+            'Sử dụng mô hình AI để dự đoán trạng thái pin trong 24 giờ tiếp theo.',
+            style: TextStyle(color: colors.muted, fontSize: 13, height: 1.4),
+          ),
+          const SizedBox(height: 16),
 
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _predictSOC,
-                icon: const Icon(Icons.psychology),
-                label: const Text('Dự đoán SOC'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.purple,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: FilledButton.icon(
+              onPressed: _predictSOC,
+              icon: const Icon(Icons.psychology_rounded, size: 18),
+              label: const Text(
+                'Dự đoán SOC',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: colors.primary,
+                foregroundColor: colors.onPrimary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -600,13 +679,13 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
             _currentBatteryState?.percentage ??
             widget.vehicle.currentBattery.toDouble(),
         temperature: _currentBatteryState?.temp ?? 25.0,
-        voltage: 48.0, // Default voltage
-        current: 15.0, // Default current
+        voltage: 48.0,
+        current: 15.0,
         odometer: widget.vehicle.currentOdo.toDouble(),
         timeOfDay: DateTime.now().hour,
         dayOfWeek: DateTime.now().weekday,
-        avgSpeed: 30.0, // Default average speed
-        elevationGain: 50.0, // Default elevation gain
+        avgSpeed: 30.0,
+        elevationGain: 50.0,
         weatherCondition: 'sunny',
       );
 
@@ -614,31 +693,51 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('Kết quả dự đoán SOC'),
+            backgroundColor: AppUiColors.of(context).surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(CockpitRadius.large),
+            ),
+            title: Text(
+              'Kết quả dự đoán SOC',
+              style: TextStyle(
+                color: AppUiColors.of(context).text,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'SOC dự đoán (24h): ${result['predictedSOC']?.toStringAsFixed(1) ?? 'N/A'}%',
+                  style: TextStyle(
+                    color: AppUiColors.of(context).text,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   'Độ tin cậy: ${result['confidence']?.toStringAsFixed(1) ?? 'N/A'}%',
+                  style: TextStyle(color: AppUiColors.of(context).muted),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   'Sức khỏe pin: ${result['batteryHealth']?.toStringAsFixed(1) ?? 'N/A'}%',
+                  style: TextStyle(color: AppUiColors.of(context).muted),
                 ),
                 if (result['recommendations'] != null) ...[
                   const SizedBox(height: 16),
-                  const Text(
+                  Text(
                     'Khuyến nghị:',
-                    style: TextStyle(fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      color: AppUiColors.of(context).text,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
+                  const SizedBox(height: 4),
                   ...List<String>.from(
                     result['recommendations'],
-                  ).map((rec) => Text('• $rec')),
+                  ).map((rec) => Text('• $rec', style: TextStyle(color: AppUiColors.of(context).muted))),
                 ],
               ],
             ),
@@ -663,32 +762,31 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
     }
   }
 
-  Color _getBatteryColor(double percentage) {
-    if (percentage < 10) return Colors.red;
-    if (percentage < 20) return Colors.orange;
-    if (percentage < 50) return Colors.blue;
-    return Colors.green;
+  Color _getBatteryColor(double percentage, AppUiColors colors) {
+    if (percentage < 20) return colors.danger;
+    if (percentage < 50) return colors.amber;
+    return colors.emerald;
   }
 
-  Color _getHealthColor(double soh) {
-    if (soh < 80) return Colors.red;
-    if (soh < 90) return Colors.orange;
-    return Colors.green;
+  Color _getHealthColor(double soh, AppUiColors colors) {
+    if (soh < 80) return colors.danger;
+    if (soh < 90) return colors.amber;
+    return colors.emerald;
   }
 
-  Color _getTemperatureColor(double temp) {
-    if (temp > 35) return Colors.red;
-    if (temp < 10) return Colors.blue;
-    return Colors.green;
+  Color _getTemperatureColor(double temp, AppUiColors colors) {
+    if (temp > 40) return colors.danger;
+    if (temp < 10) return colors.info;
+    return colors.emerald;
   }
 
-  Color _getTrendColor(dynamic trend) {
-    if (trend == null) return Colors.grey;
+  Color _getTrendColor(dynamic trend, AppUiColors colors) {
+    if (trend == null) return colors.muted;
     final trendData = trend as Map<String, dynamic>;
     final trendType = trendData['trend'] as String;
-    if (trendType == 'decreasing') return Colors.red;
-    if (trendType == 'increasing') return Colors.green;
-    return Colors.blue;
+    if (trendType == 'decreasing') return colors.danger;
+    if (trendType == 'increasing') return colors.emerald;
+    return colors.info;
   }
 
   String _getTrendText(dynamic trend) {

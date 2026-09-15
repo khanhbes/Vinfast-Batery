@@ -960,18 +960,62 @@ def user_charge_logs():
     if not _fs():
         return jsonify({'success': True, 'data': []})
 
-    q = _fs().collection('ChargeLogs') \
-        .where('ownerUid', '==', uid) \
-        .where('isDeleted', '==', False)
+    try:
+        limit = max(1, min(int(request.args.get('limit', 100)), 200))
+    except (TypeError, ValueError):
+        limit = 100
+    # Do not require isDeleted == false: old sessions predate that field and
+    # were otherwise silently omitted from history synchronization.
+    q = _fs().collection('ChargeLogs').where('ownerUid', '==', uid)
     if vehicle_id:
         q = q.where('vehicleId', '==', vehicle_id)
-    docs = q.order_by('startTime', direction='DESCENDING').stream()
+    docs = q.order_by('startTime', direction='DESCENDING').limit(limit * 2).stream()
     logs = []
     for doc in docs:
         d = doc.to_dict()
+        if (d.get('isDeleted') is True or d.get('isArchived') is True or
+                d.get('archivedAt') is not None or d.get('hiddenByUserAt') is not None):
+            continue
         d['logId'] = doc.id
         logs.append(d)
+        if len(logs) >= limit:
+            break
     return jsonify({'success': True, 'data': logs})
+
+
+@app.route('/api/mobile/notifications', methods=['DELETE'])
+@require_auth
+def delete_all_mobile_notifications():
+    """Permanently delete only the authenticated user's notifications.
+
+    Firestore batches are capped below the platform limit. Repeating the
+    request is safe and never enumerates or mutates another account's data.
+    """
+    database = _fs()
+    if not database:
+        return jsonify({'success': False, 'error': 'Firestore unavailable'}), 503
+
+    deleted = 0
+    while True:
+        documents = list(
+            database.collection('UserNotifications')
+            .where('userId', '==', request._uid)
+            .limit(400)
+            .stream()
+        )
+        if not documents:
+            break
+        batch = database.batch()
+        for document in documents:
+            batch.delete(document.reference)
+        batch.commit()
+        deleted += len(documents)
+        if len(documents) < 400:
+            break
+
+    with _mobile_bootstrap_lock:
+        _mobile_unread_cache[request._uid] = (time.monotonic(), 0)
+    return jsonify({'success': True, 'data': {'deleted': deleted}})
 
 
 @app.route('/api/user/trip-logs', methods=['GET'])

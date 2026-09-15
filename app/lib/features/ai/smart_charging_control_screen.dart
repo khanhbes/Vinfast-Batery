@@ -438,6 +438,8 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
       timerVerified:
           session?.timerVerified == true || status?.timerRemaining != null,
       estimatedSoc: estimatedSoc,
+      isStopping: state.phase == SmartChargingViewPhase.stopping,
+      isStarting: state.phase == SmartChargingViewPhase.starting,
       onStop: () => _stopWithConfirmation(state, controller),
     );
   }

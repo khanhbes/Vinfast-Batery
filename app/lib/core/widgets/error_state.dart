@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/app_ui_colors.dart';
 import '../utils/app_error_formatter.dart';
 import 'debug_error_sheet.dart';
 
@@ -49,6 +50,7 @@ class ErrorState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppUiColors.of(context);
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
@@ -59,18 +61,18 @@ class ErrorState extends StatelessWidget {
               width: 72,
               height: 72,
               decoration: BoxDecoration(
-                color: AppColors.error.withValues(alpha: 0.12),
+                color: colors.danger.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Icon(icon, size: 36, color: AppColors.error),
+              child: Icon(icon, size: 36, color: colors.danger),
             ),
             const SizedBox(height: 16),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 15,
-                color: AppColors.textTertiary,
+                color: colors.muted,
                 height: 1.4,
               ),
             ),
@@ -83,7 +85,7 @@ class ErrorState extends StatelessWidget {
                     width: double.infinity,
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: AppColors.error.withValues(alpha: 0.06),
+                      color: colors.danger.withValues(alpha: 0.06),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
@@ -91,7 +93,7 @@ class ErrorState extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 10,
                         fontFamily: 'monospace',
-                        color: AppColors.textTertiary.withValues(alpha: 0.85),
+                        color: colors.muted.withValues(alpha: 0.85),
                         height: 1.3,
                       ),
                     ),
@@ -108,7 +110,7 @@ class ErrorState extends StatelessWidget {
                 icon: const Icon(Icons.bug_report_outlined, size: 16),
                 label: const Text('Xem chi tiết lỗi (Debug)'),
                 style: TextButton.styleFrom(
-                  foregroundColor: AppColors.error,
+                  foregroundColor: colors.danger,
                   visualDensity: VisualDensity.compact,
                 ),
               ),
