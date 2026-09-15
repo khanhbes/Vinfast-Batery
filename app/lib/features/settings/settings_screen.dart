@@ -302,7 +302,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               CockpitSettingsRow(
                 icon: Icons.electric_moped_rounded,
                 title: 'Phương tiện',
-                subtitle: 'Quản lý xe, dung lượng pin và xe đang chọn',
+                subtitle: _developerUnlocked
+                    ? 'Quản lý xe, dung lượng pin và xe đang chọn'
+                    : null,
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => VehicleGarageScreen()),
@@ -313,7 +315,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 title: 'Smart Charger',
                 subtitle: _shellyConfigured
                     ? _shellyLabel
-                    : 'Shelly chưa kết nối',
+                    : (_developerUnlocked ? 'Shelly chưa kết nối' : null),
                 onTap: _openShellySetup,
               ),
             ]),
@@ -324,7 +326,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               CockpitSettingsRow(
                 icon: Icons.psychology_alt_rounded,
                 title: 'AI cá nhân',
-                subtitle: 'Mô hình riêng cho từng tài khoản và xe',
+                subtitle: _developerUnlocked
+                    ? 'Mô hình riêng cho từng tài khoản và xe'
+                    : null,
                 onTap: _openPersonalAi,
               ),
             ]),
@@ -335,7 +339,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               CockpitSettingsRow(
                 icon: Icons.notifications_outlined,
                 title: 'Trung tâm thông báo',
-                subtitle: 'Cảnh báo sạc, đồng bộ và nhắc nhở',
+                subtitle: _developerUnlocked
+                    ? 'Cảnh báo sạc, đồng bộ và nhắc nhở'
+                    : null,
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => NotificationCenterScreen()),
@@ -344,7 +350,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               CockpitSettingsRow(
                 icon: Icons.notifications_active_outlined,
                 title: 'Thông báo đẩy',
-                subtitle: 'Nhận cảnh báo quan trọng trên thiết bị',
+                subtitle: _developerUnlocked
+                    ? 'Nhận cảnh báo quan trọng trên thiết bị'
+                    : null,
                 trailing: _AnimatedToggle(
                   value: _pushNotifications,
                   onChanged: _setPushNotifications,
@@ -359,29 +367,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               CockpitSettingsRow(
                 icon: Icons.cloud_sync_outlined,
                 title: 'Tự động đồng bộ',
-                subtitle: 'Đồng bộ dữ liệu với web khi có mạng',
+                subtitle: _developerUnlocked
+                    ? 'Đồng bộ dữ liệu với web khi có mạng'
+                    : null,
                 trailing: _AnimatedToggle(
                   value: _autoSync,
                   onChanged: _setAutoSync,
                 ),
                 onTap: () => _setAutoSync(!_autoSync),
               ),
-              CockpitSettingsRow(
-                icon: Icons.sync_rounded,
-                title: 'Đồng bộ ngay',
-                subtitle: 'Đẩy dữ liệu hiện tại lên web dashboard',
-                onTap: _isLoading ? null : _manualSync,
-              ),
+              if (_developerUnlocked)
+                CockpitSettingsRow(
+                  icon: Icons.sync_rounded,
+                  title: 'Đồng bộ ngay',
+                  subtitle: 'Đẩy dữ liệu hiện tại lên web dashboard',
+                  onTap: _isLoading ? null : _manualSync,
+                ),
               CockpitSettingsRow(
                 icon: Icons.download_outlined,
                 title: 'Tải dữ liệu tài khoản',
-                subtitle: 'Xuất toàn bộ dữ liệu người dùng',
+                subtitle: _developerUnlocked
+                    ? 'Xuất toàn bộ dữ liệu người dùng'
+                    : null,
                 availability: SettingsItemAvailability.comingSoon,
               ),
               CockpitSettingsRow(
                 icon: Icons.shield_outlined,
                 title: 'Quyền riêng tư và bảo mật',
-                subtitle: 'Kiểm soát dữ liệu và quyền truy cập',
+                subtitle: _developerUnlocked
+                    ? 'Kiểm soát dữ liệu và quyền truy cập'
+                    : null,
                 availability: SettingsItemAvailability.comingSoon,
               ),
             ]),
@@ -392,13 +407,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               CockpitSettingsRow(
                 icon: Icons.palette_outlined,
                 title: 'Giao diện, ngôn ngữ và đơn vị',
-                subtitle: _getAppearanceValue(),
+                subtitle: _developerUnlocked ? _getAppearanceValue() : null,
                 onTap: _showAppearanceSheet,
               ),
               CockpitSettingsRow(
                 icon: Icons.fingerprint_rounded,
                 title: 'Xác thực sinh trắc học',
-                subtitle: 'Vân tay hoặc khuôn mặt khi mở ứng dụng',
+                subtitle: _developerUnlocked
+                    ? 'Vân tay hoặc khuôn mặt khi mở ứng dụng'
+                    : null,
                 availability: SettingsItemAvailability.comingSoon,
               ),
             ]),
@@ -409,7 +426,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               CockpitSettingsRow(
                 icon: Icons.help_outline_rounded,
                 title: 'Trợ giúp',
-                subtitle: 'FAQ và hướng dẫn sử dụng',
+                subtitle: _developerUnlocked
+                    ? 'FAQ và hướng dẫn sử dụng'
+                    : null,
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => GuideScreen()),

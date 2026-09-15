@@ -149,6 +149,59 @@ abstract final class CockpitMotion {
       MediaQuery.maybeOf(context)?.disableAnimations != true;
 }
 
+/// Standardized transition curves and durations for consistent animations.
+abstract final class CockpitTransitions {
+  static const Curve standard = Curves.easeOutCubic;
+  static const Curve decelerate = Curves.decelerate;
+  static const Curve spring = Curves.easeOutBack;
+  static const Curve subtle = Curves.easeInOut;
+
+  static const Duration quick = Duration(milliseconds: 120);
+  static const Duration normal = Duration(milliseconds: 200);
+  static const Duration page = Duration(milliseconds: 300);
+  static const Duration drawer = Duration(milliseconds: 350);
+}
+
+/// Standardized elevation/shadow levels for layered surfaces.
+abstract final class CockpitElevation {
+  static List<BoxShadow> none = const [];
+
+  static List<BoxShadow> low = const [
+    BoxShadow(
+      color: Color(0x0D000000),
+      blurRadius: 4,
+      offset: Offset(0, 1),
+    ),
+  ];
+
+  static List<BoxShadow> medium = const [
+    BoxShadow(
+      color: Color(0x14000000),
+      blurRadius: 12,
+      offset: Offset(0, 4),
+    ),
+    BoxShadow(
+      color: Color(0x0A000000),
+      blurRadius: 4,
+      offset: Offset(0, 1),
+    ),
+  ];
+
+  static List<BoxShadow> high = const [
+    BoxShadow(
+      color: Color(0x1F000000),
+      blurRadius: 24,
+      offset: Offset(0, 8),
+    ),
+    BoxShadow(
+      color: Color(0x0F000000),
+      blurRadius: 8,
+      offset: Offset(0, 2),
+    ),
+  ];
+}
+
+
 abstract final class CockpitTypography {
   static TextStyle numbers({
     double? fontSize,

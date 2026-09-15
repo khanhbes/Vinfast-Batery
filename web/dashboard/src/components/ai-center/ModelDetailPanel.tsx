@@ -7,6 +7,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { ResponsiveText } from '@/components/ui/ResponsiveText';
 // @ts-ignore
 import { aiListModels, aiDeleteModel, aiQuickPredict, aiLoadActiveModel, aiDeactivateModel, aiTestVersion, aiDeployModel } from '@/api';
 import { ACCENT_CLASSES, ModelTypeMeta, ModelVersion, formatBytes, formatDate, PredictionResponse } from './types';
@@ -423,8 +424,8 @@ function VersionsTab({ versions, loading, onDelete, onTest, onDeploy, onEvaluate
               </td>
               <td className="py-2 text-muted-foreground">{formatDate(v.uploadedAt)}</td>
               <td className="py-2 text-muted-foreground">{formatBytes(v.sizeBytes)}</td>
-              <td className="py-2 text-muted-foreground truncate max-w-[240px]" title={v.note || ''}>
-                {v.note || '—'}
+              <td className="py-2 text-muted-foreground max-w-[240px]">
+                <ResponsiveText strategy="auto" className="text-sm text-muted-foreground" maxLines={2} alwaysTooltip>{v.note || '—'}</ResponsiveText>
               </td>
               <td className="py-2 text-right">
                 <div className="inline-flex gap-1">
@@ -599,7 +600,7 @@ function TestTab({
             return (
               <div key={f} className="flex flex-col gap-1">
                 <div className="flex items-center gap-2">
-                  <label className="text-xs w-32 text-muted-foreground truncate" title={desc}>
+                  <label className="text-xs w-32 text-muted-foreground" title={desc}>
                     {desc}
                   </label>
                   <input
@@ -962,7 +963,7 @@ function MetricsTabEnhanced({ meta, versions, selectedVersion, onSelectedVersion
                 const unit = schema?.unit;
                 return (
                   <div key={field} className="flex items-center gap-2">
-                    <label className="text-xs w-40 text-muted-foreground truncate" title={desc}>{desc}</label>
+                    <label className="text-xs w-40 text-muted-foreground" title={desc}>{desc}</label>
                     <input
                       type="number"
                       value={testInputs[field] ?? 0}
@@ -1069,7 +1070,7 @@ function MetricsTabEnhanced({ meta, versions, selectedVersion, onSelectedVersion
                 return (
                   <div key={i} className="text-xs">
                     <div className="flex justify-between mb-1">
-                      <span className="truncate max-w-[60%]" title={tc.label}>{tc.label}</span>
+                      <ResponsiveText strategy="auto" className="max-w-[60%] text-sm" alwaysTooltip>{tc.label}</ResponsiveText>
                       <span className={`font-mono ${tc.ok ? '' : 'text-red-600'}`}>
                         {tc.ok ? `${tc.formattedPrediction || `${(tc.prediction as number).toFixed(2)} ${unit}`}` : `❌ ${tc.error || 'error'}`}
                       </span>
