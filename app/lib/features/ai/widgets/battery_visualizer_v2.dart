@@ -50,8 +50,12 @@ class _BatteryVisualizerV2State extends State<BatteryVisualizerV2>
   }
 
   void _setTarget(double raw) {
-    final next = raw.round().clamp(
-      (widget.currentPercent.ceil() + 1).clamp(1, 100),
+    final safeCurrent = widget.currentPercent.isFinite
+        ? widget.currentPercent.clamp(0.0, 100.0)
+        : 0.0;
+    final safeRaw = raw.isFinite ? raw : 80.0;
+    final next = safeRaw.round().clamp(
+      (safeCurrent.ceil() + 1).clamp(1, 100),
       100,
     );
     if (next == widget.targetPercent.round()) return;
@@ -65,15 +69,21 @@ class _BatteryVisualizerV2State extends State<BatteryVisualizerV2>
 
   static const _presets = [
     (value: 80, label: '80%', tag: 'Tối ưu LFP', recommended: true),
-    (value: 90, label: '90%', tag: 'Tiêu chuẩn', recommended: false),
+    (value: 90, label: '90%', tag: 'Hàng ngày', recommended: false),
     (value: 100, label: '100%', tag: 'Tối đa', recommended: false),
   ];
 
   @override
   Widget build(BuildContext context) {
     final reducedMotion = MediaQuery.disableAnimationsOf(context);
-    final current = widget.currentPercent.round().clamp(0, 100);
-    final target = widget.targetPercent.round().clamp(current, 100);
+    final safeCurrent = widget.currentPercent.isFinite
+        ? widget.currentPercent.clamp(0.0, 100.0)
+        : 0.0;
+    final safeTarget = widget.targetPercent.isFinite
+        ? widget.targetPercent.clamp(safeCurrent, 100.0)
+        : 80.0;
+    final current = safeCurrent.round().clamp(0, 100);
+    final target = safeTarget.round().clamp(current, 100);
 
     return CockpitSurface(
       padding: const EdgeInsets.all(20),

@@ -103,7 +103,10 @@ class SmartChargingUiState {
 
   /// Pure hardware-derived charger status for UI representation
   ChargerDisplayState get displayState {
-    if (phase == SmartChargingViewPhase.loading || refreshing) {
+    if (phase == SmartChargingViewPhase.loading ||
+        phase == SmartChargingViewPhase.starting ||
+        phase == SmartChargingViewPhase.stopping ||
+        refreshing) {
       return ChargerDisplayState.connecting;
     }
     if (chargerError != null && chargerStatus == null) {
@@ -286,6 +289,8 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
   bool _sessionRequestRunning = false;
   bool _disposed = false;
   String? _idempotencyKey;
+  bool _pendingRelayCommand = false;
+  bool get isPendingRelayCommand => _pendingRelayCommand;
   String? _lastNotifiedTerminalId;
   String? _lastLoggedTerminalId;
   final List<double> _stablePowerSamples = [];
@@ -1007,6 +1012,11 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
 
   Future<void> _persistTerminal(SmartChargingSession session) async {
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'terminal_logged_${session.sessionId}';
+      if (prefs.getBool(key) == true) return;
+      await prefs.setBool(key, true);
+
       await _repository?.flushPendingTelemetry(session.sessionId);
       await _logSink?.call(session);
       await _trainingSyncService.enqueue(session.sessionId);
@@ -1078,7 +1088,8 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
   Future<bool> start({required bool confirmed}) async {
     final preview = state.preview;
     if (!confirmed || preview == null) return false;
-    if (state.phase == SmartChargingViewPhase.starting ||
+    if (_pendingRelayCommand ||
+        state.phase == SmartChargingViewPhase.starting ||
         state.phase == SmartChargingViewPhase.stopping) {
       return false;
     }
@@ -1097,6 +1108,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       );
       return false;
     }
+    _pendingRelayCommand = true;
     state = state.copyWith(
       phase: SmartChargingViewPhase.starting,
       actionError: null,
@@ -1193,16 +1205,20 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         );
       }
       return false;
+    } finally {
+      _pendingRelayCommand = false;
     }
   }
 
   Future<bool> stop({UserStopReason reason = UserStopReason.none}) async {
     final session = state.session;
-    if (state.phase == SmartChargingViewPhase.starting ||
+    if (_pendingRelayCommand ||
+        state.phase == SmartChargingViewPhase.starting ||
         state.phase == SmartChargingViewPhase.stopping) {
       return false;
     }
     if (session == null) return manualOff();
+    _pendingRelayCommand = true;
     state = state.copyWith(
       phase: SmartChargingViewPhase.stopping,
       actionError: null,
@@ -1285,11 +1301,14 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         );
       }
       return false;
+    } finally {
+      _pendingRelayCommand = false;
     }
   }
 
   Future<bool> manualOn(Duration duration) async {
-    if (state.phase == SmartChargingViewPhase.starting ||
+    if (_pendingRelayCommand ||
+        state.phase == SmartChargingViewPhase.starting ||
         state.phase == SmartChargingViewPhase.stopping) {
       return false;
     }
@@ -1302,6 +1321,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       );
       return false;
     }
+    _pendingRelayCommand = true;
     state = state.copyWith(
       phase: SmartChargingViewPhase.starting,
       actionError: null,
@@ -1318,8 +1338,28 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         ),
       );
       if (_disposed) return false;
+
+      // Status readback to verify relay ON
+      SmartChargerStatus? currentStatus;
+      try {
+        currentStatus = await _repository!.status(
+          vehicleId: state.draft.vehicleId,
+        );
+      } catch (_) {}
+
+      if (currentStatus != null &&
+          !currentStatus.relay &&
+          !session.relayVerified) {
+        state = state.copyWith(
+          phase: SmartChargingViewPhase.editing,
+          actionError: 'Không thể bật sạc: Chưa xác nhận được ổ sạc bật.',
+        );
+        return false;
+      }
+
       state = state.copyWith(
         session: session,
+        chargerStatus: currentStatus ?? state.chargerStatus,
         history: [
           session,
           ...state.history.where((item) => item.sessionId != session.sessionId),
@@ -1338,7 +1378,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
                 effectiveStopAt: session.effectiveStopAt,
                 lastEstimatedSoc: session.estimatedSoc ?? session.startSoc,
                 lastSessionEnergyWh: session.energyUsedWh,
-                lastKnownRelay: session.relayVerified,
+                lastKnownRelay: currentStatus?.relay ?? session.relayVerified,
               ),
             )
             .catchError((_) {}),
@@ -1358,10 +1398,31 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         );
       }
       return false;
+    } catch (e, stack) {
+      AppErrorReporter.report(
+        e,
+        stack,
+        source: 'SmartChargingController.manualOn',
+      );
+      if (!_disposed) {
+        state = state.copyWith(
+          phase: SmartChargingViewPhase.editing,
+          actionError: 'Không thể bật sạc: $e',
+        );
+      }
+      return false;
+    } finally {
+      _pendingRelayCommand = false;
     }
   }
 
   Future<bool> manualOff() async {
+    if (_pendingRelayCommand ||
+        state.phase == SmartChargingViewPhase.starting ||
+        state.phase == SmartChargingViewPhase.stopping) {
+      return false;
+    }
+    _pendingRelayCommand = true;
     try {
       await _repository!.manualOff(vehicleId: state.draft.vehicleId);
       await _stopForegroundMonitor();
@@ -1375,6 +1436,16 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       );
       if (!_disposed) state = state.copyWith(actionError: error.message);
       return false;
+    } catch (e, stack) {
+      AppErrorReporter.report(
+        e,
+        stack,
+        source: 'SmartChargingController.manualOff',
+      );
+      if (!_disposed) state = state.copyWith(actionError: 'Lỗi khi tắt sạc: $e');
+      return false;
+    } finally {
+      _pendingRelayCommand = false;
     }
   }
 

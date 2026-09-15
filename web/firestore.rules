@@ -20,9 +20,9 @@ service cloud.firestore {
       return isAuth() && request.auth.uid == ownerUid;
     }
     function notDeleted() {
-      return resource.data.isDeleted != true &&
-        resource.data.isArchived != true &&
-        resource.data.archivedAt == null;
+      return (!('isDeleted' in resource.data) || resource.data.isDeleted != true) &&
+        (!('isArchived' in resource.data) || resource.data.isArchived != true) &&
+        (!('archivedAt' in resource.data) || resource.data.archivedAt == null);
     }
     // True if the authenticated user owns the Vehicles/{vehicleId} document.
     // Used as a legacy fallback for child docs that may not yet carry ownerUid.
@@ -178,7 +178,10 @@ service cloud.firestore {
 
     // ── ChargeLogs ──
     match /ChargeLogs/{logId} {
-      allow read: if canReadOwned() && notDeleted();
+      // Deletion flags are presentation state, not an authorization boundary.
+      // Authorize by owner and let clients/API hide archived records. This also
+      // keeps legacy logs (which have no isDeleted field) queryable.
+      allow read: if canReadOwned();
       allow create: if canCreateOwned();
       allow update: if isAuth() && isOwner(resource.data.ownerUid) &&
         request.resource.data.ownerUid == request.auth.uid;

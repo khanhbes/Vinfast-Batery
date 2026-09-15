@@ -28,7 +28,7 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
   late final AnimationController _rippleController;
   late final Animation<double> _rippleScale;
   late final Animation<double> _rippleOpacity;
-  int _selectedMinutes = 60;
+  int _selectedMinutes = 120;
   bool _pressed = false;
   bool _submitting = false;
 
@@ -104,7 +104,7 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
     try {
       await widget.onStart(
         _selectedMinutes == -1
-            ? const Duration(hours: 7)
+            ? const Duration(hours: 6)
             : Duration(minutes: _selectedMinutes),
       );
     } catch (_) {
@@ -137,7 +137,7 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
   }
 
   String get _buttonLabel {
-    if (_selectedMinutes == -1) return 'Bắt đầu ngay · tự ngắt sau 7 giờ';
+    if (_selectedMinutes == -1) return 'Bắt đầu ngay · tự ngắt sau 6 giờ';
     final h = _selectedMinutes ~/ 60;
     final m = _selectedMinutes % 60;
     if (h > 0 && m > 0) return 'Sạc $h giờ $m phút';

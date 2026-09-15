@@ -4,6 +4,8 @@ import '../../core/theme/app_motion.dart';
 import 'package:fl_chart/fl_chart.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_ui_colors.dart';
+import '../../core/widgets/app_screen_header.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/error_state.dart';
@@ -25,16 +27,17 @@ class StatisticsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = AppUiColors.of(context);
     final vehicleId = ref.watch(selectedVehicleIdProvider);
     final logsAsync = ref.watch(chargeLogsProvider(vehicleId));
     final statsAsync = ref.watch(vehicleStatsProvider(vehicleId));
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: colors.background,
       body: SafeArea(
         child: RefreshIndicator(
-          color: AppColors.primary,
-          backgroundColor: AppColors.surface,
+          color: colors.primary,
+          backgroundColor: colors.surface,
           onRefresh: () async {
             ref.invalidate(chargeLogsProvider(vehicleId));
             ref.invalidate(vehicleStatsProvider(vehicleId));
@@ -46,49 +49,12 @@ class StatisticsScreen extends ConsumerWidget {
             slivers: [
               // ── Header ──
               SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: AppColors.info.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(
-                          Icons.analytics_rounded,
-                          color: AppColors.info,
-                          size: 22,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Thống kê',
-                              style: TextStyle(
-                                color: AppColors.textPrimary,
-                                fontSize: 22,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: -0.5,
-                              ),
-                            ),
-                            Text(
-                              'Phân tích chu kỳ sạc & tiêu thụ',
-                              style: TextStyle(
-                                color: AppColors.textSecondary,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ).appFadeSlideIn(index: 4),
+                child: AppScreenHeader(
+                  icon: Icons.analytics_rounded,
+                  title: 'Thống kê',
+                  subtitle: 'Phân tích chu kỳ sạc & tiêu thụ',
+                  iconColor: colors.info,
+                ),
               ),
 
               // ── Summary Cards ──
@@ -222,179 +188,199 @@ class StatisticsScreen extends ConsumerWidget {
     final totalCharges = stats['totalCharges'] as int? ?? 0;
     if (totalCharges == 0) return const SizedBox.shrink();
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          return ResponsiveCardGrid(
-            children: [
-              StatCard(
-                icon: Icons.battery_charging_full_rounded,
-                iconColor: AppColors.primary,
-                title: 'Tổng lần sạc',
-                value: '$totalCharges',
-              ).appFadeSlideIn(index: 2),
-              StatCard(
-                icon: Icons.trending_up_rounded,
-                iconColor: AppColors.info,
-                title: 'Sạc TB / lần',
-                value:
-                    '${((stats['avgChargeGain'] as double?) ?? 0.0).toStringAsFixed(0)}%',
-              ).appFadeSlideIn(index: 3),
-              StatCard(
-                icon: Icons.battery_1_bar_rounded,
-                iconColor: AppColors.warning,
-                title: 'Pin bắt đầu TB',
-                value:
-                    '${((stats['avgStartBattery'] as double?) ?? 0.0).toStringAsFixed(0)}%',
-              ).appFadeSlideIn(index: 4),
-              StatCard(
-                icon: Icons.timer_outlined,
-                iconColor: AppColors.error,
-                title: 'Thời gian sạc TB',
-                value:
-                    '${((stats['avgChargeDuration'] as double?) ?? 0.0).toStringAsFixed(1)}h',
-              ).appFadeSlideIn(index: 5),
-            ],
-          );
-        },
-      ),
+    return Builder(
+      builder: (context) {
+        final colors = AppUiColors.of(context);
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return ResponsiveCardGrid(
+                children: [
+                  StatCard(
+                    icon: Icons.battery_charging_full_rounded,
+                    iconColor: colors.emerald,
+                    title: 'Tổng lần sạc',
+                    value: '$totalCharges',
+                  ).appFadeSlideIn(index: 2),
+                  StatCard(
+                    icon: Icons.trending_up_rounded,
+                    iconColor: colors.info,
+                    title: 'Sạc TB / lần',
+                    value:
+                        '${((stats['avgChargeGain'] as double?) ?? 0.0).toStringAsFixed(0)}%',
+                  ).appFadeSlideIn(index: 3),
+                  StatCard(
+                    icon: Icons.battery_1_bar_rounded,
+                    iconColor: colors.amber,
+                    title: 'Pin bắt đầu TB',
+                    value:
+                        '${((stats['avgStartBattery'] as double?) ?? 0.0).toStringAsFixed(0)}%',
+                  ).appFadeSlideIn(index: 4),
+                  StatCard(
+                    icon: Icons.timer_outlined,
+                    iconColor: colors.danger,
+                    title: 'Thời gian sạc TB',
+                    value:
+                        '${((stats['avgChargeDuration'] as double?) ?? 0.0).toStringAsFixed(1)}h',
+                  ).appFadeSlideIn(index: 5),
+                ],
+              );
+            },
+          ),
+        );
+      },
     );
   }
 
   // ── Charge Trend Line Chart ──
   Widget _buildChargeTrendChart(List<ChargeLogModel> logs) {
-    if (logs.length < 2) return const SizedBox.shrink();
-
-    // Lấy 20 log gần nhất, đảo ngược để sắp theo thời gian tăng
-    final recentLogs = logs.take(20).toList().reversed.toList();
+    final validLogs = logs
+        .where((l) => l.chargeGain.isFinite && l.startBatteryPercent.isFinite)
+        .take(20)
+        .toList()
+        .reversed
+        .toList();
+    if (validLogs.length < 2) return const SizedBox.shrink();
 
     final chargeGainSpots = <FlSpot>[];
     final startBatterySpots = <FlSpot>[];
 
-    for (int i = 0; i < recentLogs.length; i++) {
+    for (int i = 0; i < validLogs.length; i++) {
       chargeGainSpots.add(
-        FlSpot(i.toDouble(), recentLogs[i].chargeGain.toDouble()),
+        FlSpot(
+          i.toDouble(),
+          validLogs[i].chargeGain.toDouble().clamp(0.0, 100.0),
+        ),
       );
       startBatterySpots.add(
-        FlSpot(i.toDouble(), recentLogs[i].startBatteryPercent.toDouble()),
+        FlSpot(
+          i.toDouble(),
+          validLogs[i].startBatteryPercent.toDouble().clamp(0.0, 100.0),
+        ),
       );
     }
 
-    return _ChartCard(
-      title: '⚡ Xu hướng sạc',
-      subtitle: '${recentLogs.length} lần sạc gần nhất',
-      delay: 600,
-      legend: const [
-        _LegendItem(color: AppColors.primary, label: 'Sạc được (%)'),
-        _LegendItem(color: AppColors.error, label: 'Pin bắt đầu (%)'),
-      ],
-      child: SizedBox(
-        height: 200,
-        child: LineChart(
-          LineChartData(
-            gridData: FlGridData(
-              show: true,
-              drawVerticalLine: false,
-              horizontalInterval: 20,
-              getDrawingHorizontalLine: (value) => FlLine(
-                color: AppColors.border.withValues(alpha: 0.5),
-                strokeWidth: 1,
-              ),
-            ),
-            titlesData: FlTitlesData(
-              leftTitles: AxisTitles(
-                sideTitles: SideTitles(
-                  showTitles: true,
-                  reservedSize: 36,
-                  interval: 20,
-                  getTitlesWidget: (value, _) => Text(
-                    '${value.toInt()}%',
-                    style: const TextStyle(
-                      color: AppColors.textTertiary,
-                      fontSize: 10,
+    return Builder(
+      builder: (context) {
+        final colors = AppUiColors.of(context);
+        return _ChartCard(
+          title: '⚡ Xu hướng sạc',
+          subtitle: '${validLogs.length} lần sạc gần nhất',
+          delay: 600,
+          legend: [
+            _LegendItem(color: colors.primary, label: 'Sạc được (%)'),
+            _LegendItem(color: colors.danger, label: 'Pin bắt đầu (%)'),
+          ],
+          child: SizedBox(
+            height: 200,
+            child: LineChart(
+              LineChartData(
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  horizontalInterval: 20,
+                  getDrawingHorizontalLine: (value) => FlLine(
+                    color: colors.border.withValues(alpha: 0.5),
+                    strokeWidth: 1,
+                  ),
+                ),
+                titlesData: FlTitlesData(
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 36,
+                      interval: 20,
+                      getTitlesWidget: (value, _) => Text(
+                        '${value.toInt()}%',
+                        style: TextStyle(
+                          color: colors.muted,
+                          fontSize: 10,
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
-              bottomTitles: const AxisTitles(
-                sideTitles: SideTitles(showTitles: false),
-              ),
-              topTitles: const AxisTitles(
-                sideTitles: SideTitles(showTitles: false),
-              ),
-              rightTitles: const AxisTitles(
-                sideTitles: SideTitles(showTitles: false),
-              ),
-            ),
-            borderData: FlBorderData(show: false),
-            lineBarsData: [
-              // Charge gain line
-              LineChartBarData(
-                spots: chargeGainSpots,
-                isCurved: true,
-                curveSmoothness: 0.3,
-                color: AppColors.primary,
-                barWidth: 3,
-                isStrokeCapRound: true,
-                dotData: FlDotData(
-                  show: true,
-                  getDotPainter: (_, _, _, _) => FlDotCirclePainter(
-                    radius: 3,
-                    color: AppColors.primary,
-                    strokeWidth: 1,
-                    strokeColor: Colors.white,
+                  bottomTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  topTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  rightTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
                   ),
                 ),
-                belowBarData: BarAreaData(
-                  show: true,
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      AppColors.primary.withValues(alpha: 0.3),
-                      AppColors.primary.withValues(alpha: 0.0),
-                    ],
-                  ),
-                ),
-              ),
-              // Start battery line
-              LineChartBarData(
-                spots: startBatterySpots,
-                isCurved: true,
-                curveSmoothness: 0.3,
-                color: AppColors.error,
-                barWidth: 2,
-                isStrokeCapRound: true,
-                dashArray: [5, 3],
-                dotData: const FlDotData(show: false),
-              ),
-            ],
-            lineTouchData: LineTouchData(
-              touchTooltipData: LineTouchTooltipData(
-                getTooltipColor: (_) => AppColors.surfaceLight,
-                tooltipRoundedRadius: 8,
-                getTooltipItems: (spots) {
-                  return spots.map((s) {
-                    final color = s.barIndex == 0
-                        ? AppColors.primary
-                        : AppColors.error;
-                    final label = s.barIndex == 0 ? 'Sạc được' : 'Pin bắt đầu';
-                    return LineTooltipItem(
-                      '$label: ${s.y.toInt()}%',
-                      TextStyle(
-                        color: color,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                borderData: FlBorderData(show: false),
+                lineBarsData: [
+                  // Charge gain line
+                  LineChartBarData(
+                    spots: chargeGainSpots,
+                    isCurved: true,
+                    curveSmoothness: 0.3,
+                    color: colors.primary,
+                    barWidth: 3,
+                    isStrokeCapRound: true,
+                    dotData: FlDotData(
+                      show: true,
+                      getDotPainter: (_, _, _, _) => FlDotCirclePainter(
+                        radius: 3,
+                        color: colors.primary,
+                        strokeWidth: 1,
+                        strokeColor: colors.surface,
                       ),
-                    );
-                  }).toList();
-                },
+                    ),
+                    belowBarData: BarAreaData(
+                      show: true,
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          colors.primary.withValues(alpha: 0.3),
+                          colors.primary.withValues(alpha: 0.0),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // Start battery line
+                  LineChartBarData(
+                    spots: startBatterySpots,
+                    isCurved: true,
+                    curveSmoothness: 0.3,
+                    color: colors.danger,
+                    barWidth: 2,
+                    isStrokeCapRound: true,
+                    dashArray: [5, 3],
+                    dotData: const FlDotData(show: false),
+                  ),
+                ],
+                lineTouchData: LineTouchData(
+                  touchTooltipData: LineTouchTooltipData(
+                    getTooltipColor: (_) => colors.surface,
+                    tooltipRoundedRadius: 8,
+                    getTooltipItems: (spots) {
+                      return spots.map((s) {
+                        final color = s.barIndex == 0
+                            ? colors.primary
+                            : colors.danger;
+                        final label =
+                            s.barIndex == 0 ? 'Sạc được' : 'Pin bắt đầu';
+                        return LineTooltipItem(
+                          '$label: ${s.y.toInt()}%',
+                          TextStyle(
+                            color: color,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        );
+                      }).toList();
+                    },
+                  ),
+                ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -425,129 +411,136 @@ class StatisticsScreen extends ConsumerWidget {
         : 0.0;
 
     final healthScore = (100 + degradation).clamp(0, 100);
-    final healthText = healthScore >= 80
-        ? 'Tốt'
-        : healthScore >= 60
-        ? 'Khá'
-        : healthScore >= 40
-        ? 'Trung bình'
-        : 'Cần kiểm tra';
-    final healthColor = healthScore >= 80
-        ? AppColors.primary
-        : healthScore >= 60
-        ? AppColors.warning
-        : AppColors.error;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [healthColor.withValues(alpha: 0.1), AppColors.card],
-          ),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: healthColor.withValues(alpha: 0.3)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.health_and_safety_rounded,
-                  color: healthColor,
-                  size: 22,
-                ),
-                const SizedBox(width: 8),
-                const Text(
-                  'Tình trạng pin',
-                  style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: healthColor.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    healthText,
-                    style: TextStyle(
-                      color: healthColor,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            // Health score bar
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: LinearProgressIndicator(
-                value: healthScore / 100,
-                minHeight: 8,
-                backgroundColor: AppColors.border,
-                valueColor: AlwaysStoppedAnimation(healthColor),
+    return Builder(
+      builder: (context) {
+        final colors = AppUiColors.of(context);
+        final healthText = healthScore >= 80
+            ? 'Tốt'
+            : healthScore >= 60
+            ? 'Khá'
+            : healthScore >= 40
+            ? 'Trung bình'
+            : 'Cần kiểm tra';
+        final healthColor = healthScore >= 80
+            ? colors.emerald
+            : healthScore >= 60
+            ? colors.amber
+            : colors.danger;
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [healthColor.withValues(alpha: 0.1), colors.surface],
               ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: healthColor.withValues(alpha: 0.3)),
             ),
-            const SizedBox(height: 10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Điểm sức khỏe: ${healthScore.toStringAsFixed(0)}/100',
-                  style: TextStyle(
-                    color: healthColor,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
+                Row(
+                  children: [
+                    Icon(
+                      Icons.health_and_safety_rounded,
+                      color: healthColor,
+                      size: 22,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Tình trạng pin',
+                      style: TextStyle(
+                        color: colors.text,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: healthColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        healthText,
+                        style: TextStyle(
+                          color: healthColor,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                // Health score bar
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: LinearProgressIndicator(
+                    value: healthScore / 100,
+                    minHeight: 8,
+                    backgroundColor: colors.border,
+                    valueColor: AlwaysStoppedAnimation(healthColor),
                   ),
                 ),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Điểm sức khỏe: ${healthScore.toStringAsFixed(0)}/100',
+                      style: TextStyle(
+                        color: healthColor,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      'Tốc độ sạc TB: ${recentRate.toStringAsFixed(1)}%/h',
+                      style: TextStyle(
+                        color: colors.muted,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
                 Text(
-                  'Tốc độ sạc TB: ${recentRate.toStringAsFixed(1)}%/h',
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
+                  degradation >= 0
+                      ? '📈 Hiệu suất sạc ổn định so với trước'
+                      : '📉 Tốc độ sạc giảm ${degradation.abs().toStringAsFixed(1)}% — theo dõi thêm',
+                  style: TextStyle(
+                    color: colors.muted,
                     fontSize: 12,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              degradation >= 0
-                  ? '📈 Hiệu suất sạc ổn định so với trước'
-                  : '📉 Tốc độ sạc giảm ${degradation.abs().toStringAsFixed(1)}% — theo dõi thêm',
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
-      ),
-    ).appFadeSlideIn(index: 7);
+          ),
+        ).appFadeSlideIn(index: 7);
+      },
+    );
   }
 
   // ── Consumption Bar Chart ──
   Widget _buildConsumptionChart(List<ChargeLogModel> logs) {
-    if (logs.length < 3) return const SizedBox.shrink();
+    final validLogs = logs.where((l) => l.chargeGain.isFinite).toList();
+    if (validLogs.length < 3) return const SizedBox.shrink();
 
     // Group by week
     final now = DateTime.now();
     final Map<int, List<ChargeLogModel>> weeklyLogs = {};
 
-    for (final log in logs) {
+    for (final log in validLogs) {
       final weeksAgo = now.difference(log.startTime).inDays ~/ 7;
       if (weeksAgo < 8) {
         weeklyLogs.putIfAbsent(weeksAgo, () => []).add(log);
@@ -557,115 +550,121 @@ class StatisticsScreen extends ConsumerWidget {
     final weeks = weeklyLogs.keys.toList()..sort();
     if (weeks.isEmpty) return const SizedBox.shrink();
 
-    final barGroups = <BarChartGroupData>[];
-    for (int i = 0; i < weeks.length; i++) {
-      final weekLogs = weeklyLogs[weeks[i]]!;
-      final avgGain =
-          weekLogs.fold<int>(0, (s, l) => s + l.chargeGain) / weekLogs.length;
+    return Builder(
+      builder: (context) {
+        final colors = AppUiColors.of(context);
+        final barGroups = <BarChartGroupData>[];
+        for (int i = 0; i < weeks.length; i++) {
+          final weekLogs = weeklyLogs[weeks[i]]!;
+          final avgGain =
+              weekLogs.fold<int>(0, (s, l) => s + l.chargeGain) /
+              weekLogs.length;
 
-      barGroups.add(
-        BarChartGroupData(
-          x: i,
-          barRods: [
-            BarChartRodData(
-              toY: avgGain,
-              width: 16,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(6),
-              ),
-              gradient: const LinearGradient(
-                begin: Alignment.bottomCenter,
-                end: Alignment.topCenter,
-                colors: [AppColors.info, AppColors.accentGreen],
-              ),
+          barGroups.add(
+            BarChartGroupData(
+              x: i,
+              barRods: [
+                BarChartRodData(
+                  toY: avgGain.clamp(0.0, 100.0),
+                  width: 16,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(6),
+                  ),
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [colors.info, colors.emerald],
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      );
-    }
+          );
+        }
 
-    return _ChartCard(
-      title: '📊 Tiêu thụ điện theo tuần',
-      subtitle: 'Mức sạc trung bình mỗi tuần',
-      delay: 800,
-      child: SizedBox(
-        height: 180,
-        child: BarChart(
-          BarChartData(
-            gridData: FlGridData(
-              show: true,
-              drawVerticalLine: false,
-              horizontalInterval: 20,
-              getDrawingHorizontalLine: (value) => FlLine(
-                color: AppColors.border.withValues(alpha: 0.5),
-                strokeWidth: 1,
-              ),
-            ),
-            titlesData: FlTitlesData(
-              leftTitles: AxisTitles(
-                sideTitles: SideTitles(
-                  showTitles: true,
-                  reservedSize: 36,
-                  interval: 20,
-                  getTitlesWidget: (value, _) => Text(
-                    '${value.toInt()}%',
-                    style: const TextStyle(
-                      color: AppColors.textTertiary,
-                      fontSize: 10,
+        return _ChartCard(
+          title: '📊 Tiêu thụ điện theo tuần',
+          subtitle: 'Mức sạc trung bình mỗi tuần',
+          delay: 800,
+          child: SizedBox(
+            height: 180,
+            child: BarChart(
+              BarChartData(
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  horizontalInterval: 20,
+                  getDrawingHorizontalLine: (value) => FlLine(
+                    color: colors.border.withValues(alpha: 0.5),
+                    strokeWidth: 1,
+                  ),
+                ),
+                titlesData: FlTitlesData(
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 36,
+                      interval: 20,
+                      getTitlesWidget: (value, _) => Text(
+                        '${value.toInt()}%',
+                        style: TextStyle(
+                          color: colors.muted,
+                          fontSize: 10,
+                        ),
+                      ),
                     ),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      getTitlesWidget: (value, _) {
+                        final idx = value.toInt();
+                        if (idx >= 0 && idx < weeks.length) {
+                          final w = weeks[idx];
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Text(
+                              w == 0 ? 'Nay' : '${w}w',
+                              style: TextStyle(
+                                color: colors.muted,
+                                fontSize: 10,
+                              ),
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
+                  ),
+                  topTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  rightTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                ),
+                borderData: FlBorderData(show: false),
+                barGroups: barGroups,
+                barTouchData: BarTouchData(
+                  touchTooltipData: BarTouchTooltipData(
+                    getTooltipColor: (_) => colors.surface,
+                    tooltipRoundedRadius: 8,
+                    getTooltipItem: (group, groupIdx, rod, rodIdx) {
+                      return BarTooltipItem(
+                        '${rod.toY.toStringAsFixed(0)}% TB',
+                        TextStyle(
+                          color: colors.emerald,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
-              bottomTitles: AxisTitles(
-                sideTitles: SideTitles(
-                  showTitles: true,
-                  getTitlesWidget: (value, _) {
-                    final idx = value.toInt();
-                    if (idx >= 0 && idx < weeks.length) {
-                      final w = weeks[idx];
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text(
-                          w == 0 ? 'Nay' : '${w}w',
-                          style: const TextStyle(
-                            color: AppColors.textTertiary,
-                            fontSize: 10,
-                          ),
-                        ),
-                      );
-                    }
-                    return const SizedBox.shrink();
-                  },
-                ),
-              ),
-              topTitles: const AxisTitles(
-                sideTitles: SideTitles(showTitles: false),
-              ),
-              rightTitles: const AxisTitles(
-                sideTitles: SideTitles(showTitles: false),
-              ),
-            ),
-            borderData: FlBorderData(show: false),
-            barGroups: barGroups,
-            barTouchData: BarTouchData(
-              touchTooltipData: BarTouchTooltipData(
-                getTooltipColor: (_) => AppColors.surfaceLight,
-                tooltipRoundedRadius: 8,
-                getTooltipItem: (group, groupIdx, rod, rodIdx) {
-                  return BarTooltipItem(
-                    '${rod.toY.toStringAsFixed(0)}% TB',
-                    const TextStyle(
-                      color: AppColors.accentGreen,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  );
-                },
-              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -714,59 +713,64 @@ class StatisticsScreen extends ConsumerWidget {
       avgDaysBetween = totalDays / (sorted.length - 1);
     }
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Row(
+    return Builder(
+      builder: (context) {
+        final colors = AppUiColors.of(context);
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: colors.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: colors.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  Icons.insights_rounded,
-                  color: AppColors.warning,
-                  size: 20,
+                Row(
+                  children: [
+                    Icon(
+                      Icons.insights_rounded,
+                      color: colors.amber,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Thói quen sạc',
+                      style: TextStyle(
+                        color: colors.text,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
-                SizedBox(width: 8),
-                Text(
-                  'Thói quen sạc',
-                  style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
+                const SizedBox(height: 14),
+                _PatternTile(
+                  icon: Icons.access_time_rounded,
+                  label: 'Giờ sạc phổ biến',
+                  value: '${peakHour.toString().padLeft(2, '0')}:00',
+                  trailing: '${hourCounts[peakHour]} lần',
+                ),
+                _PatternTile(
+                  icon: Icons.calendar_today_rounded,
+                  label: 'Ngày sạc phổ biến',
+                  value: dayNames[peakDay],
+                  trailing: '${dayCounts[peakDay]} lần',
+                ),
+                _PatternTile(
+                  icon: Icons.loop_rounded,
+                  label: 'Chu kỳ sạc',
+                  value: 'Mỗi ${avgDaysBetween.toStringAsFixed(1)} ngày',
+                  trailing: '',
                 ),
               ],
             ),
-            const SizedBox(height: 14),
-            _PatternTile(
-              icon: Icons.access_time_rounded,
-              label: 'Giờ sạc phổ biến',
-              value: '${peakHour.toString().padLeft(2, '0')}:00',
-              trailing: '${hourCounts[peakHour]} lần',
-            ),
-            _PatternTile(
-              icon: Icons.calendar_today_rounded,
-              label: 'Ngày sạc phổ biến',
-              value: dayNames[peakDay],
-              trailing: '${dayCounts[peakDay]} lần',
-            ),
-            _PatternTile(
-              icon: Icons.loop_rounded,
-              label: 'Chu kỳ sạc',
-              value: 'Mỗi ${avgDaysBetween.toStringAsFixed(1)} ngày',
-              trailing: '',
-            ),
-          ],
-        ),
-      ),
-    ).appFadeSlideIn(index: 9);
+          ),
+        ).appFadeSlideIn(index: 9);
+      },
+    );
   }
 }
 
@@ -791,22 +795,23 @@ class _ChartCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppUiColors.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppColors.card,
+          color: colors.surface,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.border),
+          border: Border.all(color: colors.border),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               title,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
+              style: TextStyle(
+                color: colors.text,
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
               ),
@@ -814,8 +819,8 @@ class _ChartCard extends StatelessWidget {
             const SizedBox(height: 2),
             Text(
               subtitle,
-              style: const TextStyle(
-                color: AppColors.textTertiary,
+              style: TextStyle(
+                color: colors.muted,
                 fontSize: 12,
               ),
             ),
@@ -854,7 +859,7 @@ class _LegendItem extends StatelessWidget {
         const SizedBox(width: 6),
         Text(
           label,
-          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+          style: TextStyle(color: AppUiColors.of(context).muted, fontSize: 11),
         ),
       ],
     );
@@ -876,11 +881,12 @@ class _PatternTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppUiColors.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         children: [
-          Icon(icon, color: AppColors.textTertiary, size: 18),
+          Icon(icon, color: colors.muted, size: 18),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -888,15 +894,15 @@ class _PatternTile extends StatelessWidget {
               children: [
                 Text(
                   label,
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
+                  style: TextStyle(
+                    color: colors.muted,
                     fontSize: 12,
                   ),
                 ),
                 Text(
                   value,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
+                  style: TextStyle(
+                    color: colors.text,
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
                   ),
@@ -907,10 +913,9 @@ class _PatternTile extends StatelessWidget {
           if (trailing.isNotEmpty)
             Text(
               trailing,
-              style: const TextStyle(
-                color: AppColors.primary,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
+              style: TextStyle(
+                color: colors.muted,
+                fontSize: 12,
               ),
             ),
         ],

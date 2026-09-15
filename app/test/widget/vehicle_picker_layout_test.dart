@@ -104,6 +104,7 @@ void main() {
         child: MaterialApp(
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(context).copyWith(
+              size: const Size(393, 852),
               textScaler: const TextScaler.linear(1.3),
             ),
             child: child!,

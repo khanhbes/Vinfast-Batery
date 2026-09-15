@@ -42,6 +42,7 @@ class _StopChargingConfirmationSheet extends StatefulWidget {
 class _StopChargingConfirmationSheetState
     extends State<_StopChargingConfirmationSheet> {
   UserStopReason _reason = UserStopReason.none;
+  bool _submitting = false;
 
   @override
   Widget build(BuildContext context) {
@@ -91,7 +92,7 @@ class _StopChargingConfirmationSheetState
             ),
             const SizedBox(height: 24),
             OutlinedButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: _submitting ? null : () => Navigator.pop(context),
               child: const Text('Tiếp tục sạc'),
             ),
             const SizedBox(height: 8),
@@ -101,9 +102,22 @@ class _StopChargingConfirmationSheetState
                 foregroundColor: colors.onError,
                 minimumSize: const Size.fromHeight(52),
               ),
-              onPressed: () =>
-                  Navigator.pop(context, StopChargingDecision(_reason)),
-              child: const Text('Dừng sạc'),
+              onPressed: _submitting
+                  ? null
+                  : () {
+                      setState(() => _submitting = true);
+                      Navigator.pop(context, StopChargingDecision(_reason));
+                    },
+              child: _submitting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text('Dừng sạc'),
             ),
           ],
         ),

@@ -22,7 +22,8 @@ void main() {
     );
     final node = tester.getSemantics(find.bySemanticsLabel('Lịch sử'));
     expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
-    tester.binding.rootPipelineOwner.semanticsOwner!.performAction(
+    // ignore: deprecated_member_use
+    tester.binding.pipelineOwner.semanticsOwner!.performAction(
       node.id,
       SemanticsAction.tap,
     );

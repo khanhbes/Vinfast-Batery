@@ -294,6 +294,11 @@ class NotificationCenterService {
     return _repository.delete(notificationId);
   }
 
+  /// Xóa toàn bộ thông báo thuộc tài khoản đang đăng nhập.
+  Future<bool> deleteAll() {
+    return _repository.deleteAll();
+  }
+
   /// Model sync service (truy cập trực tiếp nếu cần)
   ModelSyncService get modelSync => _modelSync;
 }

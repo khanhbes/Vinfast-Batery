@@ -1,4 +1,5 @@
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/cockpit_design_system.dart';
@@ -18,7 +19,7 @@ class ChargeModeSwitcherV2 extends StatefulWidget {
 }
 
 class _ChargeModeSwitcherV2State extends State<ChargeModeSwitcherV2>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   late final AnimationController _pulseController;
   late final AnimationController _aiIconController;
   late final AnimationController _timerIconController;
@@ -30,6 +31,8 @@ class _ChargeModeSwitcherV2State extends State<ChargeModeSwitcherV2>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
     // Breathing glow animation
     _pulseController = AnimationController(
       vsync: this,
@@ -62,7 +65,32 @@ class _ChargeModeSwitcherV2State extends State<ChargeModeSwitcherV2>
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.inactive) {
+      _stopAnimations();
+    } else if (state == AppLifecycleState.resumed) {
+      _resumeAnimations();
+    }
+  }
+
+  void _stopAnimations() {
+    if (_pulseController.isAnimating) _pulseController.stop();
+    if (_aiIconController.isAnimating) _aiIconController.stop();
+    if (_timerIconController.isAnimating) _timerIconController.stop();
+  }
+
+  void _resumeAnimations() {
+    if (!mounted || MediaQuery.disableAnimationsOf(context)) return;
+    if (!_pulseController.isAnimating) _pulseController.repeat(reverse: true);
+    if (!_aiIconController.isAnimating) _aiIconController.repeat(reverse: true);
+    if (!_timerIconController.isAnimating) _timerIconController.repeat(reverse: true);
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pulseController.dispose();
     _aiIconController.dispose();
     _timerIconController.dispose();
@@ -221,6 +249,7 @@ class _ModeTab extends StatefulWidget {
 
 class _ModeTabState extends State<_ModeTab> {
   double _scale = 1.0;
+  Timer? _bounceTimer;
 
   @override
   void didUpdateWidget(covariant _ModeTab oldWidget) {
@@ -230,12 +259,20 @@ class _ModeTabState extends State<_ModeTab> {
     }
   }
 
-  void _triggerBounce() async {
+  void _triggerBounce() {
     setState(() => _scale = 1.05);
-    await Future.delayed(const Duration(milliseconds: 150));
-    if (mounted) {
-      setState(() => _scale = 1.0);
-    }
+    _bounceTimer?.cancel();
+    _bounceTimer = Timer(const Duration(milliseconds: 150), () {
+      if (mounted) {
+        setState(() => _scale = 1.0);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _bounceTimer?.cancel();
+    super.dispose();
   }
 
   @override

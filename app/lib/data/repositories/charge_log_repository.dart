@@ -200,22 +200,52 @@ class ChargeLogRepository {
   Future<List<ChargeLogModel>> getChargeLogs(String vehicleId) async {
     final uid = _uid;
     if (uid == null || vehicleId.isEmpty) return [];
-    final docs = await FirestoreSafeQuery.orderedQuery(
-      collection: _chargeLogsRef,
-      whereField: 'vehicleId',
-      whereValue: vehicleId,
-      orderByField: 'startTime',
-      descending: true,
-      additionalWhere: {'ownerUid': uid},
+    try {
+      final docs = await FirestoreSafeQuery.orderedQuery(
+        collection: _chargeLogsRef,
+        whereField: 'vehicleId',
+        whereValue: vehicleId,
+        orderByField: 'startTime',
+        descending: true,
+        additionalWhere: {'ownerUid': uid},
+      );
+      return docs
+          .where((doc) {
+            final data =
+                (doc.data() as Map<String, dynamic>?) ?? <String, dynamic>{};
+            return data['isDeleted'] != true &&
+                data['isArchived'] != true &&
+                data['archivedAt'] == null &&
+                data['hiddenByUserAt'] == null;
+          })
+          .map((doc) => ChargeLogModel.fromFirestore(doc))
+          .toList();
+    } on FirebaseException catch (error) {
+      if (error.code != 'permission-denied' &&
+          error.code != 'failed-precondition' &&
+          error.code != 'unavailable') {
+        rethrow;
+      }
+      return _getChargeLogsFromApi(vehicleId);
+    }
+  }
+
+  Future<List<ChargeLogModel>> _getChargeLogsFromApi(String vehicleId) async {
+    final response = await ApiService().get(
+      '/api/user/charge-logs?vehicleId=${Uri.encodeQueryComponent(vehicleId)}&limit=200',
     );
-    return docs
-        .where((doc) {
-          final data =
-              (doc.data() as Map<String, dynamic>?) ?? <String, dynamic>{};
-          return data['isDeleted'] != true && data['hiddenByUserAt'] == null;
-        })
-        .map((doc) => ChargeLogModel.fromFirestore(doc))
-        .toList();
+    if (response['success'] != true || response['data'] is! List) return [];
+    final logs = <ChargeLogModel>[];
+    for (final raw in response['data'] as List) {
+      if (raw is! Map) continue;
+      try {
+        logs.add(ChargeLogModel.fromMap(Map<String, dynamic>.from(raw)));
+      } on Object {
+        // A malformed legacy record must not hide the rest of the history.
+      }
+    }
+    logs.sort((left, right) => right.startTime.compareTo(left.startTime));
+    return logs;
   }
 
   /// Lưu charge log mới + cập nhật ODO xe bằng Firestore Transaction

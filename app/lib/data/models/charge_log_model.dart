@@ -32,16 +32,18 @@ class AiPredictionData {
 
   factory AiPredictionData.fromMap(Map<String, dynamic>? data) {
     if (data == null) return AiPredictionData();
+    DateTime? date(Object? value) {
+      if (value is Timestamp) return value.toDate();
+      if (value is DateTime) return value;
+      return DateTime.tryParse(value?.toString() ?? '');
+    }
+
     return AiPredictionData(
-      requestedAt: data['requestedAt'] != null
-          ? (data['requestedAt'] as Timestamp).toDate()
-          : null,
+      requestedAt: date(data['requestedAt']),
       startBatteryPercent: data['startBatteryPercent'],
       targetBatteryPercent: data['targetBatteryPercent'],
       predictedDurationSec: data['predictedDurationSec']?.toDouble(),
-      predictedStopAt: data['predictedStopAt'] != null
-          ? (data['predictedStopAt'] as Timestamp).toDate()
-          : null,
+      predictedStopAt: date(data['predictedStopAt']),
       modelSource: data['modelSource'],
       modelVersion: data['modelVersion'],
       isBeta: data['isBeta'],
@@ -192,24 +194,25 @@ class ChargeLogModel {
 
   /// Convert from in-memory map (demo mode)
   factory ChargeLogModel.fromMap(Map<String, dynamic> data) {
+    DateTime date(Object? value) {
+      if (value is Timestamp) return value.toDate();
+      if (value is DateTime) return value;
+      return DateTime.parse(value.toString());
+    }
+
     return ChargeLogModel(
       logId: data['logId'],
       vehicleId: data['vehicleId'] ?? '',
-      startTime: data['startTime'] is DateTime
-          ? data['startTime']
-          : DateTime.parse(data['startTime']),
-      endTime: data['endTime'] is DateTime
-          ? data['endTime']
-          : DateTime.parse(data['endTime']),
+      ownerUid: data['ownerUid'],
+      startTime: date(data['startTime']),
+      endTime: date(data['endTime']),
       startBatteryPercent: data['startBatteryPercent'] ?? 0,
       endBatteryPercent: data['endBatteryPercent'] ?? 0,
       odoAtCharge: data['odoAtCharge'] ?? 0,
       targetBatteryPercent: data['targetBatteryPercent'],
-      estimatedCompleteAt: data['estimatedCompleteAt'] is DateTime
-          ? data['estimatedCompleteAt']
-          : data['estimatedCompleteAt'] != null
-          ? DateTime.parse(data['estimatedCompleteAt'])
-          : null,
+      estimatedCompleteAt: data['estimatedCompleteAt'] == null
+          ? null
+          : date(data['estimatedCompleteAt']),
       aiPrediction: AiPredictionData.fromMap(data['aiPrediction']),
     );
   }

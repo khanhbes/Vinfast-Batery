@@ -152,6 +152,15 @@ class ApiService {
     return _write(endpoint, body, method: 'PUT');
   }
 
+  /// DELETE request helper. A JSON body is optional because most mobile
+  /// delete endpoints derive ownership from the Firebase ID token.
+  Future<Map<String, dynamic>> delete(
+    String endpoint, [
+    Map<String, dynamic> body = const <String, dynamic>{},
+  ]) {
+    return _write(endpoint, body, method: 'DELETE');
+  }
+
   Future<Map<String, dynamic>> _write(
     String endpoint,
     Map<String, dynamic> body, {

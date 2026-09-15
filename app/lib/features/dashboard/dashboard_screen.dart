@@ -5,6 +5,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_ui_colors.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/widgets/app_popup.dart';
 import '../../core/widgets/error_state.dart';
@@ -68,6 +69,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   PayloadType _selectedPayload = PayloadType.onePerson;
   Timer? _uiTimer;
   bool _isStartingTrip = false;
+  bool _isNavigating = false;
 
   @override
   void initState() {
@@ -76,6 +78,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     _chargeService.onUpdate = () => setState(() {});
     // Timer refresh UI mỗi 1 giây khi tracking
     _uiTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
       if (_tripService.isTracking || _chargeService.isCharging) {
         setState(() {});
       }
@@ -228,7 +231,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   @override
   void dispose() {
+    _tripService.onUpdate = null;
+    _chargeService.onUpdate = null;
     _uiTimer?.cancel();
+    _uiTimer = null;
     super.dispose();
   }
 
@@ -238,7 +244,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final vehicleAsync = ref.watch(vehicleProvider(vehicleId));
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AppUiColors.of(context).background,
       floatingActionButton: QuickActionFab(
         vehicleId: vehicleId.isEmpty ? null : vehicleId,
         heroTag: 'quick_action_fab_dashboard',
@@ -294,14 +300,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         child: PersistentChargingPill(
                           session: session,
                           now: DateTime.now(),
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => SmartChargingControlScreen(
-                                vehicleId: vehicleId,
-                                currentSoc: vehicle.currentBattery.toDouble(),
+                          onTap: () {
+                            if (_isNavigating || !mounted) return;
+                            _isNavigating = true;
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => SmartChargingControlScreen(
+                                  vehicleId: vehicleId,
+                                  currentSoc: vehicle.currentBattery.toDouble(),
+                                ),
                               ),
-                            ),
-                          ),
+                            ).then((_) {
+                              if (mounted) _isNavigating = false;
+                            });
+                          },
                         ),
                       ),
                     );
@@ -1245,13 +1257,21 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         // Scroll to RoutePredictionCard (already visible on Dashboard)
         break;
       case QuickAction.aiFunctions:
+        if (_isNavigating || !mounted) return;
+        _isNavigating = true;
         Navigator.of(
           context,
-        ).push(MaterialPageRoute(builder: (_) => const AiFunctionsScreen()));
+        ).push(MaterialPageRoute(builder: (_) => const AiFunctionsScreen())).then((_) {
+          if (mounted) _isNavigating = false;
+        });
       case QuickAction.guide:
+        if (_isNavigating || !mounted) return;
+        _isNavigating = true;
         Navigator.of(
           context,
-        ).push(MaterialPageRoute(builder: (_) => const GuideScreen()));
+        ).push(MaterialPageRoute(builder: (_) => const GuideScreen())).then((_) {
+          if (mounted) _isNavigating = false;
+        });
     }
   }
 
@@ -1348,8 +1368,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   /// centralized prevents the legacy ChargeTrackingService flow from issuing
   /// an untimed relay ON command.
   void _openSmartCharge(AsyncValue vehicleAsync, String vehicleId) {
+    if (_isNavigating || !mounted) return;
     final vehicle = vehicleAsync.value;
     if (vehicle == null || vehicleId.trim().isEmpty) return;
+    _isNavigating = true;
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => SmartChargingControlScreen(
@@ -1357,7 +1379,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           currentSoc: vehicle.currentBattery.toDouble(),
         ),
       ),
-    );
+    ).then((_) {
+      if (mounted) _isNavigating = false;
+    });
   }
 
   // Retained only for compatibility with saved/legacy callers. New entry

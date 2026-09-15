@@ -5,6 +5,11 @@ import 'package:intl/intl.dart';
 
 import '../../core/providers/app_providers.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_ui_colors.dart';
+import '../../core/widgets/app_screen_header.dart';
+import '../../core/widgets/empty_state.dart';
+import '../../core/widgets/error_state.dart';
+import '../../core/widgets/loading_skeleton.dart';
 import '../../data/models/charge_log_model.dart';
 import '../../data/repositories/charge_log_repository.dart';
 import 'add_charge_log_modal.dart';
@@ -18,91 +23,56 @@ class ChargeLogScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = AppUiColors.of(context);
     final vehicleId = ref.watch(selectedVehicleIdProvider);
     final logsAsync = ref.watch(chargeLogsProvider(vehicleId));
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: colors.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ── Header ──
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
+            AppScreenHeader(
+              icon: Icons.history_rounded,
+              title: 'Lịch sử sạc',
+              subtitle: 'Tất cả nhật ký sạc điện',
+              iconColor: colors.emerald,
+              actions: [
+                IconButton(
+                  onPressed: () async {
+                    final result = await AddChargeLogModal.show(
+                      context,
+                      vehicleId,
+                    );
+                    if (result == true) {
+                      ref.invalidate(chargeLogsProvider(vehicleId));
+                      ref.invalidate(vehicleStatsProvider(vehicleId));
+                      ref.invalidate(vehicleProvider(vehicleId));
+                    }
+                  },
+                  icon: Container(
+                    padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(12),
+                      color: colors.primary,
+                      borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(
-                      Icons.history_rounded,
-                      color: AppColors.primary,
-                      size: 22,
+                      Icons.add_rounded,
+                      color: Colors.white,
+                      size: 18,
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Lịch sử sạc',
-                          style: TextStyle(
-                            color: AppColors.textPrimary,
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                        Text(
-                          'Tất cả nhật ký sạc điện',
-                          style: TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Add button
-                  IconButton(
-                    onPressed: () async {
-                      final result = await AddChargeLogModal.show(
-                        context,
-                        vehicleId,
-                      );
-                      if (result == true) {
-                        ref.invalidate(chargeLogsProvider(vehicleId));
-                        ref.invalidate(vehicleStatsProvider(vehicleId));
-                        ref.invalidate(vehicleProvider(vehicleId));
-                      }
-                    },
-                    icon: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(
-                        Icons.add_rounded,
-                        color: Colors.white,
-                        size: 18,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ).animate().fadeIn(duration: 400.ms),
+                ),
+              ],
+            ),
 
             const SizedBox(height: 8),
 
             // ── Summary Bar ──
             logsAsync.when(
-              data: (logs) => _buildSummaryBar(logs),
+              data: (logs) => _buildSummaryBar(context, logs),
               loading: () => const SizedBox(height: 50),
               error: (_, _) => const SizedBox.shrink(),
             ),
@@ -115,32 +85,22 @@ class ChargeLogScreen extends ConsumerWidget {
                 data: (logs) {
                   if (logs.isEmpty) {
                     return Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.battery_alert_rounded,
-                            color: AppColors.textTertiary,
-                            size: 64,
-                          ),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'Chưa có nhật ký sạc',
-                            style: TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'Bắt đầu ghi lại chu kỳ sạc của bạn',
-                            style: TextStyle(
-                              color: AppColors.textTertiary,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
+                      child: EmptyState(
+                        icon: Icons.history_rounded,
+                        title: 'Chưa có nhật ký sạc',
+                        message: 'Bắt đầu ghi lại chu kỳ sạc của bạn',
+                        actionLabel: 'Thêm nhật ký sạc',
+                        onAction: () async {
+                          final result = await AddChargeLogModal.show(
+                            context,
+                            vehicleId,
+                          );
+                          if (result == true) {
+                            ref.invalidate(chargeLogsProvider(vehicleId));
+                            ref.invalidate(vehicleStatsProvider(vehicleId));
+                            ref.invalidate(vehicleProvider(vehicleId));
+                          }
+                        },
                       ),
                     );
                   }
@@ -177,8 +137,8 @@ class ChargeLogScreen extends ConsumerWidget {
                                 ),
                                 child: Text(
                                   _formatDateHeader(log.startTime),
-                                  style: const TextStyle(
-                                    color: AppColors.textTertiary,
+                                  style: TextStyle(
+                                    color: colors.muted,
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
                                     letterSpacing: 0.5,
@@ -203,28 +163,14 @@ class ChargeLogScreen extends ConsumerWidget {
                     ),
                   );
                 },
-                loading: () => const Center(
-                  child: CircularProgressIndicator(
-                    color: AppColors.primary,
-                    strokeWidth: 2,
-                  ),
+                loading: () => const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  child: LoadingSkeleton(layout: SkeletonLayout.list),
                 ),
-                error: (e, _) => Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.error_outline,
-                        color: AppColors.error,
-                        size: 48,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Lỗi: $e',
-                        style: const TextStyle(color: AppColors.error),
-                      ),
-                    ],
-                  ),
+                error: (e, _) => ErrorState.fromError(
+                  error: e,
+                  prefix: 'Không tải được nhật ký sạc',
+                  onRetry: () => ref.invalidate(chargeLogsProvider(vehicleId)),
                 ),
               ),
             ),
@@ -234,7 +180,8 @@ class ChargeLogScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildSummaryBar(List<ChargeLogModel> logs) {
+  Widget _buildSummaryBar(BuildContext context, List<ChargeLogModel> logs) {
+    final colors = AppUiColors.of(context);
     final totalGain = logs.fold<int>(0, (s, l) => s + l.chargeGain);
     final avgDuration = logs.isEmpty
         ? 0.0
@@ -248,9 +195,9 @@ class ChargeLogScreen extends ConsumerWidget {
       margin: const EdgeInsets.symmetric(horizontal: 20),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.card,
+        color: colors.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: colors.border),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -260,13 +207,13 @@ class ChargeLogScreen extends ConsumerWidget {
             value: '${logs.length}',
             icon: Icons.repeat_rounded,
           ),
-          Container(width: 1, height: 30, color: AppColors.border),
+          Container(width: 1, height: 30, color: colors.border),
           _SummaryItem(
             label: 'Tổng nạp',
             value: '$totalGain%',
             icon: Icons.bolt_rounded,
           ),
-          Container(width: 1, height: 30, color: AppColors.border),
+          Container(width: 1, height: 30, color: colors.border),
           _SummaryItem(
             label: 'Sạc TB',
             value: '${avgDuration.toStringAsFixed(1)}h',
@@ -297,25 +244,26 @@ class ChargeLogScreen extends ConsumerWidget {
     ChargeLogModel log,
     String vehicleId,
   ) {
+    final colors = AppUiColors.of(context);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface,
+        backgroundColor: colors.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
+        title: Text(
           'Xóa nhật ký sạc?',
-          style: TextStyle(color: AppColors.textPrimary),
+          style: TextStyle(color: colors.text, fontWeight: FontWeight.w600),
         ),
         content: Text(
           'Bạn có chắc muốn xóa nhật ký sạc ${log.startBatteryPercent}% → ${log.endBatteryPercent}%?',
-          style: const TextStyle(color: AppColors.textSecondary),
+          style: TextStyle(color: colors.muted),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text(
+            child: Text(
               'Huỷ',
-              style: TextStyle(color: AppColors.textSecondary),
+              style: TextStyle(color: colors.muted),
             ),
           ),
           TextButton(
@@ -327,7 +275,13 @@ class ChargeLogScreen extends ConsumerWidget {
               ref.invalidate(chargeLogsProvider(vehicleId));
               ref.invalidate(vehicleStatsProvider(vehicleId));
             },
-            child: const Text('Xóa', style: TextStyle(color: AppColors.error)),
+            child: Text(
+              'Xóa',
+              style: TextStyle(
+                color: colors.danger,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),
@@ -352,21 +306,22 @@ class _SummaryItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppUiColors.of(context);
     return Column(
       children: [
-        Icon(icon, color: AppColors.primary, size: 16),
+        Icon(icon, color: colors.emerald, size: 16),
         const SizedBox(height: 4),
         Text(
           value,
-          style: const TextStyle(
-            color: AppColors.textPrimary,
+          style: TextStyle(
+            color: colors.text,
             fontSize: 16,
             fontWeight: FontWeight.w700,
           ),
         ),
         Text(
           label,
-          style: const TextStyle(color: AppColors.textTertiary, fontSize: 11),
+          style: TextStyle(color: colors.muted, fontSize: 11),
         ),
       ],
     );
@@ -385,6 +340,7 @@ class _ChargeLogDetailCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppUiColors.of(context);
     final timeFormat = DateFormat('HH:mm');
     final chargeGain = log.chargeGain;
 
@@ -392,9 +348,9 @@ class _ChargeLogDetailCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.card,
+        color: colors.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: colors.border),
       ),
       child: Column(
         children: [
@@ -415,24 +371,24 @@ class _ChargeLogDetailCard extends StatelessWidget {
                       children: [
                         Text(
                           '${log.startBatteryPercent}%',
-                          style: const TextStyle(
-                            color: AppColors.error,
+                          style: TextStyle(
+                            color: colors.danger,
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 6),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
                           child: Icon(
                             Icons.arrow_forward_rounded,
-                            color: AppColors.textTertiary,
+                            color: colors.muted,
                             size: 16,
                           ),
                         ),
                         Text(
                           '${log.endBatteryPercent}%',
-                          style: const TextStyle(
-                            color: AppColors.primary,
+                          style: TextStyle(
+                            color: colors.emerald,
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
                           ),
@@ -444,13 +400,13 @@ class _ChargeLogDetailCard extends StatelessWidget {
                             vertical: 3,
                           ),
                           decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.12),
+                            color: colors.emerald.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
                             '+$chargeGain%',
-                            style: const TextStyle(
-                              color: AppColors.primary,
+                            style: TextStyle(
+                              color: colors.emerald,
                               fontSize: 13,
                               fontWeight: FontWeight.w700,
                             ),
@@ -462,16 +418,16 @@ class _ChargeLogDetailCard extends StatelessWidget {
                     // Time info
                     Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.schedule_rounded,
-                          color: AppColors.textTertiary,
+                          color: colors.muted,
                           size: 14,
                         ),
                         const SizedBox(width: 4),
                         Text(
                           '${timeFormat.format(log.startTime)} — ${timeFormat.format(log.endTime)}',
-                          style: const TextStyle(
-                            color: AppColors.textSecondary,
+                          style: TextStyle(
+                            color: colors.muted,
                             fontSize: 13,
                           ),
                         ),
@@ -482,13 +438,13 @@ class _ChargeLogDetailCard extends StatelessWidget {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: AppColors.surfaceLight,
+                            color: colors.border.withValues(alpha: 0.3),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
                             log.durationText,
-                            style: const TextStyle(
-                              color: AppColors.textSecondary,
+                            style: TextStyle(
+                              color: colors.text,
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
                             ),
@@ -503,18 +459,18 @@ class _ChargeLogDetailCard extends StatelessWidget {
           ),
 
           const SizedBox(height: 10),
-          const Divider(color: AppColors.border, height: 1),
+          Divider(color: colors.border, height: 1),
           const SizedBox(height: 10),
 
           // Bottom row
           Row(
             children: [
-              const Icon(Icons.speed_rounded, color: AppColors.info, size: 16),
+              Icon(Icons.speed_rounded, color: colors.info, size: 16),
               const SizedBox(width: 6),
               Text(
                 'ODO: ${log.odoAtCharge} km',
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
+                style: TextStyle(
+                  color: colors.muted,
                   fontSize: 12,
                 ),
               ),
@@ -527,22 +483,22 @@ class _ChargeLogDetailCard extends StatelessWidget {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: AppColors.error.withValues(alpha: 0.1),
+                    color: colors.danger.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
                         Icons.delete_outline_rounded,
-                        color: AppColors.error,
+                        color: colors.danger,
                         size: 14,
                       ),
-                      SizedBox(width: 4),
+                      const SizedBox(width: 4),
                       Text(
                         'Xóa',
                         style: TextStyle(
-                          color: AppColors.error,
+                          color: colors.danger,
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
                         ),
@@ -571,23 +527,24 @@ class _BatteryProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppUiColors.of(context);
     return Container(
       width: 8,
       height: 50,
       decoration: BoxDecoration(
-        color: AppColors.border,
+        color: colors.border,
         borderRadius: BorderRadius.circular(4),
       ),
       child: Align(
         alignment: Alignment.bottomCenter,
         child: FractionallySizedBox(
-          heightFactor: end / 100,
+          heightFactor: (end / 100).clamp(0.0, 1.0),
           child: Container(
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
+              gradient: LinearGradient(
                 begin: Alignment.bottomCenter,
                 end: Alignment.topCenter,
-                colors: [AppColors.error, AppColors.warning, AppColors.primary],
+                colors: [colors.danger, colors.amber, colors.emerald],
               ),
               borderRadius: BorderRadius.circular(4),
             ),
