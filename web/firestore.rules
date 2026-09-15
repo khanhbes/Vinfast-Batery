@@ -10,19 +10,14 @@ service cloud.firestore {
     // Firestore request.
     function isActiveAccount() {
       return request.auth != null &&
-        request.auth.token.accountDisabled != true;
+        (!('accountDisabled' in request.auth.token) ||
+         request.auth.token.accountDisabled != true);
     }
     function isAuth() {
       return isActiveAccount();
     }
     function isOwner(ownerUid) {
       return isAuth() && request.auth.uid == ownerUid;
-    }
-    function activeVehicleLimit(uid) {
-      // Quota is enforced by the API and, when present, a Firebase custom
-      // claim. Never read users/{uid} from a rule evaluation.
-      let configured = request.auth.token.maxActiveVehicles;
-      return configured is int && configured >= 1 && configured <= 10 ? configured : 2;
     }
     function notDeleted() {
       return resource.data.isDeleted != true &&
