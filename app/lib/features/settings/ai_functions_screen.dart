@@ -198,7 +198,7 @@ class AiFunctionsScreen extends ConsumerWidget {
             ? _FeatureStatus.learning
             : _FeatureStatus.needsData,
         detail: !hasModel
-            ? 'Chưa link model VinFast'
+            ? 'Chưa liên kết mẫu xe'
             : hasTrained
             ? 'AI insight ($insightStatus)'
             : 'On-device (chờ AI web)',

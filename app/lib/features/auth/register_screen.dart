@@ -1,12 +1,14 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import '../../core/theme/app_motion.dart';
-
-import '../../core/theme/app_colors.dart';
 import '../../core/services/auth_service.dart';
+import '../../core/theme/app_motion.dart';
+import '../../core/theme/cockpit_design_system.dart';
 import '../../core/widgets/app_popup.dart';
+import '../../core/widgets/ev_energy_animations.dart';
 
-/// Professional Registration Screen — PLAN #3
+/// Professional Registration Screen — Cockpit Design System Edition
 /// Captures: Full Name, Email, Phone Number, Password
+/// Minimalist EV battery theme, no generic icons, custom 2D energy animations.
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
@@ -16,11 +18,23 @@ class RegisterScreen extends StatefulWidget {
 
 class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameCtrl = TextEditingController();
-  final _emailCtrl = TextEditingController();
-  final _phoneCtrl = TextEditingController();
-  final _passCtrl = TextEditingController();
-  final _confirmPassCtrl = TextEditingController();
+  late final _nameCtrl = TextEditingController(
+    text: kDebugMode ? 'Le Hoang EV' : '',
+  );
+  late final _emailCtrl = TextEditingController(
+    text: kDebugMode
+        ? 'lehoang.${DateTime.now().millisecondsSinceEpoch % 10000}@vinfast.test'
+        : '',
+  );
+  late final _phoneCtrl = TextEditingController(
+    text: kDebugMode ? '0912345678' : '',
+  );
+  late final _passCtrl = TextEditingController(
+    text: kDebugMode ? 'VinFast2026@' : '',
+  );
+  late final _confirmPassCtrl = TextEditingController(
+    text: kDebugMode ? 'VinFast2026@' : '',
+  );
   bool _loading = false;
   bool _obscurePass = true;
   bool _obscureConfirm = true;
@@ -66,31 +80,51 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   InputDecoration _inputDecoration({
     required String label,
-    required IconData icon,
+    String? hint,
     Widget? suffix,
   }) {
     return InputDecoration(
       labelText: label,
-      labelStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
-      prefixIcon: Icon(icon, color: AppColors.textSecondary, size: 20),
+      labelStyle: CockpitTypography.label(
+        fontSize: 13,
+        color: CockpitColors.muted,
+      ),
+      hintText: hint,
+      hintStyle: CockpitTypography.body(
+        fontSize: 13,
+        color: CockpitColors.dim,
+      ),
       suffixIcon: suffix,
       filled: true,
-      fillColor: AppColors.surface,
+      fillColor: CockpitColors.surface,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: AppColors.border),
+        borderRadius: BorderRadius.circular(CockpitRadius.small),
+        borderSide: const BorderSide(color: CockpitColors.border),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: AppColors.border),
+        borderRadius: BorderRadius.circular(CockpitRadius.small),
+        borderSide: const BorderSide(color: CockpitColors.border),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+        borderRadius: BorderRadius.circular(CockpitRadius.small),
+        borderSide: const BorderSide(
+          color: CockpitColors.emeraldStrong,
+          width: 1.5,
+        ),
       ),
       errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: AppColors.error.withAlpha(153)),
+        borderRadius: BorderRadius.circular(CockpitRadius.small),
+        borderSide: BorderSide(
+          color: CockpitColors.danger.withValues(alpha: 0.6),
+        ),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(CockpitRadius.small),
+        borderSide: const BorderSide(
+          color: CockpitColors.danger,
+          width: 1.5,
+        ),
       ),
     );
   }
@@ -98,7 +132,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: CockpitColors.background,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -108,6 +142,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  const SizedBox(height: 12),
                   // Back button
                   Align(
                     alignment: Alignment.centerLeft,
@@ -116,94 +151,75 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       child: Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: AppColors.surfaceVariant,
-                          borderRadius: BorderRadius.circular(12),
+                          color: CockpitColors.surface,
+                          borderRadius:
+                              BorderRadius.circular(CockpitRadius.small),
+                          border: Border.all(color: CockpitColors.border),
                         ),
                         child: const Icon(
                           Icons.arrow_back_ios_new_rounded,
-                          color: AppColors.textPrimary,
+                          color: CockpitColors.text,
                           size: 18,
                         ),
                       ),
                     ),
-                  ).appFadeSlideIn(index: 3),
-                  const SizedBox(height: 24),
+                  ).appFadeSlideIn(index: 0),
+                  const SizedBox(height: 16),
 
-                  // Logo
-                  Container(
-                    width: 72,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          AppColors.primary.withAlpha(40),
-                          AppColors.primaryContainer.withAlpha(60),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: AppColors.primary.withAlpha(51),
-                      ),
-                    ),
-                    child: const Icon(
-                      Icons.person_add_rounded,
-                      color: AppColors.primary,
-                      size: 34,
-                    ),
+                  // Header Orb
+                  const EvEnergyOrb(
+                    size: 72,
+                    showParticles: true,
                   ).appScalePop(),
                   const SizedBox(height: 16),
 
-                  const Text(
+                  Text(
                     'Tạo tài khoản',
-                    style: TextStyle(
-                      color: AppColors.textPrimary,
+                    style: CockpitTypography.heading(
                       fontSize: 24,
                       fontWeight: FontWeight.w800,
-                      letterSpacing: -0.5,
+                      color: CockpitColors.text,
+                      letterSpacing: 0.5,
                     ),
                   ).appFadeSlideIn(index: 1),
                   const SizedBox(height: 6),
                   Text(
-                    'Nhập thông tin để đăng ký tài khoản mới',
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
+                    'Nhập thông tin để bắt đầu quản lý pin xe điện',
+                    style: CockpitTypography.body(
                       fontSize: 13,
+                      color: CockpitColors.muted,
                     ),
                   ).appFadeSlideIn(index: 1),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 16),
 
-                  // Error
+                  const SizedBox(
+                    width: 120,
+                    child: EvGlowLine(height: 1.2),
+                  ).appFadeSlideIn(index: 1),
+                  const SizedBox(height: 24),
+
+                  // Error banner
                   if (_error != null) ...[
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
                       decoration: BoxDecoration(
-                        color: AppColors.errorBg,
-                        borderRadius: BorderRadius.circular(12),
+                        color: CockpitColors.danger.withValues(alpha: 0.1),
+                        borderRadius:
+                            BorderRadius.circular(CockpitRadius.small),
                         border: Border.all(
-                          color: AppColors.error.withAlpha(77),
+                          color: CockpitColors.danger.withValues(alpha: 0.35),
                         ),
                       ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.error_outline,
-                            color: AppColors.error,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _error!,
-                              style: TextStyle(
-                                color: AppColors.error,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                        ],
+                      child: Text(
+                        _error!,
+                        style: CockpitTypography.body(
+                          fontSize: 12.5,
+                          color: CockpitColors.danger,
+                        ),
                       ),
                     ).appFadeSlideIn(slide: 0),
                     const SizedBox(height: 16),
@@ -213,13 +229,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   TextFormField(
                     controller: _nameCtrl,
                     textCapitalization: TextCapitalization.words,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
+                    style: CockpitTypography.body(
                       fontSize: 14,
+                      color: CockpitColors.text,
                     ),
                     decoration: _inputDecoration(
                       label: 'Họ và Tên',
-                      icon: Icons.person_outline_rounded,
+                      hint: 'Ví dụ: Nguyễn Văn A',
                     ),
                     validator: (v) {
                       if (v == null || v.trim().isEmpty) {
@@ -235,13 +251,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   TextFormField(
                     controller: _emailCtrl,
                     keyboardType: TextInputType.emailAddress,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
+                    style: CockpitTypography.body(
                       fontSize: 14,
+                      color: CockpitColors.text,
                     ),
                     decoration: _inputDecoration(
                       label: 'Email',
-                      icon: Icons.email_outlined,
+                      hint: 'name@example.com',
                     ),
                     validator: (v) {
                       if (v == null || v.trim().isEmpty) {
@@ -259,13 +275,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   TextFormField(
                     controller: _phoneCtrl,
                     keyboardType: TextInputType.phone,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
+                    style: CockpitTypography.body(
                       fontSize: 14,
+                      color: CockpitColors.text,
                     ),
                     decoration: _inputDecoration(
                       label: 'Số điện thoại',
-                      icon: Icons.phone_outlined,
+                      hint: '09xxxxxxxx',
                     ),
                     validator: (v) {
                       if (v == null || v.trim().isEmpty) {
@@ -283,19 +299,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   TextFormField(
                     controller: _passCtrl,
                     obscureText: _obscurePass,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
+                    style: CockpitTypography.body(
                       fontSize: 14,
+                      color: CockpitColors.text,
                     ),
                     decoration: _inputDecoration(
                       label: 'Mật khẩu',
-                      icon: Icons.lock_outlined,
+                      hint: 'Tối thiểu 6 ký tự',
                       suffix: IconButton(
                         icon: Icon(
                           _obscurePass
                               ? Icons.visibility_off
                               : Icons.visibility,
-                          color: AppColors.textSecondary,
+                          color: CockpitColors.muted,
                           size: 20,
                         ),
                         onPressed: () =>
@@ -316,19 +332,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   TextFormField(
                     controller: _confirmPassCtrl,
                     obscureText: _obscureConfirm,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
+                    style: CockpitTypography.body(
                       fontSize: 14,
+                      color: CockpitColors.text,
                     ),
                     decoration: _inputDecoration(
                       label: 'Xác nhận mật khẩu',
-                      icon: Icons.lock_outline_rounded,
+                      hint: 'Nhập lại mật khẩu đã chọn',
                       suffix: IconButton(
                         icon: Icon(
                           _obscureConfirm
                               ? Icons.visibility_off
                               : Icons.visibility,
-                          color: AppColors.textSecondary,
+                          color: CockpitColors.muted,
                           size: 20,
                         ),
                         onPressed: () =>
@@ -343,61 +359,66 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       return null;
                     },
                   ).appFadeSlideIn(index: 4),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 24),
 
-                  // Register Button
+                  // Register Button with EvChargingWave on loading
                   ConstrainedBox(
                     constraints: const BoxConstraints(
                       minWidth: double.infinity,
-                      minHeight: 52,
+                      minHeight: 50,
                     ),
                     child: ElevatedButton(
                       onPressed: _loading ? null : _register,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: AppColors.background,
+                        backgroundColor: CockpitColors.emeraldStrong,
+                        foregroundColor: CockpitColors.background,
+                        disabledBackgroundColor:
+                            CockpitColors.emeraldStrong.withValues(alpha: 0.4),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius:
+                              BorderRadius.circular(CockpitRadius.small),
                         ),
                         elevation: 0,
                       ),
                       child: _loading
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.5,
-                                valueColor: AlwaysStoppedAnimation(
-                                  AppColors.background,
-                                ),
+                          ? const Center(
+                              child: EvChargingWave(
+                                width: 56,
+                                height: 14,
+                                color: CockpitColors.background,
                               ),
                             )
-                          : const Text(
+                          : Text(
                               'Đăng ký',
-                              style: TextStyle(
-                                fontSize: 16,
+                              style: CockpitTypography.heading(
+                                fontSize: 15,
                                 fontWeight: FontWeight.w700,
+                                color: CockpitColors.background,
                               ),
                             ),
                     ),
                   ).appFadeSlideIn(index: 4),
+                  const SizedBox(height: 20),
+
+                  // Back to login with separator
+                  const EvGlowLine(height: 1.0).appFadeSlideIn(index: 5),
                   const SizedBox(height: 16),
 
-                  // Back to login
                   TextButton(
                     onPressed: () => Navigator.pop(context),
                     child: RichText(
                       text: TextSpan(
                         text: 'Đã có tài khoản? ',
-                        style: TextStyle(
-                          color: AppColors.textSecondary,
+                        style: CockpitTypography.body(
                           fontSize: 13,
+                          color: CockpitColors.muted,
                         ),
                         children: [
                           TextSpan(
                             text: 'Đăng nhập',
-                            style: TextStyle(
-                              color: AppColors.primary,
+                            style: CockpitTypography.body(
+                              fontSize: 13,
+                              color: CockpitColors.emeraldStrong,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -405,7 +426,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                     ),
                   ).appFadeSlideIn(index: 5),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 20),
                 ],
               ),
             ),

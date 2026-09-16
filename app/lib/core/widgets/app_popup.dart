@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
 import 'debug_error_sheet.dart';
 
@@ -166,14 +167,32 @@ class AppPopup {
         onDismiss: dismiss,
       ),
     );
-    overlay.insert(_entry!);
-    if (!persistent) {
-      _timer = Timer(
-        kind == AppNoticeKind.error
-            ? const Duration(seconds: 6)
-            : const Duration(seconds: 4),
-        dismiss,
-      );
+
+    void insertOverlay() {
+      if (_entry == null) return;
+      final currentOverlay = navigatorKey.currentState?.overlay;
+      if (currentOverlay == null) return;
+      try {
+        currentOverlay.insert(_entry!);
+        if (!persistent) {
+          _timer = Timer(
+            kind == AppNoticeKind.error
+                ? const Duration(seconds: 6)
+                : const Duration(seconds: 4),
+            dismiss,
+          );
+        }
+      } catch (_) {
+        // Guard against any lifecycle or insertion race condition
+      }
+    }
+
+    final schedulerPhase = SchedulerBinding.instance.schedulerPhase;
+    if (schedulerPhase == SchedulerPhase.persistentCallbacks ||
+        schedulerPhase == SchedulerPhase.midFrameMicrotasks) {
+      SchedulerBinding.instance.addPostFrameCallback((_) => insertOverlay());
+    } else {
+      insertOverlay();
     }
   }
 }

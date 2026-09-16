@@ -23,6 +23,7 @@ import '../smart_charging/shelly_setup_screen.dart';
 import '../trip_planner/trip_planner_wrapper.dart';
 import '../maintenance/maintenance_screen.dart';
 import '../../core/widgets/responsive_text.dart';
+import '../../core/widgets/ev_energy_animations.dart';
 
 // =============================================================================
 // Home Screen V4 — Modern Dashboard Design
@@ -421,28 +422,78 @@ class _VehicleBanner extends StatelessWidget {
         ? vehicle?.lastBatteryPercent
         : null;
 
+    final vehicleImageUrl = vehicle?.imageUrl;
+    final hasVehicleImage =
+        vehicleImageUrl != null && vehicleImageUrl.trim().isNotEmpty;
+
     return Container(
       height: 210,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(28),
-        color: CockpitColors.surface,
-        image: DecorationImage(
-          onError: (_, _) {},
-          image: const NetworkImage(
-            'https://images.unsplash.com/photo-1617788138017-80ad40651399?w=800',
-          ),
-          fit: BoxFit.cover,
-        ),
+        color: const Color(0xFF0F172A),
+        image: hasVehicleImage
+            ? DecorationImage(
+                onError: (_, _) {},
+                image: NetworkImage(vehicleImageUrl),
+                fit: BoxFit.cover,
+              )
+            : null,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.35),
-            blurRadius: 16,
+            color: Colors.black.withValues(alpha: 0.45),
+            blurRadius: 18,
             offset: const Offset(0, 6),
           ),
+          if (!hasVehicleImage)
+            BoxShadow(
+              color: CockpitColors.emerald.withValues(alpha: 0.14),
+              blurRadius: 24,
+              spreadRadius: 2,
+            ),
         ],
+        border: Border.all(
+          color: CockpitColors.emerald.withValues(alpha: 0.28),
+          width: 1.2,
+        ),
       ),
       child: Stack(
         children: [
+          // Fallback nền Cockpit EV cao cấp khi chưa có ảnh thực
+          if (!hasVehicleImage) ...[
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(28),
+                  gradient: const RadialGradient(
+                    center: Alignment(0.45, -0.2),
+                    radius: 1.2,
+                    colors: [
+                      Color(0xFF064E3B),
+                      Color(0xFF0F172A),
+                      Color(0xFF020617),
+                    ],
+                    stops: [0.0, 0.55, 1.0],
+                  ),
+                ),
+              ),
+            ),
+            // Hoạ tiết pin năng lượng EV 2D nổi bật ở góc phải
+            Positioned(
+              right: 24,
+              top: 36,
+              child: Opacity(
+                opacity: 0.85,
+                child: EvBatteryFillAnim(
+                  width: 58,
+                  height: 92,
+                  fillPercentage: (percent != null ? percent / 100.0 : 0.85)
+                      .clamp(0.1, 1.0),
+                  isCharging: false,
+                ),
+              ),
+            ),
+          ],
+
           // Gradient dark overlay
           Container(
             decoration: BoxDecoration(
@@ -451,8 +502,8 @@ class _VehicleBanner extends StatelessWidget {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.black.withValues(alpha: 0.25),
-                  Colors.black.withValues(alpha: 0.85),
+                  Colors.black.withValues(alpha: hasVehicleImage ? 0.35 : 0.1),
+                  Colors.black.withValues(alpha: hasVehicleImage ? 0.85 : 0.75),
                 ],
               ),
             ),

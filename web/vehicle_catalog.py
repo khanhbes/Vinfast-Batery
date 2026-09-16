@@ -208,6 +208,23 @@ def normalize_catalog_document(payload: dict[str, Any], *, existing: dict[str, A
         for key in ("heroUrl", "thumbnailUrl", "sourceUrl", "credit", "licenseNote", "checksum"):
             if key in source["media"]:
                 media[key] = _clean_text(source["media"][key], 1200)
+        views = _nested_map(media.get("views"))
+        incoming_views = _nested_map(source["media"]).get("views")
+        if isinstance(incoming_views, dict):
+            for view_name in ("twoD", "threeD"):
+                incoming_view = incoming_views.get(view_name)
+                if not isinstance(incoming_view, dict):
+                    continue
+                views[view_name] = {
+                    key: _clean_text(incoming_view.get(key), 1200)
+                    for key in (
+                        "thumbnailUrl", "mediumUrl", "heroUrl", "sourceUrl",
+                        "credit", "licenseNote", "checksum", "approvedAt", "kind",
+                    )
+                    if incoming_view.get(key) is not None
+                }
+        if views:
+            media["views"] = views
         base["media"] = media
     if "sources" in source and isinstance(source["sources"], list):
         base["sources"] = [
@@ -376,8 +393,25 @@ def create_user_vehicle(
                 "error": "This vehicle configuration is not selectable",
             }, 409
         user_data = user_snapshot.to_dict() if user_snapshot.exists else {}
-        active_count = _integer(user_data.get("activeVehicleCount"), 0) or 0
-        if active_count >= max_vehicles:
+        raw_vehicles = [v for v in (user_data.get("vehicles") or []) if isinstance(v, str) and v.strip()]
+
+        # Check for existing active vehicle with same catalogId (idempotent onboarding / retry)
+        # and accurately collect only non-deleted, non-archived active vehicles.
+        active_vehicles = []
+        for existing_vid in raw_vehicles:
+            try:
+                v_ref = db.collection("Vehicles").document(existing_vid)
+                v_snap = v_ref.get(transaction=transaction) if transaction is not None else v_ref.get()
+                if v_snap.exists:
+                    v_data = v_snap.to_dict() or {}
+                    if not v_data.get("isDeleted") and not v_data.get("isArchived"):
+                        if v_data.get("catalogId") == catalog_id:
+                            return {"success": True, "data": _jsonable(v_data)}, 200
+                        active_vehicles.append(existing_vid)
+            except Exception:
+                pass
+
+        if len(active_vehicles) >= max_vehicles:
             return {
                 "success": False,
                 "error": f"Vehicle limit reached ({max_vehicles})",
@@ -408,6 +442,7 @@ def create_user_vehicle(
                     "defaultEfficiencyKmPerPercent"
                 ),
                 "batteryChemistry": battery.get("chemistry"),
+                "media": _nested_map(spec.get("media")),
             },
             "nickname": nickname,
             "vehicleName": display_name,
@@ -436,11 +471,11 @@ def create_user_vehicle(
             "source": "catalog_api",
         }
         listed = list(
-            dict.fromkeys([*(user_data.get("vehicles") or []), vehicle_id])
+            dict.fromkeys([*active_vehicles, vehicle_id])
         )
         user_update = {
             "vehicles": listed,
-            "activeVehicleCount": active_count + 1,
+            "activeVehicleCount": len(listed),
             "updatedAt": now,
         }
         if transaction is None:
@@ -717,7 +752,15 @@ def process_research_job(db: Any, job_id: str) -> dict[str, Any]:
     return result
 
 
-def _upload_vehicle_media(db: Any, catalog_id: str, file_storage: Any, source_url: str, credit: str, license_note: str) -> dict[str, Any]:
+def _upload_vehicle_media(
+    db: Any,
+    catalog_id: str,
+    file_storage: Any,
+    source_url: str,
+    credit: str,
+    license_note: str,
+    media_kind: str,
+) -> dict[str, Any]:
     if Image is None:
         raise ValueError("Image processing is unavailable")
     content = file_storage.read(10 * 1024 * 1024 + 1)
@@ -739,7 +782,7 @@ def _upload_vehicle_media(db: Any, catalog_id: str, file_storage: Any, source_ur
             resized = resized.resize((width, height), Image.Resampling.LANCZOS)
         output = BytesIO()
         resized.save(output, "WEBP", quality=84, method=6)
-        path = f"vehicle-catalog/{catalog_id}/{checksum[:12]}/{label}.webp"
+        path = f"vehicle-catalog/{catalog_id}/{media_kind}/{checksum[:12]}/{label}.webp"
         blob = bucket.blob(path)
         token = str(uuid.uuid4())
         blob.metadata = {"firebaseStorageDownloadTokens": token}
@@ -753,8 +796,24 @@ def _upload_vehicle_media(db: Any, catalog_id: str, file_storage: Any, source_ur
         "credit": credit,
         "licenseNote": license_note,
         "checksum": checksum,
+        "kind": media_kind,
         "approvedAt": utcnow(),
     }
+
+
+def merge_catalog_media(existing: dict[str, Any], asset: dict[str, Any], media_kind: str) -> dict[str, Any]:
+    """Keep a stable primary image while retaining approved 2D/3D assets."""
+    media = _nested_map(existing)
+    views = _nested_map(media.get("views"))
+    views[media_kind] = asset
+    media["views"] = views
+    # 2D is the default app/catalog image. If only a render is approved, it is
+    # used until a 2D photograph is available.
+    primary = views.get("twoD") or views.get("threeD") or asset
+    for key in ("thumbnailUrl", "mediumUrl", "heroUrl", "sourceUrl", "credit", "licenseNote", "checksum", "approvedAt"):
+        if key in primary:
+            media[key] = primary[key]
+    return media
 
 
 def commit_catalog_publish(
@@ -971,7 +1030,7 @@ def create_catalog_blueprint(
                 nickname = _clean_text(vehicle.get("nickname"), 100)
                 updates = {
                     "catalogRevisionApplied": revision,
-                    "catalogSnapshot": {"displayName": _display_name(published, "vi"), "brandName": published.get("brandName"), "model": published.get("model"), "variant": published.get("variant"), "modelYear": published.get("modelYear"), "calculationCapacityWh": defaults.get("calculationCapacityWh"), "defaultEfficiencyKmPerPercent": defaults.get("defaultEfficiencyKmPerPercent"), "batteryChemistry": battery.get("chemistry")},
+                    "catalogSnapshot": {"displayName": _display_name(published, "vi"), "brandName": published.get("brandName"), "model": published.get("model"), "variant": published.get("variant"), "modelYear": published.get("modelYear"), "calculationCapacityWh": defaults.get("calculationCapacityWh"), "defaultEfficiencyKmPerPercent": defaults.get("defaultEfficiencyKmPerPercent"), "batteryChemistry": battery.get("chemistry"), "media": _nested_map(published.get("media"))},
                     "vehicleName": nickname or _display_name(published, "vi"),
                     "model": _display_name(published, "vi"),
                     "year": published.get("modelYear"),
@@ -1031,15 +1090,20 @@ def create_catalog_blueprint(
             return jsonify({"success": False, "error": "Image usage rights must be confirmed"}), 422
         if "file" not in request.files:
             return jsonify({"success": False, "error": "Image file is required"}), 400
+        media_kind = _clean_text(request.form.get("kind"), 20)
+        if media_kind not in {"twoD", "threeD"}:
+            return jsonify({"success": False, "error": "Media kind must be twoD or threeD"}), 422
+        ref = database().collection(DRAFT_COLLECTION).document(catalog_id)
+        draft_snapshot = ref.get()
+        if not draft_snapshot.exists:
+            return jsonify({"success": False, "error": "Draft not found; create a draft before uploading media"}), 404
         try:
-            media = _upload_vehicle_media(database(), catalog_id, request.files["file"], _clean_text(request.form.get("sourceUrl"), 1200), _clean_text(request.form.get("credit"), 160), _clean_text(request.form.get("licenseNote"), 500))
+            asset = _upload_vehicle_media(database(), catalog_id, request.files["file"], _clean_text(request.form.get("sourceUrl"), 1200), _clean_text(request.form.get("credit"), 160), _clean_text(request.form.get("licenseNote"), 500), media_kind)
         except (ValueError, OSError) as exc:
             return jsonify({"success": False, "error": str(exc)}), 422
-        ref = database().collection(DRAFT_COLLECTION).document(catalog_id)
-        if not ref.get().exists:
-            return jsonify({"success": False, "error": "Draft not found; create a draft before uploading media"}), 404
+        media = merge_catalog_media(_nested_map((draft_snapshot.to_dict() or {}).get("media")), asset, media_kind)
         ref.update({"media": media, "updatedAt": utcnow(), "updatedBy": request._uid})
-        audit("catalog_media_upload", DRAFT_COLLECTION, catalog_id, request._uid, request._email, {"checksum": media["checksum"]})
+        audit("catalog_media_upload", DRAFT_COLLECTION, catalog_id, request._uid, request._email, {"checksum": asset["checksum"], "kind": media_kind})
         return jsonify({"success": True, "data": media})
 
     @bp.get("/api/admin/vehicle-manufacturers")
@@ -1172,7 +1236,7 @@ def create_catalog_blueprint(
         updates = {
             "catalogId": catalog_id,
             "catalogRevisionAtSelection": spec.get("revision"),
-            "catalogSnapshot": {"displayName": _display_name(spec, "vi"), "brandName": spec.get("brandName"), "model": spec.get("model"), "variant": spec.get("variant"), "modelYear": spec.get("modelYear"), "calculationCapacityWh": defaults.get("calculationCapacityWh"), "defaultEfficiencyKmPerPercent": defaults.get("defaultEfficiencyKmPerPercent"), "batteryChemistry": battery.get("chemistry")},
+            "catalogSnapshot": {"displayName": _display_name(spec, "vi"), "brandName": spec.get("brandName"), "model": spec.get("model"), "variant": spec.get("variant"), "modelYear": spec.get("modelYear"), "calculationCapacityWh": defaults.get("calculationCapacityWh"), "defaultEfficiencyKmPerPercent": defaults.get("defaultEfficiencyKmPerPercent"), "batteryChemistry": battery.get("chemistry"), "media": _nested_map(spec.get("media"))},
             "vehicleName": nickname or _display_name(spec, "vi"),
             "model": _display_name(spec, "vi"),
             "year": spec.get("modelYear"),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/guide_registry.dart';
 import '../theme/app_ui_colors.dart';
+import 'battery_bot_mascot.dart';
 
 /// EV Cockpit Spotlight Coach Mark Overlay
 /// - Làm mờ nền và tạo vùng spotlight làm nổi bật widget mục tiêu
@@ -45,7 +46,10 @@ class CoachMarkOverlay extends StatefulWidget {
         },
       ),
     );
-    Overlay.of(context).insert(entry);
+    final overlay = Overlay.maybeOf(context);
+    if (overlay != null) {
+      overlay.insert(entry);
+    }
     return entry;
   }
 
@@ -209,41 +213,81 @@ class _CoachMarkOverlayState extends State<CoachMarkOverlay>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Step indicator & Skip
+                // BatteryBot Mascot Header & Step indicator
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        isEn
-                            ? 'Step ${_currentIndex + 1} of ${widget.steps.length}'
-                            : 'Bước ${_currentIndex + 1} / ${widget.steps.length}',
-                        style: const TextStyle(
-                          color: Color(0xFF10B981),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
+                    const BatteryBotMascot(
+                      size: BatteryBotSize.sm,
+                      customWidth: 36,
+                      customHeight: 46,
+                      mood: BatteryBotMood.greeting,
+                      enableFloating: true,
                     ),
-                    TextButton(
-                      onPressed: _skip,
-                      style: TextButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        foregroundColor: Colors.white60,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF10B981).withValues(alpha: 0.18),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: const Color(0xFF10B981).withValues(alpha: 0.35),
+                                    width: 0.8,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Text('⚡ ', style: TextStyle(fontSize: 10)),
+                                    Text(
+                                      isEn
+                                          ? 'Step ${_currentIndex + 1} of ${widget.steps.length}'
+                                          : 'Bước ${_currentIndex + 1} / ${widget.steps.length}',
+                                      style: const TextStyle(
+                                        color: Color(0xFF34D399),
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: _skip,
+                                style: TextButton.styleFrom(
+                                  visualDensity: VisualDensity.compact,
+                                  foregroundColor: Colors.white60,
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                ),
+                                child: Text(isEn ? 'Skip' : 'Bỏ qua', style: const TextStyle(fontSize: 12)),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            isEn ? 'BatteryBot Guide' : 'Trợ lý hướng dẫn',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.55),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
                       ),
-                      child: Text(isEn ? 'Skip' : 'Bỏ qua'),
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
 
                 // Title
                 Text(
@@ -293,7 +337,7 @@ class _CoachMarkOverlayState extends State<CoachMarkOverlay>
                         setState(() => _dontShowAgain = !_dontShowAgain);
                       },
                       child: Text(
-                        isEn ? "Don't show again" : 'Không hiện lại hướng dẫn',
+                        isEn ? "Don't show again" : 'Không hiện lại',
                         style: const TextStyle(
                           color: Colors.white70,
                           fontSize: 12.5,
@@ -345,8 +389,8 @@ class _CoachMarkOverlayState extends State<CoachMarkOverlay>
                       ),
                       child: Text(
                         isLast
-                            ? (isEn ? 'Got it!' : 'Đã hiểu')
-                            : (isEn ? 'Next' : 'Tiếp tục'),
+                            ? (isEn ? 'Got it!' : 'Hoàn tất')
+                            : (isEn ? 'Next' : 'Tiếp theo'),
                       ),
                     ),
                   ],
@@ -388,9 +432,16 @@ class _SpotlightPainter extends CustomPainter {
 
     canvas.drawPath(path, paint);
 
-    // Subtle emerald outline around the spotlight hole
+    // Neon glow aura around the spotlight hole
+    final glowPaint = Paint()
+      ..color = const Color(0xFF10B981).withValues(alpha: 0.4)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 4.0
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+    canvas.drawRRect(rrect, glowPaint);
+
     final borderPaint = Paint()
-      ..color = const Color(0xFF10B981).withValues(alpha: 0.8)
+      ..color = const Color(0xFF34D399)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
     canvas.drawRRect(rrect, borderPaint);

@@ -79,6 +79,29 @@ class VehicleModel {
   /// Whether this vehicle has been linked to a reviewed vehicle catalog entry.
   bool get hasModelLink => effectiveCatalogId != null;
 
+  /// URL ảnh xe từ catalog media hoặc snapshot
+  String? get imageUrl {
+    if (catalogSnapshot != null) {
+      final media = catalogSnapshot!['media'];
+      if (media is Map) {
+        final views = media['views'];
+        final twoD = views is Map ? views['twoD'] : null;
+        final threeD = views is Map ? views['threeD'] : null;
+        final url =
+            (twoD is Map ? twoD['thumbnailUrl'] ?? twoD['heroUrl'] : null) ??
+            (threeD is Map
+                ? threeD['thumbnailUrl'] ?? threeD['heroUrl']
+                : null) ??
+            media['thumbnailUrl'] ??
+            media['heroUrl'];
+        if (url is String && url.isNotEmpty) return url;
+      }
+      final direct = catalogSnapshot!['imageUrl'];
+      if (direct is String && direct.isNotEmpty) return direct;
+    }
+    return null;
+  }
+
   /// Parse số nguyên an toàn — chấp nhận `int`, `double`, `num`, `String`,
   /// hoặc `null`. Tránh crash `'double' is not a subtype of int` khi Firestore
   /// trả về `0.0` cho field đang khai báo là int.

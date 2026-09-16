@@ -22,7 +22,7 @@ import '../../data/models/smart_charger_binding.dart';
 import '../../main.dart' show firebaseInitErrorProvider;
 import '../../navigation/app_navigation.dart';
 import 'login_screen.dart';
-import 'onboarding_flow_screen.dart';
+import 'onboarding_chat_screen.dart';
 
 /// AuthGate: gate có trạng thái khởi động rõ ràng.
 ///
@@ -65,6 +65,7 @@ class _AuthGateState extends ConsumerState<AuthGate> {
   ///   và `explicit_signed_out == false` thì cho phép chờ thêm tối đa 8s
   ///   để token persistence kịp khôi phục (tránh đẩy user về Login nhầm).
   Future<void> _initialize() async {
+    final splashStartTime = DateTime.now();
     // Đọc marker trước để quyết định timeout.
     try {
       _wasAuthenticated = await SessionService().wasAuthenticated();
@@ -120,6 +121,12 @@ class _AuthGateState extends ConsumerState<AuthGate> {
         _wasAuthenticated = true;
         _explicitSignedOut = false;
       }
+    }
+
+    // Đảm bảo splash screen chạy tối thiểu 3 giây trước khi chuyển màn hình
+    final elapsed = DateTime.now().difference(splashStartTime);
+    if (elapsed < const Duration(milliseconds: 3000)) {
+      await Future.delayed(const Duration(milliseconds: 3000) - elapsed);
     }
 
     if (mounted) {
@@ -470,7 +477,7 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
         // Route a new account through its retryable onboarding bootstrap,
         // rather than treating a transient read failure as permission to enter.
         if (snapshot.hasError) {
-          return isNew ? const OnboardingFlowScreen() : const AppNavigation();
+          return isNew ? const OnboardingChatScreen() : const AppNavigation();
         }
         if (!snapshot.hasData) {
           if (!isNew) return const AppNavigation();
@@ -481,7 +488,7 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
 
         final data = snapshot.data?.data();
         if (data == null) {
-          return isNew ? const OnboardingFlowScreen() : const AppNavigation();
+          return isNew ? const OnboardingChatScreen() : const AppNavigation();
         }
         final flowVer = data['registrationFlowVersion'] as int? ?? 1;
         final completedAt = data['onboardingCompletedAt'];
@@ -489,7 +496,7 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
           // Chỉ account có registrationFlowVersion >= 2 mới bị bắt buộc onboarding.
           // Tài khoản cũ không bị chặn.
         if (flowVer >= 2 && completedAt == null) {
-          return const OnboardingFlowScreen();
+          return const OnboardingChatScreen();
         }
 
         return const AppNavigation();

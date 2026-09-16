@@ -114,6 +114,10 @@ export const adminRevokeAccountSessions = (uid) =>
   apiFetch(`/api/admin/accounts/${encodeURIComponent(uid)}/revoke-sessions`, { method: 'POST' })
 export const adminPasswordResetAudit = (uid) =>
   apiFetch(`/api/admin/accounts/${encodeURIComponent(uid)}/password-reset-audit`, { method: 'POST' })
+export const adminDeleteAccount = (uid, confirmUid) =>
+  apiFetch(`/api/admin/accounts/${encodeURIComponent(uid)}`, {
+    method: 'DELETE', body: JSON.stringify({ confirmUid }),
+  })
 export const adminDataSnapshot = (limit = 50, datasets = [], force = false) => {
   const query = new URLSearchParams({ limit: String(limit) })
   if (datasets.length) query.set('datasets', datasets.join(','))

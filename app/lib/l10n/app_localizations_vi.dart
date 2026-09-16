@@ -9,10 +9,10 @@ class AppLocalizationsVi extends AppLocalizations {
   AppLocalizationsVi([String locale = 'vi']) : super(locale);
 
   @override
-  String get appTitle => 'VinFast Battery';
+  String get appTitle => 'EV Battery';
 
   @override
-  String get appTagline => 'Quản lý pin xe máy điện VinFast';
+  String get appTagline => 'Quản lý pin xe điện';
 
   @override
   String get tabHome => 'Trang chủ';
