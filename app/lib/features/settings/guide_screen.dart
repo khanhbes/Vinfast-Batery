@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/dashboard_preferences_service.dart';
 import '../../core/services/guide_registry.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/app_popup.dart';
 import '../../core/widgets/coach_mark_overlay.dart';
 import '../../navigation/app_navigation.dart';
 
@@ -34,13 +35,20 @@ class _GuideScreenState extends ConsumerState<GuideScreen> {
 
   void _runTour(String tourId) {
     if (tourId == GuideRegistry.overviewTourId) {
-      Navigator.of(context).pop(); // Quay về màn trước (hoặc Tổng quan)
-      AppNavigation.navigateToTab(context, 0);
+      final nav = Navigator.of(context);
+      nav.pop(); // Đóng màn hình Guide
+      
+      final rootCtx = AppPopup.navigatorKey.currentContext;
+      if (rootCtx != null && rootCtx.mounted) {
+        AppNavigation.navigateToTab(rootCtx, 0);
+      }
 
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(const Duration(milliseconds: 450), () {
+        final activeCtx = AppPopup.navigatorKey.currentContext;
+        if (activeCtx == null || !activeCtx.mounted) return;
         final pref = ref.read(dashboardPreferencesProvider);
         CoachMarkOverlay.show(
-          context: context,
+          context: activeCtx,
           steps: GuideRegistry.getOverviewTourSteps(),
           onFinish: () {
             pref.markTourCompleted(GuideRegistry.overviewTourId);

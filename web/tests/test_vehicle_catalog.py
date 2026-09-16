@@ -13,6 +13,7 @@ from vehicle_catalog import (
     create_user_vehicle,
     extract_candidate_from_text,
     legacy_projection,
+    merge_catalog_media,
     normalize_catalog_document,
     patch_personal_vehicle,
     validate_catalog_document,
@@ -111,6 +112,17 @@ def test_normalization_and_identity_are_deterministic():
     second = normalize_catalog_document({**complete_payload(), 'brandName': '  VinFast  '})
     assert first['identityKey'] == second['identityKey'] == catalog_identity(first)
     assert first['appDefaults']['calculationCapacityWh'] == 1872
+
+
+def test_media_views_keep_2d_as_primary_and_survive_normalization():
+    photo = {'thumbnailUrl': 'https://storage.example/2d.webp', 'heroUrl': 'https://storage.example/2d-hero.webp', 'kind': 'twoD'}
+    render = {'thumbnailUrl': 'https://storage.example/3d.webp', 'heroUrl': 'https://storage.example/3d-hero.webp', 'kind': 'threeD'}
+    media = merge_catalog_media({}, render, 'threeD')
+    media = merge_catalog_media(media, photo, 'twoD')
+    normalized = normalize_catalog_document({**complete_payload(), 'media': media})
+    assert normalized['media']['thumbnailUrl'] == photo['thumbnailUrl']
+    assert normalized['media']['views']['twoD']['heroUrl'] == photo['heroUrl']
+    assert normalized['media']['views']['threeD']['thumbnailUrl'] == render['thumbnailUrl']
 
 
 def test_publish_validation_requires_locales_source_and_safe_defaults():
@@ -244,3 +256,36 @@ def test_personal_patch_preserves_technical_values():
     assert status == 200 and result['success'] is True
     assert db.data['Vehicles']['v1']['batteryCapacity'] == 1872
     assert db.data['Vehicles']['v1']['vehicleName'] == 'Commute'
+
+
+def test_create_user_vehicle_idempotent_retry_when_same_catalog_id():
+    spec = normalize_catalog_document(complete_payload())
+    spec.update({'catalogId': 'evo200', 'status': 'published', 'selectable': True, 'revision': 4})
+    db = FakeDb({
+        'VehicleCatalog': {'evo200': spec},
+        'Vehicles': {
+            'v-existing': {
+                'vehicleId': 'v-existing',
+                'ownerUid': 'user-1',
+                'catalogId': 'evo200',
+                'vehicleName': 'VinFast Evo200',
+                'isDeleted': False,
+            }
+        },
+        'users': {'user-1': {'vehicles': ['v-existing'], 'activeVehicleCount': 1}},
+    })
+    result, status = create_user_vehicle(db, 'user-1', {'catalogId': 'evo200'}, runner=lambda operation: operation(FakeTransaction()))
+    assert status == 200
+    assert result['data']['vehicleId'] == 'v-existing'
+
+
+def test_create_user_vehicle_reconciles_stale_active_vehicle_count():
+    spec = normalize_catalog_document(complete_payload())
+    spec.update({'catalogId': 'evo200', 'status': 'published', 'selectable': True, 'revision': 4})
+    db = FakeDb({
+        'VehicleCatalog': {'evo200': spec},
+        'users': {'user-1': {'vehicles': [], 'activeVehicleCount': 2}},
+    })
+    result, status = create_user_vehicle(db, 'user-1', {'catalogId': 'evo200'}, max_vehicles=2, runner=lambda operation: operation(FakeTransaction()))
+    assert status == 201
+    assert db.data['users']['user-1']['activeVehicleCount'] == 1

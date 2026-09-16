@@ -527,7 +527,7 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'CATALOG VINFAST',
+                  'CATALOG XE ĐIỆN',
                   style: TextStyle(
                     color: AppColors.primary,
                     fontSize: 11,

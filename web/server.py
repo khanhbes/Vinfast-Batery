@@ -1494,6 +1494,105 @@ def admin_account_password_reset_audit(uid: str):
     return jsonify({'success': True, 'data': {'uid': uid}})
 
 
+_ACCOUNT_PURGE_COLLECTIONS = {
+    'Vehicles': 'ownerUid',
+    'ChargeLogs': 'ownerUid',
+    'TripLogs': 'ownerUid',
+    'MaintenanceTasks': 'ownerUid',
+    'TelemetryPoints': 'ownerUid',
+    'battery_states': 'ownerUid',
+    'trip_predictions': 'ownerUid',
+    'soc_predictions': 'ownerUid',
+    'charge_feedback': 'ownerUid',
+    'AiVehicleInsights': 'ownerUid',
+    'AiVehicleProfiles': 'ownerUid',
+    'UserNotifications': 'userId',
+    'ShellyCredentialVault': 'ownerUid',
+    'shellyDeviceLocks': 'ownerUid',
+}
+_ACCOUNT_PURGE_MAX_DOCUMENTS = 2000
+
+
+def _delete_document_tree(reference, deleted: list[int]):
+    """Delete a document and its subcollections without leaving orphans."""
+    for collection in reference.collections():
+        for document in collection.stream():
+            _delete_document_tree(document.reference, deleted)
+    reference.delete()
+    deleted[0] += 1
+
+
+@app.route('/api/admin/accounts/<uid>', methods=['DELETE'])
+@require_admin
+def admin_account_delete(uid: str):
+    """Permanently purge a non-admin account after explicit UID confirmation."""
+    body = request.get_json(silent=True) or {}
+    if str(body.get('confirmUid') or '') != uid:
+        return jsonify({'success': False, 'error': 'Type the exact account UID to confirm deletion', 'code': 'confirmationRequired'}), 400
+    resolved, failure = _admin_account_or_404(uid)
+    if failure:
+        return failure
+    user, profile = resolved
+    target = _account_record(user, profile)
+    if uid == request._uid or target['isAdmin']:
+        return jsonify({'success': False, 'error': 'The current administrator or an administrator account cannot be deleted here', 'code': 'protectedAccount'}), 403
+
+    database = _fs()
+    if not database:
+        return jsonify({'success': False, 'error': 'Firestore is unavailable; account data was not deleted', 'code': 'firestoreUnavailable'}), 503
+    try:
+        # Never remove a device lock while it may still represent an active
+        # relay session. The operator must stop Smart Charge first so its
+        # terminal flow can turn the relay off and record final energy safely.
+        lock_documents = list(
+            database.collection('shellyDeviceLocks')
+            .where('ownerUid', '==', uid)
+            .stream()
+        )
+        active_locks = []
+        now = datetime.now(timezone.utc)
+        for lock in lock_documents:
+            expires_at = (lock.to_dict() or {}).get('expiresAt')
+            if hasattr(expires_at, 'to_datetime'):
+                expires_at = expires_at.to_datetime()
+            if isinstance(expires_at, datetime) and expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            if not isinstance(expires_at, datetime) or expires_at > now:
+                active_locks.append(lock)
+        if active_locks:
+            return jsonify({
+                'success': False,
+                'error': 'Stop the active Smart Charge session before deleting this account',
+                'code': 'activeSmartCharge',
+            }), 409
+        # Lock access first. A retry after a partial purge remains safe.
+        _firebase_auth.update_user(uid, disabled=True)
+        _firebase_auth.revoke_refresh_tokens(uid)
+
+        references = [database.collection('users').document(uid)]
+        for collection, owner_field in _ACCOUNT_PURGE_COLLECTIONS.items():
+            references.extend(
+                document.reference
+                for document in database.collection(collection)
+                .where(owner_field, '==', uid)
+                .limit(_ACCOUNT_PURGE_MAX_DOCUMENTS + 1)
+                .stream()
+            )
+        unique = {reference.path: reference for reference in references}
+        if len(unique) > _ACCOUNT_PURGE_MAX_DOCUMENTS:
+            return jsonify({'success': False, 'error': 'Account has too much data for a safe one-step purge', 'code': 'purgeTooLarge'}), 409
+
+        deleted = [0]
+        for reference in unique.values():
+            _delete_document_tree(reference, deleted)
+        _firebase_auth.delete_user(uid)
+        _audit('account_purge', 'users', uid, request._uid, request._email, {'deletedDocuments': deleted[0]})
+        return jsonify({'success': True, 'data': {'uid': uid, 'deletedDocuments': deleted[0]}})
+    except Exception as exc:
+        print(f'Account purge failed for {uid}: {exc}')
+        return jsonify({'success': False, 'error': 'Account purge could not finish. The account remains disabled; retry after reviewing server logs.', 'code': 'accountPurgeFailed'}), 503
+
+
 _ADMIN_SNAPSHOT_COLLECTIONS = {
     'profiles': ('users', 'uid'),
     'vehicleSpecs': ('VinFastModelSpecs', 'modelId'),

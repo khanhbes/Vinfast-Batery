@@ -168,67 +168,67 @@ class GuideRegistry {
     return [
       CoachMarkStep(
         id: 'step_switch_vehicle',
-        titleVi: 'Chuyển xe & Thông báo',
+        titleVi: 'Đổi xe & Thông báo',
         titleEn: 'Switch Vehicle & Notifications',
         descriptionVi:
-            'Chạm vào tên xe ở góc trên để đổi xe đang theo dõi. Chuông thông báo hiển thị các cảnh báo an toàn và trạng thái sạc.',
+            'Chạm tên xe để đổi xe theo dõi. Chuông thông báo hiển thị cảnh báo an toàn và trạng thái sạc.',
         descriptionEn:
-            'Tap the vehicle name at the top to switch the active vehicle. The bell icon shows notifications and battery alerts.',
+            'Tap the vehicle name at the top to switch vehicle. Bell shows battery alerts.',
         anchorKey: keyVehicleSwitcher,
         tooltipAlignment: Alignment.bottomCenter,
       ),
       CoachMarkStep(
         id: 'step_customize_dashboard',
-        titleVi: 'Tùy chỉnh màn hình Tổng quan',
-        titleEn: 'Customize Overview Dashboard',
+        titleVi: 'Tùy chỉnh giao diện',
+        titleEn: 'Customize Dashboard',
         descriptionVi:
-            'Bấm nút "Tùy chỉnh" để kéo đổi thứ tự hoặc ẩn bớt các widget pin, sạc và dự đoán theo nhu cầu riêng của bạn.',
+            'Bấm nút "Tùy chỉnh" để sắp xếp vị trí hoặc ẩn/hiện các thẻ widget theo nhu cầu của bạn.',
         descriptionEn:
-            'Tap "Customize" to reorder or show/hide battery, charging, and prediction widgets to match your preferences.',
+            'Tap "Customize" to reorder or show/hide widgets to match your preferences.',
         anchorKey: keyCustomizeDashboard,
         tooltipAlignment: Alignment.bottomLeft,
       ),
       CoachMarkStep(
         id: 'step_battery_health',
-        titleVi: 'Theo dõi Pin, SoH & Quãng đường',
-        titleEn: 'Battery State, Health & Range',
+        titleVi: 'Pin & Quãng đường',
+        titleEn: 'Battery & Range',
         descriptionVi:
-            'Theo dõi % pin (SoC), điểm sức khỏe pin (SoH) và ước tính quãng đường còn lại được mô hình AI tính toán chính xác.',
+            'Theo dõi % pin (SoC), độ chai pin (SoH) và ước tính quãng đường còn lại tính bằng AI.',
         descriptionEn:
-            'View battery % (SoC), State of Health (SoH), and remaining range accurately estimated by AI models.',
+            'View battery % (SoC), health (SoH), and AI estimated remaining range.',
         anchorKey: keyBatteryHealthCard,
         tooltipAlignment: Alignment.topCenter,
       ),
       CoachMarkStep(
         id: 'step_charge_control',
-        titleVi: 'Thiết lập Smart Charge',
-        titleEn: 'Smart Charge Workspace',
+        titleVi: 'Sạc thông minh',
+        titleEn: 'Smart Charge',
         descriptionVi:
-            'Chuyển sang tab Sạc để đặt giới hạn SoC mục tiêu, tính toán chi phí điện và điều khiển relay an toàn.',
+            'Chuyển sang tab Sạc để đặt mức pin mục tiêu, ước tính tiền điện và bật/tắt relay an toàn.',
         descriptionEn:
-            'Switch to the Charge tab to configure target SoC, calculate electricity costs, and manage relay control safely.',
+            'Switch to Charge tab to set target SoC, estimate cost, and toggle relay safely.',
         anchorKey: keyChargeTab,
         tooltipAlignment: Alignment.topCenter,
       ),
       CoachMarkStep(
         id: 'step_trip_tracking',
-        titleVi: 'Chuyến đi & Hiệu suất',
+        titleVi: 'Hành trình',
         titleEn: 'Trips & Efficiency',
         descriptionVi:
-            'Theo dõi hành trình di chuyển thực tế và lượng điện năng tiêu thụ Wh/km để tối ưu hóa quãng đường lái xe.',
+            'Theo dõi lộ trình di chuyển thực tế và lượng tiêu thụ Wh/km để tối ưu quãng đường.',
         descriptionEn:
-            'Record live trips and energy consumption Wh/km to optimize your daily driving range.',
+            'Record live trips and energy consumption Wh/km to optimize your daily range.',
         anchorKey: keyTripPlannerAction,
         tooltipAlignment: Alignment.bottomCenter,
       ),
       CoachMarkStep(
         id: 'step_garage_and_more',
-        titleVi: 'Garage xe & Cài đặt nâng cao',
+        titleVi: 'Garage & Cài đặt',
         titleEn: 'Garage & Settings',
         descriptionVi:
-            'Thêm xe từ Catalog toàn cầu của VinFast, cấu hình bộ sạc thông minh Shelly và đồng bộ dữ liệu tại tab Khác.',
+            'Thêm xe từ Catalog xe điện, cấu hình bộ sạc Shelly và tùy chỉnh app tại tab Khác.',
         descriptionEn:
-            'Add vehicles from the Global Catalog, connect Shelly smart chargers, and sync your data in the More tab.',
+            'Add vehicles from Catalog, connect Shelly smart chargers, and adjust settings in More tab.',
         anchorKey: keyMoreSettingsTab,
         tooltipAlignment: Alignment.topCenter,
       ),
@@ -241,8 +241,8 @@ class GuideRegistry {
     GuideItem(
       id: 'guide_getting_started',
       category: GuideCategory.gettingStarted,
-      titleVi: 'Làm quen với ứng dụng VinFast Battery',
-      titleEn: 'Getting Started with VinFast Battery',
+      titleVi: 'Làm quen với ứng dụng EV Battery',
+      titleEn: 'Getting Started with EV Battery',
       summaryVi:
           'Hướng dẫn cơ bản các tính năng quản lý pin xe máy điện và cockpit thông minh.',
       summaryEn:
@@ -302,12 +302,12 @@ class GuideRegistry {
     GuideItem(
       id: 'guide_add_vehicle_catalog',
       category: GuideCategory.vehicle,
-      titleVi: 'Thêm xe từ Catalog toàn cầu VinFast',
-      titleEn: 'Add Vehicle from Global Catalog',
+      titleVi: 'Thêm xe từ Catalog xe điện',
+      titleEn: 'Add Vehicle from EV Catalog',
       summaryVi:
           'Chọn dòng xe chính xác (Klara, Feliz, Theon, Evo, Vento) để AI tính toán tối ưu.',
       summaryEn:
-          'Select the exact VinFast EV model for accurate AI consumption models.',
+          'Select the exact EV model for accurate AI consumption models.',
       prerequisitesVi: ['Kết nối mạng Internet', 'Tối đa 2 xe sở hữu active'],
       prerequisitesEn: [
         'Internet connection',

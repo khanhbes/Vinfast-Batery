@@ -12,18 +12,24 @@
   - Option 6: Don dep va Giai phong cac cong mang (5000, 8001, 3000)
 
 .EXAMPLE
-  .\run.ps1                 # Mo menu tuong tac chon option
-  .\run.ps1 1               # Chay Server Local Dev
-  .\run.ps1 2               # Chay Server Docker
-  .\run.ps1 3               # Build APK Release
-  .\run.ps1 4               # Build APK Debug
-  .\run.ps1 -Option 1       # Chay theo tham so
+  .\run.bat                 # Mo menu tuong tac (khong bi Execution Policy chan)
+  .\run.bat 1               # Chay Server Local Dev
+  .\run.bat 2               # Chay Server Docker
+  .\run.bat 3               # Build APK Release, dung version trong pubspec.yaml
+  .\run.bat 4               # Build APK Debug
+  .\run.bat 3 -AppVersion 1.1.4 -BuildNumber 114
 #>
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
     [ValidateSet('1', '2', '3', '4', '5', '6', '0', 'local', 'docker', 'build-release', 'build-debug', 'build-clean', 'stop')]
-    [string]$Option
+    [string]$Option,
+
+    # Optional build identity. If omitted, values are read from app/pubspec.yaml.
+    # Example: .\run.bat 3 -AppVersion 1.1.4 -BuildNumber 114
+    [string]$AppVersion,
+    [ValidateRange(1, 2100000000)]
+    [int]$BuildNumber
 )
 
 Set-StrictMode -Version Latest
@@ -299,6 +305,8 @@ function Build-AndroidApp {
         [string]$BuildMode = 'release',
         [switch]$Clean,
         [switch]$SplitAbi,
+        [string]$VersionName,
+        [int]$VersionCode,
         [string]$ApiUrl = 'https://khanhbes.tailaafca5.ts.net'
     )
 
@@ -314,6 +322,41 @@ function Build-AndroidApp {
         throw "Khong tim thay lenh 'flutter'. Vui long cai Flutter SDK va them vao PATH."
     }
     Write-Ok "Flutter SDK san sang."
+
+    $pubspecFile = Join-Path $appDir 'pubspec.yaml'
+    $pubspecText = Get-Content -Path $pubspecFile -Raw
+    $versionMatch = [regex]::Match(
+        $pubspecText,
+        '(?m)^version:\s*([^+\s]+)\+(\d+)\s*$'
+    )
+    if (-not $versionMatch.Success) {
+        throw "Khong doc duoc 'version: x.y.z+build' trong app/pubspec.yaml."
+    }
+    if ([string]::IsNullOrWhiteSpace($VersionName)) {
+        $VersionName = $versionMatch.Groups[1].Value
+    }
+    if ($VersionCode -le 0) {
+        $VersionCode = [int]$versionMatch.Groups[2].Value
+    }
+    if ($VersionName -notmatch '^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$') {
+        throw "AppVersion khong hop le: $VersionName (vi du hop le: 1.1.4)."
+    }
+    if (-not [string]::IsNullOrWhiteSpace($AppVersion) -or $BuildNumber -gt 0) {
+        if ([string]::IsNullOrWhiteSpace($AppVersion) -or $BuildNumber -le 0) {
+            throw "Khi doi version, can truyen dong thoi -AppVersion va -BuildNumber."
+        }
+        $newVersionLine = "version: $VersionName+$VersionCode"
+        $updatedPubspec = [regex]::Replace(
+            $pubspecText,
+            '(?m)^version:\s*[^\r\n]+$',
+            $newVersionLine,
+            1
+        )
+        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllText($pubspecFile, $updatedPubspec, $utf8NoBom)
+        Write-Ok "Da cap nhat app/pubspec.yaml: $newVersionLine"
+    }
+    Write-Ok "Version build: $VersionName+$VersionCode"
 
     $androidDir = Join-Path $appDir 'android'
     $keyPropsFile = Join-Path $androidDir 'key.properties'
@@ -332,13 +375,19 @@ function Build-AndroidApp {
             Write-Ok "Da clean xong."
         }
 
-        Write-Step "Cap nhat dependencies (flutter pub get)..."
-        & flutter pub get
+        Write-Step "Cap nhat dependencies tu cache (flutter pub get --offline)..."
+        & flutter pub get --offline
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warn "Cache dependency chua du. Thu lai flutter pub get online..."
+            & flutter pub get
+        }
         if ($LASTEXITCODE -ne 0) { throw "flutter pub get that bai." }
         Write-Ok "Dependencies san sang."
 
         Write-Step "Dang bien dich APK ($BuildMode)..."
         $buildArgs = @('build', 'apk', "--$BuildMode")
+        $buildArgs += "--build-name=$VersionName"
+        $buildArgs += "--build-number=$VersionCode"
         $buildArgs += "--dart-define=APP_API_BASE_URL=$ApiUrl"
         if ($SplitAbi -and $BuildMode -eq 'release') {
             $buildArgs += '--split-per-abi'
@@ -351,7 +400,11 @@ function Build-AndroidApp {
         }
 
         $outputDir = Join-Path $appDir "build\app\outputs\flutter-apk"
-        $apkFiles = Get-ChildItem -Path $outputDir -Filter "*.apk" | Where-Object { $_.Name -notmatch 'preview' }
+        # The output directory may still contain APKs from another build mode.
+        # Never publish a stale release APK while running a debug build.
+        $apkFiles = Get-ChildItem -Path $outputDir -Filter "*.apk" | Where-Object {
+            $_.Name -notmatch 'preview' -and $_.Name -match "-$BuildMode\.apk$"
+        }
         if (-not $apkFiles) {
             throw "Khong tim thay file APK nao trong $outputDir"
         }
@@ -360,21 +413,45 @@ function Build-AndroidApp {
         if (-not (Test-Path $webApkDir)) { New-Item -ItemType Directory -Path $webApkDir -Force | Out-Null }
 
         Write-Step "Tong ket file APK da tao:"
+        $otaUpdated = $false
         foreach ($apk in $apkFiles) {
+            $variant = $apk.BaseName -replace '^app-', ''
+            $artifactName = "VinFastBattery_${VersionName}+${VersionCode}_${variant}.apk"
+            $artifactPath = Join-Path $outputDir $artifactName
+            Move-Item -LiteralPath $apk.FullName -Destination $artifactPath -Force
+            $apk = Get-Item -LiteralPath $artifactPath
             $sizeMB = [math]::Round($apk.Length / 1MB, 2)
             Write-Host "  [APK] $($apk.Name) ($sizeMB MB)" -ForegroundColor Green
             Write-Host "        Duong dan: $($apk.FullName)" -ForegroundColor DarkGray
 
-            if ($apk.Name -match 'app-release.apk' -or $apk.Name -match 'app-arm64-v8a-release.apk') {
+            if ($variant -eq 'release' -or $variant -eq 'arm64-v8a-release') {
                 $latestTarget = Join-Path $webApkDir "VinFastBattery_latest.apk"
                 Copy-Item -Path $apk.FullName -Destination $latestTarget -Force
                 Write-Ok "Da cap nhat OTA web server: $latestTarget"
+                $otaUpdated = $true
             }
-            if ($apk.Name -match 'app-debug.apk') {
+            if ($variant -eq 'debug') {
                 $debugTarget = Join-Path $webApkDir "VinFastBattery_debug.apk"
                 Copy-Item -Path $apk.FullName -Destination $debugTarget -Force
                 Write-Ok "Da cap nhat debug APK cho web server: $debugTarget"
             }
+        }
+
+        if ($BuildMode -eq 'release' -and $otaUpdated) {
+            $appConfigFile = Join-Path $webApkDir 'app_config.json'
+            $appConfig = if (Test-Path $appConfigFile) {
+                Get-Content -Path $appConfigFile -Raw | ConvertFrom-Json
+            } else {
+                [PSCustomObject]@{}
+            }
+            $appConfig | Add-Member -NotePropertyName latestVersion -NotePropertyValue $VersionName -Force
+            $appConfig | Add-Member -NotePropertyName latestBuild -NotePropertyValue $VersionCode -Force
+            $releaseDate = Get-Date -Format 'dd/MM/yyyy HH:mm'
+            $appConfig | Add-Member -NotePropertyName releaseNotes -NotePropertyValue "Build $VersionCode - $releaseDate" -Force
+            $configJson = $appConfig | ConvertTo-Json -Depth 10
+            $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+            [System.IO.File]::WriteAllText($appConfigFile, $configJson + [Environment]::NewLine, $utf8NoBom)
+            Write-Ok "Da dong bo OTA metadata: $VersionName+$VersionCode"
         }
 
         Write-Host ""
@@ -431,7 +508,8 @@ function Show-Menu {
     Write-Host "      -> Chay containers va mo ket noi Internet: khanhbes.tailaafca5.ts.net" -ForegroundColor DarkGray
     Write-Host ""
     Write-Host "  [3] Build ung dung Android APK (Ban Release chuan - Toi uu, Ky so)" -ForegroundColor White
-    Write-Host "      -> Tao APK release va tu dong copy vao thu muc OTA web" -ForegroundColor DarkGray
+    Write-Host "      -> Version: app/pubspec.yaml; hoac -AppVersion x.y.z -BuildNumber n" -ForegroundColor DarkGray
+    Write-Host "      -> Tao APK release, copy OTA va dong bo app_config.json" -ForegroundColor DarkGray
     Write-Host ""
     Write-Host "  [4] Build ung dung Android APK (Ban Debug - Test nhanh tren may that)" -ForegroundColor White
     Write-Host "      -> Bien dich nhanh khong can cau hinh keystore" -ForegroundColor DarkGray
@@ -466,13 +544,13 @@ switch ($selected) {
         Start-ServerDocker
     }
     { $_ -in '3', 'build-release' } {
-        Build-AndroidApp -BuildMode 'release' -SplitAbi
+        Build-AndroidApp -BuildMode 'release' -SplitAbi -VersionName $AppVersion -VersionCode $BuildNumber
     }
     { $_ -in '4', 'build-debug' } {
-        Build-AndroidApp -BuildMode 'debug'
+        Build-AndroidApp -BuildMode 'debug' -VersionName $AppVersion -VersionCode $BuildNumber
     }
     { $_ -in '5', 'build-clean' } {
-        Build-AndroidApp -BuildMode 'release' -Clean -SplitAbi
+        Build-AndroidApp -BuildMode 'release' -Clean -SplitAbi -VersionName $AppVersion -VersionCode $BuildNumber
     }
     { $_ -in '6', 'stop' } {
         Stop-AllServers

@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
-import '../../core/theme/app_motion.dart';
-
-import '../../core/theme/app_colors.dart';
 import '../../core/services/auth_service.dart';
+import '../../core/theme/app_motion.dart';
+import '../../core/theme/cockpit_design_system.dart';
 import '../../core/widgets/app_popup.dart';
+import '../../core/widgets/ev_energy_animations.dart';
 import 'register_screen.dart';
 
-/// Login Screen — PLAN #3 (enhanced)
-/// - Uses AuthService for persistent login
-/// - Navigate to RegisterScreen
-/// - Forgot password support
+/// Login Screen — Cockpit Design System Edition
+/// Minimalist EV battery theme, no generic icons, custom 2D energy animations.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -73,31 +71,51 @@ class _LoginScreenState extends State<LoginScreen> {
 
   InputDecoration _inputDecoration({
     required String label,
-    required IconData icon,
+    String? hint,
     Widget? suffix,
   }) {
     return InputDecoration(
       labelText: label,
-      labelStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
-      prefixIcon: Icon(icon, color: AppColors.textSecondary, size: 20),
+      labelStyle: CockpitTypography.label(
+        fontSize: 13,
+        color: CockpitColors.muted,
+      ),
+      hintText: hint,
+      hintStyle: CockpitTypography.body(
+        fontSize: 13,
+        color: CockpitColors.dim,
+      ),
       suffixIcon: suffix,
       filled: true,
-      fillColor: AppColors.surface,
+      fillColor: CockpitColors.surface,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: AppColors.border),
+        borderRadius: BorderRadius.circular(CockpitRadius.small),
+        borderSide: const BorderSide(color: CockpitColors.border),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: AppColors.border),
+        borderRadius: BorderRadius.circular(CockpitRadius.small),
+        borderSide: const BorderSide(color: CockpitColors.border),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+        borderRadius: BorderRadius.circular(CockpitRadius.small),
+        borderSide: const BorderSide(
+          color: CockpitColors.emeraldStrong,
+          width: 1.5,
+        ),
       ),
       errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: AppColors.error.withAlpha(153)),
+        borderRadius: BorderRadius.circular(CockpitRadius.small),
+        borderSide: BorderSide(
+          color: CockpitColors.danger.withValues(alpha: 0.6),
+        ),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(CockpitRadius.small),
+        borderSide: const BorderSide(
+          color: CockpitColors.danger,
+          width: 1.5,
+        ),
       ),
     );
   }
@@ -105,118 +123,86 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: CockpitColors.background,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
+            padding: const EdgeInsets.symmetric(horizontal: 28),
             child: Form(
               key: _formKey,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Logo with gradient glow
-                  Container(
-                    width: 80,
-                    height: 80,
-                    padding: const EdgeInsets.all(5),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          AppColors.primary.withAlpha(40),
-                          AppColors.primaryContainer.withAlpha(60),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(22),
-                      border: Border.all(
-                        color: AppColors.primary.withAlpha(51),
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.primary.withAlpha(20),
-                          blurRadius: 30,
-                          spreadRadius: 5,
-                        ),
-                      ],
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(18),
-                      child: Image.asset(
-                        'assets/icons/app_icon.png',
-                        fit: BoxFit.cover,
-                        filterQuality: FilterQuality.high,
-                      ),
-                    ),
+                  // Animated Energy Orb Header (Replaces static icon)
+                  const EvEnergyOrb(
+                    size: 80,
+                    showParticles: true,
                   ).appScalePop(),
                   const SizedBox(height: 20),
 
-                  const Text(
+                  Text(
                     'VinFast Battery',
-                    style: TextStyle(
-                      color: AppColors.textPrimary,
+                    style: CockpitTypography.heading(
                       fontSize: 26,
                       fontWeight: FontWeight.w800,
-                      letterSpacing: -0.5,
+                      color: CockpitColors.text,
+                      letterSpacing: 0.5,
                     ),
                   ).appFadeSlideIn(index: 1),
                   const SizedBox(height: 6),
                   Text(
-                    'Đăng nhập để tiếp tục',
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 14,
+                    'Hệ thống quản lý năng lượng xe điện thông minh',
+                    textAlign: TextAlign.center,
+                    style: CockpitTypography.body(
+                      fontSize: 13,
+                      color: CockpitColors.muted,
                     ),
                   ).appFadeSlideIn(index: 1),
-                  const SizedBox(height: 36),
+
+                  const SizedBox(height: 16),
+                  const SizedBox(
+                    width: 120,
+                    child: EvGlowLine(height: 1.2),
+                  ).appFadeSlideIn(index: 1),
+                  const SizedBox(height: 28),
 
                   // Error banner
                   if (_error != null) ...[
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
                       decoration: BoxDecoration(
-                        color: AppColors.errorBg,
-                        borderRadius: BorderRadius.circular(12),
+                        color: CockpitColors.danger.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(CockpitRadius.small),
                         border: Border.all(
-                          color: AppColors.error.withAlpha(77),
+                          color: CockpitColors.danger.withValues(alpha: 0.35),
                         ),
                       ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.error_outline,
-                            color: AppColors.error,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _error!,
-                              style: TextStyle(
-                                color: AppColors.error,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                        ],
+                      child: Text(
+                        _error!,
+                        style: CockpitTypography.body(
+                          fontSize: 12.5,
+                          color: CockpitColors.danger,
+                        ),
                       ),
                     ).appFadeSlideIn(slide: 0),
                     const SizedBox(height: 16),
                   ],
 
-                  // Email
+                  // Email Input
                   TextFormField(
                     controller: _emailCtrl,
                     keyboardType: TextInputType.emailAddress,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
+                    style: CockpitTypography.body(
                       fontSize: 14,
+                      color: CockpitColors.text,
                     ),
                     decoration: _inputDecoration(
                       label: 'Email',
-                      icon: Icons.email_outlined,
+                      hint: 'name@example.com',
                     ),
                     validator: (v) {
                       if (v == null || v.trim().isEmpty) return 'Nhập email';
@@ -226,21 +212,21 @@ class _LoginScreenState extends State<LoginScreen> {
                   ).appFadeSlideIn(index: 2),
                   const SizedBox(height: 14),
 
-                  // Password
+                  // Password Input
                   TextFormField(
                     controller: _passCtrl,
                     obscureText: _obscure,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
+                    style: CockpitTypography.body(
                       fontSize: 14,
+                      color: CockpitColors.text,
                     ),
                     decoration: _inputDecoration(
                       label: 'Mật khẩu',
-                      icon: Icons.lock_outlined,
+                      hint: 'Tối thiểu 6 ký tự',
                       suffix: IconButton(
                         icon: Icon(
                           _obscure ? Icons.visibility_off : Icons.visibility,
-                          color: AppColors.textSecondary,
+                          color: CockpitColors.muted,
                           size: 20,
                         ),
                         onPressed: () => setState(() => _obscure = !_obscure),
@@ -260,55 +246,59 @@ class _LoginScreenState extends State<LoginScreen> {
                       onPressed: _forgotPassword,
                       child: Text(
                         'Quên mật khẩu?',
-                        style: TextStyle(
-                          color: AppColors.primary,
-                          fontSize: 12,
+                        style: CockpitTypography.label(
+                          fontSize: 12.5,
+                          color: CockpitColors.emeraldStrong,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
                   ).appFadeSlideIn(index: 2),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
 
-                  // Login Button
+                  // Submit Button with EvChargingWave on loading
                   ConstrainedBox(
                     constraints: const BoxConstraints(
                       minWidth: double.infinity,
-                      minHeight: 52,
+                      minHeight: 50,
                     ),
                     child: ElevatedButton(
                       onPressed: _loading ? null : _submit,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: AppColors.background,
+                        backgroundColor: CockpitColors.emeraldStrong,
+                        foregroundColor: CockpitColors.background,
+                        disabledBackgroundColor:
+                            CockpitColors.emeraldStrong.withValues(alpha: 0.4),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius:
+                              BorderRadius.circular(CockpitRadius.small),
                         ),
                         elevation: 0,
                       ),
                       child: _loading
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.5,
-                                valueColor: AlwaysStoppedAnimation(
-                                  AppColors.background,
-                                ),
+                          ? const Center(
+                              child: EvChargingWave(
+                                width: 56,
+                                height: 14,
+                                color: CockpitColors.background,
                               ),
                             )
-                          : const Text(
+                          : Text(
                               'Đăng nhập',
-                              style: TextStyle(
-                                fontSize: 16,
+                              style: CockpitTypography.heading(
+                                fontSize: 15,
                                 fontWeight: FontWeight.w700,
+                                color: CockpitColors.background,
                               ),
                             ),
                     ),
                   ).appFadeSlideIn(index: 3),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 24),
 
-                  // Register link
+                  // Register link with subtle separator
+                  const EvGlowLine(height: 1.0).appFadeSlideIn(index: 3),
+                  const SizedBox(height: 16),
+
                   TextButton(
                     onPressed: () {
                       Navigator.push(
@@ -323,15 +313,16 @@ class _LoginScreenState extends State<LoginScreen> {
                       textAlign: TextAlign.center,
                       text: TextSpan(
                         text: 'Chưa có tài khoản? ',
-                        style: TextStyle(
-                          color: AppColors.textSecondary,
+                        style: CockpitTypography.body(
                           fontSize: 13,
+                          color: CockpitColors.muted,
                         ),
                         children: [
                           TextSpan(
                             text: 'Đăng ký ngay',
-                            style: TextStyle(
-                              color: AppColors.primary,
+                            style: CockpitTypography.body(
+                              fontSize: 13,
+                              color: CockpitColors.emeraldStrong,
                               fontWeight: FontWeight.w700,
                             ),
                           ),

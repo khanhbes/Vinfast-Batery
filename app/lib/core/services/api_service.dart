@@ -258,11 +258,11 @@ class ApiService {
     Map<String, dynamic>? parsedJson;
     try {
       final decoded = jsonDecode(response.body);
-      if (decoded is Map<String, dynamic>) {
-        parsedJson = decoded;
+      if (decoded is Map) {
+        parsedJson = Map<String, dynamic>.from(decoded);
       }
     } catch (e, stack) {
-      if (response.statusCode != 200) {
+      if (response.statusCode < 200 || response.statusCode >= 300) {
         final err = ApiException(
           endpoint: endpoint,
           statusCode: response.statusCode,
@@ -286,7 +286,7 @@ class ApiService {
       }
     }
 
-    if (response.statusCode == 200) {
+    if (response.statusCode >= 200 && response.statusCode < 300) {
       return parsedJson ?? <String, dynamic>{'success': true};
     }
 

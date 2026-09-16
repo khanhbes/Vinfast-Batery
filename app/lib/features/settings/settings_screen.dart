@@ -148,10 +148,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void _showAboutDialog() {
     showAboutDialog(
       context: context,
-      applicationName: 'VinFast Battery',
+      applicationName: 'EV Battery',
       applicationVersion: _appVersion,
       applicationLegalese:
-          '© 2026 VinFast Battery. Hệ thống quản lý pin xe điện.',
+          '© 2026 EV Battery. Hệ thống quản lý pin xe điện.',
       applicationIcon: Container(
         padding: EdgeInsets.all(8),
         decoration: BoxDecoration(

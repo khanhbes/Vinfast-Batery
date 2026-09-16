@@ -123,6 +123,15 @@ class VinFastModelSpec {
     final media = data['media'] is Map
         ? Map<String, dynamic>.from(data['media'] as Map)
         : const <String, dynamic>{};
+    final mediaViews = media['views'] is Map
+        ? Map<String, dynamic>.from(media['views'] as Map)
+        : const <String, dynamic>{};
+    final twoDMedia = mediaViews['twoD'] is Map
+        ? Map<String, dynamic>.from(mediaViews['twoD'] as Map)
+        : const <String, dynamic>{};
+    final threeDMedia = mediaViews['threeD'] is Map
+        ? Map<String, dynamic>.from(mediaViews['threeD'] as Map)
+        : const <String, dynamic>{};
     final resolvedName =
         (selectedLocale['displayName'] ??
                 fallbackLocale['displayName'] ??
@@ -188,7 +197,13 @@ class VinFastModelSpec {
       rangeKm: optDouble(performance['rangeKm'] ?? data['rangeKm']),
       imageAsset: data['imageAsset'] as String?,
       imageUrl:
-          (media['thumbnailUrl'] ?? media['heroUrl'] ?? data['imageUrl'])
+          (twoDMedia['thumbnailUrl'] ??
+                  twoDMedia['heroUrl'] ??
+                  threeDMedia['thumbnailUrl'] ??
+                  threeDMedia['heroUrl'] ??
+                  media['thumbnailUrl'] ??
+                  media['heroUrl'] ??
+                  data['imageUrl'])
               as String?,
       description:
           (selectedLocale['description'] ?? fallbackLocale['description'])

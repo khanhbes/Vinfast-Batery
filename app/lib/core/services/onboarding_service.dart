@@ -63,20 +63,70 @@ class OnboardingService {
 
   OnboardingService({ApiService? api}) : _api = api ?? ApiService();
 
-  /// Validate ngày sinh định dạng `YYYY-MM-DD`
-  /// - Tùy chọn (null hoặc rỗng là hợp lệ)
+  /// Chuyển đổi chuỗi ngày sinh bất kỳ (dd/MM/yyyy hoặc yyyy-MM-dd) sang DateTime
+  static DateTime? parseDateOfBirth(String? dob) {
+    if (dob == null || dob.trim().isEmpty) return null;
+    final trimmed = dob.trim();
+    // Thử định dạng dd/MM/yyyy
+    final dmyRegex = RegExp(r'^(\d{1,2})/(\d{1,2})/(\d{4})$');
+    final dmyMatch = dmyRegex.firstMatch(trimmed);
+    if (dmyMatch != null) {
+      final day = int.tryParse(dmyMatch.group(1)!);
+      final month = int.tryParse(dmyMatch.group(2)!);
+      final year = int.tryParse(dmyMatch.group(3)!);
+      if (day != null && month != null && year != null) {
+        try {
+          final dt = DateTime(year, month, day);
+          if (dt.year == year && dt.month == month && dt.day == day) {
+            return dt;
+          }
+        } catch (_) {}
+      }
+      return null;
+    }
+    // Thử định dạng yyyy-MM-dd
+    final ymdRegex = RegExp(r'^(\d{4})-(\d{1,2})-(\d{1,2})$');
+    final ymdMatch = ymdRegex.firstMatch(trimmed);
+    if (ymdMatch != null) {
+      final year = int.tryParse(ymdMatch.group(1)!);
+      final month = int.tryParse(ymdMatch.group(2)!);
+      final day = int.tryParse(ymdMatch.group(3)!);
+      if (day != null && month != null && year != null) {
+        try {
+          final dt = DateTime(year, month, day);
+          if (dt.year == year && dt.month == month && dt.day == day) {
+            return dt;
+          }
+        } catch (_) {}
+      }
+      return null;
+    }
+    return DateTime.tryParse(trimmed);
+  }
+
+  /// Chuyển đổi định dạng ngày sinh sang chuẩn YYYY-MM-DD gửi lên server
+  static String? toServerDateFormat(String? dob) {
+    final dt = parseDateOfBirth(dob);
+    if (dt == null) return null;
+    return '${dt.year.toString().padLeft(4, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+  }
+
+  /// Chuyển đổi định dạng ngày sinh sang chuẩn dd/MM/yyyy hiển thị cho người dùng
+  static String? toDisplayDateFormat(String? dob) {
+    final dt = parseDateOfBirth(dob);
+    if (dt == null) return null;
+    return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year.toString().padLeft(4, '0')}';
+  }
+
+  /// Validate ngày sinh (hỗ trợ dd/MM/yyyy hoặc YYYY-MM-DD)
+  /// - Tùy chọn (null hoặc rỗng là hợp lệ khi bỏ qua)
   /// - Không được ở tương lai
   /// - Tuổi không được vượt quá 120
   static String? validateDateOfBirth(String? dob) {
     if (dob == null || dob.trim().isEmpty) return null;
-    final trimmed = dob.trim();
-    final regex = RegExp(r'^\d{4}-\d{2}-\d{2}$');
-    if (!regex.hasMatch(trimmed)) {
-      return 'Định dạng ngày sinh phải là YYYY-MM-DD';
-    }
-    final parsed = DateTime.tryParse(trimmed);
+    final parsed = parseDateOfBirth(dob);
     if (parsed == null) {
-      return 'Ngày sinh không hợp lệ';
+      return 'Định dạng ngày sinh phải là dd/mm/yyyy';
     }
     final now = DateTime.now();
     if (parsed.isAfter(now)) {
@@ -95,10 +145,10 @@ class OnboardingService {
     return null;
   }
 
-  /// Tính tuổi từ chuỗi `YYYY-MM-DD`
+  /// Tính tuổi từ chuỗi ngày sinh (hỗ trợ cả dd/MM/yyyy và yyyy-MM-dd)
   static int? calculateAge(String? dob) {
     if (dob == null || dob.trim().isEmpty) return null;
-    final parsed = DateTime.tryParse(dob.trim());
+    final parsed = parseDateOfBirth(dob);
     if (parsed == null) return null;
     final now = DateTime.now();
     final age =
@@ -141,11 +191,14 @@ class OnboardingService {
     }
   }
 
-  /// Cập nhật thông tin profile (họ tên bắt buộc, phone và ngày sinh tùy chọn)
+  /// Cập nhật thông tin profile (họ tên, phone, ngày sinh, và dữ liệu khảo sát cá nhân hóa)
   Future<Map<String, dynamic>> updateProfile({
     required String name,
     String? phone,
     String? dateOfBirth,
+    double? avgDailyDistanceKm,
+    String? usagePurpose,
+    double? typicalSocWhenCharge,
   }) async {
     try {
       final dobErr = validateDateOfBirth(dateOfBirth);
@@ -153,13 +206,20 @@ class OnboardingService {
         return {'success': false, 'error': dobErr};
       }
 
+      final serverDob = toServerDateFormat(dateOfBirth);
+
       final payload = <String, dynamic>{
         'name': name.trim(),
         if (phone != null) 'phone': phone.trim(),
-        if (dateOfBirth != null && dateOfBirth.trim().isNotEmpty)
-          'dateOfBirth': dateOfBirth.trim()
+        if (serverDob != null)
+          'dateOfBirth': serverDob
         else
           'dateOfBirth': null,
+        if (avgDailyDistanceKm != null) 'avgDailyDistanceKm': avgDailyDistanceKm,
+        if (usagePurpose != null && usagePurpose.isNotEmpty)
+          'usagePurpose': usagePurpose,
+        if (typicalSocWhenCharge != null)
+          'typicalSocWhenCharge': typicalSocWhenCharge,
       };
 
       final res = await _api.patch('/api/user/profile', payload);
