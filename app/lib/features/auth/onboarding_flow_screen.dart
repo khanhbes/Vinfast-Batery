@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -324,7 +325,7 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
         const SizedBox(height: 24),
         const Center(
           child: Text(
-            'Chào mừng đến với VinFast Battery',
+            'Chào mừng đến với EV Battery',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: Colors.white,
@@ -441,6 +442,10 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
         TextField(
           controller: _phoneCtrl,
           keyboardType: TextInputType.phone,
+          inputFormatters: [
+            FilteringTextInputFormatter.digitsOnly,
+            LengthLimitingTextInputFormatter(11),
+          ],
           style: const TextStyle(color: Colors.white),
           decoration: _inputDeco(
             label: 'Số điện thoại (tùy chọn)',

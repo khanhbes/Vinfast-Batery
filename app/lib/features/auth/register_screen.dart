@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/theme/app_motion.dart';
 import '../../core/theme/cockpit_design_system.dart';
@@ -18,23 +19,11 @@ class RegisterScreen extends StatefulWidget {
 
 class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
-  late final _nameCtrl = TextEditingController(
-    text: kDebugMode ? 'Le Hoang EV' : '',
-  );
-  late final _emailCtrl = TextEditingController(
-    text: kDebugMode
-        ? 'lehoang.${DateTime.now().millisecondsSinceEpoch % 10000}@vinfast.test'
-        : '',
-  );
-  late final _phoneCtrl = TextEditingController(
-    text: kDebugMode ? '0912345678' : '',
-  );
-  late final _passCtrl = TextEditingController(
-    text: kDebugMode ? 'VinFast2026@' : '',
-  );
-  late final _confirmPassCtrl = TextEditingController(
-    text: kDebugMode ? 'VinFast2026@' : '',
-  );
+  final _nameCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
+  final _passCtrl = TextEditingController();
+  final _confirmPassCtrl = TextEditingController();
   bool _loading = false;
   bool _obscurePass = true;
   bool _obscureConfirm = true;
@@ -52,6 +41,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
+    HapticFeedback.lightImpact();
     setState(() {
       _loading = true;
       _error = null;
@@ -136,6 +126,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: const EdgeInsets.symmetric(horizontal: 28),
             child: Form(
               key: _formKey,
@@ -229,6 +220,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   TextFormField(
                     controller: _nameCtrl,
                     textCapitalization: TextCapitalization.words,
+                    textInputAction: TextInputAction.next,
                     style: CockpitTypography.body(
                       fontSize: 14,
                       color: CockpitColors.text,
@@ -251,6 +243,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   TextFormField(
                     controller: _emailCtrl,
                     keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.next,
                     style: CockpitTypography.body(
                       fontSize: 14,
                       color: CockpitColors.text,
@@ -275,6 +268,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   TextFormField(
                     controller: _phoneCtrl,
                     keyboardType: TextInputType.phone,
+                    textInputAction: TextInputAction.next,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(11),
+                    ],
                     style: CockpitTypography.body(
                       fontSize: 14,
                       color: CockpitColors.text,
@@ -299,6 +297,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   TextFormField(
                     controller: _passCtrl,
                     obscureText: _obscurePass,
+                    textInputAction: TextInputAction.next,
                     style: CockpitTypography.body(
                       fontSize: 14,
                       color: CockpitColors.text,
@@ -332,6 +331,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   TextFormField(
                     controller: _confirmPassCtrl,
                     obscureText: _obscureConfirm,
+                    textInputAction: TextInputAction.done,
+                    onFieldSubmitted: (_) => _register(),
                     style: CockpitTypography.body(
                       fontSize: 14,
                       color: CockpitColors.text,
@@ -397,7 +398,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               ),
                             ),
                     ),
-                  ).appFadeSlideIn(index: 4),
+                  ).appTactile(enabled: !_loading).appFadeSlideIn(index: 4),
                   const SizedBox(height: 20),
 
                   // Back to login with separator
@@ -426,6 +427,34 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                     ),
                   ).appFadeSlideIn(index: 5),
+                  if (kDebugMode) ...[
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _nameCtrl.text = 'Le Hoang EV';
+                          _emailCtrl.text =
+                              'lehoang.${DateTime.now().millisecondsSinceEpoch % 10000}@vinfast.test';
+                          _phoneCtrl.text = '0912345678';
+                          _passCtrl.text = 'VinFast2026@';
+                          _confirmPassCtrl.text = 'VinFast2026@';
+                          _error = null;
+                        });
+                      },
+                      icon: const Icon(
+                        Icons.build_circle_outlined,
+                        size: 16,
+                        color: CockpitColors.muted,
+                      ),
+                      label: Text(
+                        'Điền dữ liệu mẫu (QA)',
+                        style: CockpitTypography.label(
+                          fontSize: 12,
+                          color: CockpitColors.muted,
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 20),
                 ],
               ),

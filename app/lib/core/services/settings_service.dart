@@ -23,7 +23,7 @@ class SettingsService extends ChangeNotifier {
   SharedPreferences? _prefs;
   bool _initialized = false;
   AppThemeMode _themeMode = AppThemeMode.dark;
-  AppLanguage _language = AppLanguage.system;
+  AppLanguage _language = AppLanguage.vietnamese;
 
   bool get isInitialized => _initialized;
 
@@ -132,8 +132,10 @@ class SettingsService extends ChangeNotifier {
       case 'en':
       case 'english':
         return AppLanguage.english;
-      default:
+      case 'system':
         return AppLanguage.system;
+      default:
+        return AppLanguage.vietnamese;
     }
   }
 }

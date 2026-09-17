@@ -12,8 +12,8 @@ class NotificationRepository {
   factory NotificationRepository() => _instance;
   NotificationRepository._internal();
 
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  FirebaseFirestore get _firestore => FirebaseFirestore.instance;
+  FirebaseAuth get _auth => FirebaseAuth.instance;
   int? _cachedUnread;
   DateTime? _cachedUnreadAt;
 

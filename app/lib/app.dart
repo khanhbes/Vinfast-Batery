@@ -82,7 +82,7 @@ class _VinFastBatteryAppState extends State<VinFastBatteryApp> {
             ? AppTheme.amoledTheme
             : AppTheme.darkTheme;
         return MaterialApp(
-          title: 'VinFast Battery',
+          title: 'EV Battery',
           debugShowCheckedModeBanner: false,
 
           // Theme support (Light/Dark/System per PLAN1)

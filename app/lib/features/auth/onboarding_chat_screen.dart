@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
@@ -8,6 +9,7 @@ import '../../core/services/auth_service.dart';
 import '../../core/services/dashboard_preferences_service.dart';
 import '../../core/services/guide_registry.dart';
 import '../../core/services/onboarding_service.dart';
+import '../../core/theme/app_motion.dart';
 import '../../core/theme/cockpit_design_system.dart';
 import '../../core/widgets/app_popup.dart';
 import '../../core/widgets/battery_bot_mascot.dart';
@@ -175,6 +177,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
   }
 
   void _nextStep() {
+    HapticFeedback.lightImpact();
     if (_currentStep == 0) {
       // Từ Welcome sang Chọn xe (nếu đã có xe -> sang ngày sinh)
       if (_createdVehicleId != null && _createdVehicleId!.isNotEmpty) {
@@ -506,6 +509,13 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
             Expanded(
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 320),
+                layoutBuilder: (currentChild, previousChildren) => Stack(
+                  alignment: Alignment.topCenter,
+                  children: <Widget>[
+                    ...previousChildren,
+                    ?currentChild,
+                  ],
+                ),
                 switchInCurve: Curves.easeOutCubic,
                 switchOutCurve: Curves.easeInCubic,
                 transitionBuilder: (child, animation) {
@@ -831,15 +841,17 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
         crossAxisCount: 2,
         mainAxisSpacing: 12,
         crossAxisSpacing: 12,
-        childAspectRatio: 0.95,
+        childAspectRatio: 0.90,
       ),
       itemCount: _catalogSpecs.length,
       itemBuilder: (context, index) {
         final spec = _catalogSpecs[index];
         final isSelected = _selectedSpec?.modelId == spec.modelId;
 
-        return GestureDetector(
+        return AppTactileBounce(
+          pressScale: 0.96,
           onTap: () {
+            HapticFeedback.selectionClick();
             setState(() => _selectedSpec = spec);
           },
           child: AnimatedContainer(
@@ -928,9 +940,10 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
                             child: Image.network(
                               spec.imageUrl!.trim(),
                               fit: BoxFit.contain,
-                              errorBuilder: (_, __, ___) =>
-                                  _buildVehicleFallbackInitial(
-                                      spec, isSelected),
+                              errorBuilder:
+                                  (context, error, stackTrace) =>
+                                      _buildVehicleFallbackGraphic(
+                                          spec, isSelected),
                               loadingBuilder:
                                   (context, child, progress) {
                                 if (progress == null) return child;
@@ -948,7 +961,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
                             ),
                           ),
                         )
-                      : _buildVehicleFallbackInitial(spec, isSelected),
+                      : _buildVehicleFallbackGraphic(spec, isSelected),
                 ),
 
                 // Tên xe & Quãng đường
@@ -985,32 +998,99 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
     );
   }
 
-  Widget _buildVehicleFallbackInitial(VinFastModelSpec spec, bool isSelected) {
+  Widget _buildVehicleFallbackGraphic(VinFastModelSpec spec, bool isSelected) {
+    final line = (spec.modelLine?.isNotEmpty == true)
+        ? spec.modelLine!.toUpperCase()
+        : (spec.modelName.split(' ').length > 1
+            ? spec.modelName.split(' ')[1].toUpperCase()
+            : 'EV');
+
     return Container(
-      width: 54,
-      height: 54,
+      width: double.infinity,
+      height: 56,
       decoration: BoxDecoration(
         color: const Color(0xFF0F172A),
-        shape: BoxShape.circle,
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isSelected
-              ? CockpitColors.emerald.withValues(alpha: 0.4)
-              : Colors.transparent,
+              ? CockpitColors.emerald.withValues(alpha: 0.5)
+              : const Color(0xFF1E293B),
+          width: 1,
+        ),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isSelected
+              ? [
+                  const Color(0xFF064E3B).withValues(alpha: 0.4),
+                  const Color(0xFF0F172A),
+                ]
+              : [
+                  const Color(0xFF1E293B).withValues(alpha: 0.3),
+                  const Color(0xFF0A0F1D),
+                ],
         ),
       ),
-      child: Center(
-        child: Text(
-          (spec.modelLine?.isNotEmpty == true)
-              ? spec.modelLine!.substring(0, 1)
-              : 'E',
-          style: TextStyle(
-            color: isSelected
-                ? CockpitColors.emerald
-                : const Color(0xFF94A3B8),
-            fontSize: 24,
-            fontWeight: FontWeight.w800,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Background watermark
+          Positioned(
+            right: 6,
+            bottom: 2,
+            child: Text(
+              line,
+              style: TextStyle(
+                color: (isSelected ? CockpitColors.emerald : Colors.white)
+                    .withValues(alpha: 0.08),
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+                fontStyle: FontStyle.italic,
+                letterSpacing: 1.2,
+              ),
+            ),
           ),
-        ),
+          // Silhouette icon & badge
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.two_wheeler_rounded,
+                size: 26,
+                color: isSelected
+                    ? CockpitColors.emerald
+                    : const Color(0xFF94A3B8),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? CockpitColors.emerald.withValues(alpha: 0.2)
+                      : const Color(0xFF1E293B),
+                  borderRadius: BorderRadius.circular(5),
+                  border: Border.all(
+                    color: isSelected
+                        ? CockpitColors.emerald.withValues(alpha: 0.7)
+                        : const Color(0xFF334155),
+                    width: 0.8,
+                  ),
+                ),
+                child: Text(
+                  line,
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.1,
+                    color: isSelected
+                        ? CockpitColors.emerald
+                        : const Color(0xFFCBD5E1),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -1081,6 +1161,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
               hint: '0',
               icon: Icons.speed_rounded,
               keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             ),
             const SizedBox(height: 18),
 
@@ -1596,8 +1677,10 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
       child: Column(
         children: [
           // Thẻ A: Kết nối Shelly ngay
-          GestureDetector(
+          AppTactileBounce(
+            pressScale: 0.97,
             onTap: () {
+              HapticFeedback.selectionClick();
               setState(() => _shellyStatus = 'connected');
               _nextStep();
             },
@@ -1657,8 +1740,10 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
           const SizedBox(height: 12),
 
           // Thẻ B: Bỏ qua / Thiết lập sau
-          GestureDetector(
+          AppTactileBounce(
+            pressScale: 0.97,
             onTap: () {
+              HapticFeedback.selectionClick();
               setState(() => _shellyStatus = 'skipped');
               _nextStep();
             },
@@ -1901,6 +1986,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
     required String hint,
     required IconData icon,
     TextInputType keyboardType = TextInputType.text,
+    List<TextInputFormatter>? inputFormatters,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1929,6 +2015,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
                 child: TextField(
                   controller: controller,
                   keyboardType: keyboardType,
+                  inputFormatters: inputFormatters,
                   style: const TextStyle(color: Colors.white, fontSize: 14),
                   decoration: InputDecoration(
                     hintText: hint,
@@ -2042,7 +2129,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
                         ],
                       ),
               ),
-            ),
+            ).appTactile(enabled: canContinue && !_isSubmitting),
           ),
         ],
       ),

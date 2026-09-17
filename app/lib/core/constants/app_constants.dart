@@ -2,7 +2,7 @@
 class AppConstants {
   AppConstants._();
 
-  static const String appName = 'VinFast Battery';
+  static const String appName = 'EV Battery';
 
   // API Base URL — mặc định dùng Tailscale Funnel.
   // Có thể ghi đè linh hoạt trong Developer Mode hoặc SharedPreferences.

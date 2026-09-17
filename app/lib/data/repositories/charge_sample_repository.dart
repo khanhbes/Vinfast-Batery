@@ -17,7 +17,7 @@ class ChargeSampleRepository {
   factory ChargeSampleRepository() => _instance;
   ChargeSampleRepository._internal();
 
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  FirebaseFirestore get _firestore => FirebaseFirestore.instance;
   final ApiService _apiService = ApiService();
 
   /// Check connectivity

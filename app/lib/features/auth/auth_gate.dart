@@ -65,6 +65,12 @@ class _AuthGateState extends ConsumerState<AuthGate> {
   ///   và `explicit_signed_out == false` thì cho phép chờ thêm tối đa 8s
   ///   để token persistence kịp khôi phục (tránh đẩy user về Login nhầm).
   Future<void> _initialize() async {
+    // Nếu Firebase init đã có lỗi (ví dụ từ trước hoặc override trong test), hiển thị error UI ngay
+    if (ref.read(firebaseInitErrorProvider) != null) {
+      if (mounted) setState(() => _initializing = false);
+      return;
+    }
+
     final splashStartTime = DateTime.now();
     // Đọc marker trước để quyết định timeout.
     try {
@@ -74,59 +80,81 @@ class _AuthGateState extends ConsumerState<AuthGate> {
       debugPrint('[AuthGate] Read session markers error: $e');
     }
 
-    // Nếu Firebase init lỗi thì không cần chờ — hiển thị error UI ngay.
-    if (ref.read(firebaseInitErrorProvider) != null) {
-      if (mounted) setState(() => _initializing = false);
-      return;
+    // Đảm bảo Firebase sẵn sàng trước khi truy cập bất kỳ Firebase service nào
+    if (!FirebaseBootstrapCoordinator.isReady) {
+      try {
+        await FirebaseBootstrapCoordinator.ensureInitialized().timeout(
+          const Duration(seconds: 15),
+        );
+        ref.read(firebaseInitErrorProvider.notifier).state = null;
+      } catch (e) {
+        debugPrint('[AuthGate] Firebase init error: $e');
+        if (mounted) {
+          ref.read(firebaseInitErrorProvider.notifier).state = e;
+          setState(() => _initializing = false);
+        }
+        return;
+      }
     }
+
+    // Khởi tạo push notification trong nền khi Firebase đã sẵn sàng
+    unawaited(
+      FirebaseBootstrapCoordinator.initializePushServices().catchError((e) {
+        debugPrint('[AuthGate] Push services init error: $e');
+      }),
+    );
 
     final completer = Completer<User?>();
     StreamSubscription<User?>? sub;
-    sub = FirebaseAuth.instance.authStateChanges().listen((user) {
-      if (!completer.isCompleted) completer.complete(user);
-      sub?.cancel();
-    });
-
-    // Cold-start case: cho phép wait lâu hơn để token kịp restore.
-    final timeout = (_wasAuthenticated && !_explicitSignedOut)
-        ? const Duration(seconds: 8)
-        : const Duration(seconds: 3);
-
-    User? restoredUser;
     try {
-      restoredUser = await completer.future.timeout(
-        timeout,
-        onTimeout: () => null,
-      );
-    } finally {
-      await sub.cancel();
-    }
+      sub = FirebaseAuth.instance.authStateChanges().listen((user) {
+        if (!completer.isCompleted) completer.complete(user);
+        sub?.cancel();
+      });
 
-    // Nếu lần trước đã đăng nhập và chưa bấm Đăng xuất, nhưng Firebase vẫn
-    // trả null ở cold start, thử khôi phục bằng credential đã mã hóa.
-    if (restoredUser == null && _wasAuthenticated && !_explicitSignedOut) {
-      restoredUser = FirebaseAuth.instance.currentUser;
-      if (restoredUser == null) {
-        try {
-          restoredUser = await AuthService().restoreRememberedLogin().timeout(
-            const Duration(seconds: 10),
-            onTimeout: () => null,
-          );
-        } catch (e) {
-          debugPrint('[AuthGate] Remembered login restore error: $e');
+      // Cold-start case: cho phép wait lâu hơn để token kịp restore.
+      final timeout = (_wasAuthenticated && !_explicitSignedOut)
+          ? const Duration(seconds: 8)
+          : const Duration(seconds: 3);
+
+      User? restoredUser;
+      try {
+        restoredUser = await completer.future.timeout(
+          timeout,
+          onTimeout: () => null,
+        );
+      } finally {
+        await sub.cancel();
+      }
+
+      // Nếu lần trước đã đăng nhập và chưa bấm Đăng xuất, nhưng Firebase vẫn
+      // trả null ở cold start, thử khôi phục bằng credential đã mã hóa.
+      if (restoredUser == null && _wasAuthenticated && !_explicitSignedOut) {
+        restoredUser = FirebaseAuth.instance.currentUser;
+        if (restoredUser == null) {
+          try {
+            restoredUser = await AuthService().restoreRememberedLogin().timeout(
+              const Duration(seconds: 10),
+              onTimeout: () => null,
+            );
+          } catch (e) {
+            debugPrint('[AuthGate] Remembered login restore error: $e');
+          }
+        }
+        if (restoredUser != null) {
+          await SessionService().markAuthenticated();
+          _wasAuthenticated = true;
+          _explicitSignedOut = false;
         }
       }
-      if (restoredUser != null) {
-        await SessionService().markAuthenticated();
-        _wasAuthenticated = true;
-        _explicitSignedOut = false;
-      }
+    } catch (e) {
+      debugPrint('[AuthGate] Auth restore error: $e');
     }
 
-    // Đảm bảo splash screen chạy tối thiểu 3 giây trước khi chuyển màn hình
+    // Đảm bảo splash screen chạy tối thiểu 2.5 giây trước khi chuyển màn hình
     final elapsed = DateTime.now().difference(splashStartTime);
-    if (elapsed < const Duration(milliseconds: 3000)) {
-      await Future.delayed(const Duration(milliseconds: 3000) - elapsed);
+    if (elapsed < const Duration(milliseconds: 2500)) {
+      await Future.delayed(const Duration(milliseconds: 2500) - elapsed);
     }
 
     if (mounted) {
@@ -148,8 +176,14 @@ class _AuthGateState extends ConsumerState<AuthGate> {
   Future<void> _retryFirebaseInit() async {
     setState(() => _initializing = true);
     try {
-      await FirebaseBootstrapCoordinator.ensureInitialized();
-      await FirebaseBootstrapCoordinator.initializePushServices();
+      await FirebaseBootstrapCoordinator.ensureInitialized().timeout(
+        const Duration(seconds: 15),
+      );
+      unawaited(
+        FirebaseBootstrapCoordinator.initializePushServices().catchError((e) {
+          debugPrint('[AuthGate] Push retry error: $e');
+        }),
+      );
       ref.read(firebaseInitErrorProvider.notifier).state = null;
     } catch (e) {
       ref.read(firebaseInitErrorProvider.notifier).state = e;
@@ -161,10 +195,11 @@ class _AuthGateState extends ConsumerState<AuthGate> {
   Widget build(BuildContext context) {
     final initError = ref.watch(firebaseInitErrorProvider);
 
-    // 1) Firebase init lỗi → màn hình lỗi/retry, KHÔNG đẩy về Login.
-    if (initError != null && !_initializing) {
+    // 1) Firebase init lỗi hoặc chưa sẵn sàng sau khi hết initializing → màn hình lỗi/retry.
+    // Tuyệt đối KHÔNG render StreamBuilder hay truy cập FirebaseAuth.instance ở đây.
+    if ((initError != null || !FirebaseBootstrapCoordinator.isReady) && !_initializing) {
       return _BootstrapErrorScreen(
-        error: initError,
+        error: initError ?? 'Firebase chưa sẵn sàng.',
         onRetry: _retryFirebaseInit,
       );
     }
@@ -178,7 +213,7 @@ class _AuthGateState extends ConsumerState<AuthGate> {
       );
     }
 
-    // 3) Sau init: dùng StreamBuilder theo dõi auth state realtime.
+    // 3) Sau init: chỉ dùng StreamBuilder khi Firebase chắc chắn đã sẵn sàng.
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {

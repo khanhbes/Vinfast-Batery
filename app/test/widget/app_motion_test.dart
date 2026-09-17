@@ -133,6 +133,42 @@ void main() {
     expect(taps, 2);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('AppTactileBounce handles tap, scale compression, and rebounds', (
+    tester,
+  ) async {
+    var taps = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: const Text('Bounce Target').appTactile(
+            pressScale: 0.96,
+            onTap: () => taps++,
+          ),
+        ),
+      ),
+    );
+
+    // Initial state: scale 1.0
+    final scaleFinder = find.byType(ScaleTransition);
+    expect(scaleFinder, findsOneWidget);
+    var scaleTransition = tester.widget<ScaleTransition>(scaleFinder);
+    expect(scaleTransition.scale.value, 1.0);
+
+    // Press down
+    final gesture = await tester.startGesture(tester.getCenter(find.text('Bounce Target')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 130));
+    scaleTransition = tester.widget<ScaleTransition>(scaleFinder);
+    expect(scaleTransition.scale.value, closeTo(0.96, 0.02));
+
+    // Release
+    await gesture.up();
+    await tester.pumpAndSettle();
+    scaleTransition = tester.widget<ScaleTransition>(scaleFinder);
+    expect(scaleTransition.scale.value, 1.0);
+    expect(taps, 1);
+  });
 }
 
 class _CounterTab extends StatefulWidget {

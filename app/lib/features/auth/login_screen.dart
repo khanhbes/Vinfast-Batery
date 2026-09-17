@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/theme/app_motion.dart';
 import '../../core/theme/cockpit_design_system.dart';
@@ -32,6 +33,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    HapticFeedback.lightImpact();
     setState(() {
       _loading = true;
       _error = null;
@@ -141,7 +143,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 20),
 
                   Text(
-                    'VinFast Battery',
+                    'EV Battery',
                     style: CockpitTypography.heading(
                       fontSize: 26,
                       fontWeight: FontWeight.w800,
@@ -292,7 +294,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
                     ),
-                  ).appFadeSlideIn(index: 3),
+                  ).appTactile(enabled: !_loading).appFadeSlideIn(index: 3),
                   const SizedBox(height: 24),
 
                   // Register link with subtle separator

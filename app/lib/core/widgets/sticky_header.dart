@@ -52,7 +52,7 @@ class SharedStickyHeader extends StatelessWidget {
 
   const SharedStickyHeader({
     super.key,
-    this.title = 'VinFast Battery',
+    this.title = 'EV Battery',
     this.onNotificationTap,
     this.onProfileTap,
     this.notificationCount = 0,

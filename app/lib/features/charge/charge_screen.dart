@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/app_providers.dart';
+import '../../core/widgets/empty_state.dart';
+import '../../core/widgets/vehicle_picker_sheet.dart';
 import '../ai/smart_charging_control_screen.dart';
 
 /// Vehicle-scoped Smart Charge entry point for the V4 Charge tab.
@@ -13,7 +15,13 @@ class ChargeScreen extends ConsumerWidget {
     final vehicleContext = ref.watch(vehicleContextProvider);
     final vehicleId = vehicleContext.vehicleId;
     if (vehicleId.isEmpty) {
-      return const Center(child: Text('Hãy chọn xe để sử dụng Smart Charge'));
+      return EmptyState(
+        icon: Icons.electric_bolt_rounded,
+        title: 'Chưa chọn phương tiện',
+        message: 'Vui lòng chọn xe VinFast của bạn để sử dụng tính năng sạc thông minh.',
+        actionLabel: 'Chọn xe ngay',
+        onAction: () => VehiclePickerSheet.show(context, ref),
+      );
     }
     // The context owns the identity; the async provider preserves a distinct
     // loading/error state instead of showing an endless spinner on failure.
@@ -23,7 +31,13 @@ class ChargeScreen extends ConsumerWidget {
       error: (error, _) =>
           Center(child: Text('Không thể tải thông tin xe: $error')),
       data: (value) => value == null
-          ? const Center(child: Text('Chưa có dữ liệu xe đã chọn'))
+          ? EmptyState(
+              icon: Icons.electric_bike_rounded,
+              title: 'Chưa có dữ liệu xe',
+              message: 'Không tìm thấy dữ liệu cho phương tiện đã chọn.',
+              actionLabel: 'Chọn xe khác',
+              onAction: () => VehiclePickerSheet.show(context, ref),
+            )
           : SmartChargingControlScreen(
               vehicleId: vehicleId,
               currentSoc: value.currentBattery.toDouble(),

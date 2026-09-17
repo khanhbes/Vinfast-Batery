@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 
 import 'debug_error_sheet.dart';
 
@@ -16,7 +15,6 @@ class AppPopup {
   static String? _lastSignature;
   static DateTime? _lastShownAt;
   static final Set<String> _shownSignatures = <String>{};
-  static bool _isDebugSheetOpen = false;
 
   static void showSuccess(
     String title, {
@@ -55,29 +53,6 @@ class AppPopup {
       actionLabel: kDebugMode ? 'CHI TIẾT' : 'MỞ',
       userInitiated: userInitiated,
     );
-
-    // Tự động mở DebugErrorSheet trong debug mode nếu chưa mở
-    if (kDebugMode && !_isDebugSheetOpen) {
-      final ctx = navigatorKey.currentContext;
-      if (ctx != null) {
-        _isDebugSheetOpen = true;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          final currentCtx = navigatorKey.currentContext;
-          if (currentCtx != null && currentCtx.mounted) {
-            DebugErrorSheet.show(
-              currentCtx,
-              error: error ?? detail ?? title,
-              stackTrace: stackTrace,
-              source: 'AutoDebug',
-            ).whenComplete(() {
-              _isDebugSheetOpen = false;
-            });
-          } else {
-            _isDebugSheetOpen = false;
-          }
-        });
-      }
-    }
   }
 
   static void showWarning(
@@ -114,8 +89,15 @@ class AppPopup {
   static void dismiss() {
     _timer?.cancel();
     _timer = null;
-    _entry?.remove();
+    final entry = _entry;
     _entry = null;
+    if (entry != null && entry.mounted) {
+      try {
+        entry.remove();
+      } catch (_) {
+        // Guard against double removal or unmounted race condition
+      }
+    }
   }
 
   static void _show(
@@ -127,6 +109,8 @@ class AppPopup {
     bool persistent = false,
     bool userInitiated = false,
   }) {
+    if (WidgetsBinding.instance.rootElement == null) return;
+
     final signature = '$kind|$title|$detail';
     final now = DateTime.now();
 
@@ -151,13 +135,15 @@ class AppPopup {
     }
     final overlay = navigatorKey.currentState?.overlay;
     if (overlay == null) {
-      messengerKey.currentState?.showSnackBar(
-        SnackBar(content: Text(detail == null ? title : '$title\n$detail')),
-      );
+      try {
+        messengerKey.currentState?.showSnackBar(
+          SnackBar(content: Text(detail == null ? title : '$title\n$detail')),
+        );
+      } catch (_) {}
       return;
     }
     dismiss();
-    _entry = OverlayEntry(
+    final newEntry = OverlayEntry(
       builder: (context) => _NoticeOverlay(
         kind: kind,
         title: title,
@@ -167,13 +153,14 @@ class AppPopup {
         onDismiss: dismiss,
       ),
     );
+    _entry = newEntry;
 
     void insertOverlay() {
-      if (_entry == null) return;
+      if (!identical(_entry, newEntry) || newEntry.mounted) return;
       final currentOverlay = navigatorKey.currentState?.overlay;
       if (currentOverlay == null) return;
       try {
-        currentOverlay.insert(_entry!);
+        currentOverlay.insert(newEntry);
         if (!persistent) {
           _timer = Timer(
             kind == AppNoticeKind.error
@@ -187,13 +174,7 @@ class AppPopup {
       }
     }
 
-    final schedulerPhase = SchedulerBinding.instance.schedulerPhase;
-    if (schedulerPhase == SchedulerPhase.persistentCallbacks ||
-        schedulerPhase == SchedulerPhase.midFrameMicrotasks) {
-      SchedulerBinding.instance.addPostFrameCallback((_) => insertOverlay());
-    } else {
-      insertOverlay();
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) => insertOverlay());
   }
 }
 
