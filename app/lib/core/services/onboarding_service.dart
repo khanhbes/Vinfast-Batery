@@ -211,15 +211,11 @@ class OnboardingService {
       final payload = <String, dynamic>{
         'name': name.trim(),
         if (phone != null) 'phone': phone.trim(),
-        if (serverDob != null)
-          'dateOfBirth': serverDob
-        else
-          'dateOfBirth': null,
-        if (avgDailyDistanceKm != null) 'avgDailyDistanceKm': avgDailyDistanceKm,
+        'dateOfBirth': serverDob,
+        'avgDailyDistanceKm': ?avgDailyDistanceKm,
         if (usagePurpose != null && usagePurpose.isNotEmpty)
           'usagePurpose': usagePurpose,
-        if (typicalSocWhenCharge != null)
-          'typicalSocWhenCharge': typicalSocWhenCharge,
+        'typicalSocWhenCharge': ?typicalSocWhenCharge,
       };
 
       final res = await _api.patch('/api/user/profile', payload);

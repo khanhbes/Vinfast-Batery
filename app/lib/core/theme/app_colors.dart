@@ -23,16 +23,16 @@ class AppColors {
   static const Color lightGreen = Color(0xFF6EE7B7);
 
   // ── Surfaces (Material 3 dark) ───────────────────────
-  static const Color background = Color(0xFF050505);
-  static const Color surface = Color(0xFF0C0C0C);
-  static const Color surfaceVariant = Color(0xFF171A20);
-  static const Color surfaceLight = Color(0xFF171A20);
-  static const Color card = Color(0xFF101216);
-  static const Color cardElevated = Color(0xFF171A20);
+  static const Color background = Color(0xFF0A0C10);
+  static const Color surface = Color(0xFF0F131C);
+  static const Color surfaceVariant = Color(0xFF181F2C);
+  static const Color surfaceLight = Color(0xFF181F2C);
+  static const Color card = Color(0xFF131823);
+  static const Color cardElevated = Color(0xFF181F2C);
 
   // ── Borders ───────────────────────────────────────────
-  static const Color border = Color(0xFF1E232B);
-  static const Color borderLight = Color(0xFF282F3B);
+  static const Color border = Color(0xFF1E2636);
+  static const Color borderLight = Color(0xFF2B364B);
 
   // ── Text ──────────────────────────────────────────────
   static const Color textPrimary = Color(0xFFF8FAFC);

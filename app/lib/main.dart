@@ -24,10 +24,20 @@ final pendingRecoveryProvider = StateProvider<String?>((ref) => null);
 /// Firebase chưa sẵn sàng.
 final firebaseInitErrorProvider = StateProvider<Object?>((ref) => null);
 
-bool _isExpectedOperationalError(Object error) =>
-    error is SmartChargerException ||
-    error is ShellyClientException ||
-    error is SmartChargePredictionException;
+bool _isExpectedOperationalError(Object error) {
+  final str = error.toString();
+  if (str.contains('google_fonts') ||
+      str.contains('Failed to load font') ||
+      str.contains('HandshakeException') ||
+      str.contains('SocketException') ||
+      str.contains('TimeoutException') ||
+      str.contains('Zone mismatch')) {
+    return true;
+  }
+  return error is SmartChargerException ||
+      error is ShellyClientException ||
+      error is SmartChargePredictionException;
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -60,31 +70,16 @@ void main() async {
 
   await runZonedGuarded(
     () async {
-      // Android may already initialize Firebase before Dart starts. The
-      // coordinator also resolves a normal duplicate-app startup race.
-      Object? firebaseInitError;
-      try {
-        await FirebaseBootstrapCoordinator.ensureInitialized();
-        await FirebaseBootstrapCoordinator.initializePushServices();
-      } catch (e, stack) {
-        AppErrorReporter.report(e, stack, source: 'Firebase');
-        firebaseInitError = e;
-      }
-
-      // Khởi tạo Notification Service
-      try {
-        await NotificationService().initialize();
-      } catch (e, stack) {
-        AppErrorReporter.report(e, stack, source: 'NotificationService');
-      }
-      // Push is started only after Firebase succeeds above.
-
-      // Khởi tạo Background Service
-      try {
-        await BackgroundServiceConfig.initialize();
-      } catch (e, stack) {
-        AppErrorReporter.report(e, stack, source: 'BackgroundService');
-      }
+      // Khởi động Firebase trong nền (AuthGate sẽ await phối hợp hiển thị splash/retry)
+      unawaited(
+        () async {
+          try {
+            await FirebaseBootstrapCoordinator.ensureInitialized();
+          } catch (e, stack) {
+            AppErrorReporter.report(e, stack, source: 'FirebaseBootstrap');
+          }
+        }(),
+      );
 
       // Kiểm tra session tracking chưa kết thúc (crash recovery)
       String? pendingRecovery;
@@ -105,6 +100,20 @@ void main() async {
         AppErrorReporter.report(e, stack, source: 'CrashRecovery');
       }
 
+      // Khởi tạo Notification Service trong nền (không chặn first frame)
+      unawaited(
+        NotificationService().initialize().catchError((e, stack) {
+          AppErrorReporter.report(e, stack, source: 'NotificationService');
+        }),
+      );
+
+      // Khởi tạo Background Service trong nền (không chặn first frame)
+      unawaited(
+        BackgroundServiceConfig.initialize().catchError((e, stack) {
+          AppErrorReporter.report(e, stack, source: 'BackgroundService');
+        }),
+      );
+
       // Lock to portrait mode
       SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
 
@@ -122,7 +131,6 @@ void main() async {
         ProviderScope(
           overrides: [
             pendingRecoveryProvider.overrideWith((ref) => pendingRecovery),
-            firebaseInitErrorProvider.overrideWith((ref) => firebaseInitError),
           ],
           child: const VinFastBatteryApp(),
         ),

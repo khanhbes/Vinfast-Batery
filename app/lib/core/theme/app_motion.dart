@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 /// Hệ thống motion thống nhất cho toàn app — Design System V4.
@@ -173,6 +174,24 @@ extension AppMotionAnimate on Widget {
       },
     );
   }
+
+  /// Mechanical tactile press feedback with scale compression & haptics.
+  Widget appTactile({
+    VoidCallback? onTap,
+    VoidCallback? onLongPress,
+    bool enabled = true,
+    double pressScale = 0.97,
+    bool enableHaptic = true,
+  }) {
+    return AppTactileBounce(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      enabled: enabled,
+      pressScale: pressScale,
+      enableHaptic: enableHaptic,
+      child: this,
+    );
+  }
 }
 
 /// Subtle, one-shot entrance. Layout, focus and hit targets remain available
@@ -205,6 +224,95 @@ class AppReveal extends StatelessWidget {
       builder: (context, value, child) => Opacity(
         opacity: 0.82 + 0.18 * value,
         child: Transform.translate(offset: offset * (1 - value), child: child),
+      ),
+    );
+  }
+}
+
+/// Interactive tactile wrapper providing mechanical press depth and haptic response.
+///
+/// Benchmarked against luxury automotive interfaces (Porsche Connect, Apple CarPlay):
+/// - Compresses to 0.97 scale on touch down in 120ms with [Curves.easeOutCubic].
+/// - Springs back to 1.0 on release in 180ms with [Curves.easeOutBack].
+/// - Triggers subtle [HapticFeedback.lightImpact] on tap.
+class AppTactileBounce extends StatefulWidget {
+  const AppTactileBounce({
+    super.key,
+    required this.child,
+    this.onTap,
+    this.onLongPress,
+    this.enabled = true,
+    this.pressScale = 0.97,
+    this.enableHaptic = true,
+  });
+
+  final Widget child;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final bool enabled;
+  final double pressScale;
+  final bool enableHaptic;
+
+  @override
+  State<AppTactileBounce> createState() => _AppTactileBounceState();
+}
+
+class _AppTactileBounceState extends State<AppTactileBounce>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 120),
+      reverseDuration: const Duration(milliseconds: 180),
+    );
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: widget.pressScale,
+    ).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeOutBack,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _triggerHaptic() {
+    if (!widget.enableHaptic) return;
+    HapticFeedback.lightImpact();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.enabled) return widget.child;
+
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: (_) {
+        _triggerHaptic();
+        _controller.forward();
+      },
+      onPointerUp: (_) => _controller.reverse(),
+      onPointerCancel: (_) => _controller.reverse(),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        onLongPress: widget.onLongPress,
+        child: ScaleTransition(
+          scale: _scaleAnimation,
+          child: widget.child,
+        ),
       ),
     );
   }

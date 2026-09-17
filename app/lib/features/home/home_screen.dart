@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/dashboard_preferences_service.dart';
 import '../../core/services/guide_registry.dart';
@@ -24,6 +25,7 @@ import '../trip_planner/trip_planner_wrapper.dart';
 import '../maintenance/maintenance_screen.dart';
 import '../../core/widgets/responsive_text.dart';
 import '../../core/widgets/ev_energy_animations.dart';
+import '../../core/widgets/debug_error_sheet.dart';
 
 // =============================================================================
 // Home Screen V4 — Modern Dashboard Design
@@ -734,19 +736,19 @@ class _StatCardsRow extends StatelessWidget {
         _StatCard(
           icon: Icons.bolt_outlined,
           value: percent == null ? '—' : '$percent%',
-          label: 'CHARGE',
+          label: 'MỨC PIN',
           isHighlighted: false,
         ),
         _StatCard(
           icon: Icons.near_me_outlined,
           value: range,
-          label: 'RANGE KM',
+          label: 'QUÃNG ĐƯỜNG',
           isHighlighted: true,
         ),
         _StatCard(
-          icon: Icons.access_time_outlined,
+          icon: Icons.speed_rounded,
           value: odo == null ? '—' : '$odo',
-          label: 'ODO KM',
+          label: 'TỔNG ODO',
           isHighlighted: false,
         ),
       ],
@@ -1033,7 +1035,7 @@ class _QuickActionsRow extends StatelessWidget {
         _AnimatedActionButton(
           key: GuideRegistry.keyTripPlannerAction,
           icon: Icons.map_outlined,
-          label: 'Trip Planner',
+          label: 'Lộ trình sạc',
           color: AppUiColors.of(context).primary,
           onTap: () => Navigator.push(
             context,
@@ -1042,7 +1044,7 @@ class _QuickActionsRow extends StatelessWidget {
         ),
         _AnimatedActionButton(
           icon: Icons.build_outlined,
-          label: 'Service',
+          label: 'Bảo dưỡng xe',
           color: Color(0xFFE8A87C),
           onTap: () => Navigator.push(
             context,
@@ -1051,7 +1053,7 @@ class _QuickActionsRow extends StatelessWidget {
         ),
         _AnimatedActionButton(
           icon: Icons.sync_rounded,
-          label: 'Sync Now',
+          label: 'Đồng bộ ngay',
           color: AppUiColors.of(context).primary,
           onTap: onSync,
         ),
@@ -1113,6 +1115,7 @@ class _AnimatedActionButtonState extends State<_AnimatedActionButton>
       onTapDown: (_) => _controller.forward(),
       onTapUp: (_) {
         _controller.reverse();
+        HapticFeedback.lightImpact();
         widget.onTap();
       },
       onTapCancel: () => _controller.reverse(),
@@ -1598,7 +1601,6 @@ class _InlineErrorBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final friendly = AppErrorFormatter.format(error);
-    final raw = error.toString();
     return Container(
       padding: EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -1656,14 +1658,30 @@ class _InlineErrorBanner extends StatelessWidget {
           ),
           if (kDebugMode) ...[
             SizedBox(height: 6),
-            Text(
-              raw,
-              maxLines: 4,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: AppUiColors.of(context).muted.withValues(alpha: 0.8),
-                fontSize: 10,
-                fontFamily: 'monospace',
+            GestureDetector(
+              onTap: () => DebugErrorSheet.show(
+                context,
+                error: error,
+                source: title,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.terminal_rounded,
+                    size: 13,
+                    color: AppUiColors.of(context).muted,
+                  ),
+                  SizedBox(width: 4),
+                  Text(
+                    'Xem chi tiết kỹ thuật',
+                    style: TextStyle(
+                      color: AppUiColors.of(context).muted,
+                      fontSize: 11,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],

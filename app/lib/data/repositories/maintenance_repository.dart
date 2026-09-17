@@ -89,7 +89,7 @@ class MaintenanceRepository {
   // STATIC METHODS for convenience (used by UI)
   // ═══════════════════════════════════════════════════════════════════════
 
-  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  static FirebaseFirestore get _firestore => FirebaseFirestore.instance;
 
   /// Stream of maintenance tasks for real-time updates.
   ///

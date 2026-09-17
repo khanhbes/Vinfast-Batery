@@ -24,8 +24,8 @@ class SyncService {
   static const Duration _timeout = Duration(seconds: 30);
 
   // Firestore instances
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  FirebaseFirestore get _firestore => FirebaseFirestore.instance;
+  FirebaseAuth get _auth => FirebaseAuth.instance;
 
   /// Every sync write is authenticated with the current Firebase ID token.
   /// The backend derives ownerUid from this token and rejects anonymous or

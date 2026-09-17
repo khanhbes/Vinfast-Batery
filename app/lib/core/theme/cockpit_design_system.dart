@@ -7,11 +7,12 @@ import 'package:google_fonts/google_fonts.dart';
 /// Emerald is intentionally reserved for verified state and primary actions.
 /// Estimated values use amber and destructive actions use red.
 abstract final class CockpitColors {
-  static const background = Color(0xFF050505);
-  static const shell = Color(0xFF0C0C0C);
-  static const surface = Color(0xFF101216);
-  static const elevated = Color(0xFF171A20);
-  static const surfaceSoft = Color(0xFF1D2128);
+  /// Deep Obsidian - nền xe sang tối ưu độ sâu quang học (thay vì #000000 phẳng)
+  static const background = Color(0xFF0A0C10);
+  static const shell = Color(0xFF0F131C);
+  static const surface = Color(0xFF131823);
+  static const elevated = Color(0xFF181F2C);
+  static const surfaceSoft = Color(0xFF1E2738);
 
   static const emerald = Color(0xFF34D399);
   static const emeraldStrong = Color(0xFF10B981);
@@ -24,8 +25,8 @@ abstract final class CockpitColors {
   static const text = Color(0xFFF8FAFC);
   static const muted = Color(0xFF94A3B8);
   static const dim = Color(0xFF64748B);
-  static const border = Color(0xFF1E232B);
-  static const borderStrong = Color(0xFF282F3B);
+  static const border = Color(0xFF1E2636);
+  static const borderStrong = Color(0xFF2B364B);
 }
 
 /// Theme-adaptive color scheme accessor via `context.cockpit`.

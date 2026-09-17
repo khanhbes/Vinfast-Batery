@@ -196,7 +196,7 @@ class _BootstrapSplashState extends State<BootstrapSplash>
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            'VinFast Battery',
+                            'EV Battery',
                             textAlign: TextAlign.center,
                             style: CockpitTypography.heading(
                               fontSize: 26,

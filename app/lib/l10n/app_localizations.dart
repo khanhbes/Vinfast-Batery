@@ -101,13 +101,13 @@ abstract class AppLocalizations {
   /// No description provided for @appTitle.
   ///
   /// In vi, this message translates to:
-  /// **'VinFast Battery'**
+  /// **'EV Battery'**
   String get appTitle;
 
   /// No description provided for @appTagline.
   ///
   /// In vi, this message translates to:
-  /// **'Quản lý pin xe máy điện VinFast'**
+  /// **'Quản lý pin xe điện'**
   String get appTagline;
 
   /// No description provided for @tabHome.

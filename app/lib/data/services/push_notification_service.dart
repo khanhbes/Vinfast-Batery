@@ -11,6 +11,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../core/services/firebase_bootstrap_coordinator.dart';
 import '../repositories/vehicle_spec_repository.dart';
 import '../repositories/notification_repository.dart';
 
@@ -21,7 +22,7 @@ class PushNotificationService {
   PushNotificationService._();
   static final instance = PushNotificationService._();
 
-  final FirebaseMessaging _messaging = FirebaseMessaging.instance;
+  FirebaseMessaging get _messaging => FirebaseMessaging.instance;
   final FlutterSecureStorage _storage = const FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
     iOptions: IOSOptions(
@@ -65,6 +66,9 @@ class PushNotificationService {
 
   Future<void> _initializeInternal() async {
     if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) return;
+    if (!FirebaseBootstrapCoordinator.isReady) {
+      await FirebaseBootstrapCoordinator.ensureInitialized();
+    }
     if (Platform.isIOS) {
       await _messaging.requestPermission(alert: true, badge: true, sound: true);
       await _messaging.setForegroundNotificationPresentationOptions(

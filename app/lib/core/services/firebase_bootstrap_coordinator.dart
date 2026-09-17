@@ -18,6 +18,18 @@ class FirebaseBootstrapCoordinator {
   static Future<void>? _initializingPush;
   static bool _pushReady = false;
 
+  /// Returns true when the default Firebase app is already initialized and valid.
+  static bool get isReady {
+    try {
+      final app = _defaultAppOrNull();
+      if (app == null) return false;
+      _validate(app);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static Future<FirebaseApp> ensureInitialized() {
     final existing = _defaultAppOrNull();
     if (existing != null) {

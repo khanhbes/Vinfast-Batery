@@ -8,6 +8,8 @@ import '../core/theme/app_ui_colors.dart';
 import '../core/widgets/app_navigation_bar.dart';
 import '../core/widgets/app_popup.dart';
 import '../core/widgets/app_tab_stack.dart';
+import '../core/widgets/empty_state.dart';
+import '../core/widgets/vehicle_picker_sheet.dart';
 import '../core/widgets/vehicle_switcher.dart';
 import '../core/widgets/global_charging_pill.dart';
 import '../features/ai/smart_charge_history_screen.dart';
@@ -81,21 +83,29 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
       ),
     );
 
-    return Scaffold(
-      backgroundColor: AppUiColors.of(context).background,
-      appBar: _buildUnifiedAppBar(context, currentIndex),
-      body: Stack(
-        children: [
-          AppTabStack(index: currentIndex, children: _screens),
-          GlobalChargingPill(),
-        ],
-      ),
-      bottomNavigationBar: AppNavigationBar(
-        selectedIndex: currentIndex,
-        onSelected: (index) {
-          AppPopup.clearShownErrors();
-          ref.read(currentTabProvider.notifier).state = index;
-        },
+    return PopScope(
+      canPop: currentIndex == 0,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && currentIndex != 0) {
+          ref.read(currentTabProvider.notifier).state = 0;
+        }
+      },
+      child: Scaffold(
+        backgroundColor: AppUiColors.of(context).background,
+        appBar: _buildUnifiedAppBar(context, currentIndex),
+        body: Stack(
+          children: [
+            AppTabStack(index: currentIndex, children: _screens),
+            GlobalChargingPill(),
+          ],
+        ),
+        bottomNavigationBar: AppNavigationBar(
+          selectedIndex: currentIndex,
+          onSelected: (index) {
+            AppPopup.clearShownErrors();
+            ref.read(currentTabProvider.notifier).state = index;
+          },
+        ),
       ),
     );
   }
@@ -105,15 +115,16 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
     BuildContext context,
     int currentIndex,
   ) {
-    final tabTitles = ['Tổng quan', '', 'Lịch sử sạc', 'Khác'];
+    final tabTitles = ['Tổng quan', 'Sạc pin', 'Lịch sử sạc', 'Cài đặt'];
+    final selectedVehicleId = ref.watch(selectedVehicleIdProvider);
     const energyMode = true;
 
     return AppBar(
       backgroundColor: AppUiColors.of(context).surface,
       elevation: 0,
-      // The Charge workspace already has its own contextual heading. Keeping
-      // another "Smart Charge" here caused truncation beside the vehicle pill.
-      title: currentIndex == 1
+      // The Charge workspace has its own contextual heading when a vehicle is active.
+      // If no vehicle is selected, display "Sạc pin" so the AppBar is not an empty bar.
+      title: (currentIndex == 1 && selectedVehicleId.isNotEmpty)
           ? null
           : Text(
               tabTitles[currentIndex],
@@ -170,7 +181,13 @@ class _SelectedHistory extends ConsumerWidget {
     final pending = ref.watch(pendingSmartChargeTargetProvider);
     final id = pending?.vehicleId ?? selectedId;
     if (id.isEmpty) {
-      return Center(child: Text('Hãy chọn xe để xem lịch sử sạc'));
+      return EmptyState(
+        icon: Icons.history_rounded,
+        title: 'Chưa chọn phương tiện',
+        message: 'Vui lòng chọn xe VinFast của bạn để xem toàn bộ lịch sử sạc pin.',
+        actionLabel: 'Chọn xe ngay',
+        onAction: () => VehiclePickerSheet.show(context, ref),
+      );
     }
     final vehicle = ref.watch(vehicleProvider(id));
     return vehicle.when(
