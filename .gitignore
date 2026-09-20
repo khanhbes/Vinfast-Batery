@@ -87,6 +87,7 @@ app.*.map.json
 # APKs are local release artifacts; publish them through GitHub Releases instead.
 /app/releases/*.apk
 /web/apk/*.apk
+/*_Release.apk
 
 # Firebase Admin credentials (never commit)
 serviceAccountKey.json
