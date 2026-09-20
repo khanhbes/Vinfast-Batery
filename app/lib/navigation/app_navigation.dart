@@ -115,27 +115,26 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
     BuildContext context,
     int currentIndex,
   ) {
-    final tabTitles = ['Tổng quan', 'Sạc pin', 'Lịch sử sạc', 'Cài đặt'];
-    final selectedVehicleId = ref.watch(selectedVehicleIdProvider);
+    final tabTitles = ['Tổng quan', 'Sạc pin', 'Lịch sử', 'Cài đặt'];
     const energyMode = true;
 
     return AppBar(
       backgroundColor: AppUiColors.of(context).surface,
       elevation: 0,
-      // The Charge workspace has its own contextual heading when a vehicle is active.
-      // If no vehicle is selected, display "Sạc pin" so the AppBar is not an empty bar.
-      title: (currentIndex == 1 && selectedVehicleId.isNotEmpty)
-          ? null
-          : Text(
-              tabTitles[currentIndex],
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: AppUiColors.of(context).text,
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+      title: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: Text(
+          tabTitles[currentIndex],
+          maxLines: 1,
+          softWrap: false,
+          style: TextStyle(
+            color: AppUiColors.of(context).text,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
       actions: [
         if (currentIndex == 0) ...[
           IconButton(
@@ -255,13 +254,17 @@ class _NotificationBell extends StatelessWidget {
     return Semantics(
       button: true,
       label: unreadCount > 0 ? 'Thông báo, $unreadCount chưa đọc' : 'Thông báo',
-      child: Material(
-        color: AppUiColors.of(context).elevated,
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          onTap: onTap,
+      child: Tooltip(
+        message: unreadCount > 0
+            ? '$unreadCount thông báo mới'
+            : 'Trung tâm thông báo',
+        child: Material(
+          color: AppUiColors.of(context).elevated,
           borderRadius: BorderRadius.circular(16),
-          child: SizedBox(
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(16),
+            child: SizedBox(
             width: 48,
             height: 48,
             child: Stack(
@@ -306,6 +309,7 @@ class _NotificationBell extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

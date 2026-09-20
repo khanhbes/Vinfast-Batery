@@ -898,12 +898,12 @@ class _SmartChargeHeaderState extends State<_SmartChargeHeader>
         statusText = 'Đang kết nối...';
         break;
       case ChargerDisplayState.offline:
-        dotColor = CockpitColors.danger;
+        dotColor = CockpitColors.amber;
         statusText = 'Mất kết nối ổ sạc';
         break;
       case ChargerDisplayState.error:
-        dotColor = CockpitColors.danger;
-        statusText = 'Lỗi kết nối';
+        dotColor = CockpitColors.amber;
+        statusText = 'Chưa kết nối bộ sạc';
         break;
     }
 
@@ -984,9 +984,11 @@ class _SmartChargeHeaderState extends State<_SmartChargeHeader>
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         Text(
-                          state.draft.vehicleId.isNotEmpty
+                          state.draft.vehicleId.isNotEmpty &&
+                                  state.draft.vehicleId.length < 24 &&
+                                  !state.draft.vehicleId.contains('-')
                               ? state.draft.vehicleId
-                              : 'VinFast',
+                              : 'VinFast EV',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -1046,18 +1048,36 @@ class _SmartChargeHeaderState extends State<_SmartChargeHeader>
                 InkWell(
                   onTap: widget.onSetup,
                   borderRadius: BorderRadius.circular(8),
-                  child: Padding(
+                  child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
-                      vertical: 4,
+                      vertical: 3,
                     ),
-                    child: Text(
-                      'CÀI ĐẶT',
-                      style: TextStyle(
-                        color: CockpitColors.emerald,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
+                    decoration: BoxDecoration(
+                      color: CockpitColors.amber.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: CockpitColors.amber.withValues(alpha: 0.4),
                       ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.settings_suggest_rounded,
+                          size: 13,
+                          color: CockpitColors.amber,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Thiết lập',
+                          style: TextStyle(
+                            color: CockpitColors.amber,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),

@@ -77,28 +77,43 @@ class ResponsiveText extends StatelessWidget {
           scaledPainter.dispose();
         }
 
-        // Apply strategy shortening with minimum font size
+        // Apply strategy shortening or scaledown without ellipsis
         final minStyle = baseStyle.copyWith(fontSize: minFontSize);
-        var shortened = text;
-        for (var pass = 1; pass <= 4; pass++) {
-          shortened = _shorten(shortened, strategy, pass);
-          final painter = TextPainter(
-            text: TextSpan(text: shortened, style: minStyle),
+        if (strategy == ResponsiveTextStrategy.name) {
+          // For vehicle/user names: try omitting brand prefix ("VinFast") first
+          final nameShort = _shorten(text, ResponsiveTextStrategy.name, 1);
+          final p = TextPainter(
+            text: TextSpan(text: nameShort, style: minStyle),
             maxLines: maxLines,
             textDirection: TextDirection.ltr,
           )..layout(maxWidth: constraints.maxWidth);
-
-          if (!painter.didExceedMaxLines) {
-            painter.dispose();
-            return _buildTooltipText(shortened, minStyle);
+          if (!p.didExceedMaxLines) {
+            p.dispose();
+            return _buildText(nameShort, minStyle);
           }
-          painter.dispose();
+          p.dispose();
         }
 
-        // Last resort: show shortened text with tooltip
-        return _buildTooltipText(shortened, minStyle);
+        // Final graceful fallback: scale down the full text so no ellipsis is ever shown
+        return FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: alignmentFor(textAlign),
+          child: _buildText(text, minStyle),
+        );
       },
     );
+  }
+
+  static Alignment alignmentFor(TextAlign? align) {
+    switch (align) {
+      case TextAlign.center:
+        return Alignment.center;
+      case TextAlign.right:
+      case TextAlign.end:
+        return Alignment.centerRight;
+      default:
+        return Alignment.centerLeft;
+    }
   }
 
   Widget _buildText(String displayText, TextStyle effectiveStyle) {

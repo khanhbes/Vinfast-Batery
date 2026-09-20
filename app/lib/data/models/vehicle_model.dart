@@ -79,6 +79,25 @@ class VehicleModel {
   /// Whether this vehicle has been linked to a reviewed vehicle catalog entry.
   bool get hasModelLink => effectiveCatalogId != null;
 
+  /// Display model name with fallback for backwards compatibility
+  String get modelName {
+    if (vinfastModelName != null && vinfastModelName!.trim().isNotEmpty) {
+      return vinfastModelName!.trim();
+    }
+    if (vehicleName.trim().isNotEmpty) {
+      return vehicleName.trim();
+    }
+    return 'Xe của tôi';
+  }
+
+  /// Preferred display name: nickname -> vinfastModelName -> vehicleName
+  String get displayName {
+    if (nickname != null && nickname!.trim().isNotEmpty) {
+      return nickname!.trim();
+    }
+    return modelName;
+  }
+
   /// URL ảnh xe từ catalog media hoặc snapshot
   String? get imageUrl {
     if (catalogSnapshot != null) {

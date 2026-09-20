@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 // Legacy AI diagnostics remain visible to the local support console.
 // ignore_for_file: avoid_print, avoid_types_as_parameter_names
 
@@ -46,7 +47,7 @@ class BatteryStateService {
 
       return batteryState;
     } catch (e) {
-      print('Failed to get current battery state: $e');
+      if (kDebugMode) debugPrint('Failed to get current battery state: $e');
       rethrow;
     }
   }
@@ -100,7 +101,7 @@ class BatteryStateService {
 
       return data['data'];
     } catch (e) {
-      print('SOC prediction failed: $e');
+      if (kDebugMode) debugPrint('SOC prediction failed: $e');
 
       // Fallback prediction
       return _generateFallbackSOCPrediction(
@@ -139,7 +140,7 @@ class BatteryStateService {
           .map((doc) => BatteryStateModel.fromFirestore(doc))
           .toList();
     } catch (e) {
-      print('Failed to get battery history: $e');
+      if (kDebugMode) debugPrint('Failed to get battery history: $e');
       return [];
     }
   }
@@ -175,9 +176,9 @@ class BatteryStateService {
             'lastUpdated': FieldValue.serverTimestamp(),
           });
 
-      print('Battery state updated for vehicle: $vehicleId');
+      if (kDebugMode) debugPrint('Battery state updated for vehicle: $vehicleId');
     } catch (e) {
-      print('Failed to update battery state: $e');
+      if (kDebugMode) debugPrint('Failed to update battery state: $e');
     }
   }
 
@@ -222,7 +223,7 @@ class BatteryStateService {
         'lastUpdated': history.first.timestamp.toIso8601String(),
       };
     } catch (e) {
-      print('Failed to get battery stats: $e');
+      if (kDebugMode) debugPrint('Failed to get battery stats: $e');
       return {};
     }
   }
@@ -242,9 +243,9 @@ class BatteryStateService {
           )
           .timeout(_timeout);
 
-      print('Battery state synced to web dashboard: $vehicleId');
+      if (kDebugMode) debugPrint('Battery state synced to web dashboard: $vehicleId');
     } catch (e) {
-      print('Failed to sync battery state to web dashboard: $e');
+      if (kDebugMode) debugPrint('Failed to sync battery state to web dashboard: $e');
     }
   }
 
@@ -255,7 +256,7 @@ class BatteryStateService {
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) {
-        print('Skip battery state save: not authenticated');
+        if (kDebugMode) debugPrint('Skip battery state save: not authenticated');
         return;
       }
       final payload = <String, dynamic>{
@@ -269,7 +270,7 @@ class BatteryStateService {
           )
           .set(payload);
     } catch (e) {
-      print('Failed to save battery state to Firestore: $e');
+      if (kDebugMode) debugPrint('Failed to save battery state to Firestore: $e');
     }
   }
 
@@ -290,7 +291,7 @@ class BatteryStateService {
 
       return 25.0; // Default temperature
     } catch (e) {
-      print('Failed to get latest temperature: $e');
+      if (kDebugMode) debugPrint('Failed to get latest temperature: $e');
       return 25.0;
     }
   }
@@ -308,7 +309,7 @@ class BatteryStateService {
       final vehicle = VehicleModel.fromFirestore(vehicleDoc);
       return vehicle.stateOfHealth;
     } catch (e) {
-      print('Failed to calculate SOH: $e');
+      if (kDebugMode) debugPrint('Failed to calculate SOH: $e');
       return 100.0;
     }
   }
@@ -329,7 +330,7 @@ class BatteryStateService {
       final vehicle = VehicleModel.fromFirestore(vehicleDoc);
       return currentBattery * vehicle.defaultEfficiency;
     } catch (e) {
-      print('Failed to calculate estimated range: $e');
+      if (kDebugMode) debugPrint('Failed to calculate estimated range: $e');
       return currentBattery * 1.2;
     }
   }
@@ -446,7 +447,7 @@ class BatteryStateService {
       final response = await http.get(url).timeout(_timeout);
       return response.statusCode == 200;
     } catch (e) {
-      print('SOC API connection test failed: $e');
+      if (kDebugMode) debugPrint('SOC API connection test failed: $e');
       return false;
     }
   }
@@ -491,7 +492,7 @@ class BatteryStateService {
         throw Exception('Failed to submit feedback: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error submitting charge feedback: $e');
+      if (kDebugMode) debugPrint('Error submitting charge feedback: $e');
       rethrow;
     }
   }
@@ -508,7 +509,7 @@ class BatteryStateService {
         throw Exception('Failed to get model status: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error getting charging model status: $e');
+      if (kDebugMode) debugPrint('Error getting charging model status: $e');
       return {
         'status': 'error',
         'message': e.toString(),

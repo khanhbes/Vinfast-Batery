@@ -50,16 +50,19 @@ class VehicleSwitcher extends ConsumerWidget {
             unawaited(SessionService().setSelectedVehicleId(current.vehicleId));
           });
         }
+        final displayName = current.nickname?.isNotEmpty == true
+            ? current.nickname!
+            : (current.vinfastModelName?.isNotEmpty == true
+                ? current.vinfastModelName!
+                : (current.vehicleName.isNotEmpty ? current.vehicleName : 'Chọn xe'));
+
         return Semantics(
           button: true,
-          label: 'Chọn xe. Đang chọn: ${current.vehicleName.isEmpty ? "Chưa đặt tên" : current.vehicleName}',
+          label: 'Chọn xe. Đang chọn: $displayName',
           hint: 'Chạm để đổi xe trong gara',
           child: Tooltip(
-            message: 'Đổi xe: ${current.vehicleName}',
+            message: 'Đổi xe: $displayName',
             child: SizedBox(
-              // Keep room for the navigation actions on 320–360dp devices.
-              // TextButton.icon gives its label the remaining constrained
-              // width, so the existing ellipsis remains effective.
               width: switch (MediaQuery.sizeOf(context).width) {
                 < 430 => 96,
                 < 600 => 128,
@@ -69,14 +72,18 @@ class VehicleSwitcher extends ConsumerWidget {
                 onPressed: () => VehiclePickerSheet.show(context, ref),
                 style: TextButton.styleFrom(
                   minimumSize: const Size(48, 48),
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
                   backgroundColor: AppUiColors.of(context).elevated,
                 ),
-                icon: const Icon(Icons.directions_bike_rounded, size: 20),
-                label: Text(
-                  current.vehicleName.isEmpty ? 'Chọn xe' : current.vehicleName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                icon: const Icon(Icons.directions_bike_rounded, size: 16),
+                label: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    displayName,
+                    maxLines: 1,
+                    softWrap: false,
+                  ),
                 ),
               ),
             ),

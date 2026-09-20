@@ -109,6 +109,52 @@ service cloud.firestore {
           (!('guideSchemaVersion' in request.resource.data) || request.resource.data.guideSchemaVersion is int);
       }
 
+      // Local-first onboarding draft. This is a recovery record only; the
+      // backend remains the authority for Vehicles and completion state.
+      match /onboardingDrafts/{draftId} {
+        allow read: if isAuth() && request.auth.uid == uid && draftId == 'current';
+        allow create, update: if isAuth() && request.auth.uid == uid && draftId == 'current' &&
+          request.resource.data.keys().hasOnly([
+            'schemaVersion', 'state', 'revision', 'operationId',
+            'name', 'phone', 'dateOfBirth', 'avgDailyDistanceKm',
+            'usagePurpose', 'typicalSocWhenCharge', 'catalogId',
+            'nickname', 'licensePlate', 'initialOdo', 'shellyStatus',
+            'attemptCount', 'nextAttemptAt', 'lastErrorCode',
+            'lastErrorMessage', 'updatedAt'
+          ]) &&
+          request.resource.data.schemaVersion is int &&
+          request.resource.data.schemaVersion >= 1 &&
+          request.resource.data.schemaVersion <= 2 &&
+          request.resource.data.state in [
+            'localPending', 'syncing', 'synced', 'failedRetryable', 'failedPermanent'
+          ] &&
+          request.resource.data.revision is int &&
+          request.resource.data.revision >= 0 &&
+          request.resource.data.operationId is string &&
+          request.resource.data.operationId.size() > 0 &&
+          request.resource.data.operationId.size() <= 160 &&
+          request.resource.data.name is string &&
+          request.resource.data.name.size() <= 100 &&
+          (!('phone' in request.resource.data) || (request.resource.data.phone is string && request.resource.data.phone.size() <= 20)) &&
+          (!('dateOfBirth' in request.resource.data) || (request.resource.data.dateOfBirth is string && request.resource.data.dateOfBirth.size() <= 32)) &&
+          (!('usagePurpose' in request.resource.data) || (request.resource.data.usagePurpose is string && request.resource.data.usagePurpose.size() <= 80)) &&
+          (!('nickname' in request.resource.data) || (request.resource.data.nickname is string && request.resource.data.nickname.size() <= 80)) &&
+          (!('licensePlate' in request.resource.data) || (request.resource.data.licensePlate is string && request.resource.data.licensePlate.size() <= 32)) &&
+          (!('catalogId' in request.resource.data) || (request.resource.data.catalogId is string && request.resource.data.catalogId.size() > 0 && request.resource.data.catalogId.size() <= 160)) &&
+          (!('lastErrorCode' in request.resource.data) || (request.resource.data.lastErrorCode is string && request.resource.data.lastErrorCode.size() <= 80)) &&
+          (!('lastErrorMessage' in request.resource.data) || (request.resource.data.lastErrorMessage is string && request.resource.data.lastErrorMessage.size() <= 300)) &&
+          (!('initialOdo' in request.resource.data) ||
+            (request.resource.data.initialOdo is int && request.resource.data.initialOdo >= 0 && request.resource.data.initialOdo <= 9999999)) &&
+          (!('attemptCount' in request.resource.data) ||
+            (request.resource.data.attemptCount is int && request.resource.data.attemptCount >= 0 && request.resource.data.attemptCount <= 8)) &&
+          (!('shellyStatus' in request.resource.data) || request.resource.data.shellyStatus in ['connected', 'skipped']) &&
+          (!('avgDailyDistanceKm' in request.resource.data) ||
+            (request.resource.data.avgDailyDistanceKm is number && request.resource.data.avgDailyDistanceKm >= 0 && request.resource.data.avgDailyDistanceKm <= 1000)) &&
+          (!('typicalSocWhenCharge' in request.resource.data) ||
+            (request.resource.data.typicalSocWhenCharge is number && request.resource.data.typicalSocWhenCharge >= 0 && request.resource.data.typicalSocWhenCharge <= 100));
+        allow delete: if isAuth() && request.auth.uid == uid && draftId == 'current';
+      }
+
       match /vehicleChargerBindings/{vehicleId} {
         allow read: if isAuth() && request.auth.uid == uid;
         allow write: if isAuth() && request.auth.uid == uid && containsNoChargerSecrets();

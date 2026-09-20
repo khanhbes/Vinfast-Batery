@@ -94,8 +94,8 @@ class AppScreenHeader extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                     letterSpacing: -0.5,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  maxLines: 2,
+                  softWrap: true,
                 ),
                 if (subtitle != null && subtitle!.isNotEmpty)
                   Text(
@@ -104,8 +104,8 @@ class AppScreenHeader extends StatelessWidget {
                       color: colors.muted,
                       fontSize: 13,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    maxLines: 2,
+                    softWrap: true,
                   ),
               ],
             ),

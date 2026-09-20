@@ -12,6 +12,7 @@ import 'package:intl/intl.dart';
 import '../../data/models/smart_charge_history.dart';
 import '../../data/models/smart_charge_cost.dart';
 import '../../data/models/smart_charging_session.dart';
+import '../../core/services/app_error_reporter.dart';
 import '../../core/widgets/app_popup.dart';
 import '../../core/widgets/responsive_card_grid.dart';
 import 'widgets/smart_charge_cockpit_theme.dart';
@@ -86,7 +87,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
   void initState() {
     super.initState();
     _load(reset: true);
-    _liveTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+    _liveTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (_items.any((item) => !item.state.isTerminal)) _load(reset: true);
     });
   }
@@ -120,7 +121,9 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
         _cursor = page.nextCursor;
         _error = null;
       });
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('[HistoryScreen] Load error: $e');
+      AppErrorReporter.report(e, st, source: 'SmartChargeHistoryScreen');
       if (mounted) setState(() => _error = 'Không thể đồng bộ lịch sử sạc.');
     } finally {
       if (mounted) {
@@ -311,7 +314,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
               icon: Icon(Icons.date_range_rounded),
               label: Text(
                 _customRange == null
-                    ? 'CHỌN KHOẢNG NGÀY'
+                    ? 'Chọn khoảng ngày'
                     : '${DateFormat('dd/MM').format(_customRange!.start)} – ${DateFormat('dd/MM/yyyy').format(_customRange!.end)}',
               ),
             ),
@@ -356,7 +359,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
               () => _setStatus(SmartChargeHistorySessionFilter.stoppedEarly),
             ),
             _filterChip(
-              'Partial',
+              'Sạc một phần',
               _statusFilter == SmartChargeHistorySessionFilter.partial,
               () => _setStatus(SmartChargeHistorySessionFilter.partial),
             ),
@@ -475,13 +478,13 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
               FilledButton.icon(
                 onPressed: () => Navigator.pop(context, ChargeReportFormat.pdf),
                 icon: Icon(Icons.picture_as_pdf_rounded),
-                label: Text('XUẤT PDF'),
+                label: Text('Xuất PDF'),
               ),
               SizedBox(height: 10),
               OutlinedButton.icon(
                 onPressed: () => Navigator.pop(context, ChargeReportFormat.csv),
                 icon: Icon(Icons.table_view_rounded),
-                label: Text('XUẤT CSV'),
+                label: Text('Xuất CSV'),
               ),
             ],
           ),
@@ -744,7 +747,7 @@ class _MonthlySummary extends StatelessWidget {
               _SummaryKpi(
                 'Tổng tiền',
                 summary.totalCostVnd <= 0
-                    ? '—'
+                    ? '0 đ'
                     : '${NumberFormat.compact(locale: 'vi').format(summary.totalCostVnd)} đ',
               ),
               _SummaryKpi('Thời gian', _duration(summary.totalDuration)),
@@ -792,6 +795,23 @@ class _SevenDayBars extends StatelessWidget {
   final List<SmartChargeDailyEnergy> days;
   @override
   Widget build(BuildContext context) {
+    final hasData = days.any((d) => d.energyWh > 0);
+    if (!hasData) {
+      return Container(
+        alignment: Alignment.center,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.bar_chart_rounded, size: 16, color: AppUiColors.of(context).muted),
+            const SizedBox(width: 6),
+            Text(
+              'Chưa có dữ liệu nạp sạc 7 ngày qua',
+              style: TextStyle(fontSize: 11.5, color: AppUiColors.of(context).muted),
+            ),
+          ],
+        ),
+      );
+    }
     final maximum = days.fold<double>(
       1,
       (value, item) => max(value, item.energyWh),

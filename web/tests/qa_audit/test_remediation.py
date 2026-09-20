@@ -25,6 +25,11 @@ def test_csv_export_neutralizes_spreadsheet_formulas_without_changing_numbers():
 
 def test_api_security_headers_and_https_only_hsts(client):
     plain = client.get('/api/health')
+    assert plain.json['success'] is True
+    assert plain.json['status'] == 'ok'
+    assert plain.json['requestId']
+    assert 'firebaseConnected' not in plain.json
+    assert 'consumptionModel' not in plain.json
     assert plain.headers['X-Content-Type-Options'] == 'nosniff'
     assert plain.headers['X-Frame-Options'] == 'DENY'
     assert plain.headers['Content-Security-Policy'].startswith("default-src 'none'")
@@ -33,6 +38,21 @@ def test_api_security_headers_and_https_only_hsts(client):
 
     forwarded_https = client.get('/api/health', headers={'X-Forwarded-Proto': 'https'})
     assert forwarded_https.headers['Strict-Transport-Security'] == 'max-age=31536000'
+
+
+def test_readiness_reports_dependency_state(client, monkeypatch):
+    monkeypatch.setattr(server, '_firebase_available', True)
+    monkeypatch.setattr(server, '_fs', lambda: object())
+    response = client.get('/api/ready')
+    assert response.status_code == 200
+    assert response.json['status'] == 'ready'
+    assert response.json['requestId']
+
+    monkeypatch.setattr(server, '_firebase_available', False)
+    response = client.get('/api/ready')
+    assert response.status_code == 503
+    assert response.json['retryable'] is True
+    assert response.json['code'] == 'dependenciesUnavailable'
 
 
 def test_sliding_window_limiter_returns_retry_after_and_recovers():

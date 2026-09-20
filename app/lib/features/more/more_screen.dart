@@ -8,6 +8,7 @@ import '../../core/services/auth_service.dart';
 import '../../core/services/feature_availability_registry.dart';
 import '../../core/services/notification_center_service.dart';
 import '../../core/theme/app_motion.dart';
+import '../../core/theme/app_ui_colors.dart';
 import '../../core/theme/cockpit_design_system.dart';
 import '../../core/widgets/app_popup.dart';
 import '../../core/widgets/vehicle_picker_sheet.dart';
@@ -74,10 +75,10 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF12161F),
+        backgroundColor: AppUiColors.of(context).surface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
-          side: const BorderSide(color: Color(0xFF1E293B), width: 1),
+          side: BorderSide(color: AppUiColors.of(context).border, width: 1),
         ),
         title: const Row(
           children: [
@@ -527,8 +528,8 @@ class _ActionTile extends StatelessWidget {
                               fontWeight: FontWeight.w600,
                               letterSpacing: 0.1,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                            maxLines: 2,
+                            softWrap: true,
                           ),
                         ),
                         if (badge != null) ...[
@@ -546,8 +547,8 @@ class _ActionTile extends StatelessWidget {
                           fontSize: 12,
                           fontWeight: FontWeight.w400,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                        maxLines: 2,
+                        softWrap: true,
                       ),
                     ],
                   ],
@@ -678,8 +679,8 @@ class _DriverProfileHeroCard extends StatelessWidget {
                                     fontWeight: FontWeight.w700,
                                     letterSpacing: 0.2,
                                   ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 2,
+                                  softWrap: true,
                                 ),
                               ),
                               const SizedBox(width: 6),
@@ -718,8 +719,8 @@ class _DriverProfileHeroCard extends StatelessWidget {
                               fontSize: 12.5,
                               fontWeight: FontWeight.w400,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                            maxLines: 2,
+                            softWrap: true,
                           ),
                         ],
                       ),
@@ -779,15 +780,19 @@ class _DriverProfileHeroCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 6),
                       Expanded(
-                        child: Text(
-                          vehicle.modelName,
-                          style: const TextStyle(
-                            color: Color(0xFFE2E8F0),
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w600,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            vehicle.displayName,
+                            style: const TextStyle(
+                              color: Color(0xFFE2E8F0),
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            softWrap: false,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -924,7 +929,7 @@ class _AppBrandingFooter extends StatelessWidget {
     return Column(
       children: [
         Text(
-          'VinFast Battery · Phiên bản 1.1.3 (Build 4)',
+          'VinFast Battery · Phiên bản 1.1.4 (Build 5)',
           style: TextStyle(
             color: const Color(0xFF64748B).withValues(alpha: 0.8),
             fontSize: 11.5,

@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
 import '../constants/app_constants.dart';
 import 'app_error_reporter.dart';
+import 'api_result.dart';
 
 /// Exception thrown or logged during API requests.
 class ApiException implements Exception {
@@ -75,6 +76,9 @@ class ApiService {
 
   /// GET request helper
   Future<Map<String, dynamic>> get(String endpoint) async {
+    if (!AppConstants.isApiConfigured) {
+      return _configurationError(endpoint);
+    }
     try {
       final headers = await getHeaders();
       final response = await http
@@ -82,7 +86,7 @@ class ApiService {
           .timeout(const Duration(seconds: 30));
 
       return _handleResponse(endpoint, response);
-    } on TimeoutException catch (e, stack) {
+    } on TimeoutException catch (_, stack) {
       final err = ApiException(
         endpoint: endpoint,
         message: 'Yêu cầu hết thời gian chờ (Timeout).',
@@ -98,6 +102,9 @@ class ApiService {
       return {
         'success': false,
         'error': 'Yêu cầu hết thời gian chờ (Timeout).',
+        'userMessage': 'Yêu cầu hết thời gian chờ. Vui lòng thử lại.',
+        'code': 'GET_TIMEOUT',
+        'retryable': true,
       };
     } on SocketException catch (e, stack) {
       final err = ApiException(
@@ -112,7 +119,13 @@ class ApiService {
         endpoint: endpoint,
         debugCode: 'SOCKET_EXCEPTION',
       );
-      return {'success': false, 'error': 'Không thể kết nối tới máy chủ.'};
+      return {
+        'success': false,
+        'error': 'Không thể kết nối tới máy chủ.',
+        'userMessage': 'Không thể kết nối tới máy chủ.',
+        'code': 'SOCKET_EXCEPTION',
+        'retryable': true,
+      };
     } catch (e, stack) {
       final err = ApiException(
         endpoint: endpoint,
@@ -126,7 +139,13 @@ class ApiService {
         endpoint: endpoint,
         debugCode: 'GET_ERROR',
       );
-      return {'success': false, 'error': 'Lỗi kết nối: $e'};
+      return {
+        'success': false,
+        'error': 'Không thể kết nối tới máy chủ. Vui lòng thử lại sau.',
+        'userMessage': 'Không thể kết nối tới máy chủ. Vui lòng thử lại sau.',
+        'code': 'GET_ERROR',
+        'retryable': true,
+      };
     }
   }
 
@@ -135,6 +154,9 @@ class ApiService {
     String endpoint,
     Map<String, dynamic> body,
   ) async {
+    if (!AppConstants.isApiConfigured) {
+      return _configurationError(endpoint);
+    }
     return _post(endpoint, body);
   }
 
@@ -142,6 +164,9 @@ class ApiService {
     String endpoint,
     Map<String, dynamic> body,
   ) async {
+    if (!AppConstants.isApiConfigured) {
+      return _configurationError(endpoint);
+    }
     return _write(endpoint, body, method: 'PATCH');
   }
 
@@ -149,6 +174,9 @@ class ApiService {
     String endpoint,
     Map<String, dynamic> body,
   ) async {
+    if (!AppConstants.isApiConfigured) {
+      return _configurationError(endpoint);
+    }
     return _write(endpoint, body, method: 'PUT');
   }
 
@@ -158,7 +186,84 @@ class ApiService {
     String endpoint, [
     Map<String, dynamic> body = const <String, dynamic>{},
   ]) {
+    if (!AppConstants.isApiConfigured) {
+      return Future.value(_configurationError(endpoint));
+    }
     return _write(endpoint, body, method: 'DELETE');
+  }
+
+  Map<String, dynamic> _configurationError(String endpoint) => {
+        'success': false,
+        'error': 'Máy chủ ứng dụng chưa được cấu hình an toàn.',
+        'userMessage': 'Máy chủ ứng dụng chưa sẵn sàng. Vui lòng cập nhật ứng dụng hoặc thử lại sau.',
+        'code': 'API_NOT_CONFIGURED',
+        'retryable': true,
+        'endpoint': endpoint,
+      };
+
+  Future<ApiResult<T>> getResult<T>(
+    String endpoint, {
+    T? Function(dynamic value)? decode,
+  }) async => ApiResult.fromMap(await get(endpoint), decode: decode);
+
+  Future<ApiResult<T>> postResult<T>(
+    String endpoint,
+    Map<String, dynamic> body, {
+    T? Function(dynamic value)? decode,
+    String? idempotencyKey,
+  }) async => ApiResult.fromMap(
+        await _requestWithOptionalIdempotency(
+          endpoint,
+          body,
+          idempotencyKey: idempotencyKey,
+        ),
+        decode: decode,
+      );
+
+  Future<ApiResult<T>> patchResult<T>(
+    String endpoint,
+    Map<String, dynamic> body, {
+    T? Function(dynamic value)? decode,
+  }) async => ApiResult.fromMap(await patch(endpoint, body), decode: decode);
+
+  Future<ApiResult<T>> putResult<T>(
+    String endpoint,
+    Map<String, dynamic> body, {
+    T? Function(dynamic value)? decode,
+  }) async => ApiResult.fromMap(await put(endpoint, body), decode: decode);
+
+  Future<ApiResult<T>> deleteResult<T>(
+    String endpoint, [
+    Map<String, dynamic> body = const <String, dynamic>{},
+  ]) async => ApiResult.fromMap(await delete(endpoint, body));
+
+  Future<Map<String, dynamic>> _requestWithOptionalIdempotency(
+    String endpoint,
+    Map<String, dynamic> body, {
+    String? idempotencyKey,
+  }) async {
+    if (!AppConstants.isApiConfigured) return _configurationError(endpoint);
+    try {
+      final headers = await getHeaders();
+      if (idempotencyKey != null && idempotencyKey.trim().isNotEmpty) {
+        headers['Idempotency-Key'] = idempotencyKey.trim();
+      }
+      final response = await http
+          .post(Uri.parse('$_baseUrl$endpoint'), headers: headers, body: jsonEncode(body))
+          .timeout(const Duration(seconds: 30));
+      return _handleResponse(endpoint, response);
+    } on TimeoutException catch (e, stack) {
+      final err = ApiException(endpoint: endpoint, message: 'Yêu cầu hết thời gian chờ.', debugCode: 'POST_TIMEOUT');
+      AppErrorReporter.report(err, stack, source: 'ApiService', endpoint: endpoint, debugCode: 'POST_TIMEOUT');
+      return {'success': false, 'error': err.message, 'userMessage': err.message, 'code': 'POST_TIMEOUT', 'retryable': true};
+    } on SocketException catch (e, stack) {
+      final err = ApiException(endpoint: endpoint, message: 'Không thể kết nối tới máy chủ.', debugCode: 'SOCKET_EXCEPTION');
+      AppErrorReporter.report(err, stack, source: 'ApiService', endpoint: endpoint, debugCode: 'SOCKET_EXCEPTION');
+      return {'success': false, 'error': err.message, 'userMessage': err.message, 'code': 'SOCKET_EXCEPTION', 'retryable': true};
+    } catch (e, stack) {
+      AppErrorReporter.report(e, stack, source: 'ApiService', endpoint: endpoint, debugCode: 'POST_ERROR');
+      return {'success': false, 'error': 'Không thể kết nối tới máy chủ.', 'userMessage': 'Không thể kết nối tới máy chủ.', 'code': 'POST_ERROR', 'retryable': true};
+    }
   }
 
   Future<Map<String, dynamic>> _write(
@@ -184,7 +289,13 @@ class ApiService {
         endpoint: endpoint,
         debugCode: '${method}_ERROR',
       );
-      return {'success': false, 'error': 'Không thể kết nối tới máy chủ.'};
+      return {
+        'success': false,
+        'error': 'Không thể kết nối tới máy chủ.',
+        'userMessage': 'Không thể kết nối tới máy chủ.',
+        'code': '${method}_ERROR',
+        'retryable': true,
+      };
     }
   }
 
@@ -219,6 +330,9 @@ class ApiService {
       return {
         'success': false,
         'error': 'Yêu cầu hết thời gian chờ (Timeout).',
+        'userMessage': 'Yêu cầu hết thời gian chờ. Vui lòng thử lại.',
+        'code': 'POST_TIMEOUT',
+        'retryable': true,
       };
     } on SocketException catch (e, stack) {
       final err = ApiException(
@@ -233,7 +347,13 @@ class ApiService {
         endpoint: endpoint,
         debugCode: 'SOCKET_EXCEPTION',
       );
-      return {'success': false, 'error': 'Không thể kết nối tới máy chủ.'};
+      return {
+        'success': false,
+        'error': 'Không thể kết nối tới máy chủ.',
+        'userMessage': 'Không thể kết nối tới máy chủ.',
+        'code': 'SOCKET_EXCEPTION',
+        'retryable': true,
+      };
     } catch (e, stack) {
       final err = ApiException(
         endpoint: endpoint,
@@ -247,7 +367,13 @@ class ApiService {
         endpoint: endpoint,
         debugCode: 'POST_ERROR',
       );
-      return {'success': false, 'error': 'Lỗi kết nối: $e'};
+      return {
+        'success': false,
+        'error': 'Không thể kết nối tới máy chủ.',
+        'userMessage': 'Không thể kết nối tới máy chủ.',
+        'code': 'POST_ERROR',
+        'retryable': true,
+      };
     }
   }
 
@@ -290,9 +416,9 @@ class ApiService {
       return parsedJson ?? <String, dynamic>{'success': true};
     }
 
-    final errorMessage =
+    final errorMessage = parsedJson?['userMessage']?.toString() ??
         parsedJson?['error']?.toString() ??
-        'HTTP ${response.statusCode}: ${response.body}';
+        'Yêu cầu thất bại. Vui lòng thử lại sau.';
     final debugCode =
         parsedJson?['debugCode']?.toString() ??
         parsedJson?['code']?.toString() ??
@@ -322,10 +448,12 @@ class ApiService {
       'success': false,
       'statusCode': response.statusCode,
       'error': errorMessage,
+      'userMessage': errorMessage,
       'debugCode': debugCode,
+      'retryable': response.statusCode >= 500 || response.statusCode == 429,
       if (parsedJson?['requestId'] != null)
         'requestId': parsedJson!['requestId'],
-      'debugDetail': ?debugDetail,
+      if (debugDetail != null) 'debugDetail': debugDetail,
     };
   }
 

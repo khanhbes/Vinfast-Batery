@@ -37,6 +37,12 @@ def test_validate_date_of_birth():
     assert ok is False
     assert "120" in err
 
+    # The client and server must reject users below the product's minimum age.
+    recent = (datetime.now(timezone.utc).date() - timedelta(days=15 * 365)).strftime("%Y-%m-%d")
+    ok, err = validate_date_of_birth(recent)
+    assert ok is False
+    assert "16" in err
+
 
 class FakeDoc:
     def __init__(self, doc_id, data, exists=True):
@@ -226,6 +232,47 @@ def test_registration_bootstrap_is_idempotent(client, mock_fs, monkeypatch):
     saved = mock_fs.collection('users').document(uid).get().to_dict()
     assert saved['email'] == 'new@test.vn'
     assert saved['registrationFlowVersion'] == 2
+
+
+def test_onboarding_commit_is_idempotent_and_returns_request_id(client, mock_fs, monkeypatch):
+    uid = "commit-uid"
+    monkeypatch.setattr(server, "_verify_token", lambda: (uid, "commit@test.vn", "user"))
+    mock_fs.collection('VehicleCatalog').document('evo200').set({
+        'catalogId': 'evo200', 'status': 'published', 'selectable': True,
+        'revision': 1, 'brandName': 'VinFast', 'model': 'Evo',
+        'variant': '200', 'modelYear': 2025, 'vehicleType': 'scooter',
+        'appDefaults': {'calculationCapacityWh': 2400, 'defaultEfficiencyKmPerPercent': 1.3},
+        'battery': {'chemistry': 'LFP'}, 'localized': {
+            'vi': {'displayName': 'VinFast Evo 200'},
+            'en': {'displayName': 'VinFast Evo 200'},
+        }, 'media': {},
+    })
+    payload = {
+        'schemaVersion': 1,
+        'operationId': 'operation-1',
+        'profile': {'name': 'QA User', 'dateOfBirth': '1990-01-01'},
+        'vehicle': {'catalogId': 'evo200', 'initialOdo': 0},
+        'shellyStatus': 'skipped',
+    }
+    headers = {'Idempotency-Key': 'operation-1'}
+    first = client.post('/api/mobile/onboarding/commit', json=payload, headers=headers)
+    assert first.status_code == 200
+    assert first.json['success'] is True
+    assert first.json['requestId']
+    second = client.post('/api/mobile/onboarding/commit', json=payload, headers=headers)
+    assert second.status_code == 200
+    assert second.json['data']['vehicle']['vehicleId'] == first.json['data']['vehicle']['vehicleId']
+    vehicles = mock_fs.collection('Vehicles')._docs
+    assert len(vehicles) == 1
+    assert mock_fs.collection('users').document(uid).get().to_dict()['onboardingCompletedAt']
+
+
+def test_onboarding_commit_requires_idempotency_key(client, mock_fs, monkeypatch):
+    monkeypatch.setattr(server, "_verify_token", lambda: ("commit-uid", "commit@test.vn", "user"))
+    response = client.post('/api/mobile/onboarding/commit', json={})
+    assert response.status_code == 400
+    assert response.json['code'] == 'idempotencyKeyRequired'
+    assert response.json['retryable'] is False
 
 
 def test_sync_batch_profile_whitelist(client, mock_fs, monkeypatch):

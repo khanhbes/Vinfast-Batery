@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'api_service.dart';
+import '../models/onboarding_draft.dart';
+import 'api_result.dart';
 
 /// Dữ liệu tiến độ Onboarding
 class OnboardingProgress {
@@ -11,6 +13,9 @@ class OnboardingProgress {
   final String name;
   final String phone;
   final String? dateOfBirth;
+  final double? avgDailyDistanceKm;
+  final String? usagePurpose;
+  final double? typicalSocWhenCharge;
   final bool isProfileComplete;
   final bool hasVehicle;
   final int vehicleCount;
@@ -24,6 +29,9 @@ class OnboardingProgress {
     required this.name,
     required this.phone,
     this.dateOfBirth,
+    this.avgDailyDistanceKm,
+    this.usagePurpose,
+    this.typicalSocWhenCharge,
     required this.isProfileComplete,
     required this.hasVehicle,
     required this.vehicleCount,
@@ -45,6 +53,9 @@ class OnboardingProgress {
       name: profile['name']?.toString() ?? '',
       phone: profile['phone']?.toString() ?? '',
       dateOfBirth: profile['dateOfBirth']?.toString(),
+      avgDailyDistanceKm: (profile['avgDailyDistanceKm'] as num?)?.toDouble(),
+      usagePurpose: profile['usagePurpose']?.toString(),
+      typicalSocWhenCharge: (profile['typicalSocWhenCharge'] as num?)?.toDouble(),
       isProfileComplete: profile['isComplete'] as bool? ?? false,
       hasVehicle: vehicle['hasVehicle'] as bool? ?? false,
       vehicleCount: vehicle['count'] as int? ?? 0,
@@ -60,8 +71,17 @@ class OnboardingProgress {
 /// Dịch vụ quản lý luồng Onboarding & Profile API
 class OnboardingService {
   final ApiService _api;
+  final OnboardingDraftRepository _drafts;
 
-  OnboardingService({ApiService? api}) : _api = api ?? ApiService();
+  OnboardingService({ApiService? api, OnboardingDraftRepository? drafts})
+      : _api = api ?? ApiService(),
+        _drafts = drafts ?? OnboardingDraftRepository();
+
+  Future<OnboardingDraft?> loadDraft(String uid) => _drafts.load(uid);
+
+  Future<bool> saveDraft(OnboardingDraft draft) => _drafts.save(draft);
+
+  Future<void> clearDraft(String uid) => _drafts.clear(uid);
 
   /// Chuyển đổi chuỗi ngày sinh bất kỳ (dd/MM/yyyy hoặc yyyy-MM-dd) sang DateTime
   static DateTime? parseDateOfBirth(String? dob) {
@@ -139,6 +159,9 @@ class OnboardingService {
                 (now.month == parsed.month && now.day < parsed.day))
             ? 1
             : 0);
+    if (age < 16) {
+      return 'Người dùng phải từ đủ 16 tuổi trở lên';
+    }
     if (age > 120) {
       return 'Tuổi không hợp lệ (vượt quá 120 tuổi)';
     }
@@ -187,7 +210,8 @@ class OnboardingService {
         if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
       });
     } catch (e) {
-      return {'success': false, 'error': 'Unable to bootstrap account: $e'};
+      debugPrint('[OnboardingService] Bootstrap error: $e');
+      return {'success': false, 'error': 'Không thể khởi tạo tài khoản.', 'code': 'bootstrapFailed', 'retryable': true};
     }
   }
 
@@ -212,16 +236,17 @@ class OnboardingService {
         'name': name.trim(),
         if (phone != null) 'phone': phone.trim(),
         'dateOfBirth': serverDob,
-        'avgDailyDistanceKm': ?avgDailyDistanceKm,
+        if (avgDailyDistanceKm != null) 'avgDailyDistanceKm': avgDailyDistanceKm,
         if (usagePurpose != null && usagePurpose.isNotEmpty)
           'usagePurpose': usagePurpose,
-        'typicalSocWhenCharge': ?typicalSocWhenCharge,
+        if (typicalSocWhenCharge != null) 'typicalSocWhenCharge': typicalSocWhenCharge,
       };
 
       final res = await _api.patch('/api/user/profile', payload);
       return res;
     } catch (e) {
-      return {'success': false, 'error': 'Lỗi cập nhật hồ sơ: $e'};
+      debugPrint('[OnboardingService] Profile update error: $e');
+      return {'success': false, 'error': 'Không thể cập nhật hồ sơ.', 'code': 'profileUpdateFailed', 'retryable': true};
     }
   }
 
@@ -236,7 +261,110 @@ class OnboardingService {
       });
       return res;
     } catch (e) {
-      return {'success': false, 'error': 'Lỗi hoàn tất onboarding: $e'};
+      debugPrint('[OnboardingService] Complete onboarding error: $e');
+      return {'success': false, 'error': 'Không thể hoàn tất onboarding.', 'code': 'onboardingCompleteFailed', 'retryable': true};
+    }
+  }
+
+  Future<ApiResult<Map<String, dynamic>>> commitDraft(OnboardingDraft draft) async {
+    final result = await _api.postResult<Map<String, dynamic>>(
+      '/api/mobile/onboarding/commit',
+      {
+        'schemaVersion': 1,
+        'operationId': draft.operationId,
+        'profile': {
+          'name': draft.name,
+          if (draft.phone != null) 'phone': draft.phone,
+          if (draft.dateOfBirth != null)
+            'dateOfBirth': toServerDateFormat(draft.dateOfBirth),
+          if (draft.avgDailyDistanceKm != null)
+            'avgDailyDistanceKm': draft.avgDailyDistanceKm,
+          if (draft.usagePurpose != null) 'usagePurpose': draft.usagePurpose,
+          if (draft.typicalSocWhenCharge != null)
+            'typicalSocWhenCharge': draft.typicalSocWhenCharge,
+        },
+        'vehicle': {
+          'catalogId': draft.catalogId,
+          if (draft.nickname != null) 'nickname': draft.nickname,
+          if (draft.licensePlate != null) 'licensePlate': draft.licensePlate,
+          'initialOdo': draft.initialOdo,
+        },
+        'shellyStatus': draft.shellyStatus,
+      },
+      idempotencyKey: draft.operationId,
+      decode: (value) => value is Map<String, dynamic>
+          ? value
+          : value is Map
+              ? Map<String, dynamic>.from(value)
+              : null,
+    );
+    return result;
+  }
+}
+
+/// Foreground/connection recovery worker. It is intentionally single-flight:
+/// multiple AuthGate rebuilds or connectivity callbacks cannot submit the same
+/// onboarding operation concurrently.
+class OnboardingSyncCoordinator {
+  static final OnboardingSyncCoordinator shared = OnboardingSyncCoordinator();
+
+  static const _backoff = <Duration>[
+    Duration(seconds: 5),
+    Duration(seconds: 30),
+    Duration(minutes: 2),
+    Duration(minutes: 10),
+    Duration(minutes: 30),
+    Duration(hours: 1),
+    Duration(hours: 3),
+    Duration(hours: 6),
+  ];
+
+  OnboardingSyncCoordinator({OnboardingService? service})
+      : _service = service ?? OnboardingService();
+
+  final OnboardingService _service;
+  bool _running = false;
+
+  Future<ApiResult<Map<String, dynamic>>?> syncIfPending(String uid) async {
+    if (_running) return null;
+    _running = true;
+    try {
+      final draft = await _service.loadDraft(uid);
+      if (draft == null || draft.state == OnboardingDraftState.failedPermanent) {
+        return null;
+      }
+      if (draft.nextAttemptAt != null &&
+          draft.nextAttemptAt!.isAfter(DateTime.now().toUtc())) {
+        return null;
+      }
+      if (draft.attemptCount >= _backoff.length) return null;
+      final syncing = draft.copyWith(
+        state: OnboardingDraftState.syncing,
+        attemptCount: draft.attemptCount + 1,
+        revision: draft.revision + 1,
+        updatedAt: DateTime.now().toUtc(),
+      );
+      await _service.saveDraft(syncing);
+      final result = await _service.commitDraft(syncing);
+      if (result.success) {
+        await _service.clearDraft(uid);
+      } else {
+        final retryIndex = (syncing.attemptCount - 1).clamp(0, _backoff.length - 1).toInt();
+        await _service.saveDraft(syncing.copyWith(
+          state: result.retryable
+              ? OnboardingDraftState.failedRetryable
+              : OnboardingDraftState.failedPermanent,
+          nextAttemptAt: result.retryable
+              ? DateTime.now().toUtc().add(_backoff[retryIndex])
+              : null,
+          lastErrorCode: result.code,
+          lastErrorMessage: result.userMessage,
+          updatedAt: DateTime.now().toUtc(),
+        ));
+      }
+      return result;
+    } finally {
+      _running = false;
     }
   }
 }

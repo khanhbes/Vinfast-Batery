@@ -229,8 +229,8 @@ class _VehicleCard extends StatelessWidget {
                                 : vehicle.vehicleName,
                             style: Theme.of(context).textTheme.titleMedium
                                 ?.copyWith(fontWeight: FontWeight.w700),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                            maxLines: 2,
+                            softWrap: true,
                           ),
                           if (selected)
                             Container(
@@ -283,8 +283,8 @@ class _VehicleCard extends StatelessWidget {
                         style: Theme.of(
                           context,
                         ).textTheme.bodySmall?.copyWith(color: ui.muted),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                        maxLines: 2,
+                        softWrap: true,
                       ),
                     ),
                   ],
@@ -366,24 +366,32 @@ class _VehicleCard extends StatelessWidget {
   ) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text(
-        label,
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-          fontSize: 11,
-          color: AppUiColors.of(context).muted,
+      FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            fontSize: 11,
+            color: AppUiColors.of(context).muted,
+          ),
+          maxLines: 1,
+          softWrap: false,
         ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
       ),
       const SizedBox(height: 3),
-      Text(
-        value,
-        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-          fontWeight: FontWeight.w700,
-          color: valueColor,
+      FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: Text(
+          value,
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: valueColor,
+          ),
+          maxLines: 1,
+          softWrap: false,
         ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
       ),
     ],
   );

@@ -36,6 +36,15 @@ void main() {
       expect(OnboardingService.validateDateOfBirth('01/01/1890'), contains('120'));
     });
 
+    test('Age under 16 returns error', () {
+      final now = DateTime.now();
+      final recent = DateTime(now.year - 15, now.month, now.day);
+      expect(
+        OnboardingService.validateDateOfBirth(DateFormat('dd/MM/yyyy').format(recent)),
+        contains('16'),
+      );
+    });
+
     test('Calculates age accurately for both yyyy-MM-dd and dd/MM/yyyy', () {
       expect(OnboardingService.calculateAge(null), isNull);
       expect(OnboardingService.calculateAge(''), isNull);

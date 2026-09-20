@@ -203,7 +203,8 @@ class AuthService {
       }
       return {'success': false, 'error': errorMessage, 'code': e.code};
     } catch (e) {
-      return {'success': false, 'error': 'Unexpected error: $e'};
+      debugPrint('[AuthService] Registration error: $e');
+      return {'success': false, 'error': 'Đăng ký thất bại.', 'code': 'registrationFailed', 'retryable': true};
     }
   }
 
@@ -282,7 +283,8 @@ class AuthService {
       }
       return {'success': false, 'error': errorMessage, 'code': e.code};
     } catch (e) {
-      return {'success': false, 'error': 'Unexpected error: $e'};
+      debugPrint('[AuthService] Login error: $e');
+      return {'success': false, 'error': 'Đăng nhập thất bại.', 'code': 'loginFailed', 'retryable': true};
     }
   }
 
@@ -352,7 +354,8 @@ class AuthService {
 
       return {'success': true, 'message': 'Logout successful'};
     } catch (e) {
-      return {'success': false, 'error': 'Logout failed: $e'};
+      debugPrint('[AuthService] Logout error: $e');
+      return {'success': false, 'error': 'Đăng xuất thất bại.', 'code': 'logoutFailed', 'retryable': true};
     }
   }
 
@@ -406,7 +409,8 @@ class AuthService {
       }
       return result;
     } catch (e) {
-      return {'success': false, 'error': 'Failed to add vehicle: $e'};
+      debugPrint('[AuthService] Add vehicle error: $e');
+      return {'success': false, 'error': 'Không thể thêm xe.', 'code': 'vehicleAddFailed', 'retryable': true};
     }
   }
 

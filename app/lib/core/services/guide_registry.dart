@@ -226,9 +226,9 @@ class GuideRegistry {
         titleVi: 'Garage & Cài đặt',
         titleEn: 'Garage & Settings',
         descriptionVi:
-            'Thêm xe từ Catalog xe điện, cấu hình bộ sạc Shelly và tùy chỉnh app tại tab Khác.',
+            'Thêm xe từ Catalog xe điện, cấu hình bộ sạc Shelly và tùy chỉnh app tại tab Cài đặt.',
         descriptionEn:
-            'Add vehicles from Catalog, connect Shelly smart chargers, and adjust settings in More tab.',
+            'Add vehicles from Catalog, connect Shelly smart chargers, and adjust settings in Settings tab.',
         anchorKey: keyMoreSettingsTab,
         tooltipAlignment: Alignment.topCenter,
       ),
@@ -255,12 +255,12 @@ class GuideRegistry {
       stepsVi: [
         'Quan sát thẻ Pin và Quãng đường trên màn hình Tổng quan.',
         'Nhấn "Tùy chỉnh" trên thanh App Bar để sắp xếp các khối hiển thị.',
-        'Chuyển đổi qua lại giữa các tab: Sạc, Lịch sử, Khác ở thanh điều hướng dưới.',
+        'Chuyển đổi qua lại giữa các tab: Sạc pin, Lịch sử, Cài đặt ở thanh điều hướng dưới.',
       ],
       stepsEn: [
         'Observe the battery and range status on the Overview screen.',
         'Tap "Customize" on the App Bar to reorder or hide widgets.',
-        'Navigate between Charge, History, and More using the bottom navigation bar.',
+        'Navigate between Charge, History, and Settings using the bottom navigation bar.',
       ],
       expectedResultVi:
           'Nắm rõ cấu trúc 4 tab chính và cá nhân hóa được bố cục màn hình đầu tiên.',
@@ -314,13 +314,13 @@ class GuideRegistry {
         'Maximum 2 active vehicles owned',
       ],
       stepsVi: [
-        'Vào tab "Khác" > Chọn "Garage xe".',
+        'Vào tab "Cài đặt" > Chọn "Garage xe".',
         'Bấm "Thêm xe mới".',
         'Tìm kiếm và chọn đúng mẫu xe từ danh mục đã phát hành.',
         'Nhập tên gợi nhớ (nickname), biển số và ODO hiện tại rồi xác nhận.',
       ],
       stepsEn: [
-        'Open the "More" tab > Select "Vehicle Garage".',
+        'Open the "Settings" tab > Select "Vehicle Garage".',
         'Tap "Add New Vehicle".',
         'Search and select your exact model from the published catalog.',
         'Enter nickname, license plate, initial ODO and confirm.',
@@ -436,12 +436,12 @@ class GuideRegistry {
       stepsVi: [
         'Nếu Shelly báo offline: kiểm tra nguồn điện cấp và đèn tín hiệu trên thiết bị.',
         'Thử kết nối qua địa chỉ IP mạng nội bộ (LAN) nếu kết nối Cloud gặp sự cố.',
-        'Nếu dữ liệu chưa khớp: vào tab Khác > bấm "Đồng bộ ngay".',
+        'Nếu dữ liệu chưa khớp: vào tab Cài đặt > bấm "Đồng bộ ngay".',
       ],
       stepsEn: [
         'If Shelly shows offline: verify power supply and LED indicators on device.',
         'Try fallback local LAN IP connection if Cloud connection is unreachable.',
-        'If data is out of sync: open More tab > tap "Sync Now".',
+        'If data is out of sync: open Settings tab > tap "Sync Now".',
       ],
       expectedResultVi:
           'Khôi phục kết nối điều khiển an toàn và dữ liệu được cập nhật đầy đủ.',

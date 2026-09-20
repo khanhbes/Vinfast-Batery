@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/services/auth_service.dart';
@@ -5,6 +6,7 @@ import '../../core/theme/app_motion.dart';
 import '../../core/theme/cockpit_design_system.dart';
 import '../../core/widgets/app_popup.dart';
 import '../../core/widgets/ev_energy_animations.dart';
+import '../../navigation/app_navigation.dart';
 import 'register_screen.dart';
 
 /// Login Screen — Cockpit Design System Edition
@@ -198,6 +200,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   TextFormField(
                     controller: _emailCtrl,
                     keyboardType: TextInputType.emailAddress,
+                    onChanged: (_) { if (_error != null) setState(() => _error = null); },
                     style: CockpitTypography.body(
                       fontSize: 14,
                       color: CockpitColors.text,
@@ -332,6 +335,31 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ).appFadeSlideIn(index: 3),
+                  if (kDebugMode && !kReleaseMode) ...[
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: () {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const AppNavigation(),
+                          ),
+                        );
+                      },
+                      icon: const Icon(
+                        Icons.developer_mode_rounded,
+                        size: 16,
+                        color: CockpitColors.muted,
+                      ),
+                      label: Text(
+                        'Vào ứng dụng trực tiếp (QA Mode)',
+                        style: CockpitTypography.label(
+                          fontSize: 12,
+                          color: CockpitColors.muted,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

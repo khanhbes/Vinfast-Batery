@@ -427,7 +427,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                     ),
                   ).appFadeSlideIn(index: 5),
-                  if (kDebugMode) ...[
+                  if (kDebugMode && !kReleaseMode) ...[
                     const SizedBox(height: 8),
                     TextButton.icon(
                       onPressed: () {

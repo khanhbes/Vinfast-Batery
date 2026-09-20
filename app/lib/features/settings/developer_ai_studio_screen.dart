@@ -157,7 +157,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
       _loading = false;
       _isServerOnline = false;
       _errorMessage =
-          'Máy chủ ngoại tuyến (${AppConstants.apiBaseUrl}). Đang dùng bộ đệm dữ liệu cục bộ.';
+          'Máy chủ ngoại tuyến. Đang dùng bộ đệm dữ liệu cục bộ.';
     });
   }
 
@@ -852,12 +852,6 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      _presetChip(
-                        'Tailscale Funnel',
-                        'https://khanhbes.tailaafca5.ts.net',
-                        controller,
-                        setDlgState,
-                      ),
                       _presetChip(
                         'WiFi LAN (5000)',
                         'http://192.168.1.15:5000',

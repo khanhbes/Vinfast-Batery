@@ -69,7 +69,7 @@ class ChargeLogRepository {
     } on TimeoutException {
       debugPrint('[ChargeLogRepo] getVehicle($vehicleId) timed out after 8s');
       throw TimeoutException(
-        'Không kết nối được Firestore (8s). Kiểm tra mạng hoặc thử lại.',
+        'Không thể kết nối máy chủ. Vui lòng kiểm tra mạng hoặc thử lại.',
         _kFirestoreReadTimeout,
       );
     }
@@ -103,7 +103,7 @@ class ChargeLogRepository {
       rethrow;
     } on TimeoutException {
       throw TimeoutException(
-        'Không kết nối được Firestore (8s). Kiểm tra mạng hoặc thử lại.',
+        'Không thể kết nối máy chủ. Vui lòng kiểm tra mạng hoặc thử lại.',
         _kFirestoreReadTimeout,
       );
     }
