@@ -113,19 +113,22 @@ class AppNavigationBar extends StatelessWidget {
                               ),
                               const SizedBox(height: 3),
                               ExcludeSemantics(
-                                child: Text(
-                                  destinations[i].$2,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  textAlign: TextAlign.center,
-                                  style: CockpitTypography.label(
-                                    fontSize: 11,
-                                    fontWeight: selectedIndex == i
-                                        ? FontWeight.w700
-                                        : FontWeight.w500,
-                                    color: selectedIndex == i
-                                        ? CockpitColors.emeraldStrong
-                                        : ui.muted,
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    destinations[i].$2,
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    textAlign: TextAlign.center,
+                                    style: CockpitTypography.label(
+                                      fontSize: 11,
+                                      fontWeight: selectedIndex == i
+                                          ? FontWeight.w700
+                                          : FontWeight.w500,
+                                      color: selectedIndex == i
+                                          ? CockpitColors.emeraldStrong
+                                          : ui.muted,
+                                    ),
                                   ),
                                 ),
                               ),

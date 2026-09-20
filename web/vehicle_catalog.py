@@ -368,6 +368,7 @@ def create_user_vehicle(
     payload: dict[str, Any],
     *,
     max_vehicles: int = 2,
+    vehicle_id: str | None = None,
     runner: Callable[[Callable[[Any], Any]], Any] | None = None,
 ) -> tuple[dict[str, Any], int]:
     catalog_id = _clean_text(payload.get("catalogId"), 160)
@@ -375,12 +376,14 @@ def create_user_vehicle(
         return {"success": False, "error": "catalogId is required"}, 400
     spec_ref = db.collection(CATALOG_COLLECTION).document(catalog_id)
     user_ref = db.collection("users").document(uid)
-    vehicle_id = str(uuid.uuid4())
+    # A caller handling an idempotent operation may provide a deterministic
+    # document id.  Normal vehicle creation keeps the historical random id.
+    vehicle_id = _clean_text(vehicle_id, 120) or str(uuid.uuid4())
     vehicle_ref = db.collection("Vehicles").document(vehicle_id)
 
     def operation(transaction: Any):
-        spec_snapshot = spec_ref.get(transaction=transaction)
-        user_snapshot = user_ref.get(transaction=transaction)
+        spec_snapshot = spec_ref.get(transaction=transaction) if transaction is not None else spec_ref.get()
+        user_snapshot = user_ref.get(transaction=transaction) if transaction is not None else user_ref.get()
         if not spec_snapshot.exists:
             return {
                 "success": False,

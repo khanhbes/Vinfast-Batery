@@ -9,6 +9,8 @@ import '../../core/services/auth_service.dart';
 import '../../core/services/dashboard_preferences_service.dart';
 import '../../core/services/guide_registry.dart';
 import '../../core/services/onboarding_service.dart';
+import '../../core/models/onboarding_draft.dart';
+import '../../core/services/api_result.dart';
 import '../../core/theme/app_motion.dart';
 import '../../core/theme/cockpit_design_system.dart';
 import '../../core/widgets/app_popup.dart';
@@ -50,6 +52,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
   String? _dateOfBirth; // Định dạng dd/MM/yyyy
   bool _hadExistingDob = false;
   String? _createdVehicleId;
+  OnboardingDraft? _draft;
 
   // Dữ liệu khảo sát cá nhân hóa (Component C)
   double _dailyDistanceKm = 20.0;
@@ -95,6 +98,31 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
   Future<void> _initOnboardingFlow() async {
     final onboardingService = ref.read(onboardingServiceProvider);
 
+    final currentUser = AuthService().currentUser;
+    if (currentUser != null) {
+      _draft = await onboardingService.loadDraft(currentUser.uid);
+      if (_draft != null) {
+        _userName = _draft!.name;
+        _userPhone = _draft!.phone;
+        _dateOfBirth = _draft!.dateOfBirth;
+        _dailyDistanceKm = _draft!.avgDailyDistanceKm ?? _dailyDistanceKm;
+        _selectedUsagePurpose = _draft!.usagePurpose;
+        _typicalSocWhenCharge = _draft!.typicalSocWhenCharge ?? _typicalSocWhenCharge;
+        _nicknameCtrl.text = _draft!.nickname ?? '';
+        _plateCtrl.text = _draft!.licensePlate ?? '';
+        _odoCtrl.text = _draft!.initialOdo.toString();
+        _shellyStatus = _draft!.shellyStatus;
+        _dobCtrl.text = _draft!.dateOfBirth ?? '';
+        if (_draft!.state == OnboardingDraftState.failedPermanent) {
+          AppPopup.showWarning(
+            'Cần cập nhật thông tin onboarding',
+            detail: _draft!.lastErrorMessage ?? 'Thông tin đã lưu không còn hợp lệ.',
+            userInitiated: false,
+          );
+        }
+      }
+    }
+
     // 1. Tải catalog xe song song
     _loadCatalog();
 
@@ -128,7 +156,6 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
     }
 
     if (_userName.isEmpty) {
-      final currentUser = AuthService().currentUser;
       _userName = currentUser?.displayName ?? 'Bạn';
     }
 
@@ -137,15 +164,30 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
     }
   }
 
+  bool _catalogLoadFailed = false;
+
   Future<void> _loadCatalog() async {
+    if (mounted) setState(() => _catalogLoadFailed = false);
     try {
       final specs = await VehicleSpecRepository().getAllSpecs();
       if (mounted) {
         setState(() {
           _catalogSpecs = specs.where((s) => s.selectable).toList();
+          _catalogLoadFailed = _catalogSpecs.isEmpty;
         });
       }
-    } catch (_) {}
+    } catch (e) {
+      if (mounted) {
+        setState(() => _catalogLoadFailed = true);
+        AppPopup.showWarning(
+          'Không tải được danh sách xe',
+          detail: 'Kiểm tra kết nối và thử lại.',
+          action: _loadCatalog,
+          actionLabel: 'THỬ LẠI',
+          userInitiated: false,
+        );
+      }
+    }
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -206,25 +248,17 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
   }
 
   void _handleSubmitDailyDistance() {
-    ref.read(onboardingServiceProvider).updateProfile(
-          name: _userName,
-          phone: _userPhone,
-          dateOfBirth: _dateOfBirth,
-          avgDailyDistanceKm: _dailyDistanceKm,
-        );
+    _updateDraftAndPersist(avgDailyDistanceKm: _dailyDistanceKm);
     _goToStepOrSkip(5);
   }
 
   void _handleSubmitUsagePurpose() {
     if (_selectedUsagePurpose == null) return;
-    ref.read(onboardingServiceProvider).updateProfile(
-          name: _userName,
-          phone: _userPhone,
-          dateOfBirth: _dateOfBirth,
-          avgDailyDistanceKm: _dailyDistanceKm,
-          usagePurpose: _selectedUsagePurpose,
-          typicalSocWhenCharge: _typicalSocWhenCharge,
-        );
+    _updateDraftAndPersist(
+      avgDailyDistanceKm: _dailyDistanceKm,
+      usagePurpose: _selectedUsagePurpose,
+      typicalSocWhenCharge: _typicalSocWhenCharge,
+    );
     _goToStepOrSkip(6);
   }
 
@@ -256,7 +290,62 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
     setState(() => _currentStep = next.clamp(0, _totalSteps - 1));
   }
 
-  /// Tạo xe trên hệ thống
+  Future<void> _updateDraftAndPersist({
+    String? dateOfBirth,
+    double? avgDailyDistanceKm,
+    String? usagePurpose,
+    double? typicalSocWhenCharge,
+  }) async {
+    final draft = _draft;
+    if (draft == null) return;
+    _draft = draft.copyWith(
+      revision: draft.revision + 1,
+      dateOfBirth: dateOfBirth ?? _dateOfBirth,
+      avgDailyDistanceKm: avgDailyDistanceKm ?? _dailyDistanceKm,
+      usagePurpose: usagePurpose ?? _selectedUsagePurpose,
+      typicalSocWhenCharge: typicalSocWhenCharge ?? _typicalSocWhenCharge,
+      updatedAt: DateTime.now().toUtc(),
+    );
+    await ref.read(onboardingServiceProvider).saveDraft(_draft!);
+  }
+
+  Future<ApiResult<Map<String, dynamic>>> _commitDraft() async {
+    final draft = _draft;
+    if (draft == null) {
+      return const ApiResult(success: false, code: 'DRAFT_MISSING', userMessage: 'Chưa có thông tin onboarding.', retryable: false);
+    }
+    final service = ref.read(onboardingServiceProvider);
+    final syncing = draft.copyWith(
+      state: OnboardingDraftState.syncing,
+      revision: draft.revision + 1,
+      attemptCount: draft.attemptCount + 1,
+      updatedAt: DateTime.now().toUtc(),
+    );
+    _draft = syncing;
+    await service.saveDraft(syncing);
+    final result = await service.commitDraft(syncing);
+    if (result.success) {
+      _draft = syncing.copyWith(state: OnboardingDraftState.synced, updatedAt: DateTime.now().toUtc());
+      await service.clearDraft(syncing.uid);
+    } else {
+      final nextState = result.retryable
+          ? OnboardingDraftState.failedRetryable
+          : OnboardingDraftState.failedPermanent;
+      _draft = syncing.copyWith(
+        state: nextState,
+        lastErrorCode: result.code,
+        lastErrorMessage: result.userMessage,
+        nextAttemptAt: result.retryable
+            ? DateTime.now().toUtc().add(const Duration(seconds: 30))
+            : null,
+        updatedAt: DateTime.now().toUtc(),
+      );
+      await service.saveDraft(_draft!);
+    }
+    return result;
+  }
+
+  /// Tạo xe cục bộ trước, sau đó đồng bộ server bằng operation idempotent.
   Future<void> _handleCreateVehicle({required bool skipDetails}) async {
     if (_selectedSpec == null) {
       _goToStepOrSkip(_hadExistingDob ? 4 : 3);
@@ -268,21 +357,34 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
     final odoText = skipDetails ? '0' : _odoCtrl.text.trim();
     final odo = int.tryParse(odoText) ?? 0;
 
-    setState(() => _isSubmitting = true);
-    final res = await AuthService().addVehicle(
+    final user = AuthService().currentUser;
+    if (user == null) return;
+    _draft ??= OnboardingDraft.create(
+      uid: user.uid,
+      name: _userName,
+      phone: _userPhone,
       catalogId: _selectedSpec!.modelId,
-      nickname: (nickname != null && nickname.isNotEmpty) ? nickname : null,
-      licensePlate: (plate != null && plate.isNotEmpty) ? plate : null,
+      nickname: nickname,
+      licensePlate: plate,
       initialOdo: odo,
+      shellyStatus: _shellyStatus,
     );
+    _draft = _draft!.copyWith(
+      name: _userName,
+      phone: _userPhone,
+      catalogId: _selectedSpec!.modelId,
+      nickname: nickname,
+      licensePlate: plate,
+      initialOdo: odo,
+      revision: _draft!.revision + 1,
+      state: OnboardingDraftState.localPending,
+      updatedAt: DateTime.now().toUtc(),
+    );
+    setState(() => _isSubmitting = true);
+    await ref.read(onboardingServiceProvider).saveDraft(_draft!);
     setState(() => _isSubmitting = false);
-
-    if (res['success'] == true) {
-      _createdVehicleId = res['vehicleId']?.toString() ?? '';
-      _goToStepOrSkip(3);
-    } else {
-      AppPopup.showError(res['error']?.toString() ?? 'Không thể lưu xe.');
-    }
+    _createdVehicleId = 'pending:${_draft!.operationId}';
+    _goToStepOrSkip(3);
   }
 
   /// Xử lý nộp ngày sinh
@@ -300,22 +402,14 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
     }
 
     _dateOfBirth = trimmed;
-    ref.read(onboardingServiceProvider).updateProfile(
-          name: _userName,
-          phone: _userPhone,
-          dateOfBirth: _dateOfBirth,
-        );
+    _updateDraftAndPersist(dateOfBirth: _dateOfBirth);
 
     _goToStepOrSkip(4);
   }
 
   void _skipDob() {
     _dateOfBirth = null;
-    ref.read(onboardingServiceProvider).updateProfile(
-          name: _userName,
-          phone: _userPhone,
-          dateOfBirth: null,
-        );
+    _updateDraftAndPersist(dateOfBirth: null);
     _goToStepOrSkip(4);
   }
 
@@ -327,7 +421,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
       context: context,
       initialDate: initial,
       firstDate: DateTime(1930),
-      lastDate: DateTime(now.year - 10),
+      lastDate: DateTime(now.year - 16, now.month, now.day),
       builder: (ctx, child) {
         return Theme(
           data: ThemeData.dark().copyWith(
@@ -356,14 +450,16 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
   Future<void> _finishOnboarding() async {
     setState(() => _isSubmitting = true);
 
-    final res = await ref.read(onboardingServiceProvider).completeOnboarding(
-          shellyStatus: _shellyStatus,
-        );
+    if (_draft != null) {
+      _draft = _draft!.copyWith(shellyStatus: _shellyStatus, revision: _draft!.revision + 1, updatedAt: DateTime.now().toUtc());
+      await ref.read(onboardingServiceProvider).saveDraft(_draft!);
+    }
+    final result = await _commitDraft();
 
     setState(() => _isSubmitting = false);
     if (!mounted) return;
 
-    if (res['success'] == true) {
+    if (result.success) {
       final navigator = Navigator.of(context, rootNavigator: true);
       final preferences = ref.read(dashboardPreferencesProvider);
       navigator.pushAndRemoveUntil(
@@ -388,8 +484,16 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
           );
         }
       });
+    } else if (result.retryable) {
+      AppPopup.showWarning(
+        'Đang chờ đồng bộ onboarding',
+        detail: result.userMessage ?? 'Bạn có thể tiếp tục; app sẽ tự thử lại khi có mạng.',
+        action: _finishOnboarding,
+        actionLabel: 'THỬ LẠI',
+        userInitiated: true,
+      );
     } else {
-      AppPopup.showError(res['error']?.toString() ?? 'Không thể hoàn tất.');
+      AppPopup.showError(result.userMessage ?? 'Không thể hoàn tất.');
     }
   }
 
@@ -507,32 +611,47 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
 
             // 3. Step Content chuyển đổi mượt mà
             Expanded(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 320),
-                layoutBuilder: (currentChild, previousChildren) => Stack(
-                  alignment: Alignment.topCenter,
-                  children: <Widget>[
-                    ...previousChildren,
-                    ?currentChild,
-                  ],
-                ),
-                switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeInCubic,
-                transitionBuilder: (child, animation) {
-                  return FadeTransition(
-                    opacity: animation,
-                    child: SlideTransition(
-                      position: Tween<Offset>(
-                        begin: const Offset(0.04, 0),
-                        end: Offset.zero,
-                      ).animate(animation),
-                      child: child,
-                    ),
-                  );
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onHorizontalDragEnd: (details) {
+                  final velocity = details.primaryVelocity ?? 0;
+                  if (velocity < -250) {
+                    if (!_isSubmitting && _canContinueCurrentStep() && _currentStep < _totalSteps - 1) {
+                      _nextStep();
+                    }
+                  } else if (velocity > 250) {
+                    if (!_isSubmitting && _currentStep > 0) {
+                      _prevStep();
+                    }
+                  }
                 },
-                child: KeyedSubtree(
-                  key: ValueKey<int>(_currentStep),
-                  child: _buildCurrentStepContent(),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 320),
+                  layoutBuilder: (currentChild, previousChildren) => Stack(
+                    alignment: Alignment.topCenter,
+                    children: <Widget>[
+                      ...previousChildren,
+                      ?currentChild,
+                    ],
+                  ),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  transitionBuilder: (child, animation) {
+                    return FadeTransition(
+                      opacity: animation,
+                      child: SlideTransition(
+                        position: Tween<Offset>(
+                          begin: const Offset(0.04, 0),
+                          end: Offset.zero,
+                        ).animate(animation),
+                        child: child,
+                      ),
+                    );
+                  },
+                  child: KeyedSubtree(
+                    key: ValueKey<int>(_currentStep),
+                    child: _buildCurrentStepContent(),
+                  ),
                 ),
               ),
             ),
@@ -829,6 +948,48 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
 
   // ── STEP 1: VEHICLE PICKER (2-COLUMN GRID) ───────────────────────────────
   Widget _buildStep1VehiclePicker() {
+    if (_catalogLoadFailed) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.cloud_off_rounded, color: CockpitColors.amber, size: 48),
+              const SizedBox(height: 16),
+              const Text(
+                'Không tải được danh sách xe',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Kiểm tra kết nối mạng và thử lại.',
+                style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                onPressed: _loadCatalog,
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Thử lại'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: CockpitColors.emerald,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     if (_catalogSpecs.isEmpty) {
       return const Center(
         child: CircularProgressIndicator(color: CockpitColors.emerald),
@@ -1139,6 +1300,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
             // Tên gợi nhớ
             _buildInputField(
               controller: _nicknameCtrl,
+              autofocus: true,
               label: 'Biệt danh cho xe (Tùy chọn)',
               hint: 'VD: Evo của tôi, Xe đi làm...',
               icon: Icons.edit_note_rounded,
@@ -1169,6 +1331,13 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
             Center(
               child: TextButton(
                 onPressed: () => _handleCreateVehicle(skipDetails: true),
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 48),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 12,
+                    horizontal: 16,
+                  ),
+                ),
                 child: const Text(
                   'Bỏ qua & dùng thông tin mặc định',
                   style: TextStyle(color: CockpitColors.muted, fontSize: 13),
@@ -1228,6 +1397,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
                   Expanded(
                     child: TextField(
                       controller: _dobCtrl,
+                      autofocus: true,
                       inputFormatters: [_dobMaskFormatter],
                       keyboardType: TextInputType.number,
                       style: const TextStyle(
@@ -1263,6 +1433,13 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
             Center(
               child: TextButton(
                 onPressed: _skipDob,
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 48),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 12,
+                    horizontal: 16,
+                  ),
+                ),
                 child: const Text(
                   'Bỏ qua bước này',
                   style: TextStyle(color: CockpitColors.muted, fontSize: 13),
@@ -1985,6 +2162,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
     required String label,
     required String hint,
     required IconData icon,
+    bool autofocus = false,
     TextInputType keyboardType = TextInputType.text,
     List<TextInputFormatter>? inputFormatters,
   }) {
@@ -2014,6 +2192,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
               Expanded(
                 child: TextField(
                   controller: controller,
+                  autofocus: autofocus,
                   keyboardType: keyboardType,
                   inputFormatters: inputFormatters,
                   style: const TextStyle(color: Colors.white, fontSize: 14),

@@ -112,6 +112,15 @@ class AppErrorReporter {
       (m) => '${m[1]}***${m[3]}',
     );
 
+    // Redact identity and device identifiers from copied diagnostics.
+    sanitized = sanitized.replaceAllMapped(
+      RegExp(
+        r'((?:uid|userId|ownerUid|deviceId|vehicleId)["\x27]?\s*[:=]\s*["\x27]?)([^"\x27,\s&]+)(["\x27]?)',
+        caseSensitive: false,
+      ),
+      (m) => '${m[1]}***${m[3]}',
+    );
+
     return sanitized;
   }
 

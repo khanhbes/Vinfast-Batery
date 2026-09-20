@@ -19,6 +19,7 @@ import csv
 import uuid
 import re
 import json
+import hashlib
 from csv_security import csv_text
 from telemetry_schema import TelemetryValidationError, normalize_telemetry
 from sync_writes import commit_owned_writes, valid_document_id
@@ -38,7 +39,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, wait
 import numpy as np
 from datetime import datetime, timedelta, timezone
-from flask import Flask, request, jsonify, Response, redirect, send_file
+from flask import Flask, request, jsonify, Response, redirect, send_file, g
 from flask_cors import CORS
 from werkzeug.exceptions import HTTPException
 
@@ -355,6 +356,21 @@ CORS(app, origins=_cors_origins or ['http://localhost:3000', 'http://127.0.0.1:3
 app.secret_key = os.urandom(24)
 
 
+def _request_id() -> str:
+    """Return the stable short request id for the current HTTP request."""
+    current = getattr(g, 'request_id', None)
+    if current:
+        return current
+    current = str(uuid.uuid4())[:12]
+    g.request_id = current
+    return current
+
+
+@app.before_request
+def assign_request_id():
+    _request_id()
+
+
 @app.after_request
 def add_security_headers(response):
     """Apply defense-in-depth headers even when the API is reached directly."""
@@ -368,6 +384,24 @@ def add_security_headers(response):
         response.headers.setdefault('Strict-Transport-Security', 'max-age=31536000')
     if request.path.startswith('/api/'):
         response.headers.setdefault('Cache-Control', 'no-store')
+        response.headers.setdefault('X-Request-Id', _request_id())
+        # Preserve the existing wire shape while adding the fields needed by
+        # the typed mobile client.  Non-JSON responses (for example OPTIONS)
+        # are left untouched.
+        payload = response.get_json(silent=True)
+        if isinstance(payload, dict):
+            payload.setdefault('requestId', _request_id())
+            payload.setdefault('success', response.status_code < 400)
+            if payload.get('success') is False:
+                message = payload.get('userMessage') or payload.get('error') or 'Yêu cầu thất bại'
+                payload.setdefault('userMessage', message)
+                payload.setdefault('error', message)
+                payload.setdefault('retryable', response.status_code >= 500 or response.status_code == 429)
+                payload.setdefault('code', f'HTTP_{response.status_code}')
+                payload.setdefault('statusCode', response.status_code)
+            response.set_data(json.dumps(payload, ensure_ascii=False, separators=(',', ':')))
+            response.headers['Content-Type'] = 'application/json; charset=utf-8'
+            response.headers.pop('Content-Length', None)
     return response
 
 
@@ -595,6 +629,14 @@ def _ensure_schema(data: dict, entity: str) -> dict:
 # ═══════════════════════════════════════════════════════════════
 @app.route('/api/health', methods=['GET'])
 def health_check():
+    """Minimal liveness probe; dependency state belongs to /api/ready."""
+    return jsonify({
+        'success': True,
+        'status': 'ok',
+        'service': 'VinFast Battery Unified API',
+        'requestId': _request_id(),
+    })
+
     return jsonify({
         'status': 'ok',
         'service': 'VinFast Battery — Unified API',
@@ -618,6 +660,41 @@ def health_check():
             'POST /api/telemetry',
         ],
     })
+
+
+@app.route('/api/ready', methods=['GET'])
+def readiness_check():
+    """Dependency-aware readiness probe used by the public ingress.
+
+    Firebase is required for authentication/profile/vehicle operations.  AI
+    is deliberately reported as degraded rather than making the core mobile
+    API unavailable: the app can still complete onboarding and show cached
+    data while prediction services recover.
+    """
+    firebase_ready = bool(_firebase_available and _fs())
+    ai_ready = bool(_consumption_model is not None)
+    payload = {
+        'success': firebase_ready,
+        'status': 'ready' if firebase_ready else 'not_ready',
+        'data': {
+            'service': 'VinFast Battery — Unified API',
+            'firebase': 'ready' if firebase_ready else 'unavailable',
+            'ai': 'ready' if ai_ready else 'degraded',
+            'dependencies': {
+                'firebase': firebase_ready,
+                'ai': ai_ready,
+            },
+        },
+        'requestId': _request_id(),
+    }
+    if not firebase_ready:
+        payload.update({
+            'error': 'Dịch vụ dữ liệu chưa sẵn sàng',
+            'userMessage': 'Máy chủ đang khởi động. Vui lòng thử lại sau.',
+            'code': 'dependenciesUnavailable',
+            'retryable': True,
+        })
+    return jsonify(payload), 200 if firebase_ready else 503
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -680,6 +757,8 @@ def validate_date_of_birth(dob_str: str) -> tuple[bool, str | None]:
     if dob_date > today:
         return False, "Ngày sinh không thể ở tương lai"
     age = today.year - dob_date.year - ((today.month, today.day) < (dob_date.month, dob_date.day))
+    if age < 16:
+        return False, "Người dùng phải từ đủ 16 tuổi trở lên"
     if age > 120:
         return False, "Tuổi không hợp lệ (vượt quá 120 tuổi)"
     return True, None
@@ -765,6 +844,30 @@ def patch_user_profile():
         else:
             updates['dateOfBirth'] = None
 
+    # Optional onboarding personalization fields.  Keep validation server
+    # side so a forged mobile payload cannot write arbitrary profile keys.
+    if 'avgDailyDistanceKm' in body:
+        try:
+            distance = float(body['avgDailyDistanceKm'])
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'error': 'Quãng đường trung bình không hợp lệ', 'code': 'invalidDistance'}), 400
+        if not 0 <= distance <= 1000:
+            return jsonify({'success': False, 'error': 'Quãng đường trung bình phải từ 0 đến 1000 km', 'code': 'invalidDistance'}), 400
+        updates['avgDailyDistanceKm'] = distance
+    if 'usagePurpose' in body:
+        purpose = str(body['usagePurpose'] or '').strip()
+        if len(purpose) > 80:
+            return jsonify({'success': False, 'error': 'Mục đích sử dụng quá dài', 'code': 'invalidUsagePurpose'}), 400
+        updates['usagePurpose'] = purpose
+    if 'typicalSocWhenCharge' in body:
+        try:
+            typical_soc = float(body['typicalSocWhenCharge'])
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'error': 'Mức pin sạc thường dùng không hợp lệ', 'code': 'invalidTypicalSoc'}), 400
+        if not 0 <= typical_soc <= 100:
+            return jsonify({'success': False, 'error': 'Mức pin sạc thường dùng phải từ 0 đến 100%', 'code': 'invalidTypicalSoc'}), 400
+        updates['typicalSocWhenCharge'] = typical_soc
+
     if not updates:
         return jsonify({'success': False, 'error': 'Không có trường thông tin nào để cập nhật'}), 400
 
@@ -822,6 +925,9 @@ def get_user_onboarding():
                     'name': name,
                     'phone': user_data.get('phone', ''),
                     'dateOfBirth': user_data.get('dateOfBirth'),
+                    'avgDailyDistanceKm': user_data.get('avgDailyDistanceKm'),
+                    'usagePurpose': user_data.get('usagePurpose'),
+                    'typicalSocWhenCharge': user_data.get('typicalSocWhenCharge'),
                     'isComplete': is_profile_complete,
                 },
                 'vehicle': {
@@ -893,6 +999,181 @@ def complete_user_onboarding():
         })
     except Exception as e:
         return jsonify({'success': False, 'error': f'Lỗi hoàn tất onboarding: {e}'}), 500
+
+
+@app.route('/api/mobile/onboarding/commit', methods=['POST'])
+@require_auth
+def commit_mobile_onboarding():
+    """Commit a local-first onboarding draft exactly once.
+
+    Firebase Auth remains the identity authority.  The idempotency key is
+    persisted server-side and also determines the vehicle document id, so a
+    lost response or process restart cannot create a second vehicle.
+    """
+    database = _fs()
+    if not database:
+        return jsonify({
+            'success': False,
+            'error': 'Firestore unavailable',
+            'userMessage': 'Dịch vụ dữ liệu tạm thời chưa sẵn sàng.',
+            'code': 'firestoreUnavailable',
+            'retryable': True,
+        }), 503
+
+    idempotency_key = (request.headers.get('Idempotency-Key') or '').strip()
+    body = request.get_json(silent=True) or {}
+    operation_id = str(body.get('operationId') or idempotency_key).strip()
+    if not idempotency_key or len(idempotency_key) > 160 or not operation_id or len(operation_id) > 160:
+        return jsonify({
+            'success': False,
+            'error': 'Idempotency-Key và operationId là bắt buộc',
+            'userMessage': 'Không thể đồng bộ onboarding. Vui lòng thử lại.',
+            'code': 'idempotencyKeyRequired',
+            'retryable': False,
+        }), 400
+
+    receipt_id = hashlib.sha256(
+        f'{request._uid}:{operation_id}'.encode('utf-8')
+    ).hexdigest()
+    receipt_ref = database.collection('OnboardingOperationReceipts').document(receipt_id)
+    try:
+        receipt = receipt_ref.get()
+        if receipt.exists:
+            saved = receipt.to_dict() or {}
+            return jsonify(saved.get('response') or {
+                'success': False,
+                'error': 'Onboarding operation receipt is invalid',
+                'code': 'invalidReceipt',
+                'retryable': True,
+            }), int(saved.get('statusCode') or 200)
+    except Exception:
+        # A receipt read failure must not expose internals; the main operation
+        # may still succeed and will be retried safely by deterministic IDs.
+        pass
+
+    profile = body.get('profile') if isinstance(body.get('profile'), dict) else {}
+    vehicle = body.get('vehicle') if isinstance(body.get('vehicle'), dict) else {}
+    try:
+        schema_version = int(body.get('schemaVersion', 1))
+    except (TypeError, ValueError):
+        schema_version = 0
+    if schema_version != 1:
+        return jsonify({'success': False, 'error': 'schemaVersion không được hỗ trợ', 'userMessage': 'Phiên bản dữ liệu onboarding không được hỗ trợ.', 'code': 'unsupportedSchema', 'retryable': False}), 400
+    name = str(profile.get('name') or '').strip()
+    catalog_id = str(vehicle.get('catalogId') or '').strip()
+    if not name:
+        return jsonify({'success': False, 'error': 'Họ tên là bắt buộc', 'userMessage': 'Vui lòng nhập họ tên.', 'code': 'nameRequired', 'retryable': False}), 400
+    if not catalog_id:
+        return jsonify({'success': False, 'error': 'catalogId là bắt buộc', 'userMessage': 'Vui lòng chọn mẫu xe.', 'code': 'catalogRequired', 'retryable': False}), 400
+    if len(name) > 100:
+        return jsonify({'success': False, 'error': 'Họ tên tối đa 100 ký tự', 'userMessage': 'Họ tên quá dài.', 'code': 'invalidName', 'retryable': False}), 400
+    try:
+        initial_odo = int(vehicle.get('initialOdo', 0))
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'ODO không hợp lệ', 'userMessage': 'ODO ban đầu không hợp lệ.', 'code': 'invalidOdo', 'retryable': False}), 400
+    if initial_odo < 0 or initial_odo > 9_999_999:
+        return jsonify({'success': False, 'error': 'ODO ngoài phạm vi', 'userMessage': 'ODO ban đầu không hợp lệ.', 'code': 'invalidOdo', 'retryable': False}), 400
+
+    dob = profile.get('dateOfBirth')
+    if dob:
+        valid_dob, dob_error = validate_date_of_birth(str(dob))
+        if not valid_dob:
+            return jsonify({'success': False, 'error': dob_error, 'userMessage': dob_error, 'code': 'invalidDateOfBirth', 'retryable': False}), 400
+
+    try:
+        max_vehicles = max(1, min(int(os.environ.get('MAX_VEHICLES_PER_ACCOUNT', '2')), 10))
+    except ValueError:
+        max_vehicles = 2
+    deterministic_vehicle_id = str(uuid.uuid5(
+        uuid.NAMESPACE_URL,
+        f'vinfast-battery:onboarding:{request._uid}:{operation_id}',
+    ))
+    vehicle_payload = {
+        'catalogId': catalog_id,
+        'nickname': vehicle.get('nickname'),
+        'licensePlate': vehicle.get('licensePlate'),
+        'initialOdo': initial_odo,
+    }
+    vehicle_result, vehicle_status = create_user_vehicle(
+        database,
+        request._uid,
+        vehicle_payload,
+        max_vehicles=max_vehicles,
+        vehicle_id=deterministic_vehicle_id,
+    )
+    if vehicle_status >= 300 or vehicle_result.get('success') is not True:
+        retryable = vehicle_status >= 500
+        message = vehicle_result.get('error') or 'Không thể tạo xe'
+        return jsonify({
+            'success': False,
+            'error': message,
+            'userMessage': message,
+            'code': vehicle_result.get('code') or 'vehicleCommitFailed',
+            'retryable': retryable,
+        }), vehicle_status
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    profile_update = {
+        'uid': request._uid,
+        'email': request._email,
+        'name': name,
+        'displayName': name,
+        'phone': str(profile.get('phone') or '').strip()[:20],
+        'dateOfBirth': str(dob).strip() if dob else None,
+        'registrationFlowVersion': 2,
+        'updatedAt': now_iso,
+        'source': 'flutter_app',
+    }
+    for key, limit in (('usagePurpose', 80),):
+        value = str(profile.get(key) or '').strip()
+        if value:
+            profile_update[key] = value[:limit]
+    for key, low, high in (('avgDailyDistanceKm', 0, 1000), ('typicalSocWhenCharge', 0, 100)):
+        if profile.get(key) is not None:
+            try:
+                number = float(profile.get(key))
+            except (TypeError, ValueError):
+                return jsonify({'success': False, 'error': f'{key} không hợp lệ', 'userMessage': 'Thông tin onboarding không hợp lệ.', 'code': 'invalidProfile', 'retryable': False}), 400
+            if not low <= number <= high:
+                return jsonify({'success': False, 'error': f'{key} ngoài phạm vi', 'userMessage': 'Thông tin onboarding ngoài phạm vi cho phép.', 'code': 'invalidProfile', 'retryable': False}), 400
+            profile_update[key] = number
+
+    shelly_status = body.get('shellyStatus', 'skipped')
+    if shelly_status not in ('connected', 'skipped'):
+        shelly_status = 'skipped'
+    profile_update.update({
+        'onboardingCompletedAt': now_iso,
+        'shellyOnboardingStatus': shelly_status,
+    })
+    database.collection('users').document(request._uid).set(profile_update, merge=True)
+    response_payload = {
+        'success': True,
+        'data': {
+            'vehicle': vehicle_result.get('data') or {},
+            'onboardingCompletedAt': now_iso,
+            'shellyOnboardingStatus': shelly_status,
+            'syncState': 'synced',
+        },
+        'requestId': _request_id(),
+    }
+    try:
+        receipt_ref.set({
+            'uid': request._uid,
+            'operationId': operation_id,
+            'idempotencyKey': idempotency_key,
+            'statusCode': 200,
+            'response': response_payload,
+            'createdAt': now_iso,
+        })
+        draft_ref = database.collection('users').document(request._uid).collection('onboardingDrafts').document('current')
+        if hasattr(draft_ref, 'delete'):
+            draft_ref.delete()
+    except Exception:
+        # The deterministic vehicle id and operation id make a later retry
+        # safe even if the receipt cleanup is interrupted.
+        pass
+    _audit('onboarding_commit', 'users', request._uid, request._uid, request._email, {'operationId': operation_id})
+    return jsonify(response_payload), 200
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -3590,11 +3871,14 @@ def migrate_legacy():
 @app.errorhandler(HTTPException)
 def handle_http_exception(err: HTTPException):
     if request.path.startswith('/api/'):
-        request_id = str(uuid.uuid4())[:8]
+        request_id = _request_id()
+        retryable = err.code >= 500 or err.code == 429
         return jsonify({
             'success': False,
             'error': err.description or 'HTTP error',
+            'userMessage': err.description or 'HTTP error',
             'code': err.code,
+            'retryable': retryable,
             'requestId': request_id,
         }), err.code
     return err
@@ -3602,13 +3886,16 @@ def handle_http_exception(err: HTTPException):
 
 @app.errorhandler(Exception)
 def handle_unexpected_exception(err: Exception):
-    request_id = str(uuid.uuid4())[:8]
+    request_id = _request_id()
     print(f'❌ API error [{request_id}] {request.method} {request.path}: {err}')
     if request.path.startswith('/api/'):
         debug_mode = os.environ.get('FLASK_DEBUG', '0').lower() in ('1', 'true', 'yes')
         return jsonify({
             'success': False,
             'error': str(err) if debug_mode else 'Lỗi hệ thống, vui lòng thử lại',
+            'userMessage': str(err) if debug_mode else 'Lỗi hệ thống, vui lòng thử lại',
+            'code': 'internalError',
+            'retryable': True,
             'requestId': request_id,
         }), 500
     raise err

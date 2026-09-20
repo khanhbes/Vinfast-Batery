@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -255,7 +256,13 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
            draft: SmartChargingPlanDraft(
              vehicleId: vehicleId,
              currentSoc: currentSoc,
-             targetSoc: (currentSoc + 30).clamp(1, 100).toDouble(),
+             targetSoc: (() {
+                final raw = (currentSoc + 30).clamp(1, 100).toDouble();
+                // Ensure at least 5% delta to generate a meaningful prediction
+                return raw < currentSoc + 5
+                    ? (currentSoc + 5).clamp(1, 100).toDouble()
+                    : raw;
+              })(),
              hardDeadlineAt: (clock ?? DateTime.now)().add(
                const Duration(hours: 10),
              ),
@@ -318,7 +325,17 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         _refreshStatus(),
         _refreshSession(),
         _refreshHistory(),
-      ]);
+      ]).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          AppErrorReporter.report(
+            TimeoutException('SmartChargingController.initialize timed out after 15s'),
+            StackTrace.current,
+            source: 'SmartChargingController.initialize.timeout',
+          );
+          return [];
+        },
+      );
     } on SmartChargerException catch (error) {
       if (!_disposed) state = state.copyWith(gatewayError: error.message);
     } catch (error, stack) {
@@ -1198,7 +1215,19 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         stack,
         source: 'SmartChargingController.start',
       );
+      // Keep technical exception text out of release UI.
+      if (!kReleaseMode && !_disposed) {
+        state = state.copyWith(
+          actionError: 'KhÃ´ng thá»ƒ báº­t sáº¡c. Vui lÃ²ng kiá»ƒm tra káº¿t ná»‘i vÃ  thá»­ láº¡i.',
+        );
+      }
       if (!_disposed) {
+        state = state.copyWith(
+          actionError: 'Charging start failed. Check connection and retry.',
+        );
+      }
+      if (kReleaseMode) return false;
+      if (!kReleaseMode && !_disposed) {
         state = state.copyWith(
           phase: SmartChargingViewPhase.preview,
           actionError: 'Không thể bật sạc: $e',
@@ -1294,7 +1323,12 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       return false;
     } catch (e, stack) {
       AppErrorReporter.report(e, stack, source: 'SmartChargingController.stop');
-      if (!_disposed) {
+      if (!_disposed) state = state.copyWith(
+        phase: SmartChargingViewPhase.active,
+        actionError: 'Charging stop failed. Check charger status.',
+      );
+      if (kReleaseMode) return false;
+      if (!kReleaseMode && !_disposed) {
         state = state.copyWith(
           phase: SmartChargingViewPhase.active,
           actionError: 'Lỗi khi dừng sạc: $e',
@@ -1404,7 +1438,12 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         stack,
         source: 'SmartChargingController.manualOn',
       );
-      if (!_disposed) {
+      if (!_disposed) state = state.copyWith(
+        phase: SmartChargingViewPhase.editing,
+        actionError: 'Charging start failed. Check connection and retry.',
+      );
+      if (kReleaseMode) return false;
+      if (!kReleaseMode && !_disposed) {
         state = state.copyWith(
           phase: SmartChargingViewPhase.editing,
           actionError: 'Không thể bật sạc: $e',
@@ -1442,6 +1481,10 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         stack,
         source: 'SmartChargingController.manualOff',
       );
+      if (!_disposed) state = state.copyWith(
+        actionError: 'Charging stop failed. Check charger status.',
+      );
+      if (kReleaseMode) return false;
       if (!_disposed) state = state.copyWith(actionError: 'Lỗi khi tắt sạc: $e');
       return false;
     } finally {

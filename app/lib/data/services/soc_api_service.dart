@@ -1,8 +1,6 @@
-// This command-line HTTP bridge intentionally logs request lifecycle events.
-// ignore_for_file: avoid_print
-
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'soc_prediction_service.dart';
 
@@ -25,19 +23,19 @@ class SOCApiService {
   /// Start HTTP server
   Future<void> startServer({int port = _defaultPort}) async {
     if (_server != null) {
-      print('⚠️ Server already running on port ${_server!.port}');
+      if (kDebugMode) debugPrint('⚠️ Server already running on port ${_server!.port}');
       return;
     }
 
     try {
       _server = await HttpServer.bind('localhost', port);
-      print('🚀 SOC API Server started on http://localhost:$port');
+      if (kDebugMode) debugPrint('🚀 SOC API Server started on http://localhost:$port');
 
       await for (HttpRequest request in _server!) {
         _handleRequest(request);
       }
     } catch (e) {
-      print('❌ Failed to start SOC API server: $e');
+      if (kDebugMode) debugPrint('❌ Failed to start SOC API server: $e');
       throw Exception('Failed to start server: $e');
     }
   }
@@ -47,7 +45,7 @@ class SOCApiService {
     if (_server != null) {
       await _server!.close();
       _server = null;
-      print('🛑 SOC API Server stopped');
+      if (kDebugMode) debugPrint('🛑 SOC API Server stopped');
     }
   }
 
@@ -76,7 +74,7 @@ class SOCApiService {
       final path = request.uri.path;
       final method = request.method;
 
-      print('📡 $method $path');
+      if (kDebugMode) debugPrint('📡 $method $path');
 
       switch ('$method $path') {
         case 'POST /api/soc/predict':
@@ -96,7 +94,7 @@ class SOCApiService {
           );
       }
     } catch (e) {
-      print('❌ Error handling request: $e');
+      if (kDebugMode) debugPrint('❌ Error handling request: $e');
       _sendError(
         request.response,
         HttpStatus.internalServerError,
@@ -142,7 +140,7 @@ class SOCApiService {
         'data': result.toJson(),
       });
     } catch (e) {
-      print('❌ Error in predict endpoint: $e');
+      if (kDebugMode) debugPrint('❌ Error in predict endpoint: $e');
       _sendError(
         response,
         HttpStatus.internalServerError,
@@ -158,7 +156,7 @@ class SOCApiService {
 
       _sendJson(response, HttpStatus.ok, {'success': true, 'data': status});
     } catch (e) {
-      print('❌ Error in status endpoint: $e');
+      if (kDebugMode) debugPrint('❌ Error in status endpoint: $e');
       _sendError(
         response,
         HttpStatus.internalServerError,
@@ -200,7 +198,7 @@ class SOCApiService {
         },
       });
     } catch (e) {
-      print('❌ Error in history endpoint: $e');
+      if (kDebugMode) debugPrint('❌ Error in history endpoint: $e');
       _sendError(
         response,
         HttpStatus.internalServerError,
@@ -226,7 +224,7 @@ class SOCApiService {
 
     for (final field in requiredFields) {
       if (!data.containsKey(field)) {
-        print('❌ Missing required field: $field');
+        if (kDebugMode) debugPrint('❌ Missing required field: $field');
         return false;
       }
     }
@@ -234,19 +232,19 @@ class SOCApiService {
     // Validate ranges
     final battery = data['currentBattery'] as num;
     if (battery < 0 || battery > 100) {
-      print('❌ Invalid battery percentage: $battery');
+      if (kDebugMode) debugPrint('❌ Invalid battery percentage: $battery');
       return false;
     }
 
     final timeOfDay = data['timeOfDay'] as int;
     if (timeOfDay < 0 || timeOfDay > 23) {
-      print('❌ Invalid timeOfDay: $timeOfDay');
+      if (kDebugMode) debugPrint('❌ Invalid timeOfDay: $timeOfDay');
       return false;
     }
 
     final dayOfWeek = data['dayOfWeek'] as int;
     if (dayOfWeek < 0 || dayOfWeek > 6) {
-      print('❌ Invalid dayOfWeek: $dayOfWeek');
+      if (kDebugMode) debugPrint('❌ Invalid dayOfWeek: $dayOfWeek');
       return false;
     }
 

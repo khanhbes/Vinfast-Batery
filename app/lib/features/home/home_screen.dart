@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shimmer/shimmer.dart';
 import '../../core/services/dashboard_preferences_service.dart';
 import '../../core/services/guide_registry.dart';
 import '../../core/theme/app_motion.dart';
@@ -412,17 +413,19 @@ class _VehicleBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = vehicle?.vehicleName.isNotEmpty == true
-        ? vehicle!.vehicleName
+    final name = vehicle?.nickname?.isNotEmpty == true
+        ? vehicle!.nickname!
         : (vehicle?.vinfastModelName?.isNotEmpty == true
             ? vehicle!.vinfastModelName!
-            : 'VinFast EV');
-    final plate = vehicle?.vehicleId.isNotEmpty == true
-        ? vehicle!.vehicleId
-        : 'VF-ECO';
+            : (vehicle?.vehicleName.isNotEmpty == true
+                ? vehicle!.vehicleName
+                : 'VinFast EV'));
+    final plate = vehicle?.licensePlate?.trim().isNotEmpty == true
+        ? vehicle!.licensePlate!
+        : 'Chưa có BSX';
     final percent = vehicle?.hasBatteryData == true
-        ? vehicle?.lastBatteryPercent
-        : null;
+        ? (vehicle?.lastBatteryPercent ?? vehicle?.currentBattery)
+        : vehicle?.currentBattery;
 
     final vehicleImageUrl = vehicle?.imageUrl;
     final hasVehicleImage =
@@ -551,7 +554,7 @@ class _VehicleBanner extends StatelessWidget {
                         const SizedBox(width: 6),
                         Flexible(
                           child: Text(
-                            'Đã kết nối',
+                            'Đang hoạt động',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: CockpitTypography.label(
@@ -695,16 +698,83 @@ class _VehicleBannerShimmer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 200,
-      decoration: BoxDecoration(
-        color: AppUiColors.of(context).surface,
-        borderRadius: BorderRadius.circular(28),
-      ),
-      child: Center(
-        child: CircularProgressIndicator(
-          color: AppUiColors.of(context).primary,
-          strokeWidth: 2,
+    return Shimmer.fromColors(
+      baseColor: AppUiColors.of(context).surface,
+      highlightColor: AppUiColors.of(context).border,
+      child: Container(
+        height: 210,
+        decoration: BoxDecoration(
+          color: AppUiColors.of(context).surface,
+          borderRadius: BorderRadius.circular(28),
+        ),
+        child: Stack(
+          children: [
+            // Top-left badge placeholder
+            Positioned(
+              top: 16,
+              left: 16,
+              child: Container(
+                width: 100,
+                height: 22,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+            ),
+            // Top-right badge placeholder
+            Positioned(
+              top: 16,
+              right: 16,
+              child: Container(
+                width: 70,
+                height: 22,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+            // Bottom-left name placeholder
+            Positioned(
+              bottom: 40,
+              left: 16,
+              child: Container(
+                width: 160,
+                height: 22,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+            // Bottom-left plate placeholder
+            Positioned(
+              bottom: 16,
+              left: 16,
+              child: Container(
+                width: 80,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+            ),
+            // Bottom-right SOC pill placeholder
+            Positioned(
+              bottom: 16,
+              right: 16,
+              child: Container(
+                width: 72,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -719,15 +789,17 @@ class _StatCardsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final percent = vehicle?.hasBatteryData == true
-        ? vehicle?.lastBatteryPercent
-        : null;
+        ? (vehicle?.lastBatteryPercent ?? vehicle?.currentBattery)
+        : vehicle?.currentBattery;
     final efficiency = vehicle?.hasEfficiencyData == true
         ? vehicle?.defaultEfficiency
-        : null;
-    final range = percent != null && efficiency != null && efficiency > 0
-        ? (percent * efficiency).toInt().toString()
-        : '—';
-    final odo = vehicle?.hasOdoData == true ? vehicle?.currentOdo : null;
+        : (vehicle?.defaultEfficiency ?? 1.2);
+    final range = percent != null && percent > 0 && efficiency != null && efficiency > 0
+        ? '${(percent * efficiency).toInt()} km'
+        : '-- km';
+    final odo = vehicle?.hasOdoData == true
+        ? '${vehicle?.currentOdo ?? 0} km'
+        : (vehicle != null ? '${vehicle!.currentOdo} km' : '0 km');
 
     return ResponsiveCardGrid(
       maxColumns: 3,
@@ -735,7 +807,7 @@ class _StatCardsRow extends StatelessWidget {
       children: [
         _StatCard(
           icon: Icons.bolt_outlined,
-          value: percent == null ? '—' : '$percent%',
+          value: percent == null ? '-- %' : '$percent%',
           label: 'MỨC PIN',
           isHighlighted: false,
         ),
@@ -747,7 +819,7 @@ class _StatCardsRow extends StatelessWidget {
         ),
         _StatCard(
           icon: Icons.speed_rounded,
-          value: odo == null ? '—' : '$odo',
+          value: odo,
           label: 'TỔNG ODO',
           isHighlighted: false,
         ),
@@ -796,7 +868,7 @@ class _StatCard extends StatelessWidget {
             value,
             style: TextStyle(
               color: AppUiColors.of(context).text,
-              fontSize: 24,
+              fontSize: value.length > 7 ? 18 : 22,
               fontWeight: FontWeight.w700,
               letterSpacing: -0.5,
             ),
@@ -1156,15 +1228,18 @@ class _AnimatedActionButtonState extends State<_AnimatedActionButton>
                 ),
               ),
               const SizedBox(height: 8),
-              Text(
-                widget.label,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: CockpitTypography.label(
-                  color: AppUiColors.of(context).text,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  widget.label,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  softWrap: false,
+                  style: CockpitTypography.label(
+                    color: AppUiColors.of(context).text,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ],
@@ -1664,24 +1739,28 @@ class _InlineErrorBanner extends StatelessWidget {
                 error: error,
                 source: title,
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.terminal_rounded,
-                    size: 13,
-                    color: AppUiColors.of(context).muted,
-                  ),
-                  SizedBox(width: 4),
-                  Text(
-                    'Xem chi tiết kỹ thuật',
-                    style: TextStyle(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.terminal_rounded,
+                      size: 13,
                       color: AppUiColors.of(context).muted,
-                      fontSize: 11,
-                      decoration: TextDecoration.underline,
                     ),
-                  ),
-                ],
+                    SizedBox(width: 4),
+                    Text(
+                      'Xem chi tiết kỹ thuật',
+                      style: TextStyle(
+                        color: AppUiColors.of(context).muted,
+                        fontSize: 11,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],

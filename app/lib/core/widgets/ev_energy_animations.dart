@@ -47,6 +47,18 @@ class _EvEnergyOrbState extends State<EvEnergyOrb>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!CockpitMotion.enabled(context)) {
+      if (_pulseCtrl.isAnimating) _pulseCtrl.stop();
+      if (_orbitCtrl.isAnimating) _orbitCtrl.stop();
+    } else {
+      if (!_pulseCtrl.isAnimating) _pulseCtrl.repeat(reverse: true);
+      if (!_orbitCtrl.isAnimating) _orbitCtrl.repeat();
+    }
+  }
+
+  @override
   void dispose() {
     _pulseCtrl.dispose();
     _orbitCtrl.dispose();
@@ -226,6 +238,16 @@ class _EvChargingWaveState extends State<EvChargingWave>
       vsync: this,
       duration: const Duration(milliseconds: 2000),
     )..repeat();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!CockpitMotion.enabled(context)) {
+      if (_controller.isAnimating) _controller.stop();
+    } else {
+      if (!_controller.isAnimating) _controller.repeat();
+    }
   }
 
   @override
@@ -644,6 +666,16 @@ class _EvBatteryFillAnimState extends State<EvBatteryFillAnim>
       vsync: this,
       duration: const Duration(milliseconds: 2400),
     )..repeat();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!CockpitMotion.enabled(context)) {
+      if (_waveCtrl.isAnimating) _waveCtrl.stop();
+    } else {
+      if (!_waveCtrl.isAnimating) _waveCtrl.repeat();
+    }
   }
 
   @override

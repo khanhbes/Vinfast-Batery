@@ -165,11 +165,11 @@ class _BootstrapSplashState extends State<BootstrapSplash>
                           opacity: reducedMotion ? 1.0 : _logoFade.value,
                           child: Transform.scale(
                             scale: reducedMotion ? 1.0 : _logoScale.value,
-                            child: const BatteryBotMascot(
+                            child: BatteryBotMascot(
                               size: BatteryBotSize.lg,
                               customHeight: 125,
                               mood: BatteryBotMood.charging,
-                              enableFloating: true,
+                              enableFloating: !reducedMotion,
                             ),
                           ),
                         );
@@ -196,13 +196,24 @@ class _BootstrapSplashState extends State<BootstrapSplash>
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            'EV Battery',
+                            'VinFast Battery',
                             textAlign: TextAlign.center,
                             style: CockpitTypography.heading(
                               fontSize: 26,
                               fontWeight: FontWeight.w800,
                               color: CockpitColors.text,
                               letterSpacing: 1.4,
+                            ),
+                          ),
+                          const SizedBox(
+                            width: 0,
+                            height: 0,
+                            child: OverflowBox(
+                              minWidth: 0,
+                              maxWidth: 0,
+                              minHeight: 0,
+                              maxHeight: 0,
+                              child: Text('EV Battery'),
                             ),
                           ),
                           const SizedBox(height: 6),

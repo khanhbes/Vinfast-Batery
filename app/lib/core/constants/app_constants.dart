@@ -1,28 +1,41 @@
+import 'package:flutter/foundation.dart';
+
 /// Hằng số toàn app
 class AppConstants {
   AppConstants._();
 
   static const String appName = 'EV Battery';
 
-  // API Base URL — mặc định dùng Tailscale Funnel.
-  // Có thể ghi đè linh hoạt trong Developer Mode hoặc SharedPreferences.
+  // Production URL is injected at build time. Never ship a laptop/Tailscale
+  // endpoint as a release default. Debug builds may use the developer override
+  // for local QA, while release builds accept only the CI-provided HTTPS URL.
   static const String defaultApiBaseUrl = String.fromEnvironment(
     'APP_API_BASE_URL',
-    defaultValue: 'https://khanhbes.tailaafca5.ts.net',
+    defaultValue: '',
   );
 
   static String? _customApiBaseUrl;
 
   static String get apiBaseUrl => _customApiBaseUrl ?? defaultApiBaseUrl;
+  static bool get isApiConfigured {
+    final value = apiBaseUrl.trim();
+    final uri = Uri.tryParse(value);
+    return value.isNotEmpty && uri != null && uri.scheme == 'https' && uri.host.isNotEmpty;
+  }
+  static bool get isApiConfigurationError => !isApiConfigured;
 
   static void setCustomApiBaseUrl(String? url) {
-    if (url != null && url.trim().isNotEmpty) {
-      _customApiBaseUrl = url.trim().replaceAll(RegExp(r'/+$'), '');
-    } else {
+    final candidate = url?.trim().replaceAll(RegExp(r'/+$'), '');
+    if (candidate == null || candidate.isEmpty) {
       _customApiBaseUrl = null;
+      return;
     }
+    final uri = Uri.tryParse(candidate);
+    if (uri == null || uri.host.isEmpty || uri.scheme != 'https') return;
+    if (kReleaseMode) return;
+    _customApiBaseUrl = candidate;
   }
-  static const String appVersion = '1.1.3';
+  static const String appVersion = '1.1.5';
 
   // Firestore Collection Names
   static const String vehiclesCollection = 'Vehicles';

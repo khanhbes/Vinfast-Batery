@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 // Model-loading diagnostics are intentionally available to local operators.
 // ignore_for_file: avoid_print
 
@@ -128,9 +129,9 @@ class SOCPredictionService {
       );
 
       _isModelLoaded = true;
-      print('✅ SOC Prediction Model loaded successfully');
+      if (kDebugMode) debugPrint('✅ SOC Prediction Model loaded successfully');
     } catch (e) {
-      print('❌ Error loading SOC model: $e');
+      if (kDebugMode) debugPrint('❌ Error loading SOC model: $e');
       throw Exception('Failed to load SOC prediction model: $e');
     }
   }
@@ -153,7 +154,7 @@ class SOCPredictionService {
 
       return result;
     } catch (e) {
-      print('❌ Error predicting SOC: $e');
+      if (kDebugMode) debugPrint('❌ Error predicting SOC: $e');
       throw Exception('Failed to predict SOC: $e');
     }
   }
@@ -219,7 +220,7 @@ class SOCPredictionService {
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) {
-        print('Skip SOC prediction save: not authenticated');
+        if (kDebugMode) debugPrint('Skip SOC prediction save: not authenticated');
         return;
       }
       final firestore = FirebaseFirestore.instance;
@@ -232,9 +233,9 @@ class SOCPredictionService {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      print('✅ SOC prediction saved to Firestore');
+      if (kDebugMode) debugPrint('✅ SOC prediction saved to Firestore');
     } catch (e) {
-      print('❌ Error saving prediction to Firestore: $e');
+      if (kDebugMode) debugPrint('❌ Error saving prediction to Firestore: $e');
       // Không throw exception để không ảnh hưởng đến main flow
     }
   }
@@ -262,7 +263,7 @@ class SOCPredictionService {
           .map((doc) => SOCPredictionResult.fromJson(doc['result']))
           .toList();
     } catch (e) {
-      print('❌ Error getting prediction history: $e');
+      if (kDebugMode) debugPrint('❌ Error getting prediction history: $e');
       return [];
     }
   }

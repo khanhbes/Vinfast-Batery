@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 // Legacy prediction diagnostics remain visible to the local support console.
 // ignore_for_file: avoid_print, avoid_types_as_parameter_names
 
@@ -59,7 +60,7 @@ class TripPredictionService {
 
       return prediction;
     } catch (e) {
-      print('API prediction failed, using fallback: $e');
+      if (kDebugMode) debugPrint('API prediction failed, using fallback: $e');
 
       // Fallback về local calculation
       final prediction = TripPredictionModel.create(
@@ -172,7 +173,7 @@ class TripPredictionService {
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) {
-        print('Skip trip prediction save: not authenticated');
+        if (kDebugMode) debugPrint('Skip trip prediction save: not authenticated');
         return;
       }
       final payload = <String, dynamic>{
@@ -184,9 +185,9 @@ class TripPredictionService {
           .doc(prediction.id)
           .set(payload);
 
-      print('Trip prediction saved to Firestore: ${prediction.id}');
+      if (kDebugMode) debugPrint('Trip prediction saved to Firestore: ${prediction.id}');
     } catch (e) {
-      print('Failed to save prediction to Firestore: $e');
+      if (kDebugMode) debugPrint('Failed to save prediction to Firestore: $e');
     }
   }
 
@@ -212,7 +213,7 @@ class TripPredictionService {
           .map((doc) => TripPredictionModel.fromFirestore(doc))
           .toList();
     } catch (e) {
-      print('Failed to get prediction history: $e');
+      if (kDebugMode) debugPrint('Failed to get prediction history: $e');
       return [];
     }
   }
@@ -231,9 +232,9 @@ class TripPredictionService {
             'updatedAt': FieldValue.serverTimestamp(),
           });
 
-      print('Trip status updated: $predictionId -> $status');
+      if (kDebugMode) debugPrint('Trip status updated: $predictionId -> $status');
     } catch (e) {
-      print('Failed to update trip status: $e');
+      if (kDebugMode) debugPrint('Failed to update trip status: $e');
     }
   }
 
@@ -245,9 +246,9 @@ class TripPredictionService {
           .doc(predictionId)
           .delete();
 
-      print('Trip prediction deleted: $predictionId');
+      if (kDebugMode) debugPrint('Trip prediction deleted: $predictionId');
     } catch (e) {
-      print('Failed to delete prediction: $e');
+      if (kDebugMode) debugPrint('Failed to delete prediction: $e');
     }
   }
 
@@ -292,7 +293,7 @@ class TripPredictionService {
             : 0.0,
       };
     } catch (e) {
-      print('Failed to get prediction stats: $e');
+      if (kDebugMode) debugPrint('Failed to get prediction stats: $e');
       return {};
     }
   }
@@ -308,9 +309,9 @@ class TripPredictionService {
         await _syncPredictionToWeb(prediction);
       }
 
-      print('Synced ${localPredictions.length} predictions to web dashboard');
+      if (kDebugMode) debugPrint('Synced ${localPredictions.length} predictions to web dashboard');
     } catch (e) {
-      print('Failed to sync with web dashboard: $e');
+      if (kDebugMode) debugPrint('Failed to sync with web dashboard: $e');
     }
   }
 
@@ -329,7 +330,7 @@ class TripPredictionService {
           )
           .timeout(_timeout);
     } catch (e) {
-      print('Failed to sync prediction to web: $e');
+      if (kDebugMode) debugPrint('Failed to sync prediction to web: $e');
     }
   }
 
@@ -347,7 +348,7 @@ class TripPredictionService {
       final response = await http.get(url).timeout(_timeout);
       return response.statusCode == 200;
     } catch (e) {
-      print('API connection test failed: $e');
+      if (kDebugMode) debugPrint('API connection test failed: $e');
       return false;
     }
   }

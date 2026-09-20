@@ -194,8 +194,7 @@ class DashboardCustomizationSheet extends ConsumerWidget {
                     subtitle: subtitle.isNotEmpty
                         ? Text(
                             subtitle,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                            softWrap: true,
                             style: TextStyle(
                               color: isVisible
                                   ? const Color(0xFF94A3B8)

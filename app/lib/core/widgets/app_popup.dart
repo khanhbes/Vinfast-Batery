@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
 import 'debug_error_sheet.dart';
+import '../utils/error_mapper.dart';
 
 enum AppNoticeKind { success, error, warning, info }
 
@@ -14,7 +16,8 @@ class AppPopup {
   static Timer? _timer;
   static String? _lastSignature;
   static DateTime? _lastShownAt;
-  static final Set<String> _shownSignatures = <String>{};
+  static final Map<String, DateTime> _shownSignatures = <String, DateTime>{};
+  static const _failureWindow = Duration(seconds: 60);
 
   static void showSuccess(
     String title, {
@@ -30,6 +33,13 @@ class AppPopup {
     dynamic error,
     StackTrace? stackTrace,
   }) {
+    final friendlyTitle = error != null
+        ? UserFriendlyErrorMapper.map(error)
+        : UserFriendlyErrorMapper.map(title);
+    final friendlyDetail = (detail != null && detail.isNotEmpty)
+        ? UserFriendlyErrorMapper.map(detail)
+        : null;
+
     VoidCallback? effectiveAction = action;
     if (kDebugMode && effectiveAction == null) {
       effectiveAction = () {
@@ -47,8 +57,8 @@ class AppPopup {
 
     _show(
       AppNoticeKind.error,
-      title,
-      detail,
+      friendlyTitle,
+      friendlyDetail,
       effectiveAction,
       actionLabel: kDebugMode ? 'CHI TIẾT' : 'MỞ',
       userInitiated: userInitiated,
@@ -77,7 +87,8 @@ class AppPopup {
 
   /// Xóa bộ nhớ đệm các lỗi đã hiển thị (gọi khi đổi tab, đổi xe hoặc kéo refresh).
   static void clearShownErrors() {
-    _shownSignatures.clear();
+    final cutoff = DateTime.now().subtract(_failureWindow);
+    _shownSignatures.removeWhere((_, shownAt) => shownAt.isBefore(cutoff));
   }
 
   /// Đặt lại một lỗi cụ thể để có thể hiển thị lại nếu cần.
@@ -117,7 +128,8 @@ class AppPopup {
     // Chống spam: Nếu là lỗi hoặc cảnh báo và không phải do người dùng chủ động bấm,
     // chỉ hiển thị 1 lần duy nhất cho đến khi clearShownErrors() hoặc user bấm lại.
     if ((kind == AppNoticeKind.error || kind == AppNoticeKind.warning) && !userInitiated) {
-      if (_shownSignatures.contains(signature)) {
+      final shownAt = _shownSignatures[signature];
+      if (shownAt != null && now.difference(shownAt) < _failureWindow) {
         return;
       }
     }
@@ -131,7 +143,7 @@ class AppPopup {
     _lastShownAt = now;
 
     if (kind == AppNoticeKind.error || kind == AppNoticeKind.warning) {
-      _shownSignatures.add(signature);
+      _shownSignatures[signature] = now;
     }
     final overlay = navigatorKey.currentState?.overlay;
     if (overlay == null) {
@@ -151,6 +163,7 @@ class AppPopup {
         action: action,
         actionLabel: actionLabel,
         onDismiss: dismiss,
+        toastKey: signature,
       ),
     );
     _entry = newEntry;
@@ -164,8 +177,8 @@ class AppPopup {
         if (!persistent) {
           _timer = Timer(
             kind == AppNoticeKind.error
-                ? const Duration(seconds: 6)
-                : const Duration(seconds: 4),
+                ? const Duration(milliseconds: 3500)
+                : const Duration(milliseconds: 3000),
             dismiss,
           );
         }
@@ -174,7 +187,13 @@ class AppPopup {
       }
     }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) => insertOverlay());
+    final schedulerPhase = SchedulerBinding.instance.schedulerPhase;
+    if (schedulerPhase == SchedulerPhase.persistentCallbacks ||
+        schedulerPhase == SchedulerPhase.midFrameMicrotasks) {
+      SchedulerBinding.instance.addPostFrameCallback((_) => insertOverlay());
+    } else {
+      insertOverlay();
+    }
   }
 }
 
@@ -186,6 +205,7 @@ class _NoticeOverlay extends StatelessWidget {
     required this.action,
     required this.actionLabel,
     required this.onDismiss,
+    required this.toastKey,
   });
   final AppNoticeKind kind;
   final String title;
@@ -193,6 +213,7 @@ class _NoticeOverlay extends StatelessWidget {
   final VoidCallback? action;
   final String actionLabel;
   final VoidCallback onDismiss;
+  final String toastKey;
 
   @override
   Widget build(BuildContext context) {
@@ -233,15 +254,21 @@ class _NoticeOverlay extends StatelessWidget {
               child: child,
             ),
           ),
-          child: Material(
-            color: colors.surface,
-            elevation: 10,
-            shadowColor: Colors.black45,
-            borderRadius: BorderRadius.circular(16),
-            child: Semantics(
-              liveRegion: true,
-              label: detail == null ? title : '$title. $detail',
-              child: Container(
+          child: GestureDetector(
+            onVerticalDragEnd: (details) {
+              if ((details.primaryVelocity ?? 0) < -100) {
+                onDismiss();
+              }
+            },
+            child: Material(
+              color: colors.surface,
+              elevation: 10,
+              shadowColor: Colors.black45,
+              borderRadius: BorderRadius.circular(16),
+              child: Semantics(
+                liveRegion: true,
+                label: detail == null ? title : '$title. $detail',
+                child: Container(
                 constraints: const BoxConstraints(minHeight: 64),
                 padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
                 decoration: BoxDecoration(
@@ -287,6 +314,7 @@ class _NoticeOverlay extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

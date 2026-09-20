@@ -8,6 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/services/app_update_service.dart';
 import '../../core/services/auth_service.dart';
+import '../../core/models/onboarding_draft.dart';
+import '../../core/services/onboarding_service.dart';
 import '../../core/services/notification_center_service.dart';
 import '../../core/services/session_service.dart';
 import '../../core/theme/app_colors.dart';
@@ -51,6 +53,8 @@ class _AuthGateState extends ConsumerState<AuthGate> {
   /// User đã chủ động Đăng xuất (chỉ khi flag này true mới về Login ngay).
   bool _explicitSignedOut = false;
   bool _updateCheckStarted = false;
+  Future<OnboardingDraft?>? _draftFuture;
+  String? _draftUid;
 
   @override
   void initState() {
@@ -496,6 +500,9 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
 
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) return const AppNavigation();
+    // Retry a persisted onboarding operation whenever the authenticated shell
+    // is rebuilt (cold start, foreground restore, or connectivity recovery).
+    unawaited(OnboardingSyncCoordinator.shared.syncIfPending(currentUser.uid));
 
     _profileFuture ??= FirebaseFirestore.instance
         .collection('users')
@@ -522,19 +529,34 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
         }
 
         final data = snapshot.data?.data();
-        if (data == null) {
-          return isNew ? const OnboardingChatScreen() : const AppNavigation();
+        if (_draftUid != currentUser.uid) {
+          _draftUid = currentUser.uid;
+          _draftFuture = OnboardingDraftRepository().load(currentUser.uid);
         }
-        final flowVer = data['registrationFlowVersion'] as int? ?? 1;
-        final completedAt = data['onboardingCompletedAt'];
-
-          // Chỉ account có registrationFlowVersion >= 2 mới bị bắt buộc onboarding.
-          // Tài khoản cũ không bị chặn.
-        if (flowVer >= 2 && completedAt == null) {
-          return const OnboardingChatScreen();
-        }
-
-        return const AppNavigation();
+        return FutureBuilder<OnboardingDraft?>(
+          future: _draftFuture,
+          builder: (context, draftSnapshot) {
+            final draft = draftSnapshot.data;
+            // A draft that reached the final step but is waiting for the API
+            // must not trap the user on the wizard after a restart. The app
+            // shell can show cached data and a retry status strip.
+            final syncPending = draft != null &&
+                draft.state != OnboardingDraftState.failedPermanent &&
+                draft.name.trim().isNotEmpty &&
+                draft.catalogId.trim().isNotEmpty;
+            if (data == null) {
+              return syncPending || !isNew
+                  ? const AppNavigation()
+                  : const OnboardingChatScreen();
+            }
+            final flowVer = data['registrationFlowVersion'] as int? ?? 1;
+            final completedAt = data['onboardingCompletedAt'];
+            if (flowVer >= 2 && completedAt == null && !syncPending) {
+              return const OnboardingChatScreen();
+            }
+            return const AppNavigation();
+          },
+        );
       },
     );
   }

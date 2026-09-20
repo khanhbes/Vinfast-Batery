@@ -106,6 +106,17 @@ class _BatteryBotMascotState extends State<BatteryBotMascot>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      if (_floatCtrl.isAnimating) _floatCtrl.stop();
+      if (_pulseCtrl.isAnimating) _pulseCtrl.stop();
+      if (_blinkCtrl.isAnimating) _blinkCtrl.stop();
+      if (_tapCtrl.isAnimating) _tapCtrl.stop();
+    }
+  }
+
+  @override
   void dispose() {
     _floatCtrl.dispose();
     _pulseCtrl.dispose();

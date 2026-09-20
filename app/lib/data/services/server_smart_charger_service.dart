@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../../core/constants/app_constants.dart';
@@ -66,8 +67,6 @@ class ServerSmartChargerService {
     final request = http.Request(method, uri)
       ..headers.addAll({
         if (token != null) 'Authorization': 'Bearer $token',
-        // Support developer authorization in dev environments
-        'X-Admin-Key': 'ozqyPz2MMqaK7OKbpFAaUKPgrKWSBLqc1Hfb728tOeo=',
         'Content-Type': 'application/json',
         ...?headers,
       });
@@ -79,7 +78,7 @@ class ServerSmartChargerService {
       response = await http.Response.fromStream(streamed);
     } on SocketException {
       throw SmartChargerException(
-        'Không thể kết nối đến máy chủ (${AppConstants.apiBaseUrl}). Hãy kiểm tra xem server laptop đã bật chưa hoặc đổi IP.',
+        'Không thể kết nối đến máy chủ. Kiểm tra mạng hoặc thử lại sau.',
         code: 'connection_failed',
         statusCode: 503,
         retryable: true,
@@ -92,8 +91,9 @@ class ServerSmartChargerService {
         retryable: true,
       );
     } catch (e) {
+      debugPrint('[ServerSmartCharger] Network error: $e');
       throw SmartChargerException(
-        'Lỗi mạng khi gọi máy chủ: $e',
+        'Không thể kết nối đến máy chủ. Vui lòng thử lại sau.',
         code: 'network_error',
         statusCode: 500,
         retryable: true,
@@ -171,8 +171,8 @@ class ServerSmartChargerService {
     body: {
       ...profile.toJson(),
       if (vehicleId != null && vehicleId.isNotEmpty) 'vehicleId': vehicleId,
-      'expectedRevision': ?expectedRevision,
-      'verification': ?verification,
+      if (expectedRevision != null) 'expectedRevision': expectedRevision,
+      if (verification != null) 'verification': verification,
       'source': Platform.operatingSystem,
     },
   );

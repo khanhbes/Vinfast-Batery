@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 // Network synchronization diagnostics are intentionally emitted in debug and
 // command-line support builds.
 // ignore_for_file: avoid_print
@@ -54,7 +55,7 @@ class SyncService {
     try {
       final user = _auth.currentUser;
       if (user == null) {
-        print('No user logged in');
+        if (kDebugMode) debugPrint('No user logged in');
         return false;
       }
 
@@ -86,7 +87,7 @@ class SyncService {
           .timeout(_timeout);
 
       if (response.statusCode == 200) {
-        print('User synced to web successfully: ${user.uid}');
+        if (kDebugMode) debugPrint('User synced to web successfully: ${user.uid}');
 
         // Lưu vào SharedPreferences đánh dấu đã sync
         final prefs = await SharedPreferences.getInstance();
@@ -98,11 +99,11 @@ class SyncService {
 
         return true;
       } else {
-        print('Failed to sync user: ${response.statusCode} - ${response.body}');
+        if (kDebugMode) debugPrint('Failed to sync user: ${response.statusCode} - ${response.body}');
         return false;
       }
     } catch (e) {
-      print('Error syncing user to web: $e');
+      if (kDebugMode) debugPrint('Error syncing user to web: $e');
       return false;
     }
   }
@@ -119,7 +120,7 @@ class SyncService {
           .doc(vehicleId)
           .get();
       if (!vehicleDoc.exists) {
-        print('Vehicle not found: $vehicleId');
+        if (kDebugMode) debugPrint('Vehicle not found: $vehicleId');
         return false;
       }
 
@@ -140,7 +141,7 @@ class SyncService {
           .timeout(_timeout);
 
       if (response.statusCode == 200) {
-        print('Vehicle synced to web: $vehicleId');
+        if (kDebugMode) debugPrint('Vehicle synced to web: $vehicleId');
 
         // Cập nhật flag trong Firestore
         await _firestore.collection('Vehicles').doc(vehicleId).update({
@@ -150,11 +151,11 @@ class SyncService {
 
         return true;
       } else {
-        print('Failed to sync vehicle: ${response.statusCode}');
+        if (kDebugMode) debugPrint('Failed to sync vehicle: ${response.statusCode}');
         return false;
       }
     } catch (e) {
-      print('Error syncing vehicle to web: $e');
+      if (kDebugMode) debugPrint('Error syncing vehicle to web: $e');
       return false;
     }
   }
@@ -189,7 +190,7 @@ class SyncService {
         'failed': failed,
       };
     } catch (e) {
-      print('Error syncing all vehicles: $e');
+      if (kDebugMode) debugPrint('Error syncing all vehicles: $e');
       return {'total': 0, 'synced': 0, 'failed': 0};
     }
   }
@@ -211,7 +212,7 @@ class SyncService {
           .get();
 
       if (snapshot.docs.isEmpty) {
-        print('No battery state found for vehicle: $vehicleId');
+        if (kDebugMode) debugPrint('No battery state found for vehicle: $vehicleId');
         return false;
       }
 
@@ -231,14 +232,14 @@ class SyncService {
           .timeout(_timeout);
 
       if (response.statusCode == 200) {
-        print('Battery state synced to web: $vehicleId');
+        if (kDebugMode) debugPrint('Battery state synced to web: $vehicleId');
         return true;
       } else {
-        print('Failed to sync battery state: ${response.statusCode}');
+        if (kDebugMode) debugPrint('Failed to sync battery state: ${response.statusCode}');
         return false;
       }
     } catch (e) {
-      print('Error syncing battery state: $e');
+      if (kDebugMode) debugPrint('Error syncing battery state: $e');
       return false;
     }
   }
@@ -267,14 +268,14 @@ class SyncService {
           .timeout(_timeout);
 
       if (response.statusCode == 200) {
-        print('Trip prediction synced to web: $predictionId');
+        if (kDebugMode) debugPrint('Trip prediction synced to web: $predictionId');
         return true;
       } else {
-        print('Failed to sync trip prediction: ${response.statusCode}');
+        if (kDebugMode) debugPrint('Failed to sync trip prediction: ${response.statusCode}');
         return false;
       }
     } catch (e) {
-      print('Error syncing trip prediction: $e');
+      if (kDebugMode) debugPrint('Error syncing trip prediction: $e');
       return false;
     }
   }
@@ -323,7 +324,7 @@ class SyncService {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('last_full_sync', DateTime.now().toIso8601String());
 
-      print('Full sync completed: $results');
+      if (kDebugMode) debugPrint('Full sync completed: $results');
       final historySynced =
           (results['chargeHistory'] as Map<String, dynamic>?)?['synced'] ==
           true;
@@ -333,7 +334,7 @@ class SyncService {
         if (!historySynced) 'error': 'Không thể đồng bộ lịch sử sạc',
       };
     } catch (e) {
-      print('Error performing full sync: $e');
+      if (kDebugMode) debugPrint('Error performing full sync: $e');
       return {'success': false, 'error': e.toString()};
     }
   }
@@ -352,7 +353,7 @@ class SyncService {
         'webApiAvailable': await _checkWebApiStatus(),
       };
     } catch (e) {
-      print('Error getting sync status: $e');
+      if (kDebugMode) debugPrint('Error getting sync status: $e');
       return {'error': e.toString()};
     }
   }
@@ -391,12 +392,12 @@ class SyncService {
           }
         });
 
-    print('Auto sync started for user: ${user.uid}');
+    if (kDebugMode) debugPrint('Auto sync started for user: ${user.uid}');
   }
 
   void stopAutoSync() {
     _vehicleSubscription?.cancel();
     _vehicleSubscription = null;
-    print('Auto sync stopped');
+    if (kDebugMode) debugPrint('Auto sync stopped');
   }
 }
