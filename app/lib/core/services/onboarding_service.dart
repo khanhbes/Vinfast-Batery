@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 import 'api_service.dart';
 import '../models/onboarding_draft.dart';
@@ -338,6 +339,11 @@ class OnboardingSyncCoordinator {
         return null;
       }
       if (draft.attemptCount >= _backoff.length) return null;
+      // Offline is an expected state, not a failed delivery attempt. The
+      // connectivity callback will retry after the network recovers.
+      if (await Connectivity().checkConnectivity() == ConnectivityResult.none) {
+        return null;
+      }
       final syncing = draft.copyWith(
         state: OnboardingDraftState.syncing,
         attemptCount: draft.attemptCount + 1,
@@ -347,7 +353,21 @@ class OnboardingSyncCoordinator {
       await _service.saveDraft(syncing);
       final result = await _service.commitDraft(syncing);
       if (result.success) {
-        await _service.clearDraft(uid);
+        // Do not delete the durable draft until the authoritative profile and
+        // vehicle readback confirms the commit. A lost response can then be
+        // retried safely with the same idempotency key.
+        final confirmed = await _service.fetchOnboardingStatus();
+        if (confirmed?.isCompleted == true && confirmed?.hasVehicle == true) {
+          await _service.clearDraft(uid);
+        } else {
+          await _service.saveDraft(syncing.copyWith(
+            state: OnboardingDraftState.failedRetryable,
+            nextAttemptAt: DateTime.now().toUtc().add(_backoff.first),
+            lastErrorCode: 'syncVerificationPending',
+            lastErrorMessage: 'Đang xác minh dữ liệu đã đồng bộ.',
+            updatedAt: DateTime.now().toUtc(),
+          ));
+        }
       } else {
         final retryIndex = (syncing.attemptCount - 1).clamp(0, _backoff.length - 1).toInt();
         await _service.saveDraft(syncing.copyWith(

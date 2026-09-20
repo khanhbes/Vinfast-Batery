@@ -35,6 +35,7 @@ void main() {
     expect(next.operationId, draft.operationId);
     expect(next.state, OnboardingDraftState.failedRetryable);
     expect(next.attemptCount, 3);
+    expect(next.copyWith(dateOfBirth: null).dateOfBirth, isNull);
+    expect(next.copyWith(nextAttemptAt: null).nextAttemptAt, isNull);
   });
 }
-

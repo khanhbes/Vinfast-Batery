@@ -1,11 +1,11 @@
 import 'dart:async';
 
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../constants/app_constants.dart';
 import '../services/api_service.dart';
+import '../services/connection_coordinator.dart';
 import '../services/onboarding_service.dart';
 
 class InternetConnectionNotice extends StatefulWidget {
@@ -17,20 +17,41 @@ class InternetConnectionNotice extends StatefulWidget {
 }
 
 class _InternetNoticeState extends State<InternetConnectionNotice> {
-  StreamSubscription<ConnectivityResult>? _subscription;
+  final ConnectionCoordinator _connection = ConnectionCoordinator();
+  StreamSubscription<ChargingConnectionState>? _statusSubscription;
+  ChargingConnectionState _status = const ChargingConnectionState();
   bool _offline = false;
   bool _apiUnavailable = false;
 
   @override
   void initState() {
     super.initState();
-    _subscription = Connectivity().onConnectivityChanged.listen(_handle);
+    _statusSubscription = _connection.stream.listen((status) {
+      final recovered = status.internetAvailable && !_status.internetAvailable;
+      if (mounted) {
+        setState(() {
+          _status = status;
+          _offline = !status.internetAvailable;
+          _apiUnavailable = !status.apiReachable;
+        });
+      }
+      if (recovered) {
+        try {
+          final uid = FirebaseAuth.instance.currentUser?.uid;
+          if (uid != null) {
+            unawaited(OnboardingSyncCoordinator.shared.syncIfPending(uid));
+          }
+        } catch (_) {
+          // AuthGate will retry once Firebase initialization completes.
+        }
+      }
+    });
+    unawaited(_connection.start());
     unawaited(_retry());
     unawaited(_probeApi());
   }
 
-  Future<void> _retry() async =>
-      _handle(await Connectivity().checkConnectivity());
+  Future<void> _retry() async => _connection.start();
 
   Future<void> _probeApi() async {
     if (!AppConstants.isApiConfigured) {
@@ -38,37 +59,38 @@ class _InternetNoticeState extends State<InternetConnectionNotice> {
       return;
     }
     final result = await ApiService().get('/api/ready');
-    if (mounted) setState(() => _apiUnavailable = result['success'] != true);
-  }
-
-  void _handle(ConnectivityResult result) {
-    final offline = result == ConnectivityResult.none;
-    if (offline == _offline) return;
-    _offline = offline;
-    if (!offline) {
-      unawaited(_probeApi());
-      try {
-        final uid = FirebaseAuth.instance.currentUser?.uid;
-        if (uid != null) {
-          unawaited(OnboardingSyncCoordinator.shared.syncIfPending(uid));
-        }
-      } catch (_) {
-        // Auth bootstrap will retry from AuthGate once Firebase is ready.
-      }
-    }
+    final available = result['success'] == true;
+    _connection.markApiReachable(available);
+    if (mounted) setState(() => _apiUnavailable = !available);
   }
 
   @override
   void dispose() {
-    unawaited(_subscription?.cancel());
+    unawaited(_statusSubscription?.cancel());
+    unawaited(_connection.dispose());
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => Stack(
-        children: [
-          widget.child,
-          if (_offline || _apiUnavailable)
+  Widget build(BuildContext context) {
+    final message = !_status.internetAvailable
+        ? 'Ngoại tuyến · đang dùng dữ liệu gần nhất'
+        : !_status.apiReachable || _apiUnavailable
+            ? 'Máy chủ chưa sẵn sàng · đang dùng dữ liệu gần nhất'
+            : !_status.firebaseReachable
+                ? 'Đồng bộ tài khoản đang tạm gián đoạn'
+                : !_status.shellyReachable
+                    ? 'Bộ sạc chưa kết nối · điều khiển đang bị khóa'
+                    : 'Đang kiểm tra kết nối';
+    final semanticMessage = !_status.internetAvailable
+        ? 'Mất kết nối Internet. Dữ liệu gần nhất vẫn được giữ.'
+        : !_status.apiReachable || _apiUnavailable
+            ? 'Máy chủ chưa sẵn sàng. Dữ liệu gần nhất vẫn được giữ.'
+            : message;
+    return Stack(
+      children: [
+        widget.child,
+        if (_offline || _apiUnavailable || !_status.apiReachable || !_status.firebaseReachable || !_status.shellyReachable)
             Positioned(
               top: 0,
               left: 0,
@@ -79,9 +101,7 @@ class _InternetNoticeState extends State<InternetConnectionNotice> {
                   color: Theme.of(context).colorScheme.errorContainer,
                   child: Semantics(
                     liveRegion: true,
-                    label: _offline
-                        ? 'Mất kết nối Internet. Dữ liệu gần nhất vẫn được giữ.'
-                        : 'Máy chủ chưa sẵn sàng. Dữ liệu gần nhất vẫn được giữ.',
+                    label: semanticMessage,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       child: Row(
@@ -90,9 +110,7 @@ class _InternetNoticeState extends State<InternetConnectionNotice> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              _offline
-                                  ? 'Ngoại tuyến · đang dùng dữ liệu gần nhất'
-                                  : 'Máy chủ chưa sẵn sàng · đang dùng dữ liệu gần nhất',
+                              message,
                               style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer, fontSize: 12, fontWeight: FontWeight.w600),
                             ),
                           ),
@@ -111,5 +129,7 @@ class _InternetNoticeState extends State<InternetConnectionNotice> {
               ),
             ),
         ],
-      );
+      ],
+    );
+  }
 }

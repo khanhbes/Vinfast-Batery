@@ -262,9 +262,40 @@ def test_onboarding_commit_is_idempotent_and_returns_request_id(client, mock_fs,
     second = client.post('/api/mobile/onboarding/commit', json=payload, headers=headers)
     assert second.status_code == 200
     assert second.json['data']['vehicle']['vehicleId'] == first.json['data']['vehicle']['vehicleId']
+    # Reusing the same idempotency key with a different operation payload is
+    # still the same operation and must not create a second vehicle.
+    altered_payload = {**payload, 'operationId': 'operation-2', 'profile': {'name': 'Different Name'}}
+    third = client.post('/api/mobile/onboarding/commit', json=altered_payload, headers=headers)
+    assert third.status_code == 200
+    assert third.json['data']['vehicle']['vehicleId'] == first.json['data']['vehicle']['vehicleId']
     vehicles = mock_fs.collection('Vehicles')._docs
     assert len(vehicles) == 1
     assert mock_fs.collection('users').document(uid).get().to_dict()['onboardingCompletedAt']
+
+
+def test_onboarding_commit_validates_profile_before_writes(client, mock_fs, monkeypatch):
+    uid = "commit-validation-uid"
+    monkeypatch.setattr(server, "_verify_token", lambda: (uid, "validation@test.vn", "user"))
+    mock_fs.collection('VehicleCatalog').document('evo200').set({
+        'catalogId': 'evo200', 'status': 'published', 'selectable': True,
+        'revision': 1, 'brandName': 'VinFast', 'model': 'Evo',
+        'variant': '200', 'modelYear': 2025,
+        'appDefaults': {'calculationCapacityWh': 2400}, 'battery': {'chemistry': 'LFP'},
+        'localized': {'vi': {'displayName': 'VinFast Evo 200'}}, 'media': {},
+    })
+    response = client.post(
+        '/api/mobile/onboarding/commit',
+        json={
+            'schemaVersion': 1,
+            'operationId': 'invalid-profile-operation',
+            'profile': {'name': 'QA User', 'avgDailyDistanceKm': 5001},
+            'vehicle': {'catalogId': 'evo200'},
+        },
+        headers={'Idempotency-Key': 'invalid-profile-operation'},
+    )
+    assert response.status_code == 400
+    assert response.json['code'] == 'invalidProfile'
+    assert mock_fs.collection('Vehicles')._docs == {}
 
 
 def test_onboarding_commit_requires_idempotency_key(client, mock_fs, monkeypatch):
