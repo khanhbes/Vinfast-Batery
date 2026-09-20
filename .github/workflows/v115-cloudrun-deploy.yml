@@ -1,0 +1,58 @@
+name: VinFast Battery Cloud Run deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'staging or production'
+        required: true
+        default: staging
+        type: choice
+        options: [staging, production]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: Deploy API to Cloud Run
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    timeout-minutes: 30
+    env:
+      PROJECT_ID: vinfast-873db
+      REGION: asia-southeast1
+      SERVICE: vinfast-battery-api
+      IMAGE: asia-southeast1-docker.pkg.dev/vinfast-873db/vinfast-battery/api:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Configure Artifact Registry authentication
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+      - name: Build and push API image
+        run: gcloud builds submit web --project "${PROJECT_ID}" --tag "${IMAGE}" --dockerfile Dockerfile.api
+      - name: Render Cloud Run manifest
+        run: |
+          sed -i "s#REGION-docker.pkg.dev#${REGION}-docker.pkg.dev#g; s#image: .*api:1.1.5-rc#image: ${IMAGE}#" web/cloudrun/api-service.yaml
+      - name: Deploy Cloud Run revision
+        run: gcloud run services replace web/cloudrun/api-service.yaml --project "${PROJECT_ID}" --region "${REGION}"
+      - name: Verify liveness and readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="$(gcloud run services describe "${SERVICE}" --project "${PROJECT_ID}" --region "${REGION}" --format='value(status.url)')"
+          curl --fail --silent --show-error "${URL}/api/health" | tee /tmp/health.json
+          curl --fail --silent --show-error "${URL}/api/ready" | tee /tmp/ready.json
+      - name: Require production HTTPS URL
+        if: ${{ inputs.environment == 'production' }}
+        env:
+          PRODUCTION_API_BASE_URL: ${{ secrets.PRODUCTION_API_BASE_URL }}
+        run: |
+          set -euo pipefail
+          [[ "${PRODUCTION_API_BASE_URL}" =~ ^https://[^[:space:]]+$ ]]

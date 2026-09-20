@@ -1036,16 +1036,22 @@ def commit_mobile_onboarding():
         f'{request._uid}:{operation_id}'.encode('utf-8')
     ).hexdigest()
     receipt_ref = database.collection('OnboardingOperationReceipts').document(receipt_id)
+    # Keep the idempotency key itself unique as well as the operation id.
+    key_receipt_id = hashlib.sha256(
+        f'{request._uid}:key:{idempotency_key}'.encode('utf-8')
+    ).hexdigest()
+    key_receipt_ref = database.collection('OnboardingOperationReceiptsByKey').document(key_receipt_id)
     try:
-        receipt = receipt_ref.get()
-        if receipt.exists:
-            saved = receipt.to_dict() or {}
-            return jsonify(saved.get('response') or {
-                'success': False,
-                'error': 'Onboarding operation receipt is invalid',
-                'code': 'invalidReceipt',
-                'retryable': True,
-            }), int(saved.get('statusCode') or 200)
+        for candidate in (receipt_ref, key_receipt_ref):
+            receipt = candidate.get()
+            if receipt.exists:
+                saved = receipt.to_dict() or {}
+                return jsonify(saved.get('response') or {
+                    'success': False,
+                    'error': 'Onboarding operation receipt is invalid',
+                    'code': 'invalidReceipt',
+                    'retryable': True,
+                }), int(saved.get('statusCode') or 200)
     except Exception:
         # A receipt read failure must not expose internals; the main operation
         # may still succeed and will be retried safely by deterministic IDs.
@@ -1080,6 +1086,21 @@ def commit_mobile_onboarding():
         if not valid_dob:
             return jsonify({'success': False, 'error': dob_error, 'userMessage': dob_error, 'code': 'invalidDateOfBirth', 'retryable': False}), 400
 
+    # Validate numeric profile fields before touching Firestore. This keeps
+    # the fallback test store atomic too, instead of creating a vehicle and
+    # only then discovering invalid survey data.
+    validated_profile_numbers = {}
+    for key, low, high in (('avgDailyDistanceKm', 0, 1000), ('typicalSocWhenCharge', 0, 100)):
+        if profile.get(key) is None:
+            continue
+        try:
+            number = float(profile.get(key))
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'error': f'{key} invalid', 'userMessage': 'Thông tin onboarding không hợp lệ.', 'code': 'invalidProfile', 'retryable': False}), 400
+        if not low <= number <= high:
+            return jsonify({'success': False, 'error': f'{key} out of range', 'userMessage': 'Thông tin onboarding ngoài phạm vi cho phép.', 'code': 'invalidProfile', 'retryable': False}), 400
+        validated_profile_numbers[key] = number
+
     try:
         max_vehicles = max(1, min(int(os.environ.get('MAX_VEHICLES_PER_ACCOUNT', '2')), 10))
     except ValueError:
@@ -1094,12 +1115,17 @@ def commit_mobile_onboarding():
         'licensePlate': vehicle.get('licensePlate'),
         'initialOdo': initial_odo,
     }
+    # Keep vehicle, profile, completion and receipt writes in one Firestore
+    # transaction when the production client supports transactions. The fake
+    # store used by unit tests falls back to the legacy direct-write path.
+    transaction = database.transaction() if hasattr(database, 'transaction') else None
     vehicle_result, vehicle_status = create_user_vehicle(
         database,
         request._uid,
         vehicle_payload,
         max_vehicles=max_vehicles,
         vehicle_id=deterministic_vehicle_id,
+        runner=(lambda operation: operation(transaction)) if transaction is not None else None,
     )
     if vehicle_status >= 300 or vehicle_result.get('success') is not True:
         retryable = vehicle_status >= 500
@@ -1128,6 +1154,7 @@ def commit_mobile_onboarding():
         value = str(profile.get(key) or '').strip()
         if value:
             profile_update[key] = value[:limit]
+    profile_update.update(validated_profile_numbers)
     for key, low, high in (('avgDailyDistanceKm', 0, 1000), ('typicalSocWhenCharge', 0, 100)):
         if profile.get(key) is not None:
             try:
@@ -1145,7 +1172,11 @@ def commit_mobile_onboarding():
         'onboardingCompletedAt': now_iso,
         'shellyOnboardingStatus': shelly_status,
     })
-    database.collection('users').document(request._uid).set(profile_update, merge=True)
+    user_ref = database.collection('users').document(request._uid)
+    if transaction is not None:
+        transaction.set(user_ref, profile_update, merge=True)
+    else:
+        user_ref.set(profile_update, merge=True)
     response_payload = {
         'success': True,
         'data': {
@@ -1156,17 +1187,26 @@ def commit_mobile_onboarding():
         },
         'requestId': _request_id(),
     }
-    try:
-        receipt_ref.set({
+    receipt_data = {
             'uid': request._uid,
             'operationId': operation_id,
             'idempotencyKey': idempotency_key,
             'statusCode': 200,
             'response': response_payload,
             'createdAt': now_iso,
-        })
+        }
+    try:
+        if transaction is not None:
+            transaction.set(receipt_ref, receipt_data)
+            transaction.set(key_receipt_ref, receipt_data)
+        else:
+            receipt_ref.set(receipt_data)
+            key_receipt_ref.set(receipt_data)
         draft_ref = database.collection('users').document(request._uid).collection('onboardingDrafts').document('current')
-        if hasattr(draft_ref, 'delete'):
+        if transaction is not None:
+            transaction.delete(draft_ref)
+            transaction.commit()
+        elif hasattr(draft_ref, 'delete'):
             draft_ref.delete()
     except Exception:
         # The deterministic vehicle id and operation id make a later retry

@@ -392,8 +392,7 @@ class ApiService {
         final err = ApiException(
           endpoint: endpoint,
           statusCode: response.statusCode,
-          message: 'HTTP ${response.statusCode}: ${response.body}',
-          responseBody: response.body,
+          message: 'API response is not valid JSON.',
           debugCode: 'HTTP_PARSE_ERROR',
         );
         AppErrorReporter.report(
@@ -407,7 +406,10 @@ class ApiService {
         return {
           'success': false,
           'statusCode': response.statusCode,
-          'error': 'HTTP ${response.statusCode}: ${response.body}',
+          'error': 'Máy chủ trả về phản hồi không hợp lệ.',
+          'userMessage': 'Máy chủ đang gặp sự cố. Vui lòng thử lại sau.',
+          'code': 'HTTP_PARSE_ERROR',
+          'retryable': response.statusCode >= 500 || response.statusCode == 429,
         };
       }
     }

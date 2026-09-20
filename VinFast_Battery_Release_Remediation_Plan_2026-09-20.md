@@ -59,7 +59,7 @@ Trong lượt này đã triển khai một phần P0/P1 vào source:
 
 ## 3. Kết quả kiểm thử hiện tại
 
-- Backend toàn bộ `web/tests`: **188 passed** (trong đó onboarding/readiness/remediation mới đều xanh).
+- Backend toàn bộ `web/tests`: **189 passed** (trong đó onboarding/readiness/remediation mới đều xanh).
 - Smart charger gateway toàn bộ `tests`: **56 passed**.
 - `python -m py_compile server.py vehicle_catalog.py`: **pass**.
 - Flutter `flutter analyze --no-pub`, `dart format` và `flutter --version`: **không hoàn tất** vì các Dart daemon hiện có bị treo; chưa có bằng chứng compile APK sau thay đổi.
@@ -104,3 +104,12 @@ Chỉ ký duyệt release khi đồng thời đạt:
 - Chưa thể chứng nhận an toàn relay vì chưa có hardware/load test được giám sát.
 - Landscape, tablet, OTP và Bluetooth vẫn ngoài phạm vi v1.1.5.
 - Firebase Admin JSON hiện không được Git track theo filename kiểm tra cục bộ, nhưng chưa thể chứng minh khóa chưa từng bị chia sẻ ngoài Git; nếu từng chia sẻ phải rotate ngay.
+
+## 7. Cập nhật triển khai tiếp theo (20/09/2026)
+
+- Đã thêm manifest Cloud Run `web/cloudrun/api-service.yaml`, Dockerfile API bind theo `${PORT}`, probe `/api/health`, Secret Manager references và hướng dẫn triển khai staging/production trong `web/cloudrun/README.md`. Chưa deploy vì máy hiện tại chưa có `gcloud`, chưa xác minh billing/IAM và chưa có hostname custom cụ thể.
+- Đã thêm workflow thủ công `.github/workflows/v115-cloudrun-deploy.yml` dùng Workload Identity Federation, build image bằng `web/Dockerfile.api`, deploy theo region `asia-southeast1` và smoke test health/readiness. Workflow chưa được chạy trên GitHub.
+- Đã thêm scaffold Firebase Rules Emulator tại `web/rules_tests/` và quality-gate job (đã chỉnh peer dependency Firebase về v10 tương thích). Local `npm install`/`firebase emulators:exec` vẫn treo khi tải/chạy emulator trong môi trường hiện tại; không đánh dấu Rules đạt.
+- Onboarding commit hiện kiểm tra idempotency theo cả operation và key, validate dữ liệu khảo sát trước khi ghi, và dùng transaction khi Firestore production hỗ trợ. Cần contract test trên Firestore thật/emulator để xác minh rollback và concurrent retry.
+- `flutter pub get` đã hoàn tất; `flutter analyze --no-pub` vẫn không xuất output và phải dừng sau timeout. Chưa có bằng chứng compile APK/runtime cho `1.1.5+115`; blocker này không được che bằng kết quả backend.
+- Regression sau cập nhật: `web/tests` **189 passed**, `smart_charger_gateway/tests` **56 passed**, `py_compile` **pass**, `git diff --check` không phát hiện whitespace error. Release readiness vẫn **chưa đạt** cho tới khi Flutter/Rules/Cloud Run/runtime/Shelly gates có bằng chứng.

@@ -138,6 +138,27 @@ class ConnectionCoordinator {
     ),
   );
 
+  void markApiReachable(bool reachable) => _emit(
+    _state.copyWith(
+      apiReachable: reachable,
+      reconnecting: !reachable,
+    ),
+  );
+
+  void markFirebaseReachable(bool reachable) => _emit(
+    _state.copyWith(
+      firebaseReachable: reachable,
+      reconnecting: !reachable || _state.reconnecting,
+    ),
+  );
+
+  void markShellyReachable(bool reachable) => _emit(
+    _state.copyWith(
+      shellyReachable: reachable,
+      reconnecting: !reachable || _state.reconnecting,
+    ),
+  );
+
   void markFailure({
     bool api = false,
     bool firebase = false,
