@@ -6,8 +6,6 @@ import 'package:intl/intl.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 
 import '../../core/services/auth_service.dart';
-import '../../core/services/dashboard_preferences_service.dart';
-import '../../core/services/guide_registry.dart';
 import '../../core/services/onboarding_service.dart';
 import '../../core/models/onboarding_draft.dart';
 import '../../core/services/api_result.dart';
@@ -15,7 +13,6 @@ import '../../core/theme/app_motion.dart';
 import '../../core/theme/cockpit_design_system.dart';
 import '../../core/widgets/app_popup.dart';
 import '../../core/widgets/battery_bot_mascot.dart';
-import '../../core/widgets/coach_mark_overlay.dart';
 import '../../data/models/vinfast_model_spec.dart';
 import '../../data/repositories/vehicle_spec_repository.dart';
 import '../../navigation/app_navigation.dart';
@@ -461,29 +458,10 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
 
     if (result.success) {
       final navigator = Navigator.of(context, rootNavigator: true);
-      final preferences = ref.read(dashboardPreferencesProvider);
       navigator.pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const AppNavigation()),
         (route) => false,
       );
-
-      // Kích hoạt Just-in-Time Tour nếu lần đầu
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!preferences.isTourCompleted(GuideRegistry.overviewTourId)) {
-          CoachMarkOverlay.show(
-            context: navigator.context,
-            steps: GuideRegistry.getOverviewTourSteps(),
-            onFinish: () {
-              preferences.markTourCompleted(GuideRegistry.overviewTourId);
-            },
-            onDontShowAgain: (dontShow) {
-              if (dontShow) {
-                preferences.markTourCompleted(GuideRegistry.overviewTourId);
-              }
-            },
-          );
-        }
-      });
     } else if (result.retryable) {
       AppPopup.showWarning(
         'Đang chờ đồng bộ onboarding',

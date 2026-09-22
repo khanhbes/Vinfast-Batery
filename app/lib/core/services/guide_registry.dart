@@ -141,7 +141,7 @@ class CoachMarkStep {
 
 /// Registry toàn diện các hướng dẫn sử dụng và spotlight coach mark
 class GuideRegistry {
-  static const String overviewTourId = 'tour_overview_v1';
+  static const String overviewTourId = 'tour_overview_v2';
 
   // GlobalKeys cho Spotlight Tour anchors
   static final GlobalKey keyVehicleSwitcher = GlobalKey(

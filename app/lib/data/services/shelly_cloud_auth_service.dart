@@ -24,12 +24,18 @@ class ShellyCloudDevice {
   final String? serverUri;
   final bool isOnline;
 
-  factory ShellyCloudDevice.fromJson(Map<String, dynamic> json, {String? defaultServer}) {
+  factory ShellyCloudDevice.fromJson(
+    Map<String, dynamic> json, {
+    String? defaultServer,
+  }) {
     return ShellyCloudDevice(
       id: json['id']?.toString() ?? '',
       name: json['name']?.toString() ?? 'Shelly Device',
       type: json['type']?.toString() ?? '',
-      cloudAuthKey: json['cloud_auth_key']?.toString() ?? json['auth_key']?.toString() ?? '',
+      cloudAuthKey:
+          json['cloud_auth_key']?.toString() ??
+          json['auth_key']?.toString() ??
+          '',
       serverUri: json['server_uri']?.toString() ?? defaultServer,
       isOnline: json['online'] == true,
     );
@@ -38,7 +44,7 @@ class ShellyCloudDevice {
 
 class ShellyCloudAuthService {
   ShellyCloudAuthService({http.Client? client})
-      : _client = client ?? http.Client();
+    : _client = client ?? http.Client();
 
   final http.Client _client;
 
@@ -65,6 +71,7 @@ class ShellyCloudAuthService {
   Future<List<ShellyCloudDevice>> listDevices({
     required String authKey,
     String? cloudHost,
+    String? deviceId,
     Duration timeout = const Duration(seconds: 10),
   }) async {
     final trimmedKey = authKey.trim();
@@ -78,6 +85,77 @@ class ShellyCloudAuthService {
     }
 
     for (final host in hostsToTry) {
+      // Prefer the Cloud Control v2 contract when a targeted device is known.
+      // The legacy device-list endpoints are not enabled for every region.
+      if (deviceId != null && deviceId.trim().isNotEmpty) {
+        try {
+          final uri = Uri.parse(
+            '$host/v2/devices/api/get',
+          ).replace(queryParameters: {'auth_key': trimmedKey});
+          final response = await _client
+              .post(
+                uri,
+                headers: const {'Content-Type': 'application/json'},
+                body: jsonEncode({
+                  'ids': [deviceId.trim()],
+                  'select': ['status', 'settings'],
+                }),
+              )
+              .timeout(timeout);
+          if (response.statusCode == 200) {
+            final decoded = jsonDecode(response.body);
+            final entries = decoded is List
+                ? decoded
+                : decoded is Map && decoded['devices'] is List
+                ? decoded['devices'] as List
+                : decoded is Map && decoded['data'] is List
+                ? decoded['data'] as List
+                : decoded is Map && decoded['data'] is Map
+                ? [decoded['data']]
+                : decoded is Map
+                ? [decoded]
+                : const <dynamic>[];
+            for (final raw in entries) {
+              if (raw is! Map) continue;
+              final map = Map<String, dynamic>.from(raw);
+              final status = map['status'] is Map
+                  ? Map<String, dynamic>.from(map['status'] as Map)
+                  : const <String, dynamic>{};
+              final settings = map['settings'] is Map
+                  ? Map<String, dynamic>.from(map['settings'] as Map)
+                  : const <String, dynamic>{};
+              final cloud = status['cloud'] is Map
+                  ? Map<String, dynamic>.from(status['cloud'] as Map)
+                  : const <String, dynamic>{};
+              final info = settings['DeviceInfo'] is Map
+                  ? Map<String, dynamic>.from(settings['DeviceInfo'] as Map)
+                  : const <String, dynamic>{};
+              return [
+                ShellyCloudDevice(
+                  id: deviceId.trim(),
+                  name: info['name']?.toString() ?? 'Shelly Plug S Gen3',
+                  type: info['model']?.toString() ?? '',
+                  cloudAuthKey: trimmedKey,
+                  serverUri: host,
+                  isOnline:
+                      cloud['connected'] == true ||
+                      cloud['online'] == true ||
+                      status['online'] == true,
+                ),
+              ];
+            }
+          }
+        } on TimeoutException {
+          // Fall through to the legacy endpoint below.
+        } on SocketException {
+          // Fall through to the legacy endpoint below.
+        } on FormatException {
+          // Fall through to the legacy endpoint below.
+        } on http.ClientException {
+          // Fall through to the legacy endpoint below.
+        }
+      }
+
       // Try /interface/device/list first, then fallback to /device/all_status
       final endpoints = [
         '$host/interface/device/list?auth_key=$trimmedKey',
@@ -87,26 +165,32 @@ class ShellyCloudAuthService {
       for (final endpointUrl in endpoints) {
         try {
           final uri = Uri.parse(endpointUrl);
-          final response = await _client.post(
-            uri,
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: {
-              'auth_key': trimmedKey,
-            },
-          ).timeout(timeout);
+          final response = await _client
+              .post(
+                uri,
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: {'auth_key': trimmedKey},
+              )
+              .timeout(timeout);
 
           if (response.statusCode == 200) {
             final data = jsonDecode(response.body);
             if (data is Map) {
-              final container = (data['data'] is Map) ? data['data'] as Map : data;
-              final devicesRaw = container['devices'] ?? container['devices_status'];
+              final container = (data['data'] is Map)
+                  ? data['data'] as Map
+                  : data;
+              final devicesRaw =
+                  container['devices'] ?? container['devices_status'];
 
               if (devicesRaw is List) {
                 return devicesRaw
                     .whereType<Map>()
-                    .map((d) => ShellyCloudDevice.fromJson(Map<String, dynamic>.from(d), defaultServer: host))
+                    .map(
+                      (d) => ShellyCloudDevice.fromJson(
+                        Map<String, dynamic>.from(d),
+                        defaultServer: host,
+                      ),
+                    )
                     .toList();
               } else if (devicesRaw is Map) {
                 return devicesRaw.entries.map((entry) {
@@ -151,9 +235,15 @@ class ShellyCloudAuthService {
     required DiscoveredShellyDevice lanDevice,
     required List<ShellyCloudDevice> cloudDevices,
   }) {
-    final lanIdNormalized = lanDevice.id.toLowerCase().replaceAll(RegExp(r'[^a-f0-9]'), '');
+    final lanIdNormalized = lanDevice.id.toLowerCase().replaceAll(
+      RegExp(r'[^a-f0-9]'),
+      '',
+    );
     for (final cd in cloudDevices) {
-      final cloudIdNormalized = cd.id.toLowerCase().replaceAll(RegExp(r'[^a-f0-9]'), '');
+      final cloudIdNormalized = cd.id.toLowerCase().replaceAll(
+        RegExp(r'[^a-f0-9]'),
+        '',
+      );
       if (cloudIdNormalized == lanIdNormalized ||
           cloudIdNormalized.endsWith(lanIdNormalized) ||
           lanIdNormalized.endsWith(cloudIdNormalized)) {
@@ -179,7 +269,9 @@ class ShellyCloudAuthService {
     return ShellyConnectionProfile(
       cloudHost: host,
       cloudAuthKey: key,
-      deviceId: cloudDevice?.id.isNotEmpty == true ? cloudDevice!.id : lanDevice.id,
+      deviceId: cloudDevice?.id.isNotEmpty == true
+          ? cloudDevice!.id
+          : lanDevice.id,
       deviceName: lanDevice.name ?? cloudDevice?.name ?? 'Shelly Plug S Gen3',
       model: lanDevice.model.isNotEmpty ? lanDevice.model : 'S3PL-00112EU',
       firmware: lanDevice.firmware,

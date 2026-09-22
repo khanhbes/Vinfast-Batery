@@ -48,6 +48,10 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
   DateTimeRange? _customRange;
   String? _cursor;
   String? _error;
+  // Empty is a valid result only after at least one successful Firestore/API
+  // response.  This prevents permission/network failures from being shown as
+  // a misleading zero-history state.
+  bool _hasSuccessfulLoad = false;
   bool _allVehicles = false;
   bool _loadingMore = false;
   int _visibleCount = 20;
@@ -86,6 +90,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
   @override
   void initState() {
     super.initState();
+    _hasSuccessfulLoad = widget.initialItems.isNotEmpty;
     _load(reset: true);
     _liveTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (_items.any((item) => !item.state.isTerminal)) _load(reset: true);
@@ -120,6 +125,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
         _items = reset ? page.items : [..._items, ...page.items];
         _cursor = page.nextCursor;
         _error = null;
+        _hasSuccessfulLoad = true;
       });
     } catch (e, st) {
       debugPrint('[HistoryScreen] Load error: $e');
@@ -160,6 +166,8 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
   Widget build(BuildContext context) {
     final visible = _filteredItems;
     final shown = visible.take(_visibleCount).toList();
+    final initialLoadFailed =
+        _error != null && !_hasSuccessfulLoad && _items.isEmpty;
     final summary = SmartChargeHistorySummary.calculate(
       visible,
       from: _rangeStart,
@@ -196,92 +204,97 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
                     ),
                   ),
                 ),
-              SliverPadding(
-                padding: EdgeInsets.fromLTRB(16, 2, 16, 10),
-                sliver: SliverToBoxAdapter(
-                  child: _MonthlySummary(
-                    month: _selectedMonth,
-                    range: _customRange,
-                    summary: summary,
-                    onPrevious: _customRange == null
-                        ? () => _changeMonth(-1)
-                        : null,
-                    onNext:
-                        _customRange != null ||
-                            _monthEnd.isAfter(DateTime.now())
-                        ? null
-                        : () => _changeMonth(1),
-                  ),
-                ),
-              ),
-              SliverPadding(
-                padding: EdgeInsets.fromLTRB(16, 2, 16, 12),
-                sliver: SliverToBoxAdapter(child: _filters()),
-              ),
-              if (_error != null && _items.isEmpty)
+              if (initialLoadFailed)
                 SliverFillRemaining(child: _errorState())
-              else if (visible.isEmpty && _activeSession == null)
-                SliverFillRemaining(
-                  child: _EmptyHistory(
-                    isFiltered: _filter != null ||
-                        _statusFilter != SmartChargeHistorySessionFilter.all ||
-                        _customRange != null ||
-                        _allVehicles,
-                    onClearFilter: () => setState(() {
-                      _filter = null;
-                      _statusFilter = SmartChargeHistorySessionFilter.all;
-                      _customRange = null;
-                      _allVehicles = false;
-                      _visibleCount = 20;
-                      _load(reset: true);
-                    }),
-                  ),
-                )
               else ...[
-                if (_error != null)
-                  SliverToBoxAdapter(
-                    child: _StaleNotice(
-                      message: _error!,
-                      onRetry: () => _load(reset: true),
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(16, 2, 16, 10),
+                  sliver: SliverToBoxAdapter(
+                    child: _MonthlySummary(
+                      month: _selectedMonth,
+                      range: _customRange,
+                      summary: summary,
+                      onPrevious: _customRange == null
+                          ? () => _changeMonth(-1)
+                          : null,
+                      onNext:
+                          _customRange != null ||
+                              _monthEnd.isAfter(DateTime.now())
+                          ? null
+                          : () => _changeMonth(1),
                     ),
                   ),
-                SliverList.separated(
-                  itemCount: shown.length,
-                  separatorBuilder: (_, _) =>
-                      Divider(height: 1, indent: 16, endIndent: 16),
-                  itemBuilder: (context, index) => _HistoryRow(
-                    session: shown[index],
-                    onTap: () => _openDetail(shown[index]),
-                    onHide: () => _hide(shown[index]),
-                  ),
                 ),
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.all(20),
-                    child: _cursor == null && shown.length >= visible.length
-                        ? Center(child: Text('Đã hiển thị toàn bộ phiên sạc'))
-                        : OutlinedButton(
-                            onPressed: _loadingMore
-                                ? null
-                                : () {
-                                    if (shown.length < visible.length) {
-                                      setState(() => _visibleCount += 20);
-                                    } else {
-                                      _load(reset: false);
-                                    }
-                                  },
-                            child: _loadingMore
-                                ? SizedBox.square(
-                                    dimension: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : Text('TẢI THÊM'),
-                          ),
-                  ),
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(16, 2, 16, 12),
+                  sliver: SliverToBoxAdapter(child: _filters()),
                 ),
+                if (visible.isEmpty && _activeSession == null)
+                  SliverFillRemaining(
+                    child: _EmptyHistory(
+                      isFiltered: _filter != null ||
+                          _statusFilter != SmartChargeHistorySessionFilter.all ||
+                          _customRange != null ||
+                          _allVehicles,
+                      onClearFilter: () => setState(() {
+                        _filter = null;
+                        _statusFilter = SmartChargeHistorySessionFilter.all;
+                        _customRange = null;
+                        _allVehicles = false;
+                        _visibleCount = 20;
+                        _load(reset: true);
+                      }),
+                    ),
+                  ),
+                if (visible.isNotEmpty || _activeSession != null) ...[
+                  if (_error != null)
+                    SliverToBoxAdapter(
+                      child: _StaleNotice(
+                        message: _error!,
+                        onRetry: () => _load(reset: true),
+                      ),
+                    ),
+                  SliverList.separated(
+                    itemCount: shown.length,
+                    separatorBuilder: (_, _) =>
+                        Divider(height: 1, indent: 16, endIndent: 16),
+                    itemBuilder: (context, index) => _HistoryRow(
+                      session: shown[index],
+                      onTap: () => _openDetail(shown[index]),
+                      onHide: () => _hide(shown[index]),
+                    ),
+                  ),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.all(20),
+                      child: _cursor == null && shown.length >= visible.length
+                          ? Center(child: Text('Đã hiển thị toàn bộ phiên sạc'))
+                          : OutlinedButton(
+                              onPressed: _loadingMore
+                                  ? null
+                                  : () {
+                                      if (shown.length < visible.length) {
+                                        setState(() => _visibleCount += 20);
+                                      } else {
+                                        _load(reset: false);
+                                      }
+                                    },
+                              child: _loadingMore
+                                  ? SizedBox.square(
+                                      dimension: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : Text('TẢI THÊM'),
+                            ),
+                    ),
+                  ),
+                ],
               ],
+              // Keep this comment close to the conditional above: the stale
+              // notice is intentionally rendered only after a successful
+              // response has populated the list.
             ],
           ),
         ),

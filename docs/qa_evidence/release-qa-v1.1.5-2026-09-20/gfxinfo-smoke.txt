@@ -1,0 +1,8 @@
+Runtime: emulator-5554, API 36, 1080x2424, density 420
+Command: adb shell dumpsys gfxinfo com.bes.vinbatery framestats
+
+Observed sample (includes navigation, offline banners and notification screen):
+- Total frames rendered: 69; janky frames: 49 (71.01%); 90th percentile: 150ms; 99th percentile: 4950ms.
+- Second sample: total frames 52; janky frames 35 (67.31%); 90th percentile: 85ms; 99th percentile: 250ms.
+
+Interpretation: performance sample is poor and must be rerun on a stable API endpoint with a clean app state; it is not a release pass. Investigate notification/error-card rebuilds and animation stalls before sign-off.

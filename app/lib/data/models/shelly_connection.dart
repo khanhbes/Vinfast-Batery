@@ -4,6 +4,10 @@ enum SmartChargerErrorCode {
   notConfigured,
   cloudAuthInvalid,
   cloudRateLimited,
+  cloudBadRequest,
+  cloudDeviceNotFound,
+  cloudCommandRejected,
+  cloudResponseMalformed,
   deviceOffline,
   lanUnavailable,
   timerNotArmed,
@@ -43,17 +47,24 @@ class ShellyConnectionProfile {
     }
     return Uri.tryParse(raw);
   }
+
   bool get hasLan => lanAddress?.trim().isNotEmpty == true;
 
   String? validate() {
     final uri = cloudUri;
-    if (uri == null || uri.host.isEmpty || uri.scheme != 'https' || !uri.host.toLowerCase().endsWith('shelly.cloud')) {
+    if (uri == null ||
+        uri.host.isEmpty ||
+        uri.scheme != 'https' ||
+        !uri.host.toLowerCase().endsWith('shelly.cloud')) {
       return 'Server URI phải dùng HTTPS và thuộc tên miền shelly.cloud.';
     }
     if (cloudAuthKey.trim().isEmpty) {
       return 'Cloud Authorization Key còn trống.';
     }
     if (deviceId.trim().isEmpty) return 'Device ID còn trống.';
+    if (model.trim().toUpperCase() != 'S3PL-00112EU') {
+      return 'Chỉ hỗ trợ Shelly Plug S Gen3 (S3PL-00112EU).';
+    }
     if (hasLan && !isAllowedLanAddress(lanAddress!)) {
       return 'LAN chỉ chấp nhận IP riêng/link-local hoặc hostname .local.';
     }

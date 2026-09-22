@@ -53,8 +53,11 @@ class _GuideScreenState extends ConsumerState<GuideScreen> {
           onFinish: () {
             pref.markTourCompleted(GuideRegistry.overviewTourId);
           },
+          onSkip: () {
+            pref.markTourDismissed(GuideRegistry.overviewTourId);
+          },
           onDontShowAgain: (val) {
-            if (val) pref.markTourCompleted(GuideRegistry.overviewTourId);
+            if (val) pref.markTourDismissed(GuideRegistry.overviewTourId);
           },
         );
       });

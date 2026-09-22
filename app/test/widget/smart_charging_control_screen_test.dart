@@ -190,7 +190,7 @@ void main() {
     expect(enabled.onPressed, isNotNull);
   });
 
-  testWidgets('Shelly error floats with details and close actions', (
+  testWidgets('Shelly background error stays in the non-blocking status strip', (
     tester,
   ) async {
     final controller = harness();
@@ -201,12 +201,13 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('Kết nối Shelly chưa ổn định'), findsOneWidget);
-    expect(find.text('CHI TIẾT'), findsOneWidget);
-    expect(find.byTooltip('Đóng thông báo'), findsOneWidget);
+    // Background refresh failures must not open an overlay: the tab bar and
+    // Smart Charger controls remain usable while the connection strip carries
+    // the current state.
+    expect(find.text('Kết nối Shelly chưa ổn định'), findsNothing);
+    expect(find.text('CHI TIẾT'), findsNothing);
+    expect(find.byTooltip('Đóng thông báo'), findsNothing);
     expect(find.text('Không kết nối được ổ sạc.'), findsNothing);
-    await tester.tap(find.byTooltip('Đóng thông báo'));
-    await tester.pump();
   });
 
   testWidgets('active session displays live countdown and stop button', (

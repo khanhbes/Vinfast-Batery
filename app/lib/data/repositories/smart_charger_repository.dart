@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/smart_charger_binding.dart';
@@ -82,6 +83,9 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
   final ChargingPredictionAdapter predictor;
   final ServerSmartChargerService? _previewService;
   final ShellyChargeLogService? _chargeLogs;
+
+  String _normalizeDeviceId(String value) =>
+      value.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toLowerCase();
   @override
   bool get calibrationIsServerOwned => false;
   @override
@@ -90,14 +94,22 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
 
   @override
   Future<SmartChargerBinding?> binding({String? vehicleId}) async {
-    if (!await service.isConfiguredSecurely()) return null;
-    return const SmartChargerBinding(
-      deviceId: 'local-secure-profile',
-      displayName: 'Shelly Plug S Gen3',
-      model: 'S3PL-00112EU',
+    final profile = await SmartChargerCredentialsService().readProfile(
+      vehicleId: vehicleId,
+    );
+    if (profile == null) return null;
+    final verification = await SmartChargerCredentialsService()
+        .readVerification();
+    return SmartChargerBinding(
+      deviceId: profile.deviceId,
+      displayName: profile.deviceName,
+      model: profile.model,
       provider: 'direct',
       mode: SmartChargerConnectionMode.advancedDirect,
-      powerMeterVerified: true,
+      powerMeterVerified: verification.powerMeterVerified,
+      safeBootVerified: verification.safeBootVerified,
+      noLoadTestVerified: verification.noLoadTestVerified,
+      lastVerifiedAt: verification.lastVerifiedAt,
     );
   }
 
@@ -112,6 +124,7 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
     final status = await service.getStatus();
     return SmartChargerLiveSnapshot(status: status);
   }
+
   @override
   Future<SmartChargingPlanPreview> preview(SmartChargingPlanDraft draft) async {
     if (_previewService != null) {
@@ -123,6 +136,7 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
     }
     return predictor.predict(draft);
   }
+
   @override
   Future<SmartChargingSession> start(
     SmartChargingPlanPreview preview,
@@ -168,7 +182,11 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
   Future<SmartChargingSession?> current({String? vehicleId}) async {
     // Check identity before reconciliation so merely browsing another
     // vehicle cannot terminalize or clear the active session.
-    return service.getCurrentSessionForVehicle(vehicleId);
+    final local = await service.getCurrentSessionForVehicle(vehicleId);
+    if (local != null) return local;
+    // A second device has no local session. Restore the durable account
+    // record, but do not treat it as permission to issue ON/rearm commands.
+    return _chargeLogs?.getActiveSession(vehicleId: vehicleId);
   }
 
   @override
@@ -274,16 +292,72 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
     }
     await logs.privacyEraseSession(sessionId, confirmation);
   }
+
   @override
   Future<SmartChargeStopResult> stop(
     String? id, {
     int? expectedVersion,
     UserStopReason userStopReason = UserStopReason.none,
   }) async {
+    final remoteSessions = id == null
+        ? const <SmartChargingSession>[]
+        : await _chargeLogs?.getActiveSessions() ?? const [];
+    SmartChargingSession? remoteActive;
+    for (final item in remoteSessions) {
+      if (item.sessionId == id) {
+        remoteActive = item;
+        break;
+      }
+    }
+    if (remoteActive != null) {
+      // A session restored on another device is controllable only when this
+      // device has the same account-scoped profile and a live Cloud snapshot
+      // confirms the exact Shelly identity/model. Metadata alone is never a
+      // permission to send OFF to an arbitrary relay.
+      final expectedDeviceId = remoteActive.deviceId;
+      if (expectedDeviceId == null || expectedDeviceId.trim().isEmpty) {
+        throw const SmartChargerException(
+          'Phiên đồng bộ thiếu Device ID Shelly để xác minh an toàn.',
+          code: 'deviceMismatch',
+        );
+      }
+      final profile = await SmartChargerCredentialsService().readProfile(
+        vehicleId: remoteActive.vehicleId,
+      );
+      if (profile == null) {
+        throw const SmartChargerException(
+          'Chưa khôi phục được cấu hình Shelly của tài khoản này.',
+          code: 'notConfigured',
+          retryable: true,
+        );
+      }
+      final snapshot = await service.getCloudSnapshot(profile: profile);
+      if (_normalizeDeviceId(snapshot.deviceId) !=
+          _normalizeDeviceId(expectedDeviceId)) {
+        throw const SmartChargerException(
+          'Shelly hiện tại không khớp thiết bị của phiên đang sạc.',
+          code: 'deviceMismatch',
+        );
+      }
+    }
     final stopped = id == null
         ? await service.turnOffAndVerify()
         : await service.stopSession(id, expectedVersion: expectedVersion);
-    final withReason = stopped?.copyWith(userStopReason: userStopReason);
+    final recovered =
+        stopped ??
+        remoteActive?.copyWith(
+          state: ChargingSessionState.cancelled,
+          stoppedAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+          stopReason: ChargingStopReason.manual,
+          userStopReason: userStopReason,
+          relayVerified: true,
+          version: remoteActive.version + 1,
+        );
+    if (stopped == null && recovered != null) {
+      await _chargeLogs?.saveTerminalSession(recovered);
+    }
+    final withReason = recovered?.copyWith(userStopReason: userStopReason);
     return SmartChargeStopResult(
       // SmartChargerService only returns after an OFF readback. Preserve that
       // invariant in the public result instead of claiming success merely
@@ -327,7 +401,8 @@ class ServerSmartChargerRepository implements SmartChargerRepository {
   @override
   bool get calibrationIsServerOwned => true;
   @override
-  SmartChargeTelemetryOwner get telemetryOwner => SmartChargeTelemetryOwner.server;
+  SmartChargeTelemetryOwner get telemetryOwner =>
+      SmartChargeTelemetryOwner.server;
   @override
   Future<SmartChargerBinding?> binding({String? vehicleId}) =>
       service.getBinding(vehicleId: vehicleId);
@@ -351,6 +426,7 @@ class ServerSmartChargerRepository implements SmartChargerRepository {
           : null,
     );
   }
+
   @override
   Future<SmartChargingPlanPreview> preview(SmartChargingPlanDraft draft) =>
       service.createPreview(draft);
@@ -480,27 +556,42 @@ class ServerSmartChargerRepository implements SmartChargerRepository {
 
 class SmartChargerRepositoryFactory {
   static const _modeKey = 'smart_charger.connection_mode.v1';
+  static String? _scopedModeKey() {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      return uid == null ? null : '$_modeKey.$uid';
+    } on Object {
+      return _modeKey;
+    }
+  }
+
   static Future<SmartChargerConnectionMode> currentMode() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_modeKey);
+    final key = _scopedModeKey();
+    if (key == null) return SmartChargerConnectionMode.serverCloud;
+    final raw = prefs.getString(key);
     if (raw == 'advanced_direct') {
       return SmartChargerConnectionMode.advancedDirect;
     }
+    final credentials = SmartChargerCredentialsService();
     if (raw == null &&
-        await SmartChargerCredentialsService().readProfile() != null) {
-      await prefs.setString(_modeKey, 'advanced_direct');
+        await credentials.readProfile() != null &&
+        (await credentials.readVerification()).readyForControl) {
+      await prefs.setString(key, 'advanced_direct');
       return SmartChargerConnectionMode.advancedDirect;
     }
     return SmartChargerConnectionMode.serverCloud;
   }
 
   static Future<void> setMode(SmartChargerConnectionMode mode) async =>
-      (await SharedPreferences.getInstance()).setString(
-        _modeKey,
-        mode == SmartChargerConnectionMode.serverCloud
-            ? 'server_cloud'
-            : 'advanced_direct',
-      );
+      _scopedModeKey() == null
+      ? Future.value()
+      : (await SharedPreferences.getInstance()).setString(
+          _scopedModeKey()!,
+          mode == SmartChargerConnectionMode.serverCloud
+              ? 'server_cloud'
+              : 'advanced_direct',
+        );
   static Future<SmartChargerRepository> create() async {
     final mode = await currentMode();
     if (mode == SmartChargerConnectionMode.serverCloud) {

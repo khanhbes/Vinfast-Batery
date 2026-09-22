@@ -17,10 +17,24 @@ class AppConstants {
   static String? _customApiBaseUrl;
 
   static String get apiBaseUrl => _customApiBaseUrl ?? defaultApiBaseUrl;
+
+  /// Release builds must always use a real HTTPS endpoint. Debug/profile builds
+  /// may target the Android emulator host bridge for local-only QA without
+  /// exposing a laptop API publicly. This is intentionally restricted to
+  /// loopback/host-bridge addresses and cannot be enabled in release mode.
+  static bool _isAllowedEndpoint(Uri uri) {
+    if (uri.host.isEmpty) return false;
+    if (uri.scheme == 'https') return true;
+    if (kReleaseMode || uri.scheme != 'http') return false;
+    return uri.host == '10.0.2.2' ||
+        uri.host == '127.0.0.1' ||
+        uri.host == 'localhost';
+  }
+
   static bool get isApiConfigured {
     final value = apiBaseUrl.trim();
     final uri = Uri.tryParse(value);
-    return value.isNotEmpty && uri != null && uri.scheme == 'https' && uri.host.isNotEmpty;
+    return value.isNotEmpty && uri != null && _isAllowedEndpoint(uri);
   }
   static bool get isApiConfigurationError => !isApiConfigured;
 
@@ -31,7 +45,7 @@ class AppConstants {
       return;
     }
     final uri = Uri.tryParse(candidate);
-    if (uri == null || uri.host.isEmpty || uri.scheme != 'https') return;
+    if (uri == null || !_isAllowedEndpoint(uri)) return;
     if (kReleaseMode) return;
     _customApiBaseUrl = candidate;
   }

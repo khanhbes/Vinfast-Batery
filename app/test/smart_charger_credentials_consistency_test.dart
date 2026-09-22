@@ -45,4 +45,28 @@ void main() {
     await service.saveProfile(first);
     expect((await service.readVerification()).cloudVerified, isTrue);
   });
+
+  test('Cloud connectivity alone never unlocks relay control', () async {
+    final service = SmartChargerCredentialsService();
+    await service.saveVerification(
+      SmartChargerVerificationState.unverified.copyWith(
+        cloudVerified: true,
+        powerMeterVerified: true,
+      ),
+    );
+    expect((await service.readVerification()).readyForControl, isFalse);
+  });
+
+  test('Relay control requires all safety checks and a transport', () async {
+    final service = SmartChargerCredentialsService();
+    await service.saveVerification(
+      SmartChargerVerificationState.unverified.copyWith(
+        cloudVerified: true,
+        powerMeterVerified: true,
+        safeBootVerified: true,
+        noLoadTestVerified: true,
+      ),
+    );
+    expect((await service.readVerification()).readyForControl, isTrue);
+  });
 }

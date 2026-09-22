@@ -153,16 +153,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                                   : TimedChargingSectionV2(
                                       key: const ValueKey('timed-mode'),
                                       readyForControl:
-                                          (state.capabilities.readyForControl ||
-                                              state
-                                                  .capabilities
-                                                  .supportsDeviceTimer ||
-                                              state
-                                                  .capabilities
-                                                  .cloudAvailable ||
-                                              state
-                                                  .capabilities
-                                                  .lanAvailable) &&
+                                          state.capabilities.readyForControl &&
                                           state.phase !=
                                               SmartChargingViewPhase.starting,
                                       onStart: (duration) => _startTimedCharge(
@@ -222,14 +213,12 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     SmartChargingUiState? previous,
     SmartChargingUiState next,
   ) {
-    if (next.chargerError != null &&
-        previous?.chargerError != next.chargerError) {
-      _showFloatingDetail('Kết nối Shelly chưa ổn định', next.chargerError!);
-    }
-    if (next.sessionError != null &&
-        previous?.sessionError != next.sessionError) {
-      _showFloatingDetail('Chưa đồng bộ được phiên sạc', next.sessionError!);
-    }
+    // Background refresh/sync failures belong in the non-blocking connection
+    // status strip.  Showing them as overlays made the tab bar unusable and
+    // caused the same failure to reappear after the user dismissed it.
+    // `chargerError` and `sessionError` remain part of the typed state so the
+    // strip can describe the affected service; they are intentionally not
+    // promoted to a popup here.
     if (next.actionError != null && previous?.actionError != next.actionError) {
       _showFloatingDetail('Thao tác chưa hoàn tất', next.actionError!);
     }
@@ -241,15 +230,9 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
         persistent: true,
       );
     }
-    if (!next.connectionState.fullyConnected &&
-        previous?.connectionState.fullyConnected != false) {
-      final detail = !next.connectionState.internetAvailable
-          ? (next.connectionState.shellyReachable
-                ? 'Mất Internet; timer Shelly vẫn bảo vệ phiên sạc.'
-                : 'Mất kết nối Internet và chưa liên lạc được Shelly.')
-          : 'Một dịch vụ đồng bộ đang gián đoạn; app giữ dữ liệu gần nhất.';
-      _showFloatingDetail('Kết nối bị gián đoạn', detail);
-    }
+    // Connection changes are also rendered by the shared status strip.  An
+    // urgent safety warning is the only background condition that may remain
+    // persistent above content.
   }
 
   void _showFloatingDetail(
@@ -309,10 +292,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     final canStart =
         (state.preview?.aiChargeEligible == true ||
             state.preview?.isPhysicsFallback == true) &&
-        (state.capabilities.readyForControl ||
-            state.capabilities.supportsDeviceTimer ||
-            state.capabilities.cloudAvailable ||
-            state.capabilities.lanAvailable) &&
+        state.capabilities.readyForControl &&
         state.connectionState.shellyReachable;
     final currentTarget = draft.targetSoc.clamp(
       (draft.currentSoc.ceil() + 1).clamp(1, 99).toDouble(),
@@ -984,11 +964,12 @@ class _SmartChargeHeaderState extends State<_SmartChargeHeader>
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         Text(
-                          state.draft.vehicleId.isNotEmpty &&
-                                  state.draft.vehicleId.length < 24 &&
-                                  !state.draft.vehicleId.contains('-')
-                              ? state.draft.vehicleId
-                              : 'VinFast EV',
+                          // Vehicle document IDs are internal identifiers and
+                          // must never leak into visual text or semantics.
+                          // The selected vehicle name is shown by the app
+                          // shell; this feature header uses a safe generic
+                          // label when that name is not available here.
+                          'Xe đang chọn',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -1725,10 +1706,7 @@ class _PreviewRow extends StatelessWidget {
 /// Active Charging view when relay is ON
 // ignore: unused_element
 class _ActiveChargingView extends StatelessWidget {
-  const _ActiveChargingView({
-    required this.state,
-    required this.onStop,
-  });
+  const _ActiveChargingView({required this.state, required this.onStop});
 
   final SmartChargingUiState state;
   final VoidCallback onStop;
@@ -2055,10 +2033,10 @@ class _ManualControlsSection extends StatelessWidget {
                   commandState: state.phase == SmartChargingViewPhase.starting
                       ? CommandState.sending
                       : (state.hasActiveSession
-                          ? CommandState.confirmed
-                          : (state.phase == SmartChargingViewPhase.error
-                              ? CommandState.failed
-                              : CommandState.idle)),
+                            ? CommandState.confirmed
+                            : (state.phase == SmartChargingViewPhase.error
+                                  ? CommandState.failed
+                                  : CommandState.idle)),
                   onTap: state.capabilities.readyForControl ? onOn : () {},
                   icon: Icons.power_rounded,
                   label: 'BẬT SẠC',

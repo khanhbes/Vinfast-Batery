@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -257,12 +256,12 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
              vehicleId: vehicleId,
              currentSoc: currentSoc,
              targetSoc: (() {
-                final raw = (currentSoc + 30).clamp(1, 100).toDouble();
-                // Ensure at least 5% delta to generate a meaningful prediction
-                return raw < currentSoc + 5
-                    ? (currentSoc + 5).clamp(1, 100).toDouble()
-                    : raw;
-              })(),
+               final raw = (currentSoc + 30).clamp(1, 100).toDouble();
+               // Ensure at least 5% delta to generate a meaningful prediction
+               return raw < currentSoc + 5
+                   ? (currentSoc + 5).clamp(1, 100).toDouble()
+                   : raw;
+             })(),
              hardDeadlineAt: (clock ?? DateTime.now)().add(
                const Duration(hours: 10),
              ),
@@ -329,7 +328,9 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         const Duration(seconds: 15),
         onTimeout: () {
           AppErrorReporter.report(
-            TimeoutException('SmartChargingController.initialize timed out after 15s'),
+            TimeoutException(
+              'SmartChargingController.initialize timed out after 15s',
+            ),
             StackTrace.current,
             source: 'SmartChargingController.initialize.timeout',
           );
@@ -524,7 +525,8 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
   void _startPolling() {
     _statusTimer ??= Timer.periodic(const Duration(seconds: 5), (_) {
       final now = _clock();
-      final charging = state.session != null &&
+      final charging =
+          state.session != null &&
           !state.session!.state.isTerminal &&
           state.chargerStatus?.relay == true;
       final cadence = charging
@@ -569,7 +571,8 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
   Future<void> _refreshStatus() async {
     if (_foregroundPolling) {
       final last = _lastForegroundStatusAt;
-      if (last != null && _clock().difference(last) <= const Duration(seconds: 15)) {
+      if (last != null &&
+          _clock().difference(last) <= const Duration(seconds: 15)) {
         return;
       }
       // A foreground task that stopped emitting must never freeze the UI.
@@ -578,9 +581,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     if (_statusRequestRunning || _disposed) return;
     _statusRequestRunning = true;
     try {
-      final live = await _repository!.live(
-        vehicleId: state.draft.vehicleId,
-      );
+      final live = await _repository!.live(vehicleId: state.draft.vehicleId);
       final status = live.status;
       _connectionCoordinator.markStatusSuccess(shellyReachable: status.online);
       if (!_disposed) {
@@ -939,7 +940,8 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       state = state.copyWith(draft: draft);
     }
     final error = draft.validate(now: now);
-    final capacityError = draft.strategy != ChargingStrategy.manualTimed &&
+    final capacityError =
+        draft.strategy != ChargingStrategy.manualTimed &&
             draft.estimatedCapacityWh <= 0
         ? 'Xe chưa có dung lượng pin đã được xác minh. Hãy cập nhật catalog hoặc dùng Sạc hẹn giờ.'
         : null;
@@ -1116,10 +1118,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       );
       return false;
     }
-    if (!state.capabilities.readyForControl &&
-        !state.capabilities.supportsDeviceTimer &&
-        !state.capabilities.cloudAvailable &&
-        !state.capabilities.lanAvailable) {
+    if (!state.capabilities.readyForControl) {
       state = state.copyWith(
         actionError: 'Ổ sạc chưa sẵn sàng điều khiển an toàn.',
       );
@@ -1215,22 +1214,9 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         stack,
         source: 'SmartChargingController.start',
       );
-      // Keep technical exception text out of release UI.
-      if (!kReleaseMode && !_disposed) {
-        state = state.copyWith(
-          actionError: 'KhÃ´ng thá»ƒ báº­t sáº¡c. Vui lÃ²ng kiá»ƒm tra káº¿t ná»‘i vÃ  thá»­ láº¡i.',
-        );
-      }
       if (!_disposed) {
         state = state.copyWith(
-          actionError: 'Charging start failed. Check connection and retry.',
-        );
-      }
-      if (kReleaseMode) return false;
-      if (!kReleaseMode && !_disposed) {
-        state = state.copyWith(
-          phase: SmartChargingViewPhase.preview,
-          actionError: 'Không thể bật sạc: $e',
+          actionError: 'Không thể bật sạc. Hãy kiểm tra kết nối và thử lại.',
         );
       }
       return false;
@@ -1247,6 +1233,17 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       return false;
     }
     if (session == null) return manualOff();
+    // A session restored from another device is display-only until this
+    // device has a live, authenticated Shelly readback. Never expose a Stop
+    // command that cannot prove which relay it would affect.
+    if (state.chargerStatus == null || state.chargerStatus!.online != true) {
+      if (!_disposed) {
+        state = state.copyWith(
+          actionError: 'Chưa xác minh được Shelly trên thiết bị này; chỉ xem trạng thái đồng bộ.',
+        );
+      }
+      return false;
+    }
     _pendingRelayCommand = true;
     state = state.copyWith(
       phase: SmartChargingViewPhase.stopping,
@@ -1323,17 +1320,11 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       return false;
     } catch (e, stack) {
       AppErrorReporter.report(e, stack, source: 'SmartChargingController.stop');
-      if (!_disposed) state = state.copyWith(
-        phase: SmartChargingViewPhase.active,
-        actionError: 'Charging stop failed. Check charger status.',
-      );
-      if (kReleaseMode) return false;
-      if (!kReleaseMode && !_disposed) {
+      if (!_disposed)
         state = state.copyWith(
           phase: SmartChargingViewPhase.active,
-          actionError: 'Lỗi khi dừng sạc: $e',
+          actionError: 'Charging stop failed. Check charger status.',
         );
-      }
       return false;
     } finally {
       _pendingRelayCommand = false;
@@ -1346,10 +1337,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         state.phase == SmartChargingViewPhase.stopping) {
       return false;
     }
-    if (!state.capabilities.readyForControl &&
-        !state.capabilities.supportsDeviceTimer &&
-        !state.capabilities.cloudAvailable &&
-        !state.capabilities.lanAvailable) {
+    if (!state.capabilities.readyForControl) {
       state = state.copyWith(
         actionError: 'Ổ sạc chưa sẵn sàng điều khiển an toàn.',
       );
@@ -1438,17 +1426,11 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         stack,
         source: 'SmartChargingController.manualOn',
       );
-      if (!_disposed) state = state.copyWith(
-        phase: SmartChargingViewPhase.editing,
-        actionError: 'Charging start failed. Check connection and retry.',
-      );
-      if (kReleaseMode) return false;
-      if (!kReleaseMode && !_disposed) {
+      if (!_disposed)
         state = state.copyWith(
           phase: SmartChargingViewPhase.editing,
-          actionError: 'Không thể bật sạc: $e',
+          actionError: 'Charging start failed. Check connection and retry.',
         );
-      }
       return false;
     } finally {
       _pendingRelayCommand = false;
@@ -1481,11 +1463,10 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         stack,
         source: 'SmartChargingController.manualOff',
       );
-      if (!_disposed) state = state.copyWith(
-        actionError: 'Charging stop failed. Check charger status.',
-      );
-      if (kReleaseMode) return false;
-      if (!_disposed) state = state.copyWith(actionError: 'Lỗi khi tắt sạc: $e');
+      if (!_disposed)
+        state = state.copyWith(
+          actionError: 'Charging stop failed. Check charger status.',
+        );
       return false;
     } finally {
       _pendingRelayCommand = false;

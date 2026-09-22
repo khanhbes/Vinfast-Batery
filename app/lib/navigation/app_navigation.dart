@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,6 +19,8 @@ import '../features/ai/smart_charge_history_screen.dart';
 import '../features/ai/controllers/smart_charging_controller.dart';
 import '../features/notifications/notification_center_screen.dart';
 import '../core/services/guide_registry.dart';
+import '../core/services/dashboard_preferences_service.dart';
+import '../core/widgets/coach_mark_overlay.dart';
 import '../features/overview/widgets/dashboard_customization_sheet.dart';
 import '../features/overview/overview_screen.dart';
 import '../features/charge/charge_screen.dart';
@@ -47,10 +52,18 @@ class AppNavigation extends ConsumerStatefulWidget {
 class _AppNavigationState extends ConsumerState<AppNavigation> {
   // Tab screens — wrap với RefreshIndicator
   late final List<Widget> _screens;
+  Timer? _guideRetryTimer;
+  int _guideAttempts = 0;
+  bool _guideShown = false;
 
   @override
   void initState() {
     super.initState();
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      unawaited(ref.read(dashboardPreferencesProvider).initializeForUser(uid));
+      unawaited(ref.read(activeChargingSessionProvider).bindUser(uid));
+    }
     _screens = [
       _RefreshableTab(child: OverviewScreen()), // Tab 0: Overview
       // Charge and History own their refresh indicators. Wrapping them here
@@ -59,6 +72,59 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
       _SelectedHistory(), // Tab 2: History
       _RefreshableTab(child: MoreScreen()), // Tab 3: More
     ];
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_tryShowFirstRunGuide());
+    });
+  }
+
+  @override
+  void dispose() {
+    _guideRetryTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _tryShowFirstRunGuide() async {
+    if (!mounted || _guideShown) return;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final preferences = ref.read(dashboardPreferencesProvider);
+    await preferences.initializeForUser(uid);
+    if (!mounted || _guideShown || !preferences.shouldAutoShow(
+      GuideRegistry.overviewTourId,
+    )) {
+      return;
+    }
+    if (ModalRoute.of(context)?.isCurrent != true ||
+        !GuideRegistry.getOverviewTourSteps().every(
+          (step) => step.anchorKey.currentContext != null,
+        )) {
+      _guideAttempts++;
+      if (_guideAttempts < 40) {
+        _guideRetryTimer?.cancel();
+        _guideRetryTimer = Timer(const Duration(milliseconds: 250), () {
+          unawaited(_tryShowFirstRunGuide());
+        });
+      }
+      return;
+    }
+    _guideShown = true;
+    CoachMarkOverlay.show(
+      context: context,
+      steps: GuideRegistry.getOverviewTourSteps(),
+      onFinish: () => unawaited(
+        preferences.markTourCompleted(GuideRegistry.overviewTourId),
+      ),
+      onSkip: () => unawaited(
+        preferences.markTourDismissed(GuideRegistry.overviewTourId),
+      ),
+      onDontShowAgain: (dontShow) {
+        if (dontShow) {
+          unawaited(
+            preferences.markTourDismissed(GuideRegistry.overviewTourId),
+          );
+        }
+      },
+    );
   }
 
   @override

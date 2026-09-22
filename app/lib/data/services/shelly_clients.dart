@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/shelly_connection.dart';
+import '../models/shelly_snapshot.dart';
 import '../models/smart_charger_status.dart';
 
 class ShellyClientException implements Exception {
@@ -14,12 +15,38 @@ class ShellyClientException implements Exception {
     this.code,
     this.message, {
     this.retryable = false,
+    this.statusCode,
+    this.providerCode,
+    this.retryAfter,
+    this.commandMayHaveReachedDevice = false,
   });
   final SmartChargerErrorCode code;
   final String message;
   final bool retryable;
+  final int? statusCode;
+  final String? providerCode;
+  final Duration? retryAfter;
+  final bool commandMayHaveReachedDevice;
   @override
   String toString() => message;
+}
+
+class ShellyCloudCommandResult {
+  const ShellyCloudCommandResult({
+    required this.operationId,
+    required this.httpStatus,
+    required this.acceptedAt,
+    this.providerCode,
+    this.ambiguous = false,
+  });
+
+  final String operationId;
+  final int httpStatus;
+  final DateTime acceptedAt;
+  final String? providerCode;
+  final bool ambiguous;
+
+  bool get accepted => httpStatus == 200 && !ambiguous;
 }
 
 class ShellyCloudClient {
@@ -37,7 +64,10 @@ class ShellyCloudClient {
     _tail = _tail.then((_) async {
       final previous = _lastRequestAt;
       if (previous != null) {
-        final wait = const Duration(seconds: 1) - _clock().difference(previous);
+        // Keep a safety margin below Shelly Cloud's one-request-per-second
+        // limit; this also covers small clock/network scheduling jitter.
+        final wait =
+            const Duration(milliseconds: 1100) - _clock().difference(previous);
         if (wait.isPositive) await Future<void>.delayed(wait);
       }
       _lastRequestAt = _clock();
@@ -50,24 +80,27 @@ class ShellyCloudClient {
     return completer.future;
   }
 
-  Future<SmartChargerStatus> getStatus(ShellyConnectionProfile profile) =>
+  Future<ShellyDeviceSnapshot> getSnapshot(ShellyConnectionProfile profile) =>
       _limited(() async {
         final json = await _post(profile, '/v2/devices/api/get', {
           'ids': [profile.deviceId],
           'select': ['status', 'settings'],
         });
-        return parseShellyStatus(
-          json,
-          ShellyTransport.cloud,
-          deviceName: profile.deviceName,
-        );
+        return parseShellySnapshot(json, profile);
       });
 
-  Future<void> setSwitch(
+  Future<SmartChargerStatus> getStatus(ShellyConnectionProfile profile) async =>
+      (await getSnapshot(profile)).status;
+
+  Future<ShellyCloudCommandResult> setSwitch(
     ShellyConnectionProfile profile, {
     required bool on,
     Duration? toggleAfter,
+    String? operationId,
   }) => _limited(() async {
+    final id =
+        operationId ??
+        '${_clock().toUtc().microsecondsSinceEpoch}-${on ? 'on' : 'off'}';
     await _post(profile, '/v2/devices/api/set/switch', {
       'id': profile.deviceId,
       'channel': 0,
@@ -75,6 +108,11 @@ class ShellyCloudClient {
       if (on && toggleAfter != null)
         'toggle_after': max(1, toggleAfter.inSeconds),
     }, decodeResponse: false);
+    return ShellyCloudCommandResult(
+      operationId: id,
+      httpStatus: 200,
+      acceptedAt: _clock(),
+    );
   });
 
   Future<Map<String, dynamic>> _post(
@@ -103,37 +141,93 @@ class ShellyCloudClient {
             body: jsonEncode(body),
           )
           .timeout(const Duration(seconds: 5));
+      final isCommand = path.contains('/set/');
+      Map<String, dynamic>? errorBody;
+      final rawBody = response.body.trim();
+      if (rawBody.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(rawBody);
+          if (decoded is Map) errorBody = Map<String, dynamic>.from(decoded);
+        } on FormatException {
+          // The status code remains authoritative; never expose raw text.
+        }
+      }
+      final providerCode = errorBody?['error']?.toString();
       if (response.statusCode == 401 || response.statusCode == 403) {
-        throw const ShellyClientException(
+        throw ShellyClientException(
           SmartChargerErrorCode.cloudAuthInvalid,
           'Cloud Authorization Key không hợp lệ hoặc đã bị thu hồi.',
+          statusCode: response.statusCode,
+          providerCode: providerCode,
+          commandMayHaveReachedDevice: isCommand,
         );
       }
       if (response.statusCode == 429) {
-        throw const ShellyClientException(
+        final retryAfterSeconds = int.tryParse(
+          response.headers['retry-after'] ?? '',
+        );
+        throw ShellyClientException(
           SmartChargerErrorCode.cloudRateLimited,
           'Shelly Cloud đang giới hạn tần suất. Vui lòng thử lại.',
           retryable: true,
+          statusCode: response.statusCode,
+          providerCode: providerCode,
+          retryAfter: retryAfterSeconds == null
+              ? null
+              : Duration(seconds: retryAfterSeconds),
+          commandMayHaveReachedDevice: isCommand && !onSafeReadPath(path),
         );
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
+        final mappedCode = switch (providerCode) {
+          'BAD_REQUEST' ||
+          'DEVICE_INVALID_CHANNEL' => SmartChargerErrorCode.cloudBadRequest,
+          'DEVICE_FAILED_COMMAND' => SmartChargerErrorCode.cloudCommandRejected,
+          'DEVICE_NOT_FOUND' ||
+          'INSTANCE_NOT_FOUND' => SmartChargerErrorCode.cloudDeviceNotFound,
+          'DEVICE_OFFLINE' => SmartChargerErrorCode.deviceOffline,
+          _ =>
+            response.statusCode >= 500
+                ? SmartChargerErrorCode.cloudCommandRejected
+                : SmartChargerErrorCode.deviceOffline,
+        };
         throw ShellyClientException(
-          SmartChargerErrorCode.deviceOffline,
+          mappedCode,
           'Shelly Cloud không thể liên lạc với thiết bị.',
           retryable: response.statusCode >= 500,
+          statusCode: response.statusCode,
+          providerCode: providerCode,
+          commandMayHaveReachedDevice: isCommand && response.statusCode >= 500,
         );
       }
       // Shelly Cloud v2 documents HTTP 200 itself as the success signal for
       // control commands. A successful set/switch response is therefore
       // allowed to have an empty or non-JSON body.
-      if (!decodeResponse) return <String, dynamic>{};
-
       var responseBody = response.body;
       if (responseBody.isNotEmpty && responseBody.codeUnitAt(0) == 0xFEFF) {
         responseBody = responseBody.substring(1);
       }
       responseBody = responseBody.trim();
-      if (responseBody.isEmpty) throw const FormatException();
+      if (responseBody.isEmpty) return <String, dynamic>{};
+      if (isCommand && !decodeResponse) {
+        try {
+          final commandDecoded = jsonDecode(responseBody);
+          if (commandDecoded is Map && commandDecoded['error'] != null) {
+            throw ShellyClientException(
+              SmartChargerErrorCode.cloudCommandRejected,
+              'Shelly Cloud từ chối lệnh điều khiển.',
+              statusCode: response.statusCode,
+              providerCode: commandDecoded['error']?.toString(),
+              commandMayHaveReachedDevice: true,
+            );
+          }
+        } on ShellyClientException {
+          rethrow;
+        } on FormatException {
+          // HTTP 200 is the documented success signal for commands.
+        }
+        return <String, dynamic>{};
+      }
       final decoded = jsonDecode(responseBody);
       // Cloud Control v2 /devices/api/get returns a top-level JSON array of
       // Device State objects. Commands may return an object (or an empty one).
@@ -145,39 +239,48 @@ class ShellyCloudClient {
           ? <String, dynamic>{'devices': decoded}
           : <String, dynamic>{};
       if (result['isok'] == false || result['error'] != null) {
-        throw const ShellyClientException(
-          SmartChargerErrorCode.deviceOffline,
+        throw ShellyClientException(
+          SmartChargerErrorCode.cloudCommandRejected,
           'Shelly Cloud từ chối lệnh điều khiển.',
+          statusCode: response.statusCode,
+          providerCode: result['error']?.toString(),
+          commandMayHaveReachedDevice: isCommand,
         );
       }
       return result;
     } on ShellyClientException {
       rethrow;
     } on TimeoutException {
-      throw const ShellyClientException(
+      throw ShellyClientException(
         SmartChargerErrorCode.deviceOffline,
         'Shelly Cloud không phản hồi.',
         retryable: true,
+        commandMayHaveReachedDevice: path.contains('/set/'),
       );
     } on SocketException catch (_) {
-      throw const ShellyClientException(
+      throw ShellyClientException(
         SmartChargerErrorCode.deviceOffline,
         'Không có kết nối tới Shelly Cloud.',
         retryable: true,
+        commandMayHaveReachedDevice: path.contains('/set/'),
       );
     } on http.ClientException catch (_) {
-      throw const ShellyClientException(
+      throw ShellyClientException(
         SmartChargerErrorCode.deviceOffline,
         'Không có kết nối tới Shelly Cloud.',
         retryable: true,
+        commandMayHaveReachedDevice: path.contains('/set/'),
       );
     } on FormatException catch (_) {
-      throw const ShellyClientException(
-        SmartChargerErrorCode.deviceOffline,
+      throw ShellyClientException(
+        SmartChargerErrorCode.cloudResponseMalformed,
         'Shelly Cloud trả về dữ liệu không hợp lệ.',
+        commandMayHaveReachedDevice: path.contains('/set/'),
       );
     }
   }
+
+  bool onSafeReadPath(String path) => path.endsWith('/get');
 }
 
 class ShellyLanClient {
@@ -219,6 +322,10 @@ class ShellyLanClient {
       'config': {'initial_state': 'off', 'auto_on': false},
     });
   }
+
+  Future<Map<String, dynamic>> getSwitchConfig(
+    ShellyConnectionProfile profile,
+  ) => _rpc(profile, 'Switch.GetConfig', {'id': 0});
 
   Future<Map<String, dynamic>> _rpc(
     ShellyConnectionProfile profile,
@@ -380,6 +487,143 @@ String buildDigestAuthorization({
       '${opaque == null ? '' : ', opaque="$opaque"'}';
 }
 
+ShellyDeviceSnapshot parseShellySnapshot(
+  Map<String, dynamic> json,
+  ShellyConnectionProfile profile,
+) {
+  Map<String, dynamic>? findDevice(Object? value) {
+    if (value is Map) {
+      final map = Map<String, dynamic>.from(value);
+      final id = map['id']?.toString().toLowerCase();
+      if (id == profile.deviceId.toLowerCase() &&
+          (map.containsKey('status') || map.containsKey('settings'))) {
+        return map;
+      }
+      for (final child in map.values) {
+        final found = findDevice(child);
+        if (found != null) return found;
+      }
+    } else if (value is List) {
+      for (final child in value) {
+        final found = findDevice(child);
+        if (found != null) return found;
+      }
+    } else if (value is String &&
+        (value.trimLeft().startsWith('{') ||
+            value.trimLeft().startsWith('['))) {
+      try {
+        return findDevice(jsonDecode(value));
+      } on FormatException {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  Map<String, dynamic>? findSwitch(Object? value) {
+    if (value is Map) {
+      final map = Map<String, dynamic>.from(value);
+      final direct = map['switch:0'];
+      if (direct is Map) return Map<String, dynamic>.from(direct);
+      if (direct is String) {
+        try {
+          final found = findSwitch(jsonDecode(direct));
+          if (found != null) return found;
+        } on FormatException {
+          return null;
+        }
+      }
+      if (map.containsKey('output')) return map;
+      for (final child in map.values) {
+        final found = findSwitch(child);
+        if (found != null) return found;
+      }
+    } else if (value is List) {
+      for (final child in value) {
+        final found = findSwitch(child);
+        if (found != null) return found;
+      }
+    } else if (value is String &&
+        (value.trimLeft().startsWith('{') ||
+            value.trimLeft().startsWith('['))) {
+      try {
+        return findSwitch(jsonDecode(value));
+      } on FormatException {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  var device = findDevice(json);
+  // A few Cloud regions wrap a targeted response in `data` or omit the id
+  // because the request already contained a single id. Preserve the targeted
+  // identity in that case; never apply this fallback to an arbitrary list.
+  if (device == null) {
+    final candidate = json['data'] is Map
+        ? Map<String, dynamic>.from(json['data'] as Map)
+        : json['devices'] is List && (json['devices'] as List).length == 1
+        ? (json['devices'] as List).first is Map
+              ? Map<String, dynamic>.from(
+                  (json['devices'] as List).first as Map,
+                )
+              : null
+        : null;
+    if (candidate != null &&
+        (candidate.containsKey('status') ||
+            candidate.containsKey('settings'))) {
+      candidate['id'] = profile.deviceId;
+      device = candidate;
+    }
+  }
+  if (device == null) {
+    throw const ShellyClientException(
+      SmartChargerErrorCode.deviceOffline,
+      'Không tìm thấy đúng thiết bị Shelly trong phản hồi Cloud.',
+      retryable: true,
+    );
+  }
+  final status = parseShellyStatus(
+    {'status': device['status']},
+    ShellyTransport.cloud,
+    deviceName: profile.deviceName,
+  );
+  final statusSwitch = findSwitch(device['status']);
+  final settingsSwitch = findSwitch(device['settings']);
+  final energy = statusSwitch?['aenergy'];
+  final powerMeterFieldsPresent =
+      statusSwitch != null &&
+      statusSwitch.containsKey('apower') &&
+      (statusSwitch.containsKey('voltage') ||
+          statusSwitch.containsKey('voltage_v')) &&
+      (statusSwitch.containsKey('current') ||
+          statusSwitch.containsKey('current_a')) &&
+      ((energy is Map && energy.containsKey('total')) ||
+          statusSwitch.containsKey('energy_wh'));
+  final generationRaw = device['gen']?.toString().toUpperCase();
+  final generation = int.tryParse(
+    generationRaw?.replaceAll(RegExp(r'[^0-9]'), '') ?? '',
+  );
+  final onlineValue = device['online'];
+  final online =
+      onlineValue == 1 ||
+      onlineValue == true ||
+      const {
+        'true',
+        '1',
+        'online',
+      }.contains(onlineValue?.toString().toLowerCase());
+  return ShellyDeviceSnapshot(
+    deviceId: device['id']?.toString() ?? profile.deviceId,
+    model: (device['code'] ?? device['model'] ?? '').toString(),
+    generation: generation,
+    online: online,
+    status: status,
+    powerMeterFieldsPresent: powerMeterFieldsPresent,
+    switchConfig: ShellySwitchConfig.fromJson(settingsSwitch),
+  );
+}
+
 SmartChargerStatus parseShellyStatus(
   Map<String, dynamic> json,
   ShellyTransport transport, {
@@ -389,6 +633,15 @@ SmartChargerStatus parseShellyStatus(
   Map<String, dynamic>? findSwitch(Object? value) {
     if (value is Map) {
       final map = Map<String, dynamic>.from(value);
+      // Prefer status branches. Cloud responses also contain settings and the
+      // settings switch has no live `output`; walking it first can otherwise
+      // make a valid live status look malformed.
+      for (final key in const ['status', 'devices_status']) {
+        if (map.containsKey(key)) {
+          final found = findSwitch(map[key]);
+          if (found != null) return found;
+        }
+      }
       final direct = map['switch:0'];
       if (direct is Map) return Map<String, dynamic>.from(direct);
       if (direct is String) {

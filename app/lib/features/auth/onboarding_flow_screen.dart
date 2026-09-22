@@ -4,11 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/services/auth_service.dart';
-import '../../core/services/dashboard_preferences_service.dart';
-import '../../core/services/guide_registry.dart';
 import '../../core/services/onboarding_service.dart';
 import '../../core/widgets/app_popup.dart';
-import '../../core/widgets/coach_mark_overlay.dart';
 import '../../data/models/vinfast_model_spec.dart';
 import '../../data/repositories/vehicle_spec_repository.dart';
 import '../../navigation/app_navigation.dart';
@@ -182,30 +179,10 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
     if (res['success'] == true) {
       // Điều hướng vào màn chính AppNavigation
       final navigator = Navigator.of(context, rootNavigator: true);
-      final preferences = ref.read(dashboardPreferencesProvider);
       navigator.pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const AppNavigation()),
         (route) => false,
       );
-
-      // Tự động khởi chạy Spotlight tour lần đầu sau khi frame render
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        // Chỉ chạy nếu chưa từng hoàn thành
-        if (!preferences.isTourCompleted(GuideRegistry.overviewTourId)) {
-          CoachMarkOverlay.show(
-            context: navigator.context,
-            steps: GuideRegistry.getOverviewTourSteps(),
-            onFinish: () {
-              preferences.markTourCompleted(GuideRegistry.overviewTourId);
-            },
-            onDontShowAgain: (dontShow) {
-              if (dontShow) {
-                preferences.markTourCompleted(GuideRegistry.overviewTourId);
-              }
-            },
-          );
-        }
-      });
     } else {
       AppPopup.showError(res['error']?.toString() ?? 'Chưa hoàn tất được onboarding.');
     }

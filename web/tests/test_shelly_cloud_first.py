@@ -400,15 +400,37 @@ class RouteContractTests(unittest.TestCase):
                 "vehicleId": "VF-001", "cloudHost": "https://shelly-eu.shelly.cloud",
                 "cloudAuthKey": "secret-key", "lanAddress": "192.168.1.4",
                 "verification": {"cloudVerified": True, "powerMeterVerified": True,
-                                 "safeBootVerified": True, "noLoadTestVerified": True},
+                                 "safeBootVerified": True, "noLoadTestVerified": True,
+                                 "verifiedDeviceId": "plug-1", "verifiedModel": "S3PL-00112EU",
+                                 "verificationFingerprint": "fingerprint"},
             })
             self.assertEqual(saved.status_code, 200)
             listed = client.get("/api/shelly/profiles?vehicleId=VF-001").get_json()["data"]["items"]
             self.assertNotIn("cloudAuthKey", listed[0])
+            self.assertEqual(listed[0]["verifiedModel"], "S3PL-00112EU")
+            self.assertEqual(listed[0]["verificationFingerprint"], "fingerprint")
             restored = client.post("/api/shelly/profiles/plug-1/restore")
             self.assertEqual(restored.status_code, 200)
             self.assertEqual(restored.get_json()["data"]["cloudAuthKey"], "secret-key")
             self.assertEqual(restored.headers["Cache-Control"], "no-store, private")
+
+    def test_client_verification_flags_without_identity_cannot_unlock_profile(self):
+        metadata = SmartChargeRepository._profile_metadata(
+            {
+                "deviceId": "plug-1",
+                "model": "S3PL-00112EU",
+                "verification": {
+                    "cloudVerified": True,
+                    "powerMeterVerified": True,
+                    "safeBootVerified": True,
+                    "noLoadTestVerified": True,
+                },
+            },
+            revision=1,
+            now=utcnow(),
+        )
+        self.assertFalse(metadata["cloudVerified"])
+        self.assertFalse(SmartChargeRepository._profile_is_verified(metadata))
 
     def test_preview_and_idempotent_start_contract(self):
         self.client.post("/api/shelly/consent/start")

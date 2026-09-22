@@ -1,9 +1,17 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/notification_center_service.dart';
+import '../services/active_charging_session_coordinator.dart';
 import 'app_providers.dart';
 
 /// Current tab index provider (thay thế GlobalKey)
 final currentTabProvider = StateProvider<int>((ref) => 0);
+
+final activeChargingSessionProvider =
+    ChangeNotifierProvider<ActiveChargingSessionCoordinator>((ref) {
+      final coordinator = ActiveChargingSessionCoordinator();
+      ref.onDispose(coordinator.dispose);
+      return coordinator;
+    });
 
 /// App refresh coordinator - quản lý pull-to-refresh toàn app
 class AppRefreshCoordinator {
