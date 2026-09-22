@@ -93,11 +93,17 @@ class DashboardPreferencesService extends ChangeNotifier {
   static const _prefHiddenKey = 'dashboard_hidden';
   static const _prefCompletedToursKey = 'dashboard_completed_tours';
   static const _prefUpdatedAtKey = 'dashboard_updated_at';
+  static const _prefPendingToursKey = 'dashboard_pending_auto_tours';
+  static const _prefDismissedToursKey = 'dashboard_dismissed_tours';
+  static const overviewTourId = 'tour_overview_v2';
 
   List<String> _order = List.from(DashboardWidgetId.all);
   Set<String> _hidden = <String>{};
   Set<String> _completedTours = <String>{};
-  final int _guideSchemaVersion = 1;
+  Set<String> _pendingAutoTours = <String>{};
+  Set<String> _dismissedTours = <String>{};
+  String? _uid;
+  final int _guideSchemaVersion = 2;
   String _updatedAt = DateTime.now().toUtc().toIso8601String();
 
   bool _initialized = false;
@@ -108,6 +114,9 @@ class DashboardPreferencesService extends ChangeNotifier {
   List<String> get order => List.unmodifiable(_order);
   Set<String> get hidden => Set.unmodifiable(_hidden);
   Set<String> get completedTours => Set.unmodifiable(_completedTours);
+  Set<String> get pendingAutoTours => Set.unmodifiable(_pendingAutoTours);
+  Set<String> get dismissedTours => Set.unmodifiable(_dismissedTours);
+  String? get uid => _uid;
   String get updatedAt => _updatedAt;
 
   /// Danh sách widget đang hiển thị theo đúng thứ tự tùy chỉnh
@@ -116,13 +125,39 @@ class DashboardPreferencesService extends ChangeNotifier {
 
   bool isVisible(String widgetId) => !_hidden.contains(widgetId);
 
+  String _scopedKey(String key) => _uid == null ? key : '$key.$_uid';
+
+  /// Rebinds the preferences service to the authenticated account. Local
+  /// preferences are deliberately UID-scoped so account B cannot inherit
+  /// account A's dashboard or guide state on the same device.
+  Future<void> initializeForUser(String uid) async {
+    if (uid.trim().isEmpty) return;
+    if (_uid == uid && _initialized) return;
+    _uid = uid;
+    _initialized = false;
+    _order = List.from(DashboardWidgetId.all);
+    _hidden = <String>{};
+    _completedTours = <String>{};
+    _pendingAutoTours = <String>{};
+    _dismissedTours = <String>{};
+    _updatedAt = DateTime.now().toUtc().toIso8601String();
+    await initialize();
+  }
+
   /// Khởi tạo service: nạp từ cache cục bộ (SharedPreferences), sau đó đồng bộ ngầm Firestore
   Future<void> initialize() async {
     if (_initialized) return;
+    if (_uid == null) {
+      // Never read legacy/global keys while signed out: they can belong to a
+      // different account on this device.
+      _initialized = true;
+      notifyListeners();
+      return;
+    }
     try {
       final prefs = await SharedPreferences.getInstance();
 
-      final cachedOrderJson = prefs.getString(_prefOrderKey);
+      final cachedOrderJson = prefs.getString(_scopedKey(_prefOrderKey));
       if (cachedOrderJson != null) {
         final decoded = List<String>.from(jsonDecode(cachedOrderJson));
         _order = _normalizeOrder(decoded);
@@ -130,7 +165,7 @@ class DashboardPreferencesService extends ChangeNotifier {
         _order = List.from(DashboardWidgetId.all);
       }
 
-      final cachedHiddenJson = prefs.getString(_prefHiddenKey);
+      final cachedHiddenJson = prefs.getString(_scopedKey(_prefHiddenKey));
       if (cachedHiddenJson != null) {
         final decoded = Set<String>.from(jsonDecode(cachedHiddenJson));
         _hidden = decoded.intersection(DashboardWidgetId.all.toSet());
@@ -140,12 +175,21 @@ class DashboardPreferencesService extends ChangeNotifier {
         }
       }
 
-      final cachedToursJson = prefs.getString(_prefCompletedToursKey);
+      final cachedToursJson = prefs.getString(_scopedKey(_prefCompletedToursKey));
       if (cachedToursJson != null) {
         _completedTours = Set<String>.from(jsonDecode(cachedToursJson));
       }
 
-      final cachedUpdatedAt = prefs.getString(_prefUpdatedAtKey);
+      final pendingToursJson = prefs.getString(_scopedKey(_prefPendingToursKey));
+      if (pendingToursJson != null) {
+        _pendingAutoTours = Set<String>.from(jsonDecode(pendingToursJson));
+      }
+      final dismissedToursJson = prefs.getString(_scopedKey(_prefDismissedToursKey));
+      if (dismissedToursJson != null) {
+        _dismissedTours = Set<String>.from(jsonDecode(dismissedToursJson));
+      }
+
+      final cachedUpdatedAt = prefs.getString(_scopedKey(_prefUpdatedAtKey));
       if (cachedUpdatedAt != null) {
         _updatedAt = cachedUpdatedAt;
       }
@@ -241,8 +285,10 @@ class DashboardPreferencesService extends ChangeNotifier {
 
   /// Đánh dấu tour hướng dẫn đã hoàn thành
   Future<void> markTourCompleted(String tourId) async {
-    if (_completedTours.contains(tourId)) return;
+    if (_completedTours.contains(tourId) && !_pendingAutoTours.contains(tourId)) return;
     _completedTours.add(tourId);
+    _pendingAutoTours.remove(tourId);
+    _dismissedTours.remove(tourId);
     _updatedAt = DateTime.now().toUtc().toIso8601String();
 
     notifyListeners();
@@ -252,9 +298,58 @@ class DashboardPreferencesService extends ChangeNotifier {
 
   bool isTourCompleted(String tourId) => _completedTours.contains(tourId);
 
+  bool shouldAutoShow(String tourId) =>
+      _pendingAutoTours.contains(tourId) &&
+      !_completedTours.contains(tourId) &&
+      !_dismissedTours.contains(tourId);
+
+  Future<void> markTourDismissed(String tourId) async {
+    _dismissedTours.add(tourId);
+    _pendingAutoTours.remove(tourId);
+    _updatedAt = DateTime.now().toUtc().toIso8601String();
+    notifyListeners();
+    await _persistLocal();
+    _scheduleRemoteSync();
+  }
+
+  Future<void> seedPendingAutoTour(String tourId) async {
+    _pendingAutoTours.add(tourId);
+    _dismissedTours.remove(tourId);
+    _completedTours.remove(tourId);
+    _updatedAt = DateTime.now().toUtc().toIso8601String();
+    notifyListeners();
+    await _persistLocal();
+    _scheduleRemoteSync();
+  }
+
+  static Future<void> seedPendingTourForUser(String uid, String tourId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      '$_prefPendingToursKey.$uid',
+      jsonEncode(<String>[tourId]),
+    );
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('appPreferences')
+          .doc('ui')
+          .set({
+            'pendingAutoTours': <String>[tourId],
+            'guideSchemaVersion': 2,
+            'updatedAt': DateTime.now().toUtc().toIso8601String(),
+          }, SetOptions(merge: true));
+    } catch (_) {
+      // Local marker is sufficient to trigger the first tour; sync retries
+      // after authentication and connectivity are restored.
+    }
+  }
+
   /// Reset toàn bộ tiến độ tour (để người dùng có thể chạy lại từ đầu)
   Future<void> resetTours() async {
     _completedTours.clear();
+    _pendingAutoTours.clear();
+    _dismissedTours.clear();
     _updatedAt = DateTime.now().toUtc().toIso8601String();
 
     notifyListeners();
@@ -266,13 +361,21 @@ class DashboardPreferencesService extends ChangeNotifier {
   Future<void> _persistLocal() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_prefOrderKey, jsonEncode(_order));
-      await prefs.setString(_prefHiddenKey, jsonEncode(_hidden.toList()));
+      await prefs.setString(_scopedKey(_prefOrderKey), jsonEncode(_order));
+      await prefs.setString(_scopedKey(_prefHiddenKey), jsonEncode(_hidden.toList()));
       await prefs.setString(
-        _prefCompletedToursKey,
+        _scopedKey(_prefCompletedToursKey),
         jsonEncode(_completedTours.toList()),
       );
-      await prefs.setString(_prefUpdatedAtKey, _updatedAt);
+      await prefs.setString(
+        _scopedKey(_prefPendingToursKey),
+        jsonEncode(_pendingAutoTours.toList()),
+      );
+      await prefs.setString(
+        _scopedKey(_prefDismissedToursKey),
+        jsonEncode(_dismissedTours.toList()),
+      );
+      await prefs.setString(_scopedKey(_prefUpdatedAtKey), _updatedAt);
     } catch (e) {
       debugPrint('[DashboardPreferencesService] Persist error: $e');
     }
@@ -308,6 +411,12 @@ class DashboardPreferencesService extends ChangeNotifier {
       final remoteTours = (data['completedTours'] as List<dynamic>?)
           ?.map((e) => e.toString())
           .toSet();
+      final remotePending = (data['pendingAutoTours'] as List<dynamic>?)
+          ?.map((e) => e.toString())
+          .toSet();
+      final remoteDismissed = (data['dismissedTours'] as List<dynamic>?)
+          ?.map((e) => e.toString())
+          .toSet();
 
       if (remoteUpdatedAtStr != null) {
         final remoteTime = DateTime.tryParse(remoteUpdatedAtStr);
@@ -327,6 +436,8 @@ class DashboardPreferencesService extends ChangeNotifier {
           if (remoteTours != null) {
             _completedTours = remoteTours;
           }
+          if (remotePending != null) _pendingAutoTours = remotePending;
+          if (remoteDismissed != null) _dismissedTours = remoteDismissed;
           _updatedAt = remoteUpdatedAtStr;
           await _persistLocal();
           notifyListeners();
@@ -356,6 +467,8 @@ class DashboardPreferencesService extends ChangeNotifier {
         'dashboardOrder': _order,
         'hiddenDashboardWidgets': _hidden.toList(),
         'completedTours': _completedTours.toList(),
+        'pendingAutoTours': _pendingAutoTours.toList(),
+        'dismissedTours': _dismissedTours.toList(),
         'guideSchemaVersion': _guideSchemaVersion,
         'updatedAt': _updatedAt,
       }, SetOptions(merge: true));
@@ -385,9 +498,18 @@ class DashboardPreferencesService extends ChangeNotifier {
 final dashboardPreferencesProvider =
     ChangeNotifierProvider<DashboardPreferencesService>((ref) {
       final service = DashboardPreferencesService();
-      if (!service.isInitialized) {
+      // The offline shell and widget tests can render before Firebase has a
+      // default app. Reading FirebaseAuth.instance in that phase throws
+      // [core/no-app] and prevents the whole dashboard from rendering.
+      String? uid;
+      try {
+        uid = FirebaseAuth.instance.currentUser?.uid;
+      } on Object {
+        uid = null;
+      }
+      if (uid != null) {
         // ignore: discarded_futures
-        service.initialize();
+        service.initializeForUser(uid);
       }
       return service;
     });

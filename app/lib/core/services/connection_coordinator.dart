@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -77,6 +78,14 @@ class ConnectionCoordinator {
     : _connectivity = connectivity ?? Connectivity();
 
   static const _snapshotPrefix = 'smart_charge.active_snapshot.v3.';
+  String? get _uid {
+    try {
+      return FirebaseAuth.instance.currentUser?.uid;
+    } on Object {
+      return null;
+    }
+  }
+  String _scopedPrefix(String uid) => '$_snapshotPrefix$uid.';
   static const _backoff = <Duration>[
     Duration(seconds: 1),
     Duration(seconds: 2),
@@ -185,8 +194,10 @@ class ConnectionCoordinator {
   }
 
   Future<void> saveSnapshot(ActiveChargingSnapshot snapshot) async {
+    final uid = _uid;
+    if (uid == null) return;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList('$_snapshotPrefix${snapshot.sessionId}', [
+    await prefs.setStringList('${_scopedPrefix(uid)}${snapshot.sessionId}', [
       snapshot.vehicleId,
       snapshot.targetSoc.toString(),
       snapshot.effectiveStopAt.toUtc().toIso8601String(),
@@ -197,17 +208,22 @@ class ConnectionCoordinator {
   }
 
   Future<void> clearSnapshot(String sessionId) async =>
-      (await SharedPreferences.getInstance()).remove(
-        '$_snapshotPrefix$sessionId',
-      );
+      _uid == null
+          ? false
+          : (await SharedPreferences.getInstance()).remove(
+              '${_scopedPrefix(_uid!)}$sessionId',
+            );
 
   /// Returns locally persisted active-session snapshots for the shell pill.
   /// Snapshots contain no credentials and allow an active vehicle to remain
   /// visible after the user switches context to another vehicle.
   Future<List<ActiveChargingSnapshot>> loadSnapshots() async {
+    final uid = _uid;
+    if (uid == null) return const [];
     final prefs = await SharedPreferences.getInstance();
     final result = <ActiveChargingSnapshot>[];
-    for (final key in prefs.getKeys().where((key) => key.startsWith(_snapshotPrefix))) {
+    final prefix = _scopedPrefix(uid);
+    for (final key in prefs.getKeys().where((key) => key.startsWith(prefix))) {
       final values = prefs.getStringList(key);
       if (values == null || values.length < 6) continue;
       final stopAt = DateTime.tryParse(values[2]);
@@ -217,7 +233,7 @@ class ConnectionCoordinator {
       final relay = values[5].toLowerCase() == 'true';
       if (stopAt == null || target == null || soc == null || energy == null) continue;
       result.add(ActiveChargingSnapshot(
-        sessionId: key.substring(_snapshotPrefix.length),
+        sessionId: key.substring(prefix.length),
         vehicleId: values[0],
         targetSoc: target,
         effectiveStopAt: stopAt,

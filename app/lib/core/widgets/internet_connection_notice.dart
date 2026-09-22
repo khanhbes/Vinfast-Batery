@@ -128,7 +128,6 @@ class _InternetNoticeState extends State<InternetConnectionNotice> {
                 ),
               ),
             ),
-        ],
       ],
     );
   }

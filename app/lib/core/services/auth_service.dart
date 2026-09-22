@@ -8,6 +8,8 @@ import '../../data/services/push_notification_service.dart';
 import 'vehicle_policy.dart';
 import 'api_service.dart';
 import '../../data/repositories/vehicle_spec_repository.dart';
+import '../../data/services/smart_charge_telemetry_foreground_service.dart';
+import 'dashboard_preferences_service.dart';
 
 /// AuthService - Xử lý đăng ký/đăng nhập đồng bộ với Web Dashboard
 class AuthService {
@@ -42,8 +44,10 @@ class AuthService {
     final active = _foregroundBootstrapTask;
     if (active != null) return active;
     final now = DateTime.now();
-    if (!force && _lastForegroundBootstrap != null &&
-        now.difference(_lastForegroundBootstrap!) < const Duration(minutes: 15)) {
+    if (!force &&
+        _lastForegroundBootstrap != null &&
+        now.difference(_lastForegroundBootstrap!) <
+            const Duration(minutes: 15)) {
       return true;
     }
     final task = _checkForegroundAccountInternal();
@@ -62,7 +66,8 @@ class AuthService {
       await user.getIdToken(true);
       final response = await ApiService().get('/api/mobile/bootstrap');
       final status = response['statusCode'];
-      if (status == 401 || response['debugCode'] == 'user-disabled' ||
+      if (status == 401 ||
+          response['debugCode'] == 'user-disabled' ||
           response['debugCode'] == 'token-revoked') {
         await _auth.signOut();
         return false;
@@ -164,11 +169,20 @@ class AuthService {
         bootstrapPending = true;
         debugPrint('[AuthService] profile bootstrap deferred: $error');
       }
+      // The first-run guide is account-scoped. Seed it immediately after
+      // registration so it survives onboarding retries and a device switch.
+      await DashboardPreferencesService.seedPendingTourForUser(
+        user.uid,
+        DashboardPreferencesService.overviewTourId,
+      );
       try {
-        final response = await ApiService().post('/api/mobile/registration-bootstrap', {
-          'name': name.trim(),
-          if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
-        });
+        final response = await ApiService().post(
+          '/api/mobile/registration-bootstrap',
+          {
+            'name': name.trim(),
+            if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
+          },
+        );
         bootstrapPending = bootstrapPending || response['success'] != true;
       } catch (_) {
         bootstrapPending = true;
@@ -204,7 +218,12 @@ class AuthService {
       return {'success': false, 'error': errorMessage, 'code': e.code};
     } catch (e) {
       debugPrint('[AuthService] Registration error: $e');
-      return {'success': false, 'error': 'Đăng ký thất bại.', 'code': 'registrationFailed', 'retryable': true};
+      return {
+        'success': false,
+        'error': 'Đăng ký thất bại.',
+        'code': 'registrationFailed',
+        'retryable': true,
+      };
     }
   }
 
@@ -284,7 +303,12 @@ class AuthService {
       return {'success': false, 'error': errorMessage, 'code': e.code};
     } catch (e) {
       debugPrint('[AuthService] Login error: $e');
-      return {'success': false, 'error': 'Đăng nhập thất bại.', 'code': 'loginFailed', 'retryable': true};
+      return {
+        'success': false,
+        'error': 'Đăng nhập thất bại.',
+        'code': 'loginFailed',
+        'retryable': true,
+      };
     }
   }
 
@@ -340,6 +364,15 @@ class AuthService {
   Future<Map<String, dynamic>> logout() async {
     try {
       await PushNotificationService.instance.revokeCurrentUser();
+      // Stop the local telemetry worker only. Do not send a relay OFF command;
+      // the Shelly timer remains the hardware safety authority and another
+      // device may continue monitoring the account-scoped session.
+      try {
+        await SmartChargeTelemetryForegroundService.stop();
+      } catch (error) {
+        // A missing foreground-service plugin must not prevent Firebase sign-out.
+        debugPrint('[AuthService] telemetry worker stop deferred: $error');
+      }
       // Dừng auto sync
       _syncService.stopAutoSync();
 
@@ -355,7 +388,12 @@ class AuthService {
       return {'success': true, 'message': 'Logout successful'};
     } catch (e) {
       debugPrint('[AuthService] Logout error: $e');
-      return {'success': false, 'error': 'Đăng xuất thất bại.', 'code': 'logoutFailed', 'retryable': true};
+      return {
+        'success': false,
+        'error': 'Đăng xuất thất bại.',
+        'code': 'logoutFailed',
+        'retryable': true,
+      };
     }
   }
 
@@ -410,7 +448,12 @@ class AuthService {
       return result;
     } catch (e) {
       debugPrint('[AuthService] Add vehicle error: $e');
-      return {'success': false, 'error': 'Không thể thêm xe.', 'code': 'vehicleAddFailed', 'retryable': true};
+      return {
+        'success': false,
+        'error': 'Không thể thêm xe.',
+        'code': 'vehicleAddFailed',
+        'retryable': true,
+      };
     }
   }
 

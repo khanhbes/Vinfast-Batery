@@ -1,0 +1,23 @@
+Shelly Cloud supervised safety probe (secrets and identifiers omitted)
+Date: 2026-09-22
+Transport: Shelly Cloud API, readback only except one guarded ON/OFF cycle
+
+Initial readback:
+- relay: OFF
+- power: 0 W
+- current: 0 A
+- voltage: 226.6 V
+- temperature: 43.3 C
+- Safe Boot: initial_state=off, auto_on=false, auto_off=false
+- Cloud identity: model S3PL-00112EU, generation reported by Cloud: G2; DeviceInfo hardware generation 3
+
+Command sequence (verified run):
+1. Preconditions passed (OFF, 0 W, 0 A, 229.8 V).
+2. Exactly one ON request with toggle_after=5 was sent; no ON retry occurred.
+3. Readback observed relay ON and a positive timer; no-load power/current stayed within the configured thresholds.
+4. Timer elapsed and relay was observed OFF; the safety finally block sent exactly one OFF command.
+5. Final readback: relay OFF, 0 W, 0 A, 229.8 V, energy 12281 Wh, no active timer.
+
+Result: PASS for the supervised Direct Cloud no-load cycle. Hardware was left OFF and safe.
+
+APK follow-up: source was rebuilt as 1.1.5+115 after adding Cloud Host input and a five-second server-backup timeout. Universal APK SHA-256: F67D40A61AE2711E307D57C41E9A7B277E224C84DDBD44857822D3585912D1FE. The API 36 emulator then refused installation because its /data partition had only about 307–398 MB free, including the x86_64 split APK; the in-app Shelly cycle is therefore BLOCKED and not claimed as PASS.

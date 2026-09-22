@@ -53,8 +53,6 @@ class _AuthGateState extends ConsumerState<AuthGate> {
   /// User đã chủ động Đăng xuất (chỉ khi flag này true mới về Login ngay).
   bool _explicitSignedOut = false;
   bool _updateCheckStarted = false;
-  Future<OnboardingDraft?>? _draftFuture;
-  String? _draftUid;
 
   @override
   void initState() {
@@ -355,11 +353,14 @@ class _AuthenticatedRoot extends ConsumerStatefulWidget {
 class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
     with WidgetsBindingObserver {
   Future<DocumentSnapshot<Map<String, dynamic>>>? _profileFuture;
+  Future<OnboardingDraft?>? _draftFuture;
+  String? _draftUid;
   @override
   void dispose() {
     // Khi logout / unmount: gỡ lifecycle observer của AppUpdateService.
     AppUpdateService().stopObservingLifecycle();
     WidgetsBinding.instance.removeObserver(this);
+    ref.read(activeChargingSessionProvider).clear();
     super.dispose();
   }
 

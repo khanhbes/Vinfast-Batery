@@ -18,6 +18,7 @@ import '../../data/services/shelly_cloud_auth_service.dart';
 import '../../data/services/shelly_discovery_service.dart';
 import '../../data/services/smart_charger_credentials_service.dart';
 import '../../data/services/smart_charger_service.dart';
+import '../../data/repositories/smart_charger_repository.dart';
 import '../../data/services/vehicle_charger_binding_service.dart';
 import '../../data/services/smart_charge_preferences_service.dart';
 import '../../core/services/session_service.dart';
@@ -77,6 +78,10 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
   bool cloudBackupEnabled = true;
   int defaultStopSoc = 100;
 
+  String _userMessage(Object error) => error is SmartChargerException
+      ? error.message
+      : 'Không thể hoàn tất thao tác. Hãy kiểm tra kết nối Shelly và thử lại.';
+
   @override
   void initState() {
     super.initState();
@@ -125,7 +130,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
       vehicleName = vehicle?.vehicleName ?? 'Chưa chọn xe';
       vehiclePlate = vehicle == null
           ? 'Chưa có dữ liệu xe'
-          : '${vehicle.vehicleId} • ${vehicle.hasBatteryData ? 'Pin ${vehicle.currentBattery}%' : 'Chưa có SOC'}';
+          : '${vehicle.licensePlate?.trim().isNotEmpty == true ? vehicle.licensePlate!.trim() : 'Chưa có biển số'} • ${vehicle.hasBatteryData ? 'Pin ${vehicle.currentBattery}%' : 'Chưa có SOC'}';
       mode = SmartChargerConnectionMode.advancedDirect;
 
       var active = await credentials.readProfile(vehicleId: selectedVehicleId);
@@ -275,7 +280,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
         );
       }
     } catch (e) {
-      AppPopup.showError('Quét dải IP thất bại', detail: '$e');
+      AppPopup.showError('Quét dải IP thất bại', detail: _userMessage(e));
     } finally {
       if (mounted) setState(() => isSweeping = false);
     }
@@ -337,7 +342,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
         );
       }
     } catch (e) {
-      AppPopup.showError('Không thể kết nối IP LAN', detail: '$e');
+      AppPopup.showError('Không thể kết nối IP LAN', detail: _userMessage(e));
     } finally {
       if (mounted) {
         setState(() {
@@ -363,6 +368,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
       final devices = await cloudAuth.listDevices(
         authKey: key,
         cloudHost: host.text.trim().isEmpty ? null : host.text.trim(),
+        deviceId: dId,
       );
       final normalizedTarget = dId.toLowerCase().replaceAll(
         RegExp(r'[^a-f0-9]'),
@@ -384,18 +390,18 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
           AppPopup.showSuccess(
             'Shelly Cloud: ONLINE!',
             detail:
-                'Thiết bị "${matched.name}" (${matched.id}) đang trực tuyến trên đám mây.',
+                'Thiết bị ${_maskDeviceId(matched.id)} đang trực tuyến trên đám mây.',
           );
         } else {
           AppPopup.showWarning(
             'Shelly Cloud: OFFLINE',
             detail:
-                'Tìm thấy "${matched.name}" (${matched.id}) nhưng thiết bị hiện đang mất kết nối Internet.',
+                'Thiết bị ${_maskDeviceId(matched.id)} đang mất kết nối Internet.',
           );
         }
       } else if (devices.isNotEmpty) {
         AppPopup.showWarning(
-          'Không tìm thấy Device ID $dId',
+          'Không tìm thấy thiết bị đã cấu hình',
           detail:
               'Auth Key hợp lệ, tìm thấy ${devices.length} thiết bị khác trên tài khoản này.',
         );
@@ -406,7 +412,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
         );
       }
     } catch (e) {
-      AppPopup.showError('Lỗi kiểm tra Shelly Cloud', detail: '$e');
+      AppPopup.showError('Lỗi kiểm tra Shelly Cloud', detail: _userMessage(e));
     } finally {
       if (mounted) {
         setState(() {
@@ -415,6 +421,12 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
         });
       }
     }
+  }
+
+  String _maskDeviceId(String value) {
+    final normalized = value.trim();
+    if (normalized.length <= 4) return '••••';
+    return '${normalized.substring(0, 2)}••••${normalized.substring(normalized.length - 2)}';
   }
 
   Future<void> _verifyAll() async {
@@ -430,16 +442,31 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
         cloudVerified: result.cloudStatus != null,
         lanVerified: result.lanStatus != null,
         powerMeterVerified: result.powerMeterAvailable,
+        safeBootVerified: result.safeBootVerified,
         lastVerifiedAt: DateTime.now(),
+        verifiedDeviceId: prof.deviceId,
+        verifiedModel: result.model ?? prof.model,
+        verificationFingerprint: SmartChargerCredentialsService.fingerprintFor(
+          prof,
+          initialState: result.initialState,
+          autoOn: result.autoOn,
+        ),
       );
       verification = newState;
-      await credentials.saveProfile(prof);
+      // Keep a newly checked profile as a draft until Safe Boot and the
+      // supervised no-load relay test have both passed.
+      await credentials.saveDraft(prof);
       await credentials.saveVerification(newState);
-      await credentials.clearDraft();
       capabilities = await direct.capabilities();
       bool backupFailed = false;
       try {
-        if (cloudBackupEnabled) await server.registerShellyDevice(prof);
+        if (cloudBackupEnabled) {
+          await server.registerShellyDevice(
+            prof,
+            vehicleId: selectedVehicleId,
+            verification: newState.toJson(),
+          ).timeout(const Duration(seconds: 5));
+        }
       } catch (_) {
         backupFailed = true;
       }
@@ -460,7 +487,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
       if (mounted) {
         AppPopup.showError(
           'Kiểm tra thất bại',
-          detail: error.toString(),
+          detail: _userMessage(error),
           userInitiated: true,
         );
       }
@@ -546,7 +573,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
             : '${NumberFormat.decimalPattern('vi_VN').format(value)} đ/kWh · áp dụng cho phiên mới',
       );
     } catch (error) {
-      AppPopup.showError('Không thể lưu giá điện', detail: '$error');
+      AppPopup.showError('Không thể lưu giá điện', detail: _userMessage(error));
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -571,7 +598,10 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
             '${(value ?? 400).toStringAsFixed(0)} W · áp dụng tính thời gian sạc',
       );
     } catch (error) {
-      AppPopup.showError('Không thể lưu công suất sạc', detail: '$error');
+      AppPopup.showError(
+        'Không thể lưu công suất sạc',
+        detail: _userMessage(error),
+      );
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -721,7 +751,11 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                 borderRadius: BorderRadius.circular(CockpitRadius.small),
                 border: Border.all(color: CockpitColors.border),
               ),
-              child: const Icon(Icons.more_vert_rounded, color: CockpitColors.muted, size: 18),
+              child: const Icon(
+                Icons.more_vert_rounded,
+                color: CockpitColors.muted,
+                size: 18,
+              ),
             ),
             onSelected: (val) {
               if (val == 'delete') _delete();
@@ -733,14 +767,20 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                 value: 'refresh',
                 child: Text(
                   'Kiểm tra kết nối',
-                  style: CockpitTypography.body(fontSize: 13, color: CockpitColors.text),
+                  style: CockpitTypography.body(
+                    fontSize: 13,
+                    color: CockpitColors.text,
+                  ),
                 ),
               ),
               PopupMenuItem(
                 value: 'help',
                 child: Text(
                   'Hướng dẫn sử dụng',
-                  style: CockpitTypography.body(fontSize: 13, color: CockpitColors.text),
+                  style: CockpitTypography.body(
+                    fontSize: 13,
+                    color: CockpitColors.text,
+                  ),
                 ),
               ),
               const PopupMenuDivider(),
@@ -924,7 +964,10 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: CockpitColors.emeraldSubtle,
                       borderRadius: BorderRadius.circular(CockpitRadius.full),
@@ -1006,7 +1049,9 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         foregroundColor: CockpitColors.shell,
                         padding: const EdgeInsets.symmetric(horizontal: 14),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(CockpitRadius.small),
+                          borderRadius: BorderRadius.circular(
+                            CockpitRadius.small,
+                          ),
                         ),
                       ),
                       icon: const Icon(Icons.bolt_rounded, size: 16),
@@ -1041,7 +1086,11 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                   borderRadius: BorderRadius.circular(CockpitRadius.small),
                   border: Border.all(color: CockpitColors.border),
                 ),
-                child: const Icon(Icons.bolt_rounded, color: CockpitColors.emerald, size: 20),
+                child: const Icon(
+                  Icons.bolt_rounded,
+                  color: CockpitColors.emerald,
+                  size: 20,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -1101,7 +1150,9 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
           child: Column(
             children: [
               InkWell(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(CockpitRadius.large)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(CockpitRadius.large),
+                ),
                 onTap: () => _showQuickPowerDialog(),
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -1113,7 +1164,10 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         children: [
                           Text(
                             'Công suất sạc',
-                            style: CockpitTypography.label(fontSize: 12, color: CockpitColors.muted),
+                            style: CockpitTypography.label(
+                              fontSize: 12,
+                              color: CockpitColors.muted,
+                            ),
                           ),
                           const SizedBox(height: 4),
                           Text(
@@ -1126,7 +1180,10 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           ),
                         ],
                       ),
-                      const Icon(Icons.chevron_right_rounded, color: CockpitColors.muted),
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        color: CockpitColors.muted,
+                      ),
                     ],
                   ),
                 ),
@@ -1147,7 +1204,10 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         children: [
                           Text(
                             'Đơn giá điện',
-                            style: CockpitTypography.label(fontSize: 12, color: CockpitColors.muted),
+                            style: CockpitTypography.label(
+                              fontSize: 12,
+                              color: CockpitColors.muted,
+                            ),
                           ),
                           const SizedBox(height: 4),
                           Text(
@@ -1160,7 +1220,10 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           ),
                         ],
                       ),
-                      const Icon(Icons.chevron_right_rounded, color: CockpitColors.muted),
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        color: CockpitColors.muted,
+                      ),
                     ],
                   ),
                 ),
@@ -1204,7 +1267,9 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                       ),
                       _statusPillBadge(
                         icon: Icons.wifi_rounded,
-                        label: verification.lanVerified ? 'Đã xác minh' : 'Chưa xác minh',
+                        label: verification.lanVerified
+                            ? 'Đã xác minh'
+                            : 'Chưa xác minh',
                         verified: verification.lanVerified,
                       ),
                     ],
@@ -1226,10 +1291,16 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           height: 40,
                           child: OutlinedButton(
                             style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: CockpitColors.border),
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              side: const BorderSide(
+                                color: CockpitColors.border,
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                              ),
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(CockpitRadius.small),
+                                borderRadius: BorderRadius.circular(
+                                  CockpitRadius.small,
+                                ),
                               ),
                             ),
                             onPressed: busy ? null : _testLanQuick,
@@ -1261,10 +1332,16 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           height: 40,
                           child: OutlinedButton(
                             style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: CockpitColors.border),
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              side: const BorderSide(
+                                color: CockpitColors.border,
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                              ),
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(CockpitRadius.small),
+                                borderRadius: BorderRadius.circular(
+                                  CockpitRadius.small,
+                                ),
                               ),
                             ),
                             onPressed: busy || isSweeping ? null : _sweepSubnet,
@@ -1295,7 +1372,11 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.cloud_outlined, color: CockpitColors.info, size: 16),
+                          const Icon(
+                            Icons.cloud_outlined,
+                            color: CockpitColors.info,
+                            size: 16,
+                          ),
                           const SizedBox(width: 6),
                           Text(
                             'Cloud',
@@ -1309,7 +1390,9 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                       ),
                       _statusPillBadge(
                         icon: Icons.cloud_rounded,
-                        label: verification.cloudVerified ? 'Đã xác minh' : 'Chưa xác minh',
+                        label: verification.cloudVerified
+                            ? 'Đã xác minh'
+                            : 'Chưa xác minh',
                         verified: verification.cloudVerified,
                       ),
                     ],
@@ -1333,10 +1416,16 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           height: 40,
                           child: OutlinedButton(
                             style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: CockpitColors.border),
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              side: const BorderSide(
+                                color: CockpitColors.border,
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                              ),
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(CockpitRadius.small),
+                                borderRadius: BorderRadius.circular(
+                                  CockpitRadius.small,
+                                ),
                               ),
                             ),
                             onPressed: busy ? null : _testCloudQuick,
@@ -1368,10 +1457,16 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           height: 40,
                           child: OutlinedButton(
                             style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: CockpitColors.border),
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              side: const BorderSide(
+                                color: CockpitColors.border,
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                              ),
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(CockpitRadius.small),
+                                borderRadius: BorderRadius.circular(
+                                  CockpitRadius.small,
+                                ),
                               ),
                             ),
                             onPressed: () => _tabController.animateTo(2),
@@ -1455,7 +1550,9 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         foregroundColor: CockpitColors.shell,
                         padding: const EdgeInsets.symmetric(horizontal: 14),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(CockpitRadius.small),
+                          borderRadius: BorderRadius.circular(
+                            CockpitRadius.small,
+                          ),
                         ),
                       ),
                       icon: const Icon(Icons.bolt_rounded, size: 16),
@@ -1495,7 +1592,11 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           color: CockpitColors.emerald.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Icon(Icons.shield_outlined, color: CockpitColors.emerald, size: 18),
+                        child: const Icon(
+                          Icons.shield_outlined,
+                          color: CockpitColors.emerald,
+                          size: 18,
+                        ),
                       ),
                       const SizedBox(width: 10),
                       Text(
@@ -1509,7 +1610,10 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                     ],
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: CockpitColors.emeraldSubtle,
                       borderRadius: BorderRadius.circular(CockpitRadius.full),
@@ -1569,7 +1673,9 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                     side: const BorderSide(color: CockpitColors.border),
                     backgroundColor: CockpitColors.elevated,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(CockpitButtonTokens.radius),
+                      borderRadius: BorderRadius.circular(
+                        CockpitButtonTokens.radius,
+                      ),
                     ),
                   ),
                   child: Row(
@@ -1584,7 +1690,11 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         ),
                       ),
                       const SizedBox(width: 6),
-                      const Icon(Icons.arrow_forward_rounded, size: 16, color: CockpitColors.muted),
+                      const Icon(
+                        Icons.arrow_forward_rounded,
+                        size: 16,
+                        color: CockpitColors.muted,
+                      ),
                     ],
                   ),
                 ),
@@ -1610,7 +1720,11 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                       color: CockpitColors.emerald.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(Icons.verified_user_outlined, color: CockpitColors.emerald, size: 18),
+                    child: const Icon(
+                      Icons.verified_user_outlined,
+                      color: CockpitColors.emerald,
+                      size: 18,
+                    ),
                   ),
                   const SizedBox(width: 10),
                   Text(
@@ -1653,7 +1767,9 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                   ),
                   _statusPillBadge(
                     icon: Icons.shield_rounded,
-                    label: verification.safeBootVerified ? 'Đã xác minh' : 'Chưa xác minh',
+                    label: verification.safeBootVerified
+                        ? 'Đã xác minh'
+                        : 'Chưa xác minh',
                     verified: verification.safeBootVerified,
                   ),
                 ],
@@ -1699,11 +1815,17 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         foregroundColor: CockpitColors.text,
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(CockpitRadius.small),
+                          borderRadius: BorderRadius.circular(
+                            CockpitRadius.small,
+                          ),
                         ),
                       ),
                       onPressed: busy ? null : _runNoLoadTest,
-                      icon: const Icon(Icons.toggle_on_outlined, size: 16, color: CockpitColors.emerald),
+                      icon: const Icon(
+                        Icons.toggle_on_outlined,
+                        size: 16,
+                        color: CockpitColors.emerald,
+                      ),
                       label: Text(
                         'Kiểm tra',
                         style: CockpitTypography.label(
@@ -1785,6 +1907,14 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              _darkInputField(
+                controller: host,
+                label: 'Cloud Host',
+                hint: 'Ví dụ: https://shelly-xxx-eu.shelly.cloud',
+                prefixIcon: Icons.dns_outlined,
+                keyboardType: TextInputType.url,
+              ),
+              const SizedBox(height: 10),
               _darkInputField(
                 controller: deviceId,
                 label: 'Device ID',
@@ -1873,7 +2003,11 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           color: CockpitColors.emerald.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Icon(Icons.bolt_rounded, color: CockpitColors.emerald, size: 18),
+                        child: const Icon(
+                          Icons.bolt_rounded,
+                          color: CockpitColors.emerald,
+                          size: 18,
+                        ),
                       ),
                       const SizedBox(width: 10),
                       Column(
@@ -1881,7 +2015,10 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         children: [
                           Text(
                             'Xe liên kết',
-                            style: CockpitTypography.label(fontSize: 11, color: CockpitColors.muted),
+                            style: CockpitTypography.label(
+                              fontSize: 11,
+                              color: CockpitColors.muted,
+                            ),
                           ),
                           const SizedBox(height: 1),
                           Text(
@@ -1904,7 +2041,9 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         foregroundColor: CockpitColors.text,
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(CockpitRadius.small),
+                          borderRadius: BorderRadius.circular(
+                            CockpitRadius.small,
+                          ),
                         ),
                       ),
                       onPressed: _showSwitchVehicleDialog,
@@ -1929,7 +2068,10 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
               // Công suất sạc tiêu chuẩn
               Text(
                 'Công suất sạc tiêu chuẩn (W)',
-                style: CockpitTypography.label(fontSize: 12, color: CockpitColors.muted),
+                style: CockpitTypography.label(
+                  fontSize: 12,
+                  color: CockpitColors.muted,
+                ),
               ),
               const SizedBox(height: 6),
               Row(
@@ -1950,8 +2092,12 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         backgroundColor: CockpitColors.emeraldSubtle,
                         foregroundColor: CockpitColors.emerald,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(CockpitRadius.small),
-                          side: BorderSide(color: CockpitColors.emerald.withValues(alpha: 0.3)),
+                          borderRadius: BorderRadius.circular(
+                            CockpitRadius.small,
+                          ),
+                          side: BorderSide(
+                            color: CockpitColors.emerald.withValues(alpha: 0.3),
+                          ),
                         ),
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                       ),
@@ -2015,7 +2161,10 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
               // Đơn giá tiền điện
               Text(
                 'Đơn giá tiền điện (VND/kWh)',
-                style: CockpitTypography.label(fontSize: 12, color: CockpitColors.muted),
+                style: CockpitTypography.label(
+                  fontSize: 12,
+                  color: CockpitColors.muted,
+                ),
               ),
               const SizedBox(height: 6),
               Row(
@@ -2036,7 +2185,9 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         backgroundColor: CockpitColors.elevated,
                         foregroundColor: CockpitColors.text,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(CockpitRadius.small),
+                          borderRadius: BorderRadius.circular(
+                            CockpitRadius.small,
+                          ),
                           side: const BorderSide(color: CockpitColors.border),
                         ),
                         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -2122,7 +2273,9 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
           decoration: BoxDecoration(
             color: CockpitColors.danger.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(CockpitRadius.large),
-            border: Border.all(color: CockpitColors.danger.withValues(alpha: 0.25)),
+            border: Border.all(
+              color: CockpitColors.danger.withValues(alpha: 0.25),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2153,10 +2306,14 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                       height: CockpitButtonTokens.height,
                       child: OutlinedButton(
                         style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: CockpitColors.danger.withValues(alpha: 0.2)),
+                          side: BorderSide(
+                            color: CockpitColors.danger.withValues(alpha: 0.2),
+                          ),
                           backgroundColor: CockpitColors.elevated,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(CockpitButtonTokens.radius),
+                            borderRadius: BorderRadius.circular(
+                              CockpitButtonTokens.radius,
+                            ),
                           ),
                         ),
                         onPressed: () {
@@ -2182,9 +2339,13 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                       child: OutlinedButton(
                         style: OutlinedButton.styleFrom(
                           side: const BorderSide(color: CockpitColors.danger),
-                          backgroundColor: CockpitColors.danger.withValues(alpha: 0.15),
+                          backgroundColor: CockpitColors.danger.withValues(
+                            alpha: 0.15,
+                          ),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(CockpitButtonTokens.radius),
+                            borderRadius: BorderRadius.circular(
+                              CockpitButtonTokens.radius,
+                            ),
                           ),
                         ),
                         onPressed: _delete,
@@ -2233,10 +2394,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
           Container(
             width: 6,
             height: 6,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-            ),
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
           const SizedBox(width: 5),
           Icon(icon, size: 13, color: color),
@@ -2321,9 +2479,15 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
       style: CockpitTypography.body(fontSize: 13, color: CockpitColors.text),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: CockpitTypography.label(fontSize: 12, color: CockpitColors.muted),
+        labelStyle: CockpitTypography.label(
+          fontSize: 12,
+          color: CockpitColors.muted,
+        ),
         hintText: hint,
-        hintStyle: CockpitTypography.body(fontSize: 12, color: CockpitColors.dim),
+        hintStyle: CockpitTypography.body(
+          fontSize: 12,
+          color: CockpitColors.dim,
+        ),
         prefixIcon: prefixIcon != null
             ? Icon(prefixIcon, color: CockpitColors.muted, size: 18)
             : null,
@@ -2341,7 +2505,10 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
             : null,
         filled: true,
         fillColor: CockpitColors.elevated,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 13,
+        ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(CockpitRadius.small),
           borderSide: const BorderSide(color: CockpitColors.border),
@@ -2366,7 +2533,9 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
         onPressed: busy ? null : onTap,
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 10),
-          foregroundColor: isPrimary ? CockpitColors.emerald : CockpitColors.text,
+          foregroundColor: isPrimary
+              ? CockpitColors.emerald
+              : CockpitColors.text,
           backgroundColor: isPrimary
               ? CockpitColors.emeraldSubtle
               : CockpitColors.elevated,
@@ -2464,17 +2633,19 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
     );
   }
 
-  void _runNoLoadTest() async {
+  Future<void> _runNoLoadTest() async {
+    if (busy) return;
+    final prof = profile;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: _ui.surface,
         title: Text(
-          'Kiểm tra relay chưa khả dụng',
+          'Xác nhận test relay không tải',
           style: TextStyle(color: _ui.text),
         ),
         content: Text(
-          'Chức năng này chưa gửi lệnh kiểm tra đến Shelly. Không thể xác nhận relay hoạt động hoặc an toàn từ màn hình này.',
+          'Rút sạc xe và mọi tải khỏi Shelly. App sẽ đọc Safe Boot qua Cloud, bật relay 5 giây bằng device timer, gửi OFF và đọc lại. Không chạy test khi còn tải.',
           style: TextStyle(color: _ui.muted),
         ),
         actions: [
@@ -2486,7 +2657,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
             style: FilledButton.styleFrom(backgroundColor: _ui.primary),
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(
-              'ĐÃ HIỂU',
+              'Đã tháo tải',
               style: TextStyle(
                 color: _ui.onPrimary,
                 fontWeight: FontWeight.bold,
@@ -2496,10 +2667,57 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
         ],
       ),
     );
-    if (ok == true) {
-      AppPopup.showWarning(
-        'Chưa hỗ trợ kiểm tra relay thực tế. Không có lệnh đóng/ngắt nào được gửi; chưa thể xác nhận an toàn.',
+    if (ok != true || !mounted) return;
+
+    setState(() => busy = true);
+    try {
+      await direct.configureSafeBoot(profile: prof);
+      await direct.runNoLoadTest(profile: prof);
+      final updated = verification.copyWith(
+        safeBootVerified: true,
+        noLoadTestVerified: true,
+        lastVerifiedAt: DateTime.now(),
       );
+      await credentials.saveProfile(prof);
+      await credentials.saveVerification(updated);
+      await SmartChargerRepositoryFactory.setMode(
+        SmartChargerConnectionMode.advancedDirect,
+      );
+      verification = updated;
+      capabilities = await direct.capabilities();
+      try {
+        if (cloudBackupEnabled) {
+          await server.registerShellyDevice(
+            prof,
+            vehicleId: selectedVehicleId,
+            verification: updated.toJson(),
+          ).timeout(const Duration(seconds: 5));
+        }
+      } catch (_) {
+        // Local safety state remains valid; server backup can be retried.
+      }
+      if (mounted) {
+        setState(() {
+          dirty = false;
+          lastCheckedTime = DateFormat('HH:mm').format(DateTime.now());
+        });
+        AppPopup.showSuccess(
+          'Relay đã test và được xác minh',
+          detail:
+              'Safe Boot, ON không tải 5 giây và OFF/readback đạt. Đã mở khóa điều khiển an toàn.',
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        AppPopup.showError(
+          'Test relay thất bại',
+          detail:
+              'Relay không được đánh dấu an toàn. Kiểm tra tải điện và trạng thái OFF.',
+          userInitiated: true,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => busy = false);
     }
   }
 
@@ -2508,7 +2726,9 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
       context: context,
       backgroundColor: CockpitColors.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(CockpitRadius.sheet)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(CockpitRadius.sheet),
+        ),
       ),
       builder: (ctx) => SafeArea(
         child: Padding(
@@ -2537,7 +2757,11 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                       color: CockpitColors.emerald.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(Icons.tune_rounded, color: CockpitColors.emerald, size: 18),
+                    child: const Icon(
+                      Icons.tune_rounded,
+                      color: CockpitColors.emerald,
+                      size: 18,
+                    ),
                   ),
                   const SizedBox(width: 10),
                   Text(
@@ -2577,17 +2801,30 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
         ),
         title: Text(
           'Chỉnh công suất sạc',
-          style: CockpitTypography.heading(fontSize: 16, fontWeight: FontWeight.w700, color: CockpitColors.text),
+          style: CockpitTypography.heading(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: CockpitColors.text,
+          ),
         ),
         content: TextField(
           controller: chargePower,
           keyboardType: TextInputType.number,
-          style: CockpitTypography.numbers(fontSize: 15, color: CockpitColors.text),
+          style: CockpitTypography.numbers(
+            fontSize: 15,
+            color: CockpitColors.text,
+          ),
           decoration: InputDecoration(
             suffixText: 'W',
-            suffixStyle: CockpitTypography.label(fontSize: 13, color: CockpitColors.muted),
+            suffixStyle: CockpitTypography.label(
+              fontSize: 13,
+              color: CockpitColors.muted,
+            ),
             labelText: 'Công suất (W)',
-            labelStyle: CockpitTypography.label(fontSize: 12, color: CockpitColors.muted),
+            labelStyle: CockpitTypography.label(
+              fontSize: 12,
+              color: CockpitColors.muted,
+            ),
             filled: true,
             fillColor: CockpitColors.elevated,
             enabledBorder: OutlineInputBorder(
@@ -2605,14 +2842,19 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
             onPressed: () => Navigator.pop(ctx),
             child: Text(
               'HỦY',
-              style: CockpitTypography.label(fontSize: 12, color: CockpitColors.muted),
+              style: CockpitTypography.label(
+                fontSize: 12,
+                color: CockpitColors.muted,
+              ),
             ),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: CockpitColors.emerald,
               foregroundColor: CockpitColors.shell,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(CockpitRadius.small)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(CockpitRadius.small),
+              ),
             ),
             onPressed: () {
               Navigator.pop(ctx);
@@ -2643,17 +2885,30 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
         ),
         title: Text(
           'Chỉnh đơn giá điện',
-          style: CockpitTypography.heading(fontSize: 16, fontWeight: FontWeight.w700, color: CockpitColors.text),
+          style: CockpitTypography.heading(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: CockpitColors.text,
+          ),
         ),
         content: TextField(
           controller: tariff,
           keyboardType: TextInputType.number,
-          style: CockpitTypography.numbers(fontSize: 15, color: CockpitColors.text),
+          style: CockpitTypography.numbers(
+            fontSize: 15,
+            color: CockpitColors.text,
+          ),
           decoration: InputDecoration(
             suffixText: 'đ/kWh',
-            suffixStyle: CockpitTypography.label(fontSize: 13, color: CockpitColors.muted),
+            suffixStyle: CockpitTypography.label(
+              fontSize: 13,
+              color: CockpitColors.muted,
+            ),
             labelText: 'Đơn giá',
-            labelStyle: CockpitTypography.label(fontSize: 12, color: CockpitColors.muted),
+            labelStyle: CockpitTypography.label(
+              fontSize: 12,
+              color: CockpitColors.muted,
+            ),
             filled: true,
             fillColor: CockpitColors.elevated,
             enabledBorder: OutlineInputBorder(
@@ -2671,14 +2926,19 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
             onPressed: () => Navigator.pop(ctx),
             child: Text(
               'HỦY',
-              style: CockpitTypography.label(fontSize: 12, color: CockpitColors.muted),
+              style: CockpitTypography.label(
+                fontSize: 12,
+                color: CockpitColors.muted,
+              ),
             ),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: CockpitColors.emerald,
               foregroundColor: CockpitColors.shell,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(CockpitRadius.small)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(CockpitRadius.small),
+              ),
             ),
             onPressed: () {
               Navigator.pop(ctx);
@@ -2724,7 +2984,11 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
               for (final vehicle in vehicles.where((v) => !v.isArchived))
                 ListTile(
                   title: Text(vehicle.vehicleName),
-                  subtitle: Text(vehicle.vehicleId),
+                  subtitle: Text(
+                    vehicle.licensePlate?.trim().isNotEmpty == true
+                        ? vehicle.licensePlate!.trim()
+                        : 'Chưa có biển số',
+                  ),
                   selected: vehicle.vehicleId == selectedVehicleId,
                   onTap: () => Navigator.pop(context, vehicle.vehicleId),
                 ),

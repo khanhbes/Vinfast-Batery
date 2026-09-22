@@ -19,5 +19,11 @@
         "destination": "/index.html"
       }
     ]
+  },
+  "emulators": {
+    "singleProjectMode": false,
+    "firestore": {
+      "port": 8080
+    }
   }
 }

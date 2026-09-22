@@ -929,7 +929,7 @@ class _AppBrandingFooter extends StatelessWidget {
     return Column(
       children: [
         Text(
-          'VinFast Battery · Phiên bản 1.1.4 (Build 5)',
+          'VinFast Battery · Phiên bản 1.1.5 (Build 115)',
           style: TextStyle(
             color: const Color(0xFF64748B).withValues(alpha: 0.8),
             fontSize: 11.5,

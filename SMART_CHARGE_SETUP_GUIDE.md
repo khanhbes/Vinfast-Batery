@@ -5,25 +5,27 @@
 1. Dùng **Shelly Plug S Gen3** chính hãng, firmware mới và tải sạc không vượt **12 A / 2500 W**.
 2. Chưa cắm bộ sạc xe vào Shelly.
 3. Cài **Shelly Smart Control**, thêm Plug S Gen3 vào Wi-Fi và bật Shelly Cloud.
-4. Trong Shelly, đặt hành vi sau mất điện là **OFF** và tắt mọi auto-on/schedule cũ.
-5. Điện thoại và Shelly nên cùng Wi-Fi trong lần kiểm tra đầu để LAN fallback hoạt động.
+4. Trong Shelly Smart Control → Switch settings, đặt **Power-on default = OFF** và
+   tắt **Automatic ON**. Tắt các schedule có thể tự bật relay.
+5. Điện thoại và Shelly có thể khác mạng; LAN chỉ là đường fallback tùy chọn.
 
 Ứng dụng VinFast Battery không provisioning SSID/password và không đọc SOC từ BMS. Mọi SOC suy ra đều được ghi rõ là **ước tính**.
 
 ## 2. Chọn một cách kết nối
 
-### Cách A — Direct Cloud + LAN (khuyên dùng cho tài khoản cá nhân)
+### Cách A — Direct Cloud (khuyên dùng cho tài khoản cá nhân)
 
 1. Mở **Cài đặt → Smart Charger** và chọn **Direct**.
 2. Trong Shelly Cloud lấy đúng **Server URI**, **Authorization Cloud Key** và **Device ID** của Plug S Gen3.
 3. Nhập Server URI dạng `https://...shelly.cloud`; không thêm path hoặc query.
 4. Nhập Cloud Key và Device ID. Key chỉ được lưu trong Android Secure Storage.
-5. Bấm **QUÉT** và cho phép quyền “Thiết bị Wi-Fi lân cận”. Nếu mDNS không tìm thấy, nhập IP riêng như `192.168.1.50` hoặc hostname `.local`.
-6. Bấm **LƯU & KIỂM TRA KẾT NỐI**. App kiểm tra Cloud/LAN, `switch:0`, power meter và cấu hình khởi động OFF.
-7. Khi hộp xác nhận xuất hiện, rút toàn bộ tải rồi chọn **ĐÃ RÚT TẢI · CHẠY TEST**. App sẽ ON 5 giây, OFF và đọc lại relay.
+5. Bấm **LƯU & KIỂM TRA KẾT NỐI**. App kiểm tra đúng model Plug S Gen3, `switch:0`, power meter và đọc lại cấu hình khởi động OFF/Auto ON OFF qua Cloud.
+6. Khi hộp xác nhận xuất hiện, rút toàn bộ tải rồi chọn **ĐÃ RÚT TẢI · CHẠY TEST**. App sẽ ON 5 giây, đọc timer, OFF và readback relay.
 8. Chỉ khi màn hình báo **Sẵn sàng điều khiển** mới cắm bộ sạc xe. Nếu draft lỗi, hồ sơ tốt đang dùng không bị ghi đè.
 
 Không gửi Cloud Key qua chat, log, Firestore hoặc commit Git. Nếu nghi key bị lộ, thu hồi/đổi key trong Shelly và xóa hồ sơ trong app.
+
+Nếu Cloud không trả về đầy đủ `initial_state` hoặc `auto_on`, app giữ điều khiển relay ở trạng thái khóa. Khi đó cần bổ sung LAN một lần để đọc `Switch.GetConfig`; không bỏ qua cảnh báo.
 
 ### Cách B — Easy Connect / server pilot (một tài khoản cá nhân)
 
@@ -84,7 +86,7 @@ Nếu app báo không xác minh được timer/relay, rút tải hoặc tắt Sh
 1. Test không tải ON 5 giây rồi OFF.
 2. Sạc thử 5–10 phút, kill app và xác nhận Shelly vẫn tự OFF.
 3. Sau khi arm timer, tắt Internet điện thoại; Shelly vẫn phải OFF đúng hạn.
-4. Với Advanced Direct, mất Cloud nhưng cùng Wi-Fi phải đọc/điều khiển được qua LAN.
+4. Nếu đã cấu hình LAN, mất Cloud nhưng cùng Wi-Fi phải đọc/điều khiển được qua LAN.
 5. Rút điện và cấp lại; relay phải trở về OFF.
 6. Nhấn nút vật lý OFF trên Shelly; app phải ghi nhận phiên bị gián đoạn.
 
@@ -96,12 +98,12 @@ Từ thư mục gốc của repo:
 .\run.ps1 3
 ```
 
-Script chạy `pub get`, analyze và toàn bộ test **trước khi tăng version**; sau đó build APK arm64, sao chép `VinFastBattery_latest.apk` sang web server local. API release bắt buộc HTTPS, mặc định là `https://khanhbes.tailaafca5.ts.net`. Smart Charge không còn dùng `SMART_CHARGER_API_BASE_URL`; API chung lấy từ `APP_API_BASE_URL`.
+Script chạy `pub get`, analyze và toàn bộ test **trước khi tăng version**; sau đó build APK arm64, sao chép `VinFastBattery_latest.apk` sang web server local. Bản release không có URL API mặc định: CI phải truyền `--dart-define=APP_API_BASE_URL=https://<production-domain>`. Smart Charge không còn dùng `SMART_CHARGER_API_BASE_URL`; API chung lấy từ `APP_API_BASE_URL`.
 
 ## Runtime hiện tại
 
-Hệ thống vận hành trên laptop với Docker và Tailscale Funnel. Dùng `.\run.ps1 2` (hoặc mở `run.bat` chọn [2])
-ở root để build/khởi động stack local; không dùng VPS hoặc SSH. `smart_charger_gateway/`
+Môi trường development có thể vận hành trên laptop với Docker và tunnel tạm thời. Dùng `.\run.ps1 2` (hoặc mở `run.bat` chọn [2])
+ở root để build/khởi động stack local; không dùng URL laptop/tunnel cho release. `smart_charger_gateway/`
 là gateway legacy/diagnostic, không phải runtime dependency của app/web stack chính.
 # AI cá nhân, ETA fusion và lịch sử realtime
 

@@ -30,6 +30,10 @@ class _ShellySetupScreenState extends State<ShellySetupScreen> {
   String? _message;
   List<DiscoveredShellyDevice> _devices = const [];
 
+  String _userMessage(Object error) => error is SmartChargerException
+      ? error.message
+      : 'Không thể hoàn tất thao tác. Hãy kiểm tra kết nối Shelly và thử lại.';
+
   @override
   void initState() {
     super.initState();
@@ -73,7 +77,7 @@ class _ShellySetupScreenState extends State<ShellySetupScreen> {
       final result = await action();
       if (mounted) setState(() => _message = result);
     } on Object catch (error) {
-      if (mounted) setState(() => _message = error.toString());
+      if (mounted) setState(() => _message = _userMessage(error));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -102,8 +106,10 @@ class _ShellySetupScreenState extends State<ShellySetupScreen> {
     await _credentials.saveProfile(_profile);
     try {
       await ServerSmartChargerService().registerShellyDevice(_profile);
-    } catch (e) {
-      debugPrint('⚠️ Sync Shelly to server failed: $e');
+    } catch (_) {
+      debugPrint(
+        'Shelly server sync failed; local safety state remains available.',
+      );
     }
     setState(() => _connectionVerified = true);
     final route = result.lanStatus == null ? 'Cloud' : 'Cloud + LAN';
@@ -111,11 +117,10 @@ class _ShellySetupScreenState extends State<ShellySetupScreen> {
   }
 
   Future<String> _safeBoot() async {
-    if (!_profile.hasLan) {
-      throw StateError('Cần địa chỉ LAN để cấu hình khởi động an toàn.');
-    }
     await _service.configureSafeBoot(profile: _profile);
-    return 'Đã đặt initial_state=off, tắt auto-on và xác minh relay OFF.';
+    return _profile.hasLan
+        ? 'Đã đặt initial_state=off, tắt auto-on và xác minh relay OFF.'
+        : 'Đã đọc lại Safe Boot: initial_state=off, auto-on=off và relay OFF.';
   }
 
   Future<String> _noLoadTest() async {

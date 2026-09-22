@@ -43,7 +43,7 @@ class ShellyChargeLogService {
       tariffVndPerKwh: session.tariffVndPerKwhSnapshot,
       terminal: false,
     );
-    await _firestore.collection('ChargeLogs').doc(session.sessionId).set({
+    await _writeActivePayload(session, uid, {
       ..._basePayload(session, uid),
       'status': 'active',
       'sessionState': session.state.wireValue,
@@ -57,7 +57,94 @@ class ShellyChargeLogService {
       'estimatedEndSoc': session.estimatedSoc,
       'smartChargingSession': session.toJson(),
       'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    });
+  }
+
+  Future<void> _writeActivePayload(
+    SmartChargingSession session,
+    String uid,
+    Map<String, Object?> payload,
+  ) async {
+    final ref = _firestore.collection('ChargeLogs').doc(session.sessionId);
+    await _firestore.runTransaction((transaction) async {
+      final existing = await transaction.get(ref);
+      final existingState = existing.data()?['sessionState']?.toString();
+      if (const {
+        'completed',
+        'cancelled',
+        'interrupted',
+        'failed',
+      }.contains(existingState)) {
+        return;
+      }
+      final existingRevision =
+          (existing.data()?['revision'] as num?)?.toInt() ?? 0;
+      transaction.set(ref, {
+        ...payload,
+        'ownerUid': uid,
+        'revision': existingRevision + 1,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    });
+  }
+
+  /// Restores a Direct-mode session written by another device. The local
+  /// Shelly session is only an optimization; ChargeLogs is the durable
+  /// account-scoped hand-off used for cross-device monitoring.
+  Future<List<SmartChargingSession>> getActiveSessions({
+    String? vehicleId,
+  }) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return const [];
+    final snapshot = await _firestore
+        .collection('ChargeLogs')
+        .where('ownerUid', isEqualTo: uid)
+        .limit(100)
+        .get();
+    final sessions = <SmartChargingSession>[];
+    for (final document in snapshot.docs) {
+      final data = document.data();
+      if (data['isDeleted'] == true ||
+          data['isArchived'] == true ||
+          data['source']?.toString() != _source ||
+          data['sessionState'] == null ||
+          !const {
+            'arming',
+            'starting',
+            'active',
+            'stopping',
+            'unknown',
+          }.contains(data['sessionState'])) {
+        continue;
+      }
+      if (vehicleId != null &&
+          vehicleId.isNotEmpty &&
+          data['vehicleId']?.toString() != vehicleId) {
+        continue;
+      }
+      final raw = data['smartChargingSession'];
+      if (raw is! Map) continue;
+      try {
+        final sessionJson = Map<String, dynamic>.from(raw);
+        final outerDeviceId = data['deviceId'] ?? data['shellyDeviceId'];
+        if (sessionJson['device_id'] == null && outerDeviceId != null) {
+          sessionJson['device_id'] = outerDeviceId.toString();
+        }
+        sessions.add(SmartChargingSession.fromJson(sessionJson));
+      } on Object {
+        // Ignore malformed legacy rows; history remains available.
+      }
+    }
+    sessions.sort(
+      (a, b) =>
+          (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt),
+    );
+    return sessions;
+  }
+
+  Future<SmartChargingSession?> getActiveSession({String? vehicleId}) async {
+    final sessions = await getActiveSessions(vehicleId: vehicleId);
+    return sessions.isEmpty ? null : sessions.first;
   }
 
   Future<void> saveTerminalSession(SmartChargingSession session) async {
@@ -272,6 +359,7 @@ class ShellyChargeLogService {
         'targetBatteryPercent': session.targetSoc.round(),
         'source': _source,
         'shellyDeviceId': session.deviceId,
+        'deviceId': session.deviceId,
         'controlTransport': session.transport,
         'plannedStopAt': Timestamp.fromDate(session.effectiveStopAt),
         'predictionSource': session.predictionSource,
@@ -367,7 +455,7 @@ class ShellyChargeLogService {
       tariffVndPerKwh: session.tariffVndPerKwhSnapshot,
       terminal: false,
     );
-    await _firestore.collection('ChargeLogs').doc(session.sessionId).set({
+    await _writeActivePayload(session, uid, {
       ..._basePayload(session, uid),
       'status': 'active',
       'sessionState': session.state.wireValue,
@@ -382,9 +470,11 @@ class ShellyChargeLogService {
       'latestCurrentA': status.currentA,
       'latestTemperatureC': status.shellyTemperatureC,
       'timerRemainingSeconds': status.timerRemaining?.inSeconds,
+      'relay': status.relay,
+      'deviceId': session.deviceId,
       'smartChargingSession': session.toJson(),
       'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    });
   }
 
   double? _estimatedSoc(SmartChargingSession session) {

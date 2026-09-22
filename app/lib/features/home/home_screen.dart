@@ -21,7 +21,7 @@ import '../../data/services/battery_state_service.dart';
 import 'widgets/range_prediction_card.dart';
 import 'widgets/recent_charging_chart.dart';
 import '../dashboard/dashboard_screen.dart';
-import '../smart_charging/shelly_setup_screen.dart';
+import '../smart_charging/smart_charger_setup_hub_screen.dart';
 import '../trip_planner/trip_planner_wrapper.dart';
 import '../maintenance/maintenance_screen.dart';
 import '../../core/widgets/responsive_text.dart';
@@ -45,7 +45,9 @@ class HomeScreen extends ConsumerWidget {
 
     // ── Initial auto-select on frame if vehicleId is not yet selected ──
     final currentVehicles = allVehiclesAsync.valueOrNull;
-    if (currentVehicles != null && currentVehicles.isNotEmpty && vehicleId.isEmpty) {
+    if (currentVehicles != null &&
+        currentVehicles.isNotEmpty &&
+        vehicleId.isEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final currentId = ref.read(selectedVehicleIdProvider);
         if (currentId.isEmpty) {
@@ -63,36 +65,36 @@ class HomeScreen extends ConsumerWidget {
     }
 
     // ── Auto-select / auto-clear vehicle ID on provider changes ─────────
-    ref.listen<AsyncValue<List<VehicleModel>>>(
-      allVehiclesProvider,
-      (previous, next) {
-        next.whenData((vehicles) {
-          final currentId = ref.read(selectedVehicleIdProvider);
-          if (vehicles.isNotEmpty && currentId.isEmpty) {
-            String targetId = vehicles.first.vehicleId;
-            final savedId = ref.read(restoreVehicleIdProvider).valueOrNull;
-            if (savedId != null &&
-                savedId.isNotEmpty &&
-                vehicles.any((v) => v.vehicleId == savedId)) {
-              targetId = savedId;
-            }
-            ref.read(selectedVehicleIdProvider.notifier).state = targetId;
-            SessionService().setSelectedVehicleId(targetId);
-          }
-        });
-      },
-    );
-
-    ref.listen<AsyncValue<VehicleModel?>>(
-      vehicleProvider(vehicleId),
-      (previous, next) {
+    ref.listen<AsyncValue<List<VehicleModel>>>(allVehiclesProvider, (
+      previous,
+      next,
+    ) {
+      next.whenData((vehicles) {
         final currentId = ref.read(selectedVehicleIdProvider);
-        if (currentId.isNotEmpty && next.hasValue && next.value == null) {
-          ref.read(selectedVehicleIdProvider.notifier).state = '';
-          SessionService().setSelectedVehicleId(null);
+        if (vehicles.isNotEmpty && currentId.isEmpty) {
+          String targetId = vehicles.first.vehicleId;
+          final savedId = ref.read(restoreVehicleIdProvider).valueOrNull;
+          if (savedId != null &&
+              savedId.isNotEmpty &&
+              vehicles.any((v) => v.vehicleId == savedId)) {
+            targetId = savedId;
+          }
+          ref.read(selectedVehicleIdProvider.notifier).state = targetId;
+          SessionService().setSelectedVehicleId(targetId);
         }
-      },
-    );
+      });
+    });
+
+    ref.listen<AsyncValue<VehicleModel?>>(vehicleProvider(vehicleId), (
+      previous,
+      next,
+    ) {
+      final currentId = ref.read(selectedVehicleIdProvider);
+      if (currentId.isNotEmpty && next.hasValue && next.value == null) {
+        ref.read(selectedVehicleIdProvider.notifier).state = '';
+        SessionService().setSelectedVehicleId(null);
+      }
+    });
 
     return Scaffold(
       backgroundColor: AppUiColors.of(context).background,
@@ -102,74 +104,75 @@ class HomeScreen extends ConsumerWidget {
             constraints: const BoxConstraints(maxWidth: 720),
             child: RefreshIndicator(
               color: AppUiColors.of(context).primary,
-          onRefresh: () async {
-            ref.invalidate(allVehiclesProvider);
-            if (vehicleId.isNotEmpty) {
-              ref.invalidate(vehicleProvider(vehicleId));
-            }
-            await Future<void>.delayed(Duration(milliseconds: 300));
-          },
-          child: CustomScrollView(
-            physics: AlwaysScrollableScrollPhysics(
-              parent: BouncingScrollPhysics(),
-            ),
-            slivers: [
-              // ── Hiển thị banner cảnh báo nếu user chưa có xe nào ──
-              if (allVehiclesAsync.hasValue &&
-                  (allVehiclesAsync.value?.isEmpty ?? true))
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(20, 8, 20, 0),
-                    child: _NoVehicleBanner(),
-                  ),
+              onRefresh: () async {
+                ref.invalidate(allVehiclesProvider);
+                if (vehicleId.isNotEmpty) {
+                  ref.invalidate(vehicleProvider(vehicleId));
+                }
+                await Future<void>.delayed(Duration(milliseconds: 300));
+              },
+              child: CustomScrollView(
+                physics: AlwaysScrollableScrollPhysics(
+                  parent: BouncingScrollPhysics(),
                 ),
+                slivers: [
+                  // ── Hiển thị banner cảnh báo nếu user chưa có xe nào ──
+                  if (allVehiclesAsync.hasValue &&
+                      (allVehiclesAsync.value?.isEmpty ?? true))
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(20, 8, 20, 0),
+                        child: _NoVehicleBanner(),
+                      ),
+                    ),
 
-              // ── Hiển thị banner lỗi nếu allVehiclesProvider failed ──
-              if (allVehiclesAsync.hasError)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(20, 8, 20, 0),
-                    child: _InlineErrorBanner(
-                      title: 'Không tải được danh sách xe',
-                      error: allVehiclesAsync.error!,
-                      onRetry: () => ref.invalidate(allVehiclesProvider),
+                  // ── Hiển thị banner lỗi nếu allVehiclesProvider failed ──
+                  if (allVehiclesAsync.hasError)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(20, 8, 20, 0),
+                        child: _InlineErrorBanner(
+                          title: 'Không tải được danh sách xe',
+                          error: allVehiclesAsync.error!,
+                          onRetry: () => ref.invalidate(allVehiclesProvider),
+                        ),
+                      ),
+                    ),
+
+                  // ── Vehicle Banner ──
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(20, 8, 20, 0),
+                      child: vehicleAsync.when(
+                        data: (vehicle) => _VehicleBanner(vehicle: vehicle),
+                        loading: () => _VehicleBannerShimmer(),
+                        error: (e, _) => _InlineErrorBanner(
+                          title: 'Không tải được thông tin xe',
+                          error: e,
+                          onRetry: () =>
+                              ref.invalidate(vehicleProvider(vehicleId)),
+                        ),
+                      ),
                     ),
                   ),
-                ),
 
-              // ── Vehicle Banner ──
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(20, 8, 20, 0),
-                  child: vehicleAsync.when(
-                    data: (vehicle) => _VehicleBanner(vehicle: vehicle),
-                    loading: () => _VehicleBannerShimmer(),
-                    error: (e, _) => _InlineErrorBanner(
-                      title: 'Không tải được thông tin xe',
-                      error: e,
-                      onRetry: () => ref.invalidate(vehicleProvider(vehicleId)),
+                  // ── Shelly checklist banner if skipped in onboarding ──
+                  const _ShellyChecklistSliver(),
+
+                  // ── Dynamic Customizable Widgets ──
+                  for (final id in visibleWidgets)
+                    _buildDashboardWidget(
+                      id: id,
+                      vehicleAsync: vehicleAsync,
+                      vehicleId: vehicleId,
+                      context: context,
+                      ref: ref,
                     ),
-                  ),
-                ),
+
+                  SliverToBoxAdapter(child: SizedBox(height: 100)),
+                ],
               ),
-
-              // ── Shelly checklist banner if skipped in onboarding ──
-              const _ShellyChecklistSliver(),
-
-              // ── Dynamic Customizable Widgets ──
-              for (final id in visibleWidgets)
-                _buildDashboardWidget(
-                  id: id,
-                  vehicleAsync: vehicleAsync,
-                  vehicleId: vehicleId,
-                  context: context,
-                  ref: ref,
-                ),
-
-              SliverToBoxAdapter(child: SizedBox(height: 100)),
-            ],
-          ),
-        ),
+            ),
           ),
         ),
       ),
@@ -225,12 +228,12 @@ class HomeScreen extends ConsumerWidget {
               data: (vehicle) => vehicle == null
                   ? const SizedBox.shrink()
                   : vehicle.hasBatteryData &&
-                          vehicle.hasSohData &&
-                          vehicle.hasEfficiencyData
-                      ? RangePredictionCard(vehicle: vehicle)
-                      : const _MissingVehicleDataCard(
-                          message: 'Cần thêm dữ liệu pin để dự đoán quãng đường',
-                        ),
+                        vehicle.hasSohData &&
+                        vehicle.hasEfficiencyData
+                  ? RangePredictionCard(vehicle: vehicle)
+                  : const _MissingVehicleDataCard(
+                      message: 'Cần thêm dữ liệu pin để dự đoán quãng đường',
+                    ),
               loading: () => const SizedBox.shrink(),
               error: (_, _) => const SizedBox.shrink(),
             ),
@@ -251,7 +254,8 @@ class HomeScreen extends ConsumerWidget {
                 vehicleId: vehicle?.vehicleId ?? '',
               ),
               loading: () => const _BatteryHealthShimmer(),
-              error: (_, _) => const _BatteryHealthCard(soh: null, vehicleId: ''),
+              error: (_, _) =>
+                  const _BatteryHealthCard(soh: null, vehicleId: ''),
             ),
           ),
         );
@@ -371,24 +375,31 @@ class _ShellyChecklistSliver extends StatelessWidget {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => const ShellySetupScreen(),
+                            builder: (_) => const SmartChargerSetupHubScreen(),
                           ),
                         );
                       },
                       style: FilledButton.styleFrom(
-                        backgroundColor:
-                            const Color(0xFF10B981).withValues(alpha: 0.2),
+                        backgroundColor: const Color(
+                          0xFF10B981,
+                        ).withValues(alpha: 0.2),
                         foregroundColor: const Color(0xFF10B981),
                         visualDensity: VisualDensity.compact,
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                      child: const Text('Thiết lập',
-                          style: TextStyle(
-                              fontSize: 12, fontWeight: FontWeight.w700)),
+                      child: const Text(
+                        'Thiết lập',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -416,10 +427,10 @@ class _VehicleBanner extends StatelessWidget {
     final name = vehicle?.nickname?.isNotEmpty == true
         ? vehicle!.nickname!
         : (vehicle?.vinfastModelName?.isNotEmpty == true
-            ? vehicle!.vinfastModelName!
-            : (vehicle?.vehicleName.isNotEmpty == true
-                ? vehicle!.vehicleName
-                : 'VinFast EV'));
+              ? vehicle!.vinfastModelName!
+              : (vehicle?.vehicleName.isNotEmpty == true
+                    ? vehicle!.vehicleName
+                    : 'VinFast EV'));
     final plate = vehicle?.licensePlate?.trim().isNotEmpty == true
         ? vehicle!.licensePlate!
         : 'Chưa có BSX';
@@ -525,12 +536,17 @@ class _VehicleBanner extends StatelessWidget {
                 // Active badge
                 Flexible(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.black.withValues(alpha: 0.65),
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                        color: CockpitColors.emeraldStrong.withValues(alpha: 0.4),
+                        color: CockpitColors.emeraldStrong.withValues(
+                          alpha: 0.4,
+                        ),
                       ),
                     ),
                     child: Row(
@@ -572,11 +588,16 @@ class _VehicleBanner extends StatelessWidget {
                 // Model tag
                 Flexible(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.black.withValues(alpha: 0.5),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.15),
+                      ),
                     ),
                     child: ResponsiveText(
                       vehicle?.vinfastModelName?.toUpperCase() ?? 'VF COCKPIT',
@@ -649,17 +670,26 @@ class _VehicleBanner extends StatelessWidget {
                 // Battery SOC Pill
                 if (percent != null)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
-                      color: CockpitColors.emeraldStrong.withValues(alpha: 0.15),
+                      color: CockpitColors.emeraldStrong.withValues(
+                        alpha: 0.15,
+                      ),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: CockpitColors.emeraldStrong.withValues(alpha: 0.5),
+                        color: CockpitColors.emeraldStrong.withValues(
+                          alpha: 0.5,
+                        ),
                         width: 1.2,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: CockpitColors.emeraldStrong.withValues(alpha: 0.2),
+                          color: CockpitColors.emeraldStrong.withValues(
+                            alpha: 0.2,
+                          ),
                           blurRadius: 10,
                         ),
                       ],
@@ -794,7 +824,8 @@ class _StatCardsRow extends StatelessWidget {
     final efficiency = vehicle?.hasEfficiencyData == true
         ? vehicle?.defaultEfficiency
         : (vehicle?.defaultEfficiency ?? 1.2);
-    final range = percent != null && percent > 0 && efficiency != null && efficiency > 0
+    final range =
+        percent != null && percent > 0 && efficiency != null && efficiency > 0
         ? '${(percent * efficiency).toInt()} km'
         : '-- km';
     final odo = vehicle?.hasOdoData == true
@@ -918,7 +949,11 @@ class _BatteryHealthCard extends StatefulWidget {
   final double? soh;
   final String vehicleId;
 
-  const _BatteryHealthCard({super.key, required this.soh, required this.vehicleId});
+  const _BatteryHealthCard({
+    super.key,
+    required this.soh,
+    required this.vehicleId,
+  });
 
   @override
   State<_BatteryHealthCard> createState() => _BatteryHealthCardState();
@@ -1734,11 +1769,8 @@ class _InlineErrorBanner extends StatelessWidget {
           if (kDebugMode) ...[
             SizedBox(height: 6),
             GestureDetector(
-              onTap: () => DebugErrorSheet.show(
-                context,
-                error: error,
-                source: title,
-              ),
+              onTap: () =>
+                  DebugErrorSheet.show(context, error: error, source: title),
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,

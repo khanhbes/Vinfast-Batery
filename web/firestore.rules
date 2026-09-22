@@ -53,6 +53,9 @@ service cloud.firestore {
         !('local_password' in request.resource.data) &&
         !('authorizationKey' in request.resource.data);
     }
+    function isTerminalChargeState(value) {
+      return value in ['completed', 'cancelled', 'interrupted', 'failed'];
+    }
     // ── Users (profile sync từ app) ──
     match /users/{uid} {
       allow read: if isAuth() && request.auth.uid == uid;
@@ -92,7 +95,7 @@ service cloud.firestore {
         allow write: if isAuth() && request.auth.uid == uid && prefDoc == 'ui' &&
           request.resource.data.keys().hasOnly([
             'dashboardOrder', 'hiddenDashboardWidgets', 'completedTours',
-            'guideSchemaVersion', 'updatedAt'
+            'pendingAutoTours', 'dismissedTours', 'guideSchemaVersion', 'updatedAt'
           ]) &&
           (!('dashboardOrder' in request.resource.data) || (
             request.resource.data.dashboardOrder is list &&
@@ -105,6 +108,14 @@ service cloud.firestore {
           (!('completedTours' in request.resource.data) || (
             request.resource.data.completedTours is list &&
             request.resource.data.completedTours.size() <= 50
+          )) &&
+          (!('pendingAutoTours' in request.resource.data) || (
+            request.resource.data.pendingAutoTours is list &&
+            request.resource.data.pendingAutoTours.size() <= 20
+          )) &&
+          (!('dismissedTours' in request.resource.data) || (
+            request.resource.data.dismissedTours is list &&
+            request.resource.data.dismissedTours.size() <= 50
           )) &&
           (!('guideSchemaVersion' in request.resource.data) || request.resource.data.guideSchemaVersion is int);
       }
@@ -230,7 +241,12 @@ service cloud.firestore {
       allow read: if canReadOwned();
       allow create: if canCreateOwned();
       allow update: if isAuth() && isOwner(resource.data.ownerUid) &&
-        request.resource.data.ownerUid == request.auth.uid;
+        request.resource.data.ownerUid == request.auth.uid &&
+        // A terminal session is immutable with respect to active charging;
+        // this prevents a second device from resurrecting a stopped session.
+        (!('sessionState' in resource.data) ||
+         !isTerminalChargeState(resource.data.sessionState) ||
+         request.resource.data.sessionState == resource.data.sessionState);
       // Privacy erase is an explicit, owner-confirmed terminal-session action
       // in the app. It must be possible in Direct mode without granting a
       // user the ability to erase an active charging record.

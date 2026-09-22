@@ -62,8 +62,8 @@ Trong lượt này đã triển khai một phần P0/P1 vào source:
 - Backend toàn bộ `web/tests`: **189 passed** (trong đó onboarding/readiness/remediation mới đều xanh).
 - Smart charger gateway toàn bộ `tests`: **56 passed**.
 - `python -m py_compile server.py vehicle_catalog.py`: **pass**.
-- Flutter `flutter analyze --no-pub`, `dart format` và `flutter --version`: **không hoàn tất** vì các Dart daemon hiện có bị treo; chưa có bằng chứng compile APK sau thay đổi.
-- Chưa cài và chạy APK `1.1.5+115`; chưa có runtime screenshot mới.
+- Flutter `flutter analyze --no-pub` vẫn **BLOCKED** vì không xuất output trong timeout; sau khi dọn lock, `flutter --version` và release build đã hoàn tất.
+- APK staging `1.1.5+115` đã được build và ký; chưa cài/chạy được vì emulator không đăng ký ADB, nên chưa có runtime screenshot mới.
 - Chưa chạy Firebase Rules Emulator.
 - Chưa kiểm thử domain production, network throttling đầy đủ, thiết bị vật lý, Shelly cùng tải ≤12A/2500W, Light/Dark/font matrix.
 
@@ -105,11 +105,27 @@ Chỉ ký duyệt release khi đồng thời đạt:
 - Landscape, tablet, OTP và Bluetooth vẫn ngoài phạm vi v1.1.5.
 - Firebase Admin JSON hiện không được Git track theo filename kiểm tra cục bộ, nhưng chưa thể chứng minh khóa chưa từng bị chia sẻ ngoài Git; nếu từng chia sẻ phải rotate ngay.
 
+## Cập nhật Quick Tunnel và APK staging (21/09/2026)
+
+Quick Tunnel do người dùng mở đã được kiểm tra từ mạng ngoài: `/api/health` và `/api/ready` đều HTTP 200, có request ID; Firebase/AI báo `ready`. APK release staging mới đã build bằng HTTPS tunnel URL:
+
+- `com.bes.vinbatery`, `1.1.5+115`.
+- SHA-256 `DC2DBA0E8FBE7FE4764DB313DB090EBE5FF0C4FA821B90C77017BE6DCFD6DE8C`.
+- `apksigner` v2 và badging đạt.
+
+Đây là bằng chứng staging tạm thời, không phải production. Quick Tunnel không có SLA; emulator vẫn lỗi ADB/lock nên APK chưa được cài sạch và chưa có runtime QA. Các blocker Flutter analyze, Rules Emulator, thiết bị thật, Shelly supervised test và custom domain/TLS production vẫn còn. Trạng thái phát hành giữ **HOLD**.
+
 ## 7. Cập nhật triển khai tiếp theo (20/09/2026)
 
-- Đã thêm manifest Cloud Run `web/cloudrun/api-service.yaml`, Dockerfile API bind theo `${PORT}`, probe `/api/health`, Secret Manager references và hướng dẫn triển khai staging/production trong `web/cloudrun/README.md`. Chưa deploy vì máy hiện tại chưa có `gcloud`, chưa xác minh billing/IAM và chưa có hostname custom cụ thể.
+Runtime QA update: Báo cáo mới [VinFast_Battery_Release_QA_v1.1.5_2026-09-20.md](VinFast_Battery_Release_QA_v1.1.5_2026-09-20.md) và bằng chứng [release-qa-v1.1.5-2026-09-20](docs/qa_evidence/release-qa-v1.1.5-2026-09-20/) đã được tạo. Kết luận vẫn **HOLD**: backend 189/189 và gateway 56/56 đạt; Flutter analyzer, Rules Emulator, Cloud Run staging, APK 1.1.5, thiết bị thật và Shelly chưa có bằng chứng hợp lệ. APK 1.1.4 không được tính lại.
+
+Ngày 21/09/2026, API local chạy trực tiếp với `.env.laptop` đã trả `/api/health` và `/api/ready` HTTP 200, Firebase/AI ready. Người dùng đã mở Quick Tunnel được phê duyệt; hai endpoint tiếp tục trả HTTP 200 từ mạng ngoài. Đã bổ sung allowlist debug-only cho `http://10.0.2.2:5000`, giữ bắt buộc HTTPS ở release. APK release staging `1.1.5+115` đã build thành công; runtime vẫn HOLD do ADB/emulator.
+
+Sau đó đã sửa hai lỗi biên dịch thực tế trong `auth_gate.dart` và `internet_connection_notice.dart`. Targeted test endpoint đạt 3/3; debug build và release compile check đã hoàn tất. Release APK compile check dùng `https://staging.invalid` chỉ để xác minh mã nguồn, không được coi là APK QA/staging hợp lệ. ADB emulator chưa đăng ký nên runtime vẫn chưa chạy.
+
+- Đã thêm manifest Cloud Run `web/cloudrun/api-service.yaml`, Dockerfile API bind theo `${PORT}`, probe `/api/health`, Secret Manager references và hướng dẫn triển khai staging/production trong `web/cloudrun/README.md`. Google Cloud SDK 585.0.0 đã cài; chưa deploy vì OAuth trình duyệt, billing/IAM, secrets và hostname custom chưa được xác minh.
 - Đã thêm workflow thủ công `.github/workflows/v115-cloudrun-deploy.yml` dùng Workload Identity Federation, build image bằng `web/Dockerfile.api`, deploy theo region `asia-southeast1` và smoke test health/readiness. Workflow chưa được chạy trên GitHub.
 - Đã thêm scaffold Firebase Rules Emulator tại `web/rules_tests/` và quality-gate job (đã chỉnh peer dependency Firebase về v10 tương thích). Local `npm install`/`firebase emulators:exec` vẫn treo khi tải/chạy emulator trong môi trường hiện tại; không đánh dấu Rules đạt.
 - Onboarding commit hiện kiểm tra idempotency theo cả operation và key, validate dữ liệu khảo sát trước khi ghi, và dùng transaction khi Firestore production hỗ trợ. Cần contract test trên Firestore thật/emulator để xác minh rollback và concurrent retry.
-- `flutter pub get` đã hoàn tất; `flutter analyze --no-pub` vẫn không xuất output và phải dừng sau timeout. Chưa có bằng chứng compile APK/runtime cho `1.1.5+115`; blocker này không được che bằng kết quả backend.
+- `flutter pub get` đã hoàn tất; `flutter analyze --no-pub` vẫn không xuất output và phải dừng sau timeout. Release APK staging `1.1.5+115` đã có badging/hash/signature, nhưng chưa có runtime evidence; blocker này không được che bằng kết quả backend.
 - Regression sau cập nhật: `web/tests` **189 passed**, `smart_charger_gateway/tests` **56 passed**, `py_compile` **pass**, `git diff --check` không phát hiện whitespace error. Release readiness vẫn **chưa đạt** cho tới khi Flutter/Rules/Cloud Run/runtime/Shelly gates có bằng chứng.

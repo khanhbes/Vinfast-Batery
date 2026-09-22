@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -20,19 +21,46 @@ class SmartChargerCredentialsService {
   static const _verificationKey = 'smart_charger.verification.v1';
   static const _legacyTokenKey = 'smart_charger.api_token';
   final FlutterSecureStorage _storage;
+  String? _scopedKey(String base) {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      return uid == null ? null : '$base.$uid';
+    } on Object {
+      // Firebase is not initialized in pure unit tests. Keep the injected
+      // storage usable there without weakening the signed-out production path.
+      return base;
+    }
+  }
   static DateTime? _lastServerSyncAt;
+  static String? _lastServerSyncUid;
+  static Future<ShellyConnectionProfile?>? _serverRestoreInFlight;
+  static String? _serverRestoreUid;
+
+  static String fingerprintFor(
+    ShellyConnectionProfile profile, {
+    String? initialState,
+    bool? autoOn,
+  }) => sha256
+      .convert(
+        utf8.encode(
+          '${profile.deviceId}|${profile.model}|${initialState ?? ''}|${autoOn ?? ''}',
+        ),
+      )
+      .toString();
 
   Future<ShellyConnectionProfile?> readProfile({String? vehicleId}) async {
     try {
-      final raw = await _storage.read(key: _profileKey);
+      final key = _scopedKey(_profileKey);
+      if (key == null) return null;
+      final raw = await _storage.read(key: key);
       if (raw != null && raw.isNotEmpty) {
         return ShellyConnectionProfile.fromJson(
           Map<String, dynamic>.from(jsonDecode(raw) as Map),
         );
       }
       return await restoreFromCloud(vehicleId: vehicleId);
-    } catch (error) {
-      debugPrint('[SmartChargerCredentials] read failed: $error');
+    } catch (_) {
+      debugPrint('[SmartChargerCredentials] local profile read failed');
       return await restoreFromCloud(vehicleId: vehicleId);
     }
   }
@@ -48,69 +76,92 @@ class SmartChargerCredentialsService {
     if (uid == null) return null;
     final last = _lastServerSyncAt;
     if (!force &&
+        _lastServerSyncUid == uid &&
         last != null &&
         DateTime.now().difference(last) < const Duration(minutes: 5)) {
       return null;
     }
-    _lastServerSyncAt = DateTime.now();
-
-    try {
-      final server = ServerSmartChargerService();
-      final metadata = await server.resolveDirectProfile(vehicleId: vehicleId);
-      if (metadata == null) return null;
-      final deviceId = metadata['deviceId']?.toString() ?? '';
-      if (deviceId.isEmpty) return null;
-      final serverProfile = await server.restoreDirectProfile(deviceId);
-      if (serverProfile != null) {
-        final verified =
-            metadata['cloudVerified'] == true &&
-            metadata['powerMeterVerified'] == true &&
-            metadata['safeBootVerified'] == true &&
-            metadata['noLoadTestVerified'] == true;
-        if (verified) {
-          await saveProfile(serverProfile);
-          await saveVerification(
-            SmartChargerVerificationState(
-              cloudVerified: metadata['cloudVerified'] == true,
-              lanVerified: metadata['lanVerified'] == true,
-              powerMeterVerified: metadata['powerMeterVerified'] == true,
-              safeBootVerified: metadata['safeBootVerified'] == true,
-              noLoadTestVerified: metadata['noLoadTestVerified'] == true,
-              lastVerifiedAt: DateTime.tryParse(
-                metadata['verifiedAt']?.toString() ?? '',
-              ),
-            ),
-          );
-        } else {
-          // A remote draft is useful for recovery but must not replace a
-          // proven active controller until the Android safety test succeeds.
-          await saveDraft(serverProfile);
-        }
-        debugPrint(
-          '[SmartChargerCredentials] Restored encrypted Shelly profile from server API',
+    final existing = _serverRestoreInFlight;
+    if (existing != null && _serverRestoreUid == uid) return existing;
+    final operation = () async {
+      try {
+        final server = ServerSmartChargerService();
+        final metadata = await server.resolveDirectProfile(
+          vehicleId: vehicleId,
         );
-        return serverProfile;
+        if (metadata == null) return null;
+        final deviceId = metadata['deviceId']?.toString() ?? '';
+        if (deviceId.isEmpty) return null;
+        final serverProfile = await server.restoreDirectProfile(deviceId);
+        if (serverProfile != null) {
+          final verified =
+              metadata['cloudVerified'] == true &&
+              metadata['powerMeterVerified'] == true &&
+              metadata['safeBootVerified'] == true &&
+              metadata['noLoadTestVerified'] == true;
+          if (verified) {
+            await saveProfile(serverProfile);
+            await saveVerification(
+              SmartChargerVerificationState(
+                cloudVerified: metadata['cloudVerified'] == true,
+                lanVerified: metadata['lanVerified'] == true,
+                powerMeterVerified: metadata['powerMeterVerified'] == true,
+                safeBootVerified: metadata['safeBootVerified'] == true,
+                noLoadTestVerified: metadata['noLoadTestVerified'] == true,
+                lastVerifiedAt: DateTime.tryParse(
+                  metadata['verifiedAt']?.toString() ?? '',
+                ),
+                verifiedDeviceId: metadata['verifiedDeviceId']?.toString(),
+                verifiedModel: metadata['verifiedModel']?.toString(),
+                verificationFingerprint: metadata['verificationFingerprint']
+                    ?.toString(),
+              ),
+            );
+          } else {
+            // A remote draft is useful for recovery but must not replace a
+            // proven active controller until the Android safety test succeeds.
+            await saveDraft(serverProfile);
+          }
+          debugPrint(
+            '[SmartChargerCredentials] Restored encrypted Shelly profile from server API',
+          );
+          _lastServerSyncAt = DateTime.now();
+          _lastServerSyncUid = uid;
+          return serverProfile;
+        }
+      } catch (_) {
+        debugPrint('[SmartChargerCredentials] server profile restore failed');
       }
-    } catch (e) {
-      debugPrint('[SmartChargerCredentials] Restore from server error: $e');
+      return null;
+    }();
+    _serverRestoreInFlight = operation;
+    _serverRestoreUid = uid;
+    try {
+      return await operation;
+    } finally {
+      _serverRestoreInFlight = null;
+      _serverRestoreUid = null;
     }
-    return null;
   }
 
   Future<void> saveProfile(ShellyConnectionProfile profile) async {
     final validation = profile.validate();
     if (validation != null) throw ArgumentError(validation);
     final encoded = jsonEncode(profile.toJson());
-    final previous = await _storage.read(key: _profileKey);
+    final key = _scopedKey(_profileKey);
+    if (key == null) throw StateError('Cần đăng nhập để lưu cấu hình Shelly.');
+    final previous = await _storage.read(key: key);
     // Verification belongs to the exact saved configuration, not a new device
     // or changed credentials. Invalidate first so a failed write stays safe.
     if (previous != encoded) await invalidateVerification();
-    await _storage.write(key: _profileKey, value: encoded);
+    await _storage.write(key: key, value: encoded);
     await clearDraft();
   }
 
   Future<ShellyConnectionProfile?> readDraft() async {
-    final raw = await _storage.read(key: _draftKey);
+    final key = _scopedKey(_draftKey);
+    if (key == null) return null;
+    final raw = await _storage.read(key: key);
     if (raw == null || raw.isEmpty) return null;
     try {
       return ShellyConnectionProfile.fromJson(
@@ -122,13 +173,21 @@ class SmartChargerCredentialsService {
   }
 
   Future<void> saveDraft(ShellyConnectionProfile profile) async {
-    await _storage.write(key: _draftKey, value: jsonEncode(profile.toJson()));
+    final key = _scopedKey(_draftKey);
+    if (key != null) {
+      await _storage.write(key: key, value: jsonEncode(profile.toJson()));
+    }
   }
 
-  Future<void> clearDraft() => _storage.delete(key: _draftKey);
+  Future<void> clearDraft() async {
+    final key = _scopedKey(_draftKey);
+    if (key != null) await _storage.delete(key: key);
+  }
 
   Future<SmartChargerVerificationState> readVerification() async {
-    final raw = await _storage.read(key: _verificationKey);
+    final key = _scopedKey(_verificationKey);
+    if (key == null) return SmartChargerVerificationState.unverified;
+    final raw = await _storage.read(key: key);
     if (raw == null || raw.isEmpty) {
       return SmartChargerVerificationState.unverified;
     }
@@ -142,16 +201,26 @@ class SmartChargerCredentialsService {
   }
 
   Future<void> saveVerification(SmartChargerVerificationState value) =>
-      _storage.write(key: _verificationKey, value: jsonEncode(value.toJson()));
+      _scopedKey(_verificationKey) == null
+          ? Future.value()
+          : _storage.write(
+              key: _scopedKey(_verificationKey)!,
+              value: jsonEncode(value.toJson()),
+            );
 
   Future<void> invalidateVerification() =>
       saveVerification(SmartChargerVerificationState.unverified);
 
   Future<void> clearProfile() async {
-    await _storage.delete(key: _profileKey);
-    await _storage.delete(key: _draftKey);
-    await _storage.delete(key: _verificationKey);
-    await _storage.delete(key: _legacyTokenKey);
+    final keys = <String?>[
+      _scopedKey(_profileKey),
+      _scopedKey(_draftKey),
+      _scopedKey(_verificationKey),
+      _scopedKey(_legacyTokenKey),
+    ];
+    for (final key in keys.whereType<String>()) {
+      await _storage.delete(key: key);
+    }
   }
 
   @Deprecated(
@@ -169,6 +238,7 @@ class SmartChargerCredentialsService {
 }
 
 class SmartChargerVerificationState {
+  static const _unset = Object();
   const SmartChargerVerificationState({
     required this.cloudVerified,
     required this.lanVerified,
@@ -176,6 +246,9 @@ class SmartChargerVerificationState {
     required this.safeBootVerified,
     required this.noLoadTestVerified,
     this.lastVerifiedAt,
+    this.verifiedDeviceId,
+    this.verifiedModel,
+    this.verificationFingerprint,
   });
 
   final bool cloudVerified;
@@ -184,9 +257,17 @@ class SmartChargerVerificationState {
   final bool safeBootVerified;
   final bool noLoadTestVerified;
   final DateTime? lastVerifiedAt;
+  final String? verifiedDeviceId;
+  final String? verifiedModel;
+  final String? verificationFingerprint;
 
+  /// Relay ON requires all hardware safety checks. Transport availability
+  /// (Cloud/LAN) alone must never unlock control.
   bool get readyForControl =>
-      cloudVerified || (lanVerified && safeBootVerified && noLoadTestVerified);
+      powerMeterVerified &&
+      safeBootVerified &&
+      noLoadTestVerified &&
+      (cloudVerified || lanVerified);
 
   static const unverified = SmartChargerVerificationState(
     cloudVerified: false,
@@ -202,14 +283,28 @@ class SmartChargerVerificationState {
     bool? powerMeterVerified,
     bool? safeBootVerified,
     bool? noLoadTestVerified,
-    DateTime? lastVerifiedAt,
+    Object? lastVerifiedAt = _unset,
+    Object? verifiedDeviceId = _unset,
+    Object? verifiedModel = _unset,
+    Object? verificationFingerprint = _unset,
   }) => SmartChargerVerificationState(
     cloudVerified: cloudVerified ?? this.cloudVerified,
     lanVerified: lanVerified ?? this.lanVerified,
     powerMeterVerified: powerMeterVerified ?? this.powerMeterVerified,
     safeBootVerified: safeBootVerified ?? this.safeBootVerified,
     noLoadTestVerified: noLoadTestVerified ?? this.noLoadTestVerified,
-    lastVerifiedAt: lastVerifiedAt ?? this.lastVerifiedAt,
+    lastVerifiedAt: identical(lastVerifiedAt, _unset)
+        ? this.lastVerifiedAt
+        : lastVerifiedAt as DateTime?,
+    verifiedDeviceId: identical(verifiedDeviceId, _unset)
+        ? this.verifiedDeviceId
+        : verifiedDeviceId as String?,
+    verifiedModel: identical(verifiedModel, _unset)
+        ? this.verifiedModel
+        : verifiedModel as String?,
+    verificationFingerprint: identical(verificationFingerprint, _unset)
+        ? this.verificationFingerprint
+        : verificationFingerprint as String?,
   );
 
   Map<String, dynamic> toJson() => {
@@ -220,6 +315,10 @@ class SmartChargerVerificationState {
     'noLoadTestVerified': noLoadTestVerified,
     if (lastVerifiedAt != null)
       'lastVerifiedAt': lastVerifiedAt!.toIso8601String(),
+    if (verifiedDeviceId != null) 'verifiedDeviceId': verifiedDeviceId,
+    if (verifiedModel != null) 'verifiedModel': verifiedModel,
+    if (verificationFingerprint != null)
+      'verificationFingerprint': verificationFingerprint,
   };
 
   factory SmartChargerVerificationState.fromJson(Map<String, dynamic> json) =>
@@ -232,5 +331,8 @@ class SmartChargerVerificationState {
         lastVerifiedAt: DateTime.tryParse(
           json['lastVerifiedAt']?.toString() ?? '',
         ),
+        verifiedDeviceId: json['verifiedDeviceId']?.toString(),
+        verifiedModel: json['verifiedModel']?.toString(),
+        verificationFingerprint: json['verificationFingerprint']?.toString(),
       );
 }

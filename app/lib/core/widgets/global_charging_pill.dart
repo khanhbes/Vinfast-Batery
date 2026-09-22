@@ -2,19 +2,39 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/app_providers.dart';
-import '../services/connection_coordinator.dart';
+import '../services/active_charging_session_coordinator.dart';
 import '../../features/ai/controllers/smart_charging_controller.dart';
 
-/// Persistent, low-noise indicator for the selected vehicle's active session.
-/// It is rendered by the shell rather than by an individual tab, so changing
-/// tabs cannot hide the emergency stop/status affordance.
+/// Persistent account-scoped indicator for an active charging session.
 class GlobalChargingPill extends ConsumerWidget {
   const GlobalChargingPill({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final vehicleId = ref.watch(selectedVehicleIdProvider);
-    if (vehicleId.isEmpty) return const SizedBox.shrink();
+    final coordinator = ref.watch(activeChargingSessionProvider);
+    if (vehicleId.isEmpty) {
+      // A fresh device can receive the account-scoped session before its
+      // vehicle picker has restored a selection. Keep the session visible
+      // instead of silently hiding cross-device charging.
+      if (coordinator.sessions.length == 1) {
+        final remote = coordinator.sessions.single;
+        return _pill(
+          context,
+          ref,
+          remote.vehicleId,
+          remote.targetSoc,
+          remote.remaining,
+          remote.vehicleId,
+          synced: true,
+          stale: remote.isStale,
+        );
+      }
+      if (coordinator.sessions.length > 1) {
+        return _multiPill(context, ref, coordinator.sessions);
+      }
+      return const SizedBox.shrink();
+    }
     final vehicle = ref.watch(vehicleProvider(vehicleId));
     return vehicle.when(
       loading: () => const SizedBox.shrink(),
@@ -27,53 +47,54 @@ class GlobalChargingPill extends ConsumerWidget {
         );
         final state = ref.watch(smartChargingControllerProvider(args));
         if (state.hasActiveSession) {
-          final remaining =
-              state.chargerStatus?.timerRemaining ??
-              state.session?.remaining(state.now);
           return _pill(
             context,
             ref,
             vehicleId,
             state.session?.targetSoc,
-            remaining,
+            state.chargerStatus?.timerRemaining ??
+                state.session?.remaining(state.now),
             value.vehicleName,
+            synced: false,
           );
         }
-        // A session on vehicle A must remain discoverable after switching to
-        // vehicle B. The local snapshot is only a display/recovery hint; the
-        // Shelly timer remains the safety authority.
-        return FutureBuilder<List<ActiveChargingSnapshot>>(
-          future: ConnectionCoordinator().loadSnapshots(),
-          builder: (context, snapshot) {
-            final others = (snapshot.data ?? const <ActiveChargingSnapshot>[])
-                .where(
-                  (item) =>
-                      item.vehicleId != vehicleId &&
-                      item.lastKnownRelay &&
-                      item.effectiveStopAt.isAfter(DateTime.now()),
-                )
-                .toList(growable: false);
-            if (others.isEmpty) return const SizedBox.shrink();
-            if (others.length == 1) {
-              final other = others.first;
-              final name =
-                  ref
-                      .watch(vehicleProvider(other.vehicleId))
-                      .valueOrNull
-                      ?.vehicleName ??
-                  other.vehicleId;
-              return _pill(
-                context,
-                ref,
-                other.vehicleId,
-                other.targetSoc,
-                other.effectiveStopAt.difference(DateTime.now()),
-                name,
-              );
-            }
-            return _multiPill(context, ref, others);
-          },
-        );
+        final remote = coordinator.forVehicle(vehicleId);
+        if (remote != null) {
+          return _pill(
+            context,
+            ref,
+            vehicleId,
+            remote.targetSoc,
+            remote.remaining,
+            value.vehicleName,
+            synced: true,
+            stale: remote.isStale,
+          );
+        }
+        final others = coordinator.sessions
+            .where((item) => item.vehicleId != vehicleId)
+            .toList(growable: false);
+        if (others.isEmpty) return const SizedBox.shrink();
+        if (others.length == 1) {
+          final other = others.first;
+          final name =
+              ref
+                  .watch(vehicleProvider(other.vehicleId))
+                  .valueOrNull
+                  ?.vehicleName ??
+              other.vehicleId;
+          return _pill(
+            context,
+            ref,
+            other.vehicleId,
+            other.targetSoc,
+            other.remaining,
+            name,
+            synced: true,
+            stale: other.isStale,
+          );
+        }
+        return _multiPill(context, ref, others);
       },
     );
   }
@@ -84,19 +105,25 @@ class GlobalChargingPill extends ConsumerWidget {
     String vehicleId,
     double? targetSoc,
     Duration? remaining,
-    String vehicleName,
-  ) {
-    final label = remaining == null
+    String vehicleName, {
+    required bool synced,
+    bool stale = false,
+  }) {
+    final prefix = !synced
         ? 'ĐANG SẠC'
-        : 'ĐANG SẠC · ${remaining.inHours.toString().padLeft(2, '0')}:${(remaining.inMinutes % 60).toString().padLeft(2, '0')}';
+        : stale
+        ? 'ĐANG SẠC · DỮ LIỆU CŨ'
+        : 'ĐANG SẠC · ĐỒNG BỘ';
+    final label = remaining == null
+        ? prefix
+        : '$prefix · ${remaining.inHours.toString().padLeft(2, '0')}:${(remaining.inMinutes % 60).toString().padLeft(2, '0')}';
     return Align(
       alignment: Alignment.topCenter,
       child: Padding(
         padding: const EdgeInsets.only(top: 8, left: 16, right: 16),
         child: Semantics(
           button: true,
-          label:
-              'Phiên sạc xe $vehicleName đang diễn ra. $label. Mở Smart Charge',
+          label: 'Phiên sạc xe $vehicleName đang diễn ra. $label.',
           child: Material(
             color: Theme.of(context).colorScheme.primaryContainer,
             borderRadius: BorderRadius.circular(24),
@@ -153,7 +180,7 @@ class GlobalChargingPill extends ConsumerWidget {
   Widget _multiPill(
     BuildContext context,
     WidgetRef ref,
-    List<ActiveChargingSnapshot> sessions,
+    List<ActiveChargingSessionSnapshot> sessions,
   ) {
     final theme = Theme.of(context);
     return Align(
@@ -162,8 +189,7 @@ class GlobalChargingPill extends ConsumerWidget {
         padding: const EdgeInsets.only(top: 8, left: 16, right: 16),
         child: Semantics(
           button: true,
-          label:
-              '${sessions.length} phiên sạc đang diễn ra. Chọn xe để mở Smart Charge',
+          label: '${sessions.length} phiên sạc đang diễn ra.',
           child: Material(
             color: theme.colorScheme.primaryContainer,
             borderRadius: BorderRadius.circular(24),
@@ -192,12 +218,7 @@ class GlobalChargingPill extends ConsumerWidget {
                         color: theme.colorScheme.onPrimaryContainer,
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    Icon(
-                      Icons.expand_more,
-                      size: 18,
-                      color: theme.colorScheme.onPrimaryContainer,
-                    ),
+                    const Icon(Icons.expand_more, size: 18),
                   ],
                 ),
               ),
@@ -211,7 +232,7 @@ class GlobalChargingPill extends ConsumerWidget {
   Future<void> _showSessionChooser(
     BuildContext context,
     WidgetRef ref,
-    List<ActiveChargingSnapshot> sessions,
+    List<ActiveChargingSessionSnapshot> sessions,
   ) async {
     final selected = await showModalBottomSheet<String>(
       context: context,
@@ -226,23 +247,18 @@ class GlobalChargingPill extends ConsumerWidget {
               style: Theme.of(sheetContext).textTheme.titleLarge,
             ),
             const SizedBox(height: 8),
-            ...sessions.map((session) {
-              final vehicle = ref
-                  .read(vehicleProvider(session.vehicleId))
-                  .valueOrNull;
-              final remaining = session.effectiveStopAt.difference(
-                DateTime.now(),
-              );
-              return ListTile(
+            ...sessions.map(
+              (session) => ListTile(
                 leading: const Icon(Icons.ev_station_rounded),
-                title: Text(vehicle?.vehicleName ?? session.vehicleId),
+                title: Text(session.vehicleId),
                 subtitle: Text(
-                  'Mục tiêu ~${session.targetSoc.round()}% · còn ${remaining.inHours}g ${remaining.inMinutes % 60}p',
+                  session.isStale
+                      ? 'Dữ liệu cũ — cần xác minh'
+                      : 'Đang đồng bộ',
                 ),
-                trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(sheetContext).pop(session.vehicleId),
-              );
-            }),
+              ),
+            ),
           ],
         ),
       ),

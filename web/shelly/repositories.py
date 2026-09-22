@@ -257,10 +257,24 @@ class SmartChargeRepository:
     @staticmethod
     def _profile_metadata(profile: dict, *, revision: int, now: datetime) -> dict:
         verification = profile.get("verification") if isinstance(profile.get("verification"), dict) else {}
+        device_id = str(profile.get("deviceId") or "").strip()
+        model = str(profile.get("model") or "S3PL-00112EU").strip()
+        verified_device_id = str(verification.get("verifiedDeviceId") or "").strip()
+        verified_model = str(verification.get("verifiedModel") or "").strip()
+        fingerprint = str(verification.get("verificationFingerprint") or "").strip()
+        # Boolean flags from a mobile client are only historical evidence when
+        # they are bound to the exact device/model and a non-secret
+        # configuration fingerprint.  This prevents a client from declaring a
+        # relay safe without first completing the device readback flow.
+        identity_verified = bool(
+            fingerprint
+            and verified_device_id.lower() == device_id.lower()
+            and verified_model.upper() == model.upper()
+        )
         return {
-            "deviceId": str(profile.get("deviceId") or "").strip(),
+            "deviceId": device_id,
             "displayName": str(profile.get("deviceName") or "Shelly sạc xe").strip(),
-            "model": str(profile.get("model") or "S3PL-00112EU").strip(),
+            "model": model,
             "firmware": str(profile.get("firmware") or "").strip(),
             "vehicleId": str(profile.get("vehicleId") or "").strip() or None,
             "connectionMode": "advanced_direct",
@@ -269,13 +283,15 @@ class SmartChargeRepository:
             "source": str(profile.get("source") or "android").strip() or "android",
             "credentialRef": "vault",
             "hasCredentialVault": True,
-            "cloudVerified": verification.get("cloudVerified") is True,
-            "lanVerified": verification.get("lanVerified") is True,
-            "powerMeterVerified": verification.get("powerMeterVerified") is True,
-            "safeBootVerified": verification.get("safeBootVerified") is True,
-            "noLoadTestVerified": verification.get("noLoadTestVerified") is True,
-            "verificationFingerprint": str(profile.get("verificationFingerprint") or ""),
-            "verifiedAt": profile.get("verifiedAt") or now,
+            "cloudVerified": identity_verified and verification.get("cloudVerified") is True,
+            "lanVerified": identity_verified and verification.get("lanVerified") is True,
+            "powerMeterVerified": identity_verified and verification.get("powerMeterVerified") is True,
+            "safeBootVerified": identity_verified and verification.get("safeBootVerified") is True,
+            "noLoadTestVerified": identity_verified and verification.get("noLoadTestVerified") is True,
+            "verifiedDeviceId": verified_device_id,
+            "verifiedModel": verified_model,
+            "verificationFingerprint": fingerprint,
+            "verifiedAt": verification.get("verifiedAt") or now,
             "updatedAt": now,
             "revokedAt": None,
         }
@@ -310,6 +326,10 @@ class SmartChargeRepository:
             and metadata.get("powerMeterVerified")
             and metadata.get("safeBootVerified")
             and metadata.get("noLoadTestVerified")
+            and metadata.get("deviceId")
+            and str(metadata.get("verifiedDeviceId") or "").lower() == str(metadata.get("deviceId") or "").lower()
+            and str(metadata.get("verifiedModel") or "").upper() == str(metadata.get("model") or "").upper()
+            and metadata.get("verificationFingerprint")
         )
 
     def _profile_doc(self, uid: str, device_id: str):
@@ -469,14 +489,24 @@ class SmartChargeRepository:
         current = profiles[0]
         revision = int(current.get("revision") or 0) + 1
         now = datetime.now(timezone.utc)
+        verified_device_id = str(verification.get("verifiedDeviceId") or current.get("deviceId") or "").strip()
+        verified_model = str(verification.get("verifiedModel") or current.get("model") or "").strip()
+        fingerprint = str(verification.get("verificationFingerprint") or "").strip()
+        identity_verified = bool(
+            fingerprint
+            and verified_device_id.lower() == str(current.get("deviceId") or "").lower()
+            and verified_model.upper() == str(current.get("model") or "").upper()
+        )
         update = {
             "revision": revision,
-            "cloudVerified": verification.get("cloudVerified") is True,
-            "lanVerified": verification.get("lanVerified") is True,
-            "powerMeterVerified": verification.get("powerMeterVerified") is True,
-            "safeBootVerified": verification.get("safeBootVerified") is True,
-            "noLoadTestVerified": verification.get("noLoadTestVerified") is True,
-            "verificationFingerprint": str(verification.get("verificationFingerprint") or ""),
+            "cloudVerified": identity_verified and verification.get("cloudVerified") is True,
+            "lanVerified": identity_verified and verification.get("lanVerified") is True,
+            "powerMeterVerified": identity_verified and verification.get("powerMeterVerified") is True,
+            "safeBootVerified": identity_verified and verification.get("safeBootVerified") is True,
+            "noLoadTestVerified": identity_verified and verification.get("noLoadTestVerified") is True,
+            "verifiedDeviceId": verified_device_id,
+            "verifiedModel": verified_model,
+            "verificationFingerprint": fingerprint,
             "verifiedAt": now,
             "updatedAt": now,
         }
