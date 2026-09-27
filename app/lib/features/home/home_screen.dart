@@ -49,6 +49,7 @@ class HomeScreen extends ConsumerWidget {
         currentVehicles.isNotEmpty &&
         vehicleId.isEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
         final currentId = ref.read(selectedVehicleIdProvider);
         if (currentId.isEmpty) {
           String targetId = currentVehicles.first.vehicleId;
@@ -105,11 +106,18 @@ class HomeScreen extends ConsumerWidget {
             child: RefreshIndicator(
               color: AppUiColors.of(context).primary,
               onRefresh: () async {
-                ref.invalidate(allVehiclesProvider);
+                final requests = <Future<Object?>>[
+                  ref.refresh(allVehiclesProvider.future),
+                ];
                 if (vehicleId.isNotEmpty) {
-                  ref.invalidate(vehicleProvider(vehicleId));
+                  requests.add(ref.refresh(vehicleProvider(vehicleId).future));
                 }
-                await Future<void>.delayed(Duration(milliseconds: 300));
+                try {
+                  await Future.wait(requests);
+                } catch (_) {
+                  // The providers keep the real failure for the inline retry
+                  // state. Refresh must finish without opening a second notice.
+                }
               },
               child: CustomScrollView(
                 physics: AlwaysScrollableScrollPhysics(
@@ -143,14 +151,17 @@ class HomeScreen extends ConsumerWidget {
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: EdgeInsets.fromLTRB(20, 8, 20, 0),
-                      child: vehicleAsync.when(
-                        data: (vehicle) => _VehicleBanner(vehicle: vehicle),
-                        loading: () => _VehicleBannerShimmer(),
-                        error: (e, _) => _InlineErrorBanner(
-                          title: 'Không tải được thông tin xe',
-                          error: e,
-                          onRetry: () =>
-                              ref.invalidate(vehicleProvider(vehicleId)),
+                      child: KeyedSubtree(
+                        key: GuideRegistry.keyBatterySummary,
+                        child: vehicleAsync.when(
+                          data: (vehicle) => _VehicleBanner(vehicle: vehicle),
+                          loading: () => _VehicleBannerShimmer(),
+                          error: (e, _) => _InlineErrorBanner(
+                            title: 'Không tải được thông tin xe',
+                            error: e,
+                            onRetry: () =>
+                                ref.invalidate(vehicleProvider(vehicleId)),
+                          ),
                         ),
                       ),
                     ),

@@ -1,17 +1,20 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+
 import '../services/guide_registry.dart';
+import '../theme/app_motion.dart';
 import '../theme/app_ui_colors.dart';
 import 'battery_bot_mascot.dart';
 
-/// EV Cockpit Spotlight Coach Mark Overlay
-/// - Làm mờ nền và tạo vùng spotlight làm nổi bật widget mục tiêu
-/// - Hộp thoại hướng dẫn hỗ trợ: Tiếp, Quay lại, Bỏ qua, Không hiện lại
-/// - Hỗ trợ Reduced Motion và bảo vệ an toàn: tuyệt đối không tự động trigger relay/GPS
+/// Explains the highlighted control; never dispatches its action.
 class CoachMarkOverlay extends StatefulWidget {
   final List<CoachMarkStep> steps;
   final VoidCallback onFinish;
   final VoidCallback? onSkip;
   final void Function(bool dontShowAgain)? onDontShowAgain;
+  final bool showDontShowAgain;
 
   const CoachMarkOverlay({
     super.key,
@@ -19,37 +22,47 @@ class CoachMarkOverlay extends StatefulWidget {
     required this.onFinish,
     this.onSkip,
     this.onDontShowAgain,
+    this.showDontShowAgain = true,
   });
 
-  /// Hiển thị overlay coach mark qua OverlayEntry
-  static OverlayEntry show({
+  static OverlayEntry? _activeEntry;
+
+  static void dismissActive() {
+    final entry = _activeEntry;
+    _activeEntry = null;
+    entry?.remove();
+  }
+
+  static OverlayEntry? show({
     required BuildContext context,
     required List<CoachMarkStep> steps,
     required VoidCallback onFinish,
     VoidCallback? onSkip,
     void Function(bool dontShowAgain)? onDontShowAgain,
+    bool showDontShowAgain = true,
   }) {
-    late OverlayEntry entry;
+    dismissActive();
+    final overlay = Overlay.maybeOf(context);
+    if (overlay == null || steps.isEmpty) return null;
+    late final OverlayEntry entry;
+    void close(VoidCallback? callback) {
+      // An obsolete overlay must not close or complete its replacement.
+      if (!identical(_activeEntry, entry)) return;
+      dismissActive();
+      callback?.call();
+    }
+
     entry = OverlayEntry(
-      builder: (ctx) => CoachMarkOverlay(
+      builder: (_) => CoachMarkOverlay(
         steps: steps,
-        onFinish: () {
-          entry.remove();
-          onFinish();
-        },
-        onSkip: () {
-          entry.remove();
-          onSkip?.call();
-        },
-        onDontShowAgain: (val) {
-          onDontShowAgain?.call(val);
-        },
+        onFinish: () => close(onFinish),
+        onSkip: () => close(onSkip),
+        onDontShowAgain: onDontShowAgain,
+        showDontShowAgain: showDontShowAgain,
       ),
     );
-    final overlay = Overlay.maybeOf(context);
-    if (overlay != null) {
-      overlay.insert(entry);
-    }
+    _activeEntry = entry;
+    overlay.insert(entry);
     return entry;
   }
 
@@ -59,397 +72,434 @@ class CoachMarkOverlay extends StatefulWidget {
 
 class _CoachMarkOverlayState extends State<CoachMarkOverlay>
     with SingleTickerProviderStateMixin {
-  int _currentIndex = 0;
+  final _surfaceKey = GlobalKey();
+  int _index = 0;
   bool _dontShowAgain = false;
-  late AnimationController _animCtrl;
-  late Animation<double> _fadeAnim;
+  bool _closed = false;
+  bool _measurementScheduled = false;
+  Rect? _target;
+  BuildContext? _revealedContext;
+  Rect? _revealedViewport;
+  late final AnimationController _controller;
 
   @override
   void initState() {
     super.initState();
-    _animCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 250),
-    );
-    _fadeAnim = CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
-    _animCtrl.forward();
+    _controller = AnimationController(vsync: this);
+    _observeNextLayout();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _controller.duration = AppMotion.durationFor(context, AppMotion.fast);
+    if (!AppMotion.enabled(context)) {
+      _controller.value = 1;
+    } else if (_controller.value == 0 && !_controller.isAnimating) {
+      _controller.forward();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant CoachMarkOverlay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_index >= widget.steps.length) _index = 0;
   }
 
   @override
   void dispose() {
-    _animCtrl.dispose();
+    _controller.dispose();
     super.dispose();
   }
 
-  Rect? _getTargetRect(CoachMarkStep step) {
-    final ctx = step.anchorKey.currentContext;
-    if (ctx == null) return null;
-    final renderBox = ctx.findRenderObject() as RenderBox?;
-    if (renderBox == null || !renderBox.hasSize) return null;
-    final offset = renderBox.localToGlobal(Offset.zero);
-    return offset & renderBox.size;
+  Rect _usableBounds(Size size) {
+    final media = MediaQuery.of(context);
+    return Rect.fromLTRB(
+      media.padding.left + 12,
+      media.padding.top + 12,
+      math.max(media.padding.left + 12, size.width - media.padding.right - 12),
+      math.max(
+        media.padding.top + 12,
+        size.height -
+            math.max(media.viewInsets.bottom, media.padding.bottom) -
+            12,
+      ),
+    );
+  }
+
+  /// Observe actual layouts without a timer or scheduling endless new frames.
+  /// A late anchor, scroll or keyboard frame will trigger a fresh measurement.
+  void _observeNextLayout() {
+    if (_measurementScheduled || !mounted || _closed) return;
+    _measurementScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _measurementScheduled = false;
+      if (!mounted || _closed) return;
+      _measureAnchor();
+      _observeNextLayout();
+    });
+  }
+
+  void _measureAnchor() {
+    if (widget.steps.isEmpty) return;
+    final anchorContext = widget.steps[_index].anchorKey.currentContext;
+    final anchor = anchorContext?.findRenderObject();
+    final surface = _surfaceKey.currentContext?.findRenderObject();
+    Rect? visible;
+    if (anchor is RenderBox &&
+        anchor.attached &&
+        anchor.hasSize &&
+        surface is RenderBox &&
+        surface.attached &&
+        surface.hasSize) {
+      final rect =
+          surface.globalToLocal(anchor.localToGlobal(Offset.zero)) &
+          anchor.size;
+      final viewport = _usableBounds(surface.size);
+      if (rect.overlaps(viewport) && !rect.isEmpty) {
+        visible = rect.intersect(viewport);
+      }
+      if (anchorContext != null &&
+          (rect.top < viewport.top || rect.bottom > viewport.bottom) &&
+          (_revealedContext != anchorContext ||
+              _revealedViewport != viewport)) {
+        _revealedContext = anchorContext;
+        _revealedViewport = viewport;
+        unawaited(_revealAnchor(anchorContext, _index));
+      }
+    }
+    if (_target != visible) setState(() => _target = visible);
+  }
+
+  Future<void> _revealAnchor(BuildContext anchor, int stepIndex) async {
+    if (!mounted || !anchor.mounted || stepIndex != _index) return;
+    await Scrollable.ensureVisible(
+      anchor,
+      alignment: .45,
+      duration: AppMotion.durationFor(context, AppMotion.base),
+      curve: AppMotion.enter,
+    );
+    // Frame callbacks already watch the layout. Do not act on a stale step.
+    if (!mounted || _closed || stepIndex != _index) return;
+    _observeNextLayout();
+  }
+
+  void _changeStep(int index) {
+    setState(() {
+      _index = index;
+      _target = null;
+      _revealedContext = null;
+      _revealedViewport = null;
+    });
+    if (AppMotion.enabled(context)) _controller.forward(from: 0);
   }
 
   void _next() {
-    if (_currentIndex < widget.steps.length - 1) {
-      setState(() => _currentIndex++);
-      _animCtrl.forward(from: 0.0);
+    if (_closed || _target == null) return;
+    if (_index + 1 < widget.steps.length) {
+      _changeStep(_index + 1);
     } else {
-      if (_dontShowAgain) widget.onDontShowAgain?.call(true);
-      widget.onFinish();
+      _close(widget.onFinish);
     }
   }
 
-  void _back() {
-    if (_currentIndex > 0) {
-      setState(() => _currentIndex--);
-      _animCtrl.forward(from: 0.0);
-    }
-  }
-
-  void _skip() {
+  void _close(VoidCallback callback) {
+    if (_closed) return;
+    _closed = true;
     if (_dontShowAgain) widget.onDontShowAgain?.call(true);
-    widget.onSkip != null ? widget.onSkip!() : widget.onFinish();
+    callback();
   }
 
   @override
   Widget build(BuildContext context) {
     if (widget.steps.isEmpty) return const SizedBox.shrink();
-    final step = widget.steps[_currentIndex];
-    final targetRect = _getTargetRect(step);
+    final step = widget.steps[_index];
+    final ui = AppUiColors.of(context);
     final isEn = Localizations.localeOf(context).languageCode == 'en';
-    final uiColors = AppUiColors.of(context);
-    final screenSize = MediaQuery.of(context).size;
-
-    return Material(
-      color: Colors.transparent,
-      child: Stack(
-        children: [
-          // Spotlight hole cutout
-          Positioned.fill(
-            child: CustomPaint(
-              painter: _SpotlightPainter(
-                targetRect: targetRect,
-                overlayColor: const Color(0xE00C0F14), // Graphite neutral dark
-              ),
-            ),
-          ),
-
-          // Intercept taps outside dialog to do nothing (prevent accidental touches)
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () {},
-            ),
-          ),
-
-          // Tooltip card
-          FadeTransition(
-            opacity: _fadeAnim,
-            child: _buildTooltipBox(
-              context: context,
-              step: step,
-              targetRect: targetRect,
-              screenSize: screenSize,
-              uiColors: uiColors,
-              isEn: isEn,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTooltipBox({
-    required BuildContext context,
-    required CoachMarkStep step,
-    required Rect? targetRect,
-    required Size screenSize,
-    required AppUiColors uiColors,
-    required bool isEn,
-  }) {
-    // Determine positioning above or below the target rect
-    double? top;
-    double? bottom;
-
-    final targetBottom = targetRect != null ? targetRect.bottom : screenSize.height * 0.35;
-    final targetTop = targetRect != null ? targetRect.top : screenSize.height * 0.35;
-
-    // Place below if target is in top half, otherwise above
-    if (targetBottom < screenSize.height * 0.58) {
-      top = targetBottom + 16;
-    } else {
-      bottom = (screenSize.height - targetTop) + 16;
-    }
-
-    final isLast = _currentIndex == widget.steps.length - 1;
-
-    return Positioned(
-      left: 20,
-      right: 20,
-      top: top,
-      bottom: bottom,
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 440),
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1B2028), // Cockpit dark card
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: const Color(0xFF10B981).withValues(alpha: 0.35), // Emerald accent border
-                width: 1.2,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.6),
-                  blurRadius: 24,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+    final language = isEn ? 'en' : 'vi';
+    final noMotion = !AppMotion.enabled(context);
+    return BlockSemantics(
+      child: Material(
+        color: Colors.transparent,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final bounds = _usableBounds(constraints.biggest);
+            return Stack(
+              key: _surfaceKey,
+              fit: StackFit.expand,
               children: [
-                // BatteryBot Mascot Header & Step indicator
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    const BatteryBotMascot(
-                      size: BatteryBotSize.sm,
-                      customWidth: 36,
-                      customHeight: 46,
-                      mood: BatteryBotMood.greeting,
-                      enableFloating: true,
+                // The spotlight is visual only: even the clear cutout blocks taps.
+                const Positioned.fill(child: ModalBarrier(dismissible: false)),
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: CustomPaint(
+                      painter: _SpotlightPainter(
+                        _target,
+                        Theme.of(context).colorScheme.primary,
+                      ),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 3,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF10B981).withValues(alpha: 0.18),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(
-                                    color: const Color(0xFF10B981).withValues(alpha: 0.35),
-                                    width: 0.8,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
+                  ),
+                ),
+                CustomSingleChildLayout(
+                  delegate: _TooltipLayout(
+                    bounds,
+                    _target,
+                    step.tooltipAlignment,
+                  ),
+                  child: FadeTransition(
+                    opacity: _controller.drive(
+                      CurveTween(curve: AppMotion.enter),
+                    ),
+                    child: Semantics(
+                      scopesRoute: true,
+                      namesRoute: true,
+                      explicitChildNodes: true,
+                      label: isEn ? 'Quick guide' : 'Hướng dẫn nhanh',
+                      child: FocusTraversalGroup(
+                        child: Material(
+                          key: const ValueKey('coach-tooltip'),
+                          color: ui.surface,
+                          borderRadius: BorderRadius.circular(20),
+                          elevation: 6,
+                          clipBehavior: Clip.antiAlias,
+                          child: SingleChildScrollView(
+                            key: const ValueKey('coach-tooltip-scroll'),
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
                                   children: [
-                                    const Text('⚡ ', style: TextStyle(fontSize: 10)),
-                                    Text(
-                                      isEn
-                                          ? 'Step ${_currentIndex + 1} of ${widget.steps.length}'
-                                          : 'Bước ${_currentIndex + 1} / ${widget.steps.length}',
-                                      style: const TextStyle(
-                                        color: Color(0xFF34D399),
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
+                                    const ExcludeSemantics(
+                                      child: TickerMode(
+                                        enabled: false,
+                                        child: BatteryBotMascot(
+                                          size: BatteryBotSize.avatar,
+                                          customWidth: 32,
+                                          customHeight: 32,
+                                          mood: BatteryBotMood.greeting,
+                                          enableFloating: false,
+                                        ),
                                       ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Semantics(
+                                        liveRegion: true,
+                                        child: Text(
+                                          isEn
+                                              ? 'Step ${_index + 1} of ${widget.steps.length}'
+                                              : 'Bước ${_index + 1} / ${widget.steps.length}',
+                                          style: TextStyle(
+                                            color: ui.muted,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => _close(
+                                        widget.onSkip ?? widget.onFinish,
+                                      ),
+                                      style: TextButton.styleFrom(
+                                        minimumSize: const Size(48, 48),
+                                        splashFactory: noMotion
+                                            ? NoSplash.splashFactory
+                                            : null,
+                                        animationDuration:
+                                            AppMotion.durationFor(
+                                              context,
+                                              AppMotion.fast,
+                                            ),
+                                      ),
+                                      child: Text(isEn ? 'Skip' : 'Bỏ qua'),
                                     ),
                                   ],
                                 ),
-                              ),
-                              TextButton(
-                                onPressed: _skip,
-                                style: TextButton.styleFrom(
-                                  visualDensity: VisualDensity.compact,
-                                  foregroundColor: Colors.white60,
-                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                const SizedBox(height: 8),
+                                Semantics(
+                                  header: true,
+                                  child: Text(
+                                    step.title(language),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleLarge
+                                        ?.copyWith(color: ui.text),
+                                  ),
                                 ),
-                                child: Text(isEn ? 'Skip' : 'Bỏ qua', style: const TextStyle(fontSize: 12)),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            isEn ? 'BatteryBot Guide' : 'Trợ lý hướng dẫn',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.55),
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
+                                const SizedBox(height: 8),
+                                Text(
+                                  _target == null
+                                      ? (isEn
+                                            ? 'Waiting for this item to appear. You can skip the guide and open it again in Settings.'
+                                            : 'Đang đợi mục này hiển thị. Bạn có thể bỏ qua và mở lại hướng dẫn trong Cài đặt.')
+                                      : step.description(language),
+                                  style: Theme.of(context).textTheme.bodyMedium
+                                      ?.copyWith(color: ui.muted, height: 1.4),
+                                ),
+                                if (widget.showDontShowAgain) ...[
+                                  const SizedBox(height: 8),
+                                  CheckboxListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    controlAffinity:
+                                        ListTileControlAffinity.leading,
+                                    value: _dontShowAgain,
+                                    onChanged: (value) => setState(
+                                      () => _dontShowAgain = value ?? false,
+                                    ),
+                                    title: Text(
+                                      isEn
+                                          ? "Don't show again"
+                                          : 'Không tự mở lại',
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(height: 16),
+                                Align(
+                                  alignment: AlignmentDirectional.centerEnd,
+                                  child: Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    alignment: WrapAlignment.end,
+                                    children: [
+                                      if (_index > 0)
+                                        OutlinedButton(
+                                          onPressed: () =>
+                                              _changeStep(_index - 1),
+                                          style: OutlinedButton.styleFrom(
+                                            minimumSize: const Size(48, 48),
+                                            splashFactory: noMotion
+                                                ? NoSplash.splashFactory
+                                                : null,
+                                            animationDuration:
+                                                AppMotion.durationFor(
+                                                  context,
+                                                  AppMotion.fast,
+                                                ),
+                                          ),
+                                          child: Text(
+                                            isEn ? 'Back' : 'Quay lại',
+                                          ),
+                                        ),
+                                      FilledButton(
+                                        onPressed: _target == null
+                                            ? null
+                                            : _next,
+                                        style: FilledButton.styleFrom(
+                                          minimumSize: const Size(48, 48),
+                                          splashFactory: noMotion
+                                              ? NoSplash.splashFactory
+                                              : null,
+                                          animationDuration:
+                                              AppMotion.durationFor(
+                                                context,
+                                                AppMotion.fast,
+                                              ),
+                                        ),
+                                        child: Text(
+                                          _index == widget.steps.length - 1
+                                              ? (isEn ? 'Done' : 'Hoàn tất')
+                                              : (isEn ? 'Next' : 'Tiếp'),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ],
+                        ),
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-
-                // Title
-                Text(
-                  step.title(isEn ? 'en' : 'vi'),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.2,
                   ),
-                ),
-                const SizedBox(height: 8),
-
-                // Description
-                Text(
-                  step.description(isEn ? 'en' : 'vi'),
-                  style: const TextStyle(
-                    color: Color(0xFFCBD5E1),
-                    fontSize: 13.5,
-                    height: 1.45,
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Don't show again checkbox
-                Row(
-                  children: [
-                    SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: Checkbox(
-                        value: _dontShowAgain,
-                        activeColor: const Color(0xFF10B981),
-                        checkColor: Colors.black,
-                        side: const BorderSide(color: Colors.white38),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        onChanged: (val) {
-                          setState(() => _dontShowAgain = val ?? false);
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: () {
-                        setState(() => _dontShowAgain = !_dontShowAgain);
-                      },
-                      child: Text(
-                        isEn ? "Don't show again" : 'Không hiện lại',
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12.5,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // Action buttons
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    if (_currentIndex > 0) ...[
-                      OutlinedButton(
-                        onPressed: _back,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white70,
-                          side: const BorderSide(color: Colors.white24),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 10,
-                          ),
-                        ),
-                        child: Text(isEn ? 'Back' : 'Quay lại'),
-                      ),
-                      const SizedBox(width: 10),
-                    ],
-                    FilledButton(
-                      onPressed: _next,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF10B981), // Emerald
-                        foregroundColor: const Color(0xFF042F2E),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 10,
-                        ),
-                        textStyle: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      child: Text(
-                        isLast
-                            ? (isEn ? 'Got it!' : 'Hoàn tất')
-                            : (isEn ? 'Next' : 'Tiếp theo'),
-                      ),
-                    ),
-                  ],
                 ),
               ],
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
   }
 }
 
-/// Custom painter cắt lỗ spotlight bo tròn xung quanh targetRect
-class _SpotlightPainter extends CustomPainter {
-  final Rect? targetRect;
-  final Color overlayColor;
+class _TooltipLayout extends SingleChildLayoutDelegate {
+  const _TooltipLayout(this.bounds, this.target, this.preferredAlignment);
+  final Rect bounds;
+  final Rect? target;
+  final Alignment preferredAlignment;
+  static const gap = 16.0;
 
-  _SpotlightPainter({required this.targetRect, required this.overlayColor});
+  Rect get _space {
+    final anchor = target;
+    if (anchor == null) return bounds;
+    final above = math.max(0.0, anchor.top - gap - bounds.top);
+    final below = math.max(0.0, bounds.bottom - anchor.bottom - gap);
+    // Select usable room, respecting the registry hint only when space permits.
+    final preferAbove = preferredAlignment.y < 0;
+    final useAbove = (preferAbove && above >= 240) || below < above;
+    if (math.max(above, below) < 48) return bounds;
+    return useAbove
+        ? Rect.fromLTWH(bounds.left, bounds.top, bounds.width, above)
+        : Rect.fromLTWH(bounds.left, anchor.bottom + gap, bounds.width, below);
+  }
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
+      BoxConstraints(
+        maxWidth: math.min(460, bounds.width),
+        minWidth: math.min(460, bounds.width),
+        maxHeight: _space.height,
+      );
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) {
+    final space = _space;
+    final anchor = target;
+    final top = anchor != null && space.bottom <= anchor.top
+        ? space.bottom - childSize.height
+        : space.top;
+    return Offset(bounds.center.dx - childSize.width / 2, top);
+  }
+
+  @override
+  bool shouldRelayout(covariant _TooltipLayout oldDelegate) =>
+      bounds != oldDelegate.bounds ||
+      target != oldDelegate.target ||
+      preferredAlignment != oldDelegate.preferredAlignment;
+}
+
+class _SpotlightPainter extends CustomPainter {
+  const _SpotlightPainter(this.targetRect, this.accent);
+  final Rect? targetRect;
+  final Color accent;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = overlayColor;
-
-    if (targetRect == null) {
-      canvas.drawRect(Offset.zero & size, paint);
-      return;
+    final overlay = Path()..addRect(Offset.zero & size);
+    if (targetRect != null) {
+      final rect = RRect.fromRectAndRadius(
+        targetRect!.inflate(6),
+        const Radius.circular(14),
+      );
+      final spotlight = Path()..addRRect(rect);
+      canvas.drawPath(
+        Path.combine(PathOperation.difference, overlay, spotlight),
+        Paint()..color = const Color(0xA9000000),
+      );
+      canvas.drawRRect(
+        rect,
+        Paint()
+          ..color = accent
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2,
+      );
+    } else {
+      canvas.drawPath(overlay, Paint()..color = const Color(0xA9000000));
     }
-
-    // Expand target rect slightly for padding
-    final paddedRect = targetRect!.inflate(8.0);
-    final rrect = RRect.fromRectAndRadius(paddedRect, const Radius.circular(16));
-
-    // Path combining screen rect with hole subtracted
-    final path = Path()
-      ..addRect(Offset.zero & size)
-      ..addRRect(rrect)
-      ..fillType = PathFillType.evenOdd;
-
-    canvas.drawPath(path, paint);
-
-    // Neon glow aura around the spotlight hole
-    final glowPaint = Paint()
-      ..color = const Color(0xFF10B981).withValues(alpha: 0.4)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 4.0
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
-    canvas.drawRRect(rrect, glowPaint);
-
-    final borderPaint = Paint()
-      ..color = const Color(0xFF34D399)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0;
-    canvas.drawRRect(rrect, borderPaint);
   }
 
   @override
-  bool shouldRepaint(covariant _SpotlightPainter oldDelegate) {
-    return oldDelegate.targetRect != targetRect ||
-        oldDelegate.overlayColor != overlayColor;
-  }
+  bool shouldRepaint(covariant _SpotlightPainter oldDelegate) =>
+      oldDelegate.targetRect != targetRect || oldDelegate.accent != accent;
 }

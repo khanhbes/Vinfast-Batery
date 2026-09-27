@@ -8,12 +8,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/services/firebase_bootstrap_coordinator.dart';
 import '../repositories/vehicle_spec_repository.dart';
 import '../repositories/notification_repository.dart';
+import 'notification_service.dart';
 
 /// FCM/APNs token lifecycle. Push token documents are server-only; the app
 /// communicates through authenticated REST endpoints and never touches them in
@@ -49,7 +51,9 @@ class PushNotificationService {
     _pendingDeepLinks.clear();
   }
 
-  Future<void> initialize({void Function(Map<String, dynamic>)? onDeepLink}) async {
+  Future<void> initialize({
+    void Function(Map<String, dynamic>)? onDeepLink,
+  }) async {
     if (onDeepLink != null) setDeepLinkHandler(onDeepLink);
     if (_initialized) return;
     final active = _initializing;
@@ -69,20 +73,7 @@ class PushNotificationService {
     if (!FirebaseBootstrapCoordinator.isReady) {
       await FirebaseBootstrapCoordinator.ensureInitialized();
     }
-    if (Platform.isIOS) {
-      await _messaging.requestPermission(alert: true, badge: true, sound: true);
-      await _messaging.setForegroundNotificationPresentationOptions(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
-    }
     final handler = _deepLinkHandler;
-    try {
-      await _messaging.subscribeToTopic('vehicle_catalog');
-    } catch (error) {
-      debugPrint('[Push] catalog topic subscription deferred: $error');
-    }
     _foregroundMessages ??= FirebaseMessaging.onMessage.listen(_handleMessage);
     FirebaseMessaging.onMessageOpenedApp.listen((message) {
       if (handler != null) {
@@ -99,19 +90,46 @@ class PushNotificationService {
         _pendingDeepLinks.add(initial.data);
       }
     }
-    _tokenRefresh ??= _messaging.onTokenRefresh.listen((_) => syncCurrentUser());
+    _tokenRefresh ??= _messaging.onTokenRefresh.listen(
+      (_) => syncCurrentUser(),
+    );
     _authSubscription ??= FirebaseAuth.instance.authStateChanges().listen((_) {
       syncCurrentUser();
     });
     await syncCurrentUser();
   }
 
+  /// Requests notification permission after an explicit user choice.
+  Future<bool> requestPermissionFromUser() async {
+    if (Platform.isIOS) {
+      final settings = await _messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+      if (settings.authorizationStatus == AuthorizationStatus.authorized ||
+          settings.authorizationStatus == AuthorizationStatus.provisional) {
+        await _messaging.setForegroundNotificationPresentationOptions(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+        return true;
+      }
+      return false;
+    }
+    final granted = await NotificationService().requestPermission();
+    return granted;
+  }
+
   void _handleMessage(RemoteMessage message) {
     final event = message.data['event']?.toString();
-    if (event == 'catalog_updated' || message.data['catalogUpdated'] == 'true') {
+    if (event == 'catalog_updated' ||
+        message.data['catalogUpdated'] == 'true') {
       VehicleSpecRepository().invalidateRemoteCache();
     }
-    if (event == 'notification_updated' || message.data['notificationUpdated'] == 'true') {
+    if (event == 'notification_updated' ||
+        message.data['notificationUpdated'] == 'true') {
       NotificationRepository().invalidateUnread();
     }
     final handler = _deepLinkHandler;
@@ -129,18 +147,36 @@ class PushNotificationService {
   }
 
   Future<void> syncCurrentUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!(prefs.getBool('pushNotifications') ?? false)) return;
+    if (Platform.isAndroid || Platform.isIOS) {
+      final settings = await _messaging.getNotificationSettings();
+      final authorized =
+          settings.authorizationStatus == AuthorizationStatus.authorized ||
+          settings.authorizationStatus == AuthorizationStatus.provisional;
+      if (!authorized) return;
+    }
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       _registeredUid = null;
       return;
+    }
+    try {
+      await _messaging.subscribeToTopic('vehicle_catalog');
+    } catch (error) {
+      debugPrint(
+        '[Push] catalog topic subscription deferred: ${error.runtimeType}',
+      );
     }
     final token = await _messaging.getToken();
     if (token == null || token.isEmpty) return;
     final info = await PackageInfo.fromPlatform();
     final deviceId = await _deviceId();
     final idToken = await user.getIdToken();
-    final fingerprint = '${user.uid}|$token|${info.version}+${info.buildNumber}|${Platform.localeName}';
-    if (_registeredUid == user.uid && _lastRegisteredFingerprint == fingerprint) {
+    final fingerprint =
+        '${user.uid}|$token|${info.version}+${info.buildNumber}|${Platform.localeName}';
+    if (_registeredUid == user.uid &&
+        _lastRegisteredFingerprint == fingerprint) {
       return;
     }
     final response = await http.put(
@@ -152,7 +188,9 @@ class PushNotificationService {
       body: jsonEncode({
         'token': token,
         'platform': Platform.isIOS ? 'ios' : 'android',
-        'bundleId': Platform.isIOS ? 'com.khanhbes.vinfastbattery' : 'com.bes.vinbatery',
+        'bundleId': Platform.isIOS
+            ? 'com.khanhbes.vinfastbattery'
+            : 'com.bes.vinbatery',
         'appVersion': '${info.version}+${info.buildNumber}',
         'locale': Platform.localeName,
       }),

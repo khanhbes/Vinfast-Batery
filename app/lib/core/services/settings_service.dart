@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Theme mode options
@@ -19,6 +20,7 @@ class SettingsService extends ChangeNotifier {
 
   static const _themeKey = 'app_theme_mode';
   static const _languageKey = 'app_language';
+  static const _splashChannel = MethodChannel('com.vinfast.battery/splash');
 
   SharedPreferences? _prefs;
   bool _initialized = false;
@@ -34,6 +36,7 @@ class SettingsService extends ChangeNotifier {
       _prefs = await SharedPreferences.getInstance();
       _themeMode = _decodeThemeMode(_prefs?.getString(_themeKey));
       _language = _decodeLanguage(_prefs?.getString(_languageKey));
+      await _syncNativeSplashTheme(_themeMode);
     } catch (e) {
       debugPrint('[SettingsService] init error: $e');
     } finally {
@@ -63,6 +66,7 @@ class SettingsService extends ChangeNotifier {
     if (_themeMode == mode) return;
     _themeMode = mode;
     notifyListeners();
+    await _syncNativeSplashTheme(mode);
     final value = switch (mode) {
       AppThemeMode.light => 'light',
       AppThemeMode.dark => 'dark',
@@ -73,6 +77,23 @@ class SettingsService extends ChangeNotifier {
       await _prefs?.setString(_themeKey, value);
     } catch (e) {
       debugPrint('[SettingsService] persist theme error: $e');
+    }
+  }
+
+  Future<void> _syncNativeSplashTheme(AppThemeMode mode) async {
+    final theme = switch (mode) {
+      AppThemeMode.light => 'light',
+      AppThemeMode.dark || AppThemeMode.amoled => 'dark',
+      AppThemeMode.system => 'system',
+    };
+    try {
+      await _splashChannel.invokeMethod<void>('setSplashTheme', theme);
+    } on MissingPluginException {
+      // iOS and older embedding builds use their platform default splash.
+    } on PlatformException catch (error) {
+      debugPrint(
+        '[SettingsService] Native splash theme unavailable (${error.code}).',
+      );
     }
   }
 

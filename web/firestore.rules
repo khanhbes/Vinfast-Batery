@@ -130,6 +130,7 @@ service cloud.firestore {
             'name', 'phone', 'dateOfBirth', 'avgDailyDistanceKm',
             'usagePurpose', 'typicalSocWhenCharge', 'catalogId',
             'nickname', 'licensePlate', 'initialOdo', 'shellyStatus',
+            'finalizedAt',
             'attemptCount', 'nextAttemptAt', 'lastErrorCode',
             'lastErrorMessage', 'updatedAt'
           ]) &&
@@ -152,6 +153,7 @@ service cloud.firestore {
           (!('nickname' in request.resource.data) || (request.resource.data.nickname is string && request.resource.data.nickname.size() <= 80)) &&
           (!('licensePlate' in request.resource.data) || (request.resource.data.licensePlate is string && request.resource.data.licensePlate.size() <= 32)) &&
           (!('catalogId' in request.resource.data) || (request.resource.data.catalogId is string && request.resource.data.catalogId.size() > 0 && request.resource.data.catalogId.size() <= 160)) &&
+          (!('finalizedAt' in request.resource.data) || request.resource.data.finalizedAt is string) &&
           (!('lastErrorCode' in request.resource.data) || (request.resource.data.lastErrorCode is string && request.resource.data.lastErrorCode.size() <= 80)) &&
           (!('lastErrorMessage' in request.resource.data) || (request.resource.data.lastErrorMessage is string && request.resource.data.lastErrorMessage.size() <= 300)) &&
           (!('initialOdo' in request.resource.data) ||

@@ -1,1 +1,7 @@
 include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    # Gradle/plugin intermediates are generated artifacts, not Dart sources.
+    # Keep lib/ and test/ fully analyzed; do not suppress diagnostic rules.
+    - build/**

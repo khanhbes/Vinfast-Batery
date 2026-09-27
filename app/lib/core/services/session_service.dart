@@ -4,8 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// SessionService - Lưu trữ metadata phiên đăng nhập một cách an toàn.
 ///
-/// - Bảo mật: dùng [FlutterSecureStorage] (Android Keystore) cho `selectedVehicleId`
-///   và `lastLoginEmail`.
+/// - Bảo mật: dùng [FlutterSecureStorage] (Android Keystore) cho `selectedVehicleId`.
 /// - Tương thích ngược: vẫn ghi mirror vào [SharedPreferences] với key
 ///   `selected_vehicle_id` để các module legacy đang đọc đồng bộ tiếp tục chạy.
 /// - Khởi tạo lần đầu (sau update): nếu secure storage chưa có giá trị nhưng
@@ -17,13 +16,11 @@ class SessionService {
 
   // Secure keys
   static const _kSelectedVehicleId = 'session.selected_vehicle_id';
-  static const _kLastLoginEmail = 'session.last_login_email';
-  static const _kRememberedEmail = 'session.remembered_email';
   static const _kRememberedPassword = 'session.remembered_password';
+  static const _kLegacyRememberedEmail = 'session.remembered_email';
 
   // Mirror keys (giữ tương thích với code cũ)
   static const _kPrefSelectedVehicleId = 'selected_vehicle_id';
-  static const _kPrefLastLoginEmail = 'last_login_email';
   static const _kPrefLastUserSync = 'last_user_sync';
   static const _kPrefLastFullSync = 'last_full_sync';
 
@@ -52,13 +49,6 @@ class SessionService {
           prefVehicle != null &&
           prefVehicle.isNotEmpty) {
         await _safeWrite(_kSelectedVehicleId, prefVehicle);
-      }
-      final secEmail = await _safeRead(_kLastLoginEmail);
-      final prefEmail = prefs.getString(_kPrefLastLoginEmail);
-      if ((secEmail == null || secEmail.isEmpty) &&
-          prefEmail != null &&
-          prefEmail.isNotEmpty) {
-        await _safeWrite(_kLastLoginEmail, prefEmail);
       }
     } catch (e) {
       debugPrint('[SessionService] Migration error: $e');
@@ -96,58 +86,36 @@ class SessionService {
     }
   }
 
-  // ── Last login email ───────────────────────────────────────────────
-
-  Future<String?> getLastLoginEmail() async {
-    await _ensureMigrated();
-    final secure = await _safeRead(_kLastLoginEmail);
-    if (secure != null && secure.isNotEmpty) return secure;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final v = prefs.getString(_kPrefLastLoginEmail);
-      return (v == null || v.isEmpty) ? null : v;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  Future<void> setLastLoginEmail(String email) async {
-    await _safeWrite(_kLastLoginEmail, email);
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_kPrefLastLoginEmail, email);
-    } catch (_) {}
-  }
-
   // ── Remembered login credentials ─────────────────────────────────
 
   /// Lưu thông tin đăng nhập để app có thể tự khôi phục phiên sau cold start
   /// trong trường hợp Firebase Auth chưa restore kịp hoặc bị mất cache.
   ///
   /// Dữ liệu được ghi vào FlutterSecureStorage với encryptedSharedPreferences.
-  Future<void> saveRememberedCredentials({
-    required String email,
-    required String password,
-  }) async {
-    await _safeWrite(_kRememberedEmail, email);
-    await _safeWrite(_kRememberedPassword, password);
-  }
-
-  Future<({String email, String password})?> getRememberedCredentials() async {
-    final email = await _safeRead(_kRememberedEmail);
-    final password = await _safeRead(_kRememberedPassword);
-    if (email == null ||
-        email.trim().isEmpty ||
-        password == null ||
-        password.isEmpty) {
-      return null;
+  /// Remove credentials written by legacy builds. Returns true only when the
+  /// secure-store readback confirms both values are absent; values are never
+  /// included in logs or returned to callers.
+  Future<bool> clearLegacyCredentials() async {
+    try {
+      await _secure.delete(key: _kLegacyRememberedEmail);
+      await _secure.delete(key: _kRememberedPassword);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('last_login_email');
+      await prefs.remove('remembered_email');
+      await prefs.remove('remembered_password');
+      final email = await _secure.read(key: _kLegacyRememberedEmail);
+      final password = await _secure.read(key: _kRememberedPassword);
+      return email == null &&
+          password == null &&
+          !prefs.containsKey('last_login_email') &&
+          !prefs.containsKey('remembered_email') &&
+          !prefs.containsKey('remembered_password');
+    } catch (error) {
+      debugPrint(
+        '[SessionService] Legacy credential cleanup failed (${error.runtimeType}).',
+      );
+      return false;
     }
-    return (email: email.trim(), password: password);
-  }
-
-  Future<void> clearRememberedCredentials() async {
-    await _safeDelete(_kRememberedEmail);
-    await _safeDelete(_kRememberedPassword);
   }
 
   // ── Sync timestamps (non-sensitive) ────────────────────────────────
@@ -217,14 +185,11 @@ class SessionService {
 
   // ── Logout / cleanup ───────────────────────────────────────────────
 
-  /// Xóa metadata phiên hiện tại. Giữ lại `lastLoginEmail` để form đăng nhập
-  /// có thể prefill — truyền `keepLastEmail = false` để xóa luôn.
-  Future<void> clearSession({bool keepLastEmail = true}) async {
+  /// Xóa metadata phiên hiện tại. Legacy email/password values are always
+  /// removed so the sign-in form starts blank after logout.
+  Future<void> clearSession() async {
     await _safeDelete(_kSelectedVehicleId);
-    await clearRememberedCredentials();
-    if (!keepLastEmail) {
-      await _safeDelete(_kLastLoginEmail);
-    }
+    await clearLegacyCredentials();
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_kPrefSelectedVehicleId);
@@ -234,9 +199,6 @@ class SessionService {
       await prefs.remove(_kPrefWasAuthenticated);
       // N.B.: không remove _kPrefExplicitSignedOut ở đây
       // vì flag này được set TRƯỚC khi gọi clearSession
-      if (!keepLastEmail) {
-        await prefs.remove(_kPrefLastLoginEmail);
-      }
     } catch (e) {
       debugPrint('[SessionService] clearSession prefs error: $e');
     }

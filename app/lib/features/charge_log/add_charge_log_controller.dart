@@ -68,7 +68,7 @@ class AddChargeLogNotifier extends StateNotifier<AddChargeLogState> {
       if (vehicle == null) {
         state = state.copyWith(
           isLoading: false,
-          errorMessage: 'Không tìm thấy xe với ID: $vehicleId',
+          errorMessage: 'Không tìm thấy xe. Hãy chọn lại xe rồi thử lại.',
         );
         return;
       }
@@ -76,7 +76,8 @@ class AddChargeLogNotifier extends StateNotifier<AddChargeLogState> {
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
-        errorMessage: 'Lỗi khi tải thông tin xe: ${e.toString()}',
+        errorMessage:
+            'Chưa thể tải thông tin xe. Kiểm tra kết nối rồi thử lại.',
       );
     }
   }
@@ -221,7 +222,7 @@ class AddChargeLogNotifier extends StateNotifier<AddChargeLogState> {
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
-        errorMessage: 'Lỗi khi lưu nhật ký sạc: ${e.toString()}',
+        errorMessage: 'Chưa thể lưu phiên sạc. Vui lòng thử lại.',
       );
       return false;
     }

@@ -7,6 +7,7 @@ import 'dart:math';
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../data/models/smart_charge_history.dart';
@@ -14,15 +15,18 @@ import '../../data/models/smart_charge_cost.dart';
 import '../../data/models/smart_charging_session.dart';
 import '../../core/services/app_error_reporter.dart';
 import '../../core/widgets/app_popup.dart';
+import '../../core/utils/app_error_formatter.dart';
 import '../../core/widgets/responsive_card_grid.dart';
 import 'widgets/smart_charge_cockpit_theme.dart';
 import '../../core/theme/cockpit_design_system.dart';
 import 'controllers/smart_charging_controller.dart';
+import '../auth/auth_providers.dart';
 
 class SmartChargeHistoryScreen extends StatefulWidget {
   const SmartChargeHistoryScreen({
     super.key,
     required this.controller,
+    this.ownerUid,
     this.initialItems = const [],
     this.initialSessionId,
     this.onPendingTargetConsumed,
@@ -30,6 +34,7 @@ class SmartChargeHistoryScreen extends StatefulWidget {
   });
 
   final SmartChargingController controller;
+  final String? ownerUid;
   final List<SmartChargingSession> initialItems;
   final String? initialSessionId;
   final VoidCallback? onPendingTargetConsumed;
@@ -54,6 +59,10 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
   bool _hasSuccessfulLoad = false;
   bool _allVehicles = false;
   bool _loadingMore = false;
+  bool _loading = false;
+  int _requestGeneration = 0;
+  int _contextGeneration = 0;
+  late String _vehicleId = widget.controller.currentUiState.draft.vehicleId;
   int _visibleCount = 20;
   Timer? _liveTimer;
   bool _openedPending = false;
@@ -93,47 +102,106 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
     _hasSuccessfulLoad = widget.initialItems.isNotEmpty;
     _load(reset: true);
     _liveTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (_items.any((item) => !item.state.isTerminal)) _load(reset: true);
+      if (!_loading && _items.any((item) => !item.state.isTerminal)) {
+        _load(reset: true);
+      }
     });
   }
 
   @override
+  void didUpdateWidget(covariant SmartChargeHistoryScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final vehicleId = widget.controller.currentUiState.draft.vehicleId;
+    if (!identical(oldWidget.controller, widget.controller) ||
+        oldWidget.ownerUid != widget.ownerUid ||
+        _vehicleId != vehicleId) {
+      _contextGeneration++;
+      _vehicleId = vehicleId;
+      // Never seed a new account/vehicle with the previous screen's cache.
+      _items = [];
+      _cursor = null;
+      _error = null;
+      _hasSuccessfulLoad = false;
+      _openedPending = false;
+      _load(reset: true);
+    } else if (oldWidget.initialSessionId != widget.initialSessionId) {
+      _openedPending = false;
+      _openPendingIfAvailable();
+    }
+  }
+
+  @override
   void dispose() {
+    _contextGeneration++;
+    _requestGeneration++;
     _liveTimer?.cancel();
     super.dispose();
   }
 
-  Future<void> _load({required bool reset}) async {
+  Future<void> _load({required bool reset, bool clearItems = false}) async {
+    if (!mounted || (!reset && (_loading || _cursor == null))) return;
+    final controller = widget.controller;
+    final ownerUid = widget.ownerUid;
+    final vehicleId = _vehicleId;
+    final generation = ++_requestGeneration;
+    final contextGeneration = _contextGeneration;
+    final cursor = reset ? null : _cursor;
+    final strategy = _filter;
+    final allVehicles = _allVehicles;
+    bool isCurrent() =>
+        mounted &&
+        generation == _requestGeneration &&
+        contextGeneration == _contextGeneration &&
+        identical(controller, widget.controller) &&
+        ownerUid == widget.ownerUid &&
+        vehicleId == widget.controller.currentUiState.draft.vehicleId;
     if (reset) {
       setState(() {
         _error = null;
         _visibleCount = 20;
+        _loading = true;
+        _loadingMore = false;
+        if (clearItems) {
+          _items = [];
+          _cursor = null;
+          _hasSuccessfulLoad = false;
+        }
       });
       _openPendingIfAvailable();
     } else {
-      setState(() => _loadingMore = true);
+      setState(() {
+        _loading = true;
+        _loadingMore = true;
+      });
     }
     try {
-      final page = await widget.controller.getHistoryPage(
+      final page = await controller.getHistoryPage(
         limit: 100,
-        cursor: reset ? null : _cursor,
-        strategy: _filter,
-        allVehicles: _allVehicles,
+        cursor: cursor,
+        strategy: strategy,
+        allVehicles: allVehicles,
       );
-      if (!mounted) return;
+      if (!isCurrent()) return;
       setState(() {
-        _items = reset ? page.items : [..._items, ...page.items];
+        // Pages can overlap after a refresh; keep one row per session.
+        _items = {
+          if (!reset)
+            for (final item in _items) item.sessionId: item,
+          for (final item in page.items) item.sessionId: item,
+        }.values.toList();
         _cursor = page.nextCursor;
         _error = null;
         _hasSuccessfulLoad = true;
       });
+      _openPendingIfAvailable();
     } catch (e, st) {
-      debugPrint('[HistoryScreen] Load error: $e');
+      if (!isCurrent()) return;
       AppErrorReporter.report(e, st, source: 'SmartChargeHistoryScreen');
-      if (mounted) setState(() => _error = 'Không thể đồng bộ lịch sử sạc.');
+      setState(() => _error = 'Không thể đồng bộ lịch sử sạc.');
     } finally {
-      if (mounted) {
+      if (isCurrent()) {
         setState(() {
+          _loading = false;
           _loadingMore = false;
         });
       }
@@ -147,15 +215,23 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
         .where((item) => item.sessionId == target)
         .firstOrNull;
     if (session == null) return;
+    final contextGeneration = _contextGeneration;
+    final controller = widget.controller;
     _openedPending = true;
-    widget.onPendingTargetConsumed?.call();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
+      if (!mounted ||
+          contextGeneration != _contextGeneration ||
+          widget.initialSessionId != target)
+        return;
+      widget.onPendingTargetConsumed?.call();
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => SmartChargeSessionDetailScreen(
-            controller: widget.controller,
-            session: session,
+          builder: (_) => Consumer(
+            builder: (context, ref, _) => SmartChargeSessionDetailScreen(
+              controller: controller,
+              ownerUid: ref.watch(currentUidProvider),
+              session: session,
+            ),
           ),
         ),
       );
@@ -176,9 +252,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
     return SmartChargeCockpitTheme(
       adaptive: true,
       child: Scaffold(
-        appBar: widget.embedded
-            ? null
-            : AppBar(title: Text('Lịch sử Smart Charge')),
+        appBar: widget.embedded ? null : AppBar(title: Text('Lịch sử sạc')),
         body: RefreshIndicator(
           onRefresh: () => _load(reset: true),
           child: CustomScrollView(
@@ -204,9 +278,21 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
                     ),
                   ),
                 ),
-              if (initialLoadFailed)
+              if (_loading && !_hasSuccessfulLoad && _items.isEmpty)
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (initialLoadFailed)
                 SliverFillRemaining(child: _errorState())
               else ...[
+                if (_error != null)
+                  SliverToBoxAdapter(
+                    child: _StaleNotice(
+                      message: _error!,
+                      onRetry: () => _load(reset: true),
+                    ),
+                  ),
                 SliverPadding(
                   padding: EdgeInsets.fromLTRB(16, 2, 16, 10),
                   sliver: SliverToBoxAdapter(
@@ -232,8 +318,10 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
                 if (visible.isEmpty && _activeSession == null)
                   SliverFillRemaining(
                     child: _EmptyHistory(
-                      isFiltered: _filter != null ||
-                          _statusFilter != SmartChargeHistorySessionFilter.all ||
+                      isFiltered:
+                          _filter != null ||
+                          _statusFilter !=
+                              SmartChargeHistorySessionFilter.all ||
                           _customRange != null ||
                           _allVehicles,
                       onClearFilter: () => setState(() {
@@ -242,18 +330,11 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
                         _customRange = null;
                         _allVehicles = false;
                         _visibleCount = 20;
-                        _load(reset: true);
+                        _load(reset: true, clearItems: true);
                       }),
                     ),
                   ),
                 if (visible.isNotEmpty || _activeSession != null) ...[
-                  if (_error != null)
-                    SliverToBoxAdapter(
-                      child: _StaleNotice(
-                        message: _error!,
-                        onRetry: () => _load(reset: true),
-                      ),
-                    ),
                   SliverList.separated(
                     itemCount: shown.length,
                     separatorBuilder: (_, _) =>
@@ -270,7 +351,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
                       child: _cursor == null && shown.length >= visible.length
                           ? Center(child: Text('Đã hiển thị toàn bộ phiên sạc'))
                           : OutlinedButton(
-                              onPressed: _loadingMore
+                              onPressed: _loading
                                   ? null
                                   : () {
                                       if (shown.length < visible.length) {
@@ -315,7 +396,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
         onSelectionChanged: (value) {
           _allVehicles = value.first;
           _cursor = null;
-          _load(reset: true);
+          _load(reset: true, clearItems: true);
         },
       ),
       SizedBox(height: 8),
@@ -392,11 +473,12 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
         ),
       );
 
-  void _setStrategy(ChargingStrategy? value) => setState(() {
+  void _setStrategy(ChargingStrategy? value) {
+    if (_filter == value) return;
     _filter = value;
-    _visibleCount = 20;
     if (value != null) _statusFilter = SmartChargeHistorySessionFilter.all;
-  });
+    _load(reset: true, clearItems: true);
+  }
 
   void _setStatus(SmartChargeHistorySessionFilter value) => setState(() {
     _visibleCount = 20;
@@ -415,6 +497,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
   });
 
   Future<void> _pickDateRange() async {
+    final contextGeneration = _contextGeneration;
     final now = DateTime.now();
     final selected = await showDateRangePicker(
       context: context,
@@ -424,7 +507,8 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
       helpText: 'Chọn khoảng lịch sử sạc',
       saveText: 'ÁP DỤNG',
     );
-    if (selected == null || !mounted) return;
+    if (selected == null || !mounted || contextGeneration != _contextGeneration)
+      return;
     if (selected.duration.inDays > 366) {
       AppPopup.showWarning(
         'Khoảng thời gian quá dài',
@@ -439,6 +523,8 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
   }
 
   Future<void> _openDetail(SmartChargingSession session) async {
+    final contextGeneration = _contextGeneration;
+    final controller = widget.controller;
     final deletedOrChanged = await showModalBottomSheet<dynamic>(
       context: context,
       isScrollControlled: true,
@@ -449,14 +535,17 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
         heightFactor: .96,
         child: ClipRRect(
           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-          child: SmartChargeSessionDetailScreen(
-            controller: widget.controller,
-            session: session,
+          child: Consumer(
+            builder: (context, ref, _) => SmartChargeSessionDetailScreen(
+              controller: controller,
+              ownerUid: ref.watch(currentUidProvider),
+              session: session,
+            ),
           ),
         ),
       ),
     );
-    if (!mounted) return;
+    if (!mounted || contextGeneration != _contextGeneration) return;
     if (deletedOrChanged == true || deletedOrChanged is String) {
       if (mounted) {
         setState(() {
@@ -468,6 +557,12 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
   }
 
   Future<void> _export() async {
+    final contextGeneration = _contextGeneration;
+    final controller = widget.controller;
+    final from = _rangeStart;
+    final to = _rangeEnd;
+    final allVehicles = _allVehicles;
+    final vehicleId = _vehicleId;
     final format = await showModalBottomSheet<ChargeReportFormat>(
       context: context,
       showDragHandle: true,
@@ -504,25 +599,29 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
         ),
       ),
     );
-    if (format == null) return;
+    if (format == null || !mounted || contextGeneration != _contextGeneration)
+      return;
     try {
-      final result = await widget.controller.exportHistory(
+      final result = await controller.exportHistory(
         ChargeReportRequest(
           format: format,
-          from: _rangeStart,
-          to: _rangeEnd,
-          allVehicles: _allVehicles,
-          vehicleId: _allVehicles
-              ? null
-              : widget.controller.currentUiState.draft.vehicleId,
+          from: from,
+          to: to,
+          allVehicles: allVehicles,
+          vehicleId: allVehicles ? null : vehicleId,
         ),
       );
+      if (!mounted || contextGeneration != _contextGeneration) return;
       AppPopup.showSuccess(
         'Đã tạo báo cáo',
         detail: '${result.sessionCount} phiên · đã mở bảng chia sẻ Android.',
       );
     } on Object catch (error) {
-      AppPopup.showError('Không thể xuất báo cáo', detail: '$error');
+      if (!mounted || contextGeneration != _contextGeneration) return;
+      AppPopup.showError(
+        'Không thể xuất báo cáo',
+        detail: AppErrorFormatter.format(error),
+      );
     }
   }
 
@@ -547,6 +646,8 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
 
   Future<void> _hide(SmartChargingSession session) async {
     if (!session.state.isTerminal) return;
+    final contextGeneration = _contextGeneration;
+    final controller = widget.controller;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -566,10 +667,13 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
         ],
       ),
     );
-    if (confirmed != true) return;
+    if (confirmed != true ||
+        !mounted ||
+        contextGeneration != _contextGeneration)
+      return;
     try {
-      await widget.controller.hideSession(session.sessionId);
-      if (mounted) {
+      await controller.hideSession(session.sessionId);
+      if (mounted && contextGeneration == _contextGeneration) {
         setState(
           () =>
               _items.removeWhere((item) => item.sessionId == session.sessionId),
@@ -579,10 +683,10 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
         ).showSnackBar(SnackBar(content: Text('Đã ẩn phiên khỏi lịch sử.')));
       }
     } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Không thể ẩn phiên: $error')));
+      if (mounted && contextGeneration == _contextGeneration) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppErrorFormatter.format(error))),
+        );
       }
     }
   }
@@ -815,11 +919,18 @@ class _SevenDayBars extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.bar_chart_rounded, size: 16, color: AppUiColors.of(context).muted),
+            Icon(
+              Icons.bar_chart_rounded,
+              size: 16,
+              color: AppUiColors.of(context).muted,
+            ),
             const SizedBox(width: 6),
             Text(
               'Chưa có dữ liệu nạp sạc 7 ngày qua',
-              style: TextStyle(fontSize: 11.5, color: AppUiColors.of(context).muted),
+              style: TextStyle(
+                fontSize: 11.5,
+                color: AppUiColors.of(context).muted,
+              ),
             ),
           ],
         ),
@@ -891,9 +1002,9 @@ class _EmptyHistory extends StatelessWidget {
           isFiltered
               ? 'Không có phiên sạc phù hợp bộ lọc'
               : 'Chưa có phiên Smart Charge hoàn tất',
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
         ),
       ),
       const SizedBox(height: 6),
@@ -961,18 +1072,18 @@ class _HistoryRow extends StatelessWidget {
     final statusText = isPartial
         ? 'Partial'
         : isCompleted
-            ? 'Hoàn thành'
-            : 'Đã dừng';
+        ? 'Hoàn thành'
+        : 'Đã dừng';
     final statusBg = isPartial
         ? Colors.grey.withValues(alpha: 0.15)
         : isCompleted
-            ? CockpitColors.emerald.withValues(alpha: 0.15)
-            : CockpitColors.amber.withValues(alpha: 0.15);
+        ? CockpitColors.emerald.withValues(alpha: 0.15)
+        : CockpitColors.amber.withValues(alpha: 0.15);
     final statusFg = isPartial
         ? AppUiColors.of(context).muted
         : isCompleted
-            ? CockpitColors.emeraldStrong
-            : CockpitColors.amber;
+        ? CockpitColors.emeraldStrong
+        : CockpitColors.amber;
 
     return Semantics(
       button: true,
@@ -994,8 +1105,10 @@ class _HistoryRow extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.visibility_off_rounded,
-                  color: Theme.of(context).colorScheme.error),
+              Icon(
+                Icons.visibility_off_rounded,
+                color: Theme.of(context).colorScheme.error,
+              ),
               const SizedBox(width: 8),
               Text(
                 'Ẩn phiên',
@@ -1008,7 +1121,10 @@ class _HistoryRow extends StatelessWidget {
           ),
         ),
         child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 8,
+          ),
           onTap: onTap,
           title: Row(
             children: [
@@ -1056,9 +1172,14 @@ class _HistoryRow extends StatelessWidget {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 1,
+                  ),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
@@ -1088,9 +1209,11 @@ class SmartChargeSessionDetailScreen extends StatefulWidget {
     super.key,
     required this.controller,
     required this.session,
+    this.ownerUid,
   });
   final SmartChargingController controller;
   final SmartChargingSession session;
+  final String? ownerUid;
 
   @override
   State<SmartChargeSessionDetailScreen> createState() => _DetailState();
@@ -1104,39 +1227,78 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
   _ChartMetric _metric = _ChartMetric.power;
   Timer? _liveTimer;
   bool _loadingTelemetry = false;
+  int _contextGeneration = 0;
+  bool _contextUnavailable = false;
 
   @override
   void initState() {
     super.initState();
     _session = widget.session;
     _load();
+    _startPolling();
+  }
+
+  void _startPolling() {
+    _liveTimer?.cancel();
     if (!_session.state.isTerminal) {
       _liveTimer = Timer.periodic(const Duration(seconds: 15), (_) => _load());
     }
   }
 
   @override
+  void didUpdateWidget(covariant SmartChargeSessionDetailScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.controller, widget.controller) ||
+        oldWidget.ownerUid != widget.ownerUid ||
+        oldWidget.session.sessionId != widget.session.sessionId ||
+        oldWidget.session.vehicleId != widget.session.vehicleId) {
+      _contextGeneration++;
+      _session = widget.session;
+      _points = null;
+      _summary = null;
+      _error = null;
+      _loadingTelemetry = false;
+      // A sheet can outlive its originating tab during an account change.
+      // Do not display or query the previous account's session in that case.
+      _contextUnavailable =
+          oldWidget.ownerUid != widget.ownerUid &&
+          oldWidget.session.sessionId == widget.session.sessionId;
+      if (_contextUnavailable) {
+        _liveTimer?.cancel();
+        return;
+      }
+      _load();
+      _startPolling();
+    }
+  }
+
+  @override
   void dispose() {
+    _contextGeneration++;
     _liveTimer?.cancel();
     super.dispose();
   }
 
   Future<void> _load() async {
-    if (_loadingTelemetry) return;
+    if (_loadingTelemetry || _contextUnavailable) return;
     _loadingTelemetry = true;
+    final contextGeneration = _contextGeneration;
+    final controller = widget.controller;
+    final sessionId = _session.sessionId;
+    bool isCurrent() => mounted && contextGeneration == _contextGeneration;
     try {
       final existing = _points;
       final after = existing == null || existing.isEmpty
           ? null
           : existing.last.timestamp.toUtc().toIso8601String();
-      final incoming = await widget.controller.getTelemetry(
-        _session.sessionId,
+      final incoming = await controller.getTelemetry(
+        sessionId,
         after: after,
         limit: 120,
       );
-      if (!mounted) return;
+      if (!isCurrent()) return;
       setState(() {
-        final live = widget.controller.currentUiState.session;
+        final live = controller.currentUiState.session;
         if (live?.sessionId == _session.sessionId) _session = live!;
         final merged = after == null
             ? incoming
@@ -1164,14 +1326,29 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
         _liveTimer = null;
       }
     } catch (_) {
-      if (mounted) setState(() => _error = 'Không thể tải dữ liệu biểu đồ.');
+      if (isCurrent())
+        setState(() => _error = 'Không thể tải dữ liệu biểu đồ.');
     } finally {
-      _loadingTelemetry = false;
+      if (isCurrent()) _loadingTelemetry = false;
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_contextUnavailable) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Chi tiết phiên sạc')),
+        body: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Text(
+              'Tài khoản đã thay đổi. Hãy mở lại lịch sử sạc.',
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      );
+    }
     final duration = (_session.stoppedAt ?? _session.updatedAt).difference(
       _session.startedAt ?? _session.createdAt,
     );
@@ -1276,6 +1453,8 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
                   const SizedBox(height: 14),
                   _metricSelector(),
                   const SizedBox(height: 16),
+                  if (_error != null && _points != null)
+                    _StaleNotice(message: _error!, onRetry: _load),
                   SizedBox(height: 250, child: _chart()),
                 ],
               ),
@@ -1530,7 +1709,7 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
   );
 
   Widget _chart() {
-    if (_error != null) {
+    if (_error != null && _points == null) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1762,17 +1941,18 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
   }
 
   Future<void> _confirmSoc() async {
+    final contextGeneration = _contextGeneration;
+    final controller = widget.controller;
+    final session = _session;
     final value = await showDialog<double>(
       context: context,
       builder: (_) => const ConfirmSessionSocDialog(),
     );
-    if (value == null || !mounted) return;
+    if (value == null || !mounted || contextGeneration != _contextGeneration)
+      return;
     try {
-      final summary = await widget.controller.confirmActualEndSoc(
-        _session,
-        value,
-      );
-      if (mounted) {
+      final summary = await controller.confirmActualEndSoc(session, value);
+      if (mounted && contextGeneration == _contextGeneration) {
         setState(() {
           _session = _session.copyWith(actualEndSoc: value);
           _summary = summary;
@@ -1788,15 +1968,18 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
         );
       }
     } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Lỗi: $error')));
+      if (mounted && contextGeneration == _contextGeneration) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppErrorFormatter.format(error))),
+        );
       }
     }
   }
 
   Future<void> _privacyErase() async {
+    final contextGeneration = _contextGeneration;
+    final controller = widget.controller;
+    final sessionId = _session.sessionId;
     final input = TextEditingController();
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1809,7 +1992,7 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
             Text('Thao tác này xóa summary, telemetry và không thể hoàn tác.'),
             SizedBox(height: 12),
             SelectableText(
-              _session.sessionId,
+              sessionId,
               style: TextStyle(fontWeight: FontWeight.w700),
             ),
             SizedBox(height: 8),
@@ -1828,10 +2011,8 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
             child: Text('HỦY'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(
-              dialogContext,
-              input.text.trim() == _session.sessionId,
-            ),
+            onPressed: () =>
+                Navigator.pop(dialogContext, input.text.trim() == sessionId),
             child: Text('XÓA VĨNH VIỄN'),
           ),
         ],
@@ -1839,26 +2020,34 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
     );
     final code = input.text.trim();
     input.dispose();
-    if (confirmed != true || !mounted) return;
+    if (confirmed != true ||
+        !mounted ||
+        contextGeneration != _contextGeneration)
+      return;
     try {
-      await widget.controller.privacyEraseSession(_session.sessionId, code);
-      if (mounted) {
+      await controller.privacyEraseSession(sessionId, code);
+      if (mounted && contextGeneration == _contextGeneration) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && Navigator.of(context).canPop()) {
+          if (mounted &&
+              contextGeneration == _contextGeneration &&
+              Navigator.of(context).canPop()) {
             Navigator.of(context).pop(true);
           }
         });
       }
     } catch (error) {
-      if (mounted) {
+      if (mounted && contextGeneration == _contextGeneration) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Không thể xóa dữ liệu: $error')),
+          SnackBar(content: Text(AppErrorFormatter.format(error))),
         );
       }
     }
   }
 
   Future<void> _hideSession() async {
+    final contextGeneration = _contextGeneration;
+    final controller = widget.controller;
+    final sessionId = _session.sessionId;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -1878,19 +2067,27 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
         ],
       ),
     );
-    if (confirmed != true || !mounted) return;
+    if (confirmed != true ||
+        !mounted ||
+        contextGeneration != _contextGeneration)
+      return;
     try {
-      await widget.controller.hideSession(_session.sessionId);
-      if (mounted) {
+      await controller.hideSession(sessionId);
+      if (mounted && contextGeneration == _contextGeneration) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && Navigator.of(context).canPop()) {
+          if (mounted &&
+              contextGeneration == _contextGeneration &&
+              Navigator.of(context).canPop()) {
             Navigator.of(context).pop(true);
           }
         });
       }
     } on Object catch (error) {
-      if (mounted) {
-        AppPopup.showError('Không thể ẩn phiên', detail: '$error');
+      if (mounted && contextGeneration == _contextGeneration) {
+        AppPopup.showError(
+          'Không thể ẩn phiên',
+          detail: AppErrorFormatter.format(error),
+        );
       }
     }
   }

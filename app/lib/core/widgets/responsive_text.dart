@@ -126,21 +126,11 @@ class ResponsiveText extends StatelessWidget {
     );
   }
 
-  Widget _buildTooltipText(String displayText, TextStyle effectiveStyle) {
-    return Tooltip(
-      message: text,
-      preferBelow: true,
-      child: Text(
-        displayText,
-        style: effectiveStyle,
-        maxLines: maxLines,
-        textAlign: textAlign,
-        softWrap: true,
-      ),
-    );
-  }
-
-  static String _shorten(String text, ResponsiveTextStrategy strategy, int pass) {
+  static String _shorten(
+    String text,
+    ResponsiveTextStrategy strategy,
+    int pass,
+  ) {
     if (text.isEmpty || pass <= 0) return text;
 
     switch (strategy) {

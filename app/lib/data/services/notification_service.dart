@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
@@ -81,7 +82,8 @@ class NotificationService {
       );
     }
 
-    // ── 3. Android: xin quyền notification (Android 13+) ───────────────
+    // Permission requests are user initiated from onboarding, Settings, or a
+    // feature-specific rationale. Initialization must never open OS dialogs.
     if (Platform.isAndroid) {
       final androidPlugin = _plugin
           .resolvePlatformSpecificImplementation<
@@ -123,12 +125,6 @@ class NotificationService {
           ),
         );
 
-        // Xin quyền notification Android 13+
-        final granted = await androidPlugin.requestNotificationsPermission();
-        debugPrint(
-          '[NotificationService] Android notification permission: $granted',
-        );
-
         // Android 12+: chỉ kiểm tra exact alarm, không ép mở màn Settings.
         // Một số máy/OEM làm mờ toggle này; app vẫn schedule bằng inexact alarm.
         try {
@@ -144,26 +140,47 @@ class NotificationService {
         }
       }
     }
+    _initialized = true;
+    if (kDebugMode) {
+      debugPrint(
+        '[NotificationService] Initialized (timezone=Asia/Ho_Chi_Minh)',
+      );
+    }
+  }
+
+  /// Opens the platform permission prompt only after an explicit user action.
+  Future<bool> requestPermission() async {
+    await initialize();
+    if (Platform.isAndroid) {
+      final androidPlugin = _plugin
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
+      final granted = await androidPlugin?.requestNotificationsPermission();
+      return granted ?? await _hasNotificationPermission();
+    }
     if (Platform.isIOS) {
-      final iosPlugin = _plugin.resolvePlatformSpecificImplementation<
-          IOSFlutterLocalNotificationsPlugin>();
+      final iosPlugin = _plugin
+          .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin
+          >();
       final granted = await iosPlugin?.requestPermissions(
         alert: true,
         badge: true,
         sound: true,
       );
-      debugPrint('[NotificationService] iOS notification permission: $granted');
+      return granted ?? await _hasNotificationPermission();
     }
-
-    _initialized = true;
-    debugPrint('[NotificationService] Initialized (timezone=Asia/Ho_Chi_Minh)');
+    return true;
   }
 
   /// Kiểm tra xem notification permission đã được cấp chưa.
   Future<bool> _hasNotificationPermission() async {
     if (Platform.isIOS) {
-      final plugin = _plugin.resolvePlatformSpecificImplementation<
-          IOSFlutterLocalNotificationsPlugin>();
+      final plugin = _plugin
+          .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin
+          >();
       final settings = await plugin?.checkPermissions();
       return settings?.isEnabled ?? true;
     }
@@ -173,7 +190,6 @@ class NotificationService {
   }
 
   void _onNotificationTap(NotificationResponse response) {
-    debugPrint('Notification tapped: ${response.payload}');
     final payload = response.payload;
     if (payload != null) _tapHandler?.call(payload);
   }
@@ -305,7 +321,9 @@ class NotificationService {
     double? estimatedSoc,
   }) async {
     await initialize();
-    final socText = estimatedSoc != null ? ' (ước tính ~${estimatedSoc.toStringAsFixed(0)}%)' : '';
+    final socText = estimatedSoc != null
+        ? ' (ước tính ~${estimatedSoc.toStringAsFixed(0)}%)'
+        : '';
     await _plugin.show(
       1012,
       '⚡ Phiên sạc hoàn tất$socText',
@@ -379,9 +397,10 @@ class NotificationService {
   /// Ném nếu notification permission bị từ chối hoàn toàn.
   Future<bool> scheduleChargeReminder(
     DateTime reminderTime,
-    int targetPercent,
-    {String? vehicleId, String? sessionId}
-  ) async {
+    int targetPercent, {
+    String? vehicleId,
+    String? sessionId,
+  }) async {
     await initialize(); // idempotent
     if (!await _hasNotificationPermission()) {
       throw Exception(
@@ -441,7 +460,10 @@ class NotificationService {
     String? sessionId,
     int targetPercent,
   ) {
-    if (vehicleId == null || vehicleId.isEmpty || sessionId == null || sessionId.isEmpty) {
+    if (vehicleId == null ||
+        vehicleId.isEmpty ||
+        sessionId == null ||
+        sessionId.isEmpty) {
       return 'smart_charge/current?target=$targetPercent';
     }
     return 'smart_charge/session/${Uri.encodeComponent(vehicleId)}/${Uri.encodeComponent(sessionId)}';

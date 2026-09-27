@@ -66,7 +66,7 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = 'Chưa thể tải dữ liệu pin. Kiểm tra kết nối rồi thử lại.';
         _isLoading = false;
       });
     }
@@ -105,7 +105,9 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
                       icon: const Icon(Icons.refresh_rounded),
                       color: colors.text,
                       style: IconButton.styleFrom(
-                        backgroundColor: colors.surfaceSoft.withValues(alpha: 0.6),
+                        backgroundColor: colors.surfaceSoft.withValues(
+                          alpha: 0.6,
+                        ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -119,10 +121,7 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.all(20),
-                    child: ErrorState(
-                      message: _error!,
-                      onRetry: _refreshData,
-                    ),
+                    child: ErrorState(message: _error!, onRetry: _refreshData),
                   ),
                 )
               else if (_isLoading)
@@ -327,10 +326,7 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: TextStyle(color: colors.muted, fontSize: 12),
-          ),
+          Text(label, style: TextStyle(color: colors.muted, fontSize: 12)),
           const SizedBox(height: 4),
           Text(
             value,
@@ -460,10 +456,7 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: TextStyle(color: colors.muted, fontSize: 11),
-          ),
+          Text(label, style: TextStyle(color: colors.muted, fontSize: 11)),
           const SizedBox(height: 4),
           Text(
             value,
@@ -587,11 +580,11 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
                       show: validHistory.length <= 12,
                       getDotPainter: (spot, percent, barData, index) =>
                           FlDotCirclePainter(
-                        radius: 3,
-                        color: colors.emerald,
-                        strokeWidth: 1,
-                        strokeColor: colors.surface,
-                      ),
+                            radius: 3,
+                            color: colors.emerald,
+                            strokeWidth: 1,
+                            strokeColor: colors.surface,
+                          ),
                     ),
                     belowBarData: BarAreaData(
                       show: true,
@@ -735,9 +728,12 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  ...List<String>.from(
-                    result['recommendations'],
-                  ).map((rec) => Text('• $rec', style: TextStyle(color: AppUiColors.of(context).muted))),
+                  ...List<String>.from(result['recommendations']).map(
+                    (rec) => Text(
+                      '• $rec',
+                      style: TextStyle(color: AppUiColors.of(context).muted),
+                    ),
+                  ),
                 ],
               ],
             ),

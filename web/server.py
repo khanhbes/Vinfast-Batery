@@ -349,7 +349,19 @@ app.config['MAX_CONTENT_LENGTH'] = 65 * 1024 * 1024
 _cors_origins_raw = os.environ.get('CORS_ORIGINS', '').strip()
 if _IS_PRODUCTION and not _cors_origins_raw:
     raise RuntimeError('CORS_ORIGINS phải được cấu hình trong môi trường production')
-_cors_origins = [origin.strip() for origin in _cors_origins_raw.split(',') if origin.strip()]
+def _clean_cors_origin(origin_str: str) -> str:
+    from urllib.parse import urlparse
+    val = origin_str.strip()
+    if not val or val == '*':
+        return val
+    p = urlparse(val)
+    if p.scheme and p.netloc:
+        return f"{p.scheme}://{p.netloc}"
+    return val.rstrip('/')
+
+
+_cors_origins = [_clean_cors_origin(origin) for origin in _cors_origins_raw.split(',') if origin.strip()]
+_cors_origins = [o for o in _cors_origins if o]
 if _IS_PRODUCTION and '*' in _cors_origins:
     raise RuntimeError('CORS_ORIGINS không được dùng wildcard trong production')
 CORS(app, origins=_cors_origins or ['http://localhost:3000', 'http://127.0.0.1:3000'])
@@ -6485,18 +6497,22 @@ def _register_smart_charge_cloud_first():
         FakeShellyProvider,
         IntegratorShellyProvider,
         LegacyCloudControlProvider,
+        VaultCloudControlProvider,
         ProviderError,
     )
     from shelly.repositories import SmartChargeRepository
     from shelly.routes import create_blueprint
     from shelly.service import SmartChargeError, SmartChargeService
 
-    provider_name = os.environ.get('SHELLY_PROVIDER', 'integrator').strip().lower()
+    repository = SmartChargeRepository(_firestore_db)
+    provider_name = os.environ.get('SHELLY_PROVIDER', 'vault_cloud').strip().lower()
     try:
         if provider_name == 'fake':
             provider = FakeShellyProvider()
         elif provider_name == 'legacy':
             provider = LegacyCloudControlProvider()
+        elif provider_name == 'vault_cloud':
+            provider = VaultCloudControlProvider(repository)
         else:
             provider = IntegratorShellyProvider()
     except ProviderError as exc:
@@ -6549,7 +6565,6 @@ def _register_smart_charge_cloud_first():
             'aiChargeEligible': source == 'ai_model',
         }
 
-    repository = SmartChargeRepository(_firestore_db)
     service = SmartChargeService(
         repository,
         provider,

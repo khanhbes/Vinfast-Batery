@@ -270,16 +270,22 @@ class _AppTactileBounceState extends State<AppTactileBounce>
       duration: const Duration(milliseconds: 120),
       reverseDuration: const Duration(milliseconds: 180),
     );
-    _scaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: widget.pressScale,
-    ).animate(
+    _scaleAnimation = Tween<double>(begin: 1.0, end: widget.pressScale).animate(
       CurvedAnimation(
         parent: _controller,
         curve: Curves.easeOutCubic,
         reverseCurve: Curves.easeOutBack,
       ),
     );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!AppMotion.enabled(context)) {
+      _controller.stop();
+      _controller.value = 0;
+    }
   }
 
   @override
@@ -301,18 +307,19 @@ class _AppTactileBounceState extends State<AppTactileBounce>
       behavior: HitTestBehavior.opaque,
       onPointerDown: (_) {
         _triggerHaptic();
-        _controller.forward();
+        if (AppMotion.enabled(context)) _controller.forward();
       },
-      onPointerUp: (_) => _controller.reverse(),
-      onPointerCancel: (_) => _controller.reverse(),
+      onPointerUp: (_) {
+        if (AppMotion.enabled(context)) _controller.reverse();
+      },
+      onPointerCancel: (_) {
+        if (AppMotion.enabled(context)) _controller.reverse();
+      },
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.onTap,
         onLongPress: widget.onLongPress,
-        child: ScaleTransition(
-          scale: _scaleAnimation,
-          child: widget.child,
-        ),
+        child: ScaleTransition(scale: _scaleAnimation, child: widget.child),
       ),
     );
   }

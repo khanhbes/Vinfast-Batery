@@ -18,6 +18,7 @@ class AppPopup {
   static DateTime? _lastShownAt;
   static final Map<String, DateTime> _shownSignatures = <String, DateTime>{};
   static const _failureWindow = Duration(seconds: 60);
+  static DateTime Function() _clock = DateTime.now;
 
   static void showSuccess(
     String title, {
@@ -30,18 +31,23 @@ class AppPopup {
     String? detail,
     VoidCallback? action,
     bool userInitiated = false,
+    String actionLabel = 'Thử lại',
     dynamic error,
     StackTrace? stackTrace,
   }) {
-    final friendlyTitle = error != null
-        ? UserFriendlyErrorMapper.map(error)
-        : UserFriendlyErrorMapper.map(title);
+    final friendlyTitle =
+        AppNoticeCopy.approved(title) ??
+        UserFriendlyErrorMapper.map(error ?? title);
     final friendlyDetail = (detail != null && detail.isNotEmpty)
-        ? UserFriendlyErrorMapper.map(detail)
+        ? AppNoticeCopy.error(detail)
+        : error != null
+        ? UserFriendlyErrorMapper.map(error)
         : null;
 
     VoidCallback? effectiveAction = action;
+    var effectiveLabel = actionLabel;
     if (kDebugMode && effectiveAction == null) {
+      effectiveLabel = 'Chi tiết';
       effectiveAction = () {
         final ctx = navigatorKey.currentContext;
         if (ctx != null) {
@@ -58,9 +64,9 @@ class AppPopup {
     _show(
       AppNoticeKind.error,
       friendlyTitle,
-      friendlyDetail,
+      friendlyDetail == friendlyTitle ? null : friendlyDetail,
       effectiveAction,
-      actionLabel: kDebugMode ? 'CHI TIẾT' : 'MỞ',
+      actionLabel: effectiveLabel,
       userInitiated: userInitiated,
     );
   }
@@ -87,15 +93,55 @@ class AppPopup {
 
   /// Xóa bộ nhớ đệm các lỗi đã hiển thị (gọi khi đổi tab, đổi xe hoặc kéo refresh).
   static void clearShownErrors() {
-    final cutoff = DateTime.now().subtract(_failureWindow);
+    final cutoff = _clock().subtract(_failureWindow);
     _shownSignatures.removeWhere((_, shownAt) => shownAt.isBefore(cutoff));
   }
 
   /// Đặt lại một lỗi cụ thể để có thể hiển thị lại nếu cần.
   static void resetError(String title, {String? detail}) {
-    _shownSignatures.remove('${AppNoticeKind.error}|$title|$detail');
-    _shownSignatures.remove('${AppNoticeKind.warning}|$title|$detail');
+    for (final kind in [AppNoticeKind.error, AppNoticeKind.warning]) {
+      final copy = _safeCopy(kind, title, detail);
+      final signature = _signature(kind, copy.$1, copy.$2);
+      _shownSignatures.remove(signature);
+      if (_lastSignature == signature) {
+        _lastSignature = null;
+        _lastShownAt = null;
+      }
+    }
   }
+
+  @visibleForTesting
+  static void resetForTesting({DateTime Function()? clock}) {
+    dismiss();
+    _shownSignatures.clear();
+    _lastSignature = null;
+    _lastShownAt = null;
+    _clock = clock ?? DateTime.now;
+  }
+
+  static (String, String?) _safeCopy(
+    AppNoticeKind kind,
+    String title,
+    String? detail,
+  ) {
+    final approvedTitle = AppNoticeCopy.approved(title);
+    final isFailure =
+        kind == AppNoticeKind.error || kind == AppNoticeKind.warning;
+    final safeTitle =
+        approvedTitle ?? (isFailure ? AppNoticeCopy.error(title) : 'Thông báo');
+    final safeDetail = detail == null || detail.trim().isEmpty
+        ? null
+        : AppNoticeCopy.approved(detail) ??
+              (title == 'Cảnh báo an toàn sạc'
+                  ? AppNoticeCopy.safetyFallback
+                  : isFailure
+                  ? AppNoticeCopy.error(detail)
+                  : null);
+    return (safeTitle, safeDetail == safeTitle ? null : safeDetail);
+  }
+
+  static String _signature(AppNoticeKind kind, String title, String? detail) =>
+      '$kind|${AppNoticeCopy.category(title)}|${AppNoticeCopy.category(detail ?? '')}';
 
   static void dismiss() {
     _timer?.cancel();
@@ -122,12 +168,20 @@ class AppPopup {
   }) {
     if (WidgetsBinding.instance.rootElement == null) return;
 
-    final signature = '$kind|$title|$detail';
-    final now = DateTime.now();
+    // This boundary covers success/info too: some legacy callers interpolate
+    // device IDs, hostnames or server response text into otherwise friendly copy.
+    final copy = _safeCopy(kind, title, detail);
+    title = copy.$1;
+    detail = copy.$2;
+    actionLabel = AppNoticeCopy.actionLabel(actionLabel);
+    final signature = _signature(kind, title, detail);
+    final now = _clock();
+    clearShownErrors();
 
     // Chống spam: Nếu là lỗi hoặc cảnh báo và không phải do người dùng chủ động bấm,
-    // chỉ hiển thị 1 lần duy nhất cho đến khi clearShownErrors() hoặc user bấm lại.
-    if ((kind == AppNoticeKind.error || kind == AppNoticeKind.warning) && !userInitiated) {
+    // chỉ hiển thị lại khi lỗi phục hồi/reset hoặc failure window đã hết.
+    if ((kind == AppNoticeKind.error || kind == AppNoticeKind.warning) &&
+        !userInitiated) {
       final shownAt = _shownSignatures[signature];
       if (shownAt != null && now.difference(shownAt) < _failureWindow) {
         return;
@@ -218,6 +272,15 @@ class _NoticeOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final media = MediaQuery.of(context);
+    // Keep the navigation and safety controls below usable, even on a compact
+    // device with large text/IME. Only the notice surface intercepts touches.
+    final noticeHeight =
+        (media.size.height -
+                media.padding.vertical -
+                media.viewInsets.bottom -
+                112)
+            .clamp(80.0, 420.0);
     final (color, icon) = switch (kind) {
       AppNoticeKind.success => (
         const Color(0xFF15803D),
@@ -236,11 +299,12 @@ class _NoticeOverlay extends StatelessWidget {
       AppNoticeKind.info => (colors.primary, Icons.info_rounded),
     };
     return Positioned(
-      top: MediaQuery.paddingOf(context).top + 10,
+      top: 0,
       left: 16,
       right: 16,
       child: SafeArea(
         bottom: false,
+        minimum: const EdgeInsets.only(top: 10),
         child: TweenAnimationBuilder<double>(
           tween: Tween(begin: 0, end: 1),
           duration: MediaQuery.disableAnimationsOf(context)
@@ -267,54 +331,77 @@ class _NoticeOverlay extends StatelessWidget {
               borderRadius: BorderRadius.circular(16),
               child: Semantics(
                 liveRegion: true,
-                label: detail == null ? title : '$title. $detail',
                 child: Container(
-                constraints: const BoxConstraints(minHeight: 64),
-                padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border(left: BorderSide(color: color, width: 4)),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(top: 7),
-                      child: Icon(icon, color: color),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title,
-                            style: const TextStyle(fontWeight: FontWeight.w800),
-                          ),
-                          if (detail != null)
-                            Text(
-                              detail!,
-                              style: Theme.of(context).textTheme.bodySmall,
+                  constraints: BoxConstraints(
+                    minHeight: 64,
+                    maxHeight: noticeHeight,
+                  ),
+                  padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border(left: BorderSide(color: color, width: 4)),
+                  ),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(top: 12),
+                              child: Icon(icon, color: color),
                             ),
-                        ],
-                      ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 12),
+                                child: Text(
+                                  title,
+                                  style: Theme.of(context).textTheme.titleSmall,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Đóng thông báo',
+                              constraints: const BoxConstraints(
+                                minWidth: 48,
+                                minHeight: 48,
+                              ),
+                              onPressed: onDismiss,
+                              icon: const Icon(Icons.close_rounded),
+                            ),
+                          ],
+                        ),
+                        if (detail != null)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(36, 4, 12, 8),
+                            child: Text(
+                              detail!,
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          ),
+                        if (action != null)
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton(
+                              style: TextButton.styleFrom(
+                                minimumSize: const Size(48, 48),
+                              ),
+                              onPressed: action,
+                              child: Text(actionLabel),
+                            ),
+                          ),
+                      ],
                     ),
-                    if (action != null)
-                      TextButton(onPressed: action, child: Text(actionLabel)),
-                    IconButton(
-                      tooltip: 'Đóng thông báo',
-                      onPressed: onDismiss,
-                      icon: const Icon(Icons.close_rounded),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 }

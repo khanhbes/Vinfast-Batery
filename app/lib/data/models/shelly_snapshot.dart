@@ -78,6 +78,10 @@ class ShellyDeviceSnapshot {
     final normalized = model.trim().toUpperCase();
     return normalized == 'S3PL-00112EU' && (generation == 2 || generation == 3);
   }
+
+  /// True only when the Cloud payload contained real power-meter fields.
+  /// A numeric zero is valid telemetry; the presence flag is authoritative.
+  bool get hasPowerMeter => powerMeterFieldsPresent;
 }
 
 class ShellyDeviceIdentity {

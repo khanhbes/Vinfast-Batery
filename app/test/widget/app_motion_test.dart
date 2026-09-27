@@ -141,10 +141,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Center(
-          child: const Text('Bounce Target').appTactile(
-            pressScale: 0.96,
-            onTap: () => taps++,
-          ),
+          child: const Text(
+            'Bounce Target',
+          ).appTactile(pressScale: 0.96, onTap: () => taps++),
         ),
       ),
     );
@@ -156,7 +155,9 @@ void main() {
     expect(scaleTransition.scale.value, 1.0);
 
     // Press down
-    final gesture = await tester.startGesture(tester.getCenter(find.text('Bounce Target')));
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.text('Bounce Target')),
+    );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 130));
     scaleTransition = tester.widget<ScaleTransition>(scaleFinder);
@@ -167,6 +168,37 @@ void main() {
     await tester.pumpAndSettle();
     scaleTransition = tester.widget<ScaleTransition>(scaleFinder);
     expect(scaleTransition.scale.value, 1.0);
+    expect(taps, 1);
+  });
+
+  testWidgets('Tactile reduced motion keeps tap without scale animation', (
+    tester,
+  ) async {
+    var taps = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(disableAnimations: true),
+          child: child!,
+        ),
+        home: Center(
+          child: const Text(
+            'Reduced target',
+          ).appTactile(onTap: () => taps++, enableHaptic: false),
+        ),
+      ),
+    );
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.text('Reduced target')),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(
+      tester.widget<ScaleTransition>(find.byType(ScaleTransition)).scale.value,
+      1,
+    );
+    expect(tester.hasRunningAnimations, isFalse);
+    await gesture.up();
+    await tester.pump();
     expect(taps, 1);
   });
 }

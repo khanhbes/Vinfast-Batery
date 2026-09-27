@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AlertCircle, CheckCircle2, Cpu, ExternalLink, KeyRound, Loader2, PlugZap, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { revokeShellyProfile, saveShellyProfile, shellyProfiles } from '@/api';
+import { revokeShellyProfile, shellyProfiles, adminSaveShellyDevice } from '@/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -42,24 +42,31 @@ function SmartChargerVault() {
   useEffect(() => { void refresh(); }, [refresh]);
   const update = (key: keyof typeof form, value: string) => setForm(current => ({ ...current, [key]: value }));
 
+  const navigate = useNavigate();
+
   const save = async () => {
-    if (!form.deviceId.trim() || !form.cloudHost.trim() || !form.cloudAuthKey.trim()) {
-      setNotice({ kind: 'error', text: 'Device ID, Cloud host and Cloud authorization key are required.' });
-      return;
-    }
-    if (!/^https:\/\/[^/]+\.shelly\.cloud\/?$/i.test(form.cloudHost.trim())) {
-      setNotice({ kind: 'error', text: 'Cloud host must use HTTPS and belong to shelly.cloud.' });
+    if (!form.deviceId.trim()) {
+      setNotice({ kind: 'error', text: 'Vui lòng nhập Device ID của Shelly.' });
       return;
     }
     setBusy('save');
     setNotice(null);
     try {
-      await saveShellyProfile(form.deviceId.trim(), { ...form, source: 'web' });
+      // Use dedicated adminSaveShellyDevice to store device and automatically generate pairing code
+      const result = await adminSaveShellyDevice({
+        ...form,
+        deviceName: form.deviceId.trim(),
+        cloudHost: form.cloudHost.trim() || 'https://shelly-104-eu.shelly.cloud',
+      });
+      const code = result?.data?.code || result?.code;
       setForm(current => ({ ...current, cloudAuthKey: '', localPassword: '' }));
       await refresh(form.vehicleId.trim());
-      setNotice({ kind: 'success', text: 'Shelly Cloud was verified and the credentials were stored in the encrypted vault.' });
-    } catch {
-      setNotice({ kind: 'error', text: 'The profile could not be saved. Check the Cloud key, host and vehicle ownership.' });
+      setNotice({
+        kind: 'success',
+        text: `Đã lưu thiết bị Shelly thành công! Mã kết nối tạo ra: ${code}. Bạn có thể gửi mã này cho người dùng ở Bước 3.`,
+      });
+    } catch (err: any) {
+      setNotice({ kind: 'error', text: 'Không thể lưu thiết bị: ' + (err?.message || 'Lỗi server') });
       setBusy(null);
     }
   };
@@ -79,7 +86,7 @@ function SmartChargerVault() {
   };
 
   return <section aria-labelledby="smart-charger-title" className="space-y-5">
-    <div className="flex flex-col gap-3 border-b border-border/60 pb-5 sm:flex-row sm:items-start sm:justify-between"><div className="flex gap-3"><div className="rounded-xl bg-emerald-500/10 p-3 text-emerald-600"><PlugZap className="h-5 w-5" /></div><div><h2 id="smart-charger-title" className="text-xl font-semibold">Smart Charger</h2><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Verify Shelly Cloud and store credentials per account. The Android app still performs LAN and no-load safety checks before relay control is enabled.</p></div></div><Button variant="outline" onClick={() => void refresh(form.vehicleId.trim())} disabled={busy !== null} className="gap-2"><RefreshCw className={`h-4 w-4 ${busy === 'load' ? 'animate-spin' : ''}`} />Refresh</Button></div>
+    <div className="flex flex-col gap-3 border-b border-border/60 pb-5 sm:flex-row sm:items-start sm:justify-between"><div className="flex gap-3"><div className="rounded-xl bg-emerald-500/10 p-3 text-emerald-600"><PlugZap className="h-5 w-5" /></div><div><h2 id="smart-charger-title" className="text-xl font-semibold">Smart Charger & Shelly Gateway</h2><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Lưu thông tin thiết bị Shelly và tự động tạo mã kết nối. Cung cấp mã cho người dùng khi kết nối xe.</p></div></div><div className="flex gap-2"><Button variant="default" onClick={() => navigate('/shelly')} className="gap-2"><ExternalLink className="h-4 w-4" />Quản lý & Cấp mã Shelly</Button><Button variant="outline" onClick={() => void refresh(form.vehicleId.trim())} disabled={busy !== null} className="gap-2"><RefreshCw className={`h-4 w-4 ${busy === 'load' ? 'animate-spin' : ''}`} />Refresh</Button></div></div>
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">{fields.map(([key, label, placeholder]) => <label key={key} className="space-y-2 text-sm font-medium"><span>{label}</span><Input value={form[key]} onChange={event => update(key, event.target.value)} placeholder={placeholder} autoComplete="off" /></label>)}<label className="space-y-2 text-sm font-medium"><span>Cloud authorization key <span className="text-destructive">*</span></span><Input value={form.cloudAuthKey} onChange={event => update('cloudAuthKey', event.target.value)} placeholder="Used only for this save operation" type="password" autoComplete="new-password" /></label><label className="space-y-2 text-sm font-medium"><span>LAN password</span><Input value={form.localPassword} onChange={event => update('localPassword', event.target.value)} placeholder="Optional" type="password" autoComplete="new-password" /></label></div>
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center"><Button onClick={() => void save()} disabled={busy !== null} className="gap-2">{busy === 'save' ? <Loader2 className="animate-spin" /> : <KeyRound />}Verify and save securely</Button><p className="text-xs text-muted-foreground">Secrets are never displayed again or written to Firestore metadata.</p></div>
     {notice && <div role={notice.kind === 'error' ? 'alert' : 'status'} className={`flex items-start gap-2 rounded-xl border p-3 text-sm ${notice.kind === 'error' ? 'border-destructive/30 bg-destructive/5 text-destructive' : 'border-emerald-500/30 bg-emerald-500/5 text-emerald-700'}`}>{notice.kind === 'error' ? <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> : <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />}<span>{notice.text}</span></div>}

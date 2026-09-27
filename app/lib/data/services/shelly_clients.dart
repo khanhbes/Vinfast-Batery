@@ -140,7 +140,7 @@ class ShellyCloudClient {
             headers: const {'Content-Type': 'application/json'},
             body: jsonEncode(body),
           )
-          .timeout(const Duration(seconds: 5));
+          .timeout(const Duration(seconds: 15));
       final isCommand = path.contains('/set/');
       Map<String, dynamic>? errorBody;
       final rawBody = response.body.trim();
@@ -301,6 +301,17 @@ class ShellyLanClient {
       ShellyTransport.lan,
       deviceName: profile.deviceName,
     );
+  }
+
+  /// Verifies the actual meter schema before any relay control is unlocked.
+  /// Numeric zero is valid; only missing fields are rejected.
+  Future<bool> hasRequiredPowerMeter(ShellyConnectionProfile profile) async {
+    final json = await _rpc(profile, 'Switch.GetStatus', {'id': 0});
+    final switchStatus = json['switch:0'];
+    return switchStatus is Map &&
+        DiscoveredShellyDevice.requiredPowerMeterFields.every(
+          switchStatus.containsKey,
+        );
   }
 
   Future<void> setSwitch(

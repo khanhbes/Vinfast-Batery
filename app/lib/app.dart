@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/services/settings_service.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/app_popup.dart';
-import 'core/widgets/internet_connection_notice.dart';
 import 'data/services/notification_service.dart';
 import 'data/services/push_notification_service.dart';
 import 'features/auth/auth_gate.dart';
@@ -82,7 +81,7 @@ class _VinFastBatteryAppState extends State<VinFastBatteryApp> {
             ? AppTheme.amoledTheme
             : AppTheme.darkTheme;
         return MaterialApp(
-          title: 'EV Battery',
+          title: 'VinFast Battery',
           debugShowCheckedModeBanner: false,
 
           // Theme support (Light/Dark/System per PLAN1)
@@ -102,8 +101,6 @@ class _VinFastBatteryAppState extends State<VinFastBatteryApp> {
 
           scaffoldMessengerKey: AppPopup.messengerKey,
           navigatorKey: AppPopup.navigatorKey,
-          builder: (context, child) =>
-              InternetConnectionNotice(child: child ?? const SizedBox.shrink()),
           home: const AuthGate(),
         );
       },

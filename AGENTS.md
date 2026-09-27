@@ -158,6 +158,14 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
 - **Safety Watchdog**: Tự động ngắt relay khi nhiệt độ Shelly vượt ngưỡng (>75°C), công suất vượt định mức hoặc mất heartbeat quá 60s.
 - **Auto Cutoff**: Ngắt relay ngay khi SoC đạt mức mục tiêu được thiết lập bởi người dùng (Target SoC).
 
+### 3.6. Cơ Chế Kết Nối Shelly 3-Flow & Cấp Mã Admin (v1.1.6+)
+- **Flow 1 (mDNS/LAN Auto-discovery)**: Ứng dụng tự động quét mạng nội bộ tìm kiếm thiết bị Shelly Plug S Gen3 qua mDNS.
+- **Flow 2 (Cloud / AP Fallback)**: Khi không tìm thấy qua quét cục bộ, chuyển sang kết nối qua Shelly Cloud API hoặc Access Point của thiết bị.
+- **Flow 3 (Admin Connection Code)**: Khi cả Flow 1 & Flow 2 không thể kết nối, người dùng nhập mã kết nối 6 ký tự do Quản trị viên cung cấp.
+  - Admin tạo thiết bị và sinh mã tại trang `/shelly` trên Web Dashboard (`POST /api/admin/shelly-devices`).
+  - Server tạo mã 6 ký tự ngẫu nhiên (uppercase alphanumeric), lưu trữ trong Firestore `shellyConnectionCodes` (hạn dùng 24h, vô hiệu hóa ngay sau khi đổi).
+  - Mobile App gửi mã qua `POST /api/shelly/redeem-code` để nhận cấu hình Shelly mã hóa và tự động liên kết xe an toàn.
+
 ---
 
 ## 4. Lệnh Kiểm Thử & Kiểm Soát Chất Lượng Chuẩn

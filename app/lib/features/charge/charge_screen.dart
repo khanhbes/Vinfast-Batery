@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/app_providers.dart';
 import '../../core/widgets/empty_state.dart';
+import '../../core/widgets/error_state.dart';
 import '../../core/widgets/vehicle_picker_sheet.dart';
 import '../ai/smart_charging_control_screen.dart';
 
@@ -18,7 +19,8 @@ class ChargeScreen extends ConsumerWidget {
       return EmptyState(
         icon: Icons.electric_bolt_rounded,
         title: 'Chưa chọn phương tiện',
-        message: 'Vui lòng chọn xe VinFast của bạn để sử dụng tính năng sạc thông minh.',
+        message:
+            'Vui lòng chọn xe VinFast của bạn để sử dụng tính năng sạc thông minh.',
         actionLabel: 'Chọn xe ngay',
         onAction: () => VehiclePickerSheet.show(context, ref),
       );
@@ -28,8 +30,11 @@ class ChargeScreen extends ConsumerWidget {
     final vehicle = ref.watch(vehicleProvider(vehicleId));
     return vehicle.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, _) =>
-          Center(child: Text('Không thể tải thông tin xe: $error')),
+      error: (error, _) => ErrorState.fromError(
+        error: error,
+        prefix: 'Chưa tải được thông tin xe',
+        onRetry: () => ref.invalidate(vehicleProvider(vehicleId)),
+      ),
       data: (value) => value == null
           ? EmptyState(
               icon: Icons.electric_bike_rounded,

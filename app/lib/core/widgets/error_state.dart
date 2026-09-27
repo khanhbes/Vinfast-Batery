@@ -1,15 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
 import '../theme/app_ui_colors.dart';
 import '../utils/app_error_formatter.dart';
 import 'debug_error_sheet.dart';
 
-/// Widget hiển thị trạng thái lỗi — Dark Premium V3.
-///
-/// Trong `kDebugMode`, nếu có `rawError` thì luôn hiển thị thêm chuỗi raw
-/// (monospace, cuộn được nếu dài) để dev debug nhanh.
+/// Recoverable error presentation. Diagnostics are opt-in in debug builds;
+/// raw service content is never rendered automatically into the screen.
 class ErrorState extends StatelessWidget {
   final String message;
   final VoidCallback? onRetry;
@@ -27,7 +24,7 @@ class ErrorState extends StatelessWidget {
   });
 
   /// Factory constructor nhận raw error object và format tự động.
-  /// `rawError` được giữ lại để hiển thị chi tiết trong debug build.
+  /// Diagnostics remain behind the opt-in, redacted debug details sheet.
   factory ErrorState.fromError({
     Key? key,
     required Object error,
@@ -58,49 +55,22 @@ class ErrorState extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 72,
-              height: 72,
+              width: 56,
+              height: 56,
               decoration: BoxDecoration(
-                color: colors.danger.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(20),
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(16),
               ),
-              child: Icon(icon, size: 36, color: colors.danger),
+              child: Icon(icon, size: 28, color: colors.muted),
             ),
             const SizedBox(height: 16),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 15,
-                color: colors.muted,
-                height: 1.4,
-              ),
+              style: TextStyle(fontSize: 15, color: colors.muted, height: 1.4),
             ),
             if (kDebugMode && rawError != null) ...[
               const SizedBox(height: 12),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 120),
-                child: SingleChildScrollView(
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: colors.danger.withValues(alpha: 0.06),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      rawError.toString(),
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontFamily: 'monospace',
-                        color: colors.muted.withValues(alpha: 0.85),
-                        height: 1.3,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
               TextButton.icon(
                 onPressed: () => DebugErrorSheet.show(
                   context,
@@ -109,30 +79,19 @@ class ErrorState extends StatelessWidget {
                 ),
                 icon: const Icon(Icons.bug_report_outlined, size: 16),
                 label: const Text('Xem chi tiết lỗi (Debug)'),
-                style: TextButton.styleFrom(
-                  foregroundColor: colors.danger,
-                  visualDensity: VisualDensity.compact,
-                ),
+                style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
               ),
             ],
             if (onRetry != null) ...[
               const SizedBox(height: 16),
               ConstrainedBox(
                 constraints: const BoxConstraints(minHeight: 48),
-                child: ElevatedButton.icon(
+                child: FilledButton.icon(
                   onPressed: onRetry,
                   icon: const Icon(Icons.refresh_rounded, size: 18),
                   label: Text(retryLabel),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    textStyle: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(48, 48),
                   ),
                 ),
               ),

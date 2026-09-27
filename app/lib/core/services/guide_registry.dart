@@ -1,75 +1,66 @@
 import 'package:flutter/material.dart';
 
-enum GuideCategory {
-  gettingStarted,
-  vehicle,
-  charging,
-  trips,
-  ai,
-  account,
-  troubleshooting,
-}
+enum GuideCategory { gettingStarted, vehicle, charging, history, settings }
 
 extension GuideCategoryExtension on GuideCategory {
-  String get nameVi {
-    switch (this) {
-      case GuideCategory.gettingStarted:
-        return 'Bắt đầu';
-      case GuideCategory.vehicle:
-        return 'Xe';
-      case GuideCategory.charging:
-        return 'Sạc';
-      case GuideCategory.trips:
-        return 'Chuyến đi';
-      case GuideCategory.ai:
-        return 'AI';
-      case GuideCategory.account:
-        return 'Tài khoản';
-      case GuideCategory.troubleshooting:
-        return 'Xử lý lỗi';
-    }
-  }
+  String get nameVi => switch (this) {
+    GuideCategory.gettingStarted => 'Bắt đầu',
+    GuideCategory.vehicle => 'Xe và pin',
+    GuideCategory.charging => 'Sạc pin',
+    GuideCategory.history => 'Lịch sử',
+    GuideCategory.settings => 'Cài đặt',
+  };
 
-  String get nameEn {
-    switch (this) {
-      case GuideCategory.gettingStarted:
-        return 'Getting Started';
-      case GuideCategory.vehicle:
-        return 'Vehicle';
-      case GuideCategory.charging:
-        return 'Charging';
-      case GuideCategory.trips:
-        return 'Trips';
-      case GuideCategory.ai:
-        return 'AI';
-      case GuideCategory.account:
-        return 'Account';
-      case GuideCategory.troubleshooting:
-        return 'Troubleshooting';
-    }
-  }
+  String get nameEn => switch (this) {
+    GuideCategory.gettingStarted => 'Getting started',
+    GuideCategory.vehicle => 'Vehicle and battery',
+    GuideCategory.charging => 'Charging',
+    GuideCategory.history => 'History',
+    GuideCategory.settings => 'Settings',
+  };
 
-  IconData get icon {
-    switch (this) {
-      case GuideCategory.gettingStarted:
-        return Icons.rocket_launch_rounded;
-      case GuideCategory.vehicle:
-        return Icons.electric_scooter_rounded;
-      case GuideCategory.charging:
-        return Icons.ev_station_rounded;
-      case GuideCategory.trips:
-        return Icons.navigation_rounded;
-      case GuideCategory.ai:
-        return Icons.psychology_rounded;
-      case GuideCategory.account:
-        return Icons.person_rounded;
-      case GuideCategory.troubleshooting:
-        return Icons.build_circle_rounded;
-    }
-  }
+  IconData get icon => switch (this) {
+    GuideCategory.gettingStarted => Icons.waving_hand_rounded,
+    GuideCategory.vehicle => Icons.electric_scooter_rounded,
+    GuideCategory.charging => Icons.ev_station_rounded,
+    GuideCategory.history => Icons.history_rounded,
+    GuideCategory.settings => Icons.settings_rounded,
+  };
 }
 
-/// Mô hình một bài hướng dẫn trong Thư viện trợ giúp
+enum GuideDestination {
+  overview,
+  charging,
+  history,
+  settings,
+  shellySetup,
+  batteryBot,
+}
+
+extension GuideDestinationExtension on GuideDestination {
+  String actionLabel(String languageCode) {
+    final english = languageCode == 'en';
+    return switch (this) {
+      GuideDestination.overview => english ? 'Open Overview' : 'Mở Tổng quan',
+      GuideDestination.charging => english ? 'Open Charging' : 'Mở Sạc pin',
+      GuideDestination.history => english ? 'Open History' : 'Mở Lịch sử',
+      GuideDestination.settings => english ? 'Open Settings' : 'Mở Cài đặt',
+      GuideDestination.shellySetup =>
+        english ? 'Start Shelly setup' : 'Bắt đầu thiết lập Shelly',
+      GuideDestination.batteryBot =>
+        english ? 'Ask BatteryBot' : 'Hỏi BatteryBot',
+    };
+  }
+
+  int? get tabIndex => switch (this) {
+    GuideDestination.overview => 0,
+    GuideDestination.charging => 1,
+    GuideDestination.history => 2,
+    GuideDestination.settings => 3,
+    GuideDestination.shellySetup || GuideDestination.batteryBot => null,
+  };
+}
+
 class GuideItem {
   final String id;
   final GuideCategory category;
@@ -77,14 +68,11 @@ class GuideItem {
   final String titleEn;
   final String summaryVi;
   final String summaryEn;
-  final List<String> prerequisitesVi;
-  final List<String> prerequisitesEn;
   final List<String> stepsVi;
   final List<String> stepsEn;
-  final String expectedResultVi;
-  final String expectedResultEn;
-  final int? targetTab; // 0: Overview, 1: Charge, 2: History, 3: More
-  final String? tourId;
+  final String? noteVi;
+  final String? noteEn;
+  final GuideDestination destination;
 
   const GuideItem({
     required this.id,
@@ -93,28 +81,21 @@ class GuideItem {
     required this.titleEn,
     required this.summaryVi,
     required this.summaryEn,
-    required this.prerequisitesVi,
-    required this.prerequisitesEn,
     required this.stepsVi,
     required this.stepsEn,
-    required this.expectedResultVi,
-    required this.expectedResultEn,
-    this.targetTab,
-    this.tourId,
+    required this.destination,
+    this.noteVi,
+    this.noteEn,
   });
 
   String title(String languageCode) => languageCode == 'en' ? titleEn : titleVi;
   String summary(String languageCode) =>
       languageCode == 'en' ? summaryEn : summaryVi;
-  List<String> prerequisites(String languageCode) =>
-      languageCode == 'en' ? prerequisitesEn : prerequisitesVi;
   List<String> steps(String languageCode) =>
       languageCode == 'en' ? stepsEn : stepsVi;
-  String expectedResult(String languageCode) =>
-      languageCode == 'en' ? expectedResultEn : expectedResultVi;
+  String? note(String languageCode) => languageCode == 'en' ? noteEn : noteVi;
 }
 
-/// Spotlight Coach Mark Step Data
 class CoachMarkStep {
   final String id;
   final String titleVi;
@@ -139,331 +120,195 @@ class CoachMarkStep {
       languageCode == 'en' ? descriptionEn : descriptionVi;
 }
 
-/// Registry toàn diện các hướng dẫn sử dụng và spotlight coach mark
 class GuideRegistry {
   static const String overviewTourId = 'tour_overview_v2';
 
-  // GlobalKeys cho Spotlight Tour anchors
   static final GlobalKey keyVehicleSwitcher = GlobalKey(
     debugLabel: 'anchor_vehicle_switcher',
   );
   static final GlobalKey keyCustomizeDashboard = GlobalKey(
     debugLabel: 'anchor_customize_dashboard',
   );
+  static final GlobalKey keyBatterySummary = GlobalKey(
+    debugLabel: 'anchor_vehicle_battery_summary',
+  );
   static final GlobalKey keyBatteryHealthCard = GlobalKey(
     debugLabel: 'anchor_battery_health_card',
+  );
+  static final GlobalKey keyTripPlannerAction = GlobalKey(
+    debugLabel: 'anchor_trip_planner_action',
   );
   static final GlobalKey keyChargeTab = GlobalKey(
     debugLabel: 'anchor_charge_tab',
   );
-  static final GlobalKey keyTripPlannerAction = GlobalKey(
-    debugLabel: 'anchor_trip_planner_action',
+  static final GlobalKey keyHistoryTab = GlobalKey(
+    debugLabel: 'anchor_history_tab',
   );
   static final GlobalKey keyMoreSettingsTab = GlobalKey(
     debugLabel: 'anchor_more_settings_tab',
   );
 
-  /// Danh sách các bước trong Tour màn hình Tổng quan
-  static List<CoachMarkStep> getOverviewTourSteps() {
-    return [
-      CoachMarkStep(
-        id: 'step_switch_vehicle',
-        titleVi: 'Đổi xe & Thông báo',
-        titleEn: 'Switch Vehicle & Notifications',
-        descriptionVi:
-            'Chạm tên xe để đổi xe theo dõi. Chuông thông báo hiển thị cảnh báo an toàn và trạng thái sạc.',
-        descriptionEn:
-            'Tap the vehicle name at the top to switch vehicle. Bell shows battery alerts.',
-        anchorKey: keyVehicleSwitcher,
-        tooltipAlignment: Alignment.bottomCenter,
-      ),
-      CoachMarkStep(
-        id: 'step_customize_dashboard',
-        titleVi: 'Tùy chỉnh giao diện',
-        titleEn: 'Customize Dashboard',
-        descriptionVi:
-            'Bấm nút "Tùy chỉnh" để sắp xếp vị trí hoặc ẩn/hiện các thẻ widget theo nhu cầu của bạn.',
-        descriptionEn:
-            'Tap "Customize" to reorder or show/hide widgets to match your preferences.',
-        anchorKey: keyCustomizeDashboard,
-        tooltipAlignment: Alignment.bottomLeft,
-      ),
-      CoachMarkStep(
-        id: 'step_battery_health',
-        titleVi: 'Pin & Quãng đường',
-        titleEn: 'Battery & Range',
-        descriptionVi:
-            'Theo dõi % pin (SoC), độ chai pin (SoH) và ước tính quãng đường còn lại tính bằng AI.',
-        descriptionEn:
-            'View battery % (SoC), health (SoH), and AI estimated remaining range.',
-        anchorKey: keyBatteryHealthCard,
-        tooltipAlignment: Alignment.topCenter,
-      ),
-      CoachMarkStep(
-        id: 'step_charge_control',
-        titleVi: 'Sạc thông minh',
-        titleEn: 'Smart Charge',
-        descriptionVi:
-            'Chuyển sang tab Sạc để đặt mức pin mục tiêu, ước tính tiền điện và bật/tắt relay an toàn.',
-        descriptionEn:
-            'Switch to Charge tab to set target SoC, estimate cost, and toggle relay safely.',
-        anchorKey: keyChargeTab,
-        tooltipAlignment: Alignment.topCenter,
-      ),
-      CoachMarkStep(
-        id: 'step_trip_tracking',
-        titleVi: 'Hành trình',
-        titleEn: 'Trips & Efficiency',
-        descriptionVi:
-            'Theo dõi lộ trình di chuyển thực tế và lượng tiêu thụ Wh/km để tối ưu quãng đường.',
-        descriptionEn:
-            'Record live trips and energy consumption Wh/km to optimize your daily range.',
-        anchorKey: keyTripPlannerAction,
-        tooltipAlignment: Alignment.bottomCenter,
-      ),
-      CoachMarkStep(
-        id: 'step_garage_and_more',
-        titleVi: 'Garage & Cài đặt',
-        titleEn: 'Garage & Settings',
-        descriptionVi:
-            'Thêm xe từ Catalog xe điện, cấu hình bộ sạc Shelly và tùy chỉnh app tại tab Cài đặt.',
-        descriptionEn:
-            'Add vehicles from Catalog, connect Shelly smart chargers, and adjust settings in Settings tab.',
-        anchorKey: keyMoreSettingsTab,
-        tooltipAlignment: Alignment.topCenter,
-      ),
-    ];
-  }
+  static List<CoachMarkStep> getOverviewTourSteps() => [
+    CoachMarkStep(
+      id: 'step_vehicle_and_battery',
+      titleVi: 'Xe và pin',
+      titleEn: 'Vehicle and battery',
+      descriptionVi:
+          'Đây là xe đang chọn và thông tin pin. Chạm tên xe để chuyển xe.',
+      descriptionEn:
+          'See the selected vehicle and battery. Tap the vehicle name to switch vehicles.',
+      anchorKey: keyBatterySummary,
+    ),
+    CoachMarkStep(
+      id: 'step_charging',
+      titleVi: 'Sạc pin',
+      titleEn: 'Charging',
+      descriptionVi:
+          'Mở tab này để xem trạng thái bộ sạc và các thao tác đang khả dụng.',
+      descriptionEn:
+          'Open this tab to see charger status and available actions.',
+      anchorKey: keyChargeTab,
+      tooltipAlignment: Alignment.topCenter,
+    ),
+    CoachMarkStep(
+      id: 'step_history',
+      titleVi: 'Lịch sử',
+      titleEn: 'History',
+      descriptionVi:
+          'Xem lại các phiên sạc đã lưu và mở một phiên để xem chi tiết.',
+      descriptionEn: 'Review saved charging sessions and open one for details.',
+      anchorKey: keyHistoryTab,
+      tooltipAlignment: Alignment.topCenter,
+    ),
+    CoachMarkStep(
+      id: 'step_settings',
+      titleVi: 'Cài đặt',
+      titleEn: 'Settings',
+      descriptionVi: 'Quản lý tài khoản, xe và mở lại hướng dẫn tại đây.',
+      descriptionEn:
+          'Manage your account and vehicles, or replay this guide here.',
+      anchorKey: keyMoreSettingsTab,
+      tooltipAlignment: Alignment.topCenter,
+    ),
+  ];
 
-  /// Thư viện các bài hướng dẫn chi tiết
   static const List<GuideItem> items = [
-    // Bắt đầu
     GuideItem(
-      id: 'guide_getting_started',
-      category: GuideCategory.gettingStarted,
-      titleVi: 'Làm quen với ứng dụng EV Battery',
-      titleEn: 'Getting Started with EV Battery',
-      summaryVi:
-          'Hướng dẫn cơ bản các tính năng quản lý pin xe máy điện và cockpit thông minh.',
-      summaryEn:
-          'Essential overview of EV battery management and cockpit features.',
-      prerequisitesVi: ['Đã đăng nhập tài khoản', 'Đã thêm ít nhất 1 xe'],
-      prerequisitesEn: [
-        'Signed in to your account',
-        'At least 1 vehicle registered',
-      ],
-      stepsVi: [
-        'Quan sát thẻ Pin và Quãng đường trên màn hình Tổng quan.',
-        'Nhấn "Tùy chỉnh" trên thanh App Bar để sắp xếp các khối hiển thị.',
-        'Chuyển đổi qua lại giữa các tab: Sạc pin, Lịch sử, Cài đặt ở thanh điều hướng dưới.',
-      ],
-      stepsEn: [
-        'Observe the battery and range status on the Overview screen.',
-        'Tap "Customize" on the App Bar to reorder or hide widgets.',
-        'Navigate between Charge, History, and Settings using the bottom navigation bar.',
-      ],
-      expectedResultVi:
-          'Nắm rõ cấu trúc 4 tab chính và cá nhân hóa được bố cục màn hình đầu tiên.',
-      expectedResultEn:
-          'Understand the 4 core workspaces and personalize your Overview layout.',
-      targetTab: 0,
-      tourId: overviewTourId,
-    ),
-    GuideItem(
-      id: 'guide_customize_overview',
-      category: GuideCategory.gettingStarted,
-      titleVi: 'Cách tùy chỉnh màn hình Tổng quan',
-      titleEn: 'How to Customize Overview Screen',
-      summaryVi:
-          'Sắp xếp thứ tự, ẩn bớt khối không cần thiết hoặc khôi phục mặc định.',
-      summaryEn: 'Reorder, toggle visibility, or restore default widget layout.',
-      prerequisitesVi: ['Đang ở màn hình Tổng quan'],
-      prerequisitesEn: ['On the Overview workspace'],
-      stepsVi: [
-        'Bấm nút "Tùy chỉnh" ở góc phải thanh trên cùng.',
-        'Dùng biểu tượng kéo để di chuyển vị trí các widget.',
-        'Bật hoặc tắt công tắc để ẩn/hiện widget theo ý muốn (phải giữ ít nhất 1 widget).',
-        'Bấm "Khôi phục mặc định" nếu muốn đưa về giao diện ban đầu.',
-      ],
-      stepsEn: [
-        'Tap "Customize" in the top App Bar.',
-        'Use the drag handle to reorder content widgets.',
-        'Toggle the switch to show or hide widgets (at least 1 widget must remain visible).',
-        'Tap "Restore defaults" to return to the original layout.',
-      ],
-      expectedResultVi:
-          'Màn hình Tổng quan thay đổi ngay lập tức và được đồng bộ lên tài khoản.',
-      expectedResultEn:
-          'Overview screen updates immediately and preferences sync with your account.',
-      targetTab: 0,
-    ),
-
-    // Xe
-    GuideItem(
-      id: 'guide_add_vehicle_catalog',
+      id: 'guide_vehicle_battery',
       category: GuideCategory.vehicle,
-      titleVi: 'Thêm xe từ Catalog xe điện',
-      titleEn: 'Add Vehicle from EV Catalog',
-      summaryVi:
-          'Chọn dòng xe chính xác (Klara, Feliz, Theon, Evo, Vento) để AI tính toán tối ưu.',
-      summaryEn:
-          'Select the exact EV model for accurate AI consumption models.',
-      prerequisitesVi: ['Kết nối mạng Internet', 'Tối đa 2 xe sở hữu active'],
-      prerequisitesEn: [
-        'Internet connection',
-        'Maximum 2 active vehicles owned',
-      ],
-      stepsVi: [
-        'Vào tab "Cài đặt" > Chọn "Garage xe".',
-        'Bấm "Thêm xe mới".',
-        'Tìm kiếm và chọn đúng mẫu xe từ danh mục đã phát hành.',
-        'Nhập tên gợi nhớ (nickname), biển số và ODO hiện tại rồi xác nhận.',
-      ],
+      titleVi: 'Xem xe và pin',
+      titleEn: 'View your vehicle and battery',
+      summaryVi: 'Xem xe đang chọn và tình trạng pin trên màn hình Tổng quan.',
+      summaryEn: 'See your selected vehicle and battery status on Overview.',
+      stepsVi: ['Mở tab Tổng quan.', 'Chạm tên xe phía trên để đổi xe.'],
       stepsEn: [
-        'Open the "Settings" tab > Select "Vehicle Garage".',
-        'Tap "Add New Vehicle".',
-        'Search and select your exact model from the published catalog.',
-        'Enter nickname, license plate, initial ODO and confirm.',
+        'Open Overview.',
+        'Tap the vehicle name at the top to switch vehicles.',
       ],
-      expectedResultVi:
-          'Xe mới xuất hiện trong bộ chọn xe và tự động áp dụng thông số pin chuẩn.',
-      expectedResultEn:
-          'Vehicle appears in the switcher with official battery specifications linked.',
-      targetTab: 3,
+      destination: GuideDestination.overview,
     ),
-
-    // Sạc
     GuideItem(
-      id: 'guide_smart_charging',
+      id: 'guide_charging',
       category: GuideCategory.charging,
-      titleVi: 'Thiết lập Sạc thông minh & Điểm ngắt SoC',
-      titleEn: 'Smart Charge & Target SoC Cutoff',
-      summaryVi:
-          'Bảo vệ tuổi thọ pin bằng cách sạc đến 80-90% và tự động ngắt relay.',
-      summaryEn:
-          'Protect battery longevity by charging to 80-90% and auto-cutting relay.',
-      prerequisitesVi: ['Đã liên kết xe', 'Bộ sạc thông minh Shelly sẵn sàng'],
-      prerequisitesEn: ['Linked vehicle', 'Shelly smart charger connected'],
+      titleVi: 'Bắt đầu hoặc dừng sạc',
+      titleEn: 'Start or stop charging',
+      summaryVi: 'Kiểm tra trạng thái sạc trước khi dùng nút điều khiển.',
+      summaryEn: 'Check charging status before using a control.',
       stepsVi: [
-        'Mở tab "Sạc".',
-        'Kéo thanh chọn SoC mục tiêu (khuyến nghị 80% cho hàng ngày).',
-        'Kiểm tra thời gian sạc ước tính và chi phí tiền điện dự kiến.',
-        'Bấm "Bắt đầu sạc".',
+        'Mở tab Sạc pin.',
+        'Kiểm tra xe và trạng thái kết nối.',
+        'Chỉ chạm Bắt đầu/Dừng khi nút được mở; chờ xác nhận trạng thái.',
       ],
       stepsEn: [
-        'Open the "Charge" tab.',
-        'Drag the target SoC slider (80% recommended for daily commute).',
-        'Check estimated duration and electricity cost.',
-        'Tap "Start Charging".',
+        'Open Charging.',
+        'Check vehicle and connection status.',
+        'Use Start/Stop only when enabled, then wait for confirmation.',
       ],
-      expectedResultVi:
-          'Relay bật an toàn, màn hình đếm ngược và tự động ngắt khi đạt mốc pin.',
-      expectedResultEn:
-          'Relay powers on safely, countdown timer tracks progress and shuts off at target SoC.',
-      targetTab: 1,
+      noteVi:
+          'Nếu nút đang khóa, hãy hoàn tất thiết lập hoặc kết nối mạng trước.',
+      noteEn:
+          'If a control is disabled, finish setup or restore the network connection first.',
+      destination: GuideDestination.charging,
     ),
-
-    // Chuyến đi
     GuideItem(
-      id: 'guide_trip_tracking',
-      category: GuideCategory.trips,
-      titleVi: 'Ghi nhận chuyến đi & Dự đoán mức pin',
-      titleEn: 'Trip Logging & Range Consumption',
-      summaryVi:
-          'Theo dõi quãng đường di chuyển và độ tiêu hao năng lượng thực tế.',
-      summaryEn:
-          'Track travel distance and actual energy consumption per kilometer.',
-      prerequisitesVi: ['Bật quyền truy cập vị trí (GPS)'],
-      prerequisitesEn: ['Location permission (GPS) enabled'],
+      id: 'guide_history',
+      category: GuideCategory.history,
+      titleVi: 'Xem lịch sử sạc',
+      titleEn: 'View charging history',
+      summaryVi: 'Tìm phiên sạc đã lưu và xem số liệu của từng phiên.',
+      summaryEn: 'Find saved sessions and review their details.',
       stepsVi: [
-        'Nhấn nút "Chuyến đi" trên màn hình Tổng quan.',
-        'Bấm "Bắt đầu chuyến đi" trước khi khởi hành.',
-        'Khi đến nơi, bấm "Kết thúc" để xem thống kê tiêu hao Wh/km.',
+        'Mở tab Lịch sử.',
+        'Chọn khoảng thời gian nếu có bộ lọc.',
+        'Chạm một phiên để xem chi tiết.',
       ],
       stepsEn: [
-        'Tap "Trip Planner" on the Overview screen.',
-        'Tap "Start Trip" before leaving.',
-        'Upon arrival, tap "Finish" to inspect Wh/km consumption analytics.',
+        'Open History.',
+        'Choose a time period if a filter is available.',
+        'Tap a session to view details.',
       ],
-      expectedResultVi:
-          'Lịch sử chuyến đi được lưu lại và dùng làm dữ liệu học cho AI cá nhân.',
-      expectedResultEn:
-          'Trip log saved to train and personalize your vehicle AI consumption curve.',
-      targetTab: 0,
+      destination: GuideDestination.history,
     ),
-
-    // AI
     GuideItem(
-      id: 'guide_ai_explanation',
-      category: GuideCategory.ai,
-      titleVi: 'Cách AI dự đoán pin & độ lão hóa SoH',
-      titleEn: 'How AI Predicts Range and Battery SoH',
-      summaryVi:
-          'Mô hình Machine Learning phân tích thói quen lái và thời tiết để tính toán.',
-      summaryEn:
-          'Machine Learning models factor driving behavior, terrain, and temperature.',
-      prerequisitesVi: ['Có dữ liệu lịch sử sạc và chuyến đi'],
-      prerequisitesEn: ['Historical charge and trip logs'],
+      id: 'guide_settings',
+      category: GuideCategory.settings,
+      titleVi: 'Cài đặt và quản lý xe',
+      titleEn: 'Settings and vehicles',
+      summaryVi: 'Quản lý hồ sơ, xe và tùy chọn ứng dụng.',
+      summaryEn: 'Manage your profile, vehicles, and app preferences.',
       stepsVi: [
-        'Mô hình liên tục học từ chu kỳ sạc và độ giảm điện áp.',
-        'Tính toán dự đoán quãng đường dựa trên tốc độ trung bình và tải trọng.',
-        'Đưa ra khuyến nghị bảo dưỡng khi phát hiện cell pin mất cân bằng.',
+        'Mở tab Cài đặt.',
+        'Chọn mục muốn cập nhật.',
+        'Mở Hướng dẫn để xem lại tour.',
       ],
       stepsEn: [
-        'Model continuously learns from charge cycles and voltage drop.',
-        'Estimates range based on avg speed, payload, and ambient temperature.',
-        'Recommends maintenance when cell imbalance is detected.',
+        'Open Settings.',
+        'Choose what you want to update.',
+        'Open Guides to replay the tour.',
       ],
-      expectedResultVi:
-          'Dự đoán ngày càng chính xác sau mỗi 3-5 chu kỳ sử dụng.',
-      expectedResultEn:
-          'Predictions become increasingly precise after 3-5 charge cycles.',
-      targetTab: 0,
+      destination: GuideDestination.settings,
     ),
-
-    // Xử lý lỗi
     GuideItem(
-      id: 'guide_troubleshooting',
-      category: GuideCategory.troubleshooting,
-      titleVi: 'Xử lý lỗi kết nối Shelly & Đồng bộ dữ liệu',
-      titleEn: 'Troubleshooting Shelly & Data Sync',
-      summaryVi:
-          'Khắc phục tình trạng mất mạng, thiết bị sạc ngoại tuyến hoặc dữ liệu chưa đồng bộ.',
-      summaryEn:
-          'Fix offline charger states, network disconnects, or sync delays.',
-      prerequisitesVi: ['Kiểm tra kết nối Wifi hoặc 4G'],
-      prerequisitesEn: ['Check Wi-Fi or cellular network'],
+      id: 'guide_shelly_setup',
+      category: GuideCategory.charging,
+      titleVi: 'Kết nối Shelly Smart Charge',
+      titleEn: 'Connect Shelly Smart Charge',
+      summaryVi: 'Kết nối ổ cắm và xác minh an toàn trước khi điều khiển.',
+      summaryEn: 'Connect the plug and verify safety before enabling controls.',
       stepsVi: [
-        'Nếu Shelly báo offline: kiểm tra nguồn điện cấp và đèn tín hiệu trên thiết bị.',
-        'Thử kết nối qua địa chỉ IP mạng nội bộ (LAN) nếu kết nối Cloud gặp sự cố.',
-        'Nếu dữ liệu chưa khớp: vào tab Cài đặt > bấm "Đồng bộ ngay".',
+        'Ưu tiên điện thoại và Shelly cùng Wi-Fi; chọn Kết nối qua Wi-Fi.',
+        'Nếu không dùng được Wi-Fi, chọn Shelly Cloud.',
+        'Bạn cũng có thể nhập mã kết nối 6 ký tự do quản trị viên cấp.',
       ],
       stepsEn: [
-        'If Shelly shows offline: verify power supply and LED indicators on device.',
-        'Try fallback local LAN IP connection if Cloud connection is unreachable.',
-        'If data is out of sync: open Settings tab > tap "Sync Now".',
+        'Prefer the same Wi-Fi for phone and Shelly, then choose Wi-Fi connection.',
+        'Choose Shelly Cloud if Wi-Fi pairing is unavailable.',
+        'You can also enter a 6-character code from an administrator.',
       ],
-      expectedResultVi:
-          'Khôi phục kết nối điều khiển an toàn và dữ liệu được cập nhật đầy đủ.',
-      expectedResultEn:
-          'Safe relay control restored and local telemetry synced with the cloud.',
-      targetTab: 3,
+      noteVi:
+          'Trước Kiểm tra an toàn, rút xe và mọi tải. Ổ cắm có thể bật tối đa 5 giây. Chỉ tiếp tục sau khi xác nhận đã rút tải; hoàn tất khi ứng dụng đọc lại relay đã tắt. Hướng dẫn không tự bật hoặc tắt ổ cắm.',
+      noteEn:
+          'Before Safety Check, unplug the vehicle and every load. The outlet may turn on for up to 5 seconds. Continue only after confirming it is unplugged; setup completes after the app reads the relay off. This guide never switches the outlet.',
+      destination: GuideDestination.shellySetup,
     ),
   ];
 
   static List<GuideItem> search(String query, String languageCode) {
-    if (query.trim().isEmpty) return items;
-    final q = query.toLowerCase().trim();
-    return items.where((item) {
-      final t = item.title(languageCode).toLowerCase();
-      final s = item.summary(languageCode).toLowerCase();
-      final cat = item.category.nameVi.toLowerCase();
-      return t.contains(q) || s.contains(q) || cat.contains(q);
-    }).toList();
+    final normalized = query.trim().toLowerCase();
+    if (normalized.isEmpty) return items;
+    return items
+        .where(
+          (item) => [
+            item.title(languageCode),
+            item.summary(languageCode),
+            ...item.steps(languageCode),
+          ].join(' ').toLowerCase().contains(normalized),
+        )
+        .toList();
   }
 
-  static List<GuideItem> filterByCategory(GuideCategory? category) {
-    if (category == null) return items;
-    return items.where((item) => item.category == category).toList();
-  }
+  static List<GuideItem> filterByCategory(GuideCategory? category) =>
+      category == null
+      ? items
+      : items.where((item) => item.category == category).toList();
 }

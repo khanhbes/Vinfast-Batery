@@ -41,6 +41,7 @@ class SmartChargeRepository:
         # Process-local guard for a physical Shelly shared by multiple
         # accounts. Firestore leases below cover multi-process deployments.
         self._device_leases: dict[str, tuple[str, str, datetime]] = {}
+        self._device_owners: dict[str, str] = {}
         self._last_history_skipped = 0
         self._profile_vault = ShellyProfileVault()
         self._synced_profiles: dict[tuple[str, str], dict] = {}
@@ -130,10 +131,119 @@ class SmartChargeRepository:
             )
 
     def save_binding(self, uid: str, binding: DeviceBinding) -> None:
+        if not self.claim_device_owner(uid, binding.device_id):
+            raise PermissionError("DEVICE_ALREADY_OWNED")
+        binding.owner_uid = uid
         with self._lock:
             self._bindings.setdefault(uid, {})[binding.device_id] = binding
         if self.db:
             self.db.collection("users").document(uid).collection("shellyDevices").document(binding.device_id).set(binding.to_dict(), merge=True)
+
+    @staticmethod
+    def _device_owner_doc_id(device_id: str) -> str:
+        canonical = "".join(char for char in str(device_id).strip().lower() if char.isalnum())
+        if not canonical:
+            raise ValueError("missingDeviceId")
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    def claim_device_owner(self, uid: str, device_id: str) -> bool:
+        """Claim one physical Shelly globally; Firestore transaction is authoritative."""
+        if not uid or not device_id:
+            return False
+        if not self.db:
+            with self._lock:
+                owner = self._device_owners.get(self._device_owner_doc_id(device_id))
+                if owner is not None and owner != uid:
+                    return False
+                self._device_owners[self._device_owner_doc_id(device_id)] = uid
+                return True
+        try:
+            from google.cloud import firestore
+            ref = self.db.collection("shellyDeviceOwners").document(self._device_owner_doc_id(device_id))
+            transaction = self.db.transaction()
+
+            @firestore.transactional
+            def claim(txn):
+                snapshot = ref.get(transaction=txn)
+                data = snapshot.to_dict() or {} if snapshot.exists else {}
+                owner = str(data.get("ownerUid") or "")
+                if owner and owner != uid:
+                    return False
+                txn.set(ref, {
+                    "ownerUid": uid,
+                    "deviceIdHash": self._device_owner_doc_id(device_id),
+                    "updatedAt": datetime.now(timezone.utc),
+                    "state": "owned",
+                }, merge=True)
+                return True
+
+            return bool(claim(transaction))
+        except Exception:
+            # Ownership must fail closed if its authoritative registry is unavailable.
+            return False
+
+    def device_owned_by(self, uid: str, device_id: str) -> bool:
+        if not uid or not device_id:
+            return False
+        key = self._device_owner_doc_id(device_id)
+        if not self.db:
+            with self._lock:
+                return self._device_owners.get(key) == uid
+        try:
+            snapshot = self.db.collection("shellyDeviceOwners").document(key).get()
+            return snapshot.exists and (snapshot.to_dict() or {}).get("ownerUid") == uid
+        except Exception:
+            return False
+
+    def release_device_owner(self, uid: str, device_id: str) -> bool:
+        """Release ownership only after the caller has verified OFF and no active session."""
+        if not self.db:
+            with self._lock:
+                key = self._device_owner_doc_id(device_id)
+                if self._device_owners.get(key) != uid:
+                    return False
+                self._device_owners.pop(key, None)
+                return True
+        try:
+            from google.cloud import firestore
+            ref = self.db.collection("shellyDeviceOwners").document(self._device_owner_doc_id(device_id))
+            transaction = self.db.transaction()
+
+            @firestore.transactional
+            def release(txn):
+                snapshot = ref.get(transaction=txn)
+                if not snapshot.exists or (snapshot.to_dict() or {}).get("ownerUid") != uid:
+                    return False
+                txn.delete(ref)
+                return True
+
+            return bool(release(transaction))
+        except Exception:
+            return False
+
+    def reserve_cloud_request_slot(self, credential_fingerprint: str, interval_seconds: float = 1.1) -> float:
+        """Reserve a process-independent Shelly Cloud request slot."""
+        if not self.db:
+            raise RuntimeError("cloudRateLimiterUnavailable")
+        from google.cloud import firestore
+        ref = self.db.collection("shellyCloudRateLimits").document(credential_fingerprint)
+        transaction = self.db.transaction()
+        now = datetime.now(timezone.utc)
+
+        @firestore.transactional
+        def reserve(txn):
+            snapshot = ref.get(transaction=txn)
+            data = snapshot.to_dict() or {} if snapshot.exists else {}
+            next_at = data.get("nextAt")
+            if hasattr(next_at, "to_datetime"):
+                next_at = next_at.to_datetime()
+            if isinstance(next_at, datetime) and next_at.tzinfo is None:
+                next_at = next_at.replace(tzinfo=timezone.utc)
+            slot = max(now, next_at or now)
+            txn.set(ref, {"nextAt": slot + timedelta(seconds=interval_seconds), "updatedAt": now}, merge=True)
+            return max(0.0, (slot - now).total_seconds())
+
+        return float(reserve(transaction))
 
     def list_bindings(self, uid: str) -> list[DeviceBinding]:
         with self._lock:
@@ -158,6 +268,7 @@ class SmartChargeRepository:
                 updated_at=_date(data.get("updatedAt")) or datetime.now(timezone.utc),
                 vehicle_id=str(data.get("vehicleId")) if data.get("vehicleId") else None,
                 shared=bool(data.get("shared")),
+                owner_uid=uid,
             )
             with self._lock:
                 self._bindings.setdefault(uid, {})[binding.device_id] = binding
@@ -287,7 +398,9 @@ class SmartChargeRepository:
             "lanVerified": identity_verified and verification.get("lanVerified") is True,
             "powerMeterVerified": identity_verified and verification.get("powerMeterVerified") is True,
             "safeBootVerified": identity_verified and verification.get("safeBootVerified") is True,
-            "noLoadTestVerified": identity_verified and verification.get("noLoadTestVerified") is True,
+            # A client cannot self-certify a physical no-load test. The only
+            # writer of this bit is the server-side safety-test transaction.
+            "noLoadTestVerified": False,
             "verifiedDeviceId": verified_device_id,
             "verifiedModel": verified_model,
             "verificationFingerprint": fingerprint,
@@ -424,6 +537,8 @@ class SmartChargeRepository:
         vehicle_id = str(profile.get("vehicleId") or "").strip()
         if vehicle_id and self.vehicle_for_owner(uid, vehicle_id) is None:
             raise PermissionError("Xe không thuộc tài khoản này")
+        if not self.claim_device_owner(uid, device_id):
+            raise PermissionError("DEVICE_ALREADY_OWNED")
         old: dict = {}
         if self.db:
             snapshot = self._profile_doc(uid, device_id).get()
@@ -567,7 +682,7 @@ class SmartChargeRepository:
         with self._lock:
             self._sessions.setdefault(uid, {})[session.session_id] = session
             self._idempotency[(uid, session.idempotency_key)] = session.session_id
-            if session.state not in ("arming", "active"):
+            if session.state not in ("arming", "starting", "active", "stopping", "unknown"):
                 lease = self._device_leases.get(session.device_id)
                 if lease and lease[0] == uid and lease[1] == session.session_id:
                     self._device_leases.pop(session.device_id, None)
@@ -578,7 +693,7 @@ class SmartChargeRepository:
         # A terminal session must release both lock layers.  Leaving the
         # Firestore lease until its 12-hour expiry prevented a legitimate next
         # charging session after a successful OFF verification.
-        if session.state not in ("arming", "active"):
+        if session.state not in ("arming", "starting", "active", "stopping", "unknown"):
             self.release_device_session(uid, session.device_id, session.session_id)
 
     def claim_device_session(self, uid: str, device_id: str, session_id: str) -> bool:
@@ -599,24 +714,31 @@ class SmartChargeRepository:
             self._device_leases[device_id] = (uid, session_id, expires)
         if not self.db:
             return True
-        ref = self.db.collection("shellyDeviceLocks").document(device_id)
         try:
-            snapshot = ref.get()
-            data = snapshot.to_dict() or {} if snapshot.exists else {}
-            lock_expiry = data.get("expiresAt")
-            if hasattr(lock_expiry, "to_datetime"):
-                lock_expiry = lock_expiry.to_datetime()
-            if isinstance(lock_expiry, datetime) and lock_expiry.tzinfo is None:
-                lock_expiry = lock_expiry.replace(tzinfo=timezone.utc)
-            if snapshot.exists and lock_expiry and lock_expiry > now and (
-                data.get("ownerUid") != uid or data.get("sessionId") != session_id
-            ):
+            from google.cloud import firestore
+            ref = self.db.collection("shellyDeviceLocks").document(self._device_owner_doc_id(device_id))
+            transaction = self.db.transaction()
+
+            @firestore.transactional
+            def claim(txn):
+                snapshot = ref.get(transaction=txn)
+                data = snapshot.to_dict() or {} if snapshot.exists else {}
+                expiry = data.get("expiresAt")
+                if hasattr(expiry, "to_datetime"):
+                    expiry = expiry.to_datetime()
+                if isinstance(expiry, datetime) and expiry.tzinfo is None:
+                    expiry = expiry.replace(tzinfo=timezone.utc)
+                same_operation = data.get("ownerUid") == uid and data.get("sessionId") == session_id
+                if snapshot.exists and expiry and expiry > now and not same_operation:
+                    return False
+                txn.set(ref, {"ownerUid": uid, "sessionId": session_id, "deviceIdHash": self._device_owner_doc_id(device_id), "expiresAt": expires, "updatedAt": now}, merge=True)
+                return True
+
+            claimed = bool(claim(transaction))
+            if not claimed:
                 with self._lock:
                     self._device_leases.pop(device_id, None)
-                return False
-            ref.set({"ownerUid": uid, "sessionId": session_id, "deviceId": device_id,
-                     "expiresAt": expires, "updatedAt": now}, merge=True)
-            return True
+            return claimed
         except Exception:
             # Do not weaken the safety gate when the central lock cannot be
             # read or written. The caller must fail closed.
@@ -630,11 +752,19 @@ class SmartChargeRepository:
             if lease and lease[:2] == (uid, session_id):
                 self._device_leases.pop(device_id, None)
         if self.db:
-            ref = self.db.collection("shellyDeviceLocks").document(device_id)
             try:
-                data = ref.get().to_dict() or {}
-                if data.get("ownerUid") == uid and data.get("sessionId") == session_id:
-                    ref.delete()
+                from google.cloud import firestore
+                ref = self.db.collection("shellyDeviceLocks").document(self._device_owner_doc_id(device_id))
+                transaction = self.db.transaction()
+
+                @firestore.transactional
+                def release(txn):
+                    snapshot = ref.get(transaction=txn)
+                    data = snapshot.to_dict() or {} if snapshot.exists else {}
+                    if data.get("ownerUid") == uid and data.get("sessionId") == session_id:
+                        txn.delete(ref)
+
+                release(transaction)
             except Exception:
                 pass
 

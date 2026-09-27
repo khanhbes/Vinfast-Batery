@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -12,12 +11,13 @@ import '../../core/models/onboarding_draft.dart';
 import '../../core/services/onboarding_service.dart';
 import '../../core/services/notification_center_service.dart';
 import '../../core/services/session_service.dart';
-import '../../core/theme/app_colors.dart';
 import '../../core/widgets/bootstrap_splash.dart';
+import '../../core/widgets/internet_connection_notice.dart';
 import '../../data/repositories/vehicle_spec_repository.dart';
 import '../../data/services/maintenance_reminder_service.dart';
 import '../../data/services/vehicle_model_link_service.dart';
 import '../../data/services/smart_charger_credentials_service.dart';
+import '../../data/services/shelly_connection_coordinator.dart';
 import '../../core/services/firebase_bootstrap_coordinator.dart';
 import '../../data/repositories/smart_charger_repository.dart';
 import '../../data/models/smart_charger_binding.dart';
@@ -46,6 +46,7 @@ class AuthGate extends ConsumerStatefulWidget {
 class _AuthGateState extends ConsumerState<AuthGate> {
   /// Trạng thái khởi tạo: true khi đang chờ Firebase Auth restore lần đầu.
   bool _initializing = true;
+  bool _retryingFirebaseInit = false;
 
   /// Đã có flag `was_authenticated` (lần trước đã login thành công).
   bool _wasAuthenticated = false;
@@ -67,19 +68,21 @@ class _AuthGateState extends ConsumerState<AuthGate> {
   ///   và `explicit_signed_out == false` thì cho phép chờ thêm tối đa 8s
   ///   để token persistence kịp khôi phục (tránh đẩy user về Login nhầm).
   Future<void> _initialize() async {
+    // Purge credential remnants before any Firebase bootstrap path can return.
+    // Auth fields are never prefilled from this legacy store.
+    unawaited(SessionService().clearLegacyCredentials());
     // Nếu Firebase init đã có lỗi (ví dụ từ trước hoặc override trong test), hiển thị error UI ngay
     if (ref.read(firebaseInitErrorProvider) != null) {
       if (mounted) setState(() => _initializing = false);
       return;
     }
 
-    final splashStartTime = DateTime.now();
     // Đọc marker trước để quyết định timeout.
     try {
       _wasAuthenticated = await SessionService().wasAuthenticated();
       _explicitSignedOut = await SessionService().wasExplicitSignOut();
     } catch (e) {
-      debugPrint('[AuthGate] Read session markers error: $e');
+      debugPrint('[AuthGate] Session marker read failed (${e.runtimeType}).');
     }
 
     // Đảm bảo Firebase sẵn sàng trước khi truy cập bất kỳ Firebase service nào
@@ -90,7 +93,9 @@ class _AuthGateState extends ConsumerState<AuthGate> {
         );
         ref.read(firebaseInitErrorProvider.notifier).state = null;
       } catch (e) {
-        debugPrint('[AuthGate] Firebase init error: $e');
+        debugPrint(
+          '[AuthGate] Firebase initialization failed (${e.runtimeType}).',
+        );
         if (mounted) {
           ref.read(firebaseInitErrorProvider.notifier).state = e;
           setState(() => _initializing = false);
@@ -133,16 +138,6 @@ class _AuthGateState extends ConsumerState<AuthGate> {
       // trả null ở cold start, thử khôi phục bằng credential đã mã hóa.
       if (restoredUser == null && _wasAuthenticated && !_explicitSignedOut) {
         restoredUser = FirebaseAuth.instance.currentUser;
-        if (restoredUser == null) {
-          try {
-            restoredUser = await AuthService().restoreRememberedLogin().timeout(
-              const Duration(seconds: 10),
-              onTimeout: () => null,
-            );
-          } catch (e) {
-            debugPrint('[AuthGate] Remembered login restore error: $e');
-          }
-        }
         if (restoredUser != null) {
           await SessionService().markAuthenticated();
           _wasAuthenticated = true;
@@ -150,13 +145,7 @@ class _AuthGateState extends ConsumerState<AuthGate> {
         }
       }
     } catch (e) {
-      debugPrint('[AuthGate] Auth restore error: $e');
-    }
-
-    // Đảm bảo splash screen chạy tối thiểu 2.5 giây trước khi chuyển màn hình
-    final elapsed = DateTime.now().difference(splashStartTime);
-    if (elapsed < const Duration(milliseconds: 2500)) {
-      await Future.delayed(const Duration(milliseconds: 2500) - elapsed);
+      debugPrint('[AuthGate] Auth restore failed (${e.runtimeType}).');
     }
 
     if (mounted) {
@@ -176,21 +165,31 @@ class _AuthGateState extends ConsumerState<AuthGate> {
   }
 
   Future<void> _retryFirebaseInit() async {
-    setState(() => _initializing = true);
+    if (_retryingFirebaseInit) return;
+    setState(() {
+      _retryingFirebaseInit = true;
+      _initializing = true;
+    });
     try {
       await FirebaseBootstrapCoordinator.ensureInitialized().timeout(
         const Duration(seconds: 15),
       );
+      if (!mounted) return;
       unawaited(
         FirebaseBootstrapCoordinator.initializePushServices().catchError((e) {
-          debugPrint('[AuthGate] Push retry error: $e');
+          debugPrint('[AuthGate] Push retry error (${e.runtimeType}).');
         }),
       );
       ref.read(firebaseInitErrorProvider.notifier).state = null;
     } catch (e) {
+      if (!mounted) return;
       ref.read(firebaseInitErrorProvider.notifier).state = e;
     }
-    await _initialize();
+    try {
+      await _initialize();
+    } finally {
+      if (mounted) setState(() => _retryingFirebaseInit = false);
+    }
   }
 
   @override
@@ -199,9 +198,11 @@ class _AuthGateState extends ConsumerState<AuthGate> {
 
     // 1) Firebase init lỗi hoặc chưa sẵn sàng sau khi hết initializing → màn hình lỗi/retry.
     // Tuyệt đối KHÔNG render StreamBuilder hay truy cập FirebaseAuth.instance ở đây.
-    if ((initError != null || !FirebaseBootstrapCoordinator.isReady) && !_initializing) {
+    if (_retryingFirebaseInit ||
+        ((initError != null || !FirebaseBootstrapCoordinator.isReady) &&
+            !_initializing)) {
       return _BootstrapErrorScreen(
-        error: initError ?? 'Firebase chưa sẵn sàng.',
+        retrying: _retryingFirebaseInit,
         onRetry: _retryFirebaseInit,
       );
     }
@@ -255,86 +256,65 @@ class _BootstrapSplashScreen extends StatelessWidget {
 }
 
 class _BootstrapErrorScreen extends StatelessWidget {
-  final Object error;
+  final bool retrying;
   final VoidCallback onRetry;
-  const _BootstrapErrorScreen({required this.error, required this.onRetry});
+  const _BootstrapErrorScreen({required this.retrying, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
     return Scaffold(
-      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(
-                  Icons.cloud_off_rounded,
-                  color: AppColors.error,
-                  size: 56,
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Không khởi tạo được Firebase',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Icon(
+                    Icons.cloud_off_rounded,
+                    color: colors.onSurfaceVariant,
+                    size: 48,
                   ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Kiểm tra kết nối mạng rồi thử lại. Phiên đăng nhập của bạn '
-                  'sẽ được khôi phục tự động khi Firebase sẵn sàng.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 13,
-                    height: 1.4,
+                  const SizedBox(height: 16),
+                  Text(
+                    'Chưa thể mở ứng dụng',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.headlineSmall,
                   ),
-                ),
-                if (kDebugMode) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    constraints: const BoxConstraints(maxHeight: 120),
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.error.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(8),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Kiểm tra kết nối rồi thử lại. Bạn không cần nhập lại '
+                    'thông tin lúc này.',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colors.onSurfaceVariant,
                     ),
-                    child: SingleChildScrollView(
-                      child: Text(
-                        error.toString(),
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontFamily: 'monospace',
-                          color: AppColors.textTertiary.withValues(alpha: 0.85),
-                        ),
+                  ),
+                  const SizedBox(height: 24),
+                  FilledButton.icon(
+                    onPressed: retrying ? null : onRetry,
+                    icon: retrying
+                        ? const SizedBox.square(
+                            dimension: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.refresh_rounded),
+                    label: Text(retrying ? 'Đang thử lại' : 'Thử lại'),
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size.fromHeight(48),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 14,
                       ),
                     ),
                   ),
                 ],
-                const SizedBox(height: 24),
-                FilledButton.icon(
-                  onPressed: onRetry,
-                  icon: const Icon(Icons.refresh_rounded),
-                  label: const Text('Thử lại'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 32,
-                      vertical: 14,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),
@@ -400,6 +380,7 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
           SmartChargerConnectionMode.advancedDirect,
         );
       }
+      await ShellyConnectionCoordinator.shared.restore();
     } catch (_) {
       // Offline foreground resume keeps the previously safe local profile.
     }
@@ -431,6 +412,7 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
           SmartChargerConnectionMode.advancedDirect,
         );
       }
+      await ShellyConnectionCoordinator.shared.restore();
     } catch (e) {
       debugPrint('[AuthBootstrap] Smart Charger profile sync error: $e');
     }
@@ -500,7 +482,9 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
     });
 
     final currentUser = FirebaseAuth.instance.currentUser;
-    if (currentUser == null) return const AppNavigation();
+    if (currentUser == null) {
+      return const InternetConnectionNotice(child: AppNavigation());
+    }
     // Retry a persisted onboarding operation whenever the authenticated shell
     // is rebuilt (cold start, foreground restore, or connectivity recovery).
     unawaited(OnboardingSyncCoordinator.shared.syncIfPending(currentUser.uid));
@@ -513,17 +497,22 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
       future: _profileFuture,
       builder: (context, snapshot) {
         final createdAt = currentUser.metadata.creationTime;
-        final isNew = createdAt != null &&
+        final isNew =
+            createdAt != null &&
             DateTime.now().difference(createdAt) < const Duration(minutes: 15);
 
         // Auth can succeed before the first profile write reaches Firestore.
         // Route a new account through its retryable onboarding bootstrap,
         // rather than treating a transient read failure as permission to enter.
         if (snapshot.hasError) {
-          return isNew ? const OnboardingChatScreen() : const AppNavigation();
+          return isNew
+              ? const OnboardingChatScreen()
+              : const InternetConnectionNotice(child: AppNavigation());
         }
         if (!snapshot.hasData) {
-          if (!isNew) return const AppNavigation();
+          if (!isNew) {
+            return const InternetConnectionNotice(child: AppNavigation());
+          }
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
@@ -537,25 +526,37 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
         return FutureBuilder<OnboardingDraft?>(
           future: _draftFuture,
           builder: (context, draftSnapshot) {
+            if (draftSnapshot.connectionState == ConnectionState.waiting) {
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
+            }
             final draft = draftSnapshot.data;
             // A draft that reached the final step but is waiting for the API
             // must not trap the user on the wizard after a restart. The app
             // shell can show cached data and a retry status strip.
-            final syncPending = draft != null &&
+            final syncPending =
+                draft != null &&
+                (draft.finalizedAt != null ||
+                    draft.state == OnboardingDraftState.syncing ||
+                    draft.state == OnboardingDraftState.failedRetryable ||
+                    draft.state == OnboardingDraftState.synced) &&
                 draft.state != OnboardingDraftState.failedPermanent &&
                 draft.name.trim().isNotEmpty &&
                 draft.catalogId.trim().isNotEmpty;
             if (data == null) {
-              return syncPending || !isNew
-                  ? const AppNavigation()
-                  : const OnboardingChatScreen();
+              if (syncPending) {
+                return const InternetConnectionNotice(child: AppNavigation());
+              }
+              if (draft != null || isNew) return const OnboardingChatScreen();
+              return const InternetConnectionNotice(child: AppNavigation());
             }
             final flowVer = data['registrationFlowVersion'] as int? ?? 1;
             final completedAt = data['onboardingCompletedAt'];
             if (flowVer >= 2 && completedAt == null && !syncPending) {
               return const OnboardingChatScreen();
             }
-            return const AppNavigation();
+            return const InternetConnectionNotice(child: AppNavigation());
           },
         );
       },

@@ -381,6 +381,32 @@ class RouteContractTests(unittest.TestCase):
         app.register_blueprint(create_blueprint(self.service, self.repo, lambda: ("owner", "owner@test", "user")))
         self.client = app.test_client()
 
+    def test_physical_device_has_one_account_owner(self):
+        self.assertTrue(self.repo.claim_device_owner("owner", "plug-shared"))
+        self.assertTrue(self.repo.claim_device_owner("owner", "plug-shared"))
+        self.assertFalse(self.repo.claim_device_owner("other-user", "plug-shared"))
+        self.assertTrue(self.repo.device_owned_by("owner", "plug-shared"))
+        self.assertFalse(self.repo.device_owned_by("other-user", "plug-shared"))
+
+    def test_control_authorization_reserves_one_operation_until_verified_off(self):
+        self.repo.claim_device_owner("owner", "plug-1")
+        self.repo.save_binding("owner", DeviceBinding(
+            device_id="plug-1", display_name="Plug", model="S3PL-00112EU", generation=3,
+            provider="lan_direct", connection_mode="advanced_direct",
+        ))
+        first = self.client.post("/api/shelly/devices/plug-1/authorize", json={"operationId": "op-1"})
+        competing = self.client.post("/api/shelly/devices/plug-1/authorize", json={"operationId": "op-2"})
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(competing.status_code, 409)
+        missing_readback = self.client.post("/api/shelly/devices/plug-1/release-control", json={"operationId": "op-1"})
+        self.assertEqual(missing_readback.status_code, 400)
+        released = self.client.post("/api/shelly/devices/plug-1/release-control", json={
+            "operationId": "op-1", "relayOffVerified": True,
+        })
+        self.assertEqual(released.status_code, 200)
+        retry = self.client.post("/api/shelly/devices/plug-1/authorize", json={"operationId": "op-2"})
+        self.assertEqual(retry.status_code, 200)
+
     def test_easy_connect_fake_binds_owned_device(self):
         response = self.client.post("/api/shelly/consent/start")
         self.assertEqual(response.status_code, 200)
@@ -396,23 +422,42 @@ class RouteContractTests(unittest.TestCase):
             app = Flask(__name__)
             app.register_blueprint(create_blueprint(service, repo, lambda: ("owner", "owner@test", "user")))
             client = app.test_client()
-            saved = client.put("/api/shelly/profiles/plug-1", json={
-                "vehicleId": "VF-001", "cloudHost": "https://shelly-eu.shelly.cloud",
-                "cloudAuthKey": "secret-key", "lanAddress": "192.168.1.4",
-                "verification": {"cloudVerified": True, "powerMeterVerified": True,
-                                 "safeBootVerified": True, "noLoadTestVerified": True,
-                                 "verifiedDeviceId": "plug-1", "verifiedModel": "S3PL-00112EU",
-                                 "verificationFingerprint": "fingerprint"},
-            })
+            cloud_response = SimpleNamespace(
+                status_code=200,
+                json=lambda: [{
+                    "id": "plug-1", "online": True, "code": "S3PL-00112EU", "type": "relay",
+                    "status": {"switch:0": {"apower": 0, "voltage": 230, "current": 0, "aenergy": {"total": 0}}},
+                    "settings": {"switch:0": {"initial_state": "off", "auto_on": False}},
+                }],
+            )
+            with patch("shelly.routes.requests.post", return_value=cloud_response):
+                saved = client.put("/api/shelly/profiles/plug-1", json={
+                    "vehicleId": "VF-001", "cloudHost": "https://shelly-eu.shelly.cloud",
+                    "cloudAuthKey": "secret-key", "lanAddress": "192.168.1.4",
+                    "verification": {"cloudVerified": True, "powerMeterVerified": True,
+                                     "safeBootVerified": True, "noLoadTestVerified": True,
+                                     "verifiedDeviceId": "plug-1", "verifiedModel": "S3PL-00112EU",
+                                     "verificationFingerprint": "fingerprint"},
+                })
             self.assertEqual(saved.status_code, 200)
             listed = client.get("/api/shelly/profiles?vehicleId=VF-001").get_json()["data"]["items"]
             self.assertNotIn("cloudAuthKey", listed[0])
-            self.assertEqual(listed[0]["verifiedModel"], "S3PL-00112EU")
-            self.assertEqual(listed[0]["verificationFingerprint"], "fingerprint")
+            self.assertTrue(listed[0]["cloudVerified"])
+            self.assertTrue(listed[0]["safeBootVerified"])
+            self.assertFalse(listed[0]["noLoadTestVerified"])
             restored = client.post("/api/shelly/profiles/plug-1/restore")
             self.assertEqual(restored.status_code, 200)
-            self.assertEqual(restored.get_json()["data"]["cloudAuthKey"], "secret-key")
+            self.assertNotIn("cloudAuthKey", restored.get_json()["data"])
             self.assertEqual(restored.headers["Cache-Control"], "no-store, private")
+
+            forged = client.post("/api/shelly/profiles/plug-1/verify", json={
+                "cloudVerified": True, "powerMeterVerified": True,
+                "safeBootVerified": True, "noLoadTestVerified": True,
+                "verifiedDeviceId": "plug-1", "verifiedModel": "S3PL-00112EU",
+                "verificationFingerprint": "forged",
+            })
+            self.assertEqual(forged.status_code, 409)
+            self.assertFalse(repo.resolve_synced_profile("owner")["noLoadTestVerified"])
 
     def test_client_verification_flags_without_identity_cannot_unlock_profile(self):
         metadata = SmartChargeRepository._profile_metadata(

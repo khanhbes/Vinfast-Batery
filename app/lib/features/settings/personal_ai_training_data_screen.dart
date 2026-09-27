@@ -65,11 +65,15 @@ class _PersonalAiTrainingDataScreenState
               .doc(user.uid)
               .collection('chargingTrainingSamples')
               .get();
-          samples = snapshots.docs
-              .where((doc) => '${doc.data()['vehicleId'] ?? ''}' == widget.vehicleId)
-              .map((doc) => _TrainingSample(id: doc.id, data: doc.data()))
-              .toList()
-            ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+          samples =
+              snapshots.docs
+                  .where(
+                    (doc) =>
+                        '${doc.data()['vehicleId'] ?? ''}' == widget.vehicleId,
+                  )
+                  .map((doc) => _TrainingSample(id: doc.id, data: doc.data()))
+                  .toList()
+                ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
           if (samples.isNotEmpty) {
             _dataSourceNote = 'Đồng bộ trực tiếp: Cloud Firestore';
           }
@@ -80,13 +84,14 @@ class _PersonalAiTrainingDataScreenState
       // chuyển tiếp gọi Smart Charger API (quyền Firebase Admin SDK ở máy chủ)
       if (samples.isEmpty) {
         try {
-          final apiSamples = await ServerSmartChargerService().getPersonalTrainingSamples(widget.vehicleId);
+          final apiSamples = await ServerSmartChargerService()
+              .getPersonalTrainingSamples(widget.vehicleId);
           if (apiSamples.isNotEmpty) {
             samples = apiSamples.map((data) {
-              final id = '${data['sessionId'] ?? data['id'] ?? UniqueKey().toString()}';
+              final id =
+                  '${data['sessionId'] ?? data['id'] ?? UniqueKey().toString()}';
               return _TrainingSample(id: id, data: data);
-            }).toList()
-              ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+            }).toList()..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
             _dataSourceNote = 'Đồng bộ từ AI Dataset Server (Admin SDK)';
           }
         } catch (_) {}
@@ -95,7 +100,9 @@ class _PersonalAiTrainingDataScreenState
       // 3. Fallback tiếp tục tới Dataset Engine vật lý
       if (samples.isEmpty) {
         try {
-          final datasetRes = await ServerSmartChargerService().getAiDataset(vehicleId: widget.vehicleId);
+          final datasetRes = await ServerSmartChargerService().getAiDataset(
+            vehicleId: widget.vehicleId,
+          );
           final records = datasetRes['records'];
           if (records is List && records.isNotEmpty) {
             samples = records.map((item) {
@@ -115,7 +122,11 @@ class _PersonalAiTrainingDataScreenState
                   'trainingExcluded': m['training_excluded'] == true,
                   'eligibleForTargetTraining': m['training_eligible'] != false,
                   'developerNote': m['developer_note'] ?? '',
-                  'updatedAt': m['updated_at'] ?? m['confirmed_at'] ?? m['created_at'] ?? DateTime.now().toIso8601String(),
+                  'updatedAt':
+                      m['updated_at'] ??
+                      m['confirmed_at'] ??
+                      m['created_at'] ??
+                      DateTime.now().toIso8601String(),
                 },
               );
             }).toList();
@@ -139,11 +150,12 @@ class _PersonalAiTrainingDataScreenState
         // Nếu có mẫu hoặc chưa có mẫu, hiển thị giao diện mượt mà không chặn bằng lỗi quyền
         _error = null;
       });
-    } on Object catch (error) {
+    } on Object {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = error.toString().replaceFirst('Bad state: ', '');
+        _error =
+            'Chưa thể tải dữ liệu cá nhân hóa. Kiểm tra kết nối rồi thử lại.';
       });
     }
   }
@@ -259,7 +271,10 @@ class _PersonalAiTrainingDataScreenState
                       icon: const Icon(Icons.hub_rounded, size: 16),
                       label: const Text(
                         'Mở Developer AI Studio',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ),
@@ -271,15 +286,24 @@ class _PersonalAiTrainingDataScreenState
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: CockpitColors.emerald.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: CockpitColors.emerald.withValues(alpha: 0.3)),
+                    border: Border.all(
+                      color: CockpitColors.emerald.withValues(alpha: 0.3),
+                    ),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.check_circle_outline_rounded, size: 16, color: CockpitColors.emerald),
+                      const Icon(
+                        Icons.check_circle_outline_rounded,
+                        size: 16,
+                        color: CockpitColors.emerald,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -676,7 +700,9 @@ class _MessageCard extends StatelessWidget {
                 OutlinedButton(
                   style: OutlinedButton.styleFrom(
                     foregroundColor: CockpitColors.emerald,
-                    side: BorderSide(color: CockpitColors.emerald.withValues(alpha: 0.5)),
+                    side: BorderSide(
+                      color: CockpitColors.emerald.withValues(alpha: 0.5),
+                    ),
                   ),
                   onPressed: action,
                   child: const Text('Thử lại'),

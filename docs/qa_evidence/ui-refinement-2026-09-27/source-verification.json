@@ -1,0 +1,14 @@
+{
+  "recordedAt": "2026-09-27T23:05:20.7880135+07:00",
+  "sourceHead": "a1932da2285757b348ef854def3b406d1cee5142",
+  "sourceState": "dirty; existing user changes preserved",
+  "appVersion": "1.1.9+122",
+  "libraryAndTestFileCount": 297,
+  "sourceFingerprintSha256": "3bf480b3813819bdf11a4419fa82c185a74f4fd3a3c10e91cb363d4970bdd577",
+  "fingerprintAlgorithm": "SHA256 of UTF-8 LF-joined sorted relativePath=lowercaseSHA256(file) for rg --files app/lib app/test; path separators normalized to /; no trailing LF",
+  "flutterFullCommand": "flutter test --no-pub --reporter expanded",
+  "analyzerCommand": "flutter analyze --no-pub",
+  "analyzerResult": "TIMEOUT after 120 seconds; wrapper exit 124; not Pass",
+  "buildAndRuntime": "Not run for this batch",
+  "physicalHardware": "No hardware commands issued"
+}

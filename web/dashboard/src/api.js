@@ -4,7 +4,14 @@ import { requestPortal, PortalHttpError } from './lib/httpClient'
 // Production normally reaches the API through the same-origin Caddy proxy.
 // Accept an origin or a legacy `/api` value without producing `/api/api/...`.
 const configuredApiBase = String(import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '')
-const BASE = configuredApiBase.replace(/\/api$/i, '')
+let BASE = configuredApiBase.replace(/\/api$/i, '')
+if (typeof window !== 'undefined') {
+  const isHttps = window.location.protocol === 'https:'
+  const isNonLocalhost = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
+  if ((isHttps || isNonLocalhost) && (BASE.startsWith('http://localhost') || BASE.startsWith('http://127.0.0.1'))) {
+    BASE = ''
+  }
+}
 
 function endpointTimeout(path, method = 'GET') {
   if (/\/api\/admin\/data-snapshot(?:\?|$)/.test(path)) return 30_000
@@ -312,4 +319,18 @@ export const getChargeLogs = (vehicleId) => {
   return apiFetch(`/api/charge-logs${qs}`)
 }
 
+
+// ── Shelly Connection Codes (Admin) ──
+export const adminShellyDevices = () => apiFetch('/api/admin/shelly-devices')
+export const adminSaveShellyDevice = (data) =>
+  apiFetch('/api/admin/shelly-devices', { method: 'POST', body: JSON.stringify(data) })
+export const adminDeleteShellyDevice = (deviceId) =>
+  apiFetch('/api/admin/shelly-devices/' + encodeURIComponent(deviceId), { method: 'DELETE' })
+export const adminGenerateCodeForDevice = (deviceId, data = {}) =>
+  apiFetch('/api/admin/shelly-devices/' + encodeURIComponent(deviceId) + '/generate-code', { method: 'POST', body: JSON.stringify(data) })
+export const adminConnectionCodes = () => apiFetch('/api/admin/connection-codes')
+export const adminGenerateCode = (data) =>
+  apiFetch('/api/admin/connection-codes', { method: 'POST', body: JSON.stringify(data) })
+export const adminRevokeCode = (code) =>
+  apiFetch('/api/admin/connection-codes/' + encodeURIComponent(code), { method: 'DELETE' })
 export { emitPortalError, emitPortalSuccess }

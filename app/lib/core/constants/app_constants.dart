@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 class AppConstants {
   AppConstants._();
 
-  static const String appName = 'EV Battery';
+  static const String appName = 'VinFast Battery';
 
   // Production URL is injected at build time. Never ship a laptop/Tailscale
   // endpoint as a release default. Debug builds may use the developer override
@@ -36,6 +36,7 @@ class AppConstants {
     final uri = Uri.tryParse(value);
     return value.isNotEmpty && uri != null && _isAllowedEndpoint(uri);
   }
+
   static bool get isApiConfigurationError => !isApiConfigured;
 
   static void setCustomApiBaseUrl(String? url) {
@@ -49,7 +50,8 @@ class AppConstants {
     if (kReleaseMode) return;
     _customApiBaseUrl = candidate;
   }
-  static const String appVersion = '1.1.5';
+
+  static const String appVersion = '1.1.9';
 
   // Firestore Collection Names
   static const String vehiclesCollection = 'Vehicles';
@@ -61,6 +63,7 @@ class AppConstants {
   static const int batteryMin = 0;
   static const int batteryMax = 100;
   static const int maxOdoDigits = 7;
+
   /// Absolute device-side Smart Charge safety window.
   static const int smartChargeMaxMinutes = 600;
 

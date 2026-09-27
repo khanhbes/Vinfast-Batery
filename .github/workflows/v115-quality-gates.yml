@@ -1,4 +1,4 @@
-name: VinFast Battery v1.1.5 quality gates
+name: VinFast Battery quality gates
 
 on:
   pull_request:
@@ -158,7 +158,7 @@ jobs:
       - name: Build release APK
         env:
           PRODUCTION_API_BASE_URL: ${{ secrets.PRODUCTION_API_BASE_URL }}
-        run: flutter build apk --release --build-number=115 --build-name=1.1.5 --dart-define=APP_API_BASE_URL="$PRODUCTION_API_BASE_URL"
+        run: flutter build apk --release --dart-define=APP_API_BASE_URL="$PRODUCTION_API_BASE_URL"
       - name: Verify APK exists
         run: test -s build/app/outputs/flutter-apk/app-release.apk
       - name: Record APK hash
@@ -166,7 +166,7 @@ jobs:
       - name: Upload release evidence
         uses: actions/upload-artifact@v4
         with:
-          name: vinfast-battery-1.1.5-release-${{ github.sha }}
+          name: vinfast-battery-release-${{ github.sha }}
           path: |
             app/build/app/outputs/flutter-apk/app-release.apk
             app/build/app/outputs/flutter-apk/app-release.apk.sha256

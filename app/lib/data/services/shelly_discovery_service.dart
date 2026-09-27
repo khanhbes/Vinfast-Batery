@@ -6,9 +6,11 @@ import 'package:http/http.dart' as http;
 import 'package:multicast_dns/multicast_dns.dart';
 
 import '../models/shelly_connection.dart';
+import 'shelly_capability_checker.dart';
 
 class ShellyDiscoveryService {
   const ShellyDiscoveryService();
+  static const _capabilityChecker = ShellyCapabilityChecker();
 
   Future<List<DiscoveredShellyDevice>> discover({
     Duration timeout = const Duration(seconds: 5),
@@ -73,7 +75,9 @@ class ShellyDiscoveryService {
             name: pointer.domainName.split('.').first,
             generation: generation,
           );
-          if (device.isPlugSGen3) devices[id] = device;
+          // Keep unknown mDNS candidates until the RPC probe can reveal
+          // power-meter fields. Known Plug S Gen3 devices remain fast-pathed.
+          devices[id] = device;
         }
       }
     } catch (_) {
@@ -99,6 +103,7 @@ class ShellyDiscoveryService {
     double? currentPowerW = device.currentPowerW;
     bool? relayState = device.relayState;
     double? temperatureC = device.temperatureC;
+    var powerMeterFields = <String>{...device.powerMeterFields};
     String? name = device.name;
     String model = device.model;
 
@@ -154,6 +159,10 @@ class ShellyDiscoveryService {
               if (sw is Map<String, dynamic>) {
                 relayState = sw['output'] == true;
                 currentPowerW = (sw['apower'] as num?)?.toDouble();
+                for (final field
+                    in DiscoveredShellyDevice.requiredPowerMeterFields) {
+                  if (sw.containsKey(field)) powerMeterFields.add(field);
+                }
                 final temp = sw['temperature'];
                 if (temp is Map<String, dynamic>) {
                   temperatureC = (temp['tC'] as num?)?.toDouble();
@@ -169,7 +178,7 @@ class ShellyDiscoveryService {
       }
     }
 
-    return device.copyWith(
+    final probed = device.copyWith(
       name: name,
       model: model,
       firmware: firmware,
@@ -177,7 +186,12 @@ class ShellyDiscoveryService {
       currentPowerW: currentPowerW,
       relayState: relayState,
       temperatureC: temperatureC,
+      powerMeterFields: Set.unmodifiable(powerMeterFields),
+      powerMeterFieldsPresent: powerMeterFields.containsAll(
+        DiscoveredShellyDevice.requiredPowerMeterFields,
+      ),
     );
+    return probed;
   }
 
   /// Discovers devices via mDNS and probes each discovered device via LAN HTTP.
@@ -195,7 +209,13 @@ class ShellyDiscoveryService {
           (d) => probeDevice(d, timeout: probeTimeout, httpClient: client),
         ),
       );
-      return probed;
+      return probed
+          .where(
+            (device) =>
+                _capabilityChecker.isCompatible(device) ||
+                _capabilityChecker.isPotentiallyCompatible(device),
+          )
+          .toList(growable: false);
     } finally {
       client.close();
     }
@@ -247,7 +267,10 @@ class ShellyDiscoveryService {
       int completed = 0;
 
       for (int i = 0; i < total; i += batchSize) {
-        final batch = ips.sublist(i, (i + batchSize > total) ? total : i + batchSize);
+        final batch = ips.sublist(
+          i,
+          (i + batchSize > total) ? total : i + batchSize,
+        );
         final results = await Future.wait(
           batch.map((ip) async {
             try {
@@ -257,9 +280,13 @@ class ShellyDiscoveryService {
                 final data = jsonDecode(res.body);
                 if (data is Map<String, dynamic>) {
                   final id = data['id']?.toString() ?? 'shelly-$ip';
-                  final model = data['app']?.toString() ?? data['model']?.toString() ?? 'Shelly';
+                  final model =
+                      data['app']?.toString() ??
+                      data['model']?.toString() ??
+                      'Shelly';
                   final name = data['name']?.toString();
-                  final ver = data['ver']?.toString() ?? data['fw_id']?.toString();
+                  final ver =
+                      data['ver']?.toString() ?? data['fw_id']?.toString();
                   final authEn = data['auth_en'] == true;
                   return DiscoveredShellyDevice(
                     id: id,
@@ -279,12 +306,15 @@ class ShellyDiscoveryService {
                   name: 'Shelly $ip',
                   authEnabled: true,
                   generation: 3,
+                  powerMeterFieldsPresent: false,
                 );
               }
             } catch (_) {
               try {
                 final legUri = Uri.parse('http://$ip/shelly');
-                final legRes = await client.get(legUri).timeout(const Duration(milliseconds: 200));
+                final legRes = await client
+                    .get(legUri)
+                    .timeout(const Duration(milliseconds: 200));
                 if (legRes.statusCode == 200) {
                   final data = jsonDecode(legRes.body);
                   if (data is Map<String, dynamic>) {

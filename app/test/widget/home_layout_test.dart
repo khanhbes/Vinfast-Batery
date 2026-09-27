@@ -1,11 +1,57 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vinfast_battery/core/providers/app_providers.dart';
 import 'package:vinfast_battery/features/home/home_screen.dart';
+import 'package:vinfast_battery/data/models/vehicle_model.dart';
 
 void main() {
+  for (final fail in [false, true]) {
+    testWidgets('Refresh follows actual provider completion (failure: $fail)', (
+      tester,
+    ) async {
+      var loads = 0;
+      final pending = Completer<List<VehicleModel>>();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            allVehiclesProvider.overrideWith((ref) {
+              loads++;
+              return loads == 1
+                  ? Future.value(<VehicleModel>[])
+                  : pending.future;
+            }),
+            restoreVehicleIdProvider.overrideWith((ref) async => ''),
+            vehicleProvider.overrideWith((ref, id) async => null),
+          ],
+          child: const MaterialApp(home: HomeScreen()),
+        ),
+      );
+      await tester.pump();
+      var finished = false;
+      final refresh = tester.widget<RefreshIndicator>(
+        find.byType(RefreshIndicator),
+      );
+      final result = refresh.onRefresh().then((_) => finished = true);
+      await tester.pump(const Duration(seconds: 1));
+      expect(loads, 2);
+      expect(finished, isFalse);
+      if (fail) {
+        pending.completeError(StateError('synthetic unavailable'));
+      } else {
+        pending.complete([]);
+      }
+      await tester.pump();
+      await result;
+      expect(finished, isTrue);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
   for (final variant in [
     (1.0, Brightness.light),
     (2.0, Brightness.light),
@@ -71,9 +117,9 @@ void main() {
         ],
         child: MaterialApp(
           builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context).copyWith(
-              textScaler: const TextScaler.linear(2),
-            ),
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(2)),
             child: child!,
           ),
           home: const HomeScreen(),
