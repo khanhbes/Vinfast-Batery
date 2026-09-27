@@ -30,7 +30,7 @@ class BackgroundServiceConfig {
         isForegroundMode: true,
         // Notification config cho Foreground Service
         notificationChannelId: 'vinfast_bg_channel',
-        initialNotificationTitle: 'EV Battery',
+        initialNotificationTitle: 'VinFast Battery',
         initialNotificationContent: 'Đang chạy ngầm...',
         foregroundServiceNotificationId: 888,
         foregroundServiceTypes: [AndroidForegroundType.location],
@@ -44,11 +44,7 @@ class BackgroundServiceConfig {
   static Future<bool> ensureNotificationPermission() async {
     if (!Platform.isAndroid) return true;
     final status = await Permission.notification.status;
-    if (status.isGranted) return true;
-    // Yêu cầu quyền — nếu user từ chối thì trả false
-    final result = await Permission.notification.request();
-    debugPrint('🔔 Notification permission: $result');
-    return result.isGranted;
+    return status.isGranted;
   }
 
   /// Bắt đầu service — có log chi tiết trạng thái.

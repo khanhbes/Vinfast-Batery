@@ -15,6 +15,7 @@ import 'shelly_charge_log_service.dart';
 import 'shelly_clients.dart';
 import 'shelly_discovery_service.dart';
 import 'smart_charger_credentials_service.dart';
+import 'server_smart_charger_service.dart';
 import 'smart_charge_energy_accumulator.dart';
 import '../../core/constants/app_constants.dart';
 
@@ -162,22 +163,24 @@ class SmartChargerService {
     SmartChargerStatus? cloud;
     ShellyDeviceSnapshot? cloudSnapshot;
     SmartChargerException? cloudError;
-    try {
-      cloudSnapshot = await _translate(() => _cloud.getSnapshot(selected));
-      final snapshot = cloudSnapshot;
-      if (snapshot == null ||
-          !snapshot.online ||
-          !snapshot.isSupportedPlugSGen3) {
-        throw const SmartChargerException(
-          'Shelly không đúng Plug S Gen3 hoặc đang offline trên Cloud.',
-          code: 'unsupportedDevice',
-        );
+    if (selected.hasCloud) {
+      try {
+        cloudSnapshot = await _translate(() => _cloud.getSnapshot(selected));
+        final snapshot = cloudSnapshot;
+        if (snapshot == null || !snapshot.online || !snapshot.hasPowerMeter) {
+          throw const SmartChargerException(
+            'Shelly Cloud không trả đủ thông tin thiết bị hoặc đang offline.',
+            code: 'unsupportedDevice',
+          );
+        }
+        cloud = snapshot.status;
+      } on SmartChargerException catch (error) {
+        cloudError = error;
       }
-      cloud = snapshot.status;
-    } on SmartChargerException catch (error) {
-      cloudError = error;
     }
     SmartChargerStatus? lan;
+    var lanPowerMeterAvailable = false;
+    ShellySwitchConfig? lanSwitchConfig;
     if (selected.hasLan) {
       final info = await _translate(() => _lan.getDeviceInfo(selected));
       final foundId = (info['id'] ?? info['mac'])?.toString().toLowerCase();
@@ -192,15 +195,19 @@ class SmartChargerService {
       final generation = int.tryParse(
         info['gen']?.toString().replaceAll(RegExp(r'[^0-9]'), '') ?? '',
       );
-      final isPlugSGen3 =
-          foundModel.toUpperCase() == 'S3PL-00112EU' && generation == 3;
-      if (!isPlugSGen3) {
+      final hasMeter = info['switch:0'] != null || info['meter'] != null;
+      if (foundModel.isEmpty && !hasMeter && generation == null) {
         throw const SmartChargerException(
-          'Chỉ hỗ trợ đúng Shelly Plug S Gen3.',
+          'Không nhận diện được thiết bị Shelly hoặc power meter.',
           code: 'unsupportedDevice',
         );
       }
       lan = await _translate(() => _lan.getStatus(selected));
+      lanPowerMeterAvailable = await _translate(
+        () => _lan.hasRequiredPowerMeter(selected),
+      );
+      final rawConfig = await _translate(() => _lan.getSwitchConfig(selected));
+      lanSwitchConfig = ShellySwitchConfig.fromJson(rawConfig);
     }
     if (cloud == null && lan == null) {
       throw cloudError ??
@@ -212,15 +219,18 @@ class SmartChargerService {
     return SmartChargerConnectionTest(
       cloudStatus: cloud,
       lanStatus: lan,
-      deviceVerified:
-          cloudSnapshot?.isSupportedPlugSGen3 == true || lan != null,
+      deviceVerified: cloudSnapshot != null || lan != null,
       powerMeterAvailable:
           cloudSnapshot?.powerMeterFieldsPresent == true ||
-          (lan?.voltageV ?? 0) > 0,
+          lanPowerMeterAvailable,
       model: cloudSnapshot?.model,
-      safeBootVerified: cloudSnapshot?.switchConfig?.isSafeForCharging == true,
-      initialState: cloudSnapshot?.switchConfig?.initialState,
-      autoOn: cloudSnapshot?.switchConfig?.autoOn,
+      safeBootVerified:
+          cloudSnapshot?.switchConfig?.isSafeForCharging == true ||
+          lanSwitchConfig?.isSafeForCharging == true,
+      initialState:
+          cloudSnapshot?.switchConfig?.initialState ??
+          lanSwitchConfig?.initialState,
+      autoOn: cloudSnapshot?.switchConfig?.autoOn ?? lanSwitchConfig?.autoOn,
     );
   }
 
@@ -228,10 +238,16 @@ class SmartChargerService {
     ShellyConnectionProfile? profile,
   }) async {
     final selected = profile ?? await _requireProfile();
-    final snapshot = await _translate(() => _cloud.getSnapshot(selected));
-    if (!snapshot.online || !snapshot.isSupportedPlugSGen3) {
+    if (!selected.hasCloud) {
       throw const SmartChargerException(
-        'Shelly không đúng Plug S Gen3 hoặc đang offline trên Cloud.',
+        'Shelly Cloud chưa được cấu hình.',
+        code: 'notConfigured',
+      );
+    }
+    final snapshot = await _translate(() => _cloud.getSnapshot(selected));
+    if (!snapshot.online || !snapshot.hasPowerMeter) {
+      throw const SmartChargerException(
+        'Shelly Cloud không trả đủ thông tin power meter hoặc đang offline.',
         code: 'unsupportedDevice',
       );
     }
@@ -291,7 +307,8 @@ class SmartChargerService {
         code: 'relayUnverified',
       );
     }
-    final transport = await _verifyBeforeOn(selected);
+    final operationId = 'safety-${_clock().toUtc().microsecondsSinceEpoch}-${selected.deviceId}';
+    final transport = await _verifyBeforeOn(selected, operationId: operationId);
     SmartChargerStatus? observedOn;
     SmartChargerStatus? observedOff;
     SmartChargerException? failure;
@@ -301,6 +318,7 @@ class SmartChargerService {
         transport,
         on: true,
         toggleAfter: const Duration(seconds: 5),
+        operationId: operationId,
       );
       final deadline = _clock().add(const Duration(seconds: 4));
       while (!_clock().isAfter(deadline)) {
@@ -350,6 +368,12 @@ class SmartChargerService {
         code: 'relayUnverified',
       );
     }
+    if (transport == ShellyTransport.lan) {
+      await ServerSmartChargerService().releaseDeviceControl(
+        deviceId: selected.deviceId,
+        operationId: operationId,
+      );
+    }
     final failureError = failure;
     if (failureError != null) throw failureError;
     return ShellySafetyTestResult(
@@ -368,6 +392,15 @@ class SmartChargerService {
     final status = await _getStatus(profile);
     await _enforceSafety(profile, status);
     return status;
+  }
+
+  /// Used before deleting a Direct profile. A connection profile is safety
+  /// critical while a session is active or the relay state is uncertain.
+  Future<bool> hasActiveOrUnknownRelay() async {
+    final active = await _readActive();
+    final uncertain =
+        (await _preferences()).getBool(_uncertainRelayKey) == true;
+    return uncertain || (active != null && !active.state.isTerminal);
   }
 
   Future<void> _enforceSafety(
@@ -432,6 +465,18 @@ class SmartChargerService {
     ShellyConnectionProfile selected,
   ) async {
     try {
+      if (selected.hasCloud) {
+        throw const SmartChargerException(
+          'Dữ liệu Shelly Cloud phải được đọc qua dịch vụ bảo mật.',
+          code: 'serverControlRequired',
+        );
+      }
+      if (!selected.hasCloud) {
+        throw const SmartChargerException(
+          'Shelly Cloud chưa được cấu hình.',
+          code: 'notConfigured',
+        );
+      }
       final result = await _translate(() => _cloud.getStatus(selected));
       _lastTransport = ShellyTransport.cloud;
       return result;
@@ -452,7 +497,10 @@ class SmartChargerService {
   }
 
   Future<ShellyTransport> _verifyBeforeOn(
-    ShellyConnectionProfile profile,
+    ShellyConnectionProfile profile, {
+    required String operationId,
+    bool allowRelayOn = false,
+  }
   ) async {
     if ((await _preferences()).getBool(_uncertainRelayKey) == true) {
       throw const SmartChargerException(
@@ -460,7 +508,19 @@ class SmartChargerService {
         code: 'uncertainRelayState',
       );
     }
+    if (profile.hasCloud) {
+      throw const SmartChargerException(
+        'Điều khiển Cloud phải đi qua dịch vụ bảo mật.',
+        code: 'serverControlRequired',
+      );
+    }
     try {
+      if (!profile.hasCloud) {
+        throw const SmartChargerException(
+          'Shelly Cloud chưa được cấu hình.',
+          code: 'notConfigured',
+        );
+      }
       final snapshot = await getCloudSnapshot(profile: profile);
       if (!snapshot.powerMeterFieldsPresent) {
         throw const SmartChargerException(
@@ -474,7 +534,7 @@ class SmartChargerService {
           code: 'safeBootUnverified',
         );
       }
-      if (snapshot.status.relay) {
+      if (snapshot.status.relay && !allowRelayOn) {
         throw const SmartChargerException(
           'Relay đang ON; hãy xác minh phiên hiện tại trước khi bắt đầu lại.',
           code: 'activeSessionConflict',
@@ -491,9 +551,15 @@ class SmartChargerService {
       final generation = int.tryParse(
         info['gen']?.toString().replaceAll(RegExp(r'[^0-9]'), '') ?? '',
       );
+      if ((model?.isEmpty ?? true) && generation == null) {
+        throw const SmartChargerException(
+          'Không nhận diện được model Shelly trên LAN.',
+          code: 'unsupportedDevice',
+        );
+      }
       if (model != 'S3PL-00112EU' || generation != 3) {
         throw const SmartChargerException(
-          'Shelly không đúng Plug S Gen3.',
+          'Thiết bị không phải Shelly Plug S Gen3.',
           code: 'unsupportedDevice',
         );
       }
@@ -505,6 +571,15 @@ class SmartChargerService {
           code: 'safeBootUnverified',
         );
       }
+      final hasRequiredMeter = await _translate(
+        () => _lan.hasRequiredPowerMeter(profile),
+      );
+      if (!hasRequiredMeter) {
+        throw const SmartChargerException(
+          'Shelly không trả đủ trường đo công suất, điện áp, dòng và điện năng.',
+          code: 'powerMeterUnavailable',
+        );
+      }
       final status = await _translate(() => _lan.getStatus(profile));
       if (status.voltageV <= 0) {
         throw const SmartChargerException(
@@ -512,12 +587,16 @@ class SmartChargerService {
           code: 'powerMeterUnavailable',
         );
       }
-      if (status.relay) {
+      if (status.relay && !allowRelayOn) {
         throw const SmartChargerException(
           'Relay đang ON; hãy xác minh phiên hiện tại trước khi bắt đầu lại.',
           code: 'activeSessionConflict',
         );
       }
+      await ServerSmartChargerService().authorizeDeviceControl(
+        deviceId: profile.deviceId,
+        operationId: operationId,
+      );
       await _clearUncertainRelay();
       return ShellyTransport.lan;
     }
@@ -530,6 +609,12 @@ class SmartChargerService {
     Duration? toggleAfter,
     String? operationId,
   }) async {
+    if (transport == ShellyTransport.cloud) {
+      throw const SmartChargerException(
+        'Lệnh Shelly Cloud chỉ được gửi qua dịch vụ bảo mật.',
+        code: 'serverControlRequired',
+      );
+    }
     if (transport == ShellyTransport.cloud) {
       await _translate(
         () => _cloud.setSwitch(
@@ -588,9 +673,10 @@ class SmartChargerService {
         code: 'notReadyForControl',
       );
     }
-    final transport = await _verifyBeforeOn(profile);
+    final operationId = '${now.toUtc().microsecondsSinceEpoch}-${profile.deviceId}';
+    final transport = await _verifyBeforeOn(profile, operationId: operationId);
     final session = SmartChargingSession(
-      sessionId: '${now.toUtc().microsecondsSinceEpoch}-${profile.deviceId}',
+      sessionId: operationId,
       vehicleId: plan.vehicleId,
       state: ChargingSessionState.arming,
       strategy: strategy,
@@ -651,6 +737,12 @@ class SmartChargerService {
         if (!status.relay) {
           await _clearActive();
           await _clearUncertainRelay();
+          if (transport == ShellyTransport.lan) {
+            await ServerSmartChargerService().releaseDeviceControl(
+              deviceId: profile.deviceId,
+              operationId: session.sessionId,
+            );
+          }
           rethrow;
         }
       } on SmartChargerException {
@@ -735,7 +827,13 @@ class SmartChargerService {
         code: 'uncertainRelayState',
       );
     }
-    final transport = _lastTransport ?? await _verifyBeforeOn(profile);
+    // Re-run the live safety/ownership authorization before every ON-like
+    // operation; a cached transport is not authorization to rearm later.
+    final transport = await _verifyBeforeOn(
+      profile,
+      operationId: session.sessionId,
+      allowRelayOn: true,
+    );
     try {
       await _setSwitchAtTransport(
         profile,
@@ -830,6 +928,12 @@ class SmartChargerService {
     );
     await _clearActive();
     await _clearUncertainRelay();
+    if (status.transport == ShellyTransport.lan) {
+      await ServerSmartChargerService().releaseDeviceControl(
+        deviceId: profile.deviceId,
+        operationId: active.sessionId,
+      );
+    }
     return stopped;
   }
 
@@ -1051,12 +1155,15 @@ class SmartChargerService {
       );
 
   Future<void> _bestEffortOff(ShellyConnectionProfile profile) async {
-    final operations = <Future<void>>[
-      _cloud
-          .setSwitch(profile, on: false)
-          .then<void>((_) {})
-          .catchError((_) {}),
-    ];
+    final operations = <Future<void>>[];
+    if (profile.hasCloud) {
+      operations.add(
+        _cloud
+            .setSwitch(profile, on: false)
+            .then<void>((_) {})
+            .catchError((_) {}),
+      );
+    }
     if (profile.hasLan) {
       operations.add(_lan.setSwitch(profile, on: false).catchError((_) {}));
     }

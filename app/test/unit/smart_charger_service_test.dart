@@ -428,7 +428,7 @@ void main() {
   });
 
   test(
-    'ambiguous Cloud ON never retries through LAN and remains guarded',
+    'Cloud control is blocked in the mobile process before relay commands',
     () async {
       SharedPreferences.setMockInitialValues({});
       final cloud = _FakeCloud(fail: true);
@@ -454,12 +454,13 @@ void main() {
           isA<SmartChargerException>().having(
             (error) => error.code,
             'code',
-            'uncertainRelayState',
+            'serverControlRequired',
           ),
         ),
       );
       expect(lan.onCount, 0);
-      expect(cloud.offCount, greaterThan(0));
+      expect(cloud.onCount, 0);
+      expect(cloud.offCount, 0);
     },
   );
 
@@ -495,7 +496,7 @@ void main() {
     },
   );
 
-  test('unverified readback sends OFF and returns timerNotArmed', () async {
+  test('Cloud readback cannot trigger client-side relay commands', () async {
     SharedPreferences.setMockInitialValues({});
     var now = DateTime(2026, 1, 1, 12);
     final cloud = _FakeCloud(statusFails: true);
@@ -522,16 +523,17 @@ void main() {
         isA<SmartChargerException>().having(
           (error) => error.code,
           'code',
-          'timerNotArmed',
+          'serverControlRequired',
         ),
       ),
     );
-    expect(cloud.offCount, greaterThan(0));
-    expect(lan.lastOn, isFalse);
+    expect(cloud.onCount, 0);
+    expect(cloud.offCount, 0);
+    expect(lan.onCount, 0);
   });
 
   test(
-    'direct arm is idempotent and rejects a competing active session',
+    'direct client arm rejects Cloud profile before creating a session',
     () async {
       SharedPreferences.setMockInitialValues({});
       final cloud = _FakeCloud();
@@ -548,26 +550,17 @@ void main() {
         estimatedCapacityWh: 2400,
         predictionSource: 'ai_model',
       );
-      final first = await service.armSmartCharge(
-        plan,
-        idempotencyKey: 'same-command',
-      );
-      final duplicate = await service.armSmartCharge(
-        plan,
-        idempotencyKey: 'same-command',
-      );
-      expect(duplicate.sessionId, first.sessionId);
-      expect(cloud.onCount, 1);
       await expectLater(
-        service.armSmartCharge(plan, idempotencyKey: 'different-command'),
+        service.armSmartCharge(plan, idempotencyKey: 'same-command'),
         throwsA(
           isA<SmartChargerException>().having(
             (error) => error.code,
             'code',
-            'activeSessionConflict',
+            'serverControlRequired',
           ),
         ),
       );
+      expect(cloud.onCount, 0);
     },
   );
 }

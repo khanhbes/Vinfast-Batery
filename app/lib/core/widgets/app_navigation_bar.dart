@@ -71,7 +71,11 @@ class AppNavigationBar extends StatelessWidget {
                         child: InkWell(
                         key: i == 1
                             ? GuideRegistry.keyChargeTab
-                            : (i == 3 ? GuideRegistry.keyMoreSettingsTab : null),
+                            : (i == 2
+                                  ? GuideRegistry.keyHistoryTab
+                                  : (i == 3
+                                        ? GuideRegistry.keyMoreSettingsTab
+                                        : null)),
                         onTap: () => onSelected(i),
                         borderRadius:
                             BorderRadius.circular(CockpitRadius.medium),

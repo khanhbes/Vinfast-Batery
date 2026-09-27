@@ -181,6 +181,8 @@ class DeviceBinding:
     updated_at: datetime = field(default_factory=utcnow)
     vehicle_id: str | None = None
     shared: bool = False
+    # Authenticated account context, populated by the repository only.
+    owner_uid: str | None = field(default=None, repr=False, compare=False)
 
     def to_dict(self) -> dict[str, Any]:
         return {

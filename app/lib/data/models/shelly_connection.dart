@@ -18,8 +18,8 @@ enum SmartChargerErrorCode {
 
 class ShellyConnectionProfile {
   const ShellyConnectionProfile({
-    required this.cloudHost,
-    required this.cloudAuthKey,
+    this.cloudHost = '',
+    this.cloudAuthKey = '',
     required this.deviceId,
     this.deviceName = 'Shelly Plug S Gen3',
     this.model = 'S3PL-00112EU',
@@ -49,22 +49,44 @@ class ShellyConnectionProfile {
   }
 
   bool get hasLan => lanAddress?.trim().isNotEmpty == true;
+  bool get hasCloud =>
+      cloudHost.trim().isNotEmpty && cloudAuthKey.trim().isNotEmpty;
+
+  ShellyConnectionProfile copyWith({
+    String? cloudHost,
+    String? cloudAuthKey,
+    String? deviceId,
+    String? deviceName,
+    String? model,
+    String? firmware,
+    String? lanAddress,
+    String? localUsername,
+    String? localPassword,
+  }) => ShellyConnectionProfile(
+    cloudHost: cloudHost ?? this.cloudHost,
+    cloudAuthKey: cloudAuthKey ?? this.cloudAuthKey,
+    deviceId: deviceId ?? this.deviceId,
+    deviceName: deviceName ?? this.deviceName,
+    model: model ?? this.model,
+    firmware: firmware ?? this.firmware,
+    lanAddress: lanAddress ?? this.lanAddress,
+    localUsername: localUsername ?? this.localUsername,
+    localPassword: localPassword ?? this.localPassword,
+  );
 
   String? validate() {
-    final uri = cloudUri;
-    if (uri == null ||
-        uri.host.isEmpty ||
-        uri.scheme != 'https' ||
-        !uri.host.toLowerCase().endsWith('shelly.cloud')) {
-      return 'Server URI phải dùng HTTPS và thuộc tên miền shelly.cloud.';
-    }
-    if (cloudAuthKey.trim().isEmpty) {
-      return 'Cloud Authorization Key còn trống.';
+    if (hasCloud) {
+      final uri = cloudUri;
+      if (uri == null ||
+          uri.host.isEmpty ||
+          uri.scheme != 'https' ||
+          !uri.host.toLowerCase().endsWith('shelly.cloud')) {
+        return 'Server URI phải dùng HTTPS và thuộc tên miền shelly.cloud.';
+      }
+    } else if (!hasLan) {
+      return 'Cần cấu hình Shelly Cloud hoặc địa chỉ LAN nội bộ.';
     }
     if (deviceId.trim().isEmpty) return 'Device ID còn trống.';
-    if (model.trim().toUpperCase() != 'S3PL-00112EU') {
-      return 'Chỉ hỗ trợ Shelly Plug S Gen3 (S3PL-00112EU).';
-    }
     if (hasLan && !isAllowedLanAddress(lanAddress!)) {
       return 'LAN chỉ chấp nhận IP riêng/link-local hoặc hostname .local.';
     }
@@ -128,6 +150,8 @@ class DiscoveredShellyDevice {
     this.currentPowerW,
     this.relayState,
     this.temperatureC,
+    this.powerMeterFieldsPresent = false,
+    this.powerMeterFields = const {},
   });
 
   final String id;
@@ -141,11 +165,30 @@ class DiscoveredShellyDevice {
   final bool? relayState;
   final double? temperatureC;
 
+  /// Raw `switch:0` fields observed in a live LAN status response.  Presence,
+  /// rather than a non-zero value, is the safety evidence: an unplugged load
+  /// legitimately reports zero W/A.
+  final Set<String> powerMeterFields;
+  final bool powerMeterFieldsPresent;
+
   bool get isPlugSGen3 {
     final value = model.toLowerCase();
     return generation == 3 &&
         (value.contains('plugs') || value == 's3pl-00112eu');
   }
+
+  static const requiredPowerMeterFields = {
+    'apower',
+    'voltage',
+    'current',
+    'aenergy',
+  };
+
+  bool get hasPowerMetering =>
+      powerMeterFieldsPresent ||
+      powerMeterFields.containsAll(requiredPowerMeterFields);
+
+  bool get isCompatible => isPlugSGen3 || hasPowerMetering;
 
   DiscoveredShellyDevice copyWith({
     String? id,
@@ -158,6 +201,8 @@ class DiscoveredShellyDevice {
     double? currentPowerW,
     bool? relayState,
     double? temperatureC,
+    bool? powerMeterFieldsPresent,
+    Set<String>? powerMeterFields,
   }) {
     return DiscoveredShellyDevice(
       id: id ?? this.id,
@@ -170,6 +215,9 @@ class DiscoveredShellyDevice {
       currentPowerW: currentPowerW ?? this.currentPowerW,
       relayState: relayState ?? this.relayState,
       temperatureC: temperatureC ?? this.temperatureC,
+      powerMeterFieldsPresent:
+          powerMeterFieldsPresent ?? this.powerMeterFieldsPresent,
+      powerMeterFields: powerMeterFields ?? this.powerMeterFields,
     );
   }
 }

@@ -5,11 +5,11 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../core/constants/app_constants.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/services/api_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_motion.dart';
+import '../../core/utils/app_error_formatter.dart';
 import 'smart_charging_control_screen.dart';
 
 String _catalogLabel(String key, String fallback) =>
@@ -344,7 +344,8 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
       } catch (e2) {
         if (mounted) {
           setState(() {
-            _error = e.toString();
+            _error =
+                'Chưa thể tải danh sách tính năng AI. Vui lòng thử lại sau.';
             _loading = false;
           });
         }
@@ -457,7 +458,7 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'AI Models',
+                            'Dự báo cho xe',
                             style: TextStyle(
                               color: AppColors.textPrimary,
                               fontSize: 32,
@@ -465,7 +466,7 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
                             ),
                           ),
                           Text(
-                            'Cores and Intelligence Engine',
+                            'Kết quả dự kiến từ dữ liệu của xe',
                             style: TextStyle(
                               color: AppColors.textSecondary,
                               fontSize: 14,
@@ -514,7 +515,7 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Không kết nối được server',
+                                'Chưa tải được dự báo',
                                 style: TextStyle(
                                   color: AppColors.error,
                                   fontWeight: FontWeight.w700,
@@ -522,7 +523,7 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
                                 ),
                               ),
                               Text(
-                                AppConstants.apiBaseUrl,
+                                'Kiểm tra kết nối rồi thử lại.',
                                 style: TextStyle(
                                   color: AppColors.textSecondary,
                                   fontSize: 11,
@@ -901,10 +902,8 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      model.lastError!,
+                      AppErrorFormatter.format(model.lastError),
                       style: TextStyle(color: AppColors.error, fontSize: 11),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
@@ -970,7 +969,9 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
         : ref.read(vehicleProvider(vehicleId)).value;
     if (vehicle == null || vehicleId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Hãy chọn một xe trước khi mở Smart Charge.')),
+        const SnackBar(
+          content: Text('Hãy chọn một xe trước khi mở Smart Charge.'),
+        ),
       );
       return;
     }

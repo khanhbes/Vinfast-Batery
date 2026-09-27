@@ -92,7 +92,10 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _locating = false);
-      _message(e.toString().replaceFirst('Exception: ', ''), error: true);
+      _message(
+        'Chưa thể lấy vị trí. Kiểm tra quyền vị trí hoặc nhập điểm đi.',
+        error: true,
+      );
     }
   }
 
@@ -136,7 +139,10 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _routing = false);
-      _message(e.toString().replaceFirst('Exception: ', ''), error: true);
+      _message(
+        'Chưa thể lập lộ trình. Kiểm tra điểm đi, điểm đến và kết nối mạng.',
+        error: true,
+      );
     }
   }
 
@@ -845,7 +851,8 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
       if (mounted) {
         setState(() {
           _loading = false;
-          _error = e.toString();
+          _error =
+              'Không tìm được địa điểm. Thử từ khóa khác hoặc kiểm tra kết nối.';
         });
       }
     }

@@ -29,13 +29,14 @@ void main() {
     expect(find.text('HỖ TRỢ & TÀI KHOẢN'), findsOneWidget);
 
     // Key action tiles
-    expect(find.text('Garage xe của tôi'), findsOneWidget);
+    expect(find.text('Xe của tôi'), findsOneWidget);
     expect(find.text('Sạc thông minh Shelly'), findsOneWidget);
-    expect(find.text('Lộ trình sạc'), findsOneWidget);
+    expect(find.text('Lập hành trình'), findsOneWidget);
     expect(find.text('Trợ lý AI & Dự báo Pin'), findsOneWidget);
     expect(find.text('Bảo dưỡng xe'), findsOneWidget);
     expect(find.text('Cài đặt hệ thống'), findsOneWidget);
-    expect(find.text('Cẩm nang & Cứu hộ 24/7'), findsOneWidget);
+    expect(find.text('Hướng dẫn sử dụng'), findsOneWidget);
+    expect(find.textContaining('Cứu hộ 24/7'), findsNothing);
     expect(find.text('Trung tâm thông báo'), findsOneWidget);
 
     // Sign out button & branding footer

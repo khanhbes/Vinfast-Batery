@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_motion.dart';
+import '../../core/utils/app_error_formatter.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/error_state.dart';
 import '../../core/widgets/loading_skeleton.dart';
@@ -385,9 +386,9 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lỗi: $e'), backgroundColor: AppColors.error),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(AppErrorFormatter.format(e))));
       }
     }
   }
@@ -439,9 +440,9 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lỗi: $e'), backgroundColor: AppColors.error),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(AppErrorFormatter.format(e))));
       }
     }
   }
@@ -489,7 +490,7 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('Lỗi: $e'),
+                  content: Text(AppErrorFormatter.format(e)),
                   backgroundColor: AppColors.error,
                 ),
               );

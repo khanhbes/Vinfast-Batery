@@ -159,7 +159,9 @@ class AppErrorReporter {
     }
     notifier.value = List.unmodifiable(_entries);
 
-    debugPrint('🚨 [$source] $cleanMessage');
+    if (kDebugMode) {
+      debugPrint('[AppError] $source (${error.runtimeType}).');
+    }
   }
 
   /// Clears all recorded error entries.

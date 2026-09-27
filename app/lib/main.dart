@@ -15,7 +15,6 @@ import 'core/services/app_error_reporter.dart';
 import 'data/services/charging_prediction_adapter.dart';
 import 'data/services/shelly_clients.dart';
 import 'data/services/smart_charger_service.dart';
-import 'core/services/firebase_bootstrap_coordinator.dart';
 
 /// Provider toàn cục cho trạng thái recovery cần hiển thị dialog
 final pendingRecoveryProvider = StateProvider<String?>((ref) => null);
@@ -87,49 +86,9 @@ void main() async {
   await runZonedGuarded(
     () async {
       // Khởi động Firebase trong nền (AuthGate sẽ await phối hợp hiển thị splash/retry)
-      unawaited(
-        () async {
-          try {
-            await FirebaseBootstrapCoordinator.ensureInitialized();
-          } catch (e, stack) {
-            AppErrorReporter.report(e, stack, source: 'FirebaseBootstrap');
-          }
-        }(),
-      );
-
       // Kiểm tra session tracking chưa kết thúc (crash recovery)
-      String? pendingRecovery;
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        final customUrl = prefs.getString('custom_api_base_url');
-        if (customUrl != null && customUrl.isNotEmpty) {
-          AppConstants.setCustomApiBaseUrl(customUrl);
-        }
-        final chargeActive = prefs.getBool('charge_active') ?? false;
-        final tripActive = prefs.getBool('trip_active') ?? false;
-        if (chargeActive) {
-          pendingRecovery = 'charge';
-        } else if (tripActive) {
-          pendingRecovery = 'trip';
-        }
-      } catch (e, stack) {
-        AppErrorReporter.report(e, stack, source: 'CrashRecovery');
-      }
-
       // Khởi tạo Notification Service trong nền (không chặn first frame)
-      unawaited(
-        NotificationService().initialize().catchError((e, stack) {
-          AppErrorReporter.report(e, stack, source: 'NotificationService');
-        }),
-      );
-
       // Khởi tạo Background Service trong nền (không chặn first frame)
-      unawaited(
-        BackgroundServiceConfig.initialize().catchError((e, stack) {
-          AppErrorReporter.report(e, stack, source: 'BackgroundService');
-        }),
-      );
-
       // Lock to portrait mode
       SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
 
@@ -145,10 +104,7 @@ void main() async {
 
       runApp(
         ProviderScope(
-          overrides: [
-            pendingRecoveryProvider.overrideWith((ref) => pendingRecovery),
-          ],
-          child: const VinFastBatteryApp(),
+          child: const _DeferredStartup(child: VinFastBatteryApp()),
         ),
       );
     },
@@ -158,4 +114,60 @@ void main() async {
       AppPopup.showError('Đã bắt được lỗi không mong muốn.');
     },
   );
+}
+
+/// Defer disk and plugin initialization until the app's first frame is visible.
+class _DeferredStartup extends ConsumerStatefulWidget {
+  const _DeferredStartup({required this.child});
+
+  final Widget child;
+
+  @override
+  ConsumerState<_DeferredStartup> createState() => _DeferredStartupState();
+}
+
+class _DeferredStartupState extends ConsumerState<_DeferredStartup> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_initializeDeferredServices());
+    });
+  }
+
+  Future<void> _initializeDeferredServices() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final customUrl = prefs.getString('custom_api_base_url');
+      if (customUrl != null && customUrl.isNotEmpty) {
+        AppConstants.setCustomApiBaseUrl(customUrl);
+      }
+      final chargeActive = prefs.getBool('charge_active') ?? false;
+      final tripActive = prefs.getBool('trip_active') ?? false;
+      final recovery = chargeActive
+          ? 'charge'
+          : tripActive
+          ? 'trip'
+          : null;
+      if (mounted && recovery != null) {
+        ref.read(pendingRecoveryProvider.notifier).state = recovery;
+      }
+    } catch (error, stack) {
+      AppErrorReporter.report(error, stack, source: 'CrashRecovery');
+    }
+
+    unawaited(
+      NotificationService().initialize().catchError((error, stack) {
+        AppErrorReporter.report(error, stack, source: 'NotificationService');
+      }),
+    );
+    unawaited(
+      BackgroundServiceConfig.initialize().catchError((error, stack) {
+        AppErrorReporter.report(error, stack, source: 'BackgroundService');
+      }),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

@@ -11,6 +11,7 @@ const Settings = lazy(() => import('@/pages/Settings'));
 const DataExplorer = lazy(() => import('@/pages/DataExplorer'));
 const VehicleCatalog = lazy(() => import('@/pages/VehicleCatalog'));
 const DeveloperHub = lazy(() => import('@/pages/DeveloperHub'));
+const ShellyGateway = lazy(() => import('@/pages/ShellyGateway'));
 import Login from '@/pages/Login';
 import { Toaster } from '@/components/ui/sonner';
 import { auth } from '@/firebase';
@@ -52,6 +53,7 @@ function AppContent({ user, loading, sessionRevision }: { user: User | null; loa
               <Route path="/develop" element={<DevelopModeGate><DeveloperHub /></DevelopModeGate>} />
               <Route path="/data" element={<DevelopModeGate><DataExplorer /></DevelopModeGate>} />
               <Route path="/catalog" element={<VehicleCatalog />} />
+              <Route path="/shelly" element={<ShellyGateway />} />
               <Route path="/ai" element={<DevelopModeGate><AiCenter /></DevelopModeGate>} />
               <Route path="/audit" element={<DevelopModeGate><AuditSystem /></DevelopModeGate>} />
               <Route path="/settings" element={<DevelopModeGate><Settings /></DevelopModeGate>} />

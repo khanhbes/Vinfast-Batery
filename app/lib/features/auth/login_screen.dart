@@ -1,16 +1,14 @@
-import 'package:flutter/foundation.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import '../../core/services/auth_attempt_limiter.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/theme/app_motion.dart';
-import '../../core/theme/cockpit_design_system.dart';
-import '../../core/widgets/app_popup.dart';
-import '../../core/widgets/ev_energy_animations.dart';
-import '../../navigation/app_navigation.dart';
+import 'password_reset_screen.dart';
 import 'register_screen.dart';
 
-/// Login Screen — Cockpit Design System Edition
-/// Minimalist EV battery theme, no generic icons, custom 2D energy animations.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -21,19 +19,46 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailCtrl = TextEditingController();
-  final _passCtrl = TextEditingController();
+  final _passwordCtrl = TextEditingController();
+  final _limiter = AuthAttemptLimiter();
   bool _loading = false;
-  bool _obscure = true;
+  bool _obscurePassword = true;
+  bool _autofillEnabled = false;
+  Duration _remaining = Duration.zero;
+  Timer? _cooldownTimer;
   String? _error;
 
   @override
+  void initState() {
+    super.initState();
+    _refreshCooldown();
+  }
+
+  @override
   void dispose() {
+    _cooldownTimer?.cancel();
     _emailCtrl.dispose();
-    _passCtrl.dispose();
+    _passwordCtrl.dispose();
     super.dispose();
   }
 
+  Future<void> _refreshCooldown() async {
+    final remaining = await _limiter.remaining();
+    if (!mounted) return;
+    setState(() => _remaining = remaining);
+    _cooldownTimer?.cancel();
+    if (remaining > Duration.zero) {
+      _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
+        final next = await _limiter.remaining();
+        if (!mounted) return;
+        setState(() => _remaining = next);
+        if (next <= Duration.zero) _cooldownTimer?.cancel();
+      });
+    }
+  }
+
   Future<void> _submit() async {
+    if (_loading || _remaining > Duration.zero) return;
     if (!_formKey.currentState!.validate()) return;
     HapticFeedback.lightImpact();
     setState(() {
@@ -43,324 +68,179 @@ class _LoginScreenState extends State<LoginScreen> {
 
     final result = await AuthService().login(
       email: _emailCtrl.text.trim(),
-      password: _passCtrl.text,
+      password: _passwordCtrl.text,
     );
 
     if (!mounted) return;
-    setState(() => _loading = false);
-
     if (result['success'] == true) {
-      AppPopup.showSuccess('Đăng nhập thành công');
-    } else {
-      final msg = result['error'] ?? 'Đăng nhập thất bại';
-      setState(() => _error = msg);
-      AppPopup.showError(msg);
-    }
-  }
-
-  Future<void> _forgotPassword() async {
-    final email = _emailCtrl.text.trim();
-    if (email.isEmpty || !email.contains('@')) {
-      AppPopup.showError('Vui lòng nhập email trước');
+      TextInput.finishAutofillContext(shouldSave: true);
+      await _limiter.reset();
+      setState(() => _loading = false);
       return;
     }
-    final result = await AuthService().resetPassword(email);
-    if (!mounted) return;
-    if (result['success'] == true) {
-      AppPopup.showSuccess('Email đặt lại mật khẩu đã được gửi');
-    } else {
-      AppPopup.showError(result['error'] ?? 'Không gửi được email');
+
+    final code = result['code']?.toString();
+    if (code == 'invalid-credential' ||
+        code == 'wrong-password' ||
+        code == 'user-not-found') {
+      _remaining = await _limiter.recordInvalidCredential();
+    } else if (code == 'too-many-requests') {
+      await _limiter.applyCooldown(const Duration(seconds: 60));
+      _remaining = await _limiter.remaining();
     }
+
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _error = _remaining > Duration.zero
+          ? 'Bạn đã thử nhiều lần. Vui lòng đợi ${_remaining.inSeconds} giây.'
+          : (result['error']?.toString() ??
+                'Chưa thể đăng nhập. Vui lòng thử lại.');
+    });
+    await _refreshCooldown();
   }
 
-  InputDecoration _inputDecoration({
-    required String label,
-    String? hint,
-    Widget? suffix,
-  }) {
-    return InputDecoration(
-      labelText: label,
-      labelStyle: CockpitTypography.label(
-        fontSize: 13,
-        color: CockpitColors.muted,
-      ),
-      hintText: hint,
-      hintStyle: CockpitTypography.body(
-        fontSize: 13,
-        color: CockpitColors.dim,
-      ),
-      suffixIcon: suffix,
-      filled: true,
-      fillColor: CockpitColors.surface,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(CockpitRadius.small),
-        borderSide: const BorderSide(color: CockpitColors.border),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(CockpitRadius.small),
-        borderSide: const BorderSide(color: CockpitColors.border),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(CockpitRadius.small),
-        borderSide: const BorderSide(
-          color: CockpitColors.emeraldStrong,
-          width: 1.5,
-        ),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(CockpitRadius.small),
-        borderSide: BorderSide(
-          color: CockpitColors.danger.withValues(alpha: 0.6),
-        ),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(CockpitRadius.small),
-        borderSide: const BorderSide(
-          color: CockpitColors.danger,
-          width: 1.5,
-        ),
+  Future<void> _openPasswordReset() async {
+    await Navigator.of(context).push<void>(
+      AppMotion.pageRoute<void>(
+        PasswordResetScreen(initialEmail: _emailCtrl.text.trim()),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final canSubmit = !_loading && _remaining <= Duration.zero;
     return Scaffold(
-      backgroundColor: CockpitColors.background,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 28),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Animated Energy Orb Header (Replaces static icon)
-                  const EvEnergyOrb(
-                    size: 80,
-                    showParticles: true,
-                  ).appScalePop(),
-                  const SizedBox(height: 20),
-
-                  Text(
-                    'EV Battery',
-                    style: CockpitTypography.heading(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w800,
-                      color: CockpitColors.text,
-                      letterSpacing: 0.5,
-                    ),
-                  ).appFadeSlideIn(index: 1),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Hệ thống quản lý năng lượng xe điện thông minh',
-                    textAlign: TextAlign.center,
-                    style: CockpitTypography.body(
-                      fontSize: 13,
-                      color: CockpitColors.muted,
-                    ),
-                  ).appFadeSlideIn(index: 1),
-
-                  const SizedBox(height: 16),
-                  const SizedBox(
-                    width: 120,
-                    child: EvGlowLine(height: 1.2),
-                  ).appFadeSlideIn(index: 1),
-                  const SizedBox(height: 28),
-
-                  // Error banner
-                  if (_error != null) ...[
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: CockpitColors.danger.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(CockpitRadius.small),
-                        border: Border.all(
-                          color: CockpitColors.danger.withValues(alpha: 0.35),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: AutofillGroup(
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      TextFormField(
+                        controller: _emailCtrl,
+                        keyboardType: TextInputType.emailAddress,
+                        textInputAction: TextInputAction.next,
+                        autofillHints: _autofillEnabled
+                            ? const [
+                                AutofillHints.username,
+                                AutofillHints.email,
+                              ]
+                            : null,
+                        onTap: () {
+                          if (!_autofillEnabled) {
+                            setState(() => _autofillEnabled = true);
+                          }
+                        },
+                        autocorrect: false,
+                        decoration: const InputDecoration(
+                          labelText: 'Email',
+                          border: OutlineInputBorder(),
                         ),
+                        validator: (value) {
+                          final email = value?.trim() ?? '';
+                          if (email.isEmpty) return 'Nhập email';
+                          if (!RegExp(
+                            r'^[^\s@]+@[^\s@]+\.[^\s@]+$',
+                          ).hasMatch(email)) {
+                            return 'Email chưa đúng định dạng';
+                          }
+                          return null;
+                        },
                       ),
-                      child: Text(
-                        _error!,
-                        style: CockpitTypography.body(
-                          fontSize: 12.5,
-                          color: CockpitColors.danger,
-                        ),
-                      ),
-                    ).appFadeSlideIn(slide: 0),
-                    const SizedBox(height: 16),
-                  ],
-
-                  // Email Input
-                  TextFormField(
-                    controller: _emailCtrl,
-                    keyboardType: TextInputType.emailAddress,
-                    onChanged: (_) { if (_error != null) setState(() => _error = null); },
-                    style: CockpitTypography.body(
-                      fontSize: 14,
-                      color: CockpitColors.text,
-                    ),
-                    decoration: _inputDecoration(
-                      label: 'Email',
-                      hint: 'name@example.com',
-                    ),
-                    validator: (v) {
-                      if (v == null || v.trim().isEmpty) return 'Nhập email';
-                      if (!v.contains('@')) return 'Email không hợp lệ';
-                      return null;
-                    },
-                  ).appFadeSlideIn(index: 2),
-                  const SizedBox(height: 14),
-
-                  // Password Input
-                  TextFormField(
-                    controller: _passCtrl,
-                    obscureText: _obscure,
-                    style: CockpitTypography.body(
-                      fontSize: 14,
-                      color: CockpitColors.text,
-                    ),
-                    decoration: _inputDecoration(
-                      label: 'Mật khẩu',
-                      hint: 'Tối thiểu 6 ký tự',
-                      suffix: IconButton(
-                        icon: Icon(
-                          _obscure ? Icons.visibility_off : Icons.visibility,
-                          color: CockpitColors.muted,
-                          size: 20,
-                        ),
-                        onPressed: () => setState(() => _obscure = !_obscure),
-                      ),
-                    ),
-                    validator: (v) {
-                      if (v == null || v.isEmpty) return 'Nhập mật khẩu';
-                      if (v.length < 6) return 'Tối thiểu 6 ký tự';
-                      return null;
-                    },
-                  ).appFadeSlideIn(index: 2),
-
-                  // Forgot password
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: _forgotPassword,
-                      child: Text(
-                        'Quên mật khẩu?',
-                        style: CockpitTypography.label(
-                          fontSize: 12.5,
-                          color: CockpitColors.emeraldStrong,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ).appFadeSlideIn(index: 2),
-                  const SizedBox(height: 12),
-
-                  // Submit Button with EvChargingWave on loading
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(
-                      minWidth: double.infinity,
-                      minHeight: 50,
-                    ),
-                    child: ElevatedButton(
-                      onPressed: _loading ? null : _submit,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: CockpitColors.emeraldStrong,
-                        foregroundColor: CockpitColors.background,
-                        disabledBackgroundColor:
-                            CockpitColors.emeraldStrong.withValues(alpha: 0.4),
-                        shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(CockpitRadius.small),
-                        ),
-                        elevation: 0,
-                      ),
-                      child: _loading
-                          ? const Center(
-                              child: EvChargingWave(
-                                width: 56,
-                                height: 14,
-                                color: CockpitColors.background,
-                              ),
-                            )
-                          : Text(
-                              'Đăng nhập',
-                              style: CockpitTypography.heading(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                                color: CockpitColors.background,
-                              ),
+                      const SizedBox(height: 14),
+                      TextFormField(
+                        controller: _passwordCtrl,
+                        obscureText: _obscurePassword,
+                        textInputAction: TextInputAction.done,
+                        autofillHints: _autofillEnabled
+                            ? const [AutofillHints.password]
+                            : null,
+                        onTap: () {
+                          if (!_autofillEnabled) {
+                            setState(() => _autofillEnabled = true);
+                          }
+                        },
+                        onFieldSubmitted: canSubmit ? (_) => _submit() : null,
+                        decoration: InputDecoration(
+                          labelText: 'Mật khẩu',
+                          border: const OutlineInputBorder(),
+                          suffixIcon: IconButton(
+                            tooltip: _obscurePassword
+                                ? 'Hiện mật khẩu'
+                                : 'Ẩn mật khẩu',
+                            onPressed: () => setState(
+                              () => _obscurePassword = !_obscurePassword,
                             ),
-                    ),
-                  ).appTactile(enabled: !_loading).appFadeSlideIn(index: 3),
-                  const SizedBox(height: 24),
-
-                  // Register link with subtle separator
-                  const EvGlowLine(height: 1.0).appFadeSlideIn(index: 3),
-                  const SizedBox(height: 16),
-
-                  TextButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const RegisterScreen(),
-                        ),
-                      );
-                    },
-                    child: RichText(
-                      textScaler: MediaQuery.textScalerOf(context),
-                      textAlign: TextAlign.center,
-                      text: TextSpan(
-                        text: 'Chưa có tài khoản? ',
-                        style: CockpitTypography.body(
-                          fontSize: 13,
-                          color: CockpitColors.muted,
-                        ),
-                        children: [
-                          TextSpan(
-                            text: 'Đăng ký ngay',
-                            style: CockpitTypography.body(
-                              fontSize: 13,
-                              color: CockpitColors.emeraldStrong,
-                              fontWeight: FontWeight.w700,
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_off
+                                  : Icons.visibility,
                             ),
                           ),
-                        ],
+                        ),
+                        validator: (value) => value == null || value.isEmpty
+                            ? 'Nhập mật khẩu'
+                            : null,
                       ),
-                    ),
-                  ).appFadeSlideIn(index: 3),
-                  if (kDebugMode && !kReleaseMode) ...[
-                    const SizedBox(height: 8),
-                    TextButton.icon(
-                      onPressed: () {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const AppNavigation(),
-                          ),
-                        );
-                      },
-                      icon: const Icon(
-                        Icons.developer_mode_rounded,
-                        size: 16,
-                        color: CockpitColors.muted,
-                      ),
-                      label: Text(
-                        'Vào ứng dụng trực tiếp (QA Mode)',
-                        style: CockpitTypography.label(
-                          fontSize: 12,
-                          color: CockpitColors.muted,
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: _loading ? null : _openPasswordReset,
+                          child: const Text('Quên mật khẩu?'),
                         ),
                       ),
-                    ),
-                  ],
-                ],
+                      if (_error != null) ...[
+                        Semantics(
+                          liveRegion: true,
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Text(
+                              _error!,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: colors.error),
+                            ),
+                          ),
+                        ),
+                      ],
+                      FilledButton(
+                        onPressed: canSubmit ? _submit : null,
+                        child: _loading
+                            ? const SizedBox.square(
+                                dimension: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Text(
+                                _remaining > Duration.zero
+                                    ? 'Đợi ${_remaining.inSeconds} giây'
+                                    : 'Đăng nhập',
+                              ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextButton(
+                        onPressed: _loading
+                            ? null
+                            : () => Navigator.of(context).push<void>(
+                                AppMotion.pageRoute<void>(
+                                  const RegisterScreen(),
+                                ),
+                              ),
+                        child: const Text('Chưa có tài khoản? Đăng ký'),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),

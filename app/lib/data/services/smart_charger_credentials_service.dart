@@ -72,7 +72,12 @@ class SmartChargerCredentialsService {
     String? vehicleId,
     bool force = false,
   }) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    String? uid;
+    try {
+      uid = FirebaseAuth.instance.currentUser?.uid;
+    } on Object {
+      return null;
+    }
     if (uid == null) return null;
     final last = _lastServerSyncAt;
     if (!force &&

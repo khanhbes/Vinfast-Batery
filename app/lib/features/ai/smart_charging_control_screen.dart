@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
 
+import '../../core/providers/app_state_providers.dart';
 import '../../core/theme/app_tokens.dart';
 import '../../core/theme/cockpit_design_system.dart';
 import '../../core/widgets/app_popup.dart';
@@ -11,6 +13,7 @@ import '../../core/widgets/debug_error_sheet.dart';
 import '../../data/models/smart_charge_history.dart';
 import '../../data/models/smart_charging_session.dart';
 import '../smart_charging/smart_charger_setup_hub_screen.dart';
+import '../auth/auth_providers.dart';
 import 'controllers/smart_charging_controller.dart';
 import 'smart_charge_history_screen.dart';
 import 'widgets/active_charging_card_v2.dart';
@@ -79,6 +82,11 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
       smartChargingControllerProvider(args),
       (previous, next) => _showStateNotices(previous, next),
     );
+    ref.listen<int>(currentTabProvider, (previous, next) {
+      if (next == 1) {
+        controller.refresh();
+      }
+    });
     if (!_initialNoticesScheduled) {
       _initialNoticesScheduled = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -175,9 +183,13 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                   syncedAt: state.historySyncedAt,
                   onViewAll: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (_) => SmartChargeHistoryScreen(
-                        controller: controller,
-                        initialItems: state.history,
+                      builder: (_) => Consumer(
+                        builder: (context, routeRef, _) =>
+                            SmartChargeHistoryScreen(
+                              controller: controller,
+                              ownerUid: routeRef.watch(currentUidProvider),
+                              initialItems: state.history,
+                            ),
                       ),
                     ),
                   ),
@@ -193,9 +205,13 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                         borderRadius: const BorderRadius.vertical(
                           top: Radius.circular(28),
                         ),
-                        child: SmartChargeSessionDetailScreen(
-                          controller: controller,
-                          session: session,
+                        child: Consumer(
+                          builder: (context, routeRef, _) =>
+                              SmartChargeSessionDetailScreen(
+                                controller: controller,
+                                ownerUid: routeRef.watch(currentUidProvider),
+                                session: session,
+                              ),
                         ),
                       ),
                     ),
@@ -247,8 +263,13 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
         detail: detail,
         actionLabel: 'CHI TIẾT',
         persistent: persistent,
-        action: () =>
-            DebugErrorSheet.show(context, error: detail, source: 'SmartCharge'),
+        action: kDebugMode
+            ? () => DebugErrorSheet.show(
+                context,
+                error: detail,
+                source: 'SmartCharge',
+              )
+            : null,
       );
     });
   }

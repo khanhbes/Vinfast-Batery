@@ -96,11 +96,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
         ),
         content: const Text(
           'Bạn có chắc chắn muốn đăng xuất khỏi tài khoản trên thiết bị này?',
-          style: TextStyle(
-            color: Color(0xFF94A3B8),
-            fontSize: 14,
-            height: 1.4,
-          ),
+          style: TextStyle(color: Color(0xFF94A3B8), fontSize: 14, height: 1.4),
         ),
         actions: [
           TextButton(
@@ -182,11 +178,13 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
     final currentUser = Firebase.apps.isNotEmpty
         ? FirebaseAuth.instance.currentUser
         : null;
-    final displayName = _userData?['name'] ??
+    final displayName =
+        _userData?['name'] ??
         _userData?['displayName'] ??
         currentUser?.displayName ??
         'Chủ xe VinFast';
-    final contactInfo = _userData?['phone'] ??
+    final contactInfo =
+        _userData?['phone'] ??
         currentUser?.phoneNumber ??
         currentUser?.email ??
         'Hồ sơ đã kết nối';
@@ -213,14 +211,16 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
         const SizedBox(height: 20),
 
         // 2. SECTION: PHƯƠNG TIỆN & SẠC
-        const _SectionHeader(title: 'PHƯƠNG TIỆN & SẠC').appFadeSlideIn(index: 1),
+        const _SectionHeader(
+          title: 'PHƯƠNG TIỆN & SẠC',
+        ).appFadeSlideIn(index: 1),
         const SizedBox(height: 8),
         _GroupCard(
           children: [
             _ActionTile(
               icon: Icons.garage_rounded,
               iconColor: CockpitColors.emerald,
-              title: 'Garage xe của tôi',
+              title: 'Xe của tôi',
               subtitle: 'Quản lý xe sở hữu & thông số pin',
               onTap: () => Navigator.push(
                 context,
@@ -232,7 +232,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
               icon: Icons.power_rounded,
               iconColor: CockpitColors.info,
               title: 'Sạc thông minh Shelly',
-              subtitle: 'Kết nối ổ cắm WiFi & quản lý tự ngắt 80%',
+              subtitle: 'Kết nối và quản lý bộ sạc',
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -244,8 +244,8 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
             _ActionTile(
               icon: Icons.alt_route_rounded,
               iconColor: CockpitColors.amber,
-              title: 'Lộ trình sạc',
-              subtitle: 'Lập kế hoạch di chuyển theo trạm sạc',
+              title: 'Lập hành trình',
+              subtitle: 'Chọn điểm đến và ước tính pin cần dùng',
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const TripPlannerWrapper()),
@@ -257,7 +257,9 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
         const SizedBox(height: 20),
 
         // 3. SECTION: HỆ THỐNG & TRÍ TUỆ AI
-        const _SectionHeader(title: 'HỆ THỐNG & TRÍ TUỆ AI').appFadeSlideIn(index: 3),
+        const _SectionHeader(
+          title: 'HỆ THỐNG & TRÍ TUỆ AI',
+        ).appFadeSlideIn(index: 3),
         const SizedBox(height: 8),
         _GroupCard(
           children: [
@@ -326,15 +328,17 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
         const SizedBox(height: 20),
 
         // 4. SECTION: HỖ TRỢ & TÀI KHOẢN
-        const _SectionHeader(title: 'HỖ TRỢ & TÀI KHOẢN').appFadeSlideIn(index: 5),
+        const _SectionHeader(
+          title: 'HỖ TRỢ & TÀI KHOẢN',
+        ).appFadeSlideIn(index: 5),
         const SizedBox(height: 8),
         _GroupCard(
           children: [
             _ActionTile(
               icon: Icons.support_agent_rounded,
               iconColor: const Color(0xFF34D399),
-              title: 'Cẩm nang & Cứu hộ 24/7',
-              subtitle: 'Hướng dẫn sử dụng & hotline cứu hộ khẩn cấp',
+              title: 'Hướng dẫn sử dụng',
+              subtitle: 'Tìm chức năng và làm quen từng bước',
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const GuideScreen()),
@@ -440,15 +444,10 @@ class _GroupCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF12161F),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: const Color(0xFF1E293B),
-          width: 1,
-        ),
+        border: Border.all(color: const Color(0xFF1E293B), width: 1),
       ),
       clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: children,
-      ),
+      child: Column(children: children),
     );
   }
 }
@@ -596,17 +595,11 @@ class _DriverProfileHeroCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF111722),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: const Color(0xFF1E293B),
-          width: 1,
-        ),
+        border: Border.all(color: const Color(0xFF1E293B), width: 1),
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF131B28),
-            Color(0xFF0D121B),
-          ],
+          colors: [Color(0xFF131B28), Color(0xFF0D121B)],
         ),
       ),
       clipBehavior: Clip.antiAlias,
@@ -633,7 +626,9 @@ class _DriverProfileHeroCard extends StatelessWidget {
                             shape: BoxShape.circle,
                             color: const Color(0xFF0B101B),
                             border: Border.all(
-                              color: CockpitColors.emerald.withValues(alpha: 0.5),
+                              color: CockpitColors.emerald.withValues(
+                                alpha: 0.5,
+                              ),
                               width: 1.5,
                             ),
                           ),
@@ -690,12 +685,14 @@ class _DriverProfileHeroCard extends StatelessWidget {
                                   vertical: 1.5,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: CockpitColors.emerald
-                                      .withValues(alpha: 0.15),
+                                  color: CockpitColors.emerald.withValues(
+                                    alpha: 0.15,
+                                  ),
                                   borderRadius: BorderRadius.circular(4),
                                   border: Border.all(
-                                    color: CockpitColors.emerald
-                                        .withValues(alpha: 0.3),
+                                    color: CockpitColors.emerald.withValues(
+                                      alpha: 0.3,
+                                    ),
                                     width: 0.8,
                                   ),
                                 ),
@@ -897,11 +894,7 @@ class _SignOutButton extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.logout_rounded,
-                  color: Color(0xFFEF4444),
-                  size: 19,
-                ),
+                Icon(Icons.logout_rounded, color: Color(0xFFEF4444), size: 19),
                 SizedBox(width: 10),
                 Text(
                   'Đăng xuất tài khoản',
@@ -939,10 +932,7 @@ class _AppBrandingFooter extends StatelessWidget {
         const SizedBox(height: 3),
         const Text(
           'Hệ sinh thái quản lý & tối ưu năng lượng xe điện',
-          style: TextStyle(
-            color: Color(0xFF475569),
-            fontSize: 11,
-          ),
+          style: TextStyle(color: Color(0xFF475569), fontSize: 11),
         ),
       ],
     );

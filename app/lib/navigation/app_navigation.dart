@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -12,6 +13,7 @@ import '../core/widgets/app_navigation_bar.dart';
 import '../core/widgets/app_popup.dart';
 import '../core/widgets/app_tab_stack.dart';
 import '../core/widgets/empty_state.dart';
+import '../core/widgets/error_state.dart';
 import '../core/widgets/vehicle_picker_sheet.dart';
 import '../core/widgets/vehicle_switcher.dart';
 import '../core/widgets/global_charging_pill.dart';
@@ -24,6 +26,7 @@ import '../core/widgets/coach_mark_overlay.dart';
 import '../features/overview/widgets/dashboard_customization_sheet.dart';
 import '../features/overview/overview_screen.dart';
 import '../features/charge/charge_screen.dart';
+import '../features/auth/auth_providers.dart';
 import '../features/more/more_screen.dart';
 
 /// Unified App Navigation — PLAN1 sync
@@ -47,12 +50,23 @@ class AppNavigation extends ConsumerStatefulWidget {
       ).read(currentTabProvider.notifier).state = index;
     }
   }
+
+  /// Reveal the authenticated root shell from a pushed help route. Selecting
+  /// a hidden tab alone leaves Guide/BatteryBot obscuring the destination.
+  /// This helper only navigates; it never dispatches charging operations.
+  static bool openTab(BuildContext context, int index) {
+    if (!context.mounted || index < 0 || index >= 4) return false;
+    navigateToTab(context, index);
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    return true;
+  }
 }
 
 class _AppNavigationState extends ConsumerState<AppNavigation> {
   // Tab screens — wrap với RefreshIndicator
   late final List<Widget> _screens;
-  Timer? _guideRetryTimer;
+  StreamSubscription<User?>? _authSubscription;
+  String? _boundUid;
   int _guideAttempts = 0;
   bool _guideShown = false;
 
@@ -60,10 +74,28 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
   void initState() {
     super.initState();
     final uid = FirebaseAuth.instance.currentUser?.uid;
+    _boundUid = uid;
     if (uid != null) {
       unawaited(ref.read(dashboardPreferencesProvider).initializeForUser(uid));
       unawaited(ref.read(activeChargingSessionProvider).bindUser(uid));
     }
+    _authSubscription = FirebaseAuth.instance.userChanges().listen((user) {
+      final nextUid = user?.uid;
+      if (nextUid == _boundUid) return;
+      _boundUid = nextUid;
+      CoachMarkOverlay.dismissActive();
+      _guideShown = false;
+      _guideAttempts = 0;
+      if (nextUid != null && mounted) {
+        unawaited(
+          ref.read(dashboardPreferencesProvider).initializeForUser(nextUid),
+        );
+        unawaited(ref.read(activeChargingSessionProvider).bindUser(nextUid));
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          unawaited(_tryShowFirstRunGuide());
+        });
+      }
+    });
     _screens = [
       _RefreshableTab(child: OverviewScreen()), // Tab 0: Overview
       // Charge and History own their refresh indicators. Wrapping them here
@@ -79,7 +111,8 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
 
   @override
   void dispose() {
-    _guideRetryTimer?.cancel();
+    _authSubscription?.cancel();
+    CoachMarkOverlay.dismissActive();
     super.dispose();
   }
 
@@ -89,9 +122,9 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
     if (uid == null) return;
     final preferences = ref.read(dashboardPreferencesProvider);
     await preferences.initializeForUser(uid);
-    if (!mounted || _guideShown || !preferences.shouldAutoShow(
-      GuideRegistry.overviewTourId,
-    )) {
+    if (!mounted ||
+        _guideShown ||
+        !preferences.shouldAutoShow(GuideRegistry.overviewTourId)) {
       return;
     }
     if (ModalRoute.of(context)?.isCurrent != true ||
@@ -99,11 +132,13 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
           (step) => step.anchorKey.currentContext != null,
         )) {
       _guideAttempts++;
-      if (_guideAttempts < 40) {
-        _guideRetryTimer?.cancel();
-        _guideRetryTimer = Timer(const Duration(milliseconds: 250), () {
-          unawaited(_tryShowFirstRunGuide());
+      if (_guideAttempts < 120) {
+        // Re-check after actual Flutter frames so keyed anchors can attach;
+        // do not guess readiness with a wall-clock delay.
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          if (mounted) unawaited(_tryShowFirstRunGuide());
         });
+        SchedulerBinding.instance.scheduleFrame();
       }
       return;
     }
@@ -249,7 +284,8 @@ class _SelectedHistory extends ConsumerWidget {
       return EmptyState(
         icon: Icons.history_rounded,
         title: 'Chưa chọn phương tiện',
-        message: 'Vui lòng chọn xe VinFast của bạn để xem toàn bộ lịch sử sạc pin.',
+        message:
+            'Vui lòng chọn xe VinFast của bạn để xem toàn bộ lịch sử sạc pin.',
         actionLabel: 'Chọn xe ngay',
         onAction: () => VehiclePickerSheet.show(context, ref),
       );
@@ -257,7 +293,11 @@ class _SelectedHistory extends ConsumerWidget {
     final vehicle = ref.watch(vehicleProvider(id));
     return vehicle.when(
       loading: () => Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Không thể tải lịch sử: $e')),
+      error: (e, _) => ErrorState.fromError(
+        error: e,
+        prefix: 'Chưa tải được lịch sử',
+        onRetry: () => ref.invalidate(vehicleProvider(id)),
+      ),
       data: (value) {
         final args = SmartChargingControllerArgs(
           vehicleId: id,
@@ -269,6 +309,7 @@ class _SelectedHistory extends ConsumerWidget {
         );
         return SmartChargeHistoryScreen(
           controller: controller,
+          ownerUid: ref.watch(currentUidProvider),
           initialItems: state.history,
           embedded: true,
           initialSessionId: pending?.sessionId,
@@ -331,51 +372,54 @@ class _NotificationBell extends StatelessWidget {
             onTap: onTap,
             borderRadius: BorderRadius.circular(16),
             child: SizedBox(
-            width: 48,
-            height: 48,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Icon(
-                  Icons.notifications_outlined,
-                  color: unreadCount > 0
-                      ? AppUiColors.of(context).primary
-                      : AppUiColors.of(context).muted,
-                  size: 22,
-                ),
-                if (unreadCount > 0)
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Container(
-                      padding: EdgeInsets.all(2),
-                      decoration: BoxDecoration(
-                        color: AppUiColors.of(context).primary,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: AppUiColors.of(context).elevated,
-                          width: 1.5,
+              width: 48,
+              height: 48,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Icon(
+                    Icons.notifications_outlined,
+                    color: unreadCount > 0
+                        ? AppUiColors.of(context).primary
+                        : AppUiColors.of(context).muted,
+                    size: 22,
+                  ),
+                  if (unreadCount > 0)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color: AppUiColors.of(context).primary,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: AppUiColors.of(context).elevated,
+                            width: 1.5,
+                          ),
                         ),
-                      ),
-                      constraints: BoxConstraints(minWidth: 16, minHeight: 16),
-                      child: Center(
-                        child: Text(
-                          unreadCount > 99 ? '99+' : unreadCount.toString(),
-                          style: TextStyle(
-                            color: AppUiColors.of(context).onPrimary,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
+                        constraints: BoxConstraints(
+                          minWidth: 16,
+                          minHeight: 16,
+                        ),
+                        child: Center(
+                          child: Text(
+                            unreadCount > 99 ? '99+' : unreadCount.toString(),
+                            style: TextStyle(
+                              color: AppUiColors.of(context).onPrimary,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 }

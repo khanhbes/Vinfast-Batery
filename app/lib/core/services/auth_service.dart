@@ -145,11 +145,7 @@ class AuthService {
       bool? syncResult;
 
       // 5. Lưu thông tin đăng nhập locally (secure)
-      await _session.setLastLoginEmail(email);
-      await _session.saveRememberedCredentials(
-        email: email,
-        password: password,
-      );
+      await _session.clearLegacyCredentials();
       await _session.markUserSynced();
       await _session.markAuthenticated();
 
@@ -204,20 +200,20 @@ class AuthService {
       String errorMessage;
       switch (e.code) {
         case 'weak-password':
-          errorMessage = 'Password is too weak';
+          errorMessage = 'Mật khẩu chưa đủ mạnh.';
           break;
         case 'email-already-in-use':
-          errorMessage = 'Email already exists';
+          errorMessage = 'Email này đã được đăng ký.';
           break;
         case 'invalid-email':
-          errorMessage = 'Invalid email address';
+          errorMessage = 'Email chưa đúng định dạng.';
           break;
         default:
-          errorMessage = 'Registration failed: ${e.message}';
+          errorMessage = 'Chưa thể tạo tài khoản lúc này. Vui lòng thử lại.';
       }
       return {'success': false, 'error': errorMessage, 'code': e.code};
     } catch (e) {
-      debugPrint('[AuthService] Registration error: $e');
+      debugPrint('[AuthService] Registration failed (${e.runtimeType}).');
       return {
         'success': false,
         'error': 'Đăng ký thất bại.',
@@ -246,59 +242,31 @@ class AuthService {
 
       // Lưu phiên ngay sau khi Firebase Auth xác thực thành công. Các bước
       // đồng bộ phía sau có thể chậm/lỗi mạng nhưng không nên làm mất login.
-      await _session.setLastLoginEmail(email);
-      await _session.saveRememberedCredentials(
-        email: email,
-        password: password,
-      );
+      await _session.clearLegacyCredentials();
       await _session.markAuthenticated();
+      unawaited(_syncAfterLogin(user));
 
-      // 2. Đảm bảo user doc tồn tại trước khi update
-      await _ensureUserDoc(user);
-      await loadVehiclePolicy();
-
-      // 3. Cập nhật last login (safe vì đã ensure doc)
-      await _firestore.collection('users').doc(user.uid).update({
-        'lastLogin': FieldValue.serverTimestamp(),
-        'lastLoginSource': 'flutter_app',
-      });
-
-      // 3. Đồng bộ user với web
-      final syncResult = await _syncService.syncUserToWeb();
-
-      // 4. Đồng bộ vehicles
-      final vehicleResults = await _syncService.syncAllVehiclesToWeb();
-
-      // 5. Lưu thông tin đăng nhập (secure)
-      await _session.markUserSynced();
-
-      // 6. Bắt đầu auto sync
-      _syncService.startAutoSync();
-
-      return {
-        'success': true,
-        'user': user,
-        'synced': syncResult,
-        'vehicles': vehicleResults,
-        'message': 'Login successful',
-      };
+      return {'success': true, 'user': user, 'message': 'Login successful'};
     } on FirebaseAuthException catch (e) {
       String errorMessage;
       switch (e.code) {
         case 'user-not-found':
-          errorMessage = 'No user found with this email';
-          break;
         case 'wrong-password':
-          errorMessage = 'Incorrect password';
+        case 'invalid-credential':
+          errorMessage = 'Email hoặc mật khẩu chưa chính xác.';
+          break;
+        case 'too-many-requests':
+          errorMessage = 'Bạn đã thử đăng nhập nhiều lần. Hãy đợi rồi thử lại.';
           break;
         case 'invalid-email':
-          errorMessage = 'Invalid email address';
+          errorMessage = 'Email không đúng định dạng.';
           break;
         case 'user-disabled':
-          errorMessage = 'Account has been disabled';
+          errorMessage =
+              'Tài khoản hiện không thể đăng nhập. Hãy liên hệ hỗ trợ.';
           break;
         default:
-          errorMessage = 'Login failed: ${e.message}';
+          errorMessage = 'Chưa thể đăng nhập lúc này. Vui lòng thử lại.';
       }
       return {'success': false, 'error': errorMessage, 'code': e.code};
     } catch (e) {
@@ -312,52 +280,39 @@ class AuthService {
     }
   }
 
+  Future<void> _syncAfterLogin(User user) async {
+    try {
+      await _ensureUserDoc(user);
+      await loadVehiclePolicy();
+      await _firestore.collection('users').doc(user.uid).set({
+        'lastLogin': FieldValue.serverTimestamp(),
+        'lastLoginSource': 'flutter_app',
+      }, SetOptions(merge: true));
+      await _syncService.syncUserToWeb();
+      await _syncService.syncAllVehiclesToWeb();
+      await _session.markUserSynced();
+      _syncService.startAutoSync();
+    } catch (error, stack) {
+      debugPrint(
+        '[AuthService] post-login sync deferred: ${error.runtimeType}',
+      );
+      if (kDebugMode) debugPrintStack(stackTrace: stack);
+    }
+  }
+
   /// Khôi phục đăng nhập không cần người dùng nhập lại mật khẩu.
   ///
   /// Firebase Auth thường tự persist user trên Android. Method này là lớp
   /// dự phòng khi cold start trả về `currentUser == null` dù user đã từng
   /// đăng nhập và chưa bấm đăng xuất.
   Future<User?> restoreRememberedLogin() async {
+    await _session.clearLegacyCredentials();
     if (_auth.currentUser != null) {
       await _session.markAuthenticated();
       return _auth.currentUser;
     }
 
-    final explicitSignedOut = await _session.wasExplicitSignOut();
-    if (explicitSignedOut) return null;
-
-    final credentials = await _session.getRememberedCredentials();
-    if (credentials == null) return null;
-
-    try {
-      final userCredential = await _auth.signInWithEmailAndPassword(
-        email: credentials.email,
-        password: credentials.password,
-      );
-      final user = userCredential.user;
-      if (user == null) return null;
-
-      await _ensureUserDoc(user);
-      await loadVehiclePolicy();
-      await _session.setLastLoginEmail(credentials.email);
-      await _session.markAuthenticated();
-      _syncService.startAutoSync();
-      return user;
-    } on FirebaseAuthException catch (e) {
-      debugPrint('[AuthService] restoreRememberedLogin auth error: ${e.code}');
-      switch (e.code) {
-        case 'invalid-credential':
-        case 'user-not-found':
-        case 'wrong-password':
-        case 'user-disabled':
-          await _session.clearRememberedCredentials();
-          break;
-      }
-      return null;
-    } catch (e) {
-      debugPrint('[AuthService] restoreRememberedLogin error: $e');
-      return null;
-    }
+    return null;
   }
 
   /// Đăng xuất — chỉ method này được gọi FirebaseAuth.signOut()
@@ -766,12 +721,26 @@ class AuthService {
       await _auth.sendPasswordResetEmail(email: email);
       return {'success': true, 'message': 'Password reset email sent'};
     } on FirebaseAuthException catch (e) {
+      if (e.code == 'user-not-found') {
+        return {
+          'success': true,
+          'message':
+              'Nếu tài khoản phù hợp tồn tại, email hướng dẫn đã được gửi.',
+        };
+      }
       return {
         'success': false,
-        'error': e.message ?? 'Failed to send reset email',
+        'error': e.code == 'too-many-requests'
+            ? 'Bạn vừa gửi yêu cầu gần đây. Hãy đợi một chút rồi thử lại.'
+            : 'Chưa thể gửi email lúc này. Kiểm tra kết nối rồi thử lại.',
+        'code': e.code,
       };
-    } catch (e) {
-      return {'success': false, 'error': 'Unexpected error: $e'};
+    } catch (_) {
+      return {
+        'success': false,
+        'error': 'Chưa thể gửi email lúc này. Kiểm tra kết nối rồi thử lại.',
+        'code': 'resetFailed',
+      };
     }
   }
 
@@ -800,10 +769,20 @@ class AuthService {
     } on FirebaseAuthException catch (e) {
       return {
         'success': false,
-        'error': e.message ?? 'Failed to change password',
+        'error': e.code == 'wrong-password' || e.code == 'invalid-credential'
+            ? 'Mật khẩu hiện tại chưa chính xác.'
+            : e.code == 'weak-password'
+            ? 'Mật khẩu mới chưa đủ mạnh.'
+            : 'Chưa thể đổi mật khẩu lúc này. Vui lòng thử lại.',
+        'code': e.code,
       };
     } catch (e) {
-      return {'success': false, 'error': 'Unexpected error: $e'};
+      debugPrint('[AuthService] Password change failed (${e.runtimeType}).');
+      return {
+        'success': false,
+        'error': 'Chưa thể đổi mật khẩu lúc này. Vui lòng thử lại.',
+        'code': 'passwordChangeFailed',
+      };
     }
   }
 }

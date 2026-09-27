@@ -62,12 +62,24 @@ class ServerSmartChargerService {
     Map<String, dynamic>? body,
     Map<String, String>? headers,
   }) async {
+    final base = AppConstants.apiBaseUrl.trim().replaceAll(RegExp(r'/+$'), '');
+    if (base.isEmpty) {
+      throw const SmartChargerException(
+        'Máy chủ chưa được cấu hình. Vui lòng kiểm tra kết nối mạng.',
+        code: 'unconfigured_server',
+        statusCode: 503,
+        retryable: false,
+      );
+    }
+    final cleanPath = path.startsWith('/') ? path : '/$path';
+    final uri = Uri.parse('$base$cleanPath');
+
     final token = await _auth.currentUser?.getIdToken();
-    final uri = Uri.parse('${AppConstants.apiBaseUrl}$path');
     final request = http.Request(method, uri)
       ..headers.addAll({
         if (token != null) 'Authorization': 'Bearer $token',
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
         ...?headers,
       });
     if (body != null) request.body = jsonEncode(body);
@@ -77,7 +89,7 @@ class ServerSmartChargerService {
       final streamed = await _client.send(request).timeout(const Duration(seconds: 12));
       response = await http.Response.fromStream(streamed);
     } on SocketException {
-      throw SmartChargerException(
+      throw const SmartChargerException(
         'Không thể kết nối đến máy chủ. Kiểm tra mạng hoặc thử lại sau.',
         code: 'connection_failed',
         statusCode: 503,
@@ -90,31 +102,61 @@ class ServerSmartChargerService {
         statusCode: 504,
         retryable: true,
       );
+    } on http.ClientException catch (e) {
+      debugPrint('[ServerSmartCharger] ClientException: $e');
+      throw SmartChargerException(
+        'Không thể kết nối đến máy chủ. Kiểm tra mạng hoặc thử lại sau.',
+        code: 'network_error',
+        statusCode: 503,
+        retryable: true,
+      );
     } catch (e) {
       debugPrint('[ServerSmartCharger] Network error: $e');
       throw SmartChargerException(
-        'Không thể kết nối đến máy chủ. Vui lòng thử lại sau.',
+        'Không thể kết nối đến máy chủ: ${e.toString()}',
         code: 'network_error',
         statusCode: 500,
         retryable: true,
       );
     }
 
-    final decoded = response.body.isEmpty
-        ? <String, dynamic>{}
-        : Map<String, dynamic>.from(jsonDecode(response.body) as Map);
+    Map<String, dynamic> decoded;
+    try {
+      decoded = response.body.isEmpty
+          ? <String, dynamic>{}
+          : Map<String, dynamic>.from(jsonDecode(response.body) as Map);
+    } catch (_) {
+      throw SmartChargerException(
+        'Máy chủ phản hồi không đúng định dạng (HTTP ${response.statusCode}).',
+        statusCode: response.statusCode,
+        code: 'invalid_response',
+        retryable: response.statusCode >= 500,
+      );
+    }
+
     if (response.statusCode < 200 ||
         response.statusCode >= 300 ||
         decoded['success'] != true) {
-      final error = decoded['error'] is Map
-          ? Map<String, dynamic>.from(decoded['error'] as Map)
-          : const <String, dynamic>{};
+      String? message;
+      String? code;
+      bool retryable = response.statusCode >= 500;
+      final errObj = decoded['error'];
+      if (errObj is Map) {
+        message = errObj['message']?.toString();
+        code = errObj['code']?.toString();
+        if (errObj['retryable'] is bool) {
+          retryable = errObj['retryable'] as bool;
+        }
+      } else if (errObj is String) {
+        message = errObj;
+      }
+      message ??= decoded['userMessage']?.toString() ??
+          'Không thể kết nối dịch vụ Sạc thông minh (HTTP ${response.statusCode}).';
       throw SmartChargerException(
-        error['message']?.toString() ??
-            'Không thể kết nối dịch vụ Sạc thông minh (HTTP ${response.statusCode}).',
+        message,
         statusCode: response.statusCode,
-        code: error['code']?.toString(),
-        retryable: error['retryable'] == true,
+        code: code,
+        retryable: retryable,
       );
     }
     final data = decoded['data'];
@@ -171,8 +213,8 @@ class ServerSmartChargerService {
     body: {
       ...profile.toJson(),
       if (vehicleId != null && vehicleId.isNotEmpty) 'vehicleId': vehicleId,
-      if (expectedRevision != null) 'expectedRevision': expectedRevision,
-      if (verification != null) 'verification': verification,
+      'expectedRevision': ?expectedRevision,
+      'verification': ?verification,
       'source': Platform.operatingSystem,
     },
   );
@@ -204,8 +246,53 @@ class ServerSmartChargerService {
     );
   }
 
+  Future<void> claimLanDevice({required String deviceId, required String model}) async {
+    await _request('POST', '/api/shelly/devices/claim', body: {
+      'deviceId': deviceId,
+      'model': model,
+    });
+  }
+
+  Future<void> authorizeDeviceControl({required String deviceId, required String operationId}) async {
+    final data = await _request(
+      'POST',
+      '/api/shelly/devices/${Uri.encodeComponent(deviceId)}/authorize',
+      body: {'operationId': operationId},
+    );
+    if (data['authorized'] != true) {
+      throw const SmartChargerException('Không xác minh được quyền điều khiển Shelly.', code: 'ownershipUnavailable', statusCode: 409);
+    }
+  }
+
+  Future<void> releaseDeviceControl({required String deviceId, required String operationId}) async {
+    await _request(
+      'POST',
+      '/api/shelly/devices/${Uri.encodeComponent(deviceId)}/release-control',
+      body: {'operationId': operationId, 'relayOffVerified': true},
+    );
+  }
+
+  Future<Map<String, dynamic>> runSafetyTest({required String deviceId, required String operationId}) =>
+      _request('POST', '/api/shelly/devices/${Uri.encodeComponent(deviceId)}/safety-test', body: {
+        'operationId': operationId,
+        'confirmedUnplugged': true,
+      });
+
   Future<void> revokeBinding() async =>
       _request('DELETE', '/api/shelly/device');
+
+  /// Redeem an admin-generated connection code to bind a Shelly device.
+  Future<ShellyConnectionProfile> redeemConnectionCode(String code) async {
+    final raw = await _request(
+      'POST',
+      '/api/shelly/redeem-code',
+      body: {'code': code.trim().toUpperCase()},
+    );
+    final profileData = raw['profile'] is Map
+        ? Map<String, dynamic>.from(raw['profile'] as Map)
+        : raw;
+    return ShellyConnectionProfile.fromJson(profileData);
+  }
 
   Future<SmartChargerStatus> getStatus({String? vehicleId}) async {
     final raw = await _request(

@@ -53,6 +53,14 @@ async function run() {
       doc(aliceDb, 'users/alice/onboardingDrafts/current'),
       validDraft,
     ));
+    await assertSucceeds(setDoc(
+      doc(aliceDb, 'users/alice/onboardingDrafts/current'),
+      { ...validDraft, finalizedAt: '2026-09-27T10:00:00.000Z' },
+    ));
+    await assertFails(setDoc(
+      doc(aliceDb, 'users/alice/onboardingDrafts/current'),
+      { ...validDraft, finalizedAt: true },
+    ));
     await assertFails(setDoc(
       doc(bobDb, 'users/alice/onboardingDrafts/current'),
       validDraft,
@@ -131,6 +139,7 @@ async function run() {
       doc(bobDb, 'users/alice/appPreferences/ui'),
       { pendingAutoTours: ['tour_overview_v2'] },
     ));
+    console.log('Firestore Rules: 17 allow/deny assertions passed.');
   } finally {
     await teardown();
   }

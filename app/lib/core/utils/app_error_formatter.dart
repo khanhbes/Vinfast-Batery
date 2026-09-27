@@ -1,65 +1,76 @@
-/// Chuyển đổi lỗi kỹ thuật dài thành thông báo thân thiện cho người dùng.
+/// Maps untrusted service errors to fixed, user-facing copy.
+/// Even a short exception can contain a key, UID or internal hostname.
 class AppErrorFormatter {
   AppErrorFormatter._();
 
-  /// Format lỗi thành message ngắn gọn cho UI
-  static String format(Object error) {
-    final msg = error.toString();
+  static const fallback = 'Chưa thể thực hiện thao tác. Vui lòng thử lại.';
 
-    // Firestore index errors
-    if (_isIndexError(msg)) {
-      return 'Dữ liệu đang được đồng bộ. Vui lòng thử lại.';
+  static String format(Object? error) {
+    if (error == null) return fallback;
+    final message = error.toString().toLowerCase();
+    bool hasAny(List<String> codes) => codes.any(message.contains);
+
+    if (hasAny(['invalid-credential', 'wrong-password', 'user-not-found'])) {
+      return 'Email hoặc mật khẩu không chính xác.';
     }
-
-    // Firestore permission errors
-    if (msg.contains('permission-denied') ||
-        msg.contains('PERMISSION_DENIED')) {
-      return 'Không có quyền truy cập dữ liệu.';
+    if (message.contains('email-already-in-use')) {
+      return 'Email này đã được đăng ký. Bạn có thể đăng nhập hoặc đặt lại mật khẩu.';
     }
-
-    // Network errors
-    if (msg.contains('unavailable') ||
-        msg.contains('network') ||
-        msg.contains('SocketException') ||
-        msg.contains('TimeoutException')) {
-      return 'Không có kết nối mạng. Vui lòng kiểm tra internet.';
+    if (message.contains('weak-password')) {
+      return 'Mật khẩu chưa đủ mạnh. Vui lòng chọn mật khẩu khác.';
     }
-
-    // Firebase not initialized
-    if (msg.contains('Firebase') && msg.contains('initialize')) {
-      return 'Lỗi khởi tạo Firebase. Vui lòng khởi động lại ứng dụng.';
+    if (message.contains('invalid-email')) {
+      return 'Email chưa đúng định dạng. Vui lòng kiểm tra lại.';
     }
-
-    // Firestore not found
-    if (msg.contains('not-found') || msg.contains('NOT_FOUND')) {
-      return 'Không tìm thấy dữ liệu.';
+    if (hasAny(['too-many-requests', 'resource-exhausted', 'rate_limit'])) {
+      return 'Có quá nhiều yêu cầu. Vui lòng đợi một lát rồi thử lại.';
     }
-
-    // Generic Firestore errors - truncate URL
-    if (msg.contains('cloud_firestore') || msg.contains('firestore')) {
-      return 'Lỗi tải dữ liệu. Vui lòng thử lại.';
+    if (hasAny([
+      'requires-recent-login',
+      'unauthenticated',
+      'user-token-expired',
+    ])) {
+      return 'Vui lòng đăng nhập lại để tiếp tục.';
     }
-
-    // If message is too long, truncate
-    if (msg.length > 80) {
-      // Try to extract meaningful part
-      final colonIdx = msg.indexOf(':');
-      if (colonIdx > 0 && colonIdx < 60) {
-        return msg.substring(colonIdx + 1).trim().length > 60
-            ? 'Đã xảy ra lỗi. Vui lòng thử lại.'
-            : msg.substring(colonIdx + 1).trim();
-      }
-      return 'Đã xảy ra lỗi. Vui lòng thử lại.';
+    if (hasAny(['permission-denied', 'permission_denied'])) {
+      return 'Chưa thể truy cập dữ liệu. Vui lòng thử lại hoặc liên hệ hỗ trợ.';
     }
-
-    return msg;
-  }
-
-  static bool _isIndexError(String msg) {
-    final lower = msg.toLowerCase();
-    return lower.contains('failed-precondition') ||
-        lower.contains('failed_precondition') ||
-        lower.contains('requires an index') ||
-        lower.contains('indexes?create_composite');
+    if (hasAny([
+      'failed-precondition',
+      'failed_precondition',
+      'requires an index',
+      'indexes?create_composite',
+    ])) {
+      return 'Dữ liệu tạm chưa khả dụng. Vui lòng thử lại hoặc liên hệ hỗ trợ.';
+    }
+    if (hasAny(['handshakeexception', 'certificate_verify_failed'])) {
+      return 'Chưa thể kết nối bảo mật. Vui lòng thử lại sau.';
+    }
+    if (hasAny([
+      'shellyclientexception',
+      'device_offline',
+      'charger_offline',
+    ])) {
+      return 'Chưa thể đọc trạng thái bộ sạc. Kiểm tra kết nối và thử lại.';
+    }
+    if (hasAny(['timeoutexception', 'deadline-exceeded', 'timed out'])) {
+      return 'Chưa nhận được phản hồi. Vui lòng kiểm tra kết nối và thử lại.';
+    }
+    if (hasAny([
+      'socketexception',
+      'network-request-failed',
+      'network is unreachable',
+      'failed host lookup',
+      'connection refused',
+    ])) {
+      return 'Chưa thể kết nối dịch vụ. Vui lòng kiểm tra mạng và thử lại.';
+    }
+    if (message.contains('unavailable')) {
+      return 'Dịch vụ tạm chưa khả dụng. Vui lòng thử lại sau.';
+    }
+    if (hasAny(['not-found', 'not_found'])) {
+      return 'Không tìm thấy dữ liệu cần hiển thị.';
+    }
+    return fallback;
   }
 }

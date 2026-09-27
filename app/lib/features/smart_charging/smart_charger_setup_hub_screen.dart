@@ -23,6 +23,7 @@ import '../../data/services/vehicle_charger_binding_service.dart';
 import '../../data/services/smart_charge_preferences_service.dart';
 import '../../core/services/session_service.dart';
 import 'widgets/shelly_qr_scanner_dialog.dart';
+import 'shelly_connect_screen.dart';
 
 class SmartChargerSetupHubScreen extends ConsumerStatefulWidget {
   const SmartChargerSetupHubScreen({super.key});
@@ -67,6 +68,8 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
   int sweepFoundCount = 0;
 
   bool busy = true;
+  bool developerUnlocked = false;
+  bool _developerModeResolved = false;
   bool obscure = true;
   bool dirty = false;
   String? selectedVehicleId;
@@ -162,6 +165,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
       }
 
       final prefs = await SharedPreferences.getInstance();
+      developerUnlocked = prefs.getBool('developerModeUnlocked') ?? false;
       cloudBackupEnabled = prefs.getBool('smartChargerEncryptedBackup') ?? true;
 
       final detectedSubnet = await discovery.detectLocalSubnet();
@@ -180,7 +184,12 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
     } catch (_) {
       // Ignore load errors so UI remains interactive
     } finally {
-      if (mounted) setState(() => busy = false);
+      if (mounted) {
+        setState(() {
+          busy = false;
+          _developerModeResolved = true;
+        });
+      }
     }
   }
 
@@ -461,11 +470,13 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
       bool backupFailed = false;
       try {
         if (cloudBackupEnabled) {
-          await server.registerShellyDevice(
-            prof,
-            vehicleId: selectedVehicleId,
-            verification: newState.toJson(),
-          ).timeout(const Duration(seconds: 5));
+          await server
+              .registerShellyDevice(
+                prof,
+                vehicleId: selectedVehicleId,
+                verification: newState.toJson(),
+              )
+              .timeout(const Duration(seconds: 5));
         }
       } catch (_) {
         backupFailed = true;
@@ -681,6 +692,15 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
 
   @override
   Widget build(BuildContext context) {
+    if (!_developerModeResolved) {
+      return Scaffold(
+        backgroundColor: _ui.background,
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (!developerUnlocked) {
+      return const ShellyConnectScreen();
+    }
     final ipText = lan.text.trim().isNotEmpty
         ? lan.text.trim()
         : 'Chưa cấu hình LAN';
@@ -2687,11 +2707,13 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
       capabilities = await direct.capabilities();
       try {
         if (cloudBackupEnabled) {
-          await server.registerShellyDevice(
-            prof,
-            vehicleId: selectedVehicleId,
-            verification: updated.toJson(),
-          ).timeout(const Duration(seconds: 5));
+          await server
+              .registerShellyDevice(
+                prof,
+                vehicleId: selectedVehicleId,
+                verification: updated.toJson(),
+              )
+              .timeout(const Duration(seconds: 5));
         }
       } catch (_) {
         // Local safety state remains valid; server backup can be retried.

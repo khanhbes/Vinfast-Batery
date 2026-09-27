@@ -38,4 +38,29 @@ void main() {
     expect(next.copyWith(dateOfBirth: null).dateOfBirth, isNull);
     expect(next.copyWith(nextAttemptAt: null).nextAttemptAt, isNull);
   });
+
+  test('unfinished vehicle draft has no implicit ODO or completion marker', () {
+    final draft = OnboardingDraft.create(
+      uid: 'qa-user',
+      name: 'QA User',
+      catalogId: 'feliz',
+    );
+
+    expect(draft.initialOdo, isNull);
+    expect(draft.finalizedAt, isNull);
+    expect(draft.toMap().containsKey('initialOdo'), isFalse);
+    expect(draft.toMap().containsKey('finalizedAt'), isFalse);
+  });
+
+  test('finalization marker survives local/Firestore map restoration', () {
+    final finalizedAt = DateTime.utc(2026, 9, 26, 12);
+    final draft = OnboardingDraft.create(
+      uid: 'qa-user',
+      name: 'QA User',
+      catalogId: 'evo200',
+    ).copyWith(finalizedAt: finalizedAt);
+
+    final restored = OnboardingDraft.fromMap(draft.uid, draft.toMap());
+    expect(restored.finalizedAt, finalizedAt);
+  });
 }

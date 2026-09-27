@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/utils/app_error_formatter.dart';
 
 import '../../core/widgets/app_popup.dart';
 import '../../data/models/personal_charging_profile.dart';
@@ -107,7 +108,7 @@ class _PersonalAiSettingsState extends State<PersonalAiSettingsScreen> {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Khi bật, dữ liệu sạc của xe này được dùng để hiệu chỉnh ETA. Dữ liệu không dùng chung với tài khoản hoặc xe khác.',
+            'Khi bật, dữ liệu sạc của xe này được dùng để điều chỉnh thời gian sạc dự kiến. Dữ liệu không dùng chung với tài khoản hoặc xe khác.',
           ),
           const SizedBox(height: 24),
           if (_busy && profile == null)
@@ -117,7 +118,7 @@ class _PersonalAiSettingsState extends State<PersonalAiSettingsScreen> {
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.cloud_off_rounded),
               title: const Text('Chưa thể tải trạng thái học'),
-              subtitle: Text('$_error'),
+              subtitle: Text(AppErrorFormatter.format(_error)),
               trailing: TextButton(
                 onPressed: _load,
                 child: const Text('Thử lại'),

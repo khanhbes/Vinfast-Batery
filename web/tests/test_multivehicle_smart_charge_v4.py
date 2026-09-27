@@ -89,7 +89,7 @@ class MultiVehicleSmartChargeV4Tests(unittest.TestCase):
         self.assertEqual(repo.telemetry("owner", session_b.session_id)[0]["sessionId"], session_b.session_id)
         self.assertEqual(repo.telemetry("owner", session_a.session_id), [])
 
-    def test_shared_device_lease_blocks_a_second_account(self):
+    def test_physical_device_cannot_be_bound_to_a_second_account(self):
         repo = SmartChargeRepository()
         provider = FakeShellyProvider()
         binding_a = provider.list_devices("owner-a")[0]
@@ -101,15 +101,10 @@ class MultiVehicleSmartChargeV4Tests(unittest.TestCase):
         repo.register_vehicle_owner("owner-a", "vehicle-a")
         repo.register_vehicle_owner("owner-b", "vehicle-b")
         repo.save_binding("owner-a", binding_a)
-        repo.save_binding("owner-b", binding_b)
-        first = SmartChargeService(repo, provider, _predict, sleeper=lambda _: None)
-        second = SmartChargeService(repo, provider, _predict, sleeper=lambda _: None)
-        first_preview = first.create_preview("owner-a", {"vehicleId": "vehicle-a", "currentSoc": 20, "targetSoc": 80})
-        second_preview = second.create_preview("owner-b", {"vehicleId": "vehicle-b", "currentSoc": 20, "targetSoc": 80})
-        first.start("owner-a", first_preview.preview_id, "shared-a")
-        with self.assertRaises(SmartChargeError) as caught:
-            second.start("owner-b", second_preview.preview_id, "shared-b")
-        self.assertEqual(caught.exception.code, "activeSessionConflict")
+        with self.assertRaises(PermissionError):
+            repo.save_binding("owner-b", binding_b)
+        self.assertTrue(repo.device_owned_by("owner-a", "shared-plug"))
+        self.assertFalse(repo.device_owned_by("owner-b", "shared-plug"))
 
 
 if __name__ == "__main__":
