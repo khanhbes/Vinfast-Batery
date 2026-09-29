@@ -212,11 +212,13 @@ class ApiService {
     Map<String, dynamic> body, {
     T? Function(dynamic value)? decode,
     String? idempotencyKey,
+    String? expectedUid,
   }) async => ApiResult.fromMap(
     await _requestWithOptionalIdempotency(
       endpoint,
       body,
       idempotencyKey: idempotencyKey,
+      expectedUid: expectedUid,
     ),
     decode: decode,
   );
@@ -242,10 +244,22 @@ class ApiService {
     String endpoint,
     Map<String, dynamic> body, {
     String? idempotencyKey,
+    String? expectedUid,
   }) async {
     if (!AppConstants.isApiConfigured) return _configurationError(endpoint);
     try {
+      if (expectedUid != null &&
+          FirebaseAuth.instance.currentUser?.uid != expectedUid) {
+        return _accountChangedError();
+      }
       final headers = await getHeaders();
+      // getIdToken() is asynchronous. An account switch during that await must
+      // never send draft A with account B's bearer token (or no token).
+      if (expectedUid != null &&
+          (FirebaseAuth.instance.currentUser?.uid != expectedUid ||
+              !headers.containsKey('Authorization'))) {
+        return _accountChangedError();
+      }
       if (idempotencyKey != null && idempotencyKey.trim().isNotEmpty) {
         headers['Idempotency-Key'] = idempotencyKey.trim();
       }
@@ -314,6 +328,14 @@ class ApiService {
       };
     }
   }
+
+  static Map<String, dynamic> _accountChangedError() => {
+    'success': false,
+    'code': 'ACCOUNT_CHANGED',
+    'userMessage': 'Phiên đăng nhập đã thay đổi. Vui lòng thử lại.',
+    'retryable': false,
+    'statusCode': 401,
+  };
 
   Future<Map<String, dynamic>> _write(
     String endpoint,
@@ -476,6 +498,7 @@ class ApiService {
         parsedJson?['code']?.toString() ??
         'HTTP_${response.statusCode}';
     final debugDetail = parsedJson?['debugDetail']?.toString();
+    final requestId = parsedJson?['requestId'];
 
     final apiError = ApiException(
       endpoint: endpoint,
@@ -503,9 +526,8 @@ class ApiService {
       'userMessage': errorMessage,
       'debugCode': debugCode,
       'retryable': response.statusCode >= 500 || response.statusCode == 429,
-      if (parsedJson case {'requestId': final requestId?})
-        'requestId': requestId,
-      if (debugDetail != null) 'debugDetail': debugDetail,
+      'requestId': ?requestId,
+      'debugDetail': ?debugDetail,
     };
   }
 

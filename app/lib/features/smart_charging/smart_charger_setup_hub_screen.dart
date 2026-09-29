@@ -2692,7 +2692,13 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
     setState(() => busy = true);
     try {
       await direct.configureSafeBoot(profile: prof);
-      await direct.runNoLoadTest(profile: prof);
+      final safety = await direct.runNoLoadTest(profile: prof);
+      if (!safety.passed) {
+        throw const SmartChargerException(
+          'Kiểm tra an toàn chưa xác minh đủ ON, timer tự tắt và OFF cuối.',
+          code: 'safetyTestIncomplete',
+        );
+      }
       final updated = verification.copyWith(
         safeBootVerified: true,
         noLoadTestVerified: true,

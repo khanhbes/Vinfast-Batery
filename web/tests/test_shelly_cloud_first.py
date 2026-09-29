@@ -103,6 +103,23 @@ class SmartChargeServiceTests(unittest.TestCase):
         self.assertFalse(self.provider.status.relay)
         self.assertEqual(self.repo.history("user-a")[0].state, "failed")
 
+    def test_missing_safety_evidence_never_sends_on(self):
+        self.binding.no_load_test_verified = False
+        self.repo.save_binding("user-a", self.binding)
+        with self.assertRaises(SmartChargeError) as caught:
+            self.service.manual_on("user-a", 60, "unsafe-binding")
+        self.assertEqual(caught.exception.code, "safetyVerificationRequired")
+        self.assertEqual(self.provider.command_count, 0)
+
+    def test_failed_off_readback_keeps_unknown_session_and_lock(self):
+        self.provider.fail_readback = True
+        self.provider.off_rejected = True
+        with self.assertRaises(SmartChargeError):
+            self.service.manual_on("user-a", 60, "ambiguous-on")
+        pending = self.repo.current_session("user-a", device_id=self.binding.device_id)
+        self.assertIsNotNone(pending)
+        self.assertEqual(pending.state, "unknown")
+
     def test_manual_off_requires_readback(self):
         preview = self.preview()
         active = self.service.start("user-a", preview.preview_id, "off")

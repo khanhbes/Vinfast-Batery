@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import 'api_service.dart';
 import '../models/onboarding_draft.dart';
@@ -244,11 +245,11 @@ class OnboardingService {
         'name': name.trim(),
         if (phone != null) 'phone': phone.trim(),
         'dateOfBirth': serverDob,
-        if (avgDailyDistanceKm case final distance?)
-          'avgDailyDistanceKm': distance,
-        if (usagePurpose case final purpose? when purpose.isNotEmpty)
-          'usagePurpose': purpose,
-        if (typicalSocWhenCharge case final soc?) 'typicalSocWhenCharge': soc,
+        'avgDailyDistanceKm': ?avgDailyDistanceKm,
+        'usagePurpose': ?(usagePurpose?.isNotEmpty == true
+            ? usagePurpose
+            : null),
+        'typicalSocWhenCharge': ?typicalSocWhenCharge,
       };
 
       final res = await _api.patch('/api/user/profile', payload);
@@ -288,6 +289,22 @@ class OnboardingService {
   Future<ApiResult<Map<String, dynamic>>> commitDraft(
     OnboardingDraft draft,
   ) async {
+    if (!draft.isEligibleForCommit) {
+      return const ApiResult(
+        success: false,
+        code: 'ONBOARDING_NOT_CONFIRMED',
+        userMessage: 'Vui lòng xác nhận thông tin trước khi hoàn tất.',
+        retryable: false,
+      );
+    }
+    if (FirebaseAuth.instance.currentUser?.uid != draft.uid) {
+      return const ApiResult(
+        success: false,
+        code: 'ACCOUNT_CHANGED',
+        userMessage: 'Phiên đăng nhập đã thay đổi. Vui lòng thử lại.',
+        retryable: false,
+      );
+    }
     final result = await _api.postResult<Map<String, dynamic>>(
       '/api/mobile/onboarding/commit',
       {
@@ -313,6 +330,7 @@ class OnboardingService {
         'shellyStatus': draft.shellyStatus,
       },
       idempotencyKey: draft.operationId,
+      expectedUid: draft.uid,
       decode: (value) => value is Map<String, dynamic>
           ? value
           : value is Map
@@ -346,13 +364,19 @@ class OnboardingSyncCoordinator {
   final OnboardingService _service;
   bool _running = false;
 
+  bool _isCurrentUid(String uid) =>
+      FirebaseAuth.instance.currentUser?.uid == uid;
+
   Future<ApiResult<Map<String, dynamic>>?> syncIfPending(String uid) async {
     if (_running) return null;
     _running = true;
     try {
+      if (!_isCurrentUid(uid)) return null;
       final draft = await _service.loadDraft(uid);
-      if (draft == null ||
-          draft.state == OnboardingDraftState.failedPermanent) {
+      if (!_isCurrentUid(uid) ||
+          draft == null ||
+          !draft.isEligibleForCommit ||
+          draft.state == OnboardingDraftState.synced) {
         return null;
       }
       if (draft.nextAttemptAt != null &&
@@ -365,6 +389,7 @@ class OnboardingSyncCoordinator {
       if (await Connectivity().checkConnectivity() == ConnectivityResult.none) {
         return null;
       }
+      if (!_isCurrentUid(uid)) return null;
       final syncing = draft.copyWith(
         state: OnboardingDraftState.syncing,
         attemptCount: draft.attemptCount + 1,
@@ -372,12 +397,15 @@ class OnboardingSyncCoordinator {
         updatedAt: DateTime.now().toUtc(),
       );
       await _service.saveDraft(syncing);
+      if (!_isCurrentUid(uid)) return null;
       final result = await _service.commitDraft(syncing);
+      if (!_isCurrentUid(uid)) return null;
       if (result.success) {
         // Do not delete the durable draft until the authoritative profile and
         // vehicle readback confirms the commit. A lost response can then be
         // retried safely with the same idempotency key.
         final confirmed = await _service.fetchOnboardingStatus();
+        if (!_isCurrentUid(uid)) return null;
         if (confirmed?.isCompleted == true && confirmed?.hasVehicle == true) {
           await _service.clearDraft(uid);
         } else {

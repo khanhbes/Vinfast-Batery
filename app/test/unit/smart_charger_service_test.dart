@@ -12,6 +12,30 @@ import 'package:vinfast_battery/data/services/shelly_clients.dart';
 import 'package:vinfast_battery/data/services/smart_charger_service.dart';
 
 void main() {
+  test('cleanup OFF cannot substitute for timer auto-OFF evidence', () {
+    const initial = SmartChargerStatus(
+      online: true,
+      relay: false,
+      powerW: 0,
+      voltageV: 230,
+      currentA: 0,
+      frequencyHz: 50,
+      temperatureC: 30,
+      energyWh: 0,
+    );
+    final result = ShellySafetyTestResult(
+      initialStatus: initial,
+      onObserved: true,
+      timerObserved: true,
+      timerAutoOffObserved: false,
+      offVerified: true,
+      noLoadPowerW: 0,
+      noLoadCurrentA: 0,
+      verifiedAt: DateTime.utc(2026),
+    );
+    expect(result.passed, isFalse);
+  });
+
   const validProfile = ShellyConnectionProfile(
     cloudHost: 'https://shelly-123-eu.shelly.cloud',
     cloudAuthKey: 'secret-key',

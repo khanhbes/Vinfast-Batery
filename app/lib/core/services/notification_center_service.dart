@@ -260,13 +260,19 @@ class NotificationCenterService {
   }
 
   /// Stream thông báo
-  Stream<List<UserNotification>> watchNotifications({int limit = 100}) {
-    return _repository.watchNotifications(limit: limit);
+  Stream<List<UserNotification>> watchNotifications({
+    int limit = 100,
+    String? expectedUid,
+  }) {
+    return _repository.watchNotifications(
+      limit: limit,
+      expectedUid: expectedUid,
+    );
   }
 
   /// Stream unread count
-  Stream<int> watchUnreadCount() {
-    return _repository.watchUnreadCount();
+  Stream<int> watchUnreadCount({String? expectedUid}) {
+    return _repository.watchUnreadCount(expectedUid: expectedUid);
   }
 
   /// Lấy danh sách thông báo

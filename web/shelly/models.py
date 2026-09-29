@@ -4,6 +4,12 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
+# Unknown is deliberately nonterminal: it must retain the physical-device
+# lease until a fresh OFF readback proves that another ON is safe.
+NONTERMINAL_SESSION_STATES = frozenset(
+    {"arming", "starting", "active", "stopping", "unknown"}
+)
+
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)

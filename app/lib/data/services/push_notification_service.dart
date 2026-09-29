@@ -36,6 +36,8 @@ class PushNotificationService {
   StreamSubscription<User?>? _authSubscription;
   String? _registeredUid;
   String? _lastRegisteredFingerprint;
+  int _authGeneration = 0;
+  http.Client? _registrationClient;
   bool _initialized = false;
   Future<void>? _initializing;
   void Function(Map<String, dynamic>)? _deepLinkHandler;
@@ -147,6 +149,7 @@ class PushNotificationService {
   }
 
   Future<void> syncCurrentUser() async {
+    final generation = _authGeneration;
     final prefs = await SharedPreferences.getInstance();
     if (!(prefs.getBool('pushNotifications') ?? false)) return;
     if (Platform.isAndroid || Platform.isIOS) {
@@ -173,28 +176,48 @@ class PushNotificationService {
     final info = await PackageInfo.fromPlatform();
     final deviceId = await _deviceId();
     final idToken = await user.getIdToken();
+    if (generation != _authGeneration ||
+        FirebaseAuth.instance.currentUser?.uid != user.uid) {
+      return;
+    }
     final fingerprint =
         '${user.uid}|$token|${info.version}+${info.buildNumber}|${Platform.localeName}';
     if (_registeredUid == user.uid &&
         _lastRegisteredFingerprint == fingerprint) {
       return;
     }
-    final response = await http.put(
-      Uri.parse('${AppConstants.apiBaseUrl}/api/mobile/push-tokens/$deviceId'),
-      headers: {
-        'Authorization': 'Bearer $idToken',
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({
-        'token': token,
-        'platform': Platform.isIOS ? 'ios' : 'android',
-        'bundleId': Platform.isIOS
-            ? 'com.khanhbes.vinfastbattery'
-            : 'com.bes.vinbatery',
-        'appVersion': '${info.version}+${info.buildNumber}',
-        'locale': Platform.localeName,
-      }),
-    );
+    final client = http.Client();
+    _registrationClient = client;
+    late final http.Response response;
+    try {
+      response = await client
+          .put(
+            Uri.parse(
+              '${AppConstants.apiBaseUrl}/api/mobile/push-tokens/$deviceId',
+            ),
+            headers: {
+              'Authorization': 'Bearer $idToken',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'token': token,
+              'platform': Platform.isIOS ? 'ios' : 'android',
+              'bundleId': Platform.isIOS
+                  ? 'com.khanhbes.vinfastbattery'
+                  : 'com.bes.vinbatery',
+              'appVersion': '${info.version}+${info.buildNumber}',
+              'locale': Platform.localeName,
+            }),
+          )
+          .timeout(const Duration(seconds: 8));
+    } finally {
+      if (identical(_registrationClient, client)) _registrationClient = null;
+      client.close();
+    }
+    if (generation != _authGeneration ||
+        FirebaseAuth.instance.currentUser?.uid != user.uid) {
+      return;
+    }
     if (response.statusCode >= 200 && response.statusCode < 300) {
       _registeredUid = user.uid;
       _lastRegisteredFingerprint = fingerprint;
@@ -204,16 +227,24 @@ class PushNotificationService {
   }
 
   Future<void> revokeCurrentUser() async {
+    // Invalidate earlier asynchronous token registration before revocation.
+    _authGeneration += 1;
+    _registrationClient?.close();
+    _registrationClient = null;
+    _registeredUid = null;
+    _lastRegisteredFingerprint = null;
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
     final deviceId = await _deviceId();
     final idToken = await user.getIdToken();
-    await http.delete(
-      Uri.parse('${AppConstants.apiBaseUrl}/api/mobile/push-tokens/$deviceId'),
-      headers: {'Authorization': 'Bearer $idToken'},
-    );
-    _registeredUid = null;
-    _lastRegisteredFingerprint = null;
+    await http
+        .delete(
+          Uri.parse(
+            '${AppConstants.apiBaseUrl}/api/mobile/push-tokens/$deviceId',
+          ),
+          headers: {'Authorization': 'Bearer $idToken'},
+        )
+        .timeout(const Duration(seconds: 3));
   }
 
   void dispose() {

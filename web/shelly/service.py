@@ -16,6 +16,7 @@ from .models import (
     PersonalChargingProfile,
     SmartChargeSafetyEvent,
     SmartChargeSafetyPolicy,
+    NONTERMINAL_SESSION_STATES,
     utcnow,
 )
 from .providers import ProviderError
@@ -192,6 +193,19 @@ class SmartChargeService:
         self.repository.append_audit(uid, "preview_created", preview_id=preview.preview_id)
         return preview
 
+    def _require_ready_to_energize(self, binding: DeviceBinding, status) -> None:
+        """Server-side gate: a client readiness flag cannot authorize ON."""
+        if binding.model != "S3PL-00112EU" or binding.generation != 3:
+            raise SmartChargeError("unsupportedDevice", "Bộ sạc chưa được hỗ trợ", 409)
+        if not (binding.power_meter_verified and binding.safe_boot_verified and binding.no_load_test_verified):
+            raise SmartChargeError("safetyVerificationRequired", "Cần kiểm tra an toàn bộ sạc trước khi bật", 409)
+        if status.device_id != binding.device_id or not status.online:
+            raise SmartChargeError("deviceUnverified", "Chưa xác minh được đúng bộ sạc", 409)
+        if status.relay:
+            raise SmartChargeError("relayAlreadyOn", "Bộ sạc đang bật; hãy kiểm tra phiên hiện tại", 409)
+        if not 190 <= status.voltage_v <= 255:
+            raise SmartChargeError("unsafeVoltage", "Điện áp bộ sạc ngoài ngưỡng an toàn", 409)
+
     def start(self, uid: str, preview_id: str, idempotency_key: str) -> ChargingSession:
         if not idempotency_key or len(idempotency_key) > 160:
             raise SmartChargeError("invalidIdempotencyKey", "Thiếu Idempotency-Key")
@@ -227,8 +241,7 @@ class SmartChargeService:
             status = self.provider.get_status(binding)
         except ProviderError as exc:
             raise self._provider_error(exc) from exc
-        if not status.online:
-            raise SmartChargeError("deviceOffline", "Shelly đang Offline", 409, True)
+        self._require_ready_to_energize(binding, status)
         # Preserve the canonical server-side duration (seconds) from the
         # preview. Reconstructing it from rounded minutes caused the device
         # timer to drift from the ETA shown to the user.
@@ -321,20 +334,25 @@ class SmartChargeService:
             self.repository.append_audit(uid, "session_started", session_id=session.session_id, device_id=binding.device_id)
             return session
         except ProviderError as exc:
+            off_verified = False
             try:
                 self.provider.turn_off(binding)
+                off_status = self.provider.get_status(binding)
+                off_verified = off_status.device_id == binding.device_id and not off_status.relay
             except ProviderError:
                 pass
-            session.state = "failed"
+            session.state = "failed" if off_verified else "unknown"
             session.stop_reason = "command_failed"
             session.last_error = exc.code
-            session.stopped_at = self.clock()
-            session.updated_at = session.stopped_at
+            session.stopped_at = self.clock() if off_verified else None
+            session.updated_at = self.clock()
             session.version += 1
             self.repository.save_session(uid, session)
-            self.repository.upsert_charge_log(uid, session)
+            if off_verified:
+                self.repository.upsert_charge_log(uid, session)
             self.repository.append_audit(uid, "session_start_failed", session_id=session.session_id, error=exc.code)
-            self._emit_push(uid, session)
+            if off_verified:
+                self._emit_push(uid, session)
             raise self._provider_error(exc) from exc
 
     def status(self, uid: str, vehicle_id: str | None = None):
@@ -366,7 +384,7 @@ class SmartChargeService:
         return {
             "status": status.to_dict() if hasattr(status, "to_dict") else status,
             "session": session.to_dict() if session else None,
-            "active": bool(session and session.state in ("arming", "active")),
+            "active": bool(session and session.state in NONTERMINAL_SESSION_STATES),
         }
 
     def _finalize_session(
@@ -388,7 +406,29 @@ class SmartChargeService:
         persistence.  A repeated terminal callback therefore cannot create a
         second history item or move the vehicle SOC backwards.
         """
-        if session.state not in ("arming", "active"):
+        if session.state not in NONTERMINAL_SESSION_STATES:
+            return session
+        # Telemetry and an old relay value are not proof of OFF. Never make a
+        # session terminal (which releases the device lease) without a fresh
+        # readback of the immutable device attached to this session.
+        if status is None:
+            binding = self.binding(uid, session.vehicle_id)
+            if binding is None or binding.device_id != session.device_id:
+                session.state = "unknown"
+                session.updated_at = self.clock()
+                self.repository.save_session(uid, session)
+                return session
+            try:
+                status = self.provider.get_status(binding)
+            except ProviderError:
+                session.state = "unknown"
+                session.updated_at = self.clock()
+                self.repository.save_session(uid, session)
+                return session
+        if status.device_id != session.device_id or status.relay:
+            session.state = "unknown"
+            session.updated_at = self.clock()
+            self.repository.save_session(uid, session)
             return session
         now = self.clock()
         # Zero is a valid meter reading, so never use a truthy fallback here.
@@ -428,7 +468,7 @@ class SmartChargeService:
             if session_id
             else self.repository.current_session(uid, vehicle_id=vehicle_id)
         )
-        if session_id and (session is None or session.state not in ("arming", "active")):
+        if session_id and (session is None or session.state not in NONTERMINAL_SESSION_STATES):
             raise SmartChargeError("sessionNotFound", "Không tìm thấy phiên sạc", 404)
         binding = self.binding(
             uid,
@@ -436,6 +476,8 @@ class SmartChargeService:
         )
         if not binding:
             raise SmartChargeError("notConfigured", "Shelly chưa được kết nối", 404)
+        if session and binding.device_id != session.device_id:
+            raise SmartChargeError("bindingChanged", "Liên kết bộ sạc đã thay đổi; không thể điều khiển sai thiết bị", 409)
         if session and expected_version is not None and session.version != expected_version:
             raise SmartChargeError("versionConflict", "Phiên sạc đã thay đổi; hãy đồng bộ lại", 409)
         allowed_reasons = {"need_vehicle", "enough_charge", "safety_concern", "other", "none"}
@@ -502,7 +544,7 @@ class SmartChargeService:
         # Restored/legacy terminal summaries may only exist in ChargeLogs.
         # The repository performs the authoritative owner + terminal checks
         # against that document, so do not reject those records here.
-        if session is not None and session.state in ("arming", "active"):
+        if session is not None and session.state in NONTERMINAL_SESSION_STATES:
             raise SmartChargeError(
                 "activeSessionProtected",
                 "Không thể xóa phiên đang sạc; hãy tắt và xác minh OFF trước.",
@@ -520,7 +562,7 @@ class SmartChargeService:
         session = self.repository.get_session(uid, session_id)
         if session is None:
             raise SmartChargeError("sessionNotFound", "Không tìm thấy phiên sạc", 404)
-        if session.state in ("arming", "active"):
+        if session.state in NONTERMINAL_SESSION_STATES:
             raise SmartChargeError(
                 "activeSessionProtected",
                 "Không thể ẩn phiên đang sạc; hãy tắt và xác minh OFF trước.",
@@ -591,7 +633,7 @@ class SmartChargeService:
         # first active session drops telemetry when two distinct Shellys are
         # charging different vehicles concurrently.
         session = self.repository.get_session(uid, session_id)
-        if session is None or session.state not in ("arming", "active"):
+        if session is None or session.state not in NONTERMINAL_SESSION_STATES:
             raise SmartChargeError("sessionNotFound", "Không tìm thấy phiên sạc đang hoạt động", 404)
         now = self.clock()
         last = self._last_telemetry_at.get(session_id)
@@ -672,7 +714,7 @@ class SmartChargeService:
         """Persist one compact runtime snapshot at most once per minute."""
         now = self.clock()
         last = self._last_checkpoint_at.get(session.session_id)
-        terminal = session.state not in ("arming", "active")
+        terminal = session.state not in NONTERMINAL_SESSION_STATES
         if not force and not terminal and last and (now - last).total_seconds() < 60:
             return False
         self.repository.save_session(uid, session)
@@ -879,6 +921,7 @@ class SmartChargeService:
             before = self.provider.get_status(binding)
         except ProviderError as exc:
             raise self._provider_error(exc) from exc
+        self._require_ready_to_energize(binding, before)
         session = ChargingSession(
             session_id=str(uuid.uuid4()),
             device_id=binding.device_id,
@@ -931,18 +974,22 @@ class SmartChargeService:
             self.repository.append_audit(uid, "manual_on_verified", session_id=session.session_id, device_id=binding.device_id, duration_seconds=duration_seconds)
             return session
         except ProviderError as exc:
+            off_verified = False
             try:
                 self.provider.turn_off(binding)
+                off_status = self.provider.get_status(binding)
+                off_verified = off_status.device_id == binding.device_id and not off_status.relay
             except ProviderError:
                 pass
-            session.state = "failed"
+            session.state = "failed" if off_verified else "unknown"
             session.stop_reason = "command_failed"
             session.last_error = exc.code
-            session.stopped_at = self.clock()
-            session.updated_at = session.stopped_at
+            session.stopped_at = self.clock() if off_verified else None
+            session.updated_at = self.clock()
             session.version += 1
             self.repository.save_session(uid, session)
-            self.repository.upsert_charge_log(uid, session)
+            if off_verified:
+                self.repository.upsert_charge_log(uid, session)
             raise self._provider_error(exc) from exc
 
     def current(self, uid: str, vehicle_id: str | None = None) -> ChargingSession | None:
@@ -979,7 +1026,7 @@ class SmartChargeService:
                 stop_reason="planned_timer" if near_planned else "relay_off",
                 status=status,
             )
-        if status.timer_remaining <= 0 and session.state in ("arming", "active"):
+        if status.timer_remaining <= 0 and session.state in NONTERMINAL_SESSION_STATES:
             try:
                 self.provider.turn_off(binding)
             except ProviderError:

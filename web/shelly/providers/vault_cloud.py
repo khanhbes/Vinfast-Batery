@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import time
 from urllib.parse import urlparse
 
@@ -103,7 +104,15 @@ class VaultCloudControlProvider:
         switch = self._switch(snapshot)
         if not all(field in switch for field in ("apower", "voltage", "current", "aenergy")):
             raise ProviderError("unsupportedDevice", "Thiếu trường đo điện năng của Shelly")
-        energy = switch.get("aenergy") or {}
+        if not isinstance(switch.get("output"), bool):
+            raise ProviderError("malformedProviderResponse", "Không xác minh được trạng thái relay")
+        energy = switch.get("aenergy")
+        if not isinstance(energy, dict) or "total" not in energy:
+            raise ProviderError("malformedProviderResponse", "Thiếu số đo điện năng")
+        def meter(value, field):
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+                raise ProviderError("malformedProviderResponse", f"Số đo {field} không hợp lệ")
+            return float(value)
         # Never infer an active countdown from a configured duration: that
         # value can remain after expiry. Only a live remaining-time field is
         # acceptable as evidence for an armed safety timer.
@@ -114,13 +123,13 @@ class VaultCloudControlProvider:
         settings = snapshot.get("settings") or {}
         return DeviceStatus(
             online=True,
-            relay=switch.get("output") is True,
+            relay=switch["output"],
             timer_remaining=max(0, int(float(timer or 0))),
-            power_w=float(switch.get("apower") or 0),
-            voltage_v=float(switch.get("voltage") or 0),
-            current_a=float(switch.get("current") or 0),
+            power_w=meter(switch["apower"], "W"),
+            voltage_v=meter(switch["voltage"], "V"),
+            current_a=meter(switch["current"], "A"),
             temperature_c=float(temperature["tC"]) if isinstance(temperature, dict) and temperature.get("tC") is not None else None,
-            energy_wh=float(energy.get("total") or 0),
+            energy_wh=meter(energy["total"], "Wh"),
             device_id=binding.device_id,
         )
 
@@ -148,6 +157,7 @@ class VaultCloudControlProvider:
             raise ProviderError("unsafeVoltage", "Điện áp ngoài ngưỡng an toàn")
         on_observed = False
         timer_observed = False
+        timer_auto_off_observed = False
         off_verified = False
         on_status = None
         try:
@@ -162,7 +172,15 @@ class VaultCloudControlProvider:
                 raise ProviderError("timerNotArmed", "Không xác minh được relay ON và timer")
             if on_status.power_w > 5 or on_status.current_a > .1:
                 raise ProviderError("unexpectedLoad", "Có tải điện trong lúc kiểm tra không tải")
-            self.sleep(5.5)
+            # A manual cleanup OFF is not evidence that the device timer works.
+            # Observe the device turn itself OFF before sending cleanup OFF.
+            for _ in range(8):
+                self.sleep(1.1)
+                if not self.get_status(binding).relay:
+                    timer_auto_off_observed = True
+                    break
+            if not timer_auto_off_observed:
+                raise ProviderError("timerAutoOffUnverified", "Không xác minh được timer tự tắt relay")
         finally:
             try:
                 self.turn_off(binding)
@@ -170,4 +188,4 @@ class VaultCloudControlProvider:
                 off_verified = not self.get_status(binding).relay
         if not off_verified:
             raise ProviderError("relayUnverified", "Không xác minh được relay OFF sau kiểm tra")
-        return {"identityVerified": True, "powerMeterVerified": True, "safeBootVerified": True, "noLoadTestVerified": on_observed and timer_observed and off_verified, "initialState": initial_state, "autoOn": auto_on, "relayOffVerified": off_verified}
+        return {"identityVerified": True, "powerMeterVerified": True, "safeBootVerified": True, "noLoadTestVerified": on_observed and timer_observed and timer_auto_off_observed and off_verified, "initialState": initial_state, "autoOn": auto_on, "relayOffVerified": off_verified}

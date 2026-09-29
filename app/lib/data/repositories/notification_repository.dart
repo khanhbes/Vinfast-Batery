@@ -16,6 +16,7 @@ class NotificationRepository {
   FirebaseAuth get _auth => FirebaseAuth.instance;
   int? _cachedUnread;
   DateTime? _cachedUnreadAt;
+  String? _cachedUnreadUid;
 
   String? get _uid => _auth.currentUser?.uid;
 
@@ -30,18 +31,28 @@ class NotificationRepository {
   ///
   /// Lỗi (permission, network, …) propagate thẳng lên UI để hiển thị error
   /// state thay vì spinner vô hạn.
-  Stream<List<UserNotification>> watchNotifications({int limit = 100}) {
-    final uid = _uid;
-    if (uid == null) return Stream.value(const <UserNotification>[]);
+  Stream<List<UserNotification>> watchNotifications({
+    int limit = 100,
+    String? expectedUid,
+  }) {
+    final uid = expectedUid ?? _uid;
+    if (uid == null || uid.isEmpty) {
+      return Stream.value(const <UserNotification>[]);
+    }
+    if (_uid != uid) return Stream.error(StateError('Account changed'));
 
-    return Stream.fromFuture(getNotifications(limit: limit));
+    return Stream.fromFuture(getNotifications(limit: limit, expectedUid: uid));
   }
 
   /// Lấy danh sách thông báo một lần.
   /// Fallback: nếu thiếu index thì query không orderBy, sort ở client.
-  Future<List<UserNotification>> getNotifications({int limit = 50}) async {
-    final uid = _uid;
-    if (uid == null) return [];
+  Future<List<UserNotification>> getNotifications({
+    int limit = 50,
+    String? expectedUid,
+  }) async {
+    final uid = expectedUid ?? _uid;
+    if (uid == null || uid.isEmpty) return [];
+    if (_uid != uid) throw StateError('Account changed');
 
     try {
       final snapshot = await _notificationsRef
@@ -50,6 +61,7 @@ class NotificationRepository {
           .limit(limit)
           .get();
 
+      if (_uid != uid) throw StateError('Account changed');
       return snapshot.docs
           .map((doc) => UserNotification.fromFirestore(doc))
           .toList();
@@ -59,8 +71,8 @@ class NotificationRepository {
           msg.contains('failed-precondition') ||
           msg.toLowerCase().contains('index');
       if (!isIndexError) {
-        debugPrint('[NotificationRepo] Get error (non-index): $e');
-        return [];
+        debugPrint('[NotificationRepo] Get error (${e.runtimeType})');
+        rethrow;
       }
       // Fallback: query không orderBy
       debugPrint('[NotificationRepo] Index fallback for getNotifications');
@@ -69,14 +81,15 @@ class NotificationRepository {
             .where('userId', isEqualTo: uid)
             .limit(limit)
             .get();
+        if (_uid != uid) throw StateError('Account changed');
         final list = snapshot.docs
             .map((doc) => UserNotification.fromFirestore(doc))
             .toList();
         list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
         return list.take(limit).toList();
       } catch (e2) {
-        debugPrint('[NotificationRepo] Fallback also failed: $e2');
-        return [];
+        debugPrint('[NotificationRepo] Fallback failed (${e2.runtimeType})');
+        rethrow;
       }
     }
   }
@@ -85,13 +98,16 @@ class NotificationRepository {
   ///
   /// Dùng 1 where filter rồi đếm `status == 'unread'` ở client (tránh composite
   /// index khi backend chưa deploy). Lỗi không spam UI (badge fallback 0).
-  Stream<int> watchUnreadCount() => Stream.fromFuture(getUnreadCount());
+  Stream<int> watchUnreadCount({String? expectedUid}) =>
+      Stream.fromFuture(getUnreadCount(expectedUid: expectedUid));
 
-  Future<int> getUnreadCount({bool force = false}) async {
-    final uid = _uid;
-    if (uid == null) return 0;
+  Future<int> getUnreadCount({bool force = false, String? expectedUid}) async {
+    final uid = expectedUid ?? _uid;
+    if (uid == null || uid.isEmpty) return 0;
+    if (_uid != uid) throw StateError('Account changed');
     final now = DateTime.now();
     if (!force &&
+        _cachedUnreadUid == uid &&
         _cachedUnread != null &&
         _cachedUnreadAt != null &&
         now.difference(_cachedUnreadAt!) < const Duration(minutes: 1)) {
@@ -103,17 +119,21 @@ class NotificationRepository {
           .where('status', isEqualTo: 'unread')
           .limit(1000)
           .get();
+      if (_uid != uid) throw StateError('Account changed');
       _cachedUnread = snapshot.size;
       _cachedUnreadAt = now;
+      _cachedUnreadUid = uid;
       return snapshot.size;
     } catch (e) {
-      debugPrint('[NotificationRepo] Unread count error: $e');
-      return _cachedUnread ?? 0;
+      debugPrint('[NotificationRepo] Unread count error (${e.runtimeType})');
+      rethrow;
     }
   }
 
   void invalidateUnread() {
     _cachedUnreadAt = null;
+    _cachedUnread = null;
+    _cachedUnreadUid = null;
   }
 
   /// Đánh dấu đã đọc
@@ -141,6 +161,7 @@ class NotificationRepository {
       final snapshot = await _notificationsRef
           .where('userId', isEqualTo: uid)
           .get();
+      if (_uid != uid) return false;
 
       final unread = snapshot.docs.where((d) {
         final data = d.data() as Map<String, dynamic>?;
@@ -194,12 +215,15 @@ class NotificationRepository {
   /// Backend tự giới hạn truy vấn theo UID từ Firebase token và xóa theo các
   /// batch nhỏ, tránh client phải tải rồi phát hàng trăm lệnh delete riêng lẻ.
   Future<bool> deleteAll() async {
-    if (_uid == null) return false;
+    final uid = _uid;
+    if (uid == null) return false;
     try {
       final response = await ApiService().delete('/api/mobile/notifications');
+      if (_uid != uid) return false;
       if (response['success'] != true) return false;
       _cachedUnread = 0;
       _cachedUnreadAt = DateTime.now();
+      _cachedUnreadUid = uid;
       return true;
     } catch (e) {
       debugPrint('[NotificationRepo] Delete all error: $e');

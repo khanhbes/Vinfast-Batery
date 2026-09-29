@@ -31,9 +31,12 @@ service cloud.firestore {
         && vehicleId is string
         && exists(/databases/$(database)/documents/Vehicles/$(vehicleId))
         && get(/databases/$(database)/documents/Vehicles/$(vehicleId)).data.ownerUid == request.auth.uid
-        && get(/databases/$(database)/documents/Vehicles/$(vehicleId)).data.isDeleted != true
-        && get(/databases/$(database)/documents/Vehicles/$(vehicleId)).data.isArchived != true
-        && get(/databases/$(database)/documents/Vehicles/$(vehicleId)).data.archivedAt == null;
+        && (!('isDeleted' in get(/databases/$(database)/documents/Vehicles/$(vehicleId)).data) ||
+            get(/databases/$(database)/documents/Vehicles/$(vehicleId)).data.isDeleted != true)
+        && (!('isArchived' in get(/databases/$(database)/documents/Vehicles/$(vehicleId)).data) ||
+            get(/databases/$(database)/documents/Vehicles/$(vehicleId)).data.isArchived != true)
+        && (!('archivedAt' in get(/databases/$(database)/documents/Vehicles/$(vehicleId)).data) ||
+            get(/databases/$(database)/documents/Vehicles/$(vehicleId)).data.archivedAt == null);
     }
     // Read access if the doc has ownerUid matching the user, OR (legacy)
     // ownerUid is missing but vehicleId resolves to a Vehicle the user owns.
@@ -44,7 +47,17 @@ service cloud.firestore {
       );
     }
     function canCreateOwned() {
-      return isAuth() && request.resource.data.ownerUid == request.auth.uid;
+      return isAuth() && request.resource.data.ownerUid == request.auth.uid &&
+        validVehicleReference(request.resource.data);
+    }
+    function validVehicleReference(data) {
+      return !('vehicleId' in data) || data.vehicleId == null ||
+        data.vehicleId == '' || ownsVehicleId(data.vehicleId);
+    }
+    function canUpdateOwned() {
+      return isAuth() && resource.data.ownerUid == request.auth.uid &&
+        request.resource.data.ownerUid == resource.data.ownerUid &&
+        validVehicleReference(request.resource.data);
     }
     function containsNoChargerSecrets() {
       return !('cloudAuthKey' in request.resource.data) &&
@@ -220,8 +233,7 @@ service cloud.firestore {
       // Creation and catalog changes are server-only so a client cannot forge
       // manufacturer-controlled battery or charging specifications.
       allow create: if false;
-      allow update: if isAuth() && isOwner(resource.data.ownerUid) &&
-        request.resource.data.ownerUid == request.auth.uid &&
+      allow update: if canUpdateOwned() &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'nickname', 'vehicleName', 'licensePlate', 'currentOdo',
           'currentBattery', 'lastBatteryPercent', 'stateOfHealth',
@@ -242,8 +254,7 @@ service cloud.firestore {
       // keeps legacy logs (which have no isDeleted field) queryable.
       allow read: if canReadOwned();
       allow create: if canCreateOwned();
-      allow update: if isAuth() && isOwner(resource.data.ownerUid) &&
-        request.resource.data.ownerUid == request.auth.uid &&
+      allow update: if canUpdateOwned() &&
         // A terminal session is immutable with respect to active charging;
         // this prevents a second device from resurrecting a stopped session.
         (!('sessionState' in resource.data) ||
@@ -297,8 +308,7 @@ service cloud.firestore {
     match /ChargeSamples/{sampleId} {
       allow read: if canReadOwned() && notDeleted();
       allow create: if canCreateOwned();
-      allow update: if isAuth() && isOwner(resource.data.ownerUid) &&
-        request.resource.data.ownerUid == request.auth.uid;
+      allow update: if canUpdateOwned();
       allow delete: if false;
     }
 
@@ -306,7 +316,7 @@ service cloud.firestore {
     match /TripLogs/{tripId} {
       allow read: if canReadOwned() && notDeleted();
       allow create: if canCreateOwned();
-      allow update: if isAuth() && isOwner(resource.data.ownerUid);
+      allow update: if canUpdateOwned();
       allow delete: if false;
     }
 
@@ -319,7 +329,7 @@ service cloud.firestore {
     match /MaintenanceTasks/{taskId} {
       allow read: if canReadOwned() && notDeleted();
       allow create: if canCreateOwned();
-      allow update: if isAuth() && isOwner(resource.data.ownerUid);
+      allow update: if canUpdateOwned();
       // Allow owner to hard-delete their own tasks (used by deleteMaintenanceTask).
       allow delete: if isAuth() && isOwner(resource.data.ownerUid);
     }
@@ -336,7 +346,7 @@ service cloud.firestore {
     match /battery_states/{stateId} {
       allow read: if canReadOwned();
       allow create: if canCreateOwned();
-      allow update: if isAuth() && isOwner(resource.data.ownerUid);
+      allow update: if canUpdateOwned();
       allow delete: if false;
     }
 
@@ -344,7 +354,7 @@ service cloud.firestore {
     match /trip_predictions/{predictionId} {
       allow read: if canReadOwned();
       allow create: if canCreateOwned();
-      allow update: if isAuth() && isOwner(resource.data.ownerUid);
+      allow update: if canUpdateOwned();
       allow delete: if isAuth() && isOwner(resource.data.ownerUid);
     }
 
@@ -352,7 +362,7 @@ service cloud.firestore {
     match /soc_predictions/{predictionId} {
       allow read: if canReadOwned();
       allow create: if canCreateOwned();
-      allow update: if isAuth() && isOwner(resource.data.ownerUid);
+      allow update: if canUpdateOwned();
       allow delete: if false;
     }
 
@@ -420,7 +430,8 @@ service cloud.firestore {
     match /UserNotifications/{notificationId} {
       allow read: if isAuth() && resource.data.userId == request.auth.uid;
       allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
-      allow update: if isAuth() && resource.data.userId == request.auth.uid;
+      allow update: if isAuth() && resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == resource.data.userId;
       allow delete: if isAuth() && resource.data.userId == request.auth.uid;
     }
 

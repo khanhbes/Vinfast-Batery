@@ -307,10 +307,12 @@ class SmartChargerService {
         code: 'relayUnverified',
       );
     }
-    final operationId = 'safety-${_clock().toUtc().microsecondsSinceEpoch}-${selected.deviceId}';
+    final operationId =
+        'safety-${_clock().toUtc().microsecondsSinceEpoch}-${selected.deviceId}';
     final transport = await _verifyBeforeOn(selected, operationId: operationId);
     SmartChargerStatus? observedOn;
     SmartChargerStatus? observedOff;
+    var timerAutoOffObserved = false;
     SmartChargerException? failure;
     try {
       await _setSwitchAtTransport(
@@ -346,6 +348,15 @@ class SmartChargerService {
         );
       }
       await _delay(const Duration(seconds: 6));
+      // Verify the timer itself turned the relay OFF. The cleanup OFF below
+      // must never count as proof of a working device safety timer.
+      timerAutoOffObserved = !(await _getStatus(selected)).relay;
+      if (!timerAutoOffObserved) {
+        throw const SmartChargerException(
+          'Không xác minh được timer tự tắt relay.',
+          code: 'timerAutoOffUnverified',
+        );
+      }
     } on SmartChargerException catch (error) {
       failure = error;
     } finally {
@@ -380,6 +391,7 @@ class SmartChargerService {
       initialStatus: initial,
       onObserved: observedOn != null,
       timerObserved: (observedOn?.timerRemaining?.inSeconds ?? 0) > 0,
+      timerAutoOffObserved: timerAutoOffObserved,
       offVerified: !off.relay,
       noLoadPowerW: observedOn?.powerW ?? 0,
       noLoadCurrentA: observedOn?.currentA ?? 0,
@@ -500,8 +512,7 @@ class SmartChargerService {
     ShellyConnectionProfile profile, {
     required String operationId,
     bool allowRelayOn = false,
-  }
-  ) async {
+  }) async {
     if ((await _preferences()).getBool(_uncertainRelayKey) == true) {
       throw const SmartChargerException(
         'Relay đang ở trạng thái chưa xác định. Hãy đọc lại hoặc tắt Shelly vật lý trước khi bật lại.',
@@ -673,7 +684,8 @@ class SmartChargerService {
         code: 'notReadyForControl',
       );
     }
-    final operationId = '${now.toUtc().microsecondsSinceEpoch}-${profile.deviceId}';
+    final operationId =
+        '${now.toUtc().microsecondsSinceEpoch}-${profile.deviceId}';
     final transport = await _verifyBeforeOn(profile, operationId: operationId);
     final session = SmartChargingSession(
       sessionId: operationId,

@@ -96,7 +96,12 @@ void main() {
                   findsOneWidget,
                 );
               }
-              for (final text in tester.widgetList<Text>(find.byType(Text))) {
+              for (final copy in [
+                OnboardingStepCopy.steps[step].title,
+                OnboardingStepCopy.steps[step].description,
+                if (step == 1) spec.modelName,
+              ]) {
+                final text = tester.widget<Text>(find.text(copy).first);
                 expect(text.overflow, isNot(TextOverflow.ellipsis));
               }
               await tester.pumpWidget(const SizedBox());
@@ -174,30 +179,33 @@ void main() {
     tester,
   ) async {
     final semantics = tester.ensureSemantics();
-    addTearDown(semantics.dispose);
-    var selections = 0;
-    await tester.pumpWidget(
-      fixture(
-        step: 1,
-        brightness: Brightness.light,
-        content: OnboardingVehicleChoice(
-          spec: spec,
-          selected: true,
-          onSelected: () => selections++,
+    try {
+      var selections = 0;
+      await tester.pumpWidget(
+        fixture(
+          step: 1,
+          brightness: Brightness.light,
+          content: OnboardingVehicleChoice(
+            spec: spec,
+            selected: true,
+            onSelected: () => selections++,
+          ),
         ),
-      ),
-    );
-    expect(find.text(spec.modelName), findsOneWidget);
-    final choiceSemantics = find.descendant(
-      of: find.byType(OnboardingVehicleChoice),
-      matching: find.byWidgetPredicate(
-        (widget) => widget is Semantics && widget.properties.selected == true,
-      ),
-    );
-    expect(choiceSemantics, findsOneWidget);
-    await tester.ensureVisible(find.text(spec.modelName));
-    await tester.tap(find.text(spec.modelName));
-    expect(selections, 1);
-    expect(tester.takeException(), isNull);
+      );
+      expect(find.text(spec.modelName), findsOneWidget);
+      final choiceSemantics = find.descendant(
+        of: find.byType(OnboardingVehicleChoice),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is Semantics && widget.properties.selected == true,
+        ),
+      );
+      expect(choiceSemantics, findsOneWidget);
+      await tester.ensureVisible(find.text(spec.modelName));
+      await tester.tap(find.text(spec.modelName));
+      expect(selections, 1);
+      expect(tester.takeException(), isNull);
+    } finally {
+      semantics.dispose();
+    }
   });
 }

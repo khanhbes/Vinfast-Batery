@@ -535,15 +535,7 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
             // A draft that reached the final step but is waiting for the API
             // must not trap the user on the wizard after a restart. The app
             // shell can show cached data and a retry status strip.
-            final syncPending =
-                draft != null &&
-                (draft.finalizedAt != null ||
-                    draft.state == OnboardingDraftState.syncing ||
-                    draft.state == OnboardingDraftState.failedRetryable ||
-                    draft.state == OnboardingDraftState.synced) &&
-                draft.state != OnboardingDraftState.failedPermanent &&
-                draft.name.trim().isNotEmpty &&
-                draft.catalogId.trim().isNotEmpty;
+            final syncPending = draft?.isEligibleForCommit == true;
             if (data == null) {
               if (syncPending) {
                 return const InternetConnectionNotice(child: AppNavigation());

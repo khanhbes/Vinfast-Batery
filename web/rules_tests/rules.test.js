@@ -2,8 +2,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {
   initializeTestEnvironment,
-  assertFails,
-  assertSucceeds,
+  assertFails: firebaseAssertFails,
+  assertSucceeds: firebaseAssertSucceeds,
 } = require('@firebase/rules-unit-testing');
 const {
   collection,
@@ -16,6 +16,17 @@ const {
 } = require('firebase/firestore');
 
 let env;
+let assertionCount = 0;
+
+async function assertFails(promise) {
+  await firebaseAssertFails(promise);
+  assertionCount += 1;
+}
+
+async function assertSucceeds(promise) {
+  await firebaseAssertSucceeds(promise);
+  assertionCount += 1;
+}
 
 async function setup() {
   env = await initializeTestEnvironment({
@@ -90,6 +101,26 @@ async function run() {
       { onboardingCompletedAt: 'client-forged' },
     ));
 
+    await env.withSecurityRulesDisabled(async (context) => {
+      const adminDb = context.firestore();
+      await setDoc(doc(adminDb, 'Vehicles/vehicle-alice'), {
+        ownerUid: 'alice', isDeleted: false, isArchived: false,
+      });
+      await setDoc(doc(adminDb, 'Vehicles/vehicle-bob'), {
+        ownerUid: 'bob', isDeleted: false, isArchived: false,
+      });
+    });
+
+    await assertSucceeds(setDoc(doc(aliceDb, 'TripLogs/trip-alice'), {
+      ownerUid: 'alice', vehicleId: 'vehicle-alice', isDeleted: false,
+    }));
+    await assertFails(setDoc(doc(aliceDb, 'TripLogs/trip-cross-vehicle'), {
+      ownerUid: 'alice', vehicleId: 'vehicle-bob', isDeleted: false,
+    }));
+    await assertFails(updateDoc(doc(aliceDb, 'TripLogs/trip-alice'), {
+      ownerUid: 'bob',
+    }));
+
     // ChargeLogs queries must remain readable for the owner even when legacy
     // documents do not carry deletion flags.  The app filters presentation
     // flags client-side; rules must not require those fields in a query.
@@ -121,6 +152,9 @@ async function run() {
       where('vehicleId', '==', 'vehicle-alice'),
     );
     await assertSucceeds(getDocs(ownerHistory));
+    await assertFails(updateDoc(doc(aliceDb, 'ChargeLogs/legacy-history'), {
+      ownerUid: 'bob',
+    }));
     const crossAccountHistory = query(
       collection(bobDb, 'ChargeLogs'),
       where('ownerUid', '==', 'alice'),
@@ -139,7 +173,7 @@ async function run() {
       doc(bobDb, 'users/alice/appPreferences/ui'),
       { pendingAutoTours: ['tour_overview_v2'] },
     ));
-    console.log('Firestore Rules: 17 allow/deny assertions passed.');
+    console.log(`Firestore Rules: ${assertionCount} allow/deny assertions passed.`);
   } finally {
     await teardown();
   }

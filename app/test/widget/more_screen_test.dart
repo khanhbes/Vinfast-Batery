@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:vinfast_battery/core/constants/beta_capabilities.dart';
 import 'package:vinfast_battery/features/more/more_screen.dart';
 
 void main() {
@@ -25,14 +26,17 @@ void main() {
 
     // Section headers
     expect(find.text('PHƯƠNG TIỆN & SẠC'), findsOneWidget);
-    expect(find.text('HỆ THỐNG & TRÍ TUỆ AI'), findsOneWidget);
+    expect(find.text(BetaCapabilities.advancedAi
+        ? 'HỆ THỐNG & TRÍ TUỆ AI' : 'HỆ THỐNG'), findsOneWidget);
     expect(find.text('HỖ TRỢ & TÀI KHOẢN'), findsOneWidget);
 
     // Key action tiles
     expect(find.text('Xe của tôi'), findsOneWidget);
     expect(find.text('Sạc thông minh Shelly'), findsOneWidget);
-    expect(find.text('Lập hành trình'), findsOneWidget);
-    expect(find.text('Trợ lý AI & Dự báo Pin'), findsOneWidget);
+    expect(find.text('Lập hành trình'),
+        BetaCapabilities.tripPlanner ? findsOneWidget : findsNothing);
+    expect(find.text('Trợ lý AI & Dự báo Pin'),
+        BetaCapabilities.advancedAi ? findsOneWidget : findsNothing);
     expect(find.text('Bảo dưỡng xe'), findsOneWidget);
     expect(find.text('Cài đặt hệ thống'), findsOneWidget);
     expect(find.text('Hướng dẫn sử dụng'), findsOneWidget);

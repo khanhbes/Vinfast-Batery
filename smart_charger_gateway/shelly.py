@@ -52,6 +52,9 @@ class ShellyClient:
 
     def get_status(self) -> ChargerStatus:
         raw = self._rpc("Switch.GetStatus", {"id": 0})
+        if not isinstance(raw.get("output"), bool):
+            # Missing output is not evidence that the relay is OFF.
+            raise ShellyUnavailableError("Shelly relay state is unknown")
         temperature = raw.get("temperature")
         temperature_c = (
             temperature.get("tC") if isinstance(temperature, dict) else None
@@ -60,7 +63,7 @@ class ShellyClient:
         energy_wh = energy.get("total", 0) if isinstance(energy, dict) else 0
         return ChargerStatus(
             online=True,
-            relay=bool(raw.get("output", False)),
+            relay=raw["output"],
             power_w=float(raw.get("apower") or 0),
             voltage_v=float(raw.get("voltage") or 0),
             current_a=float(raw.get("current") or 0),
@@ -73,12 +76,18 @@ class ShellyClient:
         self, on: bool, auto_off_delay_seconds: int | None = None
     ) -> ChargerCommandResponse:
         previous_state = self.get_status().relay
-        params: dict[str, Any] = {"id": 0, "on": str(on).lower()}
-        if on and auto_off_delay_seconds is not None and auto_off_delay_seconds > 0:
-            params["auto_off"] = True
-            params["auto_off_delay"] = auto_off_delay_seconds
-
-        self._rpc_with_retry("Switch.Set", params)
+        if on and (auto_off_delay_seconds is None or auto_off_delay_seconds <= 0):
+            raise ShellyUnavailableError("A hardware timer is required to turn on")
+        params: dict[str, Any] = {"id": 0, "on": on}
+        if on:
+            # Switch.Set accepts toggle_after. auto_off is a config setting,
+            # not a command parameter and cannot bound this ON operation.
+            params["toggle_after"] = auto_off_delay_seconds
+            # An ambiguous timeout may mean the relay did turn ON. Never send
+            # a second ON; callers must read back and use OFF for recovery.
+            self._rpc("Switch.Set", params)
+        else:
+            self._rpc_with_retry("Switch.Set", params)
         # Switch.Set returns the previous state on some firmware. Read back the
         # actual state so the gateway never claims a command succeeded blindly.
         relay = self.get_status().relay
@@ -87,4 +96,3 @@ class ShellyClient:
             relay=relay,
             previous_state=previous_state,
         )
-
