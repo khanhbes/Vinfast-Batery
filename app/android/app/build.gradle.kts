@@ -33,6 +33,15 @@ val allowDebugSigning =
         || project.findProperty("allowDebugSigning")?.toString()?.equals("true", ignoreCase = true) == true
         || project.findProperty("ALLOW_DEBUG_SIGNING")?.toString()?.equals("true", ignoreCase = true) == true
 
+if (gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) } &&
+    !hasReleaseSigning && !allowDebugSigning) {
+    throw GradleException(
+        "Release signing is not configured. Set ANDROID_STORE_FILE, " +
+            "ANDROID_STORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD. " +
+            "For an explicitly debug-signed QA artifact only, set ALLOW_DEBUG_SIGNING=true."
+    )
+}
+
 android {
     namespace = "com.bes.vinbatery"
     compileSdk = flutter.compileSdkVersion
@@ -67,8 +76,12 @@ android {
                     keyAlias = releaseKeyAlias
                     keyPassword = releaseKeyPassword
                 }
-            } else {
+            } else if (allowDebugSigning) {
                 signingConfigs.getByName("debug")
+            } else {
+                // A debug build can configure this project without silently
+                // producing a debug-signed release artifact.
+                null
             }
             isMinifyEnabled = false
             isShrinkResources = false

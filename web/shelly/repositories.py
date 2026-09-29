@@ -12,6 +12,7 @@ from .models import (
     EtaCandidate,
     PersonalChargingProfile,
     SmartChargeSafetyEvent,
+    NONTERMINAL_SESSION_STATES,
 )
 from .profile_vault import ProfileVaultError, ShellyProfileVault
 
@@ -40,7 +41,7 @@ class SmartChargeRepository:
         self._training_samples: dict[tuple[str, str], dict[str, dict]] = {}
         # Process-local guard for a physical Shelly shared by multiple
         # accounts. Firestore leases below cover multi-process deployments.
-        self._device_leases: dict[str, tuple[str, str, datetime]] = {}
+        self._device_leases: dict[str, tuple[str, str]] = {}
         self._device_owners: dict[str, str] = {}
         self._last_history_skipped = 0
         self._profile_vault = ShellyProfileVault()
@@ -682,10 +683,6 @@ class SmartChargeRepository:
         with self._lock:
             self._sessions.setdefault(uid, {})[session.session_id] = session
             self._idempotency[(uid, session.idempotency_key)] = session.session_id
-            if session.state not in ("arming", "starting", "active", "stopping", "unknown"):
-                lease = self._device_leases.get(session.device_id)
-                if lease and lease[0] == uid and lease[1] == session.session_id:
-                    self._device_leases.pop(session.device_id, None)
         if self.db:
             payload = session.to_dict()
             payload["idempotency_key"] = session.idempotency_key
@@ -693,25 +690,22 @@ class SmartChargeRepository:
         # A terminal session must release both lock layers.  Leaving the
         # Firestore lease until its 12-hour expiry prevented a legitimate next
         # charging session after a successful OFF verification.
-        if session.state not in ("arming", "starting", "active", "stopping", "unknown"):
+        if session.state not in NONTERMINAL_SESSION_STATES:
             self.release_device_session(uid, session.device_id, session.session_id)
 
     def claim_device_session(self, uid: str, device_id: str, session_id: str) -> bool:
         """Atomically reserve a physical Shelly for one active session.
 
-        The in-memory lease protects the normal single-process deployment. A
-        short Firestore lease additionally prevents two app/server workers
-        from arming the same shared device at the same time.
+        The in-memory lock protects one process; Firestore prevents two workers
+        from arming the same device. Neither lock expires on a timer: an
+        unknown relay must be resolved by readback before explicit release.
         """
         now = datetime.now(timezone.utc)
-        expires = now.replace(microsecond=0)
-        from datetime import timedelta
-        expires = expires + timedelta(hours=12)
         with self._lock:
             existing = self._device_leases.get(device_id)
-            if existing and existing[2] > now and existing[:2] != (uid, session_id):
+            if existing and existing != (uid, session_id):
                 return False
-            self._device_leases[device_id] = (uid, session_id, expires)
+            self._device_leases[device_id] = (uid, session_id)
         if not self.db:
             return True
         try:
@@ -723,15 +717,12 @@ class SmartChargeRepository:
             def claim(txn):
                 snapshot = ref.get(transaction=txn)
                 data = snapshot.to_dict() or {} if snapshot.exists else {}
-                expiry = data.get("expiresAt")
-                if hasattr(expiry, "to_datetime"):
-                    expiry = expiry.to_datetime()
-                if isinstance(expiry, datetime) and expiry.tzinfo is None:
-                    expiry = expiry.replace(tzinfo=timezone.utc)
                 same_operation = data.get("ownerUid") == uid and data.get("sessionId") == session_id
-                if snapshot.exists and expiry and expiry > now and not same_operation:
+                # Legacy expiresAt is deliberately ignored. Taking over an
+                # expired unknown ON would permit a second energizing command.
+                if snapshot.exists and not same_operation:
                     return False
-                txn.set(ref, {"ownerUid": uid, "sessionId": session_id, "deviceIdHash": self._device_owner_doc_id(device_id), "expiresAt": expires, "updatedAt": now}, merge=True)
+                txn.set(ref, {"ownerUid": uid, "sessionId": session_id, "deviceIdHash": self._device_owner_doc_id(device_id), "updatedAt": now})
                 return True
 
             claimed = bool(claim(transaction))
@@ -791,7 +782,7 @@ class SmartChargeRepository:
             "actualStopAt": session.stopped_at or session.updated_at,
             "stopReason": session.stop_reason,
             "sessionState": session.state,
-            "isActive": session.state in ("arming", "active"),
+            "isActive": session.state in NONTERMINAL_SESSION_STATES,
             "energyWh": session.energy_used_wh,
             "predictionSource": session.prediction_source,
             "predictionConfidence": session.prediction_confidence,
@@ -898,7 +889,7 @@ class SmartChargeRepository:
             try:
                 snapshots = (self.db.collection("users").document(uid)
                              .collection("smartChargingSessions")
-                             .where("state", "in", ["arming", "active"])
+                             .where("state", "in", sorted(NONTERMINAL_SESSION_STATES))
                              .limit(20).stream())
                 values = []
                 for snapshot in snapshots:
@@ -916,7 +907,7 @@ class SmartChargeRepository:
                 pass
         with self._lock:
             return [s for s in self._sessions.get(uid, {}).values()
-                    if s.state in ("arming", "active")]
+                    if s.state in NONTERMINAL_SESSION_STATES]
 
     def list_all_active_sessions(self) -> list[dict]:
         """Bounded collection-group scan used only by the reconciliation worker."""
@@ -926,11 +917,11 @@ class SmartChargeRepository:
                     {"uid": uid, "vehicle_id": item.vehicle_id}
                     for uid, items in self._sessions.items()
                     for item in items.values()
-                    if item.state in ("arming", "active")
+                    if item.state in NONTERMINAL_SESSION_STATES
                 ]
         try:
             snapshots = (self.db.collection_group("smartChargingSessions")
-                         .where("state", "in", ["arming", "active"])
+                         .where("state", "in", sorted(NONTERMINAL_SESSION_STATES))
                          .limit(100).stream())
             result = []
             for snapshot in snapshots:
@@ -1001,7 +992,7 @@ class SmartChargeRepository:
         state = session.state if session is not None else str(
             log_data.get("sessionState") or log_data.get("status") or ""
         )
-        if state in ("arming", "active"):
+        if state in NONTERMINAL_SESSION_STATES:
             return False
         vehicle_id = session.vehicle_id if session is not None else str(
             log_data.get("vehicleId") or ""
@@ -1035,7 +1026,7 @@ class SmartChargeRepository:
     def hide_session(self, uid: str, session_id: str) -> ChargingSession | None:
         """Hide a terminal session from normal history without destroying it."""
         session = self.get_session(uid, session_id)
-        if session is None or session.state in ("arming", "active"):
+        if session is None or session.state in NONTERMINAL_SESSION_STATES:
             return None
         when = datetime.now(timezone.utc)
         session.hidden_at = when
@@ -1676,7 +1667,7 @@ def _session_from_charge_log(data: dict, document_id: str, uid: str) -> Charging
     state_value = str(data.get("sessionState") or data.get("status") or "completed")
     if state_value == "terminal":
         state_value = "completed"
-    if state_value not in ("arming", "active", "completed", "cancelled", "interrupted", "failed"):
+    if state_value not in (*NONTERMINAL_SESSION_STATES, "completed", "cancelled", "interrupted", "failed"):
         state_value = "completed" if stopped else "active"
     planned = _date(data.get("plannedStopAt")) or created + timedelta(seconds=duration_seconds)
     absolute = created + timedelta(hours=10)

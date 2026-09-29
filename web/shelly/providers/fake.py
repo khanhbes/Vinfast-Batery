@@ -38,7 +38,7 @@ class FakeShellyProvider:
     def get_status(self, binding: DeviceBinding) -> DeviceStatus:
         if not self.status.online:
             raise ProviderError("deviceOffline", "Shelly đang Offline", True)
-        if self.fail_readback:
+        if self.fail_readback and self.status.relay:
             return DeviceStatus(online=True, relay=True, timer_remaining=0, device_id=binding.device_id)
         self.status.device_id = binding.device_id
         return self.status

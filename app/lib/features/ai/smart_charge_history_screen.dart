@@ -221,8 +221,9 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted ||
           contextGeneration != _contextGeneration ||
-          widget.initialSessionId != target)
+          widget.initialSessionId != target) {
         return;
+      }
       widget.onPendingTargetConsumed?.call();
       Navigator.of(context).push(
         MaterialPageRoute(
@@ -507,8 +508,11 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
       helpText: 'Chọn khoảng lịch sử sạc',
       saveText: 'ÁP DỤNG',
     );
-    if (selected == null || !mounted || contextGeneration != _contextGeneration)
+    if (selected == null ||
+        !mounted ||
+        contextGeneration != _contextGeneration) {
       return;
+    }
     if (selected.duration.inDays > 366) {
       AppPopup.showWarning(
         'Khoảng thời gian quá dài',
@@ -599,8 +603,9 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
         ),
       ),
     );
-    if (format == null || !mounted || contextGeneration != _contextGeneration)
+    if (format == null || !mounted || contextGeneration != _contextGeneration) {
       return;
+    }
     try {
       final result = await controller.exportHistory(
         ChargeReportRequest(
@@ -669,8 +674,9 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
     );
     if (confirmed != true ||
         !mounted ||
-        contextGeneration != _contextGeneration)
+        contextGeneration != _contextGeneration) {
       return;
+    }
     try {
       await controller.hideSession(session.sessionId);
       if (mounted && contextGeneration == _contextGeneration) {
@@ -1326,8 +1332,9 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
         _liveTimer = null;
       }
     } catch (_) {
-      if (isCurrent())
+      if (isCurrent()) {
         setState(() => _error = 'Không thể tải dữ liệu biểu đồ.');
+      }
     } finally {
       if (isCurrent()) _loadingTelemetry = false;
     }
@@ -1948,8 +1955,9 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
       context: context,
       builder: (_) => const ConfirmSessionSocDialog(),
     );
-    if (value == null || !mounted || contextGeneration != _contextGeneration)
+    if (value == null || !mounted || contextGeneration != _contextGeneration) {
       return;
+    }
     try {
       final summary = await controller.confirmActualEndSoc(session, value);
       if (mounted && contextGeneration == _contextGeneration) {
@@ -2022,8 +2030,9 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
     input.dispose();
     if (confirmed != true ||
         !mounted ||
-        contextGeneration != _contextGeneration)
+        contextGeneration != _contextGeneration) {
       return;
+    }
     try {
       await controller.privacyEraseSession(sessionId, code);
       if (mounted && contextGeneration == _contextGeneration) {
@@ -2069,8 +2078,9 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
     );
     if (confirmed != true ||
         !mounted ||
-        contextGeneration != _contextGeneration)
+        contextGeneration != _contextGeneration) {
       return;
+    }
     try {
       await controller.hideSession(sessionId);
       if (mounted && contextGeneration == _contextGeneration) {

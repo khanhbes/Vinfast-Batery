@@ -280,8 +280,9 @@ class _BatteryBotScreenState extends State<BatteryBotScreen> {
     if (!mounted ||
         confirmed != true ||
         clearingUid != _uid ||
-        revision != _accountRevision)
+        revision != _accountRevision) {
       return;
+    }
     _messages.clear();
     _messages.add(
       const _BotMessage(

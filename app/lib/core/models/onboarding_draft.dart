@@ -61,6 +61,14 @@ class OnboardingDraft {
   final String? lastErrorMessage;
   final DateTime? updatedAt;
 
+  /// A selected vehicle is only a draft. Neither AuthGate nor a sync worker
+  /// may treat it as completed until the user confirms the review step.
+  bool get isEligibleForCommit =>
+      finalizedAt != null &&
+      name.trim().isNotEmpty &&
+      catalogId.trim().isNotEmpty &&
+      state != OnboardingDraftState.failedPermanent;
+
   factory OnboardingDraft.create({
     required String uid,
     required String name,
@@ -273,7 +281,9 @@ class OnboardingDraftRepository {
           .doc(draft.uid)
           .collection('onboardingDrafts')
           .doc('current')
-          .set(draft.toMap(), SetOptions(merge: true));
+          // Replace the whole draft so a skipped optional answer does not
+          // survive a previous merge as a stale Firestore field.
+          .set(draft.toMap());
       return true;
     } catch (_) {
       return false;

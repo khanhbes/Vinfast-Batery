@@ -63,4 +63,38 @@ void main() {
     final restored = OnboardingDraft.fromMap(draft.uid, draft.toMap());
     expect(restored.finalizedAt, finalizedAt);
   });
+
+  test('syncing state never substitutes for final confirmation', () {
+    final draft = OnboardingDraft.create(
+      uid: 'qa-user',
+      name: 'QA User',
+      catalogId: 'evo200',
+    );
+    expect(draft.isEligibleForCommit, isFalse);
+    expect(
+      draft.copyWith(state: OnboardingDraftState.syncing).isEligibleForCommit,
+      isFalse,
+    );
+    expect(
+      draft
+          .copyWith(state: OnboardingDraftState.failedRetryable)
+          .isEligibleForCommit,
+      isFalse,
+    );
+    expect(
+      draft
+          .copyWith(finalizedAt: DateTime.utc(2026, 9, 28))
+          .isEligibleForCommit,
+      isTrue,
+    );
+    expect(
+      draft
+          .copyWith(
+            finalizedAt: DateTime.utc(2026, 9, 28),
+            state: OnboardingDraftState.failedPermanent,
+          )
+          .isEligibleForCommit,
+      isFalse,
+    );
+  });
 }

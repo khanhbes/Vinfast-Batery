@@ -318,15 +318,28 @@ class AuthService {
   /// Đăng xuất — chỉ method này được gọi FirebaseAuth.signOut()
   Future<Map<String, dynamic>> logout() async {
     try {
-      await PushNotificationService.instance.revokeCurrentUser();
+      try {
+        await PushNotificationService.instance.revokeCurrentUser().timeout(
+          const Duration(seconds: 5),
+        );
+      } catch (error) {
+        // A failed API revocation must not trap the previous account in UI.
+        debugPrint(
+          '[AuthService] push revocation deferred (${error.runtimeType})',
+        );
+      }
       // Stop the local telemetry worker only. Do not send a relay OFF command;
       // the Shelly timer remains the hardware safety authority and another
       // device may continue monitoring the account-scoped session.
       try {
-        await SmartChargeTelemetryForegroundService.stop();
+        await SmartChargeTelemetryForegroundService.stop().timeout(
+          const Duration(seconds: 5),
+        );
       } catch (error) {
         // A missing foreground-service plugin must not prevent Firebase sign-out.
-        debugPrint('[AuthService] telemetry worker stop deferred: $error');
+        debugPrint(
+          '[AuthService] telemetry worker stop deferred (${error.runtimeType})',
+        );
       }
       // Dừng auto sync
       _syncService.stopAutoSync();
@@ -342,7 +355,7 @@ class AuthService {
 
       return {'success': true, 'message': 'Logout successful'};
     } catch (e) {
-      debugPrint('[AuthService] Logout error: $e');
+      debugPrint('[AuthService] Logout error (${e.runtimeType})');
       return {
         'success': false,
         'error': 'Đăng xuất thất bại.',

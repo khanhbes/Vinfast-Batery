@@ -12,7 +12,7 @@ import requests
 
 from flask import Blueprint, after_this_request, jsonify, request
 
-from .models import DeviceBinding, utcnow
+from .models import DeviceBinding, NONTERMINAL_SESSION_STATES, utcnow
 from .profile_vault import ProfileVaultError
 from .service import SmartChargeError
 
@@ -473,7 +473,7 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
     @authenticated
     def current(uid):
         session = service.current(uid, request.args.get("vehicleId") or None)
-        active = bool(session and session.state in ("arming", "active"))
+        active = bool(session and session.state in NONTERMINAL_SESSION_STATES)
         return ok(session.to_dict() if session else None, active=active)
 
     @bp.get("/api/smart-charging/sessions/active")

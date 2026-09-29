@@ -25,6 +25,7 @@ models/
 # Secrets (không bao giờ bake vào image)
 *.json
 !dashboard/package*.json
+!assets/vinfast_specs_fallback.json
 secrets/
 
 # Giữ lại requirements files

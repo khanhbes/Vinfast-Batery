@@ -105,6 +105,7 @@ class ShellySafetyTestResult {
     required this.initialStatus,
     required this.onObserved,
     required this.timerObserved,
+    required this.timerAutoOffObserved,
     required this.offVerified,
     required this.noLoadPowerW,
     required this.noLoadCurrentA,
@@ -114,10 +115,12 @@ class ShellySafetyTestResult {
   final SmartChargerStatus initialStatus;
   final bool onObserved;
   final bool timerObserved;
+  final bool timerAutoOffObserved;
   final bool offVerified;
   final double noLoadPowerW;
   final double noLoadCurrentA;
   final DateTime verifiedAt;
 
-  bool get passed => onObserved && timerObserved && offVerified;
+  bool get passed =>
+      onObserved && timerObserved && timerAutoOffObserved && offVerified;
 }

@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/notification_center_service.dart';
@@ -11,13 +14,17 @@ import '../../data/models/user_notification.dart';
 import '../../navigation/app_navigation.dart';
 
 /// Provider cho stream thông báo
-final notificationsProvider = StreamProvider<List<UserNotification>>((ref) {
-  return NotificationCenterService().watchNotifications();
-});
+final notificationsProvider = StreamProvider.autoDispose
+    .family<List<UserNotification>, String>((ref, uid) {
+      return NotificationCenterService().watchNotifications(expectedUid: uid);
+    });
 
 /// Provider cho unread count
-final unreadCountProvider = StreamProvider<int>((ref) {
-  return NotificationCenterService().watchUnreadCount();
+final unreadCountProvider = StreamProvider.autoDispose.family<int, String>((
+  ref,
+  uid,
+) {
+  return NotificationCenterService().watchUnreadCount(expectedUid: uid);
 });
 
 /// Notification Center Screen - hiển thị danh sách thông báo
@@ -33,11 +40,28 @@ class _NotificationCenterScreenState
     extends ConsumerState<NotificationCenterScreen> {
   final _service = NotificationCenterService();
   bool _isDeletingAll = false;
+  String _currentUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+  StreamSubscription<User?>? _authSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) {
+      final uid = user?.uid ?? '';
+      if (mounted && uid != _currentUid) setState(() => _currentUid = uid);
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final colors = AppUiColors.of(context);
-    final notificationsAsync = ref.watch(notificationsProvider);
+    final notificationsAsync = ref.watch(notificationsProvider(_currentUid));
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -75,10 +99,7 @@ class _NotificationCenterScreenState
                             color: colors.danger,
                           ),
                         )
-                      : Icon(
-                          Icons.delete_sweep_outlined,
-                          color: colors.muted,
-                        ),
+                      : Icon(Icons.delete_sweep_outlined, color: colors.muted),
                 ),
                 const SizedBox(width: 4),
               ],
@@ -89,7 +110,7 @@ class _NotificationCenterScreenState
                 backgroundColor: colors.surface,
                 onRefresh: () async {
                   // Invalidate provider để tạo lại stream → retry query
-                  ref.invalidate(notificationsProvider);
+                  ref.invalidate(notificationsProvider(_currentUid));
                   // Đợi 1 frame để stream re-subscribe
                   await Future<void>.delayed(const Duration(milliseconds: 200));
                 },
@@ -112,7 +133,9 @@ class _NotificationCenterScreenState
                     child: LoadingSkeleton(layout: SkeletonLayout.list),
                   ),
                   error: (error, stack) {
-                    debugPrint('[NotificationCenter] Stream error: $error');
+                    debugPrint(
+                      '[NotificationCenter] Stream error (${error.runtimeType})',
+                    );
                     return _buildScrollableState(_buildErrorState(error));
                   },
                 ),
@@ -144,7 +167,7 @@ class _NotificationCenterScreenState
         child: ErrorState.fromError(
           error: error,
           prefix: 'Không tải được thông báo',
-          onRetry: () => ref.invalidate(notificationsProvider),
+          onRetry: () => ref.invalidate(notificationsProvider(_currentUid)),
         ),
       ),
     );
@@ -166,10 +189,22 @@ class _NotificationCenterScreenState
   }
 
   Future<void> _markAllAsRead() async {
-    await _service.markAllAsRead();
+    final uid = _currentUid;
+    final success = await _service.markAllAsRead();
+    if (_currentUid != uid) return;
     if (mounted) {
+      if (success) {
+        ref.invalidate(notificationsProvider(uid));
+        ref.invalidate(unreadCountProvider(uid));
+      }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Đã đánh dấu tất cả là đã đọc')),
+        SnackBar(
+          content: Text(
+            success
+                ? 'Đã đánh dấu tất cả là đã đọc'
+                : 'Không thể đánh dấu đã đọc. Vui lòng thử lại.',
+          ),
+        ),
       );
     }
   }
@@ -213,8 +248,8 @@ class _NotificationCenterScreenState
     if (!mounted) return;
     setState(() => _isDeletingAll = false);
     if (deleted) {
-      ref.invalidate(notificationsProvider);
-      ref.invalidate(unreadCountProvider);
+      ref.invalidate(notificationsProvider(_currentUid));
+      ref.invalidate(unreadCountProvider(_currentUid));
     }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -228,12 +263,17 @@ class _NotificationCenterScreenState
   }
 
   Future<void> _onNotificationTap(UserNotification notification) async {
-    // Mark as read silently in the background
+    final uid = _currentUid;
+    if (uid.isEmpty || notification.userId != uid) return;
     if (notification.isUnread) {
-      await _service.markAsRead(notification.id);
+      final marked = await _service.markAsRead(notification.id);
+      if (marked && mounted && _currentUid == uid) {
+        ref.invalidate(notificationsProvider(uid));
+        ref.invalidate(unreadCountProvider(uid));
+      }
     }
 
-    if (!mounted) return;
+    if (!mounted || _currentUid != uid) return;
 
     // Show full-detail bottom sheet FIRST so the user sees the whole message
     await showModalBottomSheet<void>(
@@ -281,8 +321,21 @@ class _NotificationCenterScreenState
     }
   }
 
-  Future<void> _dismissNotification(UserNotification notification) async {
-    await _service.archive(notification.id);
+  Future<bool> _dismissNotification(UserNotification notification) async {
+    final uid = _currentUid;
+    final archived = await _service.archive(notification.id);
+    if (!mounted || uid != _currentUid) return false;
+    if (archived) {
+      ref.invalidate(notificationsProvider(uid));
+      ref.invalidate(unreadCountProvider(uid));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Không thể lưu thay đổi. Vui lòng thử lại.'),
+        ),
+      );
+    }
+    return archived;
   }
 }
 
@@ -290,7 +343,7 @@ class _NotificationCenterScreenState
 class _NotificationCard extends StatelessWidget {
   final UserNotification notification;
   final VoidCallback onTap;
-  final VoidCallback onDismiss;
+  final Future<bool> Function() onDismiss;
 
   const _NotificationCard({
     required this.notification,
@@ -315,7 +368,7 @@ class _NotificationCard extends StatelessWidget {
         padding: const EdgeInsets.only(right: 20),
         child: Icon(Icons.archive_outlined, color: colors.danger),
       ),
-      onDismissed: (_) => onDismiss(),
+      confirmDismiss: (_) => onDismiss(),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
@@ -545,10 +598,7 @@ class _NotificationDetailSheet extends StatelessWidget {
                         const SizedBox(height: 4),
                         Text(
                           _formatTime(notification.createdAt),
-                          style: TextStyle(
-                            color: colors.muted,
-                            fontSize: 12,
-                          ),
+                          style: TextStyle(color: colors.muted, fontSize: 12),
                         ),
                       ],
                     ),
@@ -627,9 +677,7 @@ class _NotificationDetailSheet extends StatelessWidget {
                     style: OutlinedButton.styleFrom(
                       foregroundColor: colors.muted,
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      side: BorderSide(
-                        color: colors.border,
-                      ),
+                      side: BorderSide(color: colors.border),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),

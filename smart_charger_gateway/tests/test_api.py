@@ -110,14 +110,11 @@ def test_status_is_normalized(monkeypatch, tmp_path):
     assert response.json()["relay"] is False
 
 
-def test_on_and_off_commands(monkeypatch, tmp_path):
+def test_legacy_on_is_closed_but_off_remains_available(monkeypatch, tmp_path):
     client = configure(monkeypatch, tmp_path)
     turned_on = client.post("/api/charger/on", headers=AUTH)
-    assert turned_on.json() == {
-        "success": True,
-        "relay": True,
-        "previous_state": False,
-    }
+    assert turned_on.status_code == 410
+    assert turned_on.json()["error"]["code"] == "LEGACY_ON_DISABLED"
     turned_off = client.post("/api/charger/off", headers=AUTH)
     assert turned_off.json()["relay"] is False
 

@@ -146,15 +146,13 @@ def charger_status() -> ChargerStatus:
 
 @app.post("/api/charger/on", response_model=ChargerCommandResponse, dependencies=[Depends(require_bearer)])
 def charger_on() -> ChargerCommandResponse:
-    if smart_controller.store.current() is not None:
-        raise GatewayError("ACTIVE_SESSION_EXISTS", "Phiên sạc thông minh đang điều khiển relay.", status_code=409)
-    try:
-        result = shelly_client.set_relay(True)
-    except ShellyUnavailableError as exc:
-        raise shelly_unavailable(exc) from exc
-    if not result.success:
-        raise GatewayError("RELAY_VERIFICATION_FAILED", "Không thể xác minh nguồn sạc đã bật.", status_code=503, retryable=True)
-    return result
+    # This legacy route has no session, owner check or hardware timer.
+    # Keep OFF available, but fail closed for ON.
+    raise GatewayError(
+        "LEGACY_ON_DISABLED",
+        "Hãy bắt đầu phiên sạc bằng luồng an toàn trong ứng dụng.",
+        status_code=410,
+    )
 
 
 @app.post("/api/charger/off", response_model=ChargerCommandResponse, dependencies=[Depends(require_bearer)])

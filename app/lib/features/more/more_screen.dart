@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../core/providers/app_providers.dart';
+import '../../core/constants/beta_capabilities.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/feature_availability_registry.dart';
 import '../../core/services/notification_center_service.dart';
@@ -158,7 +159,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
       hasVehicleData: vehicleId.isNotEmpty,
     ).smartCharge(ai: true);
 
-    if (vehicleId.isNotEmpty && vehicle != null) {
+    if (BetaCapabilities.advancedAi && vehicleId.isNotEmpty && vehicle != null) {
       final args = SmartChargingControllerArgs(
         vehicleId: vehicleId,
         currentSoc: vehicle.currentBattery.toDouble(),
@@ -240,17 +241,19 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                 ),
               ),
             ),
-            const _CardDivider(),
-            _ActionTile(
-              icon: Icons.alt_route_rounded,
-              iconColor: CockpitColors.amber,
-              title: 'Lập hành trình',
-              subtitle: 'Chọn điểm đến và ước tính pin cần dùng',
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const TripPlannerWrapper()),
+            if (BetaCapabilities.tripPlanner) ...[
+              const _CardDivider(),
+              _ActionTile(
+                icon: Icons.alt_route_rounded,
+                iconColor: CockpitColors.amber,
+                title: 'Lập hành trình',
+                subtitle: 'Chọn điểm đến và ước tính pin cần dùng',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const TripPlannerWrapper()),
+                ),
               ),
-            ),
+            ],
           ],
         ).appFadeSlideIn(index: 2),
 
@@ -258,12 +261,15 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
 
         // 3. SECTION: HỆ THỐNG & TRÍ TUỆ AI
         const _SectionHeader(
-          title: 'HỆ THỐNG & TRÍ TUỆ AI',
+          title: BetaCapabilities.advancedAi
+              ? 'HỆ THỐNG & TRÍ TUỆ AI'
+              : 'HỆ THỐNG',
         ).appFadeSlideIn(index: 3),
         const SizedBox(height: 8),
         _GroupCard(
           children: [
-            _ActionTile(
+            if (BetaCapabilities.advancedAi) ...[
+              _ActionTile(
               icon: Icons.psychology_rounded,
               iconColor: const Color(0xFFA855F7),
               title: 'Trợ lý AI & Dự báo Pin',
@@ -301,6 +307,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
               ),
             ),
             const _CardDivider(),
+            ],
             _ActionTile(
               icon: Icons.build_circle_rounded,
               iconColor: const Color(0xFFF97316),

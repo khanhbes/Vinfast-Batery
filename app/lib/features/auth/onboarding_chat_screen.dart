@@ -17,7 +17,7 @@ import '../../core/widgets/app_popup.dart';
 import '../../core/widgets/battery_bot_mascot.dart';
 import '../../data/models/vinfast_model_spec.dart';
 import '../../data/repositories/vehicle_spec_repository.dart';
-import '../../navigation/app_navigation.dart';
+import 'auth_gate.dart';
 import '../smart_charging/smart_charger_setup_hub_screen.dart';
 
 /// Onboarding keeps the existing draft/validation contract in a calm step UI.
@@ -54,6 +54,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
   bool _hadExistingDob = false;
   String? _createdVehicleId;
   OnboardingDraft? _draft;
+  Future<void> _pendingDraftWrite = Future<void>.value();
 
   // Dữ liệu khảo sát cá nhân hóa (Component C)
   double? _dailyDistanceKm;
@@ -287,14 +288,9 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
   }
 
   void _skipUsageSurvey() {
-    _dailyDistanceKm = null;
     _selectedUsagePurpose = null;
     _typicalSocWhenCharge = null;
-    _updateDraftAndPersist(
-      avgDailyDistanceKm: null,
-      usagePurpose: null,
-      typicalSocWhenCharge: null,
-    );
+    _updateDraftAndPersist(usagePurpose: null, typicalSocWhenCharge: null);
     _goToStepOrSkip(6);
   }
 
@@ -359,16 +355,29 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
           : typicalSocWhenCharge as double?,
       updatedAt: DateTime.now().toUtc(),
     );
-    await ref.read(onboardingServiceProvider).saveDraft(_draft!);
+    final snapshot = _draft!;
+    _pendingDraftWrite = _pendingDraftWrite.then((_) async {
+      if (AuthService().currentUser?.uid != snapshot.uid) return;
+      await ref.read(onboardingServiceProvider).saveDraft(snapshot);
+    });
+    await _pendingDraftWrite;
   }
 
   Future<ApiResult<Map<String, dynamic>>> _commitDraft() async {
     final draft = _draft;
-    if (draft == null) {
+    if (draft == null || !draft.isEligibleForCommit) {
       return const ApiResult(
         success: false,
         code: 'DRAFT_MISSING',
         userMessage: 'Chưa có thông tin thiết lập.',
+        retryable: false,
+      );
+    }
+    if (AuthService().currentUser?.uid != draft.uid) {
+      return const ApiResult(
+        success: false,
+        code: 'ACCOUNT_CHANGED',
+        userMessage: 'Phiên đăng nhập đã thay đổi. Vui lòng thử lại.',
         retryable: false,
       );
     }
@@ -381,7 +390,16 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
     );
     _draft = syncing;
     await service.saveDraft(syncing);
+    if (AuthService().currentUser?.uid != syncing.uid) {
+      return const ApiResult(
+        success: false,
+        code: 'ACCOUNT_CHANGED',
+        userMessage: 'Phiên đăng nhập đã thay đổi. Vui lòng thử lại.',
+        retryable: false,
+      );
+    }
     final result = await service.commitDraft(syncing);
+    if (AuthService().currentUser?.uid != syncing.uid) return result;
     if (result.success) {
       _draft = syncing.copyWith(
         state: OnboardingDraftState.synced,
@@ -447,6 +465,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
       updatedAt: DateTime.now().toUtc(),
     );
     setState(() => _isSubmitting = true);
+    await _pendingDraftWrite;
     await ref.read(onboardingServiceProvider).saveDraft(_draft!);
     if (!mounted) return;
     setState(() => _isSubmitting = false);
@@ -502,7 +521,11 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
 
   /// Hoàn tất Onboarding và khởi động Cockpit
   Future<void> _finishOnboarding() async {
+    if (_isSubmitting) return;
     setState(() => _isSubmitting = true);
+
+    await _pendingDraftWrite;
+    if (!mounted) return;
 
     if (_draft != null) {
       _draft = _draft!.copyWith(
@@ -517,21 +540,11 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
     if (!mounted) return;
     setState(() => _isSubmitting = false);
 
-    if (result.success) {
+    if (result.success || result.retryable) {
       final navigator = Navigator.of(context, rootNavigator: true);
       navigator.pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const AppNavigation()),
+        MaterialPageRoute(builder: (_) => const AuthGate()),
         (route) => false,
-      );
-    } else if (result.retryable) {
-      AppPopup.showWarning(
-        'Đang chờ đồng bộ thông tin',
-        detail:
-            result.userMessage ??
-            'Bạn có thể tiếp tục; app sẽ tự thử lại khi có mạng.',
-        action: _finishOnboarding,
-        actionLabel: 'THỬ LẠI',
-        userInitiated: true,
       );
     } else {
       AppPopup.showError(result.userMessage ?? 'Không thể hoàn tất.');
@@ -1309,7 +1322,7 @@ class OnboardingStepFrame extends StatelessWidget {
                             IgnorePointer(
                               child: ExcludeSemantics(child: child),
                             ),
-                          if (current != null) current,
+                          ?current,
                         ],
                       ),
                       transitionBuilder: (child, animation) => FadeTransition(

@@ -53,6 +53,9 @@ class MultiVehicleSmartChargeV4Tests(unittest.TestCase):
         shared = type(binding)(binding.device_id, binding.display_name, binding.model, binding.generation, binding.provider)
         shared.vehicle_id = "vehicle-b"
         shared.shared = True
+        shared.power_meter_verified = binding.power_meter_verified
+        shared.safe_boot_verified = binding.safe_boot_verified
+        shared.no_load_test_verified = binding.no_load_test_verified
         repo.save_binding("owner", shared)
         service = SmartChargeService(repo, provider, _predict, sleeper=lambda _: None)
         preview = service.create_preview("owner", {"vehicleId": "vehicle-a", "currentSoc": 20, "targetSoc": 80})

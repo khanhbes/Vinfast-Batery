@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/constants/beta_capabilities.dart';
 import '../../core/widgets/settings_reveal.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -321,17 +322,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ]),
 
                 SizedBox(height: 26),
-                CockpitSectionLabel('Trí tuệ nhân tạo (AI)'),
-                _settingsGroup([
-                  CockpitSettingsRow(
-                    icon: Icons.psychology_alt_rounded,
-                    title: 'AI cá nhân',
-                    subtitle: _developerUnlocked
-                        ? 'Mô hình riêng cho từng tài khoản và xe'
-                        : null,
-                    onTap: _openPersonalAi,
-                  ),
-                ]),
+                if (BetaCapabilities.advancedAi) ...[
+                  CockpitSectionLabel('Trí tuệ nhân tạo (AI)'),
+                  _settingsGroup([
+                    CockpitSettingsRow(
+                      icon: Icons.psychology_alt_rounded,
+                      title: 'AI cá nhân',
+                      subtitle: _developerUnlocked
+                          ? 'Mô hình riêng cho từng tài khoản và xe'
+                          : null,
+                      onTap: _openPersonalAi,
+                    ),
+                  ]),
+                ],
 
                 SizedBox(height: 26),
                 CockpitSectionLabel('Thông báo'),
@@ -444,7 +447,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                 ]),
 
-                if (_developerUnlocked) ...[
+                if (BetaCapabilities.developerMode && _developerUnlocked) ...[
                   SizedBox(height: 26),
                   CockpitSectionLabel('Developer Mode'),
                   _settingsGroup([
@@ -489,11 +492,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 SizedBox(height: 22),
                 Semantics(
                   button: true,
-                  label:
-                      'Phiên bản $_appVersion. Chạm bảy lần để mở Developer Mode',
+                  label: BetaCapabilities.developerMode
+                      ? 'Phiên bản $_appVersion. Chạm bảy lần để mở Developer Mode'
+                      : 'Phiên bản $_appVersion',
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTap: _handleVersionTap,
+                    onTap: BetaCapabilities.developerMode
+                        ? _handleVersionTap
+                        : null,
                     child: Padding(
                       padding: EdgeInsets.symmetric(vertical: 12),
                       child: Center(
@@ -599,6 +605,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _handleVersionTap() async {
+    if (!BetaCapabilities.developerMode) return;
     if (_developerUnlocked) return;
     _versionTapCount += 1;
     final remaining = 7 - _versionTapCount;

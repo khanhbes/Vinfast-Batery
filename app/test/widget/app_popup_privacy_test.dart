@@ -30,13 +30,17 @@ void main() {
     'errors discard short private values in visible text and semantics',
     (tester) async {
       final semantics = tester.ensureSemantics();
-      addTearDown(semantics.dispose);
-      await tester.pumpWidget(host());
-      AppPopup.showError('uid=private-user', detail: 'key=private-key');
-      await tester.pumpAndSettle();
-      expect(find.text(AppErrorFormatter.fallback), findsOneWidget);
-      expect(find.textContaining('private'), findsNothing);
-      expect(find.bySemanticsLabel(RegExp('private')), findsNothing);
+      try {
+        await tester.pumpWidget(host());
+        AppPopup.showError('uid=private-user', detail: 'key=private-key');
+        await tester.pumpAndSettle();
+        expect(find.text(AppErrorFormatter.fallback), findsOneWidget);
+        expect(find.textContaining('private'), findsNothing);
+        expect(find.bySemanticsLabel(RegExp('private')), findsNothing);
+      } finally {
+        AppPopup.dismiss();
+        semantics.dispose();
+      }
     },
   );
 
@@ -53,6 +57,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('secret'), findsNothing);
     expect(find.textContaining('internal'), findsNothing);
+    AppPopup.dismiss();
+    await tester.pump();
   });
 
   testWidgets('safety copy remains specific and keeps navigation tappable', (
@@ -122,6 +128,8 @@ void main() {
       show(11.8);
       await tester.pumpAndSettle();
       expect(find.text('Dòng điện đang cao (11.8 A).'), findsOneWidget);
+      AppPopup.dismiss();
+      await tester.pump();
     },
   );
 
@@ -141,6 +149,8 @@ void main() {
       expect(retried, isTrue);
       expect(find.text('Chi tiết'), findsNothing);
       expect(find.textContaining('private'), findsNothing);
+      AppPopup.dismiss();
+      await tester.pump();
     },
   );
 }
