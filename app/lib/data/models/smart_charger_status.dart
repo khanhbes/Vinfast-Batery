@@ -18,6 +18,8 @@ class SmartChargerStatus {
     this.timerRemaining,
     this.transport,
     this.deviceName,
+    this.deviceId,
+    this.codeRefreshRequired,
     double? shellyTemperatureC,
     this.batteryTemperatureC,
   }) : shellyTemperatureC = shellyTemperatureC ?? temperatureC;
@@ -35,6 +37,8 @@ class SmartChargerStatus {
   final Duration? timerRemaining;
   final ShellyTransport? transport;
   final String? deviceName;
+  final String? deviceId;
+  final bool? codeRefreshRequired;
 
   factory SmartChargerStatus.fromJson(Map<String, dynamic> json) {
     final online = json['online'];
@@ -43,6 +47,10 @@ class SmartChargerStatus {
       throw const FormatException('Invalid Smart Charger status response.');
     }
     return SmartChargerStatus(
+      deviceId: json['device_id']?.toString(),
+      codeRefreshRequired: json['codeRefreshRequired'] is bool
+          ? json['codeRefreshRequired'] as bool
+          : null,
       online: online,
       relay: relay,
       powerW: _asDouble(json['power_w']),

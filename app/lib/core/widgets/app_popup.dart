@@ -1,10 +1,8 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
-import 'debug_error_sheet.dart';
 import '../utils/error_mapper.dart';
 
 enum AppNoticeKind { success, error, warning, info }
@@ -44,29 +42,12 @@ class AppPopup {
         ? UserFriendlyErrorMapper.map(error)
         : null;
 
-    VoidCallback? effectiveAction = action;
-    var effectiveLabel = actionLabel;
-    if (kDebugMode && effectiveAction == null) {
-      effectiveLabel = 'Chi tiết';
-      effectiveAction = () {
-        final ctx = navigatorKey.currentContext;
-        if (ctx != null) {
-          DebugErrorSheet.show(
-            ctx,
-            error: error ?? detail ?? title,
-            stackTrace: stackTrace,
-            source: 'AppPopup',
-          );
-        }
-      };
-    }
-
     _show(
       AppNoticeKind.error,
       friendlyTitle,
       friendlyDetail == friendlyTitle ? null : friendlyDetail,
-      effectiveAction,
-      actionLabel: effectiveLabel,
+      action,
+      actionLabel: actionLabel,
       userInitiated: userInitiated,
     );
   }

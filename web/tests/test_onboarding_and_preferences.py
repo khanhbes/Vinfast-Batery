@@ -298,6 +298,73 @@ def test_onboarding_commit_validates_profile_before_writes(client, mock_fs, monk
     assert mock_fs.collection('Vehicles')._docs == {}
 
 
+@pytest.mark.parametrize('fail_commit', [False, True])
+def test_onboarding_transaction_starts_before_reads_and_commits_atomically(
+    client, mock_fs, monkeypatch, fail_commit,
+):
+    from google.cloud import firestore
+
+    uid = 'transaction-qa'
+    monkeypatch.setattr(server, '_verify_token', lambda: (uid, 'qa@example.test', 'user'))
+    mock_fs.collection('VehicleCatalog').document('evo200').set({
+        'catalogId': 'evo200', 'status': 'published', 'selectable': True,
+        'brandName': 'VinFast', 'model': 'Evo', 'revision': 1,
+        'appDefaults': {}, 'battery': {}, 'media': {},
+        'localized': {'vi': {'displayName': 'Evo200'}},
+    })
+
+    class Transaction:
+        in_progress = False
+
+        def __init__(self):
+            self.writes = []
+
+        def set(self, ref, data, merge=False):
+            assert self.in_progress
+            self.writes.append((ref, data, merge))
+
+        def delete(self, ref):
+            assert self.in_progress
+
+    original_get = FakeDocRef.get
+
+    def checked_get(ref, transaction=None):
+        if transaction is not None:
+            assert transaction.in_progress, 'read attempted before transaction begin'
+        return original_get(ref)
+
+    def transactional(operation):
+        def run(transaction):
+            transaction.in_progress = True
+            result = operation(transaction)
+            if fail_commit:
+                raise RuntimeError('simulated commit failure')
+            for ref, data, merge in transaction.writes:
+                ref.set(data, merge=merge)
+            return result
+        return run
+
+    monkeypatch.setattr(FakeDocRef, 'get', checked_get)
+    monkeypatch.setattr(mock_fs, 'transaction', Transaction, raising=False)
+    monkeypatch.setattr(firestore, 'transactional', transactional)
+    response = client.post('/api/mobile/onboarding/commit', json={
+        'schemaVersion': 1, 'operationId': 'atomic-operation',
+        'profile': {'name': 'QA'}, 'vehicle': {'catalogId': 'evo200'},
+    }, headers={'Idempotency-Key': 'atomic-operation'})
+    if fail_commit:
+        assert response.status_code == 503
+        assert response.json['code'] == 'ONBOARDING_COMMIT_UNCONFIRMED'
+        assert response.json['retryable'] is True
+        assert mock_fs.collection('Vehicles')._docs == {}
+        assert mock_fs.collection('OnboardingOperationReceipts')._docs == {}
+        assert mock_fs.collection('users')._docs == {}
+    else:
+        assert response.status_code == 200
+        assert len(mock_fs.collection('Vehicles')._docs) == 1
+        assert len(mock_fs.collection('OnboardingOperationReceipts')._docs) == 1
+        assert mock_fs.collection('users').document(uid).get().to_dict()['onboardingCompletedAt']
+
+
 def test_onboarding_commit_requires_idempotency_key(client, mock_fs, monkeypatch):
     monkeypatch.setattr(server, "_verify_token", lambda: ("commit-uid", "commit@test.vn", "user"))
     response = client.post('/api/mobile/onboarding/commit', json={})

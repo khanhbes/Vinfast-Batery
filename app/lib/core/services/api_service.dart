@@ -491,7 +491,6 @@ class ApiService {
 
     final errorMessage =
         parsedJson?['userMessage']?.toString() ??
-        parsedJson?['error']?.toString() ??
         'Yêu cầu thất bại. Vui lòng thử lại sau.';
     final debugCode =
         parsedJson?['debugCode']?.toString() ??
@@ -524,7 +523,9 @@ class ApiService {
       'statusCode': response.statusCode,
       'error': errorMessage,
       'userMessage': errorMessage,
-      'debugCode': debugCode,
+      // Keep the public code field populated for ApiResult and retain the
+      // diagnostic detail only in the redacted reporter path.
+      'code': debugCode,
       'retryable': response.statusCode >= 500 || response.statusCode == 429,
       'requestId': ?requestId,
       'debugDetail': ?debugDetail,

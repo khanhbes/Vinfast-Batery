@@ -153,4 +153,19 @@ void main() {
       await tester.pump();
     },
   );
+
+  testWidgets('unexpected errors never expose debug details', (tester) async {
+    await tester.pumpWidget(host());
+    AppPopup.showError(
+      'Lỗi không mong muốn',
+      error: ArgumentError('No host specified in URI /api/private'),
+      stackTrace: StackTrace.current,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Chi tiết'), findsNothing);
+    expect(find.textContaining('No host specified'), findsNothing);
+    expect(find.textContaining('/api/private'), findsNothing);
+    AppPopup.dismiss();
+    await tester.pump();
+  });
 }

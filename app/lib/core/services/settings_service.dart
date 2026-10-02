@@ -38,7 +38,7 @@ class SettingsService extends ChangeNotifier {
       _language = _decodeLanguage(_prefs?.getString(_languageKey));
       await _syncNativeSplashTheme(_themeMode);
     } catch (e) {
-      debugPrint('[SettingsService] init error: $e');
+      debugPrint('[SettingsService] init error (${e.runtimeType}).');
     } finally {
       _initialized = true;
       notifyListeners();
@@ -76,7 +76,7 @@ class SettingsService extends ChangeNotifier {
     try {
       await _prefs?.setString(_themeKey, value);
     } catch (e) {
-      debugPrint('[SettingsService] persist theme error: $e');
+      debugPrint('[SettingsService] persist theme error (${e.runtimeType}).');
     }
   }
 

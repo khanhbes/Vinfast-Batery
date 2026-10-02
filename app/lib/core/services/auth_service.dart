@@ -89,7 +89,9 @@ class AuthService {
       // session.
       return true;
     } catch (error, stack) {
-      debugPrint('[AuthService] foreground bootstrap deferred: $error');
+      debugPrint(
+        '[AuthService] foreground bootstrap deferred (${error.runtimeType}).',
+      );
       if (kDebugMode) debugPrintStack(stackTrace: stack);
       return true;
     }
@@ -106,7 +108,7 @@ class AuthService {
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     } catch (e) {
-      debugPrint('[AuthService] _ensureUserDoc error: $e');
+      debugPrint('[AuthService] _ensureUserDoc failed (${e.runtimeType}).');
     }
   }
 
@@ -135,64 +137,65 @@ class AuthService {
         return {'success': false, 'error': 'Failed to create user'};
       }
 
-      // 2. Cập nhật display name
-      await user.updateDisplayName(name);
+      // Server-side bootstrap continues in the background after Auth succeeds.
+      const bootstrapPending = true;
 
-      // 3. Tạo user document trong Firestore
-      var bootstrapPending = false;
-
-      // 4. Đồng bộ với web dashboard
-      bool? syncResult;
-
-      // 5. Lưu thông tin đăng nhập locally (secure)
-      await _session.clearLegacyCredentials();
-      await _session.markUserSynced();
-      await _session.markAuthenticated();
-
+      // Firebase Auth account creation is the success boundary. Profile and
+      // backend bootstrap failures remain retryable and must not turn an
+      // already-created account into a misleading "registration failed" UI.
       try {
-        await _firestore.collection('users').doc(user.uid).set({
-          'uid': user.uid,
-          'email': email,
-          'name': name,
-          'phone': phone ?? '',
-          'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-          'source': 'flutter_app',
-          'syncedToWeb': false,
-          'registrationFlowVersion': 2,
-        }, SetOptions(merge: true));
+        await user.updateDisplayName(name).timeout(const Duration(seconds: 5));
       } catch (error) {
-        bootstrapPending = true;
-        debugPrint('[AuthService] profile bootstrap deferred: $error');
-      }
-      // The first-run guide is account-scoped. Seed it immediately after
-      // registration so it survives onboarding retries and a device switch.
-      await DashboardPreferencesService.seedPendingTourForUser(
-        user.uid,
-        DashboardPreferencesService.overviewTourId,
-      );
-      try {
-        final response = await ApiService().post(
-          '/api/mobile/registration-bootstrap',
-          {
-            'name': name.trim(),
-            if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
-          },
+        debugPrint(
+          '[AuthService] display name update deferred (${error.runtimeType}).',
         );
-        bootstrapPending = bootstrapPending || response['success'] != true;
-      } catch (_) {
-        bootstrapPending = true;
       }
+
       try {
-        syncResult = await _syncService.syncUserToWeb();
-      } catch (_) {
-        bootstrapPending = true;
+        await Future.wait<void>([
+          _session.clearLegacyCredentials(),
+          _session.markUserSynced(),
+          _session.markAuthenticated(),
+        ]).timeout(const Duration(seconds: 5));
+      } catch (error) {
+        debugPrint(
+          '[AuthService] local session bootstrap deferred (${error.runtimeType}).',
+        );
       }
+
+      try {
+        await _firestore
+            .collection('users')
+            .doc(user.uid)
+            .set({
+              'uid': user.uid,
+              'email': email,
+              'name': name,
+              'phone': phone ?? '',
+              'createdAt': FieldValue.serverTimestamp(),
+              'updatedAt': FieldValue.serverTimestamp(),
+              'source': 'flutter_app',
+              'syncedToWeb': false,
+              'registrationFlowVersion': 2,
+            }, SetOptions(merge: true))
+            .timeout(const Duration(seconds: 8));
+      } catch (error) {
+        debugPrint(
+          '[AuthService] profile bootstrap deferred (${error.runtimeType}).',
+        );
+      }
+
+      // Remaining synchronization is deliberately detached from the form.
+      // AuthGate/onboarding can continue from Firebase/local state while this
+      // best-effort task retries its server-side bootstrap.
+      unawaited(
+        _finishRegistrationBootstrap(user: user, name: name, phone: phone),
+      );
 
       return {
         'success': true,
         'user': user,
-        'synced': syncResult,
+        'synced': false,
         'bootstrapPending': bootstrapPending,
         'message': 'Registration successful',
       };
@@ -220,6 +223,42 @@ class AuthService {
         'code': 'registrationFailed',
         'retryable': true,
       };
+    }
+  }
+
+  Future<void> _finishRegistrationBootstrap({
+    required User user,
+    required String name,
+    String? phone,
+  }) async {
+    try {
+      await DashboardPreferencesService.seedPendingTourForUser(
+        user.uid,
+        DashboardPreferencesService.overviewTourId,
+      ).timeout(const Duration(seconds: 8));
+    } catch (error) {
+      debugPrint(
+        '[AuthService] first-run guide seed deferred (${error.runtimeType}).',
+      );
+    }
+    try {
+      await ApiService()
+          .post('/api/mobile/registration-bootstrap', {
+            'name': name.trim(),
+            if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
+          })
+          .timeout(const Duration(seconds: 10));
+    } catch (error) {
+      debugPrint(
+        '[AuthService] registration API bootstrap deferred (${error.runtimeType}).',
+      );
+    }
+    try {
+      await _syncService.syncUserToWeb().timeout(const Duration(seconds: 10));
+    } catch (error) {
+      debugPrint(
+        '[AuthService] registration sync deferred (${error.runtimeType}).',
+      );
     }
   }
 
@@ -270,7 +309,7 @@ class AuthService {
       }
       return {'success': false, 'error': errorMessage, 'code': e.code};
     } catch (e) {
-      debugPrint('[AuthService] Login error: $e');
+      debugPrint('[AuthService] Login error (${e.runtimeType}).');
       return {
         'success': false,
         'error': 'Đăng nhập thất bại.',
@@ -723,7 +762,9 @@ class AuthService {
 
       return doc.data();
     } catch (e) {
-      debugPrint('Error getting current user data: $e');
+      debugPrint(
+        '[AuthService] Current user data read failed (${e.runtimeType}).',
+      );
       return null;
     }
   }

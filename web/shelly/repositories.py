@@ -43,6 +43,7 @@ class SmartChargeRepository:
         # accounts. Firestore leases below cover multi-process deployments.
         self._device_leases: dict[str, tuple[str, str]] = {}
         self._device_owners: dict[str, str] = {}
+        self._device_members: dict[str, list[str]] = {}
         self._last_history_skipped = 0
         self._profile_vault = ShellyProfileVault()
         self._synced_profiles: dict[tuple[str, str], dict] = {}
@@ -133,7 +134,7 @@ class SmartChargeRepository:
 
     def save_binding(self, uid: str, binding: DeviceBinding) -> None:
         if not self.claim_device_owner(uid, binding.device_id):
-            raise PermissionError("DEVICE_ALREADY_OWNED")
+            raise PermissionError("DEVICE_MEMBER_LIMIT_REACHED")
         binding.owner_uid = uid
         with self._lock:
             self._bindings.setdefault(uid, {})[binding.device_id] = binding
@@ -148,15 +149,25 @@ class SmartChargeRepository:
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
     def claim_device_owner(self, uid: str, device_id: str) -> bool:
-        """Claim one physical Shelly globally; Firestore transaction is authoritative."""
+        """Admit at most two accounts; legacy owner becomes the first member."""
         if not uid or not device_id:
             return False
         if not self.db:
             with self._lock:
-                owner = self._device_owners.get(self._device_owner_doc_id(device_id))
-                if owner is not None and owner != uid:
+                key = self._device_owner_doc_id(device_id)
+                members = list(self._device_members.get(key, []))
+                owner = self._device_owners.get(key)
+                if owner and owner not in members:
+                    members.insert(0, owner)
+                if len(members) > 2:
                     return False
-                self._device_owners[self._device_owner_doc_id(device_id)] = uid
+                if uid in members:
+                    return True
+                if len(members) >= 2:
+                    return False
+                members.append(uid)
+                self._device_members[key] = members
+                self._device_owners[key] = members[0]
                 return True
         try:
             from google.cloud import firestore
@@ -167,11 +178,19 @@ class SmartChargeRepository:
             def claim(txn):
                 snapshot = ref.get(transaction=txn)
                 data = snapshot.to_dict() or {} if snapshot.exists else {}
-                owner = str(data.get("ownerUid") or "")
-                if owner and owner != uid:
+                members = self._membership_uids(data)
+                if len(members) > 2:
                     return False
+                if uid in members:
+                    return True
+                if len(members) >= 2:
+                    return False
+                members.append(uid)
                 txn.set(ref, {
-                    "ownerUid": uid,
+                    "ownerUid": members[0],
+                    "memberUids": members,
+                    "maxMembers": 2,
+                    "membershipRevision": int(data.get("membershipRevision") or 0) + 1,
                     "deviceIdHash": self._device_owner_doc_id(device_id),
                     "updatedAt": datetime.now(timezone.utc),
                     "state": "owned",
@@ -179,9 +198,41 @@ class SmartChargeRepository:
                 return True
 
             return bool(claim(transaction))
-        except Exception:
+        except Exception as error:
             # Ownership must fail closed if its authoritative registry is unavailable.
-            return False
+            raise RuntimeError("deviceRegistryUnavailable") from error
+
+    @staticmethod
+    def _membership_uids(data: dict) -> list[str]:
+        raw_members = data.get("memberUids", [])
+        if not isinstance(raw_members, list) or any(not isinstance(v, str) or not v for v in raw_members):
+            raise ValueError("invalidMemberRegistry")
+        members = list(raw_members)
+        owner = str(data.get("ownerUid") or "")
+        if owner and owner not in members:
+            members.insert(0, owner)
+        return list(dict.fromkeys(members))
+
+    def preview_membership_migration(self) -> dict:
+        """Read-only dry run. Report counts, never account/device identifiers."""
+        records = ((snapshot.to_dict() or {} for snapshot in self.db.collection("shellyDeviceOwners").stream())
+                   if self.db else ({"ownerUid": owner, "memberUids": self._device_members.get(key, [])}
+                                    for key, owner in self._device_owners.items()))
+        result = {"legacySingleOwner": 0, "alreadyMultiMember": 0, "invalidOverCapacity": 0, "unowned": 0}
+        for data in records:
+            members = self._membership_uids(data)
+            category = ("invalidOverCapacity" if len(members) > 2 else
+                        "unowned" if not members else
+                        "legacySingleOwner" if not data.get("memberUids") else "alreadyMultiMember")
+            result[category] += 1
+        return result
+
+    def device_member_count(self, device_id: str) -> int:
+        key = self._device_owner_doc_id(device_id)
+        if self.db:
+            snapshot = self.db.collection("shellyDeviceOwners").document(key).get()
+            return len(self._membership_uids(snapshot.to_dict() or {}))
+        return len(self._device_members.get(key, [self._device_owners[key]] if key in self._device_owners else []))
 
     def device_owned_by(self, uid: str, device_id: str) -> bool:
         if not uid or not device_id:
@@ -189,33 +240,91 @@ class SmartChargeRepository:
         key = self._device_owner_doc_id(device_id)
         if not self.db:
             with self._lock:
-                return self._device_owners.get(key) == uid
+                return uid in self._device_members.get(key, [self._device_owners.get(key)])
         try:
             snapshot = self.db.collection("shellyDeviceOwners").document(key).get()
-            return snapshot.exists and (snapshot.to_dict() or {}).get("ownerUid") == uid
+            members = self._membership_uids(snapshot.to_dict() or {})
+            return snapshot.exists and len(members) <= 2 and uid in members
         except Exception:
             return False
+
+    def device_membership(self, uid: str, device_id: str) -> dict:
+        if not self.device_owned_by(uid, device_id):
+            raise PermissionError("deviceForbidden")
+        if self.db:
+            registry = self.db.collection("shellyDeviceOwners").document(self._device_owner_doc_id(device_id)).get().to_dict() or {}
+            inventory = self.db.collection("shellyInventory").document(device_id).get().to_dict() or {}
+            profile = self._profile_doc(uid, device_id).get().to_dict() or {}
+            members = self._membership_uids(registry)
+            version = int(inventory.get("codeVersion") or 0)
+        else:
+            key = self._device_owner_doc_id(device_id)
+            members = self._device_members.get(key, [self._device_owners.get(key)])
+            profile = self._synced_profiles.get((uid, device_id), {})
+            version = int(profile.get("acknowledgedCodeVersion") or 0)
+            registry = {}
+        acknowledged = int(profile.get("acknowledgedCodeVersion") or 0)
+        return {"memberCount": len(members), "maxMembers": 2,
+                "membershipRevision": int(registry.get("membershipRevision") or 0),
+                "codeVersion": version, "acknowledgedCodeVersion": acknowledged,
+                "codeRefreshRequired": version > acknowledged}
+
+    def shared_device_session(self, uid: str, device_id: str) -> ChargingSession | None:
+        """Authorized internal lookup; do not serialize another member's session."""
+        if not self.device_owned_by(uid, device_id):
+            raise PermissionError("deviceForbidden")
+        key = self._device_owner_doc_id(device_id)
+        if self.db:
+            snapshot = self.db.collection("shellyDeviceLocks").document(key).get()
+            data = snapshot.to_dict() or {} if snapshot.exists else {}
+            owner, session_id = data.get("ownerUid"), data.get("sessionId")
+        else:
+            with self._lock:
+                owner, session_id = self._device_leases.get(key, (None, None))
+        if not owner or not session_id:
+            return None
+        session = self.get_session(owner, session_id)
+        if session is None or self._device_owner_doc_id(session.device_id) != key:
+            raise RuntimeError("deviceSessionUnverified")
+        return session
 
     def release_device_owner(self, uid: str, device_id: str) -> bool:
         """Release ownership only after the caller has verified OFF and no active session."""
         if not self.db:
             with self._lock:
                 key = self._device_owner_doc_id(device_id)
-                if self._device_owners.get(key) != uid:
+                members = list(self._device_members.get(key, [self._device_owners.get(key)]))
+                if uid not in members or key in self._device_leases:
                     return False
-                self._device_owners.pop(key, None)
+                members.remove(uid)
+                self._device_members[key] = members
+                if members:
+                    self._device_owners[key] = members[0]
+                else:
+                    self._device_owners.pop(key, None)
                 return True
         try:
             from google.cloud import firestore
             ref = self.db.collection("shellyDeviceOwners").document(self._device_owner_doc_id(device_id))
+            lock_ref = self.db.collection("shellyDeviceLocks").document(self._device_owner_doc_id(device_id))
             transaction = self.db.transaction()
 
             @firestore.transactional
             def release(txn):
                 snapshot = ref.get(transaction=txn)
-                if not snapshot.exists or (snapshot.to_dict() or {}).get("ownerUid") != uid:
+                lock = lock_ref.get(transaction=txn)
+                data = snapshot.to_dict() or {} if snapshot.exists else {}
+                members = self._membership_uids(data)
+                if uid not in members or lock.exists:
                     return False
-                txn.delete(ref)
+                members.remove(uid)
+                # Preserve registry/revision even when the final member leaves.
+                txn.set(ref, {
+                    "ownerUid": members[0] if members else "",
+                    "memberUids": members, "maxMembers": 2,
+                    "membershipRevision": int(data.get("membershipRevision") or 0) + 1,
+                    "state": "owned" if members else "unlinked",
+                }, merge=True)
                 return True
 
             return bool(release(transaction))
@@ -354,11 +463,116 @@ class SmartChargeRepository:
         return binding
 
     def revoke_binding(self, uid: str, device_id: str, when: datetime) -> None:
-        binding = self._bindings.get(uid, {}).get(device_id)
+        binding = next((b for b in self.list_bindings(uid) if b.device_id == device_id), None)
         if binding:
             binding.revoked_at = when
             binding.updated_at = when
-            self.save_binding(uid, binding)
+            with self._lock:
+                self._bindings.setdefault(uid, {})[device_id] = binding
+            if self.db:
+                self.db.collection("users").document(uid).collection("shellyDevices").document(device_id).set(binding.to_dict(), merge=True)
+
+    def enroll_connection_code(self, uid: str, entry, operation_id: str) -> dict:
+        """Commit membership, vault, binding and receipt together after Cloud validation.
+
+        Code rotation is not credential rotation: an existing enrollment keeps
+        its verification and encrypted profile. No hardware command is issued.
+        """
+        if not self._profile_vault.configured:
+            raise ProfileVaultError("profileVaultUnavailable")
+        device_id = entry.device_id
+        profile = entry.to_profile_dict()
+        now = datetime.now(timezone.utc)
+        encrypted = self._profile_vault.encrypt(uid, device_id, self._profile_secrets(profile))
+        new_metadata = self._profile_metadata(profile, revision=1, now=now)
+        new_binding = DeviceBinding(
+            device_id=device_id, display_name=entry.device_name, model=entry.model,
+            generation=3, provider="vault_cloud", connection_mode="server_cloud",
+            owner_uid=uid, shared=True, no_load_test_verified=False,
+        )
+        new_metadata.update(new_binding.to_dict())
+        receipt_id = hashlib.sha256(f"{entry.code}|{uid}".encode()).hexdigest()
+
+        def validate(code_data, members, receipt_exists, inventory):
+            expiry = code_data.get("expiresAt")
+            if isinstance(expiry, str):
+                expiry = datetime.fromisoformat(expiry.replace("Z", "+00:00"))
+            if (code_data.get("isRevoked") or (expiry and expiry <= now) or
+                    (inventory.get("activeCode") and inventory["activeCode"] != entry.code)):
+                raise ValueError("connectionCodeUnavailable")
+            if receipt_exists and uid not in members:
+                raise PermissionError("redemptionRevoked")
+            if len(members) > 2 or (uid not in members and len(members) >= 2):
+                raise PermissionError("DEVICE_MEMBER_LIMIT_REACHED")
+
+        if not self.db:
+            with self._lock:
+                key = self._device_owner_doc_id(device_id)
+                members = list(self._device_members.get(key, [self._device_owners[key]] if key in self._device_owners else []))
+                receipts = getattr(self, "_enrollment_receipts", {})
+                validate(entry.to_dict(), members, receipt_id in receipts, {})
+                existing = self._synced_profiles.get((uid, device_id), {})
+                keep_existing = uid in members and existing and existing.get("revokedAt") is None
+                metadata = dict(existing if keep_existing else new_metadata)
+                metadata["acknowledgedCodeVersion"] = entry.code_version
+                if uid not in members:
+                    members.append(uid)
+                self._device_members[key] = members
+                self._device_owners[key] = members[0]
+                self._synced_profiles[(uid, device_id)] = metadata
+                if not keep_existing:
+                    self._profile_vault_records[(uid, device_id)] = {"ownerUid": uid, **encrypted}
+                    self._bindings.setdefault(uid, {})[device_id] = new_binding
+                if receipt_id not in receipts:
+                    entry.redemption_count += 1
+                receipts[receipt_id] = {"operationId": operation_id}
+                self._enrollment_receipts = receipts
+                return metadata
+
+        from google.cloud import firestore
+        owner_ref = self.db.collection("shellyDeviceOwners").document(self._device_owner_doc_id(device_id))
+        code_ref = self.db.collection("shellyConnectionCodes").document(entry.code)
+        receipt_ref = self.db.collection("shellyCodeRedemptions").document(receipt_id)
+        profile_ref = self._profile_doc(uid, device_id)
+        inventory_ref = self.db.collection("shellyInventory").document(device_id)
+        vault_ref = self.db.collection("ShellyCredentialVault").document(self._profile_vault.document_id(uid, device_id))
+
+        @firestore.transactional
+        def enroll(txn):
+            owner_snapshot = owner_ref.get(transaction=txn)
+            code_snapshot = code_ref.get(transaction=txn)
+            receipt = receipt_ref.get(transaction=txn)
+            old_profile = profile_ref.get(transaction=txn)
+            inventory_snapshot = inventory_ref.get(transaction=txn)
+            owner_data = owner_snapshot.to_dict() or {}
+            members = self._membership_uids(owner_data)
+            if not code_snapshot.exists:
+                raise ValueError("connectionCodeUnavailable")
+            code_data = code_snapshot.to_dict() or {}
+            inventory = inventory_snapshot.to_dict() or {}
+            validate(code_data, members, receipt.exists, inventory)
+            previous = old_profile.to_dict() or {} if old_profile.exists else {}
+            keep_existing = uid in members and previous and previous.get("revokedAt") is None
+            metadata = dict(previous if keep_existing else new_metadata)
+            metadata["acknowledgedCodeVersion"] = int(code_data.get("codeVersion") or 0)
+            if uid not in members:
+                members.append(uid)
+                txn.set(owner_ref, {"ownerUid": members[0], "memberUids": members,
+                    "maxMembers": 2, "membershipRevision": int(owner_data.get("membershipRevision") or 0) + 1,
+                    "state": "owned", "updatedAt": now}, merge=True)
+            if not keep_existing:
+                txn.set(vault_ref, {"ownerUid": uid, "deviceId": device_id, **encrypted})
+            txn.set(profile_ref, metadata)
+            if not receipt.exists:
+                txn.set(receipt_ref, {"uid": uid, "operationId": operation_id, "redeemedAt": now,
+                    "codeVersion": metadata["acknowledgedCodeVersion"]})
+                txn.update(code_ref, {"redemptionCount": int(code_data.get("redemptionCount") or 0) + 1})
+            return metadata
+
+        metadata = enroll(self.db.transaction())
+        with self._lock:
+            self._synced_profiles[(uid, device_id)] = dict(metadata)
+        return metadata
 
     # ── Direct profile sync vault ─────────────────────────────────────
     # The users/{uid}/shellyDevices document deliberately holds metadata only.
@@ -539,7 +753,7 @@ class SmartChargeRepository:
         if vehicle_id and self.vehicle_for_owner(uid, vehicle_id) is None:
             raise PermissionError("Xe không thuộc tài khoản này")
         if not self.claim_device_owner(uid, device_id):
-            raise PermissionError("DEVICE_ALREADY_OWNED")
+            raise PermissionError("DEVICE_MEMBER_LIMIT_REACHED")
         old: dict = {}
         if self.db:
             snapshot = self._profile_doc(uid, device_id).get()
@@ -701,21 +915,26 @@ class SmartChargeRepository:
         unknown relay must be resolved by readback before explicit release.
         """
         now = datetime.now(timezone.utc)
+        lease_key = self._device_owner_doc_id(device_id)
         with self._lock:
-            existing = self._device_leases.get(device_id)
+            existing = self._device_leases.get(lease_key)
             if existing and existing != (uid, session_id):
                 return False
-            self._device_leases[device_id] = (uid, session_id)
+            self._device_leases[lease_key] = (uid, session_id)
         if not self.db:
             return True
         try:
             from google.cloud import firestore
             ref = self.db.collection("shellyDeviceLocks").document(self._device_owner_doc_id(device_id))
+            member_ref = self.db.collection("shellyDeviceOwners").document(lease_key)
             transaction = self.db.transaction()
 
             @firestore.transactional
             def claim(txn):
                 snapshot = ref.get(transaction=txn)
+                members_snapshot = member_ref.get(transaction=txn)
+                if uid not in self._membership_uids(members_snapshot.to_dict() or {}):
+                    return False
                 data = snapshot.to_dict() or {} if snapshot.exists else {}
                 same_operation = data.get("ownerUid") == uid and data.get("sessionId") == session_id
                 # Legacy expiresAt is deliberately ignored. Taking over an
@@ -728,20 +947,21 @@ class SmartChargeRepository:
             claimed = bool(claim(transaction))
             if not claimed:
                 with self._lock:
-                    self._device_leases.pop(device_id, None)
+                    self._device_leases.pop(lease_key, None)
             return claimed
         except Exception:
             # Do not weaken the safety gate when the central lock cannot be
             # read or written. The caller must fail closed.
             with self._lock:
-                self._device_leases.pop(device_id, None)
+                self._device_leases.pop(lease_key, None)
             return False
 
     def release_device_session(self, uid: str, device_id: str, session_id: str) -> None:
+        lease_key = self._device_owner_doc_id(device_id)
         with self._lock:
-            lease = self._device_leases.get(device_id)
+            lease = self._device_leases.get(lease_key)
             if lease and lease[:2] == (uid, session_id):
-                self._device_leases.pop(device_id, None)
+                self._device_leases.pop(lease_key, None)
         if self.db:
             try:
                 from google.cloud import firestore

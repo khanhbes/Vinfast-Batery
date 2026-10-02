@@ -48,10 +48,12 @@ class ShellyConnectionCode:
     redemption_count: int = 0
     is_revoked: bool = False
     note: str = ""
+    code_version: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "code": self.code,
+            "codeVersion": self.code_version,
             "deviceId": self.device_id,
             "deviceName": self.device_name,
             "model": self.model,
@@ -72,6 +74,7 @@ class ShellyConnectionCode:
         """Safe representation without secrets — for admin list views."""
         return {
             "code": self.code,
+            "codeVersion": self.code_version,
             "deviceId": self.device_id,
             "deviceName": self.device_name,
             "model": self.model,
@@ -101,7 +104,7 @@ class ShellyConnectionCode:
         return (
             not self.is_revoked
             and not self.is_expired
-            and self.redemption_count < self.max_redemptions
+            and (self.code_version > 0 or self.redemption_count < self.max_redemptions)
         )
 
     def to_profile_dict(self) -> dict[str, Any]:
@@ -142,10 +145,11 @@ class ShellyConnectionCode:
             created_by=str(data.get("createdBy") or ""),
             created_at=_parse_dt(data.get("createdAt")) or _utcnow(),
             expires_at=_parse_dt(data.get("expiresAt")),
-            max_redemptions=1,
+            max_redemptions=2,
             redemption_count=int(data.get("redemptionCount") or 0),
             is_revoked=bool(data.get("isRevoked")),
             note=str(data.get("note") or ""),
+            code_version=int(data.get("codeVersion") or 0),
         )
 
 
@@ -285,9 +289,9 @@ class ConnectionCodeStore:
             device_id, record["cloudHost"], str(cloud_auth_key or "").strip(),
             record["lanAddress"], str(local_password).strip() if local_password else None,
         )
-        self._devices[device_id] = record
+        self._devices[device_id] = {**self._devices.get(device_id, {}), **record}
         if self._inventory_collection is not None:
-            self._inventory_collection.document(device_id).set(record)
+            self._inventory_collection.document(device_id).set(record, merge=True)
         return record
 
     def save_device_and_generate_code(
@@ -393,18 +397,52 @@ class ConnectionCodeStore:
             max_redemptions=max_redemptions,
             note=note,
         )
-        self._codes[code] = entry
+        entry.max_redemptions = 2
         if self._collection is not None:
             self._persist_secrets(device_id, entry.cloud_host, entry.cloud_auth_key,
                                   entry.lan_address, entry.local_password)
             safe_entry = entry.to_dict()
             safe_entry.pop("cloudAuthKey", None)
             safe_entry.pop("localPassword", None)
-            self._collection.document(code).set(safe_entry)
+            from google.cloud import firestore
+            inventory_ref = self._inventory_collection.document(device_id)
+            code_ref = self._collection.document(code)
+
+            @firestore.transactional
+            def rotate(txn):
+                collision = code_ref.get(transaction=txn)
+                if collision.exists:
+                    raise ValueError("connectionCodeCollision")
+                inventory_snapshot = inventory_ref.get(transaction=txn)
+                inventory = inventory_snapshot.to_dict() or {}
+                previous = inventory.get("activeCode")
+                previous_ref = self._collection.document(previous) if previous else None
+                previous_snapshot = previous_ref.get(transaction=txn) if previous_ref else None
+                version = int(inventory.get("codeVersion") or 0) + 1
+                txn.set(code_ref, {**safe_entry, "codeVersion": version, "maxRedemptions": 2})
+                if previous_snapshot and previous_snapshot.exists:
+                    txn.update(previous_ref, {"isRevoked": True})
+                txn.set(inventory_ref, {"activeCode": code, "codeVersion": version}, merge=True)
+                return version
+
+            entry.code_version = rotate(self.db.transaction())
+        else:
+            with self._lock:
+                inventory = self._devices.setdefault(device_id, {"deviceId": device_id})
+                entry.code_version = int(inventory.get("codeVersion") or 0) + 1
+                inventory.update({"activeCode": code, "codeVersion": entry.code_version})
+        # Keep local objects consistent after the authoritative transaction.
+        with self._lock:
+            for previous in self._codes.values():
+                if previous.device_id == device_id and previous.code_version < entry.code_version:
+                    previous.is_revoked = True
+            if self._collection is None and entry.code_version < int(self._devices[device_id].get("codeVersion") or 0):
+                entry.is_revoked = True
+            self._codes[code] = entry
         return entry
 
     def list_all(self) -> list[ShellyConnectionCode]:
-        if self.db and not self._codes:
+        if self.db:
             for snapshot in self._collection.stream():
                 data = snapshot.to_dict() or {}
                 data = self._scrub_legacy_secrets(snapshot.reference, data, str(data.get("deviceId") or ""))
@@ -414,7 +452,7 @@ class ConnectionCodeStore:
 
     def get(self, code: str) -> ShellyConnectionCode | None:
         normalized = code.strip().upper()
-        if normalized in self._codes:
+        if self._collection is None and normalized in self._codes:
             return self._codes[normalized]
         if self._collection is not None:
             doc = self._collection.document(normalized).get()
@@ -537,7 +575,7 @@ class ConnectionCodeStore:
                     data = doc.to_dict() or {}
                     dev_id = str(data.get("deviceId") or doc.id)
                     data = self._scrub_legacy_secrets(doc.reference, data, dev_id)
-                    if dev_id and dev_id not in self._devices:
+                    if dev_id:
                         self._devices[dev_id] = data
             except Exception:
                 pass

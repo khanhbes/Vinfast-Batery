@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../models/shelly_connection.dart';
+import '../models/smart_charger_binding.dart';
 import 'server_smart_charger_service.dart';
 
 class SmartChargerCredentialsService {
@@ -20,7 +21,34 @@ class SmartChargerCredentialsService {
   static const _draftKey = 'smart_charger.shelly_profile_draft.v1';
   static const _verificationKey = 'smart_charger.verification.v1';
   static const _legacyTokenKey = 'smart_charger.api_token';
+  static const _bindingKey = 'smart_charger.server_binding.v1';
   final FlutterSecureStorage _storage;
+
+  Future<void> cacheServerBinding(SmartChargerBinding? binding) async {
+    final key = _scopedKey(_bindingKey);
+    if (key == null) return;
+    if (binding == null) {
+      await _storage.delete(key: key);
+    } else {
+      await _storage.write(key: key, value: jsonEncode(binding.toJson()));
+    }
+  }
+
+  Future<SmartChargerBinding?> readCachedServerBinding() async {
+    final key = _scopedKey(_bindingKey);
+    if (key == null) return null;
+    try {
+      final raw = await _storage.read(key: key);
+      return raw == null
+          ? null
+          : SmartChargerBinding.fromJson(
+              Map<String, dynamic>.from(jsonDecode(raw) as Map),
+            );
+    } on Object {
+      return null;
+    }
+  }
+
   String? _scopedKey(String base) {
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -31,6 +59,7 @@ class SmartChargerCredentialsService {
       return base;
     }
   }
+
   static DateTime? _lastServerSyncAt;
   static String? _lastServerSyncUid;
   static Future<ShellyConnectionProfile?>? _serverRestoreInFlight;
@@ -207,11 +236,11 @@ class SmartChargerCredentialsService {
 
   Future<void> saveVerification(SmartChargerVerificationState value) =>
       _scopedKey(_verificationKey) == null
-          ? Future.value()
-          : _storage.write(
-              key: _scopedKey(_verificationKey)!,
-              value: jsonEncode(value.toJson()),
-            );
+      ? Future.value()
+      : _storage.write(
+          key: _scopedKey(_verificationKey)!,
+          value: jsonEncode(value.toJson()),
+        );
 
   Future<void> invalidateVerification() =>
       saveVerification(SmartChargerVerificationState.unverified);

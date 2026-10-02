@@ -149,9 +149,23 @@ class PushNotificationService {
   }
 
   Future<void> syncCurrentUser() async {
+    try {
+      await _syncCurrentUserInternal();
+    } catch (error) {
+      // Push registration is best-effort background work. A missing backend,
+      // timeout or messaging plugin error must not interrupt onboarding.
+      debugPrint('[Push] token sync deferred (${error.runtimeType})');
+    }
+  }
+
+  Future<void> _syncCurrentUserInternal() async {
     final generation = _authGeneration;
     final prefs = await SharedPreferences.getInstance();
     if (!(prefs.getBool('pushNotifications') ?? false)) return;
+    if (!AppConstants.isApiConfigured) {
+      debugPrint('[Push] token sync deferred (API not configured)');
+      return;
+    }
     if (Platform.isAndroid || Platform.isIOS) {
       final settings = await _messaging.getNotificationSettings();
       final authorized =
@@ -186,15 +200,20 @@ class PushNotificationService {
         _lastRegisteredFingerprint == fingerprint) {
       return;
     }
+    final endpoint = AppConstants.tryBuildApiUri(
+      '/api/mobile/push-tokens/$deviceId',
+    );
+    if (endpoint == null) {
+      debugPrint('[Push] token sync deferred (API not configured)');
+      return;
+    }
     final client = http.Client();
     _registrationClient = client;
     late final http.Response response;
     try {
       response = await client
           .put(
-            Uri.parse(
-              '${AppConstants.apiBaseUrl}/api/mobile/push-tokens/$deviceId',
-            ),
+            endpoint,
             headers: {
               'Authorization': 'Bearer $idToken',
               'Content-Type': 'application/json',
@@ -236,14 +255,16 @@ class PushNotificationService {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
     final deviceId = await _deviceId();
+    final endpoint = AppConstants.tryBuildApiUri(
+      '/api/mobile/push-tokens/$deviceId',
+    );
+    if (endpoint == null) {
+      debugPrint('[Push] token revoke deferred (API not configured)');
+      return;
+    }
     final idToken = await user.getIdToken();
     await http
-        .delete(
-          Uri.parse(
-            '${AppConstants.apiBaseUrl}/api/mobile/push-tokens/$deviceId',
-          ),
-          headers: {'Authorization': 'Bearer $idToken'},
-        )
+        .delete(endpoint, headers: {'Authorization': 'Bearer $idToken'})
         .timeout(const Duration(seconds: 3));
   }
 

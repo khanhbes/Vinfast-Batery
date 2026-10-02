@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../core/constants/beta_capabilities.dart';
 import '../../core/widgets/settings_reveal.dart';
@@ -54,10 +56,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   int _versionTapCount = 0;
 
   final _settingsService = SettingsService();
+  StreamSubscription<ShellyConnectionSnapshot>? _shellySubscription;
 
   @override
   void initState() {
     super.initState();
+    _shellySubscription = ShellyConnectionCoordinator.shared.states.listen(
+      _applyShellyState,
+    );
+    _applyShellyState(ShellyConnectionCoordinator.shared.current);
     _settingsService.addListener(_onSettingsChanged);
     _settingsService.initialize();
     _loadSettings();
@@ -68,23 +75,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Future<void> _loadShellyState() async {
     final snapshot = await ShellyConnectionCoordinator.shared.restore();
-    var configured = false;
-    var label = 'Shelly chưa kết nối';
-    if (snapshot.state == ShellyConnectionFlowState.connected) {
-      configured = true;
-      label = '● ${snapshot.deviceName ?? 'Shelly'} đã kết nối';
-    } else if (snapshot.state == ShellyConnectionFlowState.offline) {
-      configured = true;
-      label = '${snapshot.deviceName ?? 'Shelly'} đang ngoại tuyến';
-    } else if (snapshot.state ==
-        ShellyConnectionFlowState.verificationRequired) {
-      configured = true;
-      label = '${snapshot.deviceName ?? 'Shelly'} cần kiểm tra an toàn';
-    }
+    _applyShellyState(snapshot);
+  }
+
+  void _applyShellyState(ShellyConnectionSnapshot snapshot) {
     if (mounted) {
       setState(() {
-        _shellyConfigured = configured;
-        _shellyLabel = label;
+        _shellyConfigured =
+            snapshot.isLinked ||
+            snapshot.state == ShellyConnectionFlowState.connected ||
+            snapshot.state == ShellyConnectionFlowState.verificationRequired;
+        _shellyLabel = snapshot.codeRefreshRequired
+            ? '${snapshot.connectionLabel}\nThiết bị có mã kết nối mới'
+            : snapshot.connectionLabel;
       });
     }
   }
@@ -98,6 +101,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   void dispose() {
+    _shellySubscription?.cancel();
     _settingsService.removeListener(_onSettingsChanged);
     super.dispose();
   }

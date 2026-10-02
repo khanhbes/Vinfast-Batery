@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -234,30 +235,45 @@ class OnboardingDraftRepository {
   OnboardingDraftRepository({
     FirebaseFirestore? firestore,
     FlutterSecureStorage? storage,
-  }) : _firestore = firestore ?? FirebaseFirestore.instance,
-       _storage = storage ?? const FlutterSecureStorage();
+    Future<Map<String, dynamic>?> Function(String uid)? loadRemote,
+  }) : _firestore = firestore,
+       _loadRemote = loadRemote,
+       _storage =
+           storage ??
+           const FlutterSecureStorage(
+             aOptions: AndroidOptions(encryptedSharedPreferences: true),
+             iOptions: IOSOptions(
+               accessibility: KeychainAccessibility.first_unlock_this_device,
+             ),
+           );
 
-  final FirebaseFirestore _firestore;
+  final FirebaseFirestore? _firestore;
+  final Future<Map<String, dynamic>?> Function(String uid)? _loadRemote;
   final FlutterSecureStorage _storage;
+  FirebaseFirestore get _database => _firestore ?? FirebaseFirestore.instance;
+
+  // Repository instances are created by the form, AuthGate and worker. Their
+  // local read/compare/write operations must share the same UID-scoped lock.
+  static final Map<String, Future<void>> _localOperations = {};
+
+  Future<T> _withLocalLock<T>(String uid, Future<T> Function() action) async {
+    final previous = _localOperations[uid];
+    final completion = Completer<void>();
+    _localOperations[uid] = completion.future;
+    try {
+      if (previous != null) await previous;
+      return await action();
+    } finally {
+      completion.complete();
+      if (identical(_localOperations[uid], completion.future)) {
+        _localOperations.remove(uid);
+      }
+    }
+  }
 
   String _key(String uid) => 'vinfast.onboarding.draft.$uid';
 
-  Future<OnboardingDraft?> load(String uid) async {
-    try {
-      final remote = await _firestore
-          .collection('users')
-          .doc(uid)
-          .collection('onboardingDrafts')
-          .doc('current')
-          .get();
-      if (remote.exists && remote.data() != null) {
-        final draft = OnboardingDraft.fromMap(uid, remote.data()!);
-        await _storage.write(key: _key(uid), value: jsonEncode(draft.toMap()));
-        return draft;
-      }
-    } catch (_) {
-      // Secure local cache is the offline fallback.
-    }
+  Future<OnboardingDraft?> _readLocal(String uid) async {
     final cached = await _storage.read(key: _key(uid));
     if (cached == null || cached.isEmpty) return null;
     try {
@@ -270,20 +286,80 @@ class OnboardingDraftRepository {
     }
   }
 
-  Future<bool> save(OnboardingDraft draft) async {
-    await _storage.write(
-      key: _key(draft.uid),
-      value: jsonEncode(draft.toMap()),
-    );
+  Future<OnboardingDraft?> load(String uid) async {
     try {
-      await _firestore
+      final remote =
+          await (_loadRemote != null
+                  ? _loadRemote(uid)
+                  : _database
+                        .collection('users')
+                        .doc(uid)
+                        .collection('onboardingDrafts')
+                        .doc('current')
+                        .get()
+                        .then((snapshot) => snapshot.data()))
+              .timeout(const Duration(seconds: 8));
+      if (remote != null) {
+        final draft = OnboardingDraft.fromMap(uid, remote);
+        return await _withLocalLock(uid, () async {
+          // Read AFTER the network wait, not before it: a final confirmation
+          // may have been saved while this stale remote request was in flight.
+          final local = await _readLocal(uid);
+          // Firestore can be an older replica after an offline edit. Never
+          // replace a newer local revision with stale remote data.
+          final localUpdated = local?.updatedAt;
+          final remoteUpdated = draft.updatedAt;
+          final localIsNewer =
+              local != null &&
+              (local.revision > draft.revision ||
+                  (local.revision == draft.revision &&
+                      localUpdated != null &&
+                      (remoteUpdated == null ||
+                          localUpdated.isAfter(remoteUpdated))));
+          if (!localIsNewer) {
+            await _storage.write(
+              key: _key(uid),
+              value: jsonEncode(draft.toMap()),
+            );
+            return draft;
+          }
+          return local;
+        });
+      }
+    } catch (_) {
+      // Secure local cache is the offline fallback.
+    }
+    return _withLocalLock(uid, () => _readLocal(uid));
+  }
+
+  Future<bool> save(OnboardingDraft draft) async {
+    final accepted = await _withLocalLock(draft.uid, () async {
+      final current = await _readLocal(draft.uid);
+      if (current != null && current.operationId == draft.operationId) {
+        // A delayed form/worker save must not roll back a newer revision or
+        // erase a final confirmation from this same onboarding operation.
+        if (current.revision > draft.revision ||
+            (current.finalizedAt != null && draft.finalizedAt == null)) {
+          return false;
+        }
+      }
+      await _storage.write(
+        key: _key(draft.uid),
+        value: jsonEncode(draft.toMap()),
+      );
+      return true;
+    });
+    if (!accepted) return false;
+    try {
+      await _database
           .collection('users')
           .doc(draft.uid)
           .collection('onboardingDrafts')
           .doc('current')
           // Replace the whole draft so a skipped optional answer does not
           // survive a previous merge as a stale Firestore field.
-          .set(draft.toMap());
+          .set(draft.toMap())
+          .timeout(const Duration(seconds: 8));
       return true;
     } catch (_) {
       return false;
@@ -291,14 +367,15 @@ class OnboardingDraftRepository {
   }
 
   Future<void> clear(String uid) async {
-    await _storage.delete(key: _key(uid));
+    await _withLocalLock(uid, () => _storage.delete(key: _key(uid)));
     try {
-      await _firestore
+      await _database
           .collection('users')
           .doc(uid)
           .collection('onboardingDrafts')
           .doc('current')
-          .delete();
+          .delete()
+          .timeout(const Duration(seconds: 8));
     } catch (_) {}
   }
 }

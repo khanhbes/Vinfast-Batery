@@ -67,7 +67,11 @@ Vinfast-Batery/
 │   │   │   ├── battery/              # BatteryMonitorScreen, Cell health, Temperature
 │   │   │   ├── trip/                 # TripPlannerScreen, GPS tracking, Live route
 │   │   │   ├── smart_charging/       # SmartChargingControlScreen, Target SoC, Schedule
-│   │   │   ├── ai/                   # Range & charging time widgets, Model lab
+│   │   │   ├── ai/                   # AI Chatbot, Range & charging time widgets, Model lab
+│   │   │   │   ├── controllers/      # chat_controller, behavior_tracker (Riverpod)
+│   │   │   │   ├── models/           # chat_session, chat_message, behavior_profile
+│   │   │   │   ├── services/         # chat_api_service, behavior_sync_service, suggestion_service
+│   │   │   │   └── widgets/          # chat_message_bubble, action_confirmation_card, streaming_text
 │   │   │   └── settings/             # SettingsScreen, Vehicle profile, Server config
 │   │   └── navigation/               # app_navigation.dart (AppNavigation shell & routes)
 │   └── test/                         # Flutter Unit & Widget tests
@@ -77,6 +81,12 @@ Vinfast-Batery/
 │   ├── vehicle_catalog.py            # Quản lý danh mục xe EV & thông số kỹ thuật pin
 │   ├── ai_server/                    # FastAPI AI Service (Entrypoint: Port 8001)
 │   │   ├── main.py                   # Prediction endpoints & Model Lifecycle API
+│   │   ├── chat_engine.py            # [AI Chatbot] Gemini API wrapper & prompt builder
+│   │   ├── chat_tools.py             # [AI Chatbot] Function calling tool definitions
+│   │   ├── chat_memory.py            # [AI Chatbot] Conversation context manager
+│   │   ├── behavior_analyzer.py      # [AI Chatbot] User behavior aggregation
+│   │   ├── suggestion_engine.py      # [AI Chatbot] Proactive suggestion rules
+│   │   ├── chat_schemas.py           # [AI Chatbot] Pydantic models for chat API
 │   │   ├── models/                   # TFLite & PKL model storage
 │   │   └── fine_tune.py              # Personal AI fine-tuning pipeline
 │   ├── dashboard/                    # React 18 + Vite + TypeScript Admin Dashboard
@@ -98,7 +108,8 @@ Vinfast-Batery/
 │   │   ├── TELEMETRY_SCHEMA.md       # Schema chuẩn pin & sạc
 │   │   ├── VEHICLE_CATALOG.md        # Danh mục xe và định mức pin
 │   │   ├── START_LAPTOP_SERVER.md    # Hướng dẫn chạy server local với Tailscale/Tunnel
-│   │   └── IOS.md                    # Hướng dẫn build/test trên iOS
+│   │   ├── IOS.md                    # Hướng dẫn build/test trên iOS
+│   │   └── AI_CHATBOT_PERSONALIZATION.md  # Đặc tả AI Chatbot cá nhân hóa & kế hoạch triển khai
 │   └── archive/                      # Kho lưu trữ các kế hoạch và audit cũ (được giữ để đối soát)
 │
 ├── AGENTS.md                         # (File này) Cẩm nang kiến trúc dành cho Agent
@@ -165,6 +176,17 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Admin tạo thiết bị và sinh mã tại trang `/shelly` trên Web Dashboard (`POST /api/admin/shelly-devices`).
   - Server tạo mã 6 ký tự ngẫu nhiên (uppercase alphanumeric), lưu trữ trong Firestore `shellyConnectionCodes` (hạn dùng 24h, vô hiệu hóa ngay sau khi đổi).
   - Mobile App gửi mã qua `POST /api/shelly/redeem-code` để nhận cấu hình Shelly mã hóa và tự động liên kết xe an toàn.
+
+### 3.7. AI Chatbot Cá Nhân Hóa & Behavior Learning
+- **LLM Engine**: Google Gemini API (2.0 Flash / Pro), gọi qua backend proxy, API key chỉ lưu server-side.
+- **Behavior Learning**: Thu thập thói quen sạc, lịch sử chuyến đi, thời gian dùng app, tương tác chatbot, tùy chọn cài đặt → lưu hybrid (local Hive + Firestore `users/{uid}/behaviorProfile/current`).
+- **Personalized Prompt**: System prompt được inject behavior profile (giờ sạc ưa thích, quãng đường hàng ngày, chủ đề hay hỏi...) → câu trả lời khác biệt theo từng user.
+- **Function Calling**: 9 tools (get_battery_status, start_smart_charging, schedule_charging...). Các tool điều khiển phần cứng (bật/tắt sạc) **bắt buộc Human-in-the-Loop** qua Action Confirmation Card.
+- **SSE Streaming**: Response trả qua Server-Sent Events, hiển thị từng chữ trên Flutter.
+- **Chat History**: Hybrid local Hive + Firestore backup 30 ngày. Sliding window 20 messages cho context.
+- **Proactive Suggestions**: 8 rules chủ động gợi ý (pin thấp, nhắc bảo dưỡng, tips tiết kiệm pin...). Rate limit 1 bubble/30 phút, 5/ngày.
+- **Feedback Loop**: 👍/👎 trên mỗi câu trả lời → điều chỉnh response style và topic ranking.
+- **Đặc tả chi tiết**: Xem `docs/specs/AI_CHATBOT_PERSONALIZATION.md`.
 
 ---
 

@@ -30,8 +30,7 @@ bool _isExpectedOperationalError(Object error) {
       str.contains('Failed to load font') ||
       str.contains('HandshakeException') ||
       str.contains('SocketException') ||
-      str.contains('TimeoutException') ||
-      str.contains('Zone mismatch')) {
+      str.contains('TimeoutException')) {
     return true;
   }
   return error is SmartChargerException ||
@@ -40,8 +39,6 @@ bool _isExpectedOperationalError(Object error) {
 }
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
   // A production APK without an injected HTTPS API endpoint is unsafe to
   // ship: fail before Firebase/network work rather than silently running
   // against an empty or developer URL.
@@ -85,6 +82,9 @@ void main() async {
 
   await runZonedGuarded(
     () async {
+      // Binding and runApp must share the same zone. Initializing the binding
+      // outside runZonedGuarded caused Flutter's startup "Zone mismatch".
+      WidgetsFlutterBinding.ensureInitialized();
       // Khởi động Firebase trong nền (AuthGate sẽ await phối hợp hiển thị splash/retry)
       // Kiểm tra session tracking chưa kết thúc (crash recovery)
       // Khởi tạo Notification Service trong nền (không chặn first frame)
@@ -136,6 +136,7 @@ class _DeferredStartupState extends ConsumerState<_DeferredStartup> {
   }
 
   Future<void> _initializeDeferredServices() async {
+    var needsBackgroundRecovery = false;
     try {
       final prefs = await SharedPreferences.getInstance();
       final customUrl = prefs.getString('custom_api_base_url');
@@ -149,6 +150,7 @@ class _DeferredStartupState extends ConsumerState<_DeferredStartup> {
           : tripActive
           ? 'trip'
           : null;
+      needsBackgroundRecovery = recovery != null;
       if (mounted && recovery != null) {
         ref.read(pendingRecoveryProvider.notifier).state = recovery;
       }
@@ -156,16 +158,25 @@ class _DeferredStartupState extends ConsumerState<_DeferredStartup> {
       AppErrorReporter.report(error, stack, source: 'CrashRecovery');
     }
 
-    unawaited(
-      NotificationService().initialize().catchError((error, stack) {
-        AppErrorReporter.report(error, stack, source: 'NotificationService');
-      }),
-    );
-    unawaited(
-      BackgroundServiceConfig.initialize().catchError((error, stack) {
+    // Create notification channels before configuring the foreground service.
+    // The service references `vinfast_bg_channel`; on Android 14+/API 36 a
+    // missing channel makes the system reject the notification and kill the
+    // application.
+    try {
+      await NotificationService().initialize();
+    } catch (error, stack) {
+      AppErrorReporter.report(error, stack, source: 'NotificationService');
+    }
+    // A fresh sign-in/onboarding session does not need a background Flutter
+    // engine. Configure it only when a persisted trip/charge must be
+    // recovered; normal starts configure it lazily at the first real trip.
+    if (needsBackgroundRecovery) {
+      try {
+        await BackgroundServiceConfig.initialize();
+      } catch (error, stack) {
         AppErrorReporter.report(error, stack, source: 'BackgroundService');
-      }),
-    );
+      }
+    }
   }
 
   @override

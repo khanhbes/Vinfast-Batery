@@ -31,7 +31,11 @@ class ApiResult<T> {
       success: ok,
       data: ok ? decode?.call(map['data']) : null,
       code: map['code']?.toString(),
-      userMessage: map['userMessage']?.toString() ?? map['error']?.toString(),
+      // `error` is kept in the wire envelope for legacy callers, but it may
+      // contain provider details. Release UI only consumes the safe message;
+      // use a generic fallback when an older endpoint omits it.
+      userMessage: map['userMessage']?.toString() ??
+          (ok ? null : 'Chưa thể hoàn tất yêu cầu. Vui lòng thử lại.'),
       retryable: map['retryable'] == true,
       requestId: map['requestId']?.toString(),
       httpStatus: map['statusCode'] is num
@@ -53,4 +57,3 @@ class ApiResult<T> {
         if (httpStatus != null) 'statusCode': httpStatus,
       };
 }
-

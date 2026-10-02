@@ -39,7 +39,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, wait
 import numpy as np
 from datetime import datetime, timedelta, timezone
-from flask import Flask, request, jsonify, Response, redirect, send_file, g
+from flask import Flask, request, jsonify, Response, redirect, send_file, g, stream_with_context
 from flask_cors import CORS
 from werkzeug.exceptions import HTTPException
 
@@ -698,6 +698,7 @@ def readiness_check():
             },
         },
         'requestId': _request_id(),
+        'statusCode': 200,
     }
     if not firebase_ready:
         payload.update({
@@ -1130,102 +1131,136 @@ def commit_mobile_onboarding():
     # Keep vehicle, profile, completion and receipt writes in one Firestore
     # transaction when the production client supports transactions. The fake
     # store used by unit tests falls back to the legacy direct-write path.
-    transaction = database.transaction() if hasattr(database, 'transaction') else None
-    vehicle_result, vehicle_status = create_user_vehicle(
-        database,
-        request._uid,
-        vehicle_payload,
-        max_vehicles=max_vehicles,
-        vehicle_id=deterministic_vehicle_id,
-        runner=(lambda operation: operation(transaction)) if transaction is not None else None,
-    )
-    if vehicle_status >= 300 or vehicle_result.get('success') is not True:
-        retryable = vehicle_status >= 500
-        message = vehicle_result.get('error') or 'Không thể tạo xe'
-        return jsonify({
-            'success': False,
-            'error': message,
-            'userMessage': message,
-            'code': vehicle_result.get('code') or 'vehicleCommitFailed',
-            'retryable': retryable,
-        }), vehicle_status
+    def commit_operation(transaction):
+        # SDK transactional() begins the transaction before any reads and
+        # commits all queued writes together. A raw transaction() is inactive.
+        # Recheck receipts inside that transaction to protect concurrent retry.
+        for candidate in (receipt_ref, key_receipt_ref):
+            receipt = candidate.get(transaction=transaction) if transaction is not None else candidate.get()
+            if receipt.exists:
+                saved = receipt.to_dict() or {}
+                if not isinstance(saved.get('response'), dict):
+                    raise ValueError('Invalid onboarding receipt')
+                return jsonify(saved['response']), int(saved.get('statusCode') or 200)
+        vehicle_result, vehicle_status = create_user_vehicle(
+            database,
+            request._uid,
+            vehicle_payload,
+            max_vehicles=max_vehicles,
+            vehicle_id=deterministic_vehicle_id,
+            runner=(lambda operation: operation(transaction)) if transaction is not None else None,
+        )
+        if vehicle_status >= 300 or vehicle_result.get('success') is not True:
+            retryable = vehicle_status >= 500
+            message = vehicle_result.get('error') or 'Không thể tạo xe'
+            return jsonify({
+                'success': False,
+                'error': message,
+                'userMessage': message,
+                'code': vehicle_result.get('code') or 'vehicleCommitFailed',
+                'retryable': retryable,
+            }), vehicle_status
 
-    now_iso = datetime.now(timezone.utc).isoformat()
-    profile_update = {
-        'uid': request._uid,
-        'email': request._email,
-        'name': name,
-        'displayName': name,
-        'phone': str(profile.get('phone') or '').strip()[:20],
-        'dateOfBirth': str(dob).strip() if dob else None,
-        'registrationFlowVersion': 2,
-        'updatedAt': now_iso,
-        'source': 'flutter_app',
-    }
-    for key, limit in (('usagePurpose', 80),):
-        value = str(profile.get(key) or '').strip()
-        if value:
-            profile_update[key] = value[:limit]
-    profile_update.update(validated_profile_numbers)
-    for key, low, high in (('avgDailyDistanceKm', 0, 1000), ('typicalSocWhenCharge', 0, 100)):
-        if profile.get(key) is not None:
-            try:
-                number = float(profile.get(key))
-            except (TypeError, ValueError):
-                return jsonify({'success': False, 'error': f'{key} không hợp lệ', 'userMessage': 'Thông tin onboarding không hợp lệ.', 'code': 'invalidProfile', 'retryable': False}), 400
-            if not low <= number <= high:
-                return jsonify({'success': False, 'error': f'{key} ngoài phạm vi', 'userMessage': 'Thông tin onboarding ngoài phạm vi cho phép.', 'code': 'invalidProfile', 'retryable': False}), 400
-            profile_update[key] = number
+        now_iso = datetime.now(timezone.utc).isoformat()
+        profile_update = {
+            'uid': request._uid,
+            'email': request._email,
+            'name': name,
+            'displayName': name,
+            'phone': str(profile.get('phone') or '').strip()[:20],
+            'dateOfBirth': str(dob).strip() if dob else None,
+            'registrationFlowVersion': 2,
+            'updatedAt': now_iso,
+            'source': 'flutter_app',
+        }
+        for key, limit in (('usagePurpose', 80),):
+            value = str(profile.get(key) or '').strip()
+            if value:
+                profile_update[key] = value[:limit]
+        profile_update.update(validated_profile_numbers)
+        for key, low, high in (('avgDailyDistanceKm', 0, 1000), ('typicalSocWhenCharge', 0, 100)):
+            if profile.get(key) is not None:
+                try:
+                    number = float(profile.get(key))
+                except (TypeError, ValueError):
+                    return jsonify({'success': False, 'error': f'{key} không hợp lệ', 'userMessage': 'Thông tin onboarding không hợp lệ.', 'code': 'invalidProfile', 'retryable': False}), 400
+                if not low <= number <= high:
+                    return jsonify({'success': False, 'error': f'{key} ngoài phạm vi', 'userMessage': 'Thông tin onboarding ngoài phạm vi cho phép.', 'code': 'invalidProfile', 'retryable': False}), 400
+                profile_update[key] = number
 
-    shelly_status = body.get('shellyStatus', 'skipped')
-    if shelly_status not in ('connected', 'skipped'):
-        shelly_status = 'skipped'
-    profile_update.update({
-        'onboardingCompletedAt': now_iso,
-        'shellyOnboardingStatus': shelly_status,
-    })
-    user_ref = database.collection('users').document(request._uid)
-    if transaction is not None:
-        transaction.set(user_ref, profile_update, merge=True)
-    else:
-        user_ref.set(profile_update, merge=True)
-    response_payload = {
-        'success': True,
-        'data': {
-            'vehicle': vehicle_result.get('data') or {},
+        shelly_status = body.get('shellyStatus', 'skipped')
+        if shelly_status not in ('connected', 'skipped'):
+            shelly_status = 'skipped'
+        profile_update.update({
             'onboardingCompletedAt': now_iso,
             'shellyOnboardingStatus': shelly_status,
-            'syncState': 'synced',
-        },
-        'requestId': _request_id(),
-    }
-    receipt_data = {
-            'uid': request._uid,
-            'operationId': operation_id,
-            'idempotencyKey': idempotency_key,
+        })
+        user_ref = database.collection('users').document(request._uid)
+        if transaction is not None:
+            transaction.set(user_ref, profile_update, merge=True)
+        else:
+            user_ref.set(profile_update, merge=True)
+        response_payload = {
+            'success': True,
+            'data': {
+                'vehicle': vehicle_result.get('data') or {},
+                'onboardingCompletedAt': now_iso,
+                'shellyOnboardingStatus': shelly_status,
+                'syncState': 'synced',
+            },
+            'requestId': _request_id(),
             'statusCode': 200,
-            'response': response_payload,
-            'createdAt': now_iso,
         }
-    try:
+        receipt_data = {
+                'uid': request._uid,
+                'operationId': operation_id,
+                'idempotencyKey': idempotency_key,
+                'statusCode': 200,
+                'response': response_payload,
+                'createdAt': now_iso,
+            }
         if transaction is not None:
             transaction.set(receipt_ref, receipt_data)
             transaction.set(key_receipt_ref, receipt_data)
         else:
             receipt_ref.set(receipt_data)
             key_receipt_ref.set(receipt_data)
-        draft_ref = database.collection('users').document(request._uid).collection('onboardingDrafts').document('current')
+        user_doc = database.collection('users').document(request._uid)
+        collection_factory = getattr(user_doc, 'collection', None)
+        draft_ref = (
+            collection_factory('onboardingDrafts').document('current')
+            if callable(collection_factory)
+            else None
+        )
         if transaction is not None:
-            transaction.delete(draft_ref)
-            transaction.commit()
-        elif hasattr(draft_ref, 'delete'):
+            if draft_ref is not None:
+                transaction.delete(draft_ref)
+        elif draft_ref is not None and hasattr(draft_ref, 'delete'):
             draft_ref.delete()
-    except Exception:
-        # The deterministic vehicle id and operation id make a later retry
-        # safe even if the receipt cleanup is interrupted.
-        pass
-    _audit('onboarding_commit', 'users', request._uid, request._uid, request._email, {'operationId': operation_id})
-    return jsonify(response_payload), 200
+        return jsonify(response_payload), 200
+    try:
+        if hasattr(database, 'transaction'):
+            from google.cloud import firestore
+            result = firestore.transactional(commit_operation)(database.transaction())
+        else:
+            result = commit_operation(None)
+    except Exception as exc:
+        app.logger.warning(
+            'onboarding_commit_failed request_id=%s error=%s',
+            _request_id(), type(exc).__name__,
+        )
+        return jsonify({
+            'success': False,
+            'error': 'Onboarding commit was not confirmed',
+            'userMessage': 'Chưa xác nhận được dữ liệu đã lưu. Vui lòng thử lại.',
+            'code': 'ONBOARDING_COMMIT_UNCONFIRMED',
+            'retryable': True,
+            'requestId': _request_id(),
+            'statusCode': 503,
+        }), 503
+    if result[1] == 200:
+        _audit('onboarding_commit', 'users', request._uid, request._uid, request._email, {'operationId': operation_id})
+    return result
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -5003,6 +5038,181 @@ def soc_history():
 # ═══════════════════════════════════════════════════════════════
 # TRIP PREDICTION ENDPOINTS
 # ═══════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════
+# AI CHATBOT PROXY ENDPOINTS (BatteryBot + Gemini)
+# ═══════════════════════════════════════════════════════════════
+
+@app.route('/api/chat/send', methods=['POST'])
+def chat_send_proxy():
+    """Forward chat request to FastAPI AI service and stream SSE response back."""
+    if _http is None:
+        return jsonify({'success': False, 'error': 'requests library not installed'}), 500
+
+    url = f'{AI_SERVER_URL}/v1/chat/send'
+    json_body = request.get_json(silent=True) or {}
+
+    try:
+        upstream = _http.post(
+            url,
+            json=json_body,
+            headers=_ai_headers({'Content-Type': 'application/json'}),
+            stream=True,
+            timeout=60,
+        )
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'AI server unavailable: {e}'}), 502
+
+    def generate():
+        for chunk in upstream.iter_content(chunk_size=None):
+            if chunk:
+                yield chunk
+
+    return Response(
+        stream_with_context(generate()),
+        status=upstream.status_code,
+        content_type=upstream.headers.get('content-type', 'text/event-stream; charset=utf-8'),
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no',
+        },
+    )
+
+
+@app.route('/api/chat/sessions', methods=['GET'])
+def chat_sessions_proxy():
+    """Lấy danh sách các phiên trò chuyện."""
+    return _ai_proxy_json('GET', '/v1/chat/sessions', params=request.args)
+
+
+@app.route('/api/chat/sessions/<session_id>', methods=['GET'])
+def chat_session_detail_proxy(session_id):
+    """Lấy chi tiết tin nhắn trong một phiên."""
+    return _ai_proxy_json('GET', f'/v1/chat/sessions/{session_id}')
+
+
+@app.route('/api/chat/sessions/<session_id>', methods=['DELETE'])
+def chat_delete_session_proxy(session_id):
+    """Xóa một phiên trò chuyện."""
+    return _ai_proxy_json('DELETE', f'/v1/chat/sessions/{session_id}')
+
+
+@app.route('/api/chat/feedback', methods=['POST'])
+def chat_feedback_proxy():
+    """Gửi đánh giá tin nhắn (like/dislike)."""
+    return _ai_proxy_json('POST', '/v1/chat/feedback', json_body=request.get_json(silent=True) or {})
+
+
+# ── Behavior Learning Proxy & Sync (Phase 2) ──────────────────────
+@app.route('/api/behavior/sync', methods=['POST'])
+def behavior_sync_proxy():
+    """Đồng bộ behavior profile từ Mobile vào AI Server và sao lưu Firestore."""
+    body = request.get_json(silent=True) or {}
+    uid, _, _ = _verify_token()
+    user_id = uid or body.get('userId') or 'anonymous'
+    
+    # 1. Forward sang AI Server
+    data, code = _ai_request_json(
+        'POST',
+        '/v1/behavior/sync',
+        json_body={'userId': user_id, 'profile': body.get('profile', body)},
+    )
+    
+    # 2. Sao lưu Firestore nếu có kết nối
+    if code == 200 and _firestore_db and user_id != 'anonymous':
+        try:
+            profile_data = data.get('data') or data
+            profile_data['syncedAt'] = datetime.now(timezone.utc).isoformat()
+            _firestore_db.collection('users').document(user_id).collection('behaviorProfile').document('current').set(profile_data, merge=True)
+        except Exception as e:
+            print(f'⚠ Lỗi sao lưu Firestore behavior profile: {e}')
+
+    return jsonify(data), code
+
+
+@app.route('/api/behavior/profile', methods=['GET'])
+def behavior_get_profile_proxy():
+    """Lấy behavior profile hiện tại của người dùng."""
+    uid, _, _ = _verify_token()
+    user_id = uid or request.args.get('userId') or 'anonymous'
+    vehicle_id = request.args.get('vehicleId')
+
+    # Nếu có trên Firestore, nạp trước
+    if _firestore_db and user_id != 'anonymous':
+        try:
+            doc = _firestore_db.collection('users').document(user_id).collection('behaviorProfile').document('current').get()
+            if doc.exists:
+                saved = doc.to_dict()
+                _ai_request_json(
+                    'POST',
+                    '/v1/behavior/sync',
+                    json_body={'userId': user_id, 'profile': saved},
+                )
+        except Exception as e:
+            print(f'⚠ Lỗi đọc Firestore behavior profile: {e}')
+
+    return _ai_proxy_json(
+        'GET',
+        '/v1/behavior/profile',
+        params={'userId': user_id, 'vehicleId': vehicle_id} if vehicle_id else {'userId': user_id},
+    )
+
+
+@app.route('/api/chat/backup', methods=['POST'])
+def chat_backup_proxy():
+    """Sao lưu lịch sử phiên chat lên Firestore với TTL 30 ngày."""
+    body = request.get_json(silent=True) or {}
+    uid, _, _ = _verify_token()
+    user_id = uid or body.get('userId') or 'anonymous'
+    session_id = body.get('sessionId')
+
+    if not session_id:
+        return jsonify({'success': False, 'error': 'sessionId is required'}), 400
+
+    if not _firestore_db or user_id == 'anonymous':
+        return jsonify({'success': True, 'note': 'Firestore unavailable or anonymous user, skipped cloud backup'}), 200
+
+    try:
+        now = datetime.now(timezone.utc)
+        expires_at = now + timedelta(days=30)
+        backup_doc = {
+            'sessionId': session_id,
+            'userId': user_id,
+            'title': body.get('title', 'Cuộc trò chuyện'),
+            'messages': body.get('messages', []),
+            'backedUpAt': now.isoformat(),
+            'expiresAt': expires_at.isoformat(),
+        }
+        _firestore_db.collection('users').document(user_id).collection('chatHistory').document(session_id).set(backup_doc, merge=True)
+        return jsonify({'success': True, 'sessionId': session_id, 'expiresAt': expires_at.isoformat()}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Lỗi backup Firestore: {e}'}), 500
+
+
+@app.route('/api/chat/history', methods=['GET'])
+def chat_history_list_proxy():
+    """Lấy danh sách các phiên chat đã sao lưu trên Firestore."""
+    uid, _, _ = _verify_token()
+    user_id = uid or request.args.get('userId') or 'anonymous'
+    
+    if not _firestore_db or user_id == 'anonymous':
+        return _ai_proxy_json('GET', '/v1/chat/sessions', params=request.args)
+
+    try:
+        docs = (
+            _firestore_db.collection('users')
+            .document(user_id)
+            .collection('chatHistory')
+            .order_by('backedUpAt', direction='DESCENDING')
+            .limit(30)
+            .get()
+        )
+        sessions = [doc.to_dict() for doc in docs]
+        return jsonify({'success': True, 'data': sessions}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/trip/predict', methods=['POST'])
 def trip_predict():
     """Predict battery consumption for a trip using AI or heuristic."""
@@ -6405,6 +6615,171 @@ def admin_migrate_collections():
 # ═══════════════════════════════════════════════════════════════
 # APP CONFIG & UPDATE ENDPOINT
 # ═══════════════════════════════════════════════════════════════
+
+# ═══════════════════════════════════════════════════════════════
+# AI CHATBOT & BEHAVIOR PROXY ROUTES (Phase 1, 2 & 3)
+# ═══════════════════════════════════════════════════════════════
+
+@app.route('/api/chat/send', methods=['POST'])
+def proxy_chat_send():
+    """Proxy gửi tin nhắn chat và stream SSE về client."""
+    from flask import Response
+    from ai_server.chat_engine import chat_engine
+    from ai_server.chat_schemas import ChatSendRequest
+
+    body = request.get_json() or {}
+    try:
+        req = ChatSendRequest.model_validate(body)
+        return Response(
+            chat_engine.stream_chat(req),
+            mimetype='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                'X-Accel-Buffering': 'no',
+            },
+        )
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+
+@app.route('/api/chat/feedback', methods=['POST'])
+def proxy_chat_feedback():
+    """Ghi nhận đánh giá phản hồi từ người dùng."""
+    from ai_server.behavior_analyzer import behavior_analyzer
+    body = request.get_json() or {}
+    user_id = body.get('userId')
+    if user_id:
+        behavior_analyzer.record_chat_interaction(
+            user_id=user_id,
+            feedback_rating=body.get('rating'),
+        )
+    return jsonify({'success': True, 'data': {'status': 'received', 'rating': body.get('rating')}})
+
+
+@app.route('/api/chat/action/confirm', methods=['POST'])
+def proxy_chat_action_confirm():
+    """Xác nhận thực hiện function call (Human-in-the-Loop)."""
+    from ai_server.chat_engine import chat_engine
+    body = request.get_json() or {}
+    call_id = body.get('callId', '')
+    tool_name = body.get('toolName', '')
+    args = body.get('args', {})
+    confirmed = body.get('confirmed', True)
+
+    resp = chat_engine.confirm_action(
+        call_id=call_id,
+        tool_name=tool_name,
+        args=args,
+        confirmed=confirmed,
+    )
+    return jsonify({'success': resp.get('success', False), 'data': resp})
+
+
+@app.route('/api/chat/backup', methods=['POST'])
+def chat_backup():
+    """Sao lưu phiên chat lên Firestore với TTL 30 ngày."""
+    body = request.get_json() or {}
+    session_id = body.get('sessionId')
+    user_id = getattr(request, '_uid', body.get('userId'))
+    if not session_id or not user_id:
+        return jsonify({'success': False, 'error': 'Thiếu sessionId hoặc userId'}), 400
+
+    now = datetime.now(timezone.utc)
+    expires_at = now.timestamp() + (30 * 86400)
+
+    doc_data = {
+        'sessionId': session_id,
+        'userId': user_id,
+        'title': body.get('title', 'Cuộc trò chuyện'),
+        'messages': body.get('messages', []),
+        'updatedAt': now.isoformat(),
+        'expiresAt': datetime.fromtimestamp(expires_at, timezone.utc).isoformat(),
+    }
+
+    if _firebase_available and _firestore_db:
+        try:
+            _firestore_db.collection('users').document(user_id).collection('chatSessions').document(session_id).set(doc_data)
+        except Exception as e:
+            return jsonify({'success': False, 'error': f'Lỗi lưu Firestore: {e}'}), 500
+
+    return jsonify({'success': True, 'data': {'sessionId': session_id, 'saved': True}})
+
+
+@app.route('/api/chat/history', methods=['GET'])
+def chat_get_history():
+    """Lấy danh sách phiên chat đã sao lưu của người dùng."""
+    user_id = getattr(request, '_uid', request.args.get('userId'))
+    if not user_id:
+        return jsonify({'success': False, 'error': 'Chưa xác thực'}), 401
+
+    sessions = []
+    if _firebase_available and _firestore_db:
+        try:
+            docs = _firestore_db.collection('users').document(user_id).collection('chatSessions').order_by('updatedAt', direction=firestore.Query.DESCENDING).limit(20).stream()
+            for d in docs:
+                data = d.to_dict()
+                sessions.append({
+                    'sessionId': data.get('sessionId'),
+                    'title': data.get('title'),
+                    'updatedAt': data.get('updatedAt'),
+                    'messageCount': len(data.get('messages', [])),
+                })
+        except Exception as e:
+            pass
+
+    return jsonify({'success': True, 'data': sessions})
+
+
+@app.route('/api/behavior/sync', methods=['POST'])
+def proxy_behavior_sync():
+    """Đồng bộ behavior profile từ mobile app."""
+    from ai_server.behavior_analyzer import behavior_analyzer
+    from ai_server.chat_schemas import BehaviorProfile
+    body = request.get_json() or {}
+    user_id = body.get('userId', 'anonymous')
+    prof_data = body.get('profile', {})
+    try:
+        profile = BehaviorProfile.model_validate(prof_data)
+        updated = behavior_analyzer.update_profile(user_id, profile)
+        return jsonify({'success': True, 'data': updated.model_dump()})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+
+@app.route('/api/behavior/profile', methods=['GET'])
+def proxy_behavior_get_profile():
+    """Lấy behavior profile hiện tại của người dùng."""
+    from ai_server.behavior_analyzer import behavior_analyzer
+    user_id = request.args.get('userId', 'anonymous')
+    vehicle_id = request.args.get('vehicleId')
+    profile = behavior_analyzer.get_or_create_profile(user_id, vehicle_id)
+    return jsonify({'success': True, 'data': profile.model_dump()})
+
+
+@app.route('/api/behavior/suggestions', methods=['GET'])
+def proxy_behavior_get_suggestions():
+    """Lấy danh sách gợi ý proactive (Rules R001-R008)."""
+    from ai_server.behavior_analyzer import behavior_analyzer
+    from ai_server.suggestion_engine import suggestion_engine
+    user_id = request.args.get('userId', 'anonymous')
+    vehicle_id = request.args.get('vehicleId')
+
+    profile = behavior_analyzer.get_or_create_profile(user_id, vehicle_id)
+    v_ctx = {
+        'vehicleId': vehicle_id or profile.vehicleId,
+        'currentSoc': float(request.args.get('currentSoc', 50.0)),
+        'currentSoh': float(request.args.get('currentSoh', 98.0)),
+        'odoKm': int(request.args.get('odoKm', 0)),
+        'chargingStatus': request.args.get('chargingStatus', 'idle'),
+    }
+
+    suggestions = suggestion_engine.generate_suggestions(
+        vehicle_context=v_ctx,
+        behavior_profile=profile.model_dump(),
+    )
+    return jsonify({'success': True, 'data': suggestions})
+
 
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
 _APK_DIR = os.environ.get('APK_DIR', os.path.join(_APP_DIR, 'apk'))

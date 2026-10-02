@@ -17,6 +17,7 @@ import '../core/widgets/error_state.dart';
 import '../core/widgets/vehicle_picker_sheet.dart';
 import '../core/widgets/vehicle_switcher.dart';
 import '../core/widgets/global_charging_pill.dart';
+import '../core/widgets/floating_battery_bot.dart';
 import '../features/ai/smart_charge_history_screen.dart';
 import '../features/ai/controllers/smart_charging_controller.dart';
 import '../features/notifications/notification_center_screen.dart';
@@ -198,6 +199,7 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
           children: [
             AppTabStack(index: currentIndex, children: _screens),
             GlobalChargingPill(),
+            const FloatingBatteryBot(),
           ],
         ),
         bottomNavigationBar: AppNavigationBar(

@@ -92,7 +92,7 @@ class MultiVehicleSmartChargeV4Tests(unittest.TestCase):
         self.assertEqual(repo.telemetry("owner", session_b.session_id)[0]["sessionId"], session_b.session_id)
         self.assertEqual(repo.telemetry("owner", session_a.session_id), [])
 
-    def test_physical_device_cannot_be_bound_to_a_second_account(self):
+    def test_physical_device_allows_two_accounts_but_not_a_third(self):
         repo = SmartChargeRepository()
         provider = FakeShellyProvider()
         binding_a = provider.list_devices("owner-a")[0]
@@ -104,10 +104,12 @@ class MultiVehicleSmartChargeV4Tests(unittest.TestCase):
         repo.register_vehicle_owner("owner-a", "vehicle-a")
         repo.register_vehicle_owner("owner-b", "vehicle-b")
         repo.save_binding("owner-a", binding_a)
-        with self.assertRaises(PermissionError):
-            repo.save_binding("owner-b", binding_b)
+        repo.save_binding("owner-b", binding_b)
+        with self.assertRaisesRegex(PermissionError, "DEVICE_MEMBER_LIMIT_REACHED"):
+            repo.save_binding("owner-c", binding_b)
         self.assertTrue(repo.device_owned_by("owner-a", "shared-plug"))
-        self.assertFalse(repo.device_owned_by("owner-b", "shared-plug"))
+        self.assertTrue(repo.device_owned_by("owner-b", "shared-plug"))
+        self.assertFalse(repo.device_owned_by("owner-c", "shared-plug"))
 
 
 if __name__ == "__main__":

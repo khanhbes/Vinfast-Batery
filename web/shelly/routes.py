@@ -59,6 +59,10 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
 
     def profile_error(error):
         message = str(error)
+        if message == "deviceRegistryUnavailable":
+            return jsonify({"success": False, "error": {"code": message, "message": "Chưa thể xác minh liên kết thiết bị. Hãy thử lại.", "retryable": True}}), 503
+        if message == "DEVICE_MEMBER_LIMIT_REACHED":
+            return jsonify({"success": False, "error": {"code": message, "message": "Shelly đã liên kết tối đa hai tài khoản."}}), 409
         if message == "DEVICE_ALREADY_OWNED":
             return jsonify({"success": False, "error": {"code": "DEVICE_ALREADY_OWNED", "message": "Thiết bị Shelly đã được liên kết với một tài khoản khác"}}), 409
         if isinstance(error, PermissionError):
@@ -83,6 +87,13 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
         host = str(body.get("cloudHost") or "").rstrip("/")
         if not repository._valid_cloud_host(host):
             return "Shelly Cloud phải dùng HTTPS trên miền được hỗ trợ"
+        try:
+            fingerprint = hashlib.sha256(str(body.get("cloudAuthKey") or "").strip().encode("utf-8")).hexdigest()
+            wait = repository.reserve_cloud_request_slot(fingerprint, 1.1)
+            if wait > 0:
+                service.sleep(wait)
+        except Exception:
+            return "Chưa xác minh được giới hạn kết nối Shelly Cloud. Hãy thử lại."
         try:
             response = requests.post(
                 f"{host}/v2/devices/api/get",
@@ -297,13 +308,13 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
                 "code": "relayUnverified",
                 "message": "Không xác minh được relay OFF; yêu cầu ngắt liên kết đã bị chặn.",
             }}), 409
-        repository.revoke_synced_profile(uid, device_id)
-        repository.revoke_binding(uid, device_id, utcnow())
         if not repository.release_device_owner(uid, device_id):
             return jsonify({"success": False, "error": {
                 "code": "ownershipReleaseFailed",
                 "message": "Chưa thể giải phóng quyền sở hữu thiết bị.",
             }}), 503
+        repository.revoke_synced_profile(uid, device_id)
+        repository.revoke_binding(uid, device_id, utcnow())
         return ok({"revoked": True})
 
     @bp.delete("/api/shelly/profiles/<device_id>")
@@ -354,7 +365,7 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
         # Shelly devices.  Keep the unscoped form for legacy callers, but
         # never silently return another vehicle's explicit binding.
         binding = service.binding(uid, request.args.get("vehicleId") or None)
-        return ok(binding.to_dict() if binding else None)
+        return ok({**binding.to_dict(), **repository.device_membership(uid, binding.device_id)} if binding else None)
 
     @bp.get("/api/shelly/capabilities")
     @authenticated
@@ -395,8 +406,12 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
             return jsonify({"success": False, "error": {"code": "unsupportedDevice", "message": "Shelly Plug S Gen3 chưa được xác minh"}}), 400
         if repository.db is None:
             return jsonify({"success": False, "error": {"code": "ownershipUnavailable", "message": "Dịch vụ xác minh quyền sở hữu đang ngoại tuyến"}}), 503
-        if not repository.claim_device_owner(uid, device_id):
-            return jsonify({"success": False, "error": {"code": "DEVICE_ALREADY_OWNED", "message": "Thiết bị Shelly đã được liên kết với một tài khoản khác"}}), 409
+        try:
+            claimed = repository.claim_device_owner(uid, device_id)
+        except RuntimeError as error:
+            return profile_error(error)
+        if not claimed:
+            return jsonify({"success": False, "error": {"code": "DEVICE_MEMBER_LIMIT_REACHED", "message": "Shelly đã liên kết tối đa hai tài khoản."}}), 409
         binding = DeviceBinding(device_id=device_id, display_name="Shelly Plug S Gen3", model=model, generation=3, provider="lan_direct", connection_mode="advanced_direct", online=False, owner_uid=uid)
         repository.save_binding(uid, binding)
         return ok({"claimed": True})
@@ -518,11 +533,26 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
     def off(uid):
         body = request.get_json(silent=True) or {}
         def action():
+            vehicle_id = str(body.get("vehicleId") or request.args.get("vehicleId") or "").strip() or None
+            binding = service.binding(uid, vehicle_id)
+            shared_session = repository.shared_device_session(uid, binding.device_id) if binding else None
+            if shared_session and shared_session.owner_uid != uid:
+                try:
+                    status = service.provider.get_status(binding)
+                    if not status.online or repository._device_owner_doc_id(status.device_id) != repository._device_owner_doc_id(binding.device_id):
+                        raise RuntimeError("deviceUnverified")
+                except Exception:
+                    raise SmartChargeError("deviceUnverified", "Chưa xác minh được đúng bộ sạc. Hãy thử lại.", 409)
+                service.stop(shared_session.owner_uid, shared_session.session_id,
+                    user_stop_reason=str(body.get("userStopReason") or "none"))
+                repository.append_audit(uid, "shared_relay_off_verified", device_id=binding.device_id)
+                # Do not return another account's history, vehicle or identity.
+                return ok(None, relayOffVerified=True)
             session = service.stop(
                 uid,
                 expected_version=body.get("expectedVersion"),
                 user_stop_reason=str(body.get("userStopReason") or "none"),
-                vehicle_id=str(body.get("vehicleId") or request.args.get("vehicleId") or "").strip() or None,
+                vehicle_id=vehicle_id,
             )
             return ok(session.to_dict() if session else None)
         return execute(action)
@@ -726,7 +756,8 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
     @developer
     def admin_shelly_devices(uid):
         """List all registered Shelly devices across all users with their pairing codes."""
-        return ok(code_store.list_devices())
+        return ok([{**item, "memberCount": repository.device_member_count(item["deviceId"]), "maxMembers": 2}
+                   for item in code_store.list_devices()])
 
     @bp.post("/api/admin/shelly-devices")
     @developer
@@ -830,9 +861,9 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
         code = str(body.get("code") or "").strip().upper()
         if len(code) != 6:
             return jsonify({"success": False, "error": {"code": "invalidCode", "message": "Mã kết nối không hợp lệ"}}), 400
-        entry, error = code_store.redeem_atomic(code, uid)
-        if error:
-            return jsonify({"success": False, "error": {"code": "redemptionFailed", "message": error}}), 422
+        entry = code_store.get(code)
+        if entry is None or entry.is_revoked or entry.is_expired:
+            return jsonify({"success": False, "error": {"code": "connectionCodeUnavailable", "message": "Mã kết nối không còn hiệu lực."}}), 422
         # Save the profile for this user via the existing vault mechanism
         profile_data = entry.to_profile_dict()
         profile_data["source"] = "connection_code"
@@ -840,23 +871,15 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
         if cloud_error:
             return jsonify({"success": False, "error": {"code": "cloudVerificationFailed", "message": cloud_error}}), 422
         try:
-            metadata = repository.save_synced_profile(uid, profile_data, None)
+            fallback_operation = hashlib.sha256(f"redeem|{code}|{uid}".encode()).hexdigest()
+            operation_id = str(body.get("operationId") or request.headers.get("Idempotency-Key") or fallback_operation).strip()
+            if not operation_id or len(operation_id) > 128:
+                return jsonify({"success": False, "error": {"code": "invalidOperation", "message": "Yêu cầu kết nối không hợp lệ."}}), 400
+            metadata = repository.enroll_connection_code(uid, entry, operation_id)
         except (ProfileVaultError, PermissionError, RuntimeError, ValueError) as error:
             return profile_error(error)
-        repository.save_binding(uid, DeviceBinding(
-            device_id=entry.device_id,
-            display_name=entry.device_name,
-            model=entry.model,
-            generation=3,
-            provider="vault_cloud",
-            connection_mode="server_cloud",
-            online=bool(metadata.get("cloudVerified")),
-            shared=True,
-            power_meter_verified=bool(metadata.get("powerMeterVerified")),
-            safe_boot_verified=bool(metadata.get("safeBootVerified")),
-            no_load_test_verified=False,
-            last_verified_at=utcnow(),
-        ))
+        except Exception:
+            return jsonify({"success": False, "error": {"code": "enrollmentUnavailable", "message": "Chưa thể lưu liên kết. Hãy thử lại.", "retryable": True}}), 503
         return ok({
             "profile": metadata,
             "deviceId": entry.device_id,

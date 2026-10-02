@@ -30,8 +30,19 @@ except Exception:
     pd = None
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
+from .behavior_analyzer import behavior_analyzer
+from .chat_engine import chat_engine
+from .chat_schemas import (
+    ActionConfirmRequest,
+    ActionConfirmResponse,
+    BehaviorProfile,
+    BehaviorSyncRequest,
+    ChatFeedbackRequest,
+    ChatSendRequest,
+)
+from .suggestion_engine import suggestion_engine
 from .model_runtime import ModelRuntime
 from .model_store import ModelStore
 from .upload_policy import validate_upload, copy_upload
@@ -845,3 +856,136 @@ def soc_predict(req: PredictRequest, x_internal_token: Optional[str] = Header(de
         return _ok(_soc_svc.predict(req))
     except Exception as e:
         return _err(500, str(e))
+
+
+# ── AI Chatbot endpoints (Gemini + Multi-turn context) ─────────────
+@app.post("/v1/chat/send")
+def chat_send(
+    req: ChatSendRequest,
+    x_internal_token: Optional[str] = Header(default=None),
+):
+    _check_token(x_internal_token)
+    return StreamingResponse(
+        chat_engine.stream_chat(req),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.get("/v1/chat/sessions")
+def chat_list_sessions(
+    limit: int = 20,
+    x_internal_token: Optional[str] = Header(default=None),
+):
+    _check_token(x_internal_token)
+    sessions = chat_engine.memory.list_sessions(limit=limit)
+    return _ok([s.model_dump() for s in sessions])
+
+
+@app.get("/v1/chat/sessions/{session_id}")
+def chat_get_session(
+    session_id: str,
+    x_internal_token: Optional[str] = Header(default=None),
+):
+    _check_token(x_internal_token)
+    messages = chat_engine.memory.get_all_messages(session_id)
+    return _ok([m.model_dump() for m in messages])
+
+
+@app.delete("/v1/chat/sessions/{session_id}")
+def chat_delete_session(
+    session_id: str,
+    x_internal_token: Optional[str] = Header(default=None),
+):
+    _check_token(x_internal_token)
+    deleted = chat_engine.memory.delete_session(session_id)
+    return _ok({"deleted": deleted, "sessionId": session_id})
+
+
+@app.post("/v1/chat/feedback")
+def chat_feedback(
+    req: ChatFeedbackRequest,
+    x_internal_token: Optional[str] = Header(default=None),
+):
+    _check_token(x_internal_token)
+    if req.userId:
+        behavior_analyzer.record_chat_interaction(
+            user_id=req.userId,
+            feedback_rating=req.rating,
+        )
+    return _ok({"status": "received", "messageId": req.messageId, "rating": req.rating})
+
+
+# ── Behavior Learning Endpoints (Phase 2) ─────────────────────────
+@app.post("/v1/behavior/sync")
+def behavior_sync(
+    req: BehaviorSyncRequest,
+    x_internal_token: Optional[str] = Header(default=None),
+):
+    _check_token(x_internal_token)
+    updated = behavior_analyzer.update_profile(req.userId, req.profile)
+    return _ok(updated.model_dump())
+
+
+@app.get("/v1/behavior/profile")
+def behavior_get_profile(
+    userId: str = "anonymous",
+    vehicleId: Optional[str] = None,
+    x_internal_token: Optional[str] = Header(default=None),
+):
+    _check_token(x_internal_token)
+    profile = behavior_analyzer.get_or_create_profile(userId, vehicleId)
+    return _ok(profile.model_dump())
+
+
+# ── Function Calling & Proactive Suggestions (Phase 3) ────────────
+@app.post("/v1/chat/action/confirm", response_model=dict)
+def chat_confirm_action(
+    req: ActionConfirmRequest,
+    x_internal_token: Optional[str] = Header(default=None),
+):
+    """Xác nhận hoặc hủy thực thi hành động điều khiển từ ActionConfirmationCard."""
+    _check_token(x_internal_token)
+    response = chat_engine.confirm_action(
+        call_id=req.callId,
+        tool_name=req.toolName,
+        args=req.args,
+        confirmed=req.confirmed,
+    )
+    return _ok(response)
+
+
+@app.get("/v1/behavior/suggestions")
+def behavior_get_suggestions(
+    userId: str = "anonymous",
+    vehicleId: Optional[str] = None,
+    currentSoc: Optional[float] = None,
+    currentSoh: Optional[float] = None,
+    odoKm: Optional[int] = None,
+    chargingStatus: Optional[str] = None,
+    x_internal_token: Optional[str] = Header(default=None),
+):
+    """Lấy danh sách các gợi ý chủ động (Rules R001-R008) theo ngữ cảnh."""
+    _check_token(x_internal_token)
+    profile = behavior_analyzer.get_or_create_profile(userId, vehicleId)
+
+    v_ctx = {
+        "vehicleId": vehicleId or profile.vehicleId,
+        "currentSoc": currentSoc if currentSoc is not None else 50.0,
+        "currentSoh": currentSoh if currentSoh is not None else 98.0,
+        "odoKm": odoKm if odoKm is not None else 0,
+        "chargingStatus": chargingStatus or "idle",
+    }
+
+    suggestions = suggestion_engine.generate_suggestions(
+        vehicle_context=v_ctx,
+        behavior_profile=profile.model_dump(),
+    )
+    return _ok(suggestions)
+
+
+

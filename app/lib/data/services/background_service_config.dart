@@ -7,6 +7,7 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/services/platform_capability_adapter.dart';
+import 'notification_service.dart';
 
 /// ========================================================================
 /// Background Service Configuration
@@ -15,9 +16,25 @@ import '../../core/services/platform_capability_adapter.dart';
 /// ========================================================================
 class BackgroundServiceConfig {
   static final FlutterBackgroundService _service = FlutterBackgroundService();
+  static Future<void>? _configuration;
 
-  /// Khởi tạo background service — gọi 1 lần trong main()
+  /// Configures the service lazily. Configuration must not start a second
+  /// Flutter engine while the sign-in flow is booting.
   static Future<void> initialize() async {
+    final existing = _configuration;
+    if (existing != null) return existing;
+
+    final task = _configure();
+    _configuration = task;
+    try {
+      await task;
+    } catch (_) {
+      _configuration = null;
+      rethrow;
+    }
+  }
+
+  static Future<void> _configure() async {
     await _service.configure(
       iosConfiguration: IosConfiguration(
         autoStart: false,
@@ -27,6 +44,9 @@ class BackgroundServiceConfig {
       androidConfiguration: AndroidConfiguration(
         onStart: onStart,
         autoStart: false,
+        // The plugin defaults this to true. That can revive a stale service
+        // at boot and contend with Firebase/AuthGate during cold launch.
+        autoStartOnBoot: false,
         isForegroundMode: true,
         // Notification config cho Foreground Service
         notificationChannelId: 'vinfast_bg_channel',
@@ -36,7 +56,7 @@ class BackgroundServiceConfig {
         foregroundServiceTypes: [AndroidForegroundType.location],
       ),
     );
-    debugPrint('✅ BackgroundService configured');
+    debugPrint('[BackgroundService] configured (manual start only)');
   }
 
   /// Kiểm tra quyền POST_NOTIFICATIONS (Android 13+).
@@ -55,6 +75,11 @@ class BackgroundServiceConfig {
       return false;
     }
     try {
+      await initialize();
+      // The plugin posts its foreground notification synchronously when the
+      // service starts. Ensure the referenced channel exists even if a caller
+      // reaches this method before deferred startup has completed.
+      await NotificationService().initialize();
       final isRunning = await _service.isRunning();
       if (isRunning) {
         debugPrint('ℹ️ BackgroundService already running');

@@ -571,27 +571,41 @@ class SmartChargerRepositoryFactory {
     if (key == null) return SmartChargerConnectionMode.serverCloud;
     final raw = prefs.getString(key);
     if (raw == 'advanced_direct') {
-      return SmartChargerConnectionMode.advancedDirect;
+      final profile = await SmartChargerCredentialsService().readProfile();
+      if (_scopedModeKey() != key) {
+        return SmartChargerConnectionMode.serverCloud;
+      }
+      // Cloud credentials retained from older builds do not authorize a
+      // mobile Cloud transport to bypass the backend's physical-device lock.
+      return profile?.hasLan == true
+          ? SmartChargerConnectionMode.advancedDirect
+          : SmartChargerConnectionMode.serverCloud;
     }
     final credentials = SmartChargerCredentialsService();
+    final profile = raw == null ? await credentials.readProfile() : null;
     if (raw == null &&
-        await credentials.readProfile() != null &&
-        (await credentials.readVerification()).readyForControl) {
+        profile?.hasLan == true &&
+        (await credentials.readVerification()).readyForControl &&
+        _scopedModeKey() == key) {
       await prefs.setString(key, 'advanced_direct');
       return SmartChargerConnectionMode.advancedDirect;
     }
     return SmartChargerConnectionMode.serverCloud;
   }
 
-  static Future<void> setMode(SmartChargerConnectionMode mode) async =>
-      _scopedModeKey() == null
-      ? Future.value()
-      : (await SharedPreferences.getInstance()).setString(
-          _scopedModeKey()!,
-          mode == SmartChargerConnectionMode.serverCloud
-              ? 'server_cloud'
-              : 'advanced_direct',
-        );
+  static Future<void> setMode(SmartChargerConnectionMode mode) async {
+    final key = _scopedModeKey();
+    if (key == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    if (_scopedModeKey() != key) return;
+    await prefs.setString(
+      key,
+      mode == SmartChargerConnectionMode.serverCloud
+          ? 'server_cloud'
+          : 'advanced_direct',
+    );
+  }
+
   static Future<SmartChargerRepository> create() async {
     final mode = await currentMode();
     if (mode == SmartChargerConnectionMode.serverCloud) {

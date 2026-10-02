@@ -12,6 +12,7 @@ import '../../core/widgets/pulse_glow_button.dart';
 import '../../core/widgets/debug_error_sheet.dart';
 import '../../data/models/smart_charge_history.dart';
 import '../../data/models/smart_charging_session.dart';
+import '../../data/services/shelly_connection_coordinator.dart';
 import '../smart_charging/smart_charger_setup_hub_screen.dart';
 import '../auth/auth_providers.dart';
 import 'controllers/smart_charging_controller.dart';
@@ -106,15 +107,20 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
               children: [
                 // ── Premium header matching reference ──
-                _SmartChargeHeader(
-                  state: state,
-                  onSetup: () => Navigator.of(context)
-                      .push(
-                        MaterialPageRoute(
-                          builder: (_) => const SmartChargerSetupHubScreen(),
-                        ),
-                      )
-                      .then((_) => controller.refresh()),
+                StreamBuilder<ShellyConnectionSnapshot>(
+                  stream: ShellyConnectionCoordinator.shared.states,
+                  initialData: ShellyConnectionCoordinator.shared.current,
+                  builder: (context, snapshot) => _SmartChargeHeader(
+                    state: state,
+                    connection: snapshot.data,
+                    onSetup: () => Navigator.of(context)
+                        .push(
+                          MaterialPageRoute(
+                            builder: (_) => const SmartChargerSetupHubScreen(),
+                          ),
+                        )
+                        .then((_) => controller.refresh()),
+                  ),
                 ),
                 const SizedBox(height: 20),
 
@@ -825,9 +831,14 @@ class _ModeOption extends StatelessWidget {
 ///
 /// Animated: dot pulse, lightning glow/rotation, badge shimmer, slide-in.
 class _SmartChargeHeader extends StatefulWidget {
-  const _SmartChargeHeader({required this.state, required this.onSetup});
+  const _SmartChargeHeader({
+    required this.state,
+    required this.onSetup,
+    this.connection,
+  });
   final SmartChargingUiState state;
   final VoidCallback onSetup;
+  final ShellyConnectionSnapshot? connection;
 
   @override
   State<_SmartChargeHeader> createState() => _SmartChargeHeaderState();
@@ -1042,7 +1053,10 @@ class _SmartChargeHeaderState extends State<_SmartChargeHeader>
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  statusText,
+                  widget.connection?.isLinked == true &&
+                          displayState != ChargerDisplayState.charging
+                      ? widget.connection!.connectionLabel
+                      : statusText,
                   style: TextStyle(color: CockpitColors.muted, fontSize: 13),
                 ),
               ),

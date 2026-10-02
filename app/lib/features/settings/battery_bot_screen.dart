@@ -41,7 +41,12 @@ class BatteryBotScreen extends StatefulWidget {
   const BatteryBotScreen({
     super.key,
     this.auth,
-    this.storage = const FlutterSecureStorage(),
+    this.storage = const FlutterSecureStorage(
+      aOptions: AndroidOptions(encryptedSharedPreferences: true),
+      iOptions: IOSOptions(
+        accessibility: KeychainAccessibility.first_unlock_this_device,
+      ),
+    ),
   });
 
   final FirebaseAuth? auth;

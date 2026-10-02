@@ -37,6 +37,10 @@ class NotificationService {
   static const String channelSmartCharge = 'smart_charge_alerts_v2';
   static const String channelTrip = 'trip_channel';
   static const String channelMaintenance = 'maintenance_channel';
+  // Must exist before flutter_background_service posts its foreground
+  // notification. Android rejects a notification that references a missing
+  // channel and may kill the app on API 36.
+  static const String channelBackgroundService = 'vinfast_bg_channel';
 
   // Notification IDs
   static const int idCharge80 = 1001;
@@ -139,6 +143,26 @@ class NotificationService {
           _exactAlarmGranted = false;
         }
       }
+    }
+    // Keep the foreground-service channel creation as a final guard as well
+    // as the normal channel setup above. This covers callers that initialize
+    // the service from a different startup path.
+    if (Platform.isAndroid) {
+      final androidPlugin = _plugin
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
+      await androidPlugin?.createNotificationChannel(
+        const AndroidNotificationChannel(
+          channelBackgroundService,
+          'VinFast Battery',
+          description: 'Background service status',
+          importance: Importance.low,
+          playSound: false,
+          enableVibration: false,
+          showBadge: false,
+        ),
+      );
     }
     _initialized = true;
     if (kDebugMode) {

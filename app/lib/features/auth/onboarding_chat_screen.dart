@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,12 +20,15 @@ import '../../core/widgets/app_popup.dart';
 import '../../core/widgets/battery_bot_mascot.dart';
 import '../../data/models/vinfast_model_spec.dart';
 import '../../data/repositories/vehicle_spec_repository.dart';
-import 'auth_gate.dart';
 import '../smart_charging/smart_charger_setup_hub_screen.dart';
 
 /// Onboarding keeps the existing draft/validation contract in a calm step UI.
 class OnboardingChatScreen extends ConsumerStatefulWidget {
-  const OnboardingChatScreen({super.key});
+  const OnboardingChatScreen({super.key, this.onCompleted});
+
+  /// Lets the existing AuthGate refresh its profile/draft routing without
+  /// pushing a second gate (which would replay the splash).
+  final VoidCallback? onCompleted;
 
   @override
   ConsumerState<OnboardingChatScreen> createState() =>
@@ -46,6 +52,12 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
   final int _totalSteps = 9;
   bool _isLoading = true;
   bool _isSubmitting = false;
+  String? _initialLoadError;
+  int _initialLoadGeneration = 0;
+
+  static const _initialLoadTimeout = Duration(seconds: 15);
+  static const _permissionDecisionTimeout = Duration(seconds: 45);
+  static const _notificationSetupTimeout = Duration(seconds: 12);
 
   // Dữ liệu người dùng thu thập
   String _userName = '';
@@ -83,14 +95,23 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
   // Shelly status
   String _shellyStatus = 'skipped';
 
+  // BatteryBot Mascot Interactive State
+  Timer? _idleTimer;
+  final math.Random _random = math.Random();
+  BatteryBotMood _botMood = BatteryBotMood.greeting;
+  String _botSpeech =
+      'Chào bạn! Mình là BatteryBot ⚡. Hãy cùng mình thiết lập chiếc xe VinFast để tối ưu pin nhé!';
+
   @override
   void initState() {
     super.initState();
+    _updateBotForStep(0);
     _initOnboardingFlow();
   }
 
   @override
   void dispose() {
+    _idleTimer?.cancel();
     _nicknameCtrl.dispose();
     _plateCtrl.dispose();
     _odoCtrl.dispose();
@@ -98,8 +119,171 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
     super.dispose();
   }
 
+  void _resetIdleTimer() {
+    _idleTimer?.cancel();
+    _idleTimer = Timer(const Duration(seconds: 7), () {
+      if (!mounted) return;
+      setState(() {
+        _botMood = BatteryBotMood.thinking;
+        _botSpeech = _getIdlePromptForStep(_currentStep);
+      });
+    });
+  }
+
+  void _updateBotForStep(int step) {
+    _botMood = _getInitialMoodForStep(step);
+    _botSpeech = _getInitialPromptForStep(step);
+    _resetIdleTimer();
+  }
+
+  BatteryBotMood _getInitialMoodForStep(int step) {
+    switch (step) {
+      case 0:
+        return BatteryBotMood.greeting;
+      case 1:
+        return BatteryBotMood.thinking;
+      case 2:
+        return BatteryBotMood.listening;
+      case 3:
+        return BatteryBotMood.thinking;
+      case 4:
+        return BatteryBotMood.listening;
+      case 5:
+        return BatteryBotMood.charging;
+      case 6:
+        return BatteryBotMood.charging;
+      case 7:
+        return BatteryBotMood.greeting;
+      case 8:
+        return BatteryBotMood.happy;
+      default:
+        return BatteryBotMood.idle;
+    }
+  }
+
+  String _getInitialPromptForStep(int step) {
+    const concise = <String>[
+      'Mình sẽ giúp bạn thiết lập nhanh. Bắt đầu nhé?',
+      'Chọn mẫu xe bạn đang sử dụng.',
+      'Bạn có thể thêm biển số và ODO, hoặc bỏ qua.',
+      'Ngày sinh là tùy chọn. Bạn có thể bỏ qua.',
+      'Ước tính quãng đường mỗi ngày nếu bạn muốn.',
+      'Chọn thói quen sạc phù hợp với bạn.',
+      'Bạn có thể kết nối Shelly ngay hoặc làm sau trong Cài đặt.',
+      'Bật thông báo để nhận nhắc nhở sạc, hoặc chọn Để sau.',
+      'Kiểm tra lại thông tin rồi hoàn tất thiết lập.',
+    ];
+    if (step >= 0 && step < concise.length) return concise[step];
+    switch (step) {
+      case 0:
+        return 'Yo! Mình là BatteryBot ⚡ — Trợ lý pin thông minh nhất vũ trụ! Cùng mình thiết lập chiếc xe VinFast để tối ưu pin nhé! 🚀';
+      case 1:
+        return 'Woa, xe VinFast à? Khẩu vị sang và chuẩn gu lắm nè! Bạn đang cưỡi chiến mã nào thế? Chọn ngay nha 🛵';
+      case 2:
+        if (_selectedSpec != null) {
+          return 'Tuyệt cú mèo! Chiếc ${_selectedSpec!.modelName} này lái thích mê! Cho mình xin biển số & ODO để AI tính toán pin siêu chuẩn xác nhé! ⚡';
+        }
+        return 'Cho mình xin thêm biển số & ODO để AI tính toán mức tiêu hao pin chuẩn từng km nhé! ⚡';
+      case 3:
+        return 'À quên, sinh nhật bạn ngày nào nhỉ? Mình muốn chuẩn bị lời chúc đúng ngày và đảm bảo bạn đủ tuổi lái xe an toàn (≥16 tuổi) nè 🎂';
+      case 4:
+        return 'Hằng ngày bạn phi bao xa thế? Kéo thanh trượt để mình tính toán tầm hoạt động và gợi ý lịch sạc chuẩn như chuyên gia 📊';
+      case 5:
+        return 'Đi làm hay đi chơi nhiều hơn? Còn bao nhiêu % pin thì bạn thường cắm sạc? Chia sẻ nhỏ để bảo vệ cell pin LFP nhé! 🔋';
+      case 6:
+        return 'Sạc thông minh Shelly nè! Tự ngắt khi đạt mức pin mong muốn, tiết kiệm điện và chống chai pin tuyệt đối. Thử xem nào 🔌';
+      case 7:
+        return 'Cho mình xin phép nhắc bạn khi pin đầy nhé? Hứa là chỉ báo tin quan trọng, không bao giờ spam bạn đâu! 🔔';
+      case 8:
+        return 'Hoàn hảo không tì vết! Mọi thông số của xế yêu đã sẵn sàng. Bấm Hoàn tất để lên đường thôi bạn ơi! 🎉';
+      default:
+        return 'Cứ thong thả nhé, mình luôn ở đây sẵn sàng hỗ trợ bạn bất cứ lúc nào! ⚡';
+    }
+  }
+
+  String _getIdlePromptForStep(int step) {
+    const concise = <String>[
+      'Khi sẵn sàng, chọn Bắt đầu.',
+      'Hãy chọn một mẫu xe để tiếp tục.',
+      'Các thông tin chi tiết có thể bổ sung sau.',
+      'Bạn có thể bỏ qua ngày sinh.',
+      'Kéo thanh chọn để ước tính quãng đường.',
+      'Chọn một mục hoặc bỏ qua bước này.',
+      'Bạn có thể thiết lập Shelly sau trong Cài đặt.',
+      'Chỉ bật thông báo khi bạn muốn nhận nhắc nhở.',
+      'Chọn Hoàn tất để vào ứng dụng.',
+    ];
+    if (step >= 0 && step < concise.length) return concise[step];
+    switch (step) {
+      case 0:
+        return 'Sẵn sàng chưa bạn ơi? Chạm vào "Bắt đầu" để chúng mình cùng khám phá buồng lái nhé! 🚀';
+      case 1:
+        return 'Chưa thấy xế cưng của bạn? Cứ cuộn xuống tìm hoặc chọn phiên bản tương đương, mình đều xử lý ngon lành! 🛵';
+      case 2:
+        return 'Nếu không nhớ chính xác số ODO, cứ ước lượng gần đúng nha. AI thông minh sẽ tự học và hiệu chỉnh dần nè! 💡';
+      case 3:
+        return 'Nhập ngày sinh theo mẫu Ngày/Tháng/Năm (ví dụ 15/08/1998) nha bạn. Mọi dữ liệu đều được bảo mật tuyệt đối! 🛡️';
+      case 4:
+        return 'Di chuyển quanh phố thường tầm 15-30km. Bạn kéo thanh trượt ước lượng nhé! 🛣️';
+      case 5:
+        return 'Mẹo vàng từ BatteryBot: Sạc trong khoảng 20% - 80% là bí quyết giúp pin LFP bền bỉ suốt 10 năm đấy! ✨';
+      case 6:
+        return 'Chưa có sẵn cục sạc Shelly ở đây? Đừng ngại bấm "Bỏ qua", bạn có thể ghép nối bất cứ lúc nào trong Cài đặt! 🔌';
+      case 7:
+        return 'Bật thông báo sẽ giúp bạn an tâm ngủ ngon giấc mà không phải bận tâm canh giờ rút sạc! 💤';
+      case 8:
+        return 'Chỉ còn đúng 1 chạm nữa thôi! Bấm "Hoàn tất" để chúng mình đồng hành trên mọi cung đường nào! 🏁';
+      default:
+        return 'Đang phân vân điều gì hả bạn? Cứ chạm vào mình bất cứ lúc nào để hỏi nhé! 😊';
+    }
+  }
+
+  void _onBotTapped() {
+    HapticFeedback.lightImpact();
+    const conciseRemarks = <String>[
+      'Mình ở đây nếu bạn cần trợ giúp.',
+      'Bạn có thể quay lại bước trước bất cứ lúc nào.',
+      'Mình chỉ hướng dẫn, không tự điều khiển thiết bị.',
+    ];
+    setState(() {
+      _botMood = BatteryBotMood.happy;
+      _botSpeech = conciseRemarks[_random.nextInt(conciseRemarks.length)];
+    });
+    _resetIdleTimer();
+  }
+
   /// Khởi tạo dữ liệu từ server & tự động kiểm tra trường đã có
   Future<void> _initOnboardingFlow() async {
+    final generation = ++_initialLoadGeneration;
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _initialLoadError = null;
+      });
+    }
+    try {
+      await _loadOnboardingData().timeout(_initialLoadTimeout);
+      if (!mounted || generation != _initialLoadGeneration) return;
+      setState(() => _isLoading = false);
+    } on TimeoutException {
+      if (!mounted || generation != _initialLoadGeneration) return;
+      setState(() {
+        _isLoading = false;
+        _initialLoadError =
+            'Việc tải thông tin đang mất nhiều thời gian. Hãy kiểm tra mạng và thử lại.';
+      });
+    } catch (error) {
+      debugPrint('[Onboarding] initial load failed (${error.runtimeType})');
+      if (!mounted || generation != _initialLoadGeneration) return;
+      setState(() {
+        _isLoading = false;
+        _initialLoadError =
+            'Chưa thể tải thông tin thiết lập. Vui lòng thử lại.';
+      });
+    }
+  }
+
+  Future<void> _loadOnboardingData() async {
     final onboardingService = ref.read(onboardingServiceProvider);
 
     final currentUser = AuthService().currentUser;
@@ -168,10 +352,6 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
 
     if (_userName.isEmpty) {
       _userName = currentUser?.displayName ?? 'Bạn';
-    }
-
-    if (mounted) {
-      setState(() => _isLoading = false);
     }
   }
 
@@ -305,9 +485,11 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
         _createdVehicleId!.isNotEmpty) {
       prev = 0;
     }
+    final clampedPrev = prev.clamp(0, _totalSteps - 1);
+    _updateBotForStep(clampedPrev);
     setState(() {
       _movingForward = false;
-      _currentStep = prev.clamp(0, _totalSteps - 1);
+      _currentStep = clampedPrev;
     });
   }
 
@@ -325,9 +507,11 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
       next = _hadExistingDob ? 4 : 3;
     }
     FocusManager.instance.primaryFocus?.unfocus();
+    final clampedNext = next.clamp(0, _totalSteps - 1);
+    _updateBotForStep(clampedNext);
     setState(() {
-      _movingForward = next >= _currentStep;
-      _currentStep = next.clamp(0, _totalSteps - 1);
+      _movingForward = clampedNext >= _currentStep;
+      _currentStep = clampedNext;
     });
   }
 
@@ -400,28 +584,46 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
     }
     final result = await service.commitDraft(syncing);
     if (AuthService().currentUser?.uid != syncing.uid) return result;
+    var confirmedResult = result;
     if (result.success) {
+      // A 2xx response is not enough to discard the durable draft. Read the
+      // authoritative profile/vehicle state first so a lost response or a
+      // partial transaction can be retried without trapping the user in the
+      // wizard.
+      final confirmation = await service.fetchOnboardingStatus();
+      if (confirmation?.isCompleted != true ||
+          confirmation?.hasVehicle != true) {
+        confirmedResult = const ApiResult(
+          success: false,
+          code: 'COMMIT_VERIFICATION_PENDING',
+          userMessage:
+              'Đang xác minh dữ liệu đã lưu. Bạn có thể tiếp tục vào ứng dụng.',
+          retryable: true,
+        );
+      }
+    }
+    if (confirmedResult.success) {
       _draft = syncing.copyWith(
         state: OnboardingDraftState.synced,
         updatedAt: DateTime.now().toUtc(),
       );
       await service.clearDraft(syncing.uid);
     } else {
-      final nextState = result.retryable
+      final nextState = confirmedResult.retryable
           ? OnboardingDraftState.failedRetryable
           : OnboardingDraftState.failedPermanent;
       _draft = syncing.copyWith(
         state: nextState,
-        lastErrorCode: result.code,
-        lastErrorMessage: result.userMessage,
-        nextAttemptAt: result.retryable
+        lastErrorCode: confirmedResult.code,
+        lastErrorMessage: confirmedResult.userMessage,
+        nextAttemptAt: confirmedResult.retryable
             ? DateTime.now().toUtc().add(const Duration(seconds: 30))
             : null,
         updatedAt: DateTime.now().toUtc(),
       );
       await service.saveDraft(_draft!);
     }
-    return result;
+    return confirmedResult;
   }
 
   /// Tạo xe cục bộ trước, sau đó đồng bộ server bằng operation idempotent.
@@ -442,9 +644,10 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
     }
 
     final user = AuthService().currentUser;
-    if (user == null) return;
+    final uid = user?.uid ?? (kDebugMode ? 'debug-preview-user' : null);
+    if (uid == null) return;
     _draft ??= OnboardingDraft.create(
-      uid: user.uid,
+      uid: uid,
       name: _userName,
       phone: _userPhone,
       catalogId: _selectedSpec!.modelId,
@@ -523,31 +726,46 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
   Future<void> _finishOnboarding() async {
     if (_isSubmitting) return;
     setState(() => _isSubmitting = true);
+    try {
+      await _pendingDraftWrite;
+      if (!mounted) return;
 
-    await _pendingDraftWrite;
-    if (!mounted) return;
+      if (_draft != null) {
+        _draft = _draft!.copyWith(
+          shellyStatus: _shellyStatus,
+          finalizedAt: DateTime.now().toUtc(),
+          revision: _draft!.revision + 1,
+          updatedAt: DateTime.now().toUtc(),
+        );
+        await ref.read(onboardingServiceProvider).saveDraft(_draft!);
+      }
+      final result = await _commitDraft();
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
 
-    if (_draft != null) {
-      _draft = _draft!.copyWith(
-        shellyStatus: _shellyStatus,
-        finalizedAt: DateTime.now().toUtc(),
-        revision: _draft!.revision + 1,
-        updatedAt: DateTime.now().toUtc(),
-      );
-      await ref.read(onboardingServiceProvider).saveDraft(_draft!);
-    }
-    final result = await _commitDraft();
-    if (!mounted) return;
-    setState(() => _isSubmitting = false);
-
-    if (result.success || result.retryable) {
-      final navigator = Navigator.of(context, rootNavigator: true);
-      navigator.pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const AuthGate()),
-        (route) => false,
-      );
-    } else {
-      AppPopup.showError(result.userMessage ?? 'Không thể hoàn tất.');
+      if (result.success || result.retryable) {
+        // AuthGate is already the root route. Ask that existing gate to reload
+        // the durable draft/profile instead of pushing another AuthGate or
+        // calling popUntil on a screen that is not itself a Navigator route.
+        final onCompleted = widget.onCompleted;
+        if (onCompleted != null) {
+          onCompleted();
+        } else {
+          final navigator = Navigator.of(context, rootNavigator: true);
+          navigator.popUntil((route) => route.isFirst);
+        }
+      } else {
+        AppPopup.showError(result.userMessage ?? 'Không thể hoàn tất.');
+      }
+    } catch (error) {
+      debugPrint('[Onboarding] completion deferred (${error.runtimeType})');
+      if (mounted) {
+        AppPopup.showError(
+          'Chưa thể lưu thông tin. Vui lòng thử lại; các câu trả lời vẫn được giữ.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
@@ -559,25 +777,42 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
       if (mounted) setState(() {});
       return;
     }
+    if (_isSubmitting) return;
     setState(() => _isSubmitting = true);
     var granted = false;
     try {
       granted = await PushNotificationService.instance
-          .requestPermissionFromUser();
-    } catch (_) {
+          .requestPermissionFromUser()
+          .timeout(_permissionDecisionTimeout);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('pushNotifications', granted);
+      if (granted) {
+        await PushNotificationService.instance.initialize().timeout(
+          _notificationSetupTimeout,
+        );
+      }
+    } on TimeoutException {
+      // A system permission sheet or token sync must not keep this step
+      // loading indefinitely. If permission was granted before token setup
+      // timed out, the stored opt-in remains true and sync can retry later.
+      debugPrint('[Onboarding] push setup deferred (timeout)');
+      if (!granted) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('pushNotifications', false);
+      }
+    } catch (error) {
+      debugPrint('[Onboarding] push setup deferred (${error.runtimeType})');
       granted = false;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('pushNotifications', false);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+          _notificationOptIn = granted;
+        });
+      }
     }
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('pushNotifications', granted);
-    if (granted) {
-      await PushNotificationService.instance.initialize();
-      await PushNotificationService.instance.syncCurrentUser();
-    }
-    if (!mounted) return;
-    setState(() {
-      _isSubmitting = false;
-      _notificationOptIn = granted;
-    });
   }
 
   Future<void> _openShellySetup() async {
@@ -605,6 +840,42 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
   // Presentation is deliberately separate from draft and safety operations.
   @override
   Widget build(BuildContext context) {
+    if (_initialLoadError != null) {
+      return Scaffold(
+        body: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.cloud_off_rounded,
+                      size: 48,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      _initialLoadError!,
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
+                    const SizedBox(height: 20),
+                    FilledButton.icon(
+                      onPressed: _initOnboardingFlow,
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Thử lại'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     if (_isLoading) {
       return Scaffold(
         body: Center(
@@ -626,6 +897,9 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
       step: _currentStep,
       forward: _movingForward,
       submitting: _isSubmitting,
+      botMood: _botMood,
+      botSpeech: _botSpeech,
+      onBotTap: _onBotTapped,
       onBack: _currentStep > 0 && !_isSubmitting ? _prevStep : null,
       onContinue: !_isSubmitting && _canContinueCurrentStep()
           ? _nextStep
@@ -686,22 +960,56 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
 
   Widget _plainInfo(IconData icon, String title, String description) {
     final theme = Theme.of(context);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ExcludeSemantics(child: Icon(icon, color: theme.colorScheme.primary)),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: theme.textTheme.titleSmall),
-              const SizedBox(height: 4),
-              Text(description, style: theme.textTheme.bodyMedium),
-            ],
-          ),
+    final colors = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: colors.outlineVariant.withValues(alpha: isDark ? 0.20 : 0.30),
+          width: 1,
         ),
-      ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: colors.primary.withValues(alpha: isDark ? 0.16 : 0.10),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: ExcludeSemantics(
+              child: Icon(icon, color: colors.primary, size: 22),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.1,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  description,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colors.onSurfaceVariant,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -745,7 +1053,13 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
               selected: _selectedSpec?.modelId == spec.modelId,
               onSelected: () {
                 HapticFeedback.selectionClick();
-                setState(() => _selectedSpec = spec);
+                setState(() {
+                  _selectedSpec = spec;
+                  _botMood = BatteryBotMood.happy;
+                  _botSpeech =
+                      'Oa! ${spec.modelName} - một lựa chọn tuyệt vời! Bấm Tiếp tục nhé! 🛵⚡';
+                });
+                _resetIdleTimer();
               },
             ),
           ),
@@ -798,6 +1112,9 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
 
   Widget _buildStep3Dob() {
     final text = _dobCtrl.text.trim();
+    final colors = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -818,6 +1135,28 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
                 : null,
             errorMaxLines: 3,
             prefixIcon: const Icon(Icons.cake_outlined),
+            filled: true,
+            fillColor: colors.surfaceContainerLow,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide(
+                color: colors.outlineVariant.withValues(
+                  alpha: isDark ? 0.25 : 0.35,
+                ),
+              ),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide(
+                color: colors.outlineVariant.withValues(
+                  alpha: isDark ? 0.25 : 0.35,
+                ),
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide(color: colors.primary, width: 1.8),
+            ),
             suffixIcon: IconButton(
               onPressed: _pickDateOfBirth,
               tooltip: 'Chọn ngày sinh trên lịch',
@@ -834,12 +1173,18 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
 
   Widget _buildStep4DailyDistance() {
     final value = _dailyDistanceKm;
+    final colors = Theme.of(context).colorScheme;
+    final isDark = Theme.brightnessOf(context) == Brightness.dark;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
           value == null ? 'Chưa chọn quãng đường' : '${value.toInt()} km/ngày',
-          style: Theme.of(context).textTheme.headlineSmall,
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w800,
+            color: value != null ? colors.primary : null,
+          ),
         ),
         const SizedBox(height: 8),
         const Text('Chạm một mức gợi ý hoặc kéo thanh để chọn.'),
@@ -851,10 +1196,29 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
             min: 5,
             max: 100,
             divisions: 19,
+            activeColor: colors.primary,
             label: value == null ? 'Chưa chọn' : '${value.toInt()} km',
             semanticFormatterCallback: (value) =>
                 '${value.toInt()} km mỗi ngày',
-            onChanged: (value) => setState(() => _dailyDistanceKm = value),
+            onChanged: (value) {
+              setState(() {
+                _dailyDistanceKm = value;
+                if (value <= 15) {
+                  _botSpeech =
+                      'Đi lại nhẹ nhàng (${value.toInt()} km/ngày). Pin xe tha hồ vi vu cả tuần mới cần sạc! 🍃';
+                  _botMood = BatteryBotMood.happy;
+                } else if (value <= 40) {
+                  _botSpeech =
+                      'Quãng đường lý tưởng (${value.toInt()} km/ngày)! Khoảng 2-3 ngày cắm sạc một lần là đẹp nhất. 🛵';
+                  _botMood = BatteryBotMood.listening;
+                } else {
+                  _botSpeech =
+                      'Di chuyển nhiều (${value.toInt()} km/ngày)! AI sẽ ưu tiên tối ưu tầm vận hành cho bạn. 🚀';
+                  _botMood = BatteryBotMood.charging;
+                }
+              });
+              _resetIdleTimer();
+            },
           ),
         ),
         Wrap(
@@ -865,7 +1229,32 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
               ChoiceChip(
                 label: Text('${km.toInt()} km'),
                 selected: value != null && (value - km).abs() < 2.5,
-                onSelected: (_) => setState(() => _dailyDistanceKm = km),
+                selectedColor: colors.primary.withValues(
+                  alpha: isDark ? 0.22 : 0.16,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                onSelected: (_) {
+                  HapticFeedback.selectionClick();
+                  setState(() {
+                    _dailyDistanceKm = km;
+                    if (km <= 15) {
+                      _botSpeech =
+                          'Đi lại nhẹ nhàng (${km.toInt()} km/ngày). Pin xe tha hồ vi vu cả tuần mới cần sạc! 🍃';
+                      _botMood = BatteryBotMood.happy;
+                    } else if (km <= 40) {
+                      _botSpeech =
+                          'Quãng đường lý tưởng (${km.toInt()} km/ngày)! Khoảng 2-3 ngày cắm sạc một lần là đẹp nhất. 🛵';
+                      _botMood = BatteryBotMood.listening;
+                    } else {
+                      _botSpeech =
+                          'Di chuyển nhiều (${km.toInt()} km/ngày)! AI sẽ ưu tiên tối ưu tầm vận hành cho bạn. 🚀';
+                      _botMood = BatteryBotMood.charging;
+                    }
+                  });
+                  _resetIdleTimer();
+                },
                 materialTapTargetSize: MaterialTapTargetSize.padded,
                 showCheckmark: true,
                 padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
@@ -903,11 +1292,14 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
         icon: Icons.two_wheeler_rounded,
       ),
     ];
-    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Mục đích chính', style: Theme.of(context).textTheme.titleMedium),
+        Text('Mục đích chính', style: theme.textTheme.titleMedium),
         const SizedBox(height: 8),
         for (final purpose in purposes)
           Padding(
@@ -915,39 +1307,102 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
             child: Semantics(
               selected: _selectedUsagePurpose == purpose.id,
               inMutuallyExclusiveGroup: true,
-              child: ListTile(
-                minVerticalPadding: 12,
-                leading: Icon(purpose.icon),
-                title: Text(purpose.title),
-                subtitle: Text(purpose.detail),
-                trailing: Icon(
-                  _selectedUsagePurpose == purpose.id
-                      ? Icons.radio_button_checked
-                      : Icons.radio_button_off,
-                  color: _selectedUsagePurpose == purpose.id
-                      ? colors.primary
-                      : colors.onSurfaceVariant,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: _selectedUsagePurpose == purpose.id
+                        ? colors.primary
+                        : colors.outlineVariant.withValues(
+                            alpha: isDark ? 0.25 : 0.35,
+                          ),
+                    width: _selectedUsagePurpose == purpose.id ? 1.6 : 1.0,
+                  ),
                 ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                child: ListTile(
+                  minVerticalPadding: 12,
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: _selectedUsagePurpose == purpose.id
+                          ? colors.primary.withValues(
+                              alpha: isDark ? 0.20 : 0.12,
+                            )
+                          : colors.surfaceContainerHighest.withValues(
+                              alpha: 0.35,
+                            ),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      purpose.icon,
+                      color: _selectedUsagePurpose == purpose.id
+                          ? colors.primary
+                          : colors.onSurfaceVariant,
+                      size: 20,
+                    ),
+                  ),
+                  title: Text(
+                    purpose.title,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: _selectedUsagePurpose == purpose.id
+                          ? FontWeight.w700
+                          : FontWeight.w600,
+                    ),
+                  ),
+                  subtitle: Text(purpose.detail),
+                  trailing: Icon(
+                    _selectedUsagePurpose == purpose.id
+                        ? Icons.check_circle_rounded
+                        : Icons.radio_button_off,
+                    color: _selectedUsagePurpose == purpose.id
+                        ? colors.primary
+                        : colors.onSurfaceVariant,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  tileColor: _selectedUsagePurpose == purpose.id
+                      ? colors.primaryContainer
+                      : colors.surfaceContainerLow,
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    setState(() {
+                      _selectedUsagePurpose = purpose.id;
+                      if (purpose.id == 'daily_commute') {
+                        _botSpeech =
+                            'Đi làm & đi học hàng ngày: Lộ trình ổn định giúp AI học thói quen sạc cực nhanh! 🎓';
+                        _botMood = BatteryBotMood.happy;
+                      } else if (purpose.id == 'delivery_work') {
+                        _botSpeech =
+                            'Chạy xe dịch vụ / giao hàng: Chế độ sạc nhanh an toàn giúp xe luôn sẵn sàng lăn bánh! 📦';
+                        _botMood = BatteryBotMood.charging;
+                      } else {
+                        _botSpeech =
+                            'Đi chơi dạo phố cuối tuần: Tận hưởng trải nghiệm êm ái cùng xe điện VinFast! 🌿';
+                        _botMood = BatteryBotMood.greeting;
+                      }
+                    });
+                    _resetIdleTimer();
+                  },
                 ),
-                tileColor: _selectedUsagePurpose == purpose.id
-                    ? colors.primaryContainer
-                    : colors.surfaceContainerLow,
-                onTap: () => setState(() => _selectedUsagePurpose = purpose.id),
               ),
             ),
           ),
         const SizedBox(height: 16),
         Text(
           'Mức pin khi bạn thường bắt đầu sạc',
-          style: Theme.of(context).textTheme.titleMedium,
+          style: theme.textTheme.titleMedium,
         ),
         const SizedBox(height: 8),
         Text(
           _typicalSocWhenCharge == null
               ? 'Chưa chọn mức pin'
               : '${_typicalSocWhenCharge!.toInt()}%',
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w800,
+            color: _typicalSocWhenCharge != null ? colors.primary : null,
+          ),
         ),
         Semantics(
           label: 'Mức pin khi bắt đầu sạc',
@@ -959,11 +1414,30 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
             min: 10,
             max: 60,
             divisions: 10,
+            activeColor: colors.primary,
             label: _typicalSocWhenCharge == null
                 ? 'Chưa chọn'
                 : '${_typicalSocWhenCharge!.toInt()}%',
             semanticFormatterCallback: (value) => '${value.toInt()} phần trăm',
-            onChanged: (value) => setState(() => _typicalSocWhenCharge = value),
+            onChanged: (value) {
+              setState(() {
+                _typicalSocWhenCharge = value;
+                if (value >= 20 && value <= 30) {
+                  _botSpeech =
+                      'Khoảng ${value.toInt()}% là "tỉ lệ vàng" của pin LFP! Giúp cell pin bền bỉ nhất. 🏆';
+                  _botMood = BatteryBotMood.happy;
+                } else if (value < 20) {
+                  _botSpeech =
+                      'Còn ${value.toInt()}% mới sạc: Nhớ cắm sạc sớm, tránh để cạn dưới 10% bạn nha! 💡';
+                  _botMood = BatteryBotMood.listening;
+                } else {
+                  _botSpeech =
+                      'Cắm sạc từ ${value.toInt()}%: Bạn rất chu đáo, xe sẽ luôn dồi dào năng lượng! 👍';
+                  _botMood = BatteryBotMood.charging;
+                }
+              });
+              _resetIdleTimer();
+            },
           ),
         ),
         const Text('Bạn có thể trả lời một trong hai câu hỏi hoặc bỏ qua.'),
@@ -1159,6 +1633,8 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
     TextInputType keyboardType = TextInputType.text,
     List<TextInputFormatter>? inputFormatters,
   }) {
+    final colors = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
@@ -1173,6 +1649,28 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
         prefixIcon: Icon(icon),
         errorText: errorText,
         errorMaxLines: 3,
+        filled: true,
+        fillColor: colors.surfaceContainerLow,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(
+            color: colors.outlineVariant.withValues(
+              alpha: isDark ? 0.25 : 0.35,
+            ),
+          ),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(
+            color: colors.outlineVariant.withValues(
+              alpha: isDark ? 0.25 : 0.35,
+            ),
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: colors.primary, width: 1.8),
+        ),
       ),
     );
   }
@@ -1253,6 +1751,9 @@ class OnboardingStepFrame extends StatelessWidget {
     this.onBack,
     this.submitting = false,
     this.forward = true,
+    this.botMood,
+    this.botSpeech,
+    this.onBotTap,
   });
 
   final int step;
@@ -1261,17 +1762,30 @@ class OnboardingStepFrame extends StatelessWidget {
   final VoidCallback? onBack;
   final bool submitting;
   final bool forward;
+  final BatteryBotMood? botMood;
+  final String? botSpeech;
+  final VoidCallback? onBotTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final copy = OnboardingStepCopy.steps[step];
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+    // Keep the assistant in a stable dock. The legacy in-form rendering is
+    // disabled so changing from one to two lines never moves the form.
+    final botInDock =
+        !keyboardOpen ||
+        botSpeech != null ||
+        botMood != null ||
+        onBotTap != null;
     final stepLabel = 'Bước ${step + 1}/${OnboardingStepCopy.steps.length}';
     final duration = AppMotion.durationFor(
       context,
       const Duration(milliseconds: 220),
     );
+
     return Scaffold(
       resizeToAvoidBottomInset: true,
       body: SafeArea(
@@ -1280,6 +1794,7 @@ class OnboardingStepFrame extends StatelessWidget {
             constraints: const BoxConstraints(maxWidth: 560),
             child: Column(
               children: [
+                // Header & Segmented Progress Bar
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
                   child: Column(
@@ -1294,21 +1809,66 @@ class OnboardingStepFrame extends StatelessWidget {
                               ? 'Bắt buộc'
                               : 'Thiết lập'}',
                           style: theme.textTheme.labelLarge?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
+                            color: copy.optional
+                                ? colors.onSurfaceVariant
+                                : colors.primary,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.2,
                           ),
                         ),
                       ),
                       const SizedBox(height: 8),
+                      // Segmented EV Energy Progress Bar
                       ExcludeSemantics(
-                        child: LinearProgressIndicator(
-                          value: (step + 1) / OnboardingStepCopy.steps.length,
-                          minHeight: 3,
-                          borderRadius: BorderRadius.circular(4),
+                        child: Row(
+                          children: List.generate(
+                            OnboardingStepCopy.steps.length,
+                            (index) {
+                              final isPassed = index <= step;
+                              final isCurrent = index == step;
+                              return Expanded(
+                                child: Padding(
+                                  padding: EdgeInsets.only(
+                                    right:
+                                        index <
+                                            OnboardingStepCopy.steps.length - 1
+                                        ? 3.0
+                                        : 0.0,
+                                  ),
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 220),
+                                    curve: Curves.easeOutCubic,
+                                    height: isCurrent ? 5 : 3.5,
+                                    decoration: BoxDecoration(
+                                      color: isPassed
+                                          ? colors.primary
+                                          : colors.surfaceContainerHighest
+                                                .withValues(
+                                                  alpha: isDark ? 0.35 : 0.45,
+                                                ),
+                                      borderRadius: BorderRadius.circular(4),
+                                      boxShadow: isCurrent
+                                          ? [
+                                              BoxShadow(
+                                                color: colors.primary
+                                                    .withValues(alpha: 0.45),
+                                                blurRadius: 4,
+                                                spreadRadius: 0.5,
+                                              ),
+                                            ]
+                                          : null,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
+                if (!keyboardOpen) _buildBotDock(context, colors, isDark),
                 Expanded(
                   child: LayoutBuilder(
                     builder: (context, constraints) => AnimatedSwitcher(
@@ -1332,7 +1892,7 @@ class OnboardingStepFrame extends StatelessWidget {
                           child: child,
                           builder: (context, child) => Transform.translate(
                             offset: Offset(
-                              (forward ? 8 : -8) * (1 - animation.value),
+                              (forward ? 20 : -20) * (1 - animation.value),
                               0,
                             ),
                             child: child,
@@ -1348,34 +1908,159 @@ class OnboardingStepFrame extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              if (!keyboardOpen) ...[
-                                Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: ExcludeSemantics(
-                                    child: TickerMode(
-                                      enabled: false,
-                                      child: MediaQuery(
-                                        data: MediaQuery.of(
-                                          context,
-                                        ).copyWith(disableAnimations: true),
-                                        child: const BatteryBotMascot(
-                                          size: BatteryBotSize.avatar,
-                                          displayMode:
-                                              BatteryBotDisplayMode.avatar,
-                                          enableFloating: false,
-                                          mood: BatteryBotMood.idle,
+                              if (!keyboardOpen && !botInDock) ...[
+                                if (botSpeech != null &&
+                                    botSpeech!.isNotEmpty) ...[
+                                  SizedBox(
+                                    height: 78,
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        ExcludeSemantics(
+                                          child: BatteryBotMascot(
+                                            size: BatteryBotSize.avatar,
+                                            displayMode:
+                                                BatteryBotDisplayMode.avatar,
+                                            enableFloating: true,
+                                            mood:
+                                                botMood ?? BatteryBotMood.idle,
+                                            onTap: onBotTap,
+                                          ),
                                         ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: GestureDetector(
+                                            onTap: onBotTap,
+                                            behavior: HitTestBehavior.opaque,
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 12,
+                                                    vertical: 8,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: colors
+                                                    .surfaceContainerHighest
+                                                    .withValues(
+                                                      alpha: isDark
+                                                          ? 0.38
+                                                          : 0.52,
+                                                    ),
+                                                borderRadius:
+                                                    const BorderRadius.only(
+                                                      topRight: Radius.circular(
+                                                        16,
+                                                      ),
+                                                      bottomLeft:
+                                                          Radius.circular(16),
+                                                      bottomRight:
+                                                          Radius.circular(16),
+                                                    ),
+                                                border: Border.all(
+                                                  color: colors.primary
+                                                      .withValues(
+                                                        alpha: isDark
+                                                            ? 0.32
+                                                            : 0.20,
+                                                      ),
+                                                  width: 1,
+                                                ),
+                                              ),
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Row(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      Container(
+                                                        width: 6,
+                                                        height: 6,
+                                                        decoration:
+                                                            BoxDecoration(
+                                                              color: colors
+                                                                  .primary,
+                                                              shape: BoxShape
+                                                                  .circle,
+                                                            ),
+                                                      ),
+                                                      const SizedBox(width: 6),
+                                                      Flexible(
+                                                        child: Text(
+                                                          'BatteryBot AI',
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                          style: theme
+                                                              .textTheme
+                                                              .labelSmall
+                                                              ?.copyWith(
+                                                                color: colors
+                                                                    .primary,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w700,
+                                                                fontSize: 10.5,
+                                                              ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  const SizedBox(height: 4),
+                                                  Text(
+                                                    botSpeech!,
+                                                    key: ValueKey(botSpeech),
+                                                    maxLines: 2,
+                                                    overflow: TextOverflow.clip,
+                                                    style: theme
+                                                        .textTheme
+                                                        .bodySmall
+                                                        ?.copyWith(
+                                                          color:
+                                                              colors.onSurface,
+                                                          fontSize: 12.0,
+                                                          height: 1.3,
+                                                          fontWeight:
+                                                              FontWeight.w500,
+                                                        ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                ] else ...[
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: ExcludeSemantics(
+                                      child: BatteryBotMascot(
+                                        size: BatteryBotSize.avatar,
+                                        displayMode:
+                                            BatteryBotDisplayMode.avatar,
+                                        enableFloating: true,
+                                        mood: botMood ?? BatteryBotMood.idle,
+                                        onTap: onBotTap,
                                       ),
                                     ),
                                   ),
-                                ),
-                                const SizedBox(height: 12),
+                                  const SizedBox(height: 12),
+                                ],
                               ],
                               Semantics(
                                 header: true,
                                 child: Text(
                                   copy.title,
-                                  style: theme.textTheme.headlineSmall,
+                                  style: theme.textTheme.headlineSmall
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: -0.2,
+                                      ),
                                 ),
                               ),
                               const SizedBox(height: 8),
@@ -1383,6 +2068,7 @@ class OnboardingStepFrame extends StatelessWidget {
                                 copy.description,
                                 style: theme.textTheme.bodyMedium?.copyWith(
                                   color: theme.colorScheme.onSurfaceVariant,
+                                  height: 1.4,
                                 ),
                               ),
                               const SizedBox(height: 24),
@@ -1406,6 +2092,11 @@ class OnboardingStepFrame extends StatelessWidget {
                             minWidth: 48,
                             minHeight: 48,
                           ),
+                          style: IconButton.styleFrom(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
                           icon: const Icon(Icons.arrow_back_rounded),
                         ),
                         const SizedBox(width: 12),
@@ -1415,6 +2106,9 @@ class OnboardingStepFrame extends StatelessWidget {
                           onPressed: submitting ? null : onContinue,
                           style: FilledButton.styleFrom(
                             minimumSize: const Size(48, 48),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
                             padding: const EdgeInsets.symmetric(
                               horizontal: 16,
                               vertical: 12,
@@ -1436,6 +2130,10 @@ class OnboardingStepFrame extends StatelessWidget {
                                       ? 'Bắt đầu thiết lập'
                                       : 'Tiếp tục',
                                   textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 15,
+                                  ),
                                 ),
                         ),
                       ),
@@ -1444,6 +2142,79 @@ class OnboardingStepFrame extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBotDock(BuildContext context, ColorScheme colors, bool isDark) {
+    final speech = botSpeech?.trim();
+    return SizedBox(
+      height: 78,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+        child: Semantics(
+          container: true,
+          label: speech == null || speech.isEmpty
+              ? 'BatteryBot'
+              : 'BatteryBot: $speech',
+          button: onBotTap != null,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ExcludeSemantics(
+                child: BatteryBotMascot(
+                  size: BatteryBotSize.avatar,
+                  displayMode: BatteryBotDisplayMode.avatar,
+                  enableFloating: true,
+                  mood: botMood ?? BatteryBotMood.idle,
+                  onTap: onBotTap,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: GestureDetector(
+                  onTap: onBotTap,
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(
+                    constraints: const BoxConstraints(minHeight: 60),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colors.surfaceContainerHighest.withValues(
+                        alpha: isDark ? 0.38 : 0.52,
+                      ),
+                      borderRadius: const BorderRadius.only(
+                        topRight: Radius.circular(16),
+                        bottomLeft: Radius.circular(16),
+                        bottomRight: Radius.circular(16),
+                      ),
+                      border: Border.all(
+                        color: colors.primary.withValues(
+                          alpha: isDark ? 0.32 : 0.20,
+                        ),
+                      ),
+                    ),
+                    child: Text(
+                      (speech == null || speech.isEmpty)
+                          ? 'Mình sẽ hướng dẫn từng bước.'
+                          : speech,
+                      maxLines: 2,
+                      overflow: TextOverflow.clip,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colors.onSurface,
+                        fontSize: 12,
+                        height: 1.3,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -1464,40 +2235,112 @@ class OnboardingVehicleChoice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
     final image = spec.imageUrl?.trim();
+
     return Semantics(
       selected: selected,
       inMutuallyExclusiveGroup: true,
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        tileColor: selected
-            ? colors.primaryContainer
-            : colors.surfaceContainerLow,
-        leading: SizedBox(
-          width: 48,
-          height: 48,
-          child: image == null || image.isEmpty
-              ? const Icon(Icons.electric_scooter_outlined)
-              : ExcludeSemantics(
-                  child: Image.network(
-                    image,
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, _, _) =>
-                        const Icon(Icons.electric_scooter_outlined),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: selected
+                ? colors.primary
+                : colors.outlineVariant.withValues(alpha: isDark ? 0.25 : 0.35),
+            width: selected ? 1.8 : 1.0,
+          ),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: colors.primary.withValues(
+                      alpha: isDark ? 0.16 : 0.08,
+                    ),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
                   ),
-                ),
+                ]
+              : null,
         ),
-        title: Text(spec.modelName),
-        subtitle: Text(
-          '${(spec.nominalCapacityWh / 1000).toStringAsFixed(1)} kWh · Theo danh mục',
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 8,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          tileColor: selected
+              ? colors.primaryContainer
+              : colors.surfaceContainerLow,
+          leading: Container(
+            width: 48,
+            height: 48,
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: selected
+                  ? colors.primary.withValues(alpha: isDark ? 0.18 : 0.12)
+                  : colors.surfaceContainerHighest.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: image == null || image.isEmpty
+                ? Icon(
+                    Icons.electric_scooter_outlined,
+                    color: selected ? colors.primary : colors.onSurfaceVariant,
+                    size: 26,
+                  )
+                : ExcludeSemantics(
+                    child: Image.network(
+                      image,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, _, _) => Icon(
+                        Icons.electric_scooter_outlined,
+                        color: selected
+                            ? colors.primary
+                            : colors.onSurfaceVariant,
+                        size: 26,
+                      ),
+                    ),
+                  ),
+          ),
+          title: Text(
+            spec.modelName,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+            ),
+          ),
+          subtitle: Text(
+            '${(spec.nominalCapacityWh / 1000).toStringAsFixed(1)} kWh · Theo danh mục',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: selected ? colors.primary : colors.onSurfaceVariant,
+            ),
+          ),
+          trailing: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: selected ? colors.primary : Colors.transparent,
+              border: Border.all(
+                color: selected
+                    ? colors.primary
+                    : colors.onSurfaceVariant.withValues(alpha: 0.5),
+                width: 2,
+              ),
+            ),
+            child: selected
+                ? Icon(Icons.check_rounded, size: 16, color: colors.onPrimary)
+                : null,
+          ),
+          onTap: () {
+            HapticFeedback.selectionClick();
+            onSelected();
+          },
         ),
-        trailing: Icon(
-          selected ? Icons.radio_button_checked : Icons.radio_button_off,
-          color: selected ? colors.primary : colors.onSurfaceVariant,
-        ),
-        onTap: onSelected,
       ),
     );
   }
