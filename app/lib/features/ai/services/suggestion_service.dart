@@ -93,11 +93,11 @@ class SuggestionService {
   }) async {
     final queryParams = {
       'userId': userId,
-      if (vehicleId != null) 'vehicleId': vehicleId,
+      'vehicleId': ?vehicleId,
       if (currentSoc != null) 'currentSoc': currentSoc.toString(),
       if (currentSoh != null) 'currentSoh': currentSoh.toString(),
       if (odoKm != null) 'odoKm': odoKm.toString(),
-      if (chargingStatus != null) 'chargingStatus': chargingStatus,
+      'chargingStatus': ?chargingStatus,
     };
 
     final uri = AppConstants.tryBuildApiUri(

@@ -1,6 +1,118 @@
 # VinFast Battery — Project Status & Task Tracker
 
-> **Hiện hành 02/10/2026 — QA, chưa đủ điều kiện phát beta.** Source HEAD `7dd8133481660c30e24bbb1e54876c06830c145c`, working tree được giữ nguyên và sửa tiếp. APK debug `1.1.9+123` đã build; kết quả mới ở mục 44, 45 và 46. Những kết quả full-suite của lượt cũ không chứng nhận source hiện tại.
+## 50. AI Chatbot — Hoàn tất Nâng cấp UI/UX, Sửa triệt để lỗi tràn viền & Glassmorphism Theme (02/10/2026)
+
+- **Mục tiêu**: Thực thi toàn diện kế hoạch nâng cấp UI/UX đã được duyệt (`chatbot_uiux_upgrade_plan.md`):
+  1. **Sửa triệt để 6 lỗi tràn viền (P0 Overflows)**:
+     - `chat_message_bubble.dart`: Bỏ giới hạn cứng `maxWidth: 0.78 * screenWidth`, chuyển sang ràng buộc linh hoạt `0.82` (text) và `0.88` (rich cards/action), ngăn chặn hoàn toàn bóp méo thẻ trên màn hình nhỏ.
+     - `charging_progress_card.dart`: Bọc dòng cam kết an toàn phần cứng và nhãn tiến trình trong `Flexible`/`Expanded` kèm `softWrap: true` và `overflow: TextOverflow.ellipsis`.
+     - `streaming_text_widget.dart`: Thay thế dòng text placeholder tĩnh bằng cụm 3 chấm nảy sinh động `TypingIndicatorDots`, bọc flexible layout.
+     - `battery_status_card.dart`: Tích hợp `LayoutBuilder` tự động co giãn đồng hồ tròn từ 86px xuống 70px (hoặc xếp dọc) khi chiều rộng < 275px.
+     - `assistant_sheet.dart`: Thu gọn padding và constraints các nút tiêu đề (`minWidth: 34`), cho phép tiêu đề 'BatteryBot Copilot' co giãn với `Flexible`.
+     - `action_confirmation_card.dart`: Đảm bảo badge trạng thái và tiêu đề không bị xô lệch, nút HỦY/XÁC NHẬN co dãn tự nhiên.
+  2. **Lớp giao diện Glassmorphism cao cấp (Task 2)**:
+     - Tạo module `app/lib/features/ai/theme/chatbot_glass_theme.dart` với `GlassContainer` (hiệu ứng blur `BackdropFilter`, viền mờ `glassBorder`, gradient chiều sâu).
+     - Bổ sung các tokens semantic trong `app/lib/core/theme/app_ui_colors.dart`: `glassSurface`, `glassBorder`, `glassHighlight`, `glassShadow`.
+  3. **Hoạt họa & Tương tác cao cấp (Tasks 3, 4, 5, 6)**:
+     - **Hiệu ứng trượt & mờ dần (Slide-in/Fade-in)** cho từng bong bóng tin nhắn.
+     - **Nút Sao chép (Copy) & Chia sẻ (Share)** nhanh trực tiếp trên mỗi câu trả lời của bot cùng thông báo Snackbar nổi.
+     - **Mascot Avatar thở (Breathing Bot Avatar)** với vầng hào quang phát sáng xung quanh (`BreathingBotAvatar`), tự động tăng tốc độ nhịp thở khi đang suy nghĩ / streaming câu trả lời.
+     - **3-dots bounce typing indicator**: Widget `TypingIndicatorDots` 3 chấm nảy mềm mại chuẩn iMessage.
+     - **Thẻ Rich Cards tương tác**: Hỗ trợ chạm vào thẻ (`BatteryStatusCard`, `ChargingProgressCard`, `TripSummaryCard`) để mở bảng chẩn đoán kỹ thuật chi tiết (`ModalBottomSheet`), hoạt họa thanh tiến trình với `TweenAnimationBuilder`.
+     - **Thanh nhập liệu nâng cấp (`ChatInputBar`)**: Tích hợp thanh chọn nhanh emoji (`⚡ 🔋 🚗 ⏱️ ❓ 🛠️`), nút đính kèm ảnh/dữ liệu chụp ODO/pin.
+  4. **Hoàn thiện Dark Mode & Hỗ trợ đa kích thước (Tasks 7, 8)**:
+     - Độ tương phản cao, phong cách slate tối sang trọng (`#0F172A`, `#1E293B`), không chói mắt.
+     - Tương thích hoàn hảo từ màn hình cực nhỏ (320px) đến tablet.
+- **Verification & Test Suite**:
+  - **Flutter Widget Tests**: **10/10 PASSED (100%)** tại `app/test/widget/chatbot_uiux_overflow_test.dart` bao gồm kiểm thử độ rộng 320px cho User bubble, Bot bubble, BatteryStatusCard, ChargingProgressCard, TripSummaryCard, ActionConfirmationCard, TypingIndicatorDots, BreathingBotAvatar, ChatInputBar, và Dark Mode.
+  - **Flutter Chat Suite**: **16/16 PASSED (100%)** trên toàn bộ các bài test chatbot (`chatbot_uiux_overflow_test.dart`, `chat_models_and_service_test.dart`, `interactive_assistant_sheet_test.dart`).
+  - **Backend Pytest**: **42/42 PASSED (100%)** trên toàn bộ 5 test suite chatbot (`test_ai_chatbot.py`, `test_behavior_and_history.py`, `test_function_calling_and_proactive.py`, `test_guardrails_and_personality.py`, `test_rich_cards_and_phase5c.py`).
+
+## 49. AI Chatbot — Hoàn tất Phase 5: Native Function Calling, Guardrails, Adaptive Personality & Rich Media Cards (02/10/2026)
+
+- **Mục tiêu**: Nâng cấp toàn diện kiến trúc AI Chatbot lên AI Agent hoàn chỉnh theo kế hoạch Phase 5 (`phase5_ai_chatbot_plan.md`):
+  1. **Phase 5A (Native Function Calling & Tool Loop)**: Chuyển toàn bộ 9 tool sang Gemini SDK `types.Tool` & `types.FunctionDeclaration`, tự động thực thi read tools trong vòng lặp đệ quy và stream câu trả lời tự nhiên, duy trì Safety Gating với `ActionConfirmationCard` cho các control tools.
+  2. **Phase 5B (Guardrails & Adaptive Personality)**: Kiểm duyệt an toàn điện áp lưới ≤ 12A / 2500W, kiểm soát nhiệt độ sạc > 45°C, chống ảo giác thông số xe vs `VehicleCatalog`, che thông tin định danh PII (SĐT, CCCD 9/12 số), và bộ điều chỉnh phong cách tự động thích ứng với đánh giá của người dùng (`concise`, `detailed`, `friendly`, `professional`).
+  3. **Phase 5C (Rich Media Cards & Dynamic UX)**: Hiển thị các thẻ thông tin trực quan động (mini-gauge pin, thanh tiến trình sạc với công suất và dòng điện, thẻ tóm tắt chuyến đi & CO₂ tiết kiệm) và thanh chip gợi ý ngữ cảnh thông minh `QuickReplyChips`.
+- **Backend AI Server**:
+  - `web/ai_server/chat_tools.py`: 9 tool declarations định dạng Gemini native `types.Tool` qua `get_gemini_tools()`. Phân loại Read Tools và Safety-Gated Control Tools.
+  - `web/ai_server/chat_guardrails.py`: 3 lớp bảo vệ `validate_electrical_safety()`, `validate_vehicle_specs()`, `sanitize_pii()`.
+  - `web/ai_server/personality_adapter.py`: Thuật toán thích ứng phong cách hội thoại dựa trên tỷ lệ Like/Dislike.
+  - `web/ai_server/chat_schemas.py`: Schema `RichCardData`, `GuardrailCheckResult`, `personalityStyle`, `guardrailViolationCount`, và cập nhật `ChatMessage.richCards`.
+  - `web/ai_server/chat_engine.py`:
+    - Tích hợp Native Tool Loop với Gemini SDK `GenerateContentConfig(tools=...)`.
+    - Triển khai `_build_rich_card()` từ kết quả thực thi tool và `_detect_rich_card_intent()` cho offline fallback.
+    - Phát các sự kiện SSE chuẩn hóa: `event: tool_call`, `event: tool_result`, `event: rich_card`, `event: message_end`.
+    - Tích hợp `PersonalityAdapter` vào `build_system_prompt()` và `ChatGuardrails` vào luồng `stream_chat()`.
+  - `web/ai_server/chat_memory.py`: Lưu trữ `rich_cards` cùng với nội dung tin nhắn trong phiên.
+- **Flutter Mobile App**:
+  - `app/lib/features/ai/models/chat_message.dart`: Thêm trường `richCards` hỗ trợ serialization hai chiều, copyWith, và backward-compatibility.
+  - `app/lib/features/ai/models/behavior_profile.dart`: Thêm các trường `personalityStyle` và `guardrailViolationCount`.
+  - `app/lib/features/ai/widgets/battery_status_card.dart`: Thẻ trực quan Mini Battery Gauge tròn, % SoC lớn, bảng 4 chỉ số (quãng đường, SoH, điện áp, nhiệt độ) và cảnh báo pin yếu/nhiệt độ.
+  - `app/lib/features/ai/widgets/charging_progress_card.dart`: Thẻ tiến trình sạc từ SoC hiện tại đến SoC mục tiêu, hiển thị công suất (W/kW), dòng sạc (A ≤ 12A), thời gian còn lại (ETA) và cam kết bảo vệ an toàn phần cứng Shelly.
+  - `app/lib/features/ai/widgets/trip_summary_card.dart`: Thẻ tóm tắt chuyến đi hiển thị quãng đường (km), điện tiêu thụ (Wh/kWh), hiệu suất (Wh/km), lượng CO₂ giảm phát thải và lời khuyên tiết kiệm điện.
+  - `app/lib/features/ai/widgets/quick_reply_chips.dart`: Thanh chip gợi ý phản hồi nhanh ngang tự động thích ứng ngữ cảnh (khi pin yếu < 20%, khi xe đang sạc, hoặc câu hỏi thường gặp).
+  - `app/lib/features/ai/widgets/chat_message_bubble.dart`: Tự động render các thẻ Rich Media Cards bên dưới nội dung tin nhắn của bot.
+  - `app/lib/features/ai/services/chat_api_service.dart`: Bổ sung callback `onRichCard` và parse sự kiện SSE `event: rich_card`.
+  - `app/lib/features/ai/controllers/chat_controller.dart`: Lắng nghe `onRichCard` và cập nhật danh sách thẻ trực quan trong tin nhắn.
+  - `app/lib/features/ai/assistant_sheet.dart`: Nâng cấp giao diện với `QuickReplyChips` động và nhận thẻ `onRichCard`.
+- **Verification & Test Suite**:
+  - **Backend Pytest**: **42/42 PASSED (100%)** trên toàn bộ 5 test suite chatbot (`test_ai_chatbot.py`, `test_behavior_and_history.py`, `test_function_calling_and_proactive.py`, `test_guardrails_and_personality.py`, `test_rich_cards_and_phase5c.py`).
+  - **Flutter Tests**: **34/34 PASSED (100%)** trên toàn bộ 5 bộ test AI Flutter (`phase5c_rich_cards_test.dart`, `phase4_voice_and_controller_test.dart`, `chat_models_and_service_test.dart`, `action_and_suggestion_test.dart`, `behavior_and_history_test.dart`).
+
+## 48. Task Completion Log — Shelly Web–Android, hai thành viên (02/10/2026)
+
+**Hiện hành: Implemented — unverified ở runtime; chưa đạt beta/Shelly-ready.** HEAD khi tiếp tục `9309f2b645d1ede6ab276273bf1fba119e345b33`; giữ các thay đổi và artifact phiên khác. Build number `124` đã có artifact lưu trữ nên ứng viên lượt này tăng lên `1.1.9+125`. Kết quả lịch sử bên dưới không chứng nhận source mới.
+
+- **S-MEMBERS → Automated verified:** `web/shelly/repositories.py`, `connection_codes.py`, `routes.py`: registry tối đa hai UID theo thiết bị vật lý; UID cũ là thành viên đầu tiên, retry không chiếm thêm chỗ. Enrollment ghi membership/vault/binding/receipt trong một transaction, Cloud validation trước admission; lỗi mã hoặc commit không ghi dở dang. Có preview migration chỉ đọc, chưa chạy migration production. Client không được tự ghi registry/evidence.
+- **S-CODE → Automated verified:** xoay mã sáu ký tự tăng codeVersion, vô hiệu mã trước cho yêu cầu mới, không xóa membership hoặc verification. Nhập mã mới của thành viên giữ evidence nếu binding còn hợp lệ. `web/dashboard/src/pages/ShellyGateway.tsx` hiển thị memberCount/2 thay vì lượt redeem; bỏ mặc định 10. Marker codeRefreshRequired được trả trong binding/status. Kiểm thử end-to-end nhắc mã trên hai runtime: Blocked.
+- **S-CONTROL → Automated verified:** khóa theo Device ID chuẩn hóa, unlink tranh chấp Start dùng transaction. Thành viên B được gửi OFF sau readback đúng thiết bị; backend dùng UID chủ phiên gốc, không trả lịch sử/xe/UID của A cho B. Stop dùng Device ID bất biến của phiên. Chưa có bằng chứng relay thật hoặc hai máy Stop qua UI.
+- **S-ANDROID → Implemented — unverified:** `shelly_connection_coordinator.dart`, `smart_charger_credentials_service.dart`, binding/status models, repository factory, AuthGate, Settings, Setup, Smart Charging/controller. Snapshot chung phân biệt liên kết/trực tuyến/evidence; cache binding mã hóa theo UID không lưu online, không cấp readiness. Offline giữ evidence, không tự chạy no-load. Guard UID/generation loại kết quả trễ; restore được gộp. Nhắc mã không khóa control. Cloud-only legacy mode chuyển sang backend, không xóa profile. Safety test thành công đọc lại/cất binding server để restart.
+- **S-TLS → Blocked runtime/root cause:** `shelly_api_transport.dart`, `server_smart_charger_service.dart`: deadline cả header/body, phân loại TLS/timeout/network, thông điệp ngắn không raw exception; không trust-all, HTTP fallback hoặc retry ON. Windows curl HTTPS Funnel `/api/health` và `/api/ready` đều 200, certificate verification 0. Chưa tái hiện HandshakeException trên điện thoại/đúng APK; chưa xác định nguyên nhân cũ và không tuyên bố sửa triệt để TLS.
+- **Quality gates:** full Flutter lượt trước **543 Pass / exit 0**, log `app/build/qa-shelly-124-final-tests-20261002.log`; source AI đã thay đổi tiếp nên không dùng log đó chứng nhận toàn source hiện tại. Regression Shelly cuối **10 Pass / exit 0**. Full backend **231 Pass, 4 Skip / exit 0**; bốn skip là tests yêu cầu emulator, đã chạy riêng thực tế **4 Pass / exit 0**. Rules Emulator **23 allow/deny assertions / exit 0**, log `app/build/qa-shelly-rules-20261002.log`, gồm denial registry/codeVersion/fake safety. Gateway **59 Pass / exit 0**, dashboard lint/build **exit 0** ở lượt kiểm trước. Tests simulator không thay phần cứng.
+- **Analyzer:** full analyze có lượt exit 1 với lint đã sửa; chạy lại toàn app trên Windows vẫn **Timeout 120s / exit 124**, log `app/build/qa-shelly-125-analyze-out.log`. Không ghi Pass. Analyzer riêng Shelly từng báo một thiếu braces, đã sửa; cần giữ kết quả chạy lại tương ứng source cuối.
+- **Hygiene:** scan private-key pattern trong các file kết nối được sửa không thấy key; phát hiện/sửa literal mojibake tại `web/shelly/service.py`. Chưa audit toàn Git history/artifact, không chứng minh khóa chưa lộ. Không đọc hoặc đưa credential vào báo cáo.
+- **Runtime/build — In progress:** build QA `+125` với `APP_API_BASE_URL=https://khanhbes.tailaafca5.ts.net`, log `app/build/qa-shelly-125-build-20261002.log`. APK trước +124 đã build nhưng artifact được phiên khác lưu/chuyển nên không dùng đường app-debug cũ để chứng nhận +125. Emulator Pixel_9a bị snapshot WHPX; cold boot từng kết nối được ADB, lần mở lại offline. Chưa cài/nghiệm thu +125; sẽ bổ sung hash/certificate sau build, không ghi kết quả dự kiến là Pass.
+- **Blocker / bước tiếp:** chưa nạp backend mới vào container đang phục vụ; đang chờ xác nhận không có phiên sạc thật và cho phép rebuild riêng API. Cần điện thoại USB/ADB, hai UID/two-runtime, Wi-Fi/di động, nhắc mã idle/active và hardware test có giám sát hiện tại. Không phát ON/OFF trong lượt này. Production vẫn cần backend HTTPS ổn định, không dùng Funnel QA thay production.
+- **Cập nhật artifact +125:** lần build đầu exit 1 tại `:app:processDebugResources`, Gradle không stat được generated `package-aware-r.txt`; giữ log lỗi, không xóa source/artifact. Chạy lại build bình thường exit 0, 33,8s (`app/build/qa-shelly-125-build-retry-20261002.log`). APK `app/build/app/outputs/flutter-apk/VinFastBattery_1.1.9+125_shelly-https_x64_QA.apk`, package `com.bes.vinbatery`, versionName `1.1.9`, versionCode `125`, x86_64 dành emulator; SHA-256 `2A55F448ADA4FBF9D90FE8BAF36A57FC649EB50F94B726BCF7B38099815BF8A3`. `aapt` và `apksigner verify` exit 0; Android Debug certificate SHA-256 `914642716decb342ca80acece6284e69d66355bfa792f5c4779efecf16ecebeb`. Không phải APK production/ARM cho điện thoại. Analyzer riêng bốn file transport/coordinator/repository/server-service **No issues / exit 0**; analyzer toàn app vẫn timeout 120s. Backend regression membership/cloud **53 Pass / exit 0** sau sửa literal; scan giới hạn bảy file kết nối **0 pattern issues / exit 0**. Full Flutter mới và cài emulator đang kiểm tra, không ghi Pass trước khi có kết quả.
+- **Quality/runtime cập nhật cuối:** full Flutter source +125 **549/549 Pass, exit 0**, thời gian 6m08s, log `app/build/qa-shelly-125-full-tests-20261002.log`. `adb install -r` báo **Success**, giữ dữ liệu, `dumpsys package` xác nhận versionCode **125** / versionName **1.1.9**. Lần install trước khi boot hoàn tất bị từ chối, đã thử lại sau `sys.boot_completed=1`. Monkey launcher bị ANR **com.android.phone**, 0 events, không gán ANR đó cho app. `am start` đúng `com.vinfast.vinfast_battery.MainActivity` exit 0; chưa coi StartActivity là nghiệm thu UI/membership/TLS. Không phát relay command.
+- **Smoke cuối — Runtime Blocked:** PID app tồn tại, log riêng đoạn 200 dòng kiểm tra không có marker FATAL EXCEPTION/HandshakeException/No host/Unhandled Exception/RenderFlex overflow. Window app tồn tại nhưng window ANR hệ thống cũng tồn tại; uiautomator không xuất hierarchy. Không có bằng chứng màn kết nối được thao tác và không dùng marker vắng mặt để tuyên bố TLS/hardware Pass. Không lưu XML hoặc screenshot chứa thông tin tài khoản.
+- **S-API-DEPLOY — Runtime verified (02/10, sau xác nhận người dùng):** người dùng xác nhận không có phiên sạc thật và cho phép rebuild/restart riêng API. `docker compose --env-file .env.laptop -f docker-compose.yml -f docker-compose.laptop.yml build api`, sau đó `up -d --no-deps api` **exit 0**. Không restart AI/dashboard/gateway/worker, không xóa orphan container hay volume. Image trước `sha256:117b9ad70098a7e9be2874557f6074ce0a1d863f4d14edb4715e3de085f71352` được giữ tại tag `vinfast-api-rollback:pre-membership-20261002`; image đang chạy `sha256:94a0c36ea0dc28995852dc847800b5ab7c3d56806db6ade56882480cab34a892`, state **running/healthy**. `web/.dockerignore` thêm `.env`, `.env.*`, `*.pem`, `*.key` để không gửi secrets vào build context.
+- **S-API-SMOKE — Runtime verified, phạm vi host:** local `127.0.0.1:5000` và HTTPS `khanhbes.tailaafca5.ts.net` đều trả `/api/health=200`, `/api/ready=200`; endpoint `/api/shelly/device` không có token trả **401**, mọi response có requestId. Hash bốn module repositories/connection_codes/routes/service trong container khớp source host. Kiểm TLS dùng trust mặc định, không bỏ kiểm chứng certificate. Blocker nạp API cũ đã được gỡ; không suy ra từ health rằng hai tài khoản hoặc relay thật đã nghiệm thu. Dashboard container chưa rebuild trong quyền restart riêng API; thay đổi giao diện web vẫn chờ deploy riêng. TLS điện thoại/hai mạng, emulator UI và Shelly có giám sát vẫn **Blocked**, chưa phát ON/OFF.
+- **S-QA-LIVE — kiểm thử tiếp theo sau yêu cầu “hãy kiểm thử” (02/10):** HTTPS `/api/health=200`, `/api/ready=200`, `/api/shelly/device=401` và `/api/smart-charging/status=401` khi không có token; cả bốn response có requestId, không có pattern Traceback/Stack Trace/private_key/cloudAuthKey. Compile bốn module Shelly **trong container đang phục vụ** exit 0. Đây là smoke TLS/auth envelope trên host, không phải kiểm thử hai thành viên hoặc trạng thái thiết bị đã đăng nhập.
+- **S-QA-ANR — Fail, đính chính bắt buộc:** uiautomator cần `adb shell -tt ... /dev/tty` để xuất hierarchy trong bộ nhớ; lần trước thiếu PTY làm dump trống, không phải bằng chứng app không có semantics. Hierarchy thật bắt được **“VinFast Battery isn't responding”**, nên ngoài ANR com.android.phone trước đó, **app cũng đã có dialog ANR**. Đóng dialog rồi force-stop/start riêng app giữ dữ liệu: `am start -W` trả **Status: timeout**, WaitTime **22372ms**; hierarchy sau đó vẫn có Wait/Close app, chưa tới Dashboard/Settings/Sạc pin. Không chứng nhận startup hay đồng bộ màn hình Pass. Không xóa dữ liệu, không sửa logic để che ANR.
+- **S-QA-ENV — Blocked:** tại lần đo host có **15773 MB tổng RAM, chỉ 259 MB trống**; emulator RAM khoảng 2GB, MemAvailable 485876kB và đang dùng swap. Có bằng chứng áp lực tài nguyên, nhưng **root cause ANR chưa xác định**, chưa loại trừ lỗi app. Cuối lượt ADB mất emulator-5554, không thể kiểm lại SHA APK cài; không tự quy là emulator crash khi chưa đủ log. Cần giải phóng RAM/ổn định emulator hoặc test Android thật rồi tái chạy đúng APK +125. Chưa có trả lời xác nhận giám sát/rút tải hiện tại, nên không phát ON/OFF, không redeem mã/claim/unlink thiết bị thật hoặc đổi membership production. Hardware, hai runtime và TLS điện thoại vẫn Blocked.
+- **S-HARDWARE-PREFLIGHT — xác nhận tiếp theo, 02/10:** sau lời xác nhận của người dùng, đã thông báo hiểu là đang giám sát và đã rút tải; chỉ gửi request đọc snapshot Cloud từ container API với limiter Firestore dùng chung, credential lấy từ file đã cung cấp qua stdin, không in host/key/Device ID/UID. Shelly trả HTTP **200**, đúng model **S3PL-00112EU**, Cloud protocol **G2**, online **true**, các trường meter thật và cấu hình `initial_state=off`, `auto_on=false`. Snapshot báo **relay ON**; telemetry **2,4W / 224,3V / 0,046A / 16016,17Wh**. Chưa đạt precondition OFF nên không gửi ON 5 giây.
+- **Đính chính probe online:** probe QA đầu dùng `online is True` nên đánh sai payload số nguyên `1` thành false. Probe đọc lại chấp nhận boolean/int/string đúng contract xác nhận online true. Đây là lỗi phân loại trong probe tạm, không phải bằng chứng parser Android sai; parser Android đã xử lý số `1`. Không tính HTTP 200 thành bằng chứng control thành công.
+- **S-LEGACY-AUDIT — Blocked enrollment:** truy vấn chỉ đọc, không giải mã/in credential, tìm **1 active legacy profile / 1 tài khoản**, mode `advanced_direct`, inventory tồn tại nhưng registry `shellyDeviceOwners` theo physical ID **chưa tồn tại**, số thành viên **0**, số profile có đủ historical no-load/Safe Boot evidence **0**. Không tự chọn chủ, tạo membership, xoay mã, unlink hoặc giả lập verification. Readback provider backend theo binding chưa chạy vì chưa có membership hợp lệ. Cần enrollment có xác thực qua mã hiện hành hoặc migration được duyệt sau audit, rồi safety test có xác nhận; không bypass registry để chạy ON bằng credential tệp.
+- **Hardware result hiện hành:** đọc identity/config/telemetry **Pass**; bài OFF → ON + timer → OFF và điều khiển từ APK **Blocked, chưa thực hiện**. Tổng lệnh ON **0**, OFF **0**; trạng thái OFF cuối **chưa xác minh** vì relay đã ON trước probe. Đã yêu cầu người dùng tắt ổ bằng Shelly Smart Control/nút vật lý trước khi tiếp tục. RAM host các lần đo tiếp theo khoảng 2366MB rồi 1176MB, ADB không có emulator/điện thoại; chưa chạy lại UI/ANR. Không gọi Shelly-ready hoặc production-ready.
+
+> **Baseline lịch sử trước mục 48:** HEAD `7dd8133481660c30e24bbb1e54876c06830c145c`, APK debug `1.1.9+123`; giữ kết quả mục 44–47 để đối soát. Hiện hành là QA `1.1.9+125` tại mục 48, HEAD `9309f2b645d1ede6ab276273bf1fba119e345b33` + working tree. Chưa đủ điều kiện phát beta; không dùng baseline cũ chứng nhận source mới.
+
+## 47. AI Chatbot — Hoàn tất Phase 4: Voice Input, Riverpod Controller, Offline Queue & Polish (02/10/2026)
+
+- **Mục tiêu**: Hoàn tất Phase 4 theo đặc tả tại `docs/specs/AI_CHATBOT_PERSONALIZATION.md` bao gồm tích hợp Speech-to-Text tiếng Việt, giao diện sóng âm động (`AnimatedVoiceWaveform`), quản lý state qua Riverpod `ChatController` và `ChatState`, hàng đợi tin nhắn offline (`isQueued`, `processOfflineQueue`), cơ chế thử lại tin nhắn lỗi (`hasError`, `errorMessage`, `onRetry`), tối ưu hiệu năng lazy-load phân trang lịch sử hội thoại (`limit`, `offset`), và khả năng tiếp cận (`Semantics`).
+- **Flutter Mobile App**:
+  - `app/android/app/src/main/AndroidManifest.xml`: Cấp quyền `<uses-permission android:name="android.permission.RECORD_AUDIO"/>` cho ghi âm giọng nói.
+  - `app/lib/features/ai/models/chat_message.dart`: Bổ sung các trường `isQueued`, `hasError`, `errorMessage`, hỗ trợ `copyWith`, serialization JSON và backward-compatibility.
+  - `app/lib/features/ai/services/voice_input_service.dart`: Dịch vụ thu âm và nhận diện giọng nói tiếng Việt (`vi_VN`), quản lý xin quyền micro (`Permission.microphone`), bộ phát âm lượng âm thanh (`soundLevelStream`) cập nhật thời gian thực, timeout tự ngắt 12 giây an toàn, phương thức `updateTranscript()`, `stopListening()`, `cancelListening()`.
+  - `app/lib/features/ai/widgets/animated_voice_waveform.dart`: Widget hiển thị sóng âm audio sống động theo nhịp nói (gradient VinFast Electric Blue `#0072BC` -> Electric Green `#00E676`), co giãn theo biên độ thực `soundLevel`.
+  - `app/lib/features/ai/widgets/chat_input_bar.dart`: Tích hợp nút micro/voice (`assistant_voice_button`), chuyển đổi linh hoạt giữa nhập text và ghi âm, hiển thị sóng âm khi đang nghe, nút hủy và nút gửi, nhãn trợ năng `Semantics`.
+  - `app/lib/features/ai/controllers/chat_controller.dart`: Quản lý toàn bộ vòng đời hội thoại AI qua Riverpod (`ChatController` & `ChatState`), tự động chuyển tin nhắn vào hàng đợi offline khi mất mạng (`isQueued`), tự động đồng bộ khi có kết nối lại qua `processOfflineQueue()`, xử lý gửi lại khi lỗi qua `retryMessage()`, xác nhận hành động sạc an toàn `confirmAction()`, gửi đánh giá `sendFeedback()`.
+  - `app/lib/features/ai/widgets/chat_message_bubble.dart`: Bổ sung trạng thái tin nhắn đang xếp hàng ("Chờ mạng" kèm icon đồng hồ cát), hiển thị viền lỗi đỏ/cam và nút "Thử lại" (`onRetry`) khi gửi thất bại, gắn nhãn `Semantics` cho trình đọc màn hình.
+  - `app/lib/features/ai/services/chat_history_storage.dart`: Bổ sung phân trang `limit` và `offset` cho `listSavedSessions()` và `listSessions()` giúp tải nhanh danh sách phiên chat, tránh nghẽn bộ nhớ khi có nhiều phiên.
+  - `app/lib/features/ai/assistant_sheet.dart`: Nâng cấp giao diện trợ lý ảo BatteryBot hoàn chỉnh với Voice Input tiếng Việt, animation sóng âm, xử lý retry mượt mà, phân trang lịch sử, và tích hợp các controller providers.
+  - `app/test/unit/phase4_voice_and_controller_test.dart`: Bộ 6 test unit toàn diện kiểm thử:
+    - Serialization và deserialization các trường offline/error `isQueued`, `hasError`, `errorMessage`.
+    - Vòng đời `VoiceInputService`, luồng phát `soundLevelStream` và hủy lắng nghe `cancelListening()`.
+    - Phân trang `ChatHistoryStorage` với `limit` và `offset`.
+    - Hàng đợi tin nhắn offline của `ChatController` và xử lý xả hàng đợi khi mạng phục hồi qua `processOfflineQueue()`.
+    - Cập nhật trạng thái Action Card trong tin nhắn qua `confirmAction()`.
+- **Quality Gates & Verification**:
+  - **Flutter Analyzer**: `dart analyze` trên toàn bộ module AI và test suite đạt **0 issues, No issues found (100% clean)**.
+  - **Flutter Tests**: **26/26 PASSED (100%)** trên toàn bộ 5 bộ test AI Chatbot (`phase4_voice_and_controller_test.dart`, `action_and_suggestion_test.dart`, `chat_models_and_service_test.dart`, `behavior_and_history_test.dart`, `interactive_assistant_sheet_test.dart`).
+  - **Backend Pytest**: **19/19 PASSED (100%)** bộ test AI Chatbot (`test_function_calling_and_proactive.py`, `test_behavior_and_history.py`, `test_ai_chatbot.py`), **231 PASSED** full backend suite (`python -m pytest tests --basetemp=.pytest_tmp`), **59 PASSED** Smart Charger Gateway.
+- **Tài liệu**: Cập nhật toàn bộ tiêu chí hoàn thành Phase 4 trong `docs/specs/AI_CHATBOT_PERSONALIZATION.md`.
 
 ## 46. AI Chatbot — Hoàn tất Phase 3: Function Calling & Proactive Suggestions (02/10/2026)
 
@@ -1567,3 +1679,37 @@ Skill `frontend-skill` được áp dụng cho bố cục form tiết chế, ít
   - **7/7 PASS (100%)**: Splash hoạt động chuẩn xác, tôn trọng cấu hình giảm chuyển động.
 - **Toàn bộ Flutter Test Suite**:
   - **510 / 510 TESTS PASS (100%)** với 0 lỗi, 0 regression!
+
+## 35. Phase 5A: Native Gemini Function Calling & Streaming Tool Execution — 02/10/2026
+
+### Mục Tiêu Thực Hiện
+1. **Gemini Native Function Calling**: Thay thế hoàn toàn cơ chế phụ thuộc regex matching (`_detect_action_intent`) sang native tool dispatching của Google GenAI SDK (`google.genai`).
+2. **Auto-Execution Cho Read Tools**: Khi Gemini quyết định gọi các công cụ đọc thông tin (`get_battery_status`, `get_charging_history`, `get_trip_summary`, `get_maintenance_info`, `get_energy_tips`, `get_weather_impact`), hệ thống tự động thực thi với dữ liệu telemetry thực tế từ `vehicleContext`, gửi kết quả ngược lại cho Gemini và tiếp tục stream câu trả lời tự nhiên.
+3. **Safety Gating Bắt Buộc (Human-in-the-Loop)**: Đối với các công cụ điều khiển phần cứng (`start_smart_charging`, `stop_smart_charging`, `schedule_charging`), hệ thống chặn tuyệt đối việc tự động chạy, tự động sinh thẻ xác nhận `ActionConfirmationCard` (tuân thủ giới hạn phần cứng an toàn ≤ 12A / 2500W) và yêu cầu người dùng xác nhận trên Flutter UI.
+4. **SSE Event Streaming Mới**: Bổ sung `event: tool_call` và `event: tool_result` cho phép client theo dõi trạng thái thực thi công cụ.
+5. **Đồng bộ hóa Client-Side**: Cập nhật `ChatApiService` trên Flutter hỗ trợ callbacks `onToolCall` và `onToolResult`.
+
+### Chi Tiết Thay Đổi Codebase
+- **`web/ai_server/chat_tools.py`**:
+  - Bổ sung hàm `get_gemini_tools()` chuyển đổi 9 `TOOL_DECLARATIONS` sang danh sách `types.Tool` chuẩn của Google GenAI SDK.
+  - Cải tiến `execute_tool` cho `get_battery_status` và các read tools khác để sử dụng trực tiếp các trường telemetry động: `batteryTemp`, `voltage`, `estimatedRangeKm`, `chargingStatus`.
+- **`web/ai_server/chat_engine.py`**:
+  - Cấu hình `tools=get_gemini_tools()` trong `GenerateContentConfig`.
+  - Triển khai vòng lặp thực thi công cụ đa bước (`max_tool_turns = 3`): Tự động phát hiện `chunk.function_calls`, phân loại an toàn, thực thi read-tools, tạo `types.Part.from_function_response` và tái yêu cầu Gemini stream câu trả lời hoàn chỉnh.
+  - Bảo tồn cơ chế fallback ngoại tuyến/dự phòng an toàn khi API Key chưa cấu hình hoặc mất kết nối ngoại vi.
+  - Làm giàu phản hồi dự phòng ngoại tuyến cho các chủ đề bảo dưỡng định kỳ và tóm tắt chuyến đi.
+- **`app/lib/features/ai/services/chat_api_service.dart`**:
+  - Bổ sung tham số callbacks `onToolCall` và `onToolResult` trong phương thức `streamChat`.
+  - Bổ sung xử lý phân tích cú pháp các dòng SSE `event: tool_call` và `event: tool_result`.
+- **`web/tests/test_function_calling_and_proactive.py`**:
+  - Bổ sung 3 test suites mới: `test_get_gemini_tools_structure`, `test_native_gemini_read_tool_auto_execution_loop`, `test_native_gemini_control_tool_safety_gating`.
+- **`app/test/unit/chat_models_and_service_test.dart`**:
+  - Bổ sung test kiểm thử `streamChat handles tool_call and tool_result SSE events`.
+
+### Kết Quả Kiểm Thử Đạt Được
+- **Backend Tests (`web/tests`)**:
+  - `tests/test_function_calling_and_proactive.py`: **10/10 PASS (100%)**.
+  - Toàn bộ backend test suite: **231 PASS / 4 SKIPPED (100% tests pass)**.
+- **Flutter Tests (`app/test`)**:
+  - `test/unit/chat_models_and_service_test.dart`: **5/5 PASS (100%)**.
+  - `flutter analyze lib/features/ai`: **No issues found! (0 warnings, 0 errors)**.

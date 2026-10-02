@@ -1,4 +1,7 @@
+import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:vinfast_battery/core/constants/app_constants.dart';
 import 'package:vinfast_battery/features/ai/models/chat_message.dart';
 import 'package:vinfast_battery/features/ai/models/chat_session.dart';
 import 'package:vinfast_battery/features/ai/services/chat_api_service.dart';
@@ -90,5 +93,49 @@ void main() {
       expect(fullResponse, contains('Feliz S'));
       expect(fullResponse, contains('70%'));
     });
+
+    test('streamChat handles tool_call and tool_result SSE events', () async {
+      AppConstants.setCustomApiBaseUrl('http://127.0.0.1:5000');
+      try {
+        final mockClient = _MockStreamClient([
+          'event: message_start\ndata: {"messageId":"m1","sessionId":"s1"}\n\n',
+          'event: tool_call\ndata: {"callId":"c1","toolName":"get_battery_status","status":"executing"}\n\n',
+          'event: tool_result\ndata: {"callId":"c1","toolName":"get_battery_status","result":{"soc":80.0}}\n\n',
+          'event: text_delta\ndata: {"delta":"Pin còn 80%"}\n\n',
+          'event: message_end\ndata: {"messageId":"m1"}\n\n',
+        ]);
+        final service = ChatApiService(client: mockClient);
+        Map<String, dynamic>? receivedToolCall;
+        Map<String, dynamic>? receivedToolResult;
+
+        final res = service.streamChat(
+          message: 'Pin thế nào?',
+          onToolCall: (tc) => receivedToolCall = tc,
+          onToolResult: (tr) => receivedToolResult = tr,
+        );
+
+        final chunks = await res.stream.toList();
+        expect(chunks.join(''), 'Pin còn 80%');
+        expect(receivedToolCall?['toolName'], 'get_battery_status');
+        expect(receivedToolCall?['status'], 'executing');
+        expect(receivedToolResult?['toolName'], 'get_battery_status');
+        expect(receivedToolResult?['result']?['soc'], 80.0);
+      } finally {
+        AppConstants.setCustomApiBaseUrl(null);
+      }
+    });
   });
+}
+
+class _MockStreamClient extends http.BaseClient {
+  _MockStreamClient(this.chunks);
+  final List<String> chunks;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    final stream = Stream<List<int>>.fromIterable(
+      chunks.map((c) => utf8.encode(c)),
+    );
+    return http.StreamedResponse(stream, 200);
+  }
 }

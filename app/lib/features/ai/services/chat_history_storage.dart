@@ -85,14 +85,17 @@ class ChatHistoryStorage {
     return [];
   }
 
-  /// Liệt kê các session đã lưu ở local
-  Future<List<ChatSession>> listSavedSessions() async {
+  /// Liệt kê các session đã lưu ở local (hỗ trợ phân trang limit / offset)
+  Future<List<ChatSession>> listSavedSessions({int limit = 50, int offset = 0}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(_sessionIndexKey);
       if (raw != null && raw.isNotEmpty) {
         final list = jsonDecode(raw) as List<dynamic>;
-        return list.map((item) => ChatSession.fromJson(item as Map<String, dynamic>)).toList();
+        final all = list.map((item) => ChatSession.fromJson(item as Map<String, dynamic>)).toList();
+        if (offset >= all.length) return [];
+        final end = (offset + limit < all.length) ? offset + limit : all.length;
+        return all.sublist(offset, end);
       }
     } catch (e) {
       debugPrint('[ChatHistoryStorage] Lỗi listSavedSessions: $e');
@@ -100,8 +103,9 @@ class ChatHistoryStorage {
     return [];
   }
 
-  /// Alias cho listSavedSessions
-  Future<List<ChatSession>> listSessions() => listSavedSessions();
+  /// Alias cho listSavedSessions với hỗ trợ phân trang
+  Future<List<ChatSession>> listSessions({int limit = 50, int offset = 0}) =>
+      listSavedSessions(limit: limit, offset: offset);
 
   /// Xóa một session khỏi local storage
   Future<void> deleteSession(String sessionId) async {

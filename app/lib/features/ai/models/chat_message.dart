@@ -42,6 +42,7 @@ class ChatMessage {
     required this.timestamp,
     this.action,
     this.actionCard,
+    this.richCards,
     this.isStreaming = false,
     this.isQueued = false,
     this.hasError = false,
@@ -55,6 +56,7 @@ class ChatMessage {
   final DateTime timestamp;
   final String? action;
   final FunctionCallAction? actionCard;
+  final List<Map<String, dynamic>>? richCards;
   final bool isStreaming;
   final bool isQueued;
   final bool hasError;
@@ -70,6 +72,7 @@ class ChatMessage {
     DateTime? timestamp,
     String? action,
     FunctionCallAction? actionCard,
+    List<Map<String, dynamic>>? richCards,
     bool? isStreaming,
     bool? isQueued,
     bool? hasError,
@@ -83,6 +86,7 @@ class ChatMessage {
       timestamp: timestamp ?? this.timestamp,
       action: action ?? this.action,
       actionCard: actionCard ?? this.actionCard,
+      richCards: richCards ?? this.richCards,
       isStreaming: isStreaming ?? this.isStreaming,
       isQueued: isQueued ?? this.isQueued,
       hasError: hasError ?? this.hasError,
@@ -103,6 +107,11 @@ class ChatMessage {
       actionCard: json['actionCard'] != null
           ? FunctionCallAction.fromJson(json['actionCard'] as Map<String, dynamic>)
           : null,
+      richCards: json['richCards'] != null
+          ? (json['richCards'] as List<dynamic>)
+              .map((e) => Map<String, dynamic>.from(e as Map))
+              .toList()
+          : null,
       isStreaming: json['isStreaming'] as bool? ?? false,
       isQueued: json['isQueued'] as bool? ?? false,
       hasError: json['hasError'] as bool? ?? false,
@@ -119,6 +128,7 @@ class ChatMessage {
       'timestamp': timestamp.toIso8601String(),
       if (action != null) 'action': action,
       if (actionCard != null) 'actionCard': actionCard!.toJson(),
+      if (richCards != null && richCards!.isNotEmpty) 'richCards': richCards,
       if (isQueued) 'isQueued': true,
       if (hasError) 'hasError': true,
       if (errorMessage != null) 'errorMessage': errorMessage,

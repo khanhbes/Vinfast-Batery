@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -55,6 +54,8 @@ class VoiceInputService {
     return true;
   }
 
+  void Function(String text)? _onResult;
+
   /// Bắt đầu lắng nghe giọng nói tiếng Việt
   Future<bool> startListening({
     String localeId = 'vi_VN',
@@ -74,6 +75,7 @@ class VoiceInputService {
 
     _state = VoiceInputState.listening;
     _currentTranscript = '';
+    _onResult = onResult;
 
     // Khởi tạo stream giả lập sound level cho waveform visualization (0.0 đến 1.0)
     _soundLevelTimer?.cancel();
@@ -99,6 +101,7 @@ class VoiceInputService {
   /// Cập nhật transcript đã nhận diện được
   void updateTranscript(String text) {
     _currentTranscript = text;
+    _onResult?.call(text);
   }
 
   /// Dừng lắng nghe và trả về đoạn text đã nhận diện
@@ -107,6 +110,7 @@ class VoiceInputService {
     _autoStopTimer?.cancel();
     _state = VoiceInputState.ready;
     _soundLevelController.add(0.0);
+    _onResult = null;
     return _currentTranscript;
   }
 
@@ -117,6 +121,7 @@ class VoiceInputService {
     _currentTranscript = '';
     _state = VoiceInputState.ready;
     _soundLevelController.add(0.0);
+    _onResult = null;
   }
 
   void dispose() {

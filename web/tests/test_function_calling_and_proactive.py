@@ -168,3 +168,163 @@ def test_fastapi_action_confirm_and_suggestions_endpoints():
     assert data_sugg["success"] is True
     assert len(data_sugg["data"]) > 0
     assert any(s["ruleId"] == "R001" for s in data_sugg["data"])
+
+
+# ── Phase 5A Native Function Calling & Execution Tests ───────────────────────
+
+def test_get_gemini_tools_structure():
+    """Kiểm tra get_gemini_tools sinh types.Tool hợp lệ cho Google GenAI SDK."""
+    from ai_server.chat_tools import get_gemini_tools
+    from google.genai import types
+
+    tools = get_gemini_tools()
+    assert len(tools) == 1
+    assert isinstance(tools[0], types.Tool)
+    assert len(tools[0].function_declarations) == 9
+    names = [fd.name for fd in tools[0].function_declarations]
+    assert "get_battery_status" in names
+    assert "start_smart_charging" in names
+    assert "schedule_charging" in names
+
+
+def test_native_gemini_read_tool_auto_execution_loop():
+    """Kiểm tra Gemini gọi read tool -> auto execute -> inject result -> sinh text trả lời."""
+    import json
+    from unittest.mock import MagicMock
+    from google.genai import types
+    from ai_server.chat_engine import ChatEngine
+    from ai_server.chat_schemas import ChatSendRequest, VehicleContext
+
+    engine = ChatEngine()
+    mock_client = MagicMock()
+
+    # Turn 1: Gemini quyết định gọi get_battery_status
+    chunk_turn1 = types.GenerateContentResponse(
+        candidates=[
+            types.Candidate(
+                content=types.Content(
+                    role="model",
+                    parts=[
+                        types.Part(
+                            function_call=types.FunctionCall(
+                                name="get_battery_status",
+                                args={"vehicle_id": "VF-EVO200-001"},
+                            )
+                        )
+                    ],
+                )
+            )
+        ]
+    )
+
+    # Turn 2: Sau khi nhận tool_result, Gemini trả về câu trả lời tự nhiên
+    chunk_turn2 = types.GenerateContentResponse(
+        candidates=[
+            types.Candidate(
+                content=types.Content(
+                    role="model",
+                    parts=[types.Part.from_text(text="Pin xe Evo200 của bạn đang ở mức 82.5%.")],
+                )
+            )
+        ]
+    )
+
+    mock_client.models.generate_content_stream.side_effect = [
+        [chunk_turn1],
+        [chunk_turn2],
+    ]
+    engine._client = mock_client
+
+    req = ChatSendRequest(
+        message="Pin của mình hiện tại còn bao nhiêu?",
+        vehicleContext=VehicleContext(
+            vehicleId="VF-EVO200-001",
+            model="Evo200",
+            currentSoc=82.5,
+            currentSoh=98.0,
+            batteryTemp=29.0,
+        ),
+    )
+
+    events = list(engine.stream_chat(req))
+    event_types = [e.split("\n")[0] for e in events]
+
+    assert "event: message_start" in event_types
+    assert "event: tool_call" in event_types
+    assert "event: tool_result" in event_types
+    assert "event: text_delta" in event_types
+    assert "event: message_end" in event_types
+
+    # Kiểm tra payload tool_result
+    result_event = next(e for e in events if e.startswith("event: tool_result\n"))
+    result_data = json.loads(result_event.split("data: ")[1].strip())
+    assert result_data["toolName"] == "get_battery_status"
+    assert result_data["result"]["soc"] == 82.5
+    assert result_data["result"]["temperatureC"] == 29.0
+
+    # Kiểm tra mock_client được gọi 2 lần (turn 1 tool call, turn 2 final answer)
+    assert mock_client.models.generate_content_stream.call_count == 2
+
+
+def test_native_gemini_control_tool_safety_gating():
+    """Kiểm tra Gemini gọi control tool -> chặn auto-execute -> sinh ActionConfirmationCard (HITL)."""
+    import json
+    from unittest.mock import MagicMock
+    from google.genai import types
+    from ai_server.chat_engine import ChatEngine
+    from ai_server.chat_schemas import ChatSendRequest, VehicleContext
+
+    engine = ChatEngine()
+    mock_client = MagicMock()
+
+    # Gemini gọi start_smart_charging
+    chunk_turn1 = types.GenerateContentResponse(
+        candidates=[
+            types.Candidate(
+                content=types.Content(
+                    role="model",
+                    parts=[
+                        types.Part(
+                            function_call=types.FunctionCall(
+                                name="start_smart_charging",
+                                args={"vehicle_id": "VF-FELIZ-01", "target_soc": 85, "max_amps": 10.0},
+                            )
+                        )
+                    ],
+                )
+            )
+        ]
+    )
+
+    mock_client.models.generate_content_stream.return_value = [chunk_turn1]
+    engine._client = mock_client
+
+    req = ChatSendRequest(
+        message="Hôm nay hãy sạc giúp mình lên 85% nhé",
+        vehicleContext=VehicleContext(
+            vehicleId="VF-FELIZ-01",
+            model="Feliz S",
+            currentSoc=45.0,
+        ),
+    )
+
+    events = list(engine.stream_chat(req))
+    event_types = [e.split("\n")[0] for e in events]
+
+    assert "event: message_start" in event_types
+    assert "event: function_call" in event_types
+    assert "event: text_delta" in event_types
+    assert "event: message_end" in event_types
+
+    # Không được có event tool_call hoặc tool_result vì chưa được user xác nhận
+    assert "event: tool_call" not in event_types
+    assert "event: tool_result" not in event_types
+
+    # Kiểm tra confirmationCard
+    card_event = next(e for e in events if e.startswith("event: function_call\n"))
+    card_data = json.loads(card_event.split("data: ")[1].strip())
+    assert card_data["toolName"] == "start_smart_charging"
+    assert card_data["requiresConfirmation"] is True
+    assert card_data["args"]["target_soc"] == 85
+    assert card_data["confirmationCard"]["maxAmps"] <= 12.0
+

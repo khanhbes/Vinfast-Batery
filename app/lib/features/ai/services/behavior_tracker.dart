@@ -17,6 +17,8 @@ class BehaviorTracker extends StateNotifier<BehaviorProfile> {
 
   static const String _storageKey = 'vinfast_user_behavior_profile';
 
+  BehaviorProfile get currentProfile => state;
+
   /// Nạp profile đã lưu trong SharedPreferences (local cache)
   Future<void> loadLocalProfile() async {
     try {

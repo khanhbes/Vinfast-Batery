@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
+import 'typing_indicator_dots.dart';
+
 class StreamingTextWidget extends StatefulWidget {
   const StreamingTextWidget({
     super.key,
@@ -39,6 +41,7 @@ class _StreamingTextWidgetState extends State<StreamingTextWidget>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final textStyle = widget.style ??
         theme.textTheme.bodyMedium?.copyWith(
           color: theme.colorScheme.onSurface,
@@ -46,22 +49,31 @@ class _StreamingTextWidgetState extends State<StreamingTextWidget>
           fontSize: 14,
         );
 
+    // Khi bot đang bắt đầu soạn (chưa có text trả về)
     if (widget.text.isEmpty && widget.isStreaming) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text('BatteryBot đang soạn câu trả lời', style: textStyle?.copyWith(fontStyle: FontStyle.italic, color: theme.colorScheme.onSurface.withValues(alpha: 0.6))),
-          const SizedBox(width: 4),
-          AnimatedBuilder(
-            animation: _cursorController,
-            builder: (context, _) {
-              return Opacity(
-                opacity: _cursorController.value > 0.5 ? 1.0 : 0.0,
-                child: Text('▌', style: textStyle?.copyWith(color: theme.colorScheme.primary)),
-              );
-            },
-          ),
-        ],
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TypingIndicatorDots(
+              dotColor: theme.colorScheme.primary,
+              dotSize: 7.0,
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                'BatteryBot đang suy nghĩ...',
+                style: textStyle?.copyWith(
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
       );
     }
 
@@ -80,16 +92,39 @@ class _StreamingTextWidgetState extends State<StreamingTextWidget>
               color: theme.colorScheme.onSurfaceVariant,
               fontStyle: FontStyle.italic,
             ),
+            code: TextStyle(
+              fontSize: 12.5,
+              fontFamily: 'monospace',
+              color: isDark ? const Color(0xFF38BDF8) : const Color(0xFF0369A1),
+              backgroundColor: isDark
+                  ? const Color(0xFF0F172A)
+                  : const Color(0xFFF1F5F9),
+            ),
+            codeblockDecoration: BoxDecoration(
+              color: isDark ? const Color(0xFF0B0F17) : const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+                width: 1.0,
+              ),
+            ),
+            codeblockPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           ),
         ),
         if (widget.isStreaming) ...[
-          const SizedBox(height: 2),
+          const SizedBox(height: 4),
           AnimatedBuilder(
             animation: _cursorController,
             builder: (context, _) {
               return Opacity(
                 opacity: _cursorController.value > 0.5 ? 1.0 : 0.0,
-                child: Text('▌', style: textStyle?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.bold)),
+                child: Text(
+                  '▌',
+                  style: textStyle?.copyWith(
+                    color: theme.colorScheme.primary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               );
             },
           ),
@@ -98,3 +133,4 @@ class _StreamingTextWidgetState extends State<StreamingTextWidget>
     );
   }
 }
+

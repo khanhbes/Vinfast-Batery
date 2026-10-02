@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../core/theme/app_ui_colors.dart';
 import '../../../core/utils/battery_bot_faq.dart';
 import '../models/chat_message.dart';
 import '../models/function_call_action.dart';
+import '../theme/chatbot_glass_theme.dart';
 import 'action_confirmation_card.dart';
+import 'battery_status_card.dart';
+import 'breathing_bot_avatar.dart';
+import 'charging_progress_card.dart';
 import 'streaming_text_widget.dart';
+import 'trip_summary_card.dart';
 
 class ChatMessageBubble extends StatelessWidget {
   const ChatMessageBubble({
@@ -16,6 +23,7 @@ class ChatMessageBubble extends StatelessWidget {
     this.onActionPressed,
     this.onConfirmAction,
     this.onCancelAction,
+    this.onRetry,
     this.isActionLoading = false,
   });
 
@@ -24,24 +32,78 @@ class ChatMessageBubble extends StatelessWidget {
   final void Function(BatteryBotAction action)? onActionPressed;
   final void Function(FunctionCallAction action)? onConfirmAction;
   final void Function(FunctionCallAction action)? onCancelAction;
+  final VoidCallback? onRetry;
   final bool isActionLoading;
+
+  void _copyToClipboard(BuildContext context) {
+    Clipboard.setData(ClipboardData(text: message.content));
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Đã sao chép nội dung tin nhắn'),
+        duration: Duration(milliseconds: 1500),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _shareMessage() {
+    Share.share(
+      '${message.content}\n\n— VinFast Battery Copilot',
+      subject: 'Chia sẻ từ VinFast Battery',
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final uiColors = AppUiColors.of(context);
     final theme = Theme.of(context);
     final timeStr = DateFormat('HH:mm').format(message.timestamp);
+    final screenWidth = MediaQuery.of(context).size.width;
 
-    if (!message.fromBot) {
-      // User message — bên phải
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+    // Smooth Entrance Animation (Slide-in & Fade-in)
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+      builder: (context, animValue, child) {
+        return Opacity(
+          opacity: animValue,
+          child: Transform.translate(
+            offset: Offset(0, (1.0 - animValue) * 8.0),
+            child: child,
+          ),
+        );
+      },
+      child: !message.fromBot
+          ? _buildUserBubble(context, theme, timeStr, screenWidth)
+          : _buildBotBubble(context, theme, timeStr, screenWidth),
+    );
+  }
+
+  Widget _buildUserBubble(
+    BuildContext context,
+    ThemeData theme,
+    String timeStr,
+    double screenWidth,
+  ) {
+    return Semantics(
+      label: 'Tin nhắn của bạn: ${message.content}',
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 12),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.end,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
+            if (message.isQueued) ...[
+              Icon(
+                Icons.schedule_rounded,
+                size: 12,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+              ),
+              const SizedBox(width: 4),
+            ],
             Text(
-              timeStr,
+              message.isQueued ? 'Chờ mạng' : timeStr,
               style: TextStyle(
                 fontSize: 10,
                 color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
@@ -51,24 +113,12 @@ class ChatMessageBubble extends StatelessWidget {
             Flexible(
               child: Container(
                 constraints: BoxConstraints(
-                  maxWidth: MediaQuery.of(context).size.width * 0.75,
+                  maxWidth: screenWidth * 0.82,
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    topRight: Radius.circular(4),
-                    bottomLeft: Radius.circular(16),
-                    bottomRight: Radius.circular(16),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: theme.colorScheme.primary.withValues(alpha: 0.2),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
+                decoration: ChatbotGlassTheme.userBubbleDecoration(
+                  context,
+                  isQueued: message.isQueued,
                 ),
                 child: Text(
                   message.content,
@@ -82,118 +132,156 @@ class ChatMessageBubble extends StatelessWidget {
             ),
           ],
         ),
-      );
-    }
+      ),
+    );
+  }
 
-    // Bot message — bên trái với mascot avatar
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF0072BC), Color(0xFF00C853)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.15),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
+  Widget _buildBotBubble(
+    BuildContext context,
+    ThemeData theme,
+    String timeStr,
+    double screenWidth,
+  ) {
+    final uiColors = AppUiColors.of(context);
+    final hasRichCards =
+        (message.richCards != null && message.richCards!.isNotEmpty) ||
+        message.actionCard != null;
+
+    // Responsive width: normal text bubble takes up to 82% of screen;
+    // rich cards can use up to 88% on small screens so they never squeeze.
+    final maxBubbleWidth = screenWidth * (hasRichCards ? 0.88 : 0.82);
+
+    return Semantics(
+      label: 'BatteryBot trả lời: ${message.content}',
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 12),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Breathing Bot Avatar with halo
+            BreathingBotAvatar(
+              size: 32,
+              isStreaming: message.isStreaming,
             ),
-            child: const Icon(
-              Icons.smart_toy_rounded,
-              color: Colors.white,
-              size: 18,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  constraints: BoxConstraints(
-                    maxWidth: MediaQuery.of(context).size.width * 0.78,
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: uiColors.cardBackground,
-                    border: Border.all(
-                      color: uiColors.border.withValues(alpha: 0.6),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    constraints: BoxConstraints(
+                      maxWidth: maxBubbleWidth,
                     ),
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(4),
-                      topRight: Radius.circular(16),
-                      bottomLeft: Radius.circular(16),
-                      bottomRight: Radius.circular(16),
+                    padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+                    decoration: ChatbotGlassTheme.botBubbleDecoration(
+                      context,
+                      hasError: message.hasError,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        StreamingTextWidget(
+                          text: message.content,
+                          isStreaming: message.isStreaming,
+                        ),
+                        if (message.hasError && onRetry != null) ...[
+                          const SizedBox(height: 8),
+                          InkWell(
+                            onTap: onRetry,
+                            borderRadius: BorderRadius.circular(8),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.refresh_rounded, size: 14, color: theme.colorScheme.error),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Thử lại câu trả lời',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: theme.colorScheme.error,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                        if (message.actionCard != null) ...[
+                          const SizedBox(height: 8),
+                          ActionConfirmationCard(
+                            action: message.actionCard!,
+                            isLoading: isActionLoading,
+                            onConfirm: () => onConfirmAction?.call(message.actionCard!),
+                            onCancel: () => onCancelAction?.call(message.actionCard!),
+                          ),
+                        ],
+                        if (message.richCards != null && message.richCards!.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          for (final card in message.richCards!)
+                            _buildRichCard(context, card),
+                        ],
+                        if (message.action != null) ...[
+                          const SizedBox(height: 10),
+                          _buildActionChip(context, message.action!),
+                        ],
+                      ],
                     ),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  const SizedBox(height: 4),
+
+                  // Bottom action row: Timestamp, Copy, Share, Thumb Up / Down
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      StreamingTextWidget(
-                        text: message.content,
-                        isStreaming: message.isStreaming,
+                      Text(
+                        timeStr,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                        ),
                       ),
-                      if (message.actionCard != null) ...[
-                        const SizedBox(height: 8),
-                        ActionConfirmationCard(
-                          action: message.actionCard!,
-                          isLoading: isActionLoading,
-                          onConfirm: () => onConfirmAction?.call(message.actionCard!),
-                          onCancel: () => onCancelAction?.call(message.actionCard!),
+                      if (!message.isStreaming && message.content.isNotEmpty) ...[
+                        const SizedBox(width: 10),
+                        // Nút Copy
+                        _BubbleActionButton(
+                          icon: Icons.copy_rounded,
+                          tooltip: 'Sao chép',
+                          onTap: () => _copyToClipboard(context),
+                        ),
+                        const SizedBox(width: 4),
+                        // Nút Share
+                        _BubbleActionButton(
+                          icon: Icons.share_rounded,
+                          tooltip: 'Chia sẻ',
+                          onTap: _shareMessage,
+                        ),
+                        const SizedBox(width: 6),
+                        // Thumbs up / down feedback
+                        _FeedbackButton(
+                          icon: Icons.thumb_up_alt_outlined,
+                          activeIcon: Icons.thumb_up_alt_rounded,
+                          isSelected: message.userFeedback == 'like',
+                          onTap: () => onFeedback?.call('like'),
+                        ),
+                        const SizedBox(width: 4),
+                        _FeedbackButton(
+                          icon: Icons.thumb_down_alt_outlined,
+                          activeIcon: Icons.thumb_down_alt_rounded,
+                          isSelected: message.userFeedback == 'dislike',
+                          onTap: () => onFeedback?.call('dislike'),
                         ),
                       ],
-                      if (message.action != null) ...[
-                        const SizedBox(height: 10),
-                        _buildActionChip(context, message.action!),
-                      ],
                     ],
                   ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      timeStr,
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
-                      ),
-                    ),
-                    if (!message.isStreaming && message.content.isNotEmpty) ...[
-                      const SizedBox(width: 12),
-                      _FeedbackButton(
-                        icon: Icons.thumb_up_alt_outlined,
-                        activeIcon: Icons.thumb_up_alt_rounded,
-                        isSelected: message.userFeedback == 'like',
-                        onTap: () => onFeedback?.call('like'),
-                      ),
-                      const SizedBox(width: 4),
-                      _FeedbackButton(
-                        icon: Icons.thumb_down_alt_outlined,
-                        activeIcon: Icons.thumb_down_alt_rounded,
-                        isSelected: message.userFeedback == 'dislike',
-                        onTap: () => onFeedback?.call('dislike'),
-                      ),
-                    ],
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -241,6 +329,64 @@ class ChatMessageBubble extends StatelessWidget {
           onActionPressed?.call(action);
         }
       },
+    );
+  }
+
+  Widget _buildRichCard(BuildContext context, Map<String, dynamic> card) {
+    final cardType = card['cardType'] as String? ?? '';
+    final title = card['title'] as String? ?? '';
+    final data = (card['data'] as Map?)?.cast<String, dynamic>() ?? {};
+
+    switch (cardType) {
+      case 'battery_status':
+        return BatteryStatusCard(
+          title: title.isNotEmpty ? title : 'Trạng thái Pin & Xe',
+          data: data,
+        );
+      case 'charging_progress':
+        return ChargingProgressCard(
+          title: title.isNotEmpty ? title : 'Tiến độ Sạc Thông Minh',
+          data: data,
+        );
+      case 'trip_summary':
+        return TripSummaryCard(
+          title: title.isNotEmpty ? title : 'Tóm tắt Chuyến đi & Hiệu suất',
+          data: data,
+        );
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+}
+
+class _BubbleActionButton extends StatelessWidget {
+  const _BubbleActionButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          child: Icon(
+            icon,
+            size: 13,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.42),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -55,6 +55,9 @@ class ChatApiService {
     Map<String, dynamic>? vehicleContext,
     Map<String, dynamic>? behaviorProfile,
     void Function(FunctionCallAction action)? onFunctionCall,
+    void Function(Map<String, dynamic> toolCall)? onToolCall,
+    void Function(Map<String, dynamic> toolResult)? onToolResult,
+    void Function(Map<String, dynamic> cardData)? onRichCard,
   }) {
     final messageIdCompleter = Completer<String>();
     final sessionIdCompleter = Completer<String>();
@@ -75,6 +78,7 @@ class ChatApiService {
         sessionIdCompleter,
         functionCallCompleter,
         onFunctionCall,
+        onRichCard,
       );
       return ChatStreamResponse(
         stream: controller.stream,
@@ -108,10 +112,15 @@ class ChatApiService {
             'Lỗi kết nối máy chủ (${streamedResponse.statusCode}): $errorBody',
           );
           await controller.close();
-          if (!messageIdCompleter.isCompleted) messageIdCompleter.complete('');
-          if (!sessionIdCompleter.isCompleted) sessionIdCompleter.complete('');
-          if (!functionCallCompleter.isCompleted)
+          if (!messageIdCompleter.isCompleted) {
+            messageIdCompleter.complete('');
+          }
+          if (!sessionIdCompleter.isCompleted) {
+            sessionIdCompleter.complete('');
+          }
+          if (!functionCallCompleter.isCompleted) {
             functionCallCompleter.complete(null);
+          }
           return;
         }
 
@@ -134,10 +143,12 @@ class ChatApiService {
               if (currentEvent == 'message_start') {
                 final mid = json['messageId'] as String? ?? '';
                 final sid = json['sessionId'] as String? ?? '';
-                if (!messageIdCompleter.isCompleted)
+                if (!messageIdCompleter.isCompleted) {
                   messageIdCompleter.complete(mid);
-                if (!sessionIdCompleter.isCompleted)
+                }
+                if (!sessionIdCompleter.isCompleted) {
                   sessionIdCompleter.complete(sid);
+                }
               } else if (currentEvent == 'text_delta') {
                 final delta = json['delta'] as String? ?? '';
                 if (delta.isNotEmpty) {
@@ -149,6 +160,12 @@ class ChatApiService {
                 if (!functionCallCompleter.isCompleted) {
                   functionCallCompleter.complete(action);
                 }
+              } else if (currentEvent == 'tool_call') {
+                onToolCall?.call(json);
+              } else if (currentEvent == 'tool_result') {
+                onToolResult?.call(json);
+              } else if (currentEvent == 'rich_card') {
+                onRichCard?.call(json);
               } else if (currentEvent == 'message_end') {
                 // Kết thúc hội thoại
               }
@@ -167,10 +184,15 @@ class ChatApiService {
           controller.addError('Không thể kết nối trợ lý AI: $e');
           await controller.close();
         }
-        if (!messageIdCompleter.isCompleted) messageIdCompleter.complete('');
-        if (!sessionIdCompleter.isCompleted) sessionIdCompleter.complete('');
-        if (!functionCallCompleter.isCompleted)
+        if (!messageIdCompleter.isCompleted) {
+          messageIdCompleter.complete('');
+        }
+        if (!sessionIdCompleter.isCompleted) {
+          sessionIdCompleter.complete('');
+        }
+        if (!functionCallCompleter.isCompleted) {
           functionCallCompleter.complete(null);
+        }
       }
     }();
 
@@ -190,6 +212,7 @@ class ChatApiService {
     Completer<String> sessIdComp,
     Completer<FunctionCallAction?> fnComp,
     void Function(FunctionCallAction action)? onFunctionCall,
+    void Function(Map<String, dynamic> cardData)? onRichCard,
   ) {
     final mid = 'msg-local-${DateTime.now().millisecondsSinceEpoch}';
     final sid = 'session-local';
@@ -208,6 +231,19 @@ class ChatApiService {
           'Hiện tại pin chiếc **$model** của bạn đang ở mức **$soc%**.\n\n'
           '- Quãng đường ước tính di chuyển còn lại: **~${(soc * 1.8).round()} km**.\n'
           '- Để pin LFP bền bỉ, bạn nên sạc khi mức pin dưới 20% nhé! 🔋';
+      onRichCard?.call({
+        'cardType': 'battery_status',
+        'title': 'Trạng thái Pin & Xe',
+        'data': {
+          'vehicleId': ctx?['vehicleId'] ?? 'VF-FELIZ-01',
+          'soc': (soc as num).toDouble(),
+          'soh': 98.0,
+          'voltage': 72.0,
+          'temperature': 28.5,
+          'chargingStatus': 'idle',
+          'estimatedRangeKm': (soc * 1.8),
+        },
+      });
     } else if (lower.contains('sạc') &&
         (lower.contains('bật') || lower.contains('bắt đầu'))) {
       reply =
@@ -233,6 +269,35 @@ class ChatApiService {
           '1. Cắm sạc và kiểm tra đèn tín hiệu trên ổ cắm.\n'
           '2. Dòng sạc được giới hạn an toàn dưới **10A / 2200W**.\n'
           '3. Bạn có thể đặt mức pin ngắt tự động (Target SoC) ở tab Sạc pin.';
+      onRichCard?.call({
+        'cardType': 'charging_progress',
+        'title': 'Tiến độ Sạc Thông Minh',
+        'data': {
+          'currentSoc': (soc as num).toDouble(),
+          'targetSoc': 80.0,
+          'chargingPowerW': 1850.0,
+          'currentAmps': 8.4,
+          'remainingMinutes': 35,
+          'status': 'charging',
+        },
+      });
+    } else if (lower.contains('chuyến đi') || lower.contains('quãng đường')) {
+      reply =
+          'Tóm tắt chuyến đi gần nhất của chiếc **$model**:\n\n'
+          '- Quãng đường: **24.5 km**\n'
+          '- Tiêu thụ: **735 Wh** (~30 Wh/km)\n'
+          '- Giảm phát thải: **2.1 kg CO₂**';
+      onRichCard?.call({
+        'cardType': 'trip_summary',
+        'title': 'Tóm tắt Chuyến đi',
+        'data': {
+          'distanceKm': 24.5,
+          'energyUsedWh': 735.0,
+          'efficiencyWhKm': 30.0,
+          'co2SavedKg': 2.1,
+          'durationMinutes': 42,
+        },
+      });
     } else {
       reply =
           'Chào bạn! BatteryBot đã nhận được câu hỏi: *"$message"*.\n\n'

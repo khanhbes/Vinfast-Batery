@@ -20,7 +20,10 @@ import 'services/behavior_tracker.dart';
 import 'services/chat_api_service.dart';
 import 'services/chat_history_storage.dart';
 import 'services/suggestion_service.dart';
+import 'services/voice_input_service.dart';
+import 'widgets/animated_voice_waveform.dart';
 import 'widgets/chat_message_bubble.dart';
+import 'widgets/quick_reply_chips.dart';
 
 /// Bottom Sheet trò chuyện cùng trợ lý ảo BatteryBot với AI Streaming & Lịch sử
 class InteractiveAssistantSheet extends ConsumerStatefulWidget {
@@ -53,6 +56,9 @@ class _InteractiveAssistantSheetState
   StreamSubscription<String>? _streamSub;
   final Map<String, bool> _actionLoadingMap = {};
   ProactiveSuggestion? _activeSuggestion;
+  VoiceInputService? _voiceService;
+  bool _isListeningVoice = false;
+  double _voiceSoundLevel = 0.5;
 
   @override
   void initState() {
@@ -258,6 +264,71 @@ class _InteractiveAssistantSheetState
     }
   }
 
+  Future<void> _toggleVoiceInput() async {
+    if (_isTyping) return;
+    _voiceService ??= VoiceInputService();
+
+    if (_isListeningVoice) {
+      final text = await _voiceService!.stopListening();
+      if (!mounted) return;
+      setState(() {
+        _isListeningVoice = false;
+        _voiceSoundLevel = 0.0;
+      });
+      if (text.trim().isNotEmpty) {
+        _inputController.text = text;
+        _handleSend(text);
+      }
+    } else {
+      final success = await _voiceService!.startListening(
+        localeId: 'vi_VN',
+        onResult: (text) {
+          if (!mounted) return;
+          _voiceService!.updateTranscript(text);
+          setState(() {
+            _inputController.text = text;
+          });
+        },
+        onSoundLevel: (level) {
+          if (!mounted) return;
+          setState(() {
+            _voiceSoundLevel = level;
+          });
+        },
+        onDone: () {
+          if (!mounted) return;
+          setState(() {
+            _isListeningVoice = false;
+            _voiceSoundLevel = 0.0;
+          });
+        },
+      );
+
+      if (success && mounted) {
+        setState(() {
+          _isListeningVoice = true;
+        });
+      }
+    }
+  }
+
+  void _handleRetry(int msgIndex) {
+    if (msgIndex >= _messages.length) return;
+    String? userPrompt;
+    for (int i = msgIndex; i >= 0; i--) {
+      if (_messages[i].role == ChatRole.user) {
+        userPrompt = _messages[i].content;
+        break;
+      }
+    }
+    if (userPrompt != null) {
+      setState(() {
+        _messages.removeAt(msgIndex);
+      });
+      _handleSend(userPrompt);
+    }
+  }
+
   void _startNewChat({bool preserveGreeting = false}) {
     setState(() {
       _sessionId = 'session-${DateTime.now().millisecondsSinceEpoch}';
@@ -452,6 +523,7 @@ class _InteractiveAssistantSheetState
   @override
   void dispose() {
     _streamSub?.cancel();
+    _voiceService?.dispose();
     _inputController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -609,6 +681,21 @@ class _InteractiveAssistantSheetState
           if (botMsgIndex < _messages.length) {
             _messages[botMsgIndex] = _messages[botMsgIndex].copyWith(
               actionCard: action,
+            );
+          }
+        });
+        _scrollToBottom();
+      },
+      onRichCard: (cardData) {
+        if (!mounted) return;
+        setState(() {
+          if (botMsgIndex < _messages.length) {
+            final currentCards = _messages[botMsgIndex].richCards != null
+                ? List<Map<String, dynamic>>.from(_messages[botMsgIndex].richCards!)
+                : <Map<String, dynamic>>[];
+            currentCards.add(cardData);
+            _messages[botMsgIndex] = _messages[botMsgIndex].copyWith(
+              richCards: currentCards,
             );
           }
         });
@@ -899,7 +986,7 @@ class _InteractiveAssistantSheetState
 
           // Header với Mascot và thông tin xe
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
             child: Row(
               children: [
                 const BatteryBotMascot(
@@ -908,19 +995,23 @@ class _InteractiveAssistantSheetState
                   mood: BatteryBotMood.happy,
                   enableFloating: false,
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Row(
                         children: [
-                          Text(
-                            'BatteryBot Copilot',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: uiColors.text,
+                          Flexible(
+                            child: Text(
+                              'BatteryBot Copilot',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: uiColors.text,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           const SizedBox(width: 6),
@@ -936,7 +1027,7 @@ class _InteractiveAssistantSheetState
                             child: Text(
                               'AI Trợ lý',
                               style: TextStyle(
-                                fontSize: 10,
+                                fontSize: 9.5,
                                 fontWeight: FontWeight.bold,
                                 color: uiColors.primary,
                               ),
@@ -944,29 +1035,38 @@ class _InteractiveAssistantSheetState
                           ),
                         ],
                       ),
+                      const SizedBox(height: 2),
                       Text(
                         vehicle != null
                             ? '${vehicle.vehicleName} • Pin ${vehicle.currentBattery}%'
                             : 'Chưa chọn xe theo dõi',
-                        style: TextStyle(fontSize: 12, color: uiColors.muted),
+                        style: TextStyle(fontSize: 11.5, color: uiColors.muted),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
                       ),
                     ],
                   ),
                 ),
                 IconButton(
                   key: const Key('assistant_history_button'),
-                  icon: Icon(Icons.history_rounded, color: uiColors.muted),
+                  icon: Icon(Icons.history_rounded, color: uiColors.muted, size: 20),
                   tooltip: 'Lịch sử chat',
+                  padding: const EdgeInsets.all(6),
+                  constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
                   onPressed: _showHistoryModal,
                 ),
                 IconButton(
                   key: const Key('assistant_new_chat_button'),
-                  icon: Icon(Icons.add_comment_outlined, color: uiColors.muted),
+                  icon: Icon(Icons.add_comment_outlined, color: uiColors.muted, size: 20),
                   tooltip: 'Đoạn chat mới',
+                  padding: const EdgeInsets.all(6),
+                  constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
                   onPressed: () => _startNewChat(),
                 ),
                 IconButton(
-                  icon: Icon(Icons.close, color: uiColors.muted),
+                  icon: Icon(Icons.close, color: uiColors.muted, size: 20),
+                  padding: const EdgeInsets.all(6),
+                  constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
                   onPressed: () => Navigator.of(context).pop(),
                 ),
               ],
@@ -976,29 +1076,13 @@ class _InteractiveAssistantSheetState
           const Divider(height: 1),
 
           // Quick Action Chips
-          Container(
-            height: 44,
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              scrollDirection: Axis.horizontal,
-              itemCount: chips.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                final chipText = chips[index];
-                return ActionChip(
-                  label: Text(
-                    chipText,
-                    style: TextStyle(fontSize: 12, color: uiColors.text),
-                  ),
-                  backgroundColor: uiColors.background,
-                  side: BorderSide(color: uiColors.border),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  onPressed: () => _handleSend(chipText),
-                );
-              },
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: QuickReplyChips(
+              customSuggestions: chips,
+              currentSoc: vehicle?.currentBattery.toDouble(),
+              isCharging: false,
+              onSelect: (chipText) => _handleSend(chipText),
             ),
           ),
 
@@ -1023,6 +1107,7 @@ class _InteractiveAssistantSheetState
                       _actionLoadingMap[message.actionCard?.callId] ?? false,
                   onConfirmAction: (act) => _handleActionConfirm(index, act),
                   onCancelAction: (act) => _handleActionCancel(index, act),
+                  onRetry: () => _handleRetry(index),
                 );
               },
             ),
@@ -1044,7 +1129,7 @@ class _InteractiveAssistantSheetState
               ),
             ),
 
-          // Thanh nhập tin nhắn
+          // Thanh nhập tin nhắn & Voice Input
           Container(
             padding: EdgeInsets.only(
               left: 16,
@@ -1059,38 +1144,92 @@ class _InteractiveAssistantSheetState
             child: Row(
               children: [
                 Expanded(
-                  child: TextField(
-                    key: const Key('assistant_input_field'),
-                    controller: _inputController,
-                    textInputAction: TextInputAction.send,
-                    style: TextStyle(color: uiColors.text),
-                    decoration: InputDecoration(
-                      hintText: 'Hỏi BatteryBot về pin, sạc, xe...',
-                      hintStyle: TextStyle(fontSize: 13, color: uiColors.muted),
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        borderSide: BorderSide(color: uiColors.border),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        borderSide: BorderSide(color: uiColors.border),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        borderSide: BorderSide(color: uiColors.primary),
-                      ),
-                    ),
-                    onSubmitted: _handleSend,
-                  ),
+                  child: _isListeningVoice
+                      ? Container(
+                          height: 44,
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                          decoration: BoxDecoration(
+                            color: uiColors.primary.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(color: uiColors.primary, width: 1.5),
+                          ),
+                          child: Row(
+                            children: [
+                              IconButton(
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                icon: const Icon(Icons.close, size: 18, color: Colors.redAccent),
+                                tooltip: 'Hủy ghi âm',
+                                onPressed: () {
+                                  _voiceService?.cancelListening();
+                                  setState(() {
+                                    _isListeningVoice = false;
+                                    _voiceSoundLevel = 0.0;
+                                  });
+                                },
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: AnimatedVoiceWaveform(
+                                  isListening: true,
+                                  soundLevel: _voiceSoundLevel,
+                                  height: 24,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Đang nghe...',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: uiColors.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : TextField(
+                          key: const Key('assistant_input_field'),
+                          controller: _inputController,
+                          textInputAction: TextInputAction.send,
+                          style: TextStyle(color: uiColors.text),
+                          decoration: InputDecoration(
+                            hintText: 'Hỏi BatteryBot về pin, sạc, xe...',
+                            hintStyle: TextStyle(fontSize: 13, color: uiColors.muted),
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(24),
+                              borderSide: BorderSide(color: uiColors.border),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(24),
+                              borderSide: BorderSide(color: uiColors.border),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(24),
+                              borderSide: BorderSide(color: uiColors.primary),
+                            ),
+                          ),
+                          onSubmitted: _handleSend,
+                        ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
+                IconButton(
+                  key: const Key('assistant_voice_button'),
+                  tooltip: _isListeningVoice ? 'Dừng ghi âm' : 'Nhập bằng giọng nói tiếng Việt',
+                  icon: Icon(
+                    _isListeningVoice ? Icons.stop_circle_rounded : Icons.mic_rounded,
+                    color: _isListeningVoice ? Colors.redAccent : uiColors.primary,
+                  ),
+                  onPressed: _toggleVoiceInput,
+                ),
                 IconButton(
                   key: const Key('assistant_send_button'),
+                  tooltip: 'Gửi tin nhắn',
                   icon: Icon(Icons.send_rounded, color: uiColors.primary),
                   onPressed: () => _handleSend(_inputController.text),
                 ),

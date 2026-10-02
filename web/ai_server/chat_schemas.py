@@ -62,6 +62,7 @@ class ChatPreferences(BaseModel):
     topTopics: List[str] = Field(default_factory=lambda: ["charging_schedule", "battery_health"])
     feedbackStats: Dict[str, Any] = Field(default_factory=lambda: {"totalThumbsUp": 0, "totalThumbsDown": 0})
     preferredResponseLength: str = "concise"
+    personalityStyle: str = "concise"  # concise | detailed | friendly | professional
     languagePreference: str = "vi"
 
 
@@ -85,12 +86,28 @@ class BehaviorProfile(BaseModel):
     appUsage: AppUsagePatterns = Field(default_factory=AppUsagePatterns)
     chatPreferences: ChatPreferences = Field(default_factory=ChatPreferences)
     personalInsights: PersonalInsights = Field(default_factory=PersonalInsights)
+    guardrailViolationCount: int = 0
+
+
+class GuardrailCheckResult(BaseModel):
+    """Kết quả kiểm tra câu trả lời qua lớp bảo vệ Guardrails."""
+    isSafe: bool = True
+    originalText: str = ""
+    sanitizedText: str = ""
+    violations: List[str] = Field(default_factory=list)
 
 
 class BehaviorSyncRequest(BaseModel):
     """Request đồng bộ behavior profile từ Mobile lên Backend."""
     userId: str
     profile: BehaviorProfile
+
+
+class RichCardData(BaseModel):
+    """Structured data payload cho Rich Media Cards trên Mobile."""
+    cardType: str  # 'battery_status' | 'charging_progress' | 'trip_summary' | 'tip_card'
+    title: str = ""
+    data: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ChatMessage(BaseModel):
@@ -101,6 +118,7 @@ class ChatMessage(BaseModel):
     timestamp: Optional[str] = None
     action: Optional[str] = None
     userFeedback: Optional[str] = None  # 'like' | 'dislike'
+    richCards: Optional[List[RichCardData]] = None
 
 
 class ChatSendRequest(BaseModel):

@@ -23,7 +23,6 @@ class AnimatedVoiceWaveform extends StatefulWidget {
 class _AnimatedVoiceWaveformState extends State<AnimatedVoiceWaveform>
     with SingleTickerProviderStateMixin {
   late AnimationController _animController;
-  final Random _random = Random();
 
   @override
   void initState() {
