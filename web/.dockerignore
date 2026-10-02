@@ -23,6 +23,10 @@ models/
 .gitignore
 
 # Secrets (không bao giờ bake vào image)
+.env
+.env.*
+*.pem
+*.key
 *.json
 !dashboard/package*.json
 !assets/vinfast_specs_fallback.json

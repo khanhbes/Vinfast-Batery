@@ -3,25 +3,25 @@
   "versions": [
     {
       "version": "a",
-      "uploadedAt": "2026-10-02T10:03:41.862270+00:00",
+      "uploadedAt": "2026-10-02T14:35:02.014061+00:00",
       "note": "",
       "ext": ".onnx",
       "path": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\web\\.pytest_tmp\\test_deploy_and_delete_active_0\\v_a.onnx"
     },
     {
       "version": "b",
-      "uploadedAt": "2026-10-02T10:03:41.907460+00:00",
+      "uploadedAt": "2026-10-02T14:35:02.042065+00:00",
       "note": "",
       "ext": ".onnx",
       "path": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\web\\.pytest_tmp\\test_deploy_and_delete_active_0\\v_b.onnx"
     },
     {
       "version": "c",
-      "uploadedAt": "2026-10-02T10:03:41.959432+00:00",
+      "uploadedAt": "2026-10-02T14:35:02.067257+00:00",
       "note": "",
       "ext": ".onnx",
       "path": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\web\\.pytest_tmp\\test_deploy_and_delete_active_0\\v_c.onnx"
     }
   ],
-  "activatedAt": "2026-10-02T10:03:42.023243+00:00"
+  "activatedAt": "2026-10-02T14:35:02.109379+00:00"
 }

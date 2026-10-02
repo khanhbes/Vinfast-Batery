@@ -15,10 +15,11 @@ final behaviorSyncServiceProvider = Provider<BehaviorSyncService>((ref) {
 });
 
 class BehaviorSyncService {
-  BehaviorSyncService({required this.ref, http.Client? client})
+  BehaviorSyncService({this.ref, this.tracker, http.Client? client})
       : _client = client ?? http.Client();
 
-  final Ref ref;
+  final Ref? ref;
+  final BehaviorTracker? tracker;
   final http.Client _client;
   Timer? _debounceTimer;
 
@@ -52,7 +53,9 @@ class BehaviorSyncService {
     if (uri == null || !AppConstants.isApiConfigured) return false;
 
     try {
-      final profile = ref.read(behaviorTrackerProvider);
+      final profile = tracker?.currentProfile ??
+          ref?.read(behaviorTrackerProvider) ??
+          BehaviorProfile.defaultFor('');
       final headers = await _getHeaders();
 
       final res = await _client
@@ -95,7 +98,11 @@ class BehaviorSyncService {
         final data = body['data'] as Map<String, dynamic>?;
         if (data != null) {
           final remote = BehaviorProfile.fromJson(data);
-          ref.read(behaviorTrackerProvider.notifier).replaceProfile(remote);
+          if (tracker != null) {
+            tracker!.replaceProfile(remote);
+          } else if (ref != null) {
+            ref!.read(behaviorTrackerProvider.notifier).replaceProfile(remote);
+          }
           return remote;
         }
       }

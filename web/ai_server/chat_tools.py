@@ -13,6 +13,11 @@ import logging
 import uuid
 from typing import Any, Dict, List, Optional
 
+try:
+    from google.genai import types
+except ImportError:
+    types = None
+
 logger = logging.getLogger(__name__)
 
 # Max allowable current per AGENTS.md hardware watchdog: ≤ 12A / 2500W
@@ -185,6 +190,18 @@ TOOL_DECLARATIONS = [
 ]
 
 
+def get_gemini_tools() -> List[Any]:
+    """Chuyển đổi TOOL_DECLARATIONS thành list[types.Tool] cho Google GenAI SDK."""
+    if types is None:
+        return []
+    try:
+        decls = [types.FunctionDeclaration(**d) for d in TOOL_DECLARATIONS]
+        return [types.Tool(function_declarations=decls)]
+    except Exception as e:
+        logger.warning("Failed to construct Gemini types.Tool declarations: %s", e)
+        return []
+
+
 class ChatToolDispatcher:
     """Dispatches tool execution and builds ActionConfirmationCard for safety-gated operations."""
 
@@ -294,15 +311,19 @@ class ChatToolDispatcher:
         if tool_name == "get_battery_status":
             soc = v_ctx.get("currentSoc", 75.0)
             soh = v_ctx.get("currentSoh", 98.0)
+            voltage = float(v_ctx.get("voltage", 72.4) or 72.4)
+            temp = float(v_ctx.get("batteryTemp", 31.5) or 31.5)
+            status = v_ctx.get("chargingStatus", "idle") or "idle"
+            est_km = float(v_ctx.get("estimatedRangeKm") or round(float(soc) * 1.5, 1))
             return {
                 "status": "success",
                 "vehicleId": vehicle_id,
                 "soc": soc,
                 "soh": soh,
-                "voltage": 72.4,
-                "temperatureC": 31.5,
-                "chargingStatus": v_ctx.get("chargingStatus", "idle"),
-                "estimatedRemainingKm": round(float(soc) * 1.5, 1),
+                "voltage": voltage,
+                "temperatureC": temp,
+                "chargingStatus": status,
+                "estimatedRemainingKm": est_km,
             }
 
         elif tool_name == "get_charging_history":

@@ -28,4 +28,15 @@ class AppUiColors {
   Color get danger => theme.colorScheme.error;
   Color get dangerSurface => theme.colorScheme.errorContainer;
   Color get info => dark ? const Color(0xFF60A5FA) : const Color(0xFF1D4ED8);
+
+  // Glassmorphism tokens
+  Color get glassSurface =>
+      dark ? const Color(0x2E1E293B) : Colors.white.withValues(alpha: 0.78);
+  Color get glassBorder =>
+      dark ? Colors.white.withValues(alpha: 0.14) : Colors.white.withValues(alpha: 0.65);
+  Color get glassHighlight =>
+      dark ? Colors.white.withValues(alpha: 0.08) : Colors.white.withValues(alpha: 0.35);
+  Color get glassShadow =>
+      dark ? Colors.black.withValues(alpha: 0.35) : Colors.black.withValues(alpha: 0.06);
 }
+

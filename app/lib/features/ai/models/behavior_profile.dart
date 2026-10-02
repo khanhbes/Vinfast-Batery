@@ -184,18 +184,21 @@ class ChatPreferences {
     this.topTopics = const ['charging_schedule', 'battery_health'],
     this.feedbackStats = const {'totalThumbsUp': 0, 'totalThumbsDown': 0},
     this.preferredResponseLength = 'concise',
+    this.personalityStyle = 'concise',
     this.languagePreference = 'vi',
   });
 
   final List<String> topTopics;
   final Map<String, dynamic> feedbackStats;
   final String preferredResponseLength;
+  final String personalityStyle;
   final String languagePreference;
 
   ChatPreferences copyWith({
     List<String>? topTopics,
     Map<String, dynamic>? feedbackStats,
     String? preferredResponseLength,
+    String? personalityStyle,
     String? languagePreference,
   }) {
     return ChatPreferences(
@@ -203,6 +206,7 @@ class ChatPreferences {
       feedbackStats: feedbackStats ?? this.feedbackStats,
       preferredResponseLength:
           preferredResponseLength ?? this.preferredResponseLength,
+      personalityStyle: personalityStyle ?? this.personalityStyle,
       languagePreference: languagePreference ?? this.languagePreference,
     );
   }
@@ -217,6 +221,8 @@ class ChatPreferences {
           const {'totalThumbsUp': 0, 'totalThumbsDown': 0},
       preferredResponseLength:
           json['preferredResponseLength'] as String? ?? 'concise',
+      personalityStyle:
+          json['personalityStyle'] as String? ?? 'concise',
       languagePreference: json['languagePreference'] as String? ?? 'vi',
     );
   }
@@ -225,6 +231,7 @@ class ChatPreferences {
         'topTopics': topTopics,
         'feedbackStats': feedbackStats,
         'preferredResponseLength': preferredResponseLength,
+        'personalityStyle': personalityStyle,
         'languagePreference': languagePreference,
       };
 }
@@ -298,6 +305,7 @@ class BehaviorProfile {
     this.appUsage = const AppUsagePatterns(),
     this.chatPreferences = const ChatPreferences(),
     this.personalInsights = const PersonalInsights(),
+    this.guardrailViolationCount = 0,
   });
 
   final String schemaVersion;
@@ -310,6 +318,7 @@ class BehaviorProfile {
   final AppUsagePatterns appUsage;
   final ChatPreferences chatPreferences;
   final PersonalInsights personalInsights;
+  final int guardrailViolationCount;
 
   factory BehaviorProfile.defaultFor(String userId, [String? vehicleId]) {
     final now = DateTime.now();
@@ -332,6 +341,7 @@ class BehaviorProfile {
     AppUsagePatterns? appUsage,
     ChatPreferences? chatPreferences,
     PersonalInsights? personalInsights,
+    int? guardrailViolationCount,
   }) {
     return BehaviorProfile(
       schemaVersion: schemaVersion ?? this.schemaVersion,
@@ -344,6 +354,8 @@ class BehaviorProfile {
       appUsage: appUsage ?? this.appUsage,
       chatPreferences: chatPreferences ?? this.chatPreferences,
       personalInsights: personalInsights ?? this.personalInsights,
+      guardrailViolationCount:
+          guardrailViolationCount ?? this.guardrailViolationCount,
     );
   }
 
@@ -379,6 +391,8 @@ class BehaviorProfile {
           ? PersonalInsights.fromJson(
               json['personalInsights'] as Map<String, dynamic>)
           : const PersonalInsights(),
+      guardrailViolationCount:
+          (json['guardrailViolationCount'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -393,5 +407,6 @@ class BehaviorProfile {
         'appUsage': appUsage.toJson(),
         'chatPreferences': chatPreferences.toJson(),
         'personalInsights': personalInsights.toJson(),
+        'guardrailViolationCount': guardrailViolationCount,
       };
 }

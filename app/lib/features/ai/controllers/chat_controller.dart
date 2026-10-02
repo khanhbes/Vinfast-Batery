@@ -233,6 +233,9 @@ class ChatController extends StateNotifier<ChatState> {
         _attachActionCard(botMsgId, action);
         onFunctionCall?.call(action);
       },
+      onRichCard: (cardData) {
+        _attachRichCard(botMsgId, cardData);
+      },
     );
 
     streamResponse.sessionIdCompleter.future.then((sid) {
@@ -276,6 +279,20 @@ class ChatController extends StateNotifier<ChatState> {
     final updated = state.messages.map((m) {
       if (m.id == msgId) {
         return m.copyWith(actionCard: action);
+      }
+      return m;
+    }).toList();
+    state = state.copyWith(messages: updated);
+  }
+
+  void _attachRichCard(String msgId, Map<String, dynamic> cardData) {
+    final updated = state.messages.map((m) {
+      if (m.id == msgId) {
+        final currentCards = m.richCards != null
+            ? List<Map<String, dynamic>>.from(m.richCards!)
+            : <Map<String, dynamic>>[];
+        currentCards.add(cardData);
+        return m.copyWith(richCards: currentCards);
       }
       return m;
     }).toList();

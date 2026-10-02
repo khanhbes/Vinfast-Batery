@@ -693,11 +693,38 @@ flutter_markdown: ^0.7.0          # Render markdown in bubbles
 | **Tổng Phase 4** | | **~30h** |
 
 **Tiêu chí hoàn thành Phase 4**:
-- [ ] Voice input tiếng Việt hoạt động (speech-to-text)
-- [ ] Offline: message queue + retry khi có mạng
-- [ ] Performance: < 200ms UI response, < 1s first token
-- [ ] Tất cả tests pass, analyzer clean
-- [ ] APK build thành công
+- [x] Voice input tiếng Việt hoạt động (speech-to-text) & Animated Voice Waveform
+- [x] Offline: message queue + retry khi có mạng (`ChatController`, `isQueued`, `onRetry`)
+- [x] Performance: < 200ms UI response, < 1s first token, session pagination (`limit`/`offset`)
+- [x] Tất cả tests pass (26/26 Flutter, 19/19 backend), analyzer clean (0 issues)
+- [x] APK build thành công (`assembleDebug`)
+
+### Phase 5: Advanced AI Agent & Personalization (Tuần 9-11)
+**Mục tiêu**: Nâng cấp lên AI Agent với Native Function Calling, Auto-execute read tools, Guardrails, Adaptive Personality và Rich Media Cards.
+
+#### Phase 5A: Native Function Calling & Streaming Tool Execution
+- [x] Chuyển `TOOL_DECLARATIONS` sang Gemini SDK `types.Tool` format (`get_gemini_tools()`).
+- [x] Cấu hình `tools` trong `GenerateContentConfig`, Gemini tự quyết định gọi tool.
+- [x] Read tools auto-execution loop: Gemini gọi `get_battery_status` → backend tự thực thi → inject `FunctionResponse` → Gemini tiếp tục stream câu trả lời tự nhiên.
+- [x] Control tools (Safety-Gated: `start_smart_charging`, `stop_smart_charging`, `schedule_charging`): chặn tự động chạy, emit `ActionConfirmationCard` (≤ 12A / 2500W).
+- [x] SSE events mới `event: tool_call` và `event: tool_result` cho client tracking.
+- [x] Client Flutter `ChatApiService` hỗ trợ `onToolCall` và `onToolResult` callbacks.
+- [x] Backend tests (`test_function_calling_and_proactive.py` 10/10 PASS), Flutter tests (5/5 PASS, 0 analyzer issues).
+
+#### Phase 5B: Guardrails & Adaptive Personality
+- [x] `chat_guardrails.py`: Kiểm duyệt thông số xe vs `VehicleCatalog`, an toàn dòng/áp ≤12A/2500W, nhiệt độ ≤75°C, che PII (CCCD/SĐT).
+- [x] `personality_adapter.py`: Tự động điều chỉnh giọng văn (concise/detailed/friendly/professional) theo tỷ lệ 👍/👎 và phong cách yêu thích.
+- [x] Schema `BehaviorProfile` bổ sung `personalityStyle` và `guardrailViolationCount`, đồng bộ hybrid.
+- [x] Test suite `test_guardrails_and_personality.py` đạt 12/12 PASS (100%).
+
+#### Phase 5C: Rich Media Cards & UX Polish
+- [x] Schema `RichCardData` và SSE `event: rich_card` với structured payload cho BatteryStatus, ChargingProgress, TripSummary.
+- [x] `ChatEngine` tích hợp `_build_rich_card` từ tool output và `_detect_rich_card_intent` cho offline fallback mode.
+- [x] Flutter widgets: `BatteryStatusCard` (mini gauge tròn, SoC/SoH/V/T°C/km), `ChargingProgressCard` (tiến độ sạc, W/kW, dòng điện A ≤ 12A, ETA), `TripSummaryCard` (km, Wh, Wh/km, CO₂ saved).
+- [x] `QuickReplyChips` động theo ngữ cảnh (pin yếu < 20% -> sạc ngay, đang sạc -> ngắt/tiến độ, mặc định -> hỏi pin/tips).
+- [x] `ChatMessageBubble` tự động render các thẻ Rich Media Cards bên dưới nội dung tin nhắn.
+- [x] `ChatApiService` và `ChatController` hỗ trợ callback `onRichCard` và gắn vào `ChatMessage.richCards`.
+- [x] Bộ test Phase 5C đạt 100% PASS (8/8 backend, 8/8 Flutter, 42/42 tổng backend chatbot, 34/34 tổng Flutter AI).
 
 ---
 

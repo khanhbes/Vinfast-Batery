@@ -48,6 +48,7 @@ class ChatMemoryManager:
         content: str,
         message_id: Optional[str] = None,
         action: Optional[str] = None,
+        rich_cards: Optional[List[Any]] = None,
     ) -> ChatMessage:
         """Thêm 1 tin nhắn vào session."""
         with self._lock:
@@ -64,6 +65,7 @@ class ChatMemoryManager:
                 content=content,
                 timestamp=now_iso,
                 action=action,
+                richCards=rich_cards,
             )
             self._sessions[sid].append(msg)
 

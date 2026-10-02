@@ -374,7 +374,7 @@ class SmartChargeService:
         # Firestore reads on every foreground poll.
         binding = self.binding(uid, vehicle_id)
         if not binding:
-            raise SmartChargeError("notConfigured", "Shelly chÆ°a Ä‘Æ°á»£c káº¿t ná»‘i", 404)
+            raise SmartChargeError("notConfigured", "Shelly chưa được kết nối", 404)
         try:
             status = self.provider.get_status(binding)
             self._apply_safety(uid, binding, status)
