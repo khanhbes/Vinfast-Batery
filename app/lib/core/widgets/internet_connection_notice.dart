@@ -13,8 +13,15 @@ enum _ApiProbeState { checking, ready, unavailable, dependencyUnavailable }
 /// A non-blocking connection strip for the authenticated application only.
 /// Authentication and password reset remain usable when the app API is down.
 class InternetConnectionNotice extends StatefulWidget {
-  const InternetConnectionNotice({super.key, required this.child});
+  const InternetConnectionNotice({
+    super.key,
+    required this.child,
+    this.onboardingPending = false,
+    this.onRetryOnboarding,
+  });
   final Widget child;
+  final bool onboardingPending;
+  final Future<void> Function()? onRetryOnboarding;
 
   @override
   State<InternetConnectionNotice> createState() => _InternetNoticeState();
@@ -30,6 +37,7 @@ class _InternetNoticeState extends State<InternetConnectionNotice>
   int _failureCount = 0;
   int _retryIndex = 0;
   bool _probing = false;
+  bool _retrying = false;
 
   static const _retryDelays = <Duration>[
     Duration(seconds: 5),
@@ -65,9 +73,18 @@ class _InternetNoticeState extends State<InternetConnectionNotice>
   }
 
   Future<void> _retry() async {
-    _retryTimer?.cancel();
-    await _connection.start();
-    await _probeApi();
+    if (_retrying) return;
+    setState(() => _retrying = true);
+    try {
+      _retryTimer?.cancel();
+      await _connection.start();
+      await _probeApi();
+      if (mounted && widget.onboardingPending) {
+        await widget.onRetryOnboarding?.call();
+      }
+    } finally {
+      if (mounted) setState(() => _retrying = false);
+    }
   }
 
   Future<void> _probeApi() async {
@@ -149,60 +166,58 @@ class _InternetNoticeState extends State<InternetConnectionNotice>
       _ApiProbeState.dependencyUnavailable =>
         'Máy chủ đang khởi động. Một số dữ liệu có thể chưa cập nhật.',
     };
-    final internetMessage = !_status.internetAvailable
+    final connectionMessage = !_status.internetAvailable
         ? 'Mất kết nối Internet. Dữ liệu gần nhất vẫn được giữ.'
         : message;
+    final internetMessage = widget.onboardingPending
+        ? 'Đang chờ đồng bộ thông tin xe. Chức năng cần xe sẽ dùng được sau khi đồng bộ.'
+        : connectionMessage;
     if (internetMessage == null) return widget.child;
 
     final colors = Theme.of(context).colorScheme;
-    return Stack(
+    return Column(
       children: [
-        widget.child,
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          child: SafeArea(
-            bottom: false,
-            child: Material(
-              color: colors.errorContainer,
-              child: Semantics(
-                liveRegion: true,
-                label: internetMessage,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 6,
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.cloud_off_rounded,
-                        size: 18,
-                        color: colors.onErrorContainer,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          internetMessage,
-                          style: TextStyle(
-                            color: colors.onErrorContainer,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
+        SafeArea(
+          bottom: false,
+          child: Material(
+            color: colors.errorContainer,
+            child: Semantics(
+              liveRegion: true,
+              label: internetMessage,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 6,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.cloud_off_rounded,
+                      size: 18,
+                      color: colors.onErrorContainer,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        internetMessage,
+                        style: TextStyle(
+                          color: colors.onErrorContainer,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                      TextButton(
-                        onPressed: _retry,
-                        child: const Text('Thử lại'),
-                      ),
-                    ],
-                  ),
+                    ),
+                    TextButton(
+                      onPressed: _retrying ? null : _retry,
+                      child: Text(_retrying ? 'Đang thử lại' : 'Thử lại'),
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
         ),
+        Expanded(child: widget.child),
       ],
     );
   }

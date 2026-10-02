@@ -12,6 +12,7 @@ class SmartChargerBinding {
     this.safeBootVerified = false,
     this.noLoadTestVerified = false,
     this.lastVerifiedAt,
+    this.codeRefreshRequired = false,
   });
 
   final String deviceId;
@@ -24,9 +25,25 @@ class SmartChargerBinding {
   final bool safeBootVerified;
   final bool noLoadTestVerified;
   final DateTime? lastVerifiedAt;
+  final bool codeRefreshRequired;
+
+  Map<String, dynamic> toJson() => {
+    'deviceId': deviceId, 'displayName': displayName, 'model': model,
+    'provider': provider,
+    'connectionMode': mode == SmartChargerConnectionMode.serverCloud
+        ? 'server_cloud'
+        : 'advanced_direct',
+    'powerMeterVerified': powerMeterVerified,
+    'safeBootVerified': safeBootVerified,
+    'noLoadTestVerified': noLoadTestVerified,
+    'lastVerifiedAt': lastVerifiedAt?.toIso8601String(),
+    'codeRefreshRequired': codeRefreshRequired,
+    // Online/readiness is never restored from this historical cache.
+  };
 
   factory SmartChargerBinding.fromJson(Map<String, dynamic> json) =>
       SmartChargerBinding(
+        codeRefreshRequired: json['codeRefreshRequired'] == true,
         deviceId: json['deviceId']?.toString() ?? '',
         displayName: json['displayName']?.toString() ?? 'Shelly sạc xe',
         model: json['model']?.toString() ?? '',

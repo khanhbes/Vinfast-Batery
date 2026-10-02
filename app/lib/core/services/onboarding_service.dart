@@ -367,7 +367,10 @@ class OnboardingSyncCoordinator {
   bool _isCurrentUid(String uid) =>
       FirebaseAuth.instance.currentUser?.uid == uid;
 
-  Future<ApiResult<Map<String, dynamic>>?> syncIfPending(String uid) async {
+  Future<ApiResult<Map<String, dynamic>>?> syncIfPending(
+    String uid, {
+    bool force = false,
+  }) async {
     if (_running) return null;
     _running = true;
     try {
@@ -379,11 +382,12 @@ class OnboardingSyncCoordinator {
           draft.state == OnboardingDraftState.synced) {
         return null;
       }
-      if (draft.nextAttemptAt != null &&
+      if (!force &&
+          draft.nextAttemptAt != null &&
           draft.nextAttemptAt!.isAfter(DateTime.now().toUtc())) {
         return null;
       }
-      if (draft.attemptCount >= _backoff.length) return null;
+      if (!force && draft.attemptCount >= _backoff.length) return null;
       // Offline is an expected state, not a failed delivery attempt. The
       // connectivity callback will retry after the network recovers.
       if (await Connectivity().checkConnectivity() == ConnectivityResult.none) {

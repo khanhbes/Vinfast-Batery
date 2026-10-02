@@ -441,7 +441,7 @@ class _VehicleBanner extends StatelessWidget {
               ? vehicle!.vinfastModelName!
               : (vehicle?.vehicleName.isNotEmpty == true
                     ? vehicle!.vehicleName
-                    : 'VinFast EV'));
+                    : 'Chưa có dữ liệu xe'));
     final plate = vehicle?.licensePlate?.trim().isNotEmpty == true
         ? vehicle!.licensePlate!
         : 'Chưa có BSX';
@@ -581,7 +581,7 @@ class _VehicleBanner extends StatelessWidget {
                         const SizedBox(width: 6),
                         Flexible(
                           child: Text(
-                            'Đang hoạt động',
+                            vehicle == null ? 'Chưa đồng bộ' : 'Đã chọn xe',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: CockpitTypography.label(

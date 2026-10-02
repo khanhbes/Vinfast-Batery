@@ -398,12 +398,13 @@ class RouteContractTests(unittest.TestCase):
         app.register_blueprint(create_blueprint(self.service, self.repo, lambda: ("owner", "owner@test", "user")))
         self.client = app.test_client()
 
-    def test_physical_device_has_one_account_owner(self):
+    def test_physical_device_has_at_most_two_account_members(self):
         self.assertTrue(self.repo.claim_device_owner("owner", "plug-shared"))
         self.assertTrue(self.repo.claim_device_owner("owner", "plug-shared"))
-        self.assertFalse(self.repo.claim_device_owner("other-user", "plug-shared"))
+        self.assertTrue(self.repo.claim_device_owner("other-user", "plug-shared"))
+        self.assertFalse(self.repo.claim_device_owner("third-user", "plug-shared"))
         self.assertTrue(self.repo.device_owned_by("owner", "plug-shared"))
-        self.assertFalse(self.repo.device_owned_by("other-user", "plug-shared"))
+        self.assertTrue(self.repo.device_owned_by("other-user", "plug-shared"))
 
     def test_control_authorization_reserves_one_operation_until_verified_off(self):
         self.repo.claim_device_owner("owner", "plug-1")
@@ -447,7 +448,7 @@ class RouteContractTests(unittest.TestCase):
                     "settings": {"switch:0": {"initial_state": "off", "auto_on": False}},
                 }],
             )
-            with patch("shelly.routes.requests.post", return_value=cloud_response):
+            with patch("shelly.routes.requests.post", return_value=cloud_response), patch.object(repo, "reserve_cloud_request_slot", return_value=0):
                 saved = client.put("/api/shelly/profiles/plug-1", json={
                     "vehicleId": "VF-001", "cloudHost": "https://shelly-eu.shelly.cloud",
                     "cloudAuthKey": "secret-key", "lanAddress": "192.168.1.4",

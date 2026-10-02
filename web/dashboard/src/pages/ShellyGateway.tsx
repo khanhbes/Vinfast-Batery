@@ -87,7 +87,7 @@ export default function ShellyGateway() {
     lanAddress: '',
     localPassword: '',
     expiresHours: 720,
-    maxRedemptions: 10,
+    maxRedemptions: 2,
     note: '',
   };
   const [form, setForm] = useState(initialForm);
@@ -495,7 +495,7 @@ export default function ShellyGateway() {
                       <span>Mã kết nối hiện hành:</span>
                       {dev.activeCodeEntry && (
                         <span className="text-[10px] text-muted-foreground">
-                          {dev.activeCodeEntry.redemptionCount}/{dev.activeCodeEntry.maxRedemptions} lượt
+                          {dev.memberCount ?? 0}/2 tài khoản đang liên kết
                         </span>
                       )}
                     </div>

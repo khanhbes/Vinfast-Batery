@@ -483,6 +483,17 @@ class _ShellyConnectScreenState extends State<ShellyConnectScreen> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
               children: [
+                if (_snapshot.codeRefreshRequired)
+                  ListTile(
+                    title: const Text('Thiết bị có mã kết nối mới'),
+                    subtitle: const Text(
+                      'Liên kết hiện tại vẫn được giữ. Nhập mã mới do quản trị viên cấp khi thuận tiện.',
+                    ),
+                    trailing: TextButton(
+                      onPressed: () => setState(() => _activeFlow = 3),
+                      child: const Text('Nhập mã'),
+                    ),
+                  ),
                 if (state == ShellyConnectionFlowState.discovering) ...[
                   const SizedBox(height: 16),
                   Center(child: _PulsingRadar(color: ui.primary)),

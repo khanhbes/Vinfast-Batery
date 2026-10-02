@@ -382,7 +382,8 @@ class SmartChargeService:
         except ProviderError as exc:
             raise self._provider_error(exc) from exc
         return {
-            "status": status.to_dict() if hasattr(status, "to_dict") else status,
+            "status": {**(status.to_dict() if hasattr(status, "to_dict") else status),
+                       "codeRefreshRequired": self.repository.device_membership(uid, binding.device_id)["codeRefreshRequired"]},
             "session": session.to_dict() if session else None,
             "active": bool(session and session.state in NONTERMINAL_SESSION_STATES),
         }
@@ -470,10 +471,9 @@ class SmartChargeService:
         )
         if session_id and (session is None or session.state not in NONTERMINAL_SESSION_STATES):
             raise SmartChargeError("sessionNotFound", "Không tìm thấy phiên sạc", 404)
-        binding = self.binding(
-            uid,
-            session.vehicle_id if session else vehicle_id,
-        )
+        binding = (next((b for b in self.repository.list_bindings(uid)
+                         if b.device_id == session.device_id and b.revoked_at is None), None)
+                   if session else self.binding(uid, vehicle_id))
         if not binding:
             raise SmartChargeError("notConfigured", "Shelly chưa được kết nối", 404)
         if session and binding.device_id != session.device_id:

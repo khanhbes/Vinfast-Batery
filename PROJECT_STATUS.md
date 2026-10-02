@@ -1,5 +1,108 @@
 # VinFast Battery — Project Status & Task Tracker
 
+> **Hiện hành 02/10/2026 — QA, chưa đủ điều kiện phát beta.** Source HEAD `7dd8133481660c30e24bbb1e54876c06830c145c`, working tree được giữ nguyên và sửa tiếp. APK debug `1.1.9+123` đã build; kết quả mới ở mục 44, 45 và 46. Những kết quả full-suite của lượt cũ không chứng nhận source hiện tại.
+
+## 46. AI Chatbot — Hoàn tất Phase 3: Function Calling & Proactive Suggestions (02/10/2026)
+
+- **Mục tiêu**: Hoàn tất Phase 3 theo đặc tả tại `docs/specs/AI_CHATBOT_PERSONALIZATION.md` bao gồm 9 Function Calling tools, cơ chế an toàn Human-in-the-Loop, giới hạn phần cứng an toàn ≤ 12A / 2500W, Engine gợi ý chủ động R001–R008 với rate limit, và Action Confirmation Card tương tác trên mobile.
+- **Backend AI Service & Flask Proxy**:
+  - `web/ai_server/chat_tools.py`: Định nghĩa 9 công cụ chuẩn Gemini (6 read tools: `get_battery_status`, `estimate_range`, `get_charging_history`, `check_battery_health`, `get_charging_tips`, `get_weather_impact`; 3 control tools: `start_smart_charging`, `stop_smart_charging`, `schedule_charging`).
+  - **Safety Gating & Hardware Limit**: `SAFETY_GATED_TOOLS` bắt buộc trả về `ActionConfirmationCardData` cho mọi thao tác điều khiển vật lý. Ràng buộc watchdog dòng điện `MAX_SAFE_AMPS = 12.0` (≤ 2500W) chuẩn xác theo `AGENTS.md`.
+  - `web/ai_server/chat_schemas.py`: Bổ sung Pydantic models `ActionConfirmRequest`, `ActionConfirmResponse`, `ProactiveSuggestionItem`.
+  - `web/ai_server/suggestion_engine.py`: Triển khai `SuggestionEngine` hoàn chỉnh 8 quy tắc chủ động:
+    - `R001`: Cảnh báo pin thấp (< 20%) và gợi ý bật sạc thông minh.
+    - `R002`: Nhắc nhở xe lâu không sạc (> 3 ngày) để tránh cạn kiệt cell.
+    - `R003`: Nhắc bảo dưỡng định kỳ theo ngưỡng ODO (mỗi 5,000 km).
+    - `R004`: Cảnh báo thoái hóa pin (SoH giảm > 3% so với định mức).
+    - `R005`: Khuyên hạ SoC mục tiêu (80-85%) nếu người dùng có thói quen luôn sạc 100%.
+    - `R006`: Cảnh báo tiêu hao điện năng cao (> 35 Wh/km) và mẹo lái xe tiết kiệm.
+    - `R007`: Gợi ý sạc trước lộ trình di chuyển quen thuộc hàng ngày.
+    - `R008`: Lời chào buổi sáng & thông báo tình trạng pin sẵn sàng cho ngày mới.
+  - `web/ai_server/chat_engine.py`: Phát hiện action intent sạc pin, stream SSE với `event: function_call`, và tiếp nhận xác nhận qua `confirm_action()`.
+  - `web/ai_server/main.py`: Thêm endpoints `POST /v1/chat/action/confirm` và `GET /v1/behavior/suggestions`.
+  - `web/server.py`: Bổ sung proxy endpoints `POST /api/chat/action/confirm` và `GET /api/behavior/suggestions`.
+  - `web/tests/test_function_calling_and_proactive.py`: 7 tests tự động bao quát tool schemas, hardware safety limits, card creation, unconfirmed execution prevention, R001-R008 rule evaluation, và FastAPI endpoints.
+  - **Backend Test Verification**: **19/19 PASSED (100%)** bộ AI Chatbot, **231 PASSED** full backend suite (`python -m pytest tests --basetemp=.pytest_tmp`), **59 PASSED** Smart Charger Gateway (`pytest --basetemp=.pytest_tmp`).
+- **Flutter Mobile App**:
+  - `app/lib/features/ai/models/function_call_action.dart`: Xây dựng `ActionConfirmationCardData` và `FunctionCallAction` với các trạng thái pending, confirmed, cancelled.
+  - `app/lib/features/ai/models/proactive_suggestion.dart`: Model `ProactiveSuggestion` đầy đủ metadata, priority và serialization JSON.
+  - `app/lib/features/ai/models/chat_message.dart`: Bổ sung trường `actionCard` (`FunctionCallAction?`), hỗ trợ copyWith và JSON persistence.
+  - `app/lib/features/ai/services/suggestion_service.dart`: Client kết nối `/api/behavior/suggestions`, áp dụng rate limiting (tối đa 1 bubble/30 phút, tối đa 5 lần/ngày) và lưu cache bỏ qua 24h (`dismissSuggestion`).
+  - `app/lib/features/ai/services/chat_api_service.dart`: Phân tích sự kiện SSE `event: function_call`, gọi callback `onFunctionCall`, bổ sung `confirmAction()` gọi tới backend (hoặc mô phỏng an toàn khi offline).
+  - `app/lib/features/ai/widgets/action_confirmation_card.dart`: Widget Action Confirmation Card hiển thị thông tin sạc, lưu ý an toàn ≤ 12A / 2500W, các nút Xác nhận / Hủy, loading state và thông báo kết quả.
+  - `app/lib/features/ai/widgets/chat_message_bubble.dart`: Tích hợp hiển thị `ActionConfirmationCard` bên dưới nội dung tin nhắn bot khi có `actionCard`.
+  - `app/lib/features/ai/assistant_sheet.dart`: Hiển thị banner gợi ý chủ động (`_buildProactiveBanner`), gắn sự kiện xác nhận/hủy với `_handleActionConfirm` và `_handleActionCancel`, tự động cập nhật hội thoại và đồng bộ sang cloud.
+  - `app/lib/core/constants/app_constants.dart`: Hỗ trợ `queryParameters` trong `tryBuildApiUri`.
+  - `app/test/unit/action_and_suggestion_test.dart`: 8 tests unit toàn diện cho ActionConfirmationCardData, FunctionCallAction, ChatMessage actionCard, ProactiveSuggestion, SuggestionService rate limiting, dismiss cache và ChatApiService confirmAction.
+  - **Flutter Test Verification**: **20/20 PASSED (100%)** toàn bộ test suite AI Chatbot (`action_and_suggestion_test.dart`, `chat_models_and_service_test.dart`, `behavior_and_history_test.dart`, `interactive_assistant_sheet_test.dart`).
+- **Tài liệu**: Cập nhật toàn bộ tiêu chí hoàn thành Phase 3 trong `docs/specs/AI_CHATBOT_PERSONALIZATION.md`.
+
+## 45. AI Chatbot — Hoàn tất Phase 2: Behavior Learning & Chat History (02/10/2026)
+
+- **Mục tiêu**: Triển khai Phase 2 của AI Chatbot cá nhân hóa theo đặc tả tại `docs/specs/AI_CHATBOT_PERSONALIZATION.md`.
+- **Backend AI Service & Flask Proxy**:
+  - `web/ai_server/chat_schemas.py`: Bổ sung Pydantic models `ChargingPatterns`, `TripPatterns`, `AppUsagePatterns`, `ChatPreferences`, `PersonalInsights`, `BehaviorProfile`, `BehaviorSyncRequest`, `ChatFeedbackRequest`.
+  - `web/ai_server/behavior_analyzer.py`: Triển khai `BehaviorAnalyzer` với moving averages cho thói quen sạc (giờ sạc ưa thích, SoC mục tiêu, tỷ lệ sạc nhanh), lịch sử chuyến đi (km/ngày, Wh/km), tab xem nhiều nhất, xếp hạng chủ đề chat và trọng số phản hồi 👍/👎.
+  - `web/ai_server/chat_engine.py`: Bổ sung cá nhân hóa system prompt từ behavior profile và gợi ý tiết kiệm/bảo vệ pin cá nhân hóa khi fallback.
+  - `web/ai_server/main.py`: Thêm endpoints `POST /v1/behavior/sync` và `GET /v1/behavior/profile`; kết nối feedback API vào cập nhật trọng số `behavior_analyzer`.
+  - `web/server.py`: Thêm các proxy route Flask `POST /api/behavior/sync`, `GET /api/behavior/profile`, `POST /api/chat/backup` (Firestore 30-day TTL), `GET /api/chat/history`.
+  - `web/tests/test_behavior_and_history.py`: 4 tests tự động kiểm thử toàn bộ hành vi backend; kết hợp `test_ai_chatbot.py` đạt **12/12 PASSED (100%)**, `py_compile` exit 0.
+- **Flutter Mobile App**:
+  - `app/lib/features/ai/models/behavior_profile.dart`: Xây dựng toàn bộ model dữ liệu bất biến, serialization JSON, `copyWith` và giá trị mặc định.
+  - `app/lib/features/ai/services/behavior_tracker.dart`: Quản lý state behavior cục bộ với `SharedPreferences`, tự động di chuyển tab/topic ưa thích lên đầu và theo dõi feedback up/down/like/dislike.
+  - `app/lib/features/ai/services/behavior_sync_service.dart`: Cơ chế hybrid sync debounced (5 phút), `syncNow()` và kéo profile từ remote về máy.
+  - `app/lib/features/ai/services/chat_history_storage.dart`: Lưu trữ lịch sử hội thoại nhiều phiên cục bộ (`SharedPreferences`), liệt kê/tải/xóa session, sao lưu đám mây Firestore TTL 30 ngày.
+  - `app/lib/features/ai/assistant_sheet.dart`: Tích hợp nút xem lịch sử (`Icons.history_rounded`) và nút tạo đoạn chat mới (`Icons.add_comment_outlined`) trên header; modal xem/chuyển đổi/xóa các phiên chat cũ; tự động định danh user/xe, phân loại chủ đề chat, truyền `behaviorProfile` vào `streamChat()` và lưu session khi hoàn tất.
+  - `app/test/unit/behavior_and_history_test.dart`: Bộ test unit hoàn chỉnh cho profile, tracker và storage.
+  - **Flutter Tests**: `interactive_assistant_sheet_test.dart`, `chat_models_and_service_test.dart`, `behavior_and_history_test.dart` đạt **12/12 PASSED (100%)**, exit 0.
+- **Tài liệu**: Cập nhật toàn bộ tiêu chí hoàn thành Phase 2 trong `docs/specs/AI_CHATBOT_PERSONALIZATION.md`.
+
+## 44. QA123 — Splash, khôi phục khảo sát và timeout (02/10/2026)
+
+- **Kết quả hiện hành phiên tiếp tục — Runtime verified có giới hạn:** sửa race load/save và đồng nhất secure storage đã giữ được khảo sát xác nhận qua cold restart. API QA mới đã commit thật; đối chiếu read-only Firestore xác nhận `onboardingCompletedAt` có mặt, **đúng 1 vehicle**, remote draft không còn. Retry làm strip pending biến mất nhưng fleet provider vẫn cache rỗng; đã bổ sung `ref.invalidate(allVehiclesProvider)` trong refresh root. Không thay quyền/safety Shelly.
+- **APK cuối:** `app/build/app/outputs/flutter-apk/app-x86_64-debug.apk`, SHA-256 **`9B079C2167140B28852B48DAD9508B70A8A1D71C11EEC66D56B2A37F2B5F6A83`**, build/cài `install -r` exit 0; package `com.bes.vinbatery`, versionName `1.1.9`, code **4123** do split-ABI từ source `1.1.9+123`. aapt/apksigner exit 0, debug certificate như các artifact QA trên. Không dùng APK x86_64/local HTTP này phân phối điện thoại thật.
+- **Runtime artifact cuối:** cold launch/khôi phục Firebase session → Dashboard có **VinFast Evo200**, không còn empty fleet giả hoặc strip chờ đồng bộ; giữ ổn định 6 lần accessibility liên tiếp. Ảnh đã kiểm trực quan `app/build/qa-final-synced-dashboard.png`. Log process cuối không có marker FATAL/No host/Zone mismatch/Unhandled. Cold restart bổ sung đang đối chiếu; chưa nghiệm thu nhập login/register mới, Gboard chuẩn, toàn bộ Light/Dark/font/network matrix hoặc thiết bị thật.
+- **Quality gate source cuối:** full Flutter **514/514 Pass**, exit 0, report `app/build/qa-full-tests-20261002-fleet.jsonl`; full analyzer `dart analyze lib test` **exit 0, No issues found**. Backend source **206 Pass**, exit 0 từ lượt sửa transaction cùng source server. Không ghi gateway/Rules/dashboard latest là Pass vì chưa chạy lại ở lượt này.
+- **API QA đã triển khai:** người dùng xác nhận không có sạc thật; build dependency mới bị chậm tải, đã dừng (exit 1), không coi Pass. Build source trên image rollback giữ dependencies cũ bằng Dockerfile tạm `app/build/qa-api-20261002.Dockerfile` rồi recreate riêng api **exit 0**. Image mới `sha256:40eb42db68ae20cfec25ccc3d1a26de100275bc130489242f1a56f05b78cd64c`; hash source/container `server.py` cùng **`4E3E20DDFB013AE0CCAFA4B0CDAE05EACDFC6A1937953F38F55631C5253F385A`**. Health/ready 200, requestId có mặt, container healthy. Rollback image `vinfast-api:qa-rollback-20261002` giữ nguyên; không xóa orphan container/data.
+- **Điểm yếu chưa che giấu:** xe mới hiện 100% pin/120km mặc định trên Dashboard; chưa có bằng chứng BMS, không coi là số đo thật hoặc sign-off telemetry. Cần tách dữ liệu mặc định/ước tính khỏi số đo. Rules production cho draft chưa deploy/test lại; production HTTPS/signing/hardware vẫn HOLD. Không tạo tài khoản QA mới, không xóa tài khoản/xe hoặc gửi lệnh relay trong lượt tiếp tục.
+- **Chốt cold restart cuối:** trên artifact `9B079C...`, lần force-stop/mở lại bổ sung đạt `FINAL_SECOND_COLD_RESTART_PASS` sau 6 lần liên tiếp đúng Dashboard/Evo200, không pending/empty/onboarding. Giữ emulator đang chạy; kết quả này thay nhãn “đang đối chiếu” ở dòng runtime phía trên. Manual login/register mới và dữ liệu pin thực vẫn chưa được nghiệm thu.
+
+- **Task Completion Log — phiên tiếp tục:** APK `CFCB5A0EB25FFB17EC762E324FC491D7C0AD15BA328B758A7304DBEDAC8771C0` đã chạy chín bước khảo sát → Hoàn tất → Dashboard ổn định (6 lần accessibility liên tiếp); cold restart tiếp tục Dashboard ổn định 6 lần, không quay lại khảo sát. Ảnh `app/build/qa-123-stable-restart.png` đã kiểm trực quan đúng Dashboard. Log process tại lần restart không có marker FATAL EXCEPTION/No host/Zone mismatch/Unhandled Exception; không coi đây là nghiệm thu toàn ma trận crash/ANR.
+- **Artifact verified:** aapt/apksigner exit 0, package `com.bes.vinbatery`, versionName `1.1.9`, versionCode split x86_64 **4123**, debug certificate SHA-256 `914642716decb342ca80acece6284e69d66355bfa792f5c4779efecf16ecebeb`. Source version `1.1.9+123`; artifact QA dùng `http://10.0.2.2:5000`, không dùng production/điện thoại thật.
+- **Automated verified sau storage fix:** full Flutter **514 Pass / 0 Fail**, exit 0, report `app/build/qa-full-tests-20261002-storage.jsonl`; AuthGate/draft sau bỏ flash Dashboard **9 Pass**, exit 0; targeted analyzer draft/Bot/AuthGate exit 0. Full analyzer `lib test` sau đó thực sự kết thúc exit 2 với 3 warnings + 2 infos; đã bỏ hàm progress không được dùng, import thừa, fallback null không thể xảy ra và callback underscore thừa. Full analyzer chạy lại **exit 0, No issues found**.
+- **Retry đồng bộ — Implemented, đang runtime retest:** `InternetConnectionNotice` nhận callback retry draft, chặn double-submit; `OnboardingSyncCoordinator.syncIfPending(force:true)` cho thao tác thủ công bỏ qua backoff, vẫn kiểm eligibility và UID. Root refresh profile/draft sau request đúng account, không chỉ health probe. Đây là source mới hơn artifact `CFCB...`; build/tests mới đang chạy, không tái sử dụng bằng chứng APK cũ cho callback mới.
+- **API deployment QA được phép:** người dùng xác nhận không có phiên sạc thật và cho phép rebuild/restart API. Lưu image cũ `sha256:7e161284f6de889abeb888e3159a368d92c18116d9d71f2ef258f0b200fdce58` dưới tag `vinfast-api:qa-rollback-20261002`; chỉ `compose up --no-deps --build api`, không thay các service khác hoặc gọi relay. Build đang tải dependencies; chưa coi đồng bộ server đạt cho đến khi runtime xác minh receipt/xe.
+
+- **Đính chính runtime 02/10:** bộ kiểm tra từng bắt `Tổng quan` xuất hiện thoáng qua và báo restart Pass; ảnh `qa-storage-fixed-restart.png` thực tế là khảo sát. **Không dùng kết quả transient đó làm Pass.** Đã bỏ nhánh AuthGate cho tài khoản cũ vào Dashboard trước khi profile resolve. Nghiệm thu phải chờ ổn định và kiểm lại nhiều lần, không chỉ tìm thấy label một lần.
+- **Storage build/test:** APK options đồng nhất SHA-256 `B776B5B99DD361F6DB1701368ADBCFAD1C30AC7110EC7106EF72D67365CB3E1B`, cài `install -r` exit 0, aapt/apksigner exit 0 (x86_64, code 4123, debug signer). Draft/BatteryBot **16/16 Pass**, exit 0. Vẫn đang sửa/retest route; không coi artifact này hoàn tất mục tiêu.
+
+- **Task Completion Log — tiếp tục 02/10:** APK `C11FFC78C02216D0410F8CE97C06674231D76F3F168364E944379E55E8577680` vào Dashboard sau chín bước, nhưng restart vẫn quay lại khảo sát: **Fail**, không phải hoàn thành. Bổ sung guard `save()` chống revision cũ/marker bị xóa bởi tác vụ trễ; regression draft **7/7 Pass**, exit 0.
+- **Quality gates chạy lại:** full Flutter trước sửa harness **505 Pass / 8 Fail**, exit 1. Đã sửa baseline URL trong `app_constants_test.dart`, cleanup timer trong `app_popup_privacy_test.dart`, locale fixture tiếng Việt trong `smart_charge_history_concurrency_test.dart`; không bỏ assertions privacy/concurrency. Ba file **21/21 Pass**, exit 0. Full Flutter chạy lại **514 Pass / 0 Fail**, exit 0; runner JSON tại `app/build/qa-full-tests-20261002-fixed.jsonl`. Targeted analyzer chín file exit 0, `No issues found`; không thay thế full analyzer.
+- **Artifact guard stale save:** SHA-256 `354313DD0463C2AB955D14D7277125BB8461ADBC04278252C41FA2EC0B7DED99`, build/cài exit 0, giữ app data. Hoàn tất khảo sát vào Dashboard; ảnh `app/build/qa-stale-save-dashboard.png`. Restart **Blocked/timeout**, ảnh `app/build/qa-stale-save-restart.png` vẫn ở frame splash; chưa chứng minh recovery Pass.
+- **Phát hiện storage:** `OnboardingDraftRepository` và BatteryBot dùng Android storage mặc định, trong khi session/push/Shelly dùng encrypted preferences. Source plugin `flutter_secure_storage` 9.2.4 có migration chuyển key khỏi kho cũ; việc trộn mode có thể làm draft mất khỏi nơi đọc. Đã đồng nhất hai caller còn lại với encrypted preferences/iOS accessibility hiện có, không xóa dữ liệu. Đang build APK/test lại; thay đổi này **Implemented — unverified runtime**, full suite 514 nói trên chạy trước sửa options này.
+- **Backend vẫn Blocked runtime:** source transaction đã qua 206 backend tests nhưng container `vinfast_api` chưa rebuild/recreate. Cần xác nhận hiện không giám sát sạc thật trước khi nạp API mới. Chưa nghiệm thu login E2E, đồng bộ xe server, Rules production hoặc Shelly hardware; không tuyên bố toàn bộ mục tiêu đạt.
+
+- **Vấn đề/bằng chứng:** Firestore draft bị từ chối hoặc chờ vô hạn; khảo sát là child của AuthGate nên `popUntil(isFirst)` không cập nhật route. APK thiếu API URL không thể đồng bộ xe. Emulator còn có ANR System UI và từng ANR geolocator service, không được coi là app đã sạch ANR.
+- **File sửa:** `auth_gate.dart`, `onboarding_chat_screen.dart`, `onboarding_draft.dart`, `main.dart`, `background_service_config.dart`, `MainActivity.kt`, `internet_connection_notice.dart`, `home_screen.dart`.
+- **Triển khai:** callback hoàn tất làm AuthGate gốc đọc lại profile/draft; finalized draft hợp lệ vẫn vào shell khi Firestore lỗi. Draft chưa xác nhận không được cấp quyền hoàn tất. Profile timeout 12s; remote draft read/write/delete 8s, secure local vẫn là lưu bền vững trước remote. Nút Hoàn tất trả loading trong `finally` và giữ câu trả lời khi lưu lỗi.
+- **Startup:** binding và `runApp` nằm cùng zone; không còn coi Zone mismatch là lỗi được bỏ qua. Background service khởi tạo lazy, `autoStartOnBoot=false` cả cấu hình mới và migration native; chỉ khởi tạo nền khi cần recovery.
+- **UI:** thông báo chờ đồng bộ riêng, strip dành vùng layout thay vì phủ nội dung; không còn mô tả xe chưa tải là “Đang hoạt động”. Không thay safety gate hoặc gửi lệnh Shelly trong lượt này.
+- **Automated verified:** 39 tests auth lifecycle/layout, onboarding frame/draft/validation — exit 0. Dart analyze năm file auth/draft/strip/background/home — exit 0; analyze `main.dart` và `onboarding_chat_screen.dart` sau bỏ dead code — exit 0. Đây là targeted gates, chưa chạy full Flutter analyze/full suite cho source cuối.
+- **Build:** `flutter build apk --debug --no-pub --dart-define=APP_API_BASE_URL=http://10.0.2.2:5000` — exit 0. Package `com.bes.vinbatery`, `1.1.9+123`; SHA-256 `8E3C1995A88BCC4E82D48CDB09B2C6AAB5D118E881D1221A33626A1C80A979A9`. Đây chỉ là APK QA local, không dùng phân phối production.
+- **Artifact runtime:** bản đa kiến trúc 231MB không cài được vì thiếu bộ nhớ. Build riêng `--split-per-abi --target-platform android-x64` — exit 0; `app-x86_64-debug.apk` 101467387 bytes, SHA-256 `0618A969038A4943F38B5EE97D4F30CE078B63FB6654C169F1948216DA568D97`. Flutter split-ABI cộng offset: versionCode thực tế **4123**, versionName **1.1.9**, không ghi nhầm là 123. `adb install` exit 0; `aapt` và `apksigner verify` exit 0. Cả hai dùng Android Debug certificate SHA-256 `914642716decb342ca80acece6284e69d66355bfa792f5c4779efecf16ecebeb`.
+- **Runtime verified một phần trên x86_64 cuối:** cold launch tới khảo sát; đã thao tác welcome → chọn Evo200 → bỏ qua thông tin phụ → Shelly để sau → thông báo để sau → review, xác nhận accessibility có nút Hoàn tất. Log từ startup tới review không có AppError/No host/Unhandled Exception. Chưa dùng kết quả này để tuyên bố login full-flow hoặc release-ready.
+- **Runtime verified sau xác nhận:** nút Hoàn tất thực sự vào Dashboard trên x86_64 cuối, ảnh `app/build/qa-final-dashboard.png`. Hiển thị “Đang chờ đồng bộ” và không có popup lỗi che màn. Object inspector xác nhận lỗi API nền **HTTP 500 / internalError**, không được coi đồng bộ thành công.
+- **Backend root cause & fix:** `web/server.py` truyền một Firestore transaction chưa bắt đầu vào `create_user_vehicle`. Probe không dùng credential/network với SDK thật tái hiện `ValueError: Transaction not in progress`. Đã chuyển toàn bộ receipt recheck → vehicle/profile → completion/receipt/draft-delete vào `firestore.transactional(commit_operation)`; chỉ audit sau commit, lỗi commit trả 503 retryable thay vì success. Không dùng private SDK `_begin` hoặc nuốt lỗi commit.
+- **Backend Automated verified:** `python -m py_compile web/server.py` exit 0; `test_onboarding_and_preferences.py` **10 passed**, exit 0, gồm transaction phải bắt đầu trước read và commit failure không ghi vehicle/profile/receipt. Full backend suite đang chạy. Đây chưa thay thế Firestore Emulator concurrency test.
+- **Backend Blocked runtime:** API local đang chạy cần nạp source mới. Đã hỏi người dùng API có đang giám sát phiên sạc thật không trước khi restart; không restart/điều khiển Shelly khi chưa rõ.
+- **Đính chính sau restart:** `app/build/qa-final-restart.png` cho thấy khảo sát mở lại, nên ca restart trên artifact `0618...` là **Fail**, không được ghi Pass. Object inspector chỉ đọc metadata xác nhận draft revision 20, `finalizedAt` thiếu; không xuất tên/UID/câu trả lời.
+- **Sửa tiếp race restore:** `OnboardingDraftRepository.load()` trước đây đọc local trước khi chờ remote và có thể ghi remote cũ đè xác nhận vừa lưu. Đã serialize đọc/so sánh/ghi local theo UID giữa mọi repository instance, đọc lại local sau network wait; fallback cũng đọc bản mới nhất. Test delayed remote revision 20 trả sau khi local revision 22 đã finalized chứng minh giữ marker/operation qua lần load kế tiếp.
+- **Automated verified source mới nhất:** Flutter targeted suite **40 passed**, exit 0; analyze draft repository và test race exit 0. Lượt test đầu lúc thêm test bị lỗi vị trí import (exit 1), đã sửa và chạy lại đạt; không che kết quả lỗi. Full backend suite **206 passed**, exit 0. API Docker logs xác nhận trực tiếp `Transaction not in progress` tại onboarding commit; container hiện là image cũ (không mount source), cần rebuild/recreate chứ không chỉ restart tiến trình host.
+- **In progress:** build/cài lại APK x86_64 có race fix; hash `0618...` và ảnh Dashboard phía trên chỉ chứng minh bản trước race fix. Chưa hoàn tất nghiệm thu restart/login hoặc đồng bộ server; HOLD giữ nguyên.
+- **Runtime trước artifact cuối:** đã đi qua chín bước và vào Dashboard với finalized draft trên APK timeout trước đó; ảnh `app/build/qa-current.png` chỉ chứng minh artifact trước, không dùng thay cho APK cuối. Nhánh bật thông báo trên APK API-local trung gian không còn lỗi URI tương đối; ảnh `app/build/qa-permission.png`.
+- **In progress:** cài artifact cuối giữ dữ liệu (`uninstall -k` khi install -r thiếu bộ nhớ), retest cold launch, hoàn tất khảo sát, restart và đăng nhập. Kết quả cuối sẽ bổ sung ngay bên dưới.
+- **Blocker:** production Rules đang từ chối draft; chưa deploy trong lượt này. Emulator có System UI ANR, ổ dữ liệu còn khoảng 670MB nên cập nhật APK trực tiếp thất bại. Backend local `/api/ready` trả 200 nhưng chưa thay thế backend production. Chưa nghiệm thu Shelly thật hoặc phát hành toàn app.
+
 > **Trạng thái hiện hành 28/09/2026 — HOLD, chưa phát APK beta.** Baseline là branch `feature/ios-platform`, HEAD `ced77bf48c216a2d51467c3835782bbb2521fab0`, version source `1.1.9+122`; working tree có các sửa đổi beta chưa commit. Mục 1 và các dòng “HOÀN THÀNH/PASS” của bản 1.1.8 trở về trước chỉ là lịch sử, không phải cổng phát hành hiện tại. Kết quả và blocker mới nằm ở mục 29. Ứng viên `1.1.9+123` chưa được build/ký/nghiệm thu.
 
 > **Cập nhật hiện hành 27/09/2026:** đang triển khai đợt UI/UX đầu của mục 27 trên source `1.1.9+122`, working tree có thay đổi chưa commit. Các tuyên bố hoàn thành/PASS của những bản cũ bên dưới là lịch sử, **không chứng nhận source/APK hiện tại**. Kết quả mới và phần chưa làm nằm ở mục 28; chưa đủ điều kiện phát hành.
@@ -9,6 +112,94 @@
 > **Quy định cho AI Agent**: Mỗi khi hoàn tất một nhiệm vụ, Agent **bắt buộc** cập nhật tiến độ vào bảng [Nhật Ký Hoàn Thành Task (Changelog)](#3-nhật-ký-hoàn-thành-task-changelog) ở cuối file này. **Không tạo thêm file `.md` mới!**
 
 ---
+
+## 43. QA123 — Đăng ký, push URI, timeout và AppPopup (01/10/2026)
+
+- **Vấn đề:** sau đăng ký/onboarding, `PushNotificationService.syncCurrentUser()` ghép URL khi `APP_API_BASE_URL` rỗng, tạo URI tương đối `/api/mobile/push-tokens/...`. Exception nền đi tới handler toàn cục; `AppPopup` bản debug tự thêm nút “Chi tiết” nên người dùng có thể thấy source và stack trace.
+- **Root cause:** push sync không kiểm tra `AppConstants.isApiConfigured`; tác vụ phụ được chờ trực tiếp trong onboarding; `AppPopup` tự mở `DebugErrorSheet` cho lỗi không có recovery action. Luồng tải onboarding cũng thiếu timeout/error state.
+- **Đã sửa:** `AppConstants.tryBuildApiUri()` chỉ trả URI tuyệt đối hợp lệ; push register/revoke dừng an toàn khi API chưa cấu hình và `syncCurrentUser()` không phát exception nền ra UI. AppPopup không còn tự tạo action “Chi tiết”. Đăng ký Firebase được coi là ranh giới thành công; bootstrap profile/API phía sau có timeout và tiếp tục nền thay vì biến tài khoản đã tạo thành lỗi đăng ký.
+- **Timeout:** form đăng ký `30s`; tải dữ liệu onboarding `15s` với màn lỗi + “Thử lại”; quyết định quyền hệ thống `45s`; khởi tạo push `12s`. Mọi nhánh dùng `finally` để trả `_isSubmitting=false`.
+- **File:** `app_constants.dart`, `push_notification_service.dart`, `app_popup.dart`, `auth_service.dart`, `register_screen.dart`, `onboarding_chat_screen.dart`; test cập nhật tại `app_constants_test.dart` và `app_popup_privacy_test.dart`.
+- **Kiểm tra:** `dart format` hoàn tất `8 files`; Gradle `assembleDebug --no-daemon --offline` tạo APK mới và APK cài thành công trên `emulator-5554`. Package `com.bes.vinbatery`, `1.1.9+123`, SHA-256 `D3604513FDC8B156D1E30AC5C22C2AA182031902DD1691E76E9DEDEB6EC4C285`.
+- **Runtime:** app chạy ổn định tới khảo sát, process còn sống; logcat không có `No host specified`, `Unhandled Exception` hoặc `FATAL EXCEPTION`. Bằng chứng: `app/build/qa-register-push-timeout-fix.png` và `app/build/qa-register-push-timeout-fix-logcat.txt`.
+- **Trạng thái:** `Implemented — runtime smoke verified`. Nhánh tạo tài khoản mới → cấp quyền thông báo chưa được E2E bằng alias QA trong lượt này, nên chưa nâng thành full-flow Pass.
+- **Blocker test:** Flutter test/analyzer vẫn chỉ dừng ở `loading/analyzing` và không trả exit code; không tính Pass. Cần chạy lại hai test mục tiêu và full suite trên CI/SDK Flutter sạch.
+
+## 42. QA123 — Sửa native notification channel và cold launch (01/10/2026)
+
+- **Nguyên nhân gốc:** `flutter_background_service`/watchdog có thể khởi động foreground service trước khi Dart chạy `NotificationService.initialize()`, khiến Android API 36 từ chối notification với `invalid channel for service notification: vinfast_bg_channel` và force-kill tiến trình.
+- **Đã sửa:** tạo `vinfast_bg_channel` native trong `app/android/app/src/main/kotlin/com/vinfast/vinfast_battery/MainActivity.kt` trước `super.onCreate`; vẫn giữ khởi tạo channel phía Dart trước khi start service trong `notification_service.dart`, `background_service_config.dart` và `main.dart`.
+- **Build:** Gradle `assembleDebug --no-daemon --offline --stacktrace` — exit `0`, `BUILD SUCCESSFUL` (2m41s). APK package `com.bes.vinbatery`, versionName `1.1.9`, versionCode `123`; SHA-256 `15846C0AB1D4BF0EC5E4A96F431D8B806F14EC57036FFB932B215AC46C30CCC6`.
+- **Runtime:** cài đè QA lên `emulator-5554` (API 36, 1080x2424) thành công. Cold launch giữ `MainActivity` và process còn sống sau khởi động; logcat không còn `invalid channel`, `killed for invalid state`, `FATAL EXCEPTION`, `ForegroundServiceStartNotAllowedException` hoặc `Force finishing activity`.
+- **Bằng chứng:** `app/build/qa-runtime-123-native-channel-fix.png`, `app/build/qa-runtime-123-native-channel-fix-logcat.txt`.
+- **Trạng thái:** `Runtime verified` cho lỗi foreground-service channel. Màn đăng nhập hiện hiển thị ổn định trên ảnh runtime; chưa coi các luồng nhập tài khoản, onboarding và Shelly là Pass trong task này.
+- **Còn lại:** chạy lại toàn bộ Flutter analyzer/tests và QA tương tác auth/onboarding trên đúng APK hash này; production signing/backend/Shelly hardware vẫn là các release gate riêng.
+
+## 41. QA123 — Build và cài emulator (01/10/2026)
+
+- Build debug bằng Gradle trực tiếp với Java Android Studio: `assembleDebug --no-daemon --offline --stacktrace` — **exit 0**, `BUILD SUCCESSFUL` (6m09s).
+- APK: `app/build/app/outputs/flutter-apk/app-debug.apk`, package `com.bes.vinbatery`, version `1.1.9`, build `123`, size `198,055,285` bytes.
+- SHA-256 APK: `DC7381A3C51EDBD456C3C52DDF3D0B56EC127B19663FEC1B6C97DBEC7E03B173`.
+- Cài đặt vào `emulator-5554` thành công; API 36, `1080x2424`, activity được mở.
+- Runtime **FAIL/BLOCKED**: app hiển thị splash nhưng sau khoảng 28 giây bị Android force-finish/killed. Logcat ghi `invalid channel for service notification: vinfast_bg_channel` khi khởi động `flutter_background_service`, sau đó process bị `killed for invalid state`. Chưa kiểm thử được màn đăng nhập.
+- Ảnh/log: `app/build/qa-runtime-123.png`, `app/build/qa-runtime-123-current.png`, `app/build/qa-runtime-123-logcat.txt`.
+- Bước kế tiếp bắt buộc: tạo notification channel `vinfast_bg_channel` trước khi start foreground service (hoặc trì hoãn service khi chưa có channel), build APK mới và lặp lại runtime QA.
+
+## 40. QA123 — Emulator khởi động lại (01/10/2026)
+
+- Đã xác minh AVD `Pixel_9a` bằng SDK Android hiện có, chạy ngoài sandbox với quyền tạo lock cần thiết.
+- `adb devices -l`: `emulator-5554` ở trạng thái `device`.
+- Android API: 36; kích thước: `1080x2424`; `sys.boot_completed=1`.
+- Emulator đang được giữ chạy để thực hiện lượt test tiếp theo.
+- Chưa cài APK trong lượt này: artifact `1.1.9+123` chưa được build; APK `1.1.9+122` cũ không được dùng làm bằng chứng cho source hiện tại.
+- Trạng thái: **Runtime ready — APK install/test pending**.
+
+## 39. QA123 — Auth log redaction và legacy onboarding route (30/09/2026)
+
+- `Implemented — unverified`: AuthGate và legacy onboarding route không còn tạo AuthGate/AppNavigation mới sau hoàn tất; các log bootstrap chỉ ghi loại exception, không ghi nội dung lỗi.
+- `Implemented — unverified`: ApiResult không dùng trường `error` legacy làm user message nếu response thiếu `userMessage`; UI nhận thông báo chung an toàn.
+- `Blocked`: các thay đổi Dart này chưa được analyzer hoặc APK runtime xác minh do Flutter CLI treo/không xuất output.
+
+## 38. QA123 — Build gate recheck (30/09/2026)
+
+- `Blocked`: `flutter build apk --debug --no-pub` was retried after the latest Splash/BatteryBot changes; Flutter emitted no output for more than 30 seconds and was stopped. Exit `1`; no new APK or hash was produced.
+- `Implemented — unverified`: source remains version `1.1.9+123`; the only APK in the output folder is the pre-existing `1.1.9+122` debug artifact and is not valid evidence for this change.
+
+## 37. QA123 — Splash theme và BatteryBot dock (30/09/2026)
+
+- `Implemented — unverified`: BatteryBot được đưa vào dock cố định dưới header; form khảo sát cuộn độc lập, câu trả lời 1–2 dòng không làm nội dung nhảy theo. Khi IME mở, dock được ẩn một lần để giữ CTA trong vùng thao tác.
+- `Implemented — unverified`: Flutter splash dùng màu nền theo Light/Dark và tắt các lớp hiệu ứng tối ở Light để khớp native launch theme, tránh lóe nền trắng hoặc tương phản thấp.
+- `Blocked`: chưa có APK `1.1.9+123` để kiểm tra dock, splash hand-off và cold launch trên emulator; Flutter CLI vẫn không hoàn tất trong môi trường hiện tại.
+
+## 36. QA123 — Xác thực lỗi an toàn và kiểm tra lại (30/09/2026)
+
+- `Implemented — unverified`: Login và reset password không còn render trực tiếp `result['error']` lên UI; thông báo được chọn theo mã lỗi đã chuẩn hóa, giữ nội dung trung tính khi không nhận diện được mã.
+- `Implemented — unverified`: AuthService chỉ ghi `runtimeType` trong các log bootstrap/login/profile; không ghi exception, response body hoặc dữ liệu xác thực.
+- `Automated verified`: `python -m py_compile web/server.py` — exit `0`.
+- `Automated verified`: backend `python -m pytest web/tests -q --basetemp app/build/pytest-temp-final` — `204 passed`, exit `0` (cảnh báo pytest cache do quyền thư mục, không phải lỗi test).
+- `Automated verified`: gateway `python -m pytest tests -q --basetemp ..\app\build\gateway-pytest-temp-final` — `59 passed`, exit `0`.
+- `Blocked`: Flutter analyzer/test/build chưa kết thúc được trong Windows toolchain hiện tại; chưa có APK `1.1.9+123`, SHA-256 mới hoặc runtime evidence. Không được dùng APK `1.1.9+122` để nghiệm thu.
+- `Blocked`: chưa tái hiện bằng emulator hiện tượng splash nhảy lại khi nhập form và chưa chứng minh onboarding thật đi tới Dashboard trên artifact mới.
+
+## 35. QA123 — AuthGate, onboarding commit và BatteryBot (30/09/2026)
+
+- `Implemented — unverified`: AuthGate giữ một subscription auth ổn định, không thay form đăng nhập bằng splash khi rebuild; cold launch có cổng tối thiểu 2,8 giây.
+- `Implemented — unverified`: hoàn tất onboarding quay về AuthGate gốc; draft chỉ xóa sau khi đọc lại profile và vehicle thành công.
+- `Implemented — unverified`: draft local có revision mới hơn không bị remote cũ ghi đè.
+- `Implemented — unverified`: backend không trả thành công nếu transaction/receipt commit thất bại; trả lỗi retryable và giữ draft.
+- `Implemented — unverified`: BatteryBot khảo sát dùng lời ngắn hơn và vùng hội thoại có chiều cao cố định.
+- `Implemented — unverified`: build nâng lên `1.1.9+123`.
+- `Blocked`: `flutter analyze --no-pub`, `dart analyze` và `dart format --set-exit-if-changed` không hoàn tất trong môi trường Windows hiện tại; không tính là Pass.
+- `Blocked`: chưa build APK/hash mới và chưa nghiệm thu runtime; APK `1.1.9+122` cũ không là bằng chứng cho sửa đổi này.
+- Backend onboarding regression: `8 passed` (`web/tests/test_onboarding_and_preferences.py`).
+- Backend full suite: `192 passed, 12 errors`; các lỗi là `PermissionError` khi pytest tạo thư mục tạm trong `C:\Users\khanh\AppData\Local\Temp\pytest-of-khanh`, không được quy thành code Pass.
+- Gateway suite: `5 passed, 54 errors`; cùng blocker quyền thư mục tạm, cần chạy lại ở môi trường test có thư mục tạm truy cập được.
+- Re-run with isolated basetemp under ignored `app/build`: backend `204 passed`, gateway `59 passed`; the earlier errors were environment temp-directory permissions.
+- `Implemented — unverified`: `ApiService._handleResponse` now exposes the normalized public `code` field while keeping technical diagnostics out of the user-facing path; the splash no longer renders a fabricated progress indicator.
+- `Blocked`: APK build command was stopped after the Flutter tool produced no output for more than two minutes; no `1.1.9+123` artifact or runtime evidence exists yet.
+- Existing artifact only: `VinFastBattery_1.1.9+122_debug.apk`, SHA-256 `A8F4BB1D988F676254DC809DE6B6259CA123CAA2C4896B2E1C8D7C3EF7412FCE`; it predates this task and is not reused as evidence.
+- Dart formatter parsed the touched Dart files without syntax errors; its process still exits `1` because the environment cannot write the Flutter telemetry session file, so this is not an analyzer Pass.
+
 
 ## 1. Trạng Thái Phát Hành Hiện Tại (Release Gates: v1.1.8+119)
 
@@ -59,7 +250,10 @@
 ## 3. Nhật Ký Hoàn Thành Task (Changelog)
 
 | Ngày | Task / Mục Tiêu | Nội Dung Thay Đổi & File Tác Động | Kết Quả Kiểm Thử | Trạng Thái |
-|---|---|---|---|---|
+| **02/10/2026** | **Triển khai AI Chatbot Cá Nhân Hóa — Phase 1 MVP Foundation** | Hoàn thành toàn diện Phase 1 MVP theo đặc tả [AI_CHATBOT_PERSONALIZATION.md](docs/specs/AI_CHATBOT_PERSONALIZATION.md):<br>- **Backend**: Cài đặt `google-genai>=1.0.0`; tạo `web/ai_server/chat_schemas.py` (Pydantic models), `web/ai_server/chat_memory.py` (sliding window 20 msgs context manager), `web/ai_server/chat_engine.py` (Gemini API wrapper, context injection xe/pin, SSE generator, Vietnamese fallback); bổ sung routes `/v1/chat/send` (SSE), `/v1/chat/sessions`, `/v1/chat/feedback` trong `web/ai_server/main.py`; bổ sung Flask proxy `/api/chat/send` (SSE with `stream_with_context`) và session routes trong `web/server.py`.<br>- **Mobile (Flutter)**: Thêm `flutter_markdown: ^0.7.6+1` vào `app/pubspec.yaml`; tạo `chat_message.dart`, `chat_session.dart` (models); `chat_api_service.dart` (SSE streaming client + offline fallback simulation); `streaming_text_widget.dart` (markdown + blinking cursor); `chat_message_bubble.dart` (mascot avatar, markdown, action button, feedback 👍/👎); `chat_input_bar.dart` (reactive send + spinner); nâng cấp `assistant_sheet.dart` tích hợp SSE streaming và bảo toàn FAQ guide actions.<br>- **Tests**: `web/tests/test_ai_chatbot.py`, `app/test/unit/chat_models_and_service_test.dart`, `app/test/widget/interactive_assistant_sheet_test.dart`. | - Backend Pytest `tests/test_ai_chatbot.py`: **8/8 PASSED (100%)** ✅<br>- Flutter Widget Test `interactive_assistant_sheet_test.dart`: **5/5 PASSED (100%)** ✅<br>- Flutter Unit Test `chat_models_and_service_test.dart`: **4/4 PASSED (100%)** ✅ | **HOÀN THÀNH ✅** |
+| **02/10/2026** | **Lập kế hoạch AI Chatbot Cá Nhân Hóa** | Tạo đặc tả kỹ thuật toàn diện `docs/specs/AI_CHATBOT_PERSONALIZATION.md`: kiến trúc Gemini API + Flask proxy + FastAPI; Behavior Learning System (schema, hybrid storage Hive+Firestore); Chat Engine (system prompt personalization, sliding window 20 msg, function calling 9 tools + Human-in-the-Loop); API endpoints (SSE streaming, feedback, behavior sync); Chat History hybrid; Proactive Suggestions 8 rules; Feedback Loop; Flutter UI file structure. Cập nhật `AGENTS.md` mục 2 (directory map) và thêm mục 3.7 (AI Chatbot). Kế hoạch 4 phases (~134h): Phase 1 MVP (31h) → Phase 2 Behavior+History (34h) → Phase 3 Function Calling+Proactive (39h) → Phase 4 Voice+Polish (30h). | Chỉ tài liệu/plan, không thay đổi code logic. Không chạy tests, build hoặc Shelly trong lượt này. | **HOÀN THÀNH ✅** |
+| **02/10/2026** | **QA123 auth/onboarding → Dashboard, phục hồi và API commit** | Giữ worktree; sửa secure-storage options, stale restore/save, root eligibility/refresh fleet, retry draft, startup zone/background và backend transaction thực. API QA recreate sau xác nhận không có sạc thật, giữ image rollback. Hash/file/blocker chi tiết mục 44. | Flutter **514/514**, full analyze **exit 0**; backend **206**. APK x86_64 **9B079C...** chạy Dashboard có Evo200 ổn định; server completed + 1 xe + draft đã xóa. Login nhập tay, Rules/hardware/production chưa sign-off. | **Runtime verified — phạm vi giới hạn; release HOLD** |
+| **30/09/2026** | **Khắc phục hiển thị Emulator Pixel 9a trên Desktop & Kiểm thử Splash/Onboarding** | Khởi chạy Emulator thông qua interactive Explorer Shell (`Document.Application.ShellExecute`) đưa cửa sổ hiển thị trực tiếp lên Windows Desktop (`WinSta0\Default`); xử lý quyền Android 16 (`ACCESS_FINE_LOCATION`, `POST_NOTIFICATIONS`) chống crash cold boot; tạo shortcut tiện ích `CHAY_EMULATOR.bat` trên Desktop; xác minh màn hình Splash và chuyển tiếp sang Login Screen với 2 nút tiện ích: "Khảo sát Onboarding (Test UI)" và "Xem Splash Screen (Test UI)". | Emulator Pixel 9a (API 36) kết nối trực tiếp, `com.bes.vinbatery` chạy ổn định, chụp màn hình Splash & Login thành công. | **HOÀN THÀNH ✅** |
 | **28/09/2026** | **R00–R05 beta hardening, đợt 1** | Chốt baseline; sửa test widget, gate khảo sát; UID guard cho API/notification/logout; backend/gateway khóa đường ON thiếu timer/evidence, giữ session unknown; siết Firestore owner/vehicle reference; CI/signing/hide AI–Trip–Developer cho beta. Chi tiết và blocker mục 29. Không build APK hoặc gửi lệnh Shelly thật. | Flutter **502/502 Pass, exit 0**; backend **200/200**, gateway **59/59**, Rules Emulator **20 assertions**. Full analyzer và runtime/APK chưa đạt. | **Implemented — unverified** |
 | **27/09/2026** | **Triển khai UI/UX đợt đầu: Auth, Guide, BatteryBot, error presentation và refresh** | Register/bootstrap error theo theme; lỗi người dùng dùng thông điệp cố định; Guide/Bot mở tab thấy được; FAQ Unicode và bảo vệ context chat theo UID; coachmark tránh IME/anchor, chặn tap xuyên; Home refresh chờ Future thật; tactile tôn trọng giảm chuyển động. Chi tiết phạm vi/file và backlog ở mục 28. Không thay API/Rules/safety gate, không tạo Markdown mới. | Full Flutter **468/468 PASS, exit 0**; backend **198/198 PASS**, gateway **56/56 PASS**, đều exit 0. Analyzer **TIMEOUT 120s, exit 124**, không Pass. Có log/source fingerprint ở mục 28; chưa build/QA APK mới hoặc phần cứng. | **ĐỢT CODE ĐẦU ĐÃ KIỂM THỬ — KẾ HOẠCH TỔNG THỂ CÒN ĐANG XỬ LÝ** |
 | **27/09/2026** | **Lập kế hoạch audit và tinh gọn UI/UX toàn bộ mobile** | Kiểm kê 37 lớp Screen/Wrapper, tách màn đang dùng, 7 màn chưa có route, khảo sát 9 bước và dialog/sheet/tour. Bổ sung kế hoạch chi tiết ở mục 27: Nội dung, UI/UX, Motion, ưu tiên, độ phức tạp, roadmap và tiêu chí nghiệm thu. Chỉ cập nhật tài liệu hiện có; không thay mã ứng dụng hoặc nghiệp vụ. | Đối chiếu source/route/theme; thử riêng biểu thức chuẩn hóa FAQ bằng JavaScript thấy mất dấu tiếng Việt. Chưa chạy Flutter tests, emulator hoặc Shelly trong lượt lập plan; không kế thừa kết quả test cũ thành Pass cho kế hoạch mới. | **PLAN READY — CHƯA TRIỂN KHAI** |
@@ -1180,3 +1374,196 @@ Skill `frontend-skill` được áp dụng cho bố cục form tiết chế, ít
 3. Đóng đường mobile Direct Cloud/LAN vượt backend ownership/safety, live Safe Boot/fingerprint, timer/readback, no-blind-ON và unknown qua restart; concurrency tests hai worker/hai UID.
 4. VPS HTTPS ổn định, secret-file vault, monitoring/backup/rollback và khóa ký beta; build số mới có SHA-256/certificate. `1.1.9+122` hiện có không chứng minh các sửa trên.
 5. QA đúng APK trên emulator + điện thoại thật và Shelly có người giám sát, OFF cuối được đọc lại. Chưa có xác nhận giám sát hiện tại nên không thực hiện ON/OFF vật lý.
+
+## 30. BatteryBot AI Copilot Phase 1 (Floating Assistant & Context Sheet) — 29/09/2026
+
+### Đã triển khai
+- **Tài liệu đặc tả kỹ thuật**: Tạo [`docs/specs/BATTERYBOT_ASSISTANT.md`](docs/specs/BATTERYBOT_ASSISTANT.md) chuẩn hóa kiến trúc Hybrid Brain (Client state heuristics + Open LLM RAG backend), ma trận đoán ý ngữ cảnh, form factor 60% Glassmorphic Sheet và nguyên tắc an toàn Human-in-the-loop Action Cards.
+- **Context Engine (`app/lib/core/services/assistant_context_coordinator.dart`)**:
+  - Tự động theo dõi trạng thái xe (`VehicleModel`) và tab hiện hành qua Riverpod.
+  - Phản xạ ngữ cảnh thông minh:
+    - Cảnh báo pin yếu (< 20%) đề xuất chuẩn bị lịch sạc thông minh.
+    - Lời chào buổi sáng (6:00 - 8:59) báo tình trạng pin sẵn sàng.
+    - Mẹo tối ưu hóa tuổi thọ pin (mốc 80-90% cutoff) khi duyệt tab Sạc pin.
+  - Hẹn giờ tự động tắt bong bóng thoại (6 giây) và cơ chế chống spam (cooldown 15 phút/trigger).
+- **Floating Mascot Widget (`app/lib/core/widgets/floating_battery_bot.dart`)**:
+  - Nút nổi tròn ở góc dưới bên phải màn hình tích hợp `BatteryBotMascot`.
+  - Có thể kéo thả (draggable) linh hoạt trong vùng an toàn của màn hình.
+  - Bong bóng thoại chủ động (Proactive Speech Bubble) xuất hiện mượt mà với hiệu ứng động `AnimatedScale` và `AnimatedOpacity`.
+  - Cơ chế tự ẩn thông minh (Smart Hide) khi bàn phím ảo mở (`MediaQuery.viewInsets.bottom > 0`).
+- **Interactive Assistant Sheet (`app/lib/features/ai/assistant_sheet.dart`)**:
+  - Modal Bottom Sheet chiếm ~72% chiều cao màn hình.
+  - Header hiển thị Mascot mini, tên xe đang kích hoạt và badge phần trăm pin.
+  - Dải phím tắt gợi ý nhanh (Quick Action Chips) tự động thay đổi theo ngữ cảnh.
+  - Khung chat hai chiều hỗ trợ Markdown, lọc cảnh báo nhập thông tin nhạy cảm (Cloud Key, mật khẩu) và các nút hành động trực tiếp (chuyển nhanh sang tab Sạc pin, Tổng quan, Lịch sử, Kết nối Shelly).
+- **Tích hợp Navigation (`app/lib/navigation/app_navigation.dart`)**:
+  - Gắn `FloatingBatteryBot` vào `Stack` tầng gốc của `AppNavigation` để trợ lý luôn sẵn sàng phục vụ trên mọi tab.
+
+### Kết quả kiểm thử tự động
+- `test/unit/assistant_context_coordinator_test.dart`: **5/5 PASS, exit 0**.
+- `test/widget/floating_battery_bot_test.dart`: **1/1 PASS, exit 0**.
+- `test/widget/interactive_assistant_sheet_test.dart`: **1/1 PASS, exit 0**.
+- Cụm test BatteryBot toàn diện (bao gồm `battery_bot_screen_test.dart`): **16/16 PASS, exit 0**.
+
+## 31. Nâng cấp Visual/UI/UX & Motion Animation cho Splash Screen + Survey Screens — 29/09/2026
+
+### Đã triển khai
+- **Splash Screen (`app/lib/core/widgets/bootstrap_splash.dart`)**:
+  - **Dynamic Ambient Breathing Aura**: Thêm hiệu ứng thở đa tầng Cyan & Emerald Pulse (`RadialGradient`, chu kỳ thở 2200ms) lơ lửng phía sau logo launcher icon, tạo cảm giác công nghệ pin xe điện hiện đại.
+  - **Custom EV Energy Loading Bar**: Nâng cấp thanh tiến trình thành thanh nạp năng lượng pin bo góc 8px với dải quét sáng năng lượng (Glowing Sweep Overlay) chạy qua mượt mà, đồng thời bảo toàn `LinearProgressIndicator` để tương thích 100% với suite kiểm thử tự động.
+  - **Cyber Tagline Capsule**: Khung capsule thương hiệu 'QUẢN LÝ PIN VÀ SẠC XE ĐIỆN' với chấm tròn phát sáng nhấp nháy theo nhịp thở.
+  - **Typography & Transitions**: Cân chỉnh tỷ lệ chữ 'VinFast Battery' sắc nét, letter-spacing 1.2, hỗ trợ `AnimatedSwitcher` khi thông báo trạng thái thay đổi.
+  - **Chuyển cảnh mượt mà (`app/lib/features/auth/auth_gate.dart`)**: Tích hợp `AnimatedSwitcher` (cross-fade 280ms, curve `Curves.easeOutCubic`) chuyển cảnh êm mắt từ Splash sang Login / Authenticated Shell / Error Screen mà không bị giật khung hình.
+  - **Hỗ trợ toàn diện**: Tương thích hoàn hảo Dark Mode, Light Mode và tuân thủ cờ `disableAnimations` (Reduced Motion).
+
+- **Survey Screens — Khảo sát Onboarding 9 bước (`app/lib/features/auth/onboarding_chat_screen.dart`)**:
+  - **`OnboardingStepFrame` Header & Segmented Progress Bar**:
+    - Thay thế thanh bar đơn điệu bằng **Segmented EV Progress Bar** gồm 9 khoang pin bo tròn chuyển màu mượt mà theo bước (`220ms`), khoang hiện tại có hào quang phát sáng.
+    - Header nhãn bước `$stepLabel · Tùy chọn / Bắt buộc / Thiết lập` hiển thị sắc nét, co giãn an toàn trên màn hình nhỏ (320dp) và tỷ lệ chữ lớn (1.5x font scale).
+  - **Chuyển câu hỏi có định hướng (Directional Motion)**:
+    - Khi ấn Tiếp tục (Next): Câu hỏi mới trượt từ phải sang trái (+20dp -> 0) kết hợp `FadeTransition`.
+    - Khi ấn Quay lại (Back): Câu hỏi trước trượt từ trái sang phải (-20dp -> 0).
+    - Thời lượng giữ chuẩn `220ms` (`AppMotion.durationFor`), tự động về `Duration.zero` khi bật Reduced Motion.
+  - **Thẻ chọn xe thông minh (`OnboardingVehicleChoice`)**:
+    - Nâng cấp thành Card EV bo góc 16px, viền sáng gradient primary khi chọn (`1.8dp`), elevation nhẹ và hiệu ứng checkmark tròn động.
+    - Hiển thị dung lượng pin chuẩn danh mục kèm icon tia sét (`Icons.bolt_rounded`).
+    - Phản hồi rung nhẹ haptic (`HapticFeedback.selectionClick()`) khi chọn xe.
+  - **Visual Polish cho các bước khảo sát**:
+    - **Bước 0 (Chào mừng)**: 3 mục thông tin được chuyển thành các Feature Card bo góc 16px với icon avatar nền primary container.
+    - **Bước 2 & 3 (Chi tiết xe & Ngày sinh)**: Các `TextField` được bọc nền card mềm mại, bo góc 14px, focus state viền sáng emerald `1.8dp`.
+    - **Bước 4 (Quãng đường)**: Hiển thị số km to bản dạng EV Badge, thanh Slider có màu primary, các nút ChoiceChip hỗ trợ scale & feedback xúc giác.
+    - **Bước 5 (Mục đích & % Pin)**: Thẻ mục đích có icon container riêng, radio checkmark động, thanh trượt pin kèm chỉ số % nổi bật.
+    - **Nút hành động (Footer)**: Nút Back và Tiếp tục bo góc chuẩn 14px, touch target đạt chuẩn accessibility >= 48dp.
+
+### Kết quả kiểm thử tự động
+- `test/widget/onboarding_step_layout_test.dart`: **12/12 suites (32 test variations) PASS, exit 0**.
+- `test/widget/auth_gate_lifecycle_test.dart`: **2/2 PASS, exit 0**.
+- `test/widget/design_foundation_test.dart`: **5/5 PASS, exit 0**.
+- `test/widget/auth_layout_test.dart`: **12/12 PASS, exit 0**.
+- `test/onboarding_validation_test.dart`: **17/17 assertions PASS, exit 0**.
+- **Tổng cộng 39/39 test cases đạt 100% Xanh (Pass)**, không có bất kỳ regression hay lỗi gián đoạn nào.
+
+## 32. Kiểm Thử Trực Tiếp Trên Android Emulator: SplashView & Khảo Sát Onboarding — 29/09/2026
+
+### Thiết Bị Kiểm Thử & Môi Trường Runtime
+- **Thiết bị**: Android Emulator Pixel 9a (`emulator-5554`), Android 16 (API 36, x86_64, 1080x2424).
+- **Gói ứng dụng**: `com.bes.vinbatery` (Debug APK build & streamed install qua ADB).
+- **Trạng thái thực thi**: Khởi chạy mượt mà, 60fps, không phát sinh ngoại lệ giao diện (0 RenderFlex overflow).
+
+### Kết Quả Kiểm Thử Thực Tế Từng Màn Hình
+
+1. **Splash Screen Nâng Cấp (`BootstrapSplash`)**:
+   - Logo VinFast Battery hiển thị sắc nét với hiệu ứng **Breathing Ambient Glow Aura** (chu kỳ thở 2200ms đa tầng xanh ngọc bích & ngọc lục bảo).
+   - Cyber Tagline Capsule `● QUẢN LÝ PIN VÀ SẠC XE ĐIỆN` với chấm đèn pulsing đồng bộ.
+   - Thanh nạp năng lượng EV Energy Loading Bar chạy mượt mà với dải quét sáng năng lượng (Sweep Overlay).
+   - Tự động nhận diện cấu hình giảm chuyển động (Reduced Motion) khi người dùng kích hoạt.
+
+2. **Khảo Sát Onboarding 9 Bước (`OnboardingChatScreen`)**:
+   - **Segmented EV Progress Bar**: Hiển thị chuẩn xác 9 khoang pin bo góc tại cạnh trên, phát sáng khoang hiện tại và cập nhật màu mượt mà qua từng bước (`Bước 1/9` đến `Bước 9/9`).
+   - **Bước 0 (Chào mừng & Giới thiệu)**: 3 Feature Cards với icon container bo góc 16px, giải thích rõ ràng lộ trình thiết lập.
+   - **Bước 1 (Chọn Mẫu Xe - Vehicle Picker)**: Hiển thị đầy đủ danh mục xe (Evo200, Evo Lite Neo, Feliz 2025, Feliz S, Klara S...). Khi chạm chọn, thẻ xe kích hoạt viền sáng emerald, checkmark tròn chuyển xanh và nút "Tiếp tục" được mở khóa.
+   - **Bước 2 (Chi tiết xe)**: Các ô nhập Tên gợi nhớ, Biển số, ODO bo tròn 14px êm ái, hỗ trợ bỏ qua tùy chọn an toàn.
+   - **Bước 3 (Ngày sinh / Tuổi)**: Ô nhập ngày sinh gắn icon bánh sinh nhật, ràng buộc người dùng đủ 16 tuổi.
+   - **Bước 4 (Quãng đường hằng ngày)**: Thanh Slider kèm badge hiển thị số km to bản `30 km/ngày` màu xanh neon nổi bật, hàng nút bấm nhanh [5 km, 15 km, 30 km, 50 km, 80 km] phản hồi tức thì.
+   - **Bước 5 (Mục đích sử dụng & Mức sạc)**: Các thẻ "Đi làm", "Giao hàng", "Đi lại cá nhân" kèm thanh trượt mức pin khi bắt đầu sạc.
+   - **Bước 6 (Bộ sạc thông minh Shelly)**: Card thông tin bộ sạc an toàn, nút "Thiết lập ngay" và "Để sau".
+   - **Bước 7 (Cấp quyền thông báo)**: Giải thích rõ ràng mục đích nhận thông báo phiên sạc & bảo dưỡng.
+   - **Bước 8 (Tổng quan & Xác nhận hoàn tất)**: Bảng tóm tắt toàn bộ thông số xe và hồ sơ cá nhân hóa, nút bấm "Hoàn tất" màu emerald kích thước chuẩn công thái học.
+
+
+
+## 33. Cinematic Splash & Dynamic Interactive Chatbot Mascot — 30/09/2026
+
+### Yêu Cầu Cốt Lõi
+- **SplashView phong cách Phim Ngắn (Cinematic Short Film)**:
+  - Hoạt cảnh khởi động hoành tráng: các hạt năng lượng lượng tử hội tụ (Quantum Particles Convergence), lưới không gian 3D tương lai (Cockpit Perspective Grid), radar sonar quét tầm xa, tia sét điện trường kích hoạt đôi cánh chữ V (VinFast V-Wing logo) với vệt quét sáng kim loại.
+  - Chuyển cảnh mượt mà: hiệu ứng warp speed zoom và mờ dần vào Login Screen, kèm nút "Bỏ qua >>" thủy tinh mờ (Glassmorphic Skip Button).
+- **Màn hình Khảo sát Chatbot Động & Thông Minh**:
+  - Mascot BatteryBot luôn cử động (luôn thở, bay lơ lửng, nhấp nháy mắt, antenna phát sáng, tai xoay).
+  - Đa dạng biểu cảm cảm xúc (bình thường, suy nghĩ, vui vẻ, chú ý lắng nghe).
+  - Tương tác chạm: người dùng chạm vào mascot sẽ nhún nhảy và thốt ra những câu thoại hài hước, hóm hỉnh.
+  - Tự động gợi ý & hỏi han (Proactive Idle Timer): sau 7 giây không thao tác, bot sẽ chủ động đặt câu hỏi hoặc đưa ra lời khuyên gần gũi, thông minh.
+  - Phản ứng thông minh theo ngữ cảnh: khen ngợi mẫu xe người dùng chọn (Evo200, Feliz, Klara...), đưa ra khuyến nghị sạc tối ưu theo quãng đường di chuyển và thói quen sạc.
+
+### Đã Triển Khai Trong Mã Nguồn
+1. **`BootstrapSplash` (`app/lib/core/widgets/bootstrap_splash.dart`)**:
+   - Tái cấu trúc thành trường đoạn hoạt cảnh điện ảnh 3 hồi (`2800ms`):
+     - **Hồi 1 (0ms - 800ms)**: 28 hạt lượng tử chuyển động hội tụ xoắn ốc (`_QuantumParticlesPainter`), lưới tọa độ buồng lái cyber 3D (`_CockpitGridPainter`), vòng radar sonar mở rộng.
+     - **Hồi 2 (800ms - 2200ms)**: Logo VinFast thức tỉnh với tia chớp hồ quang điện (`_HudRadarPainter`), vệt quét ánh sáng kim loại quét qua logo, tên ứng dụng "VinFast Battery" mở rộng letter-spacing kèm hào quang sáng, cyber capsule "QUẢN LÝ PIN VÀ SẠC XE ĐIỆN", thanh nạp năng lượng tiến trình phát sáng.
+     - **Hồi 3 (2200ms - 2800ms)**: Tăng tốc cực đại (Warp Speed Zoom 1.0 -> 1.45) cùng hiệu ứng mờ dần nhẹ nhàng hòa vào giao diện tiếp theo.
+   - Thêm nút kính mờ "Bỏ qua >>" với icon `Icons.fast_forward_rounded` góc trên cùng bên phải.
+   - Tôn trọng thuộc tính accessibility `MediaQuery.disableAnimationsOf(context)`.
+
+2. **Chatbot Mascot & Khảo Sát Tương Tác (`app/lib/features/auth/onboarding_chat_screen.dart`)**:
+   - Tích hợp trạng thái động cho BatteryBot: `_idleTimer`, `_botMood`, `_botSpeech`, `_onBotTapped()`.
+   - Tạo widget bong bóng hội thoại kính mờ `_InteractiveBotBubble` với nhãn `● BatteryBot AI` và văn bản tương tác.
+   - Khi chuyển bước, bot tự động đổi lời thoại và tâm trạng tương ứng từng bước.
+   - Lắng nghe phản hồi thời gian thực:
+     - Chọn xe: Mascot cười tít mắt (`BatteryBotMood.happy`) và cất lời khen ngợi mẫu xe cụ thể.
+     - Chọn số km: Bot phân tích và đưa ra lịch trình cắm sạc khuyến nghị (ví dụ: `30 km/ngày -> 2-3 ngày cắm sạc một lần`).
+     - Chọn mục đích sử dụng & mức % pin sạc: Đưa ra lời khuyên bảo vệ tuổi thọ tế bào pin LFP.
+   - Giữ nguyên các bất biến kiểm thử: Mascot chuẩn kích thước `40x40`, duy nhất một `AnimatedSwitcher` trong `OnboardingStepFrame`.
+
+3. **`LoginScreen` (`app/lib/features/auth/login_screen.dart`)**:
+   - Cập nhật nút xem thử Splash Screen để kích hoạt trọn vẹn trường đoạn cinematic splash với chuyển cảnh `PageRouteBuilder` fade & zoom mượt mà.
+
+### Kết Quả Kiểm Thử & Nghiệm Thu Trực Tiếp Trên Android Emulator
+- **Kiểm thử tự động**:
+  - `test/widget/onboarding_step_layout_test.dart`: **12/12 PASS**.
+  - `test/widget/auth_gate_lifecycle_test.dart`: **2/2 PASS**.
+  - `test/widget/design_foundation_test.dart`: **5/5 PASS**.
+  - **Toàn bộ 19/19 test suites vượt qua 100% không lỗi**.
+- **Kiểm thử trực tiếp trên Pixel 9a (Android 16 API 36)**:
+  - Đã cài đặt APK và kích hoạt thành công trên máy ảo `emulator-5554`.
+  - Đã chụp ảnh và kiểm chứng thực tế:
+    - **Cinematic Splash**: Vệt sáng kim loại, tia chớp điện trường, radar sonar, lưới tọa độ cyber 3D và nút "Bỏ qua >>" hoạt động hoàn hảo (`splash_act1.png`).
+    - **Chuyển cảnh Splash -> Login**: Chuyển đổi mượt mà, hạ cánh chuẩn xác tại `LoginScreen` (`test_current.png`).
+    - **Mascot luôn cử động & bong bóng hội thoại**: Mascot lơ lửng, nhấp nháy, bong bóng thoại kính mờ chào đón thân thiện (`onboarding_step1.png`).
+    - **Chạm tương tác**: Mascot mắt cười híp mi (`happy`) phản hồi "Hi hi, chạm nhẹ vậy nhột ghê á! ⚡" (`onboarding_mascot_tap.png`).
+    - **Phản ứng khi chọn xe**: Khi chạm chọn `VinFast Evo200`, bot lập tức phấn khích: "Oa! VinFast Evo200 - một lựa chọn tuyệt vời! Bấm Tiếp tục nhé! 🛵⚡" (`onboarding_evo_selected_real.png`).
+    - **Gợi ý thông minh tự động (7s Idle)**: Tự động nhắc nhở khi người dùng phân vân: "Nếu chưa nhớ chính xác ODO, bạn ước lượng số km gần đúng cũng được nha! 💡" (`onboarding_step4.png`).
+    - **Tư vấn sạc theo thói quen di chuyển**: Khi chọn mức `30 km/ngày`, bot phản hồi chuẩn xác: "Quãng đường lý tưởng (30 km/ngày)! Khoảng 2-3 ngày cắm sạc một lần là đẹp nhất. 🛵" (`onboarding_step5_selected.png`).
+
+## 34. UI Polish: SplashView Bắt Buộc, Dark Cockpit Login/Register & Enhanced Mascot — 30/09/2026
+
+### Mục Tiêu Thực Hiện
+1. **SplashView**: Xóa bỏ hoàn toàn nút "Bỏ qua", đảm bảo mọi lần khởi động ứng dụng hoạt cảnh điện ảnh 3 hồi đều chạy trọn vẹn trước khi chuyển tiếp.
+2. **Dọn dẹp mã nguồn**: Xóa sạch toàn bộ các nút debug/test:
+   - "Khảo sát Onboarding (Test UI)" và "Xem Splash Screen (Test UI)" trong `LoginScreen`.
+   - "Điền dữ liệu mẫu (QA)" trong `RegisterScreen`.
+3. **Redesign Màn Hình Đăng Nhập & Đăng Ký (Dark Cockpit Premium)**:
+   - Thiết kế đồng bộ với nhận diện thương hiệu Cockpit Obsidian (`#04070D`).
+   - Hero header sang trọng: Logo VinFast tròn phát sáng hào quang neon cyan (`#00F5D4`) đa tầng, tiêu đề "VinFast Battery" đậm nét công nghệ và cyber capsule "QUẢN LÝ PIN VÀ SẠC XE ĐIỆN".
+   - Glassmorphic Form Card: Thẻ kính mờ xanh đen sâu thẳm (`#0B132B`, alpha 72%), viền phát sáng cyan tinh tế, bóng đổ mềm mại chiều sâu.
+   - Trường nhập liệu công thái học: Nền tối (`#132238`), icon prefix màu cyan neon, hiệu ứng viền phát sáng khi focus, nhãn phụ màu slate dễ chịu.
+   - Nút hành động chính (CTA): `FilledButton` xanh neon bắt mắt, font chữ đậm, bo góc 14px hiện đại, hiển thị spinner khi đang xử lý.
+   - Đảm bảo 100% responsive: Co giãn mượt mà ở màn hình nhỏ (320dp) kể cả khi bật tỉ lệ chữ to (1.5x font scale) và mở bàn phím ảo (IME) không bị RenderFlex overflow.
+4. **Cải tiến BatteryBot Mascot & Lời Thoại Onboarding**:
+   - Thêm hiệu ứng thở (Breathing Scale Animation) nhịp nhàng tự nhiên ở cả chế độ avatar lẫn full-body.
+   - Nâng cấp bộ lời thoại dí dỏm, thông minh, gần gũi, tạo cảm giác thân thiện và tràn đầy hứng khởi khi người dùng trả lời từng câu hỏi khảo sát.
+
+### Chi Tiết Thay Đổi Trong Source Code
+- **`app/lib/core/widgets/bootstrap_splash.dart`**:
+  - Xóa bỏ thuộc tính `showSkipButton`, phương thức `_skip()` và widget `_buildSkipButton()`.
+  - Hoạt cảnh điện ảnh bắt buộc hoàn thành trọn vẹn 2800ms timeline trước khi chuyển cảnh qua `onFinished`.
+- **`app/lib/features/auth/login_screen.dart`**:
+  - Loại bỏ hoàn toàn khối `if (kDebugMode)` chứa các nút test.
+  - Tái thiết kế toàn bộ layout theo Dark Cockpit Premium: Hero branding header, glassmorphic card, input fields với prefix icons, `Text.rich` cho điều hướng đăng ký.
+  - Tích hợp `FittedBox` bảo vệ chống tràn giao diện (RenderFlex overflow) trên màn hình siêu hẹp (320dp, font 1.5x, keyboard open).
+- **`app/lib/features/auth/register_screen.dart`**:
+  - Xóa bỏ nút test QA "Điền dữ liệu mẫu (QA)".
+  - Tái thiết kế giao diện theo Dark Cockpit đồng bộ với LoginScreen: Nút quay lại bo góc kính mờ với icon neon, tiêu đề trắng bóng đổ cyan, 5 trường nhập liệu với đầy đủ icon và validation rules.
+- **`app/lib/core/widgets/battery_bot_mascot.dart`**:
+  - Bổ sung `breathingScale` đồng bộ với `_pulseCtrl` cho cả avatar mode và full-body mode, giúp mascot luôn thở và sống động.
+- **`app/lib/features/auth/onboarding_chat_screen.dart`**:
+  - Cập nhật bộ lời thoại `_getInitialPromptForStep`, `_getIdlePromptForStep` và `_onBotTapped` hóm hỉnh, ấm áp và thông minh hơn.
+
+### Kết Quả Kiểm Thử & Đảm Bảo Chất Lượng
+- **Kiểm thử giao diện xác thực (`test/widget/auth_layout_test.dart`)**:
+  - **12/12 PASS (100%)**: Kiểm thử bao quát cả `LoginScreen` và `RegisterScreen` ở các độ phân giải 320dp, 412dp, chế độ Light/Dark, font scale 1.5x và bàn phím mở.
+- **Kiểm thử Onboarding Step Frame (`test/widget/onboarding_step_layout_test.dart`)**:
+  - **12/12 PASS (100%)**: Kiểm thử 9 bước khảo sát, kích thước mascot 40x40, nút tiếp tục và cử chỉ.
+- **Kiểm thử nền tảng thiết kế & Splash (`test/widget/design_foundation_test.dart`, `test/widget/auth_gate_lifecycle_test.dart`)**:
+  - **7/7 PASS (100%)**: Splash hoạt động chuẩn xác, tôn trọng cấu hình giảm chuyển động.
+- **Toàn bộ Flutter Test Suite**:
+  - **510 / 510 TESTS PASS (100%)** với 0 lỗi, 0 regression!

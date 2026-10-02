@@ -1,12 +1,11 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../../core/constants/app_constants.dart';
+import '../../core/utils/app_error_formatter.dart';
 import '../models/smart_charger_binding.dart';
 import '../models/smart_charger_capabilities.dart';
 import '../models/smart_charger_status.dart';
@@ -15,6 +14,7 @@ import '../models/personal_charging_profile.dart';
 import '../models/smart_charge_history.dart';
 import '../models/shelly_connection.dart';
 import 'smart_charger_service.dart';
+import 'shelly_api_transport.dart';
 
 class ServerSmartChargerService {
   ServerSmartChargerService({http.Client? client, FirebaseAuth? auth})
@@ -26,17 +26,23 @@ class ServerSmartChargerService {
 
   /// Metadata returned by the server vault resolver. Secrets are populated
   /// only after [restoreDirectProfile] succeeds over authenticated HTTPS.
-  Future<Map<String, dynamic>?> resolveDirectProfile({String? vehicleId}) async {
+  Future<Map<String, dynamic>?> resolveDirectProfile({
+    String? vehicleId,
+  }) async {
     final data = await _request(
       'POST',
       '/api/shelly/profiles/resolve',
-      body: {if (vehicleId != null && vehicleId.isNotEmpty) 'vehicleId': vehicleId},
+      body: {
+        if (vehicleId != null && vehicleId.isNotEmpty) 'vehicleId': vehicleId,
+      },
     );
     final profile = data['profile'];
     return profile is Map ? Map<String, dynamic>.from(profile) : null;
   }
 
-  Future<List<Map<String, dynamic>>> listDirectProfiles({String? vehicleId}) async {
+  Future<List<Map<String, dynamic>>> listDirectProfiles({
+    String? vehicleId,
+  }) async {
     final suffix = vehicleId == null || vehicleId.isEmpty
         ? ''
         : '?vehicleId=${Uri.encodeQueryComponent(vehicleId)}';
@@ -62,8 +68,8 @@ class ServerSmartChargerService {
     Map<String, dynamic>? body,
     Map<String, String>? headers,
   }) async {
-    final base = AppConstants.apiBaseUrl.trim().replaceAll(RegExp(r'/+$'), '');
-    if (base.isEmpty) {
+    final uri = AppConstants.tryBuildApiUri(path);
+    if (uri == null) {
       throw const SmartChargerException(
         'Máy chủ chưa được cấu hình. Vui lòng kiểm tra kết nối mạng.',
         code: 'unconfigured_server',
@@ -71,52 +77,38 @@ class ServerSmartChargerService {
         retryable: false,
       );
     }
-    final cleanPath = path.startsWith('/') ? path : '/$path';
-    final uri = Uri.parse('$base$cleanPath');
 
-    final token = await _auth.currentUser?.getIdToken();
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw const SmartChargerException(
+        'Vui lòng đăng nhập lại để tiếp tục.',
+        code: 'unauthenticated',
+        statusCode: 401,
+      );
+    }
+    final token = await user.getIdToken().timeout(const Duration(seconds: 12));
+    if (_auth.currentUser?.uid != user.uid || token == null) {
+      throw const SmartChargerException(
+        'Phiên đăng nhập đã thay đổi.',
+        code: 'account_changed',
+        statusCode: 401,
+      );
+    }
     final request = http.Request(method, uri)
       ..headers.addAll({
-        if (token != null) 'Authorization': 'Bearer $token',
+        'Authorization': 'Bearer $token',
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         ...?headers,
       });
     if (body != null) request.body = jsonEncode(body);
 
-    http.Response response;
-    try {
-      final streamed = await _client.send(request).timeout(const Duration(seconds: 12));
-      response = await http.Response.fromStream(streamed);
-    } on SocketException {
+    final response = await ShellyApiTransport.send(_client, request);
+    if (_auth.currentUser?.uid != user.uid) {
       throw const SmartChargerException(
-        'Không thể kết nối đến máy chủ. Kiểm tra mạng hoặc thử lại sau.',
-        code: 'connection_failed',
-        statusCode: 503,
-        retryable: true,
-      );
-    } on TimeoutException {
-      throw const SmartChargerException(
-        'Kết nối máy chủ bị quá hạn (Timeout 12s). Vui lòng thử lại.',
-        code: 'timeout',
-        statusCode: 504,
-        retryable: true,
-      );
-    } on http.ClientException catch (e) {
-      debugPrint('[ServerSmartCharger] ClientException: $e');
-      throw SmartChargerException(
-        'Không thể kết nối đến máy chủ. Kiểm tra mạng hoặc thử lại sau.',
-        code: 'network_error',
-        statusCode: 503,
-        retryable: true,
-      );
-    } catch (e) {
-      debugPrint('[ServerSmartCharger] Network error: $e');
-      throw SmartChargerException(
-        'Không thể kết nối đến máy chủ: ${e.toString()}',
-        code: 'network_error',
-        statusCode: 500,
-        retryable: true,
+        'Phiên đăng nhập đã thay đổi.',
+        code: 'account_changed',
+        statusCode: 401,
       );
     }
 
@@ -137,21 +129,28 @@ class ServerSmartChargerService {
     if (response.statusCode < 200 ||
         response.statusCode >= 300 ||
         decoded['success'] != true) {
-      String? message;
       String? code;
       bool retryable = response.statusCode >= 500;
       final errObj = decoded['error'];
       if (errObj is Map) {
-        message = errObj['message']?.toString();
         code = errObj['code']?.toString();
         if (errObj['retryable'] is bool) {
           retryable = errObj['retryable'] as bool;
         }
-      } else if (errObj is String) {
-        message = errObj;
       }
-      message ??= decoded['userMessage']?.toString() ??
-          'Không thể kết nối dịch vụ Sạc thông minh (HTTP ${response.statusCode}).';
+      code ??= decoded['code']?.toString();
+      final message = switch (code) {
+        'DEVICE_MEMBER_LIMIT_REACHED' =>
+          'Shelly đã liên kết tối đa hai tài khoản.',
+        'connectionCodeUnavailable' ||
+        'redemptionRevoked' => 'Mã kết nối không còn hiệu lực. Hãy xin mã mới.',
+        'safetyVerificationRequired' =>
+          'Cần kiểm tra an toàn bộ sạc trước khi bật.',
+        'deviceUnverified' => 'Chưa xác minh được đúng bộ sạc. Hãy thử lại.',
+        'unauthorized' ||
+        'unauthenticated' => 'Vui lòng đăng nhập lại để tiếp tục.',
+        _ => AppErrorFormatter.format(code),
+      };
       throw SmartChargerException(
         message,
         statusCode: response.statusCode,
@@ -160,6 +159,7 @@ class ServerSmartChargerService {
       );
     }
     final data = decoded['data'];
+    if (decoded.containsKey('data') && data == null) return {'_null': true};
     if (data != null) {
       return data is Map ? Map<String, dynamic>.from(data) : {'items': data};
     }
@@ -246,25 +246,39 @@ class ServerSmartChargerService {
     );
   }
 
-  Future<void> claimLanDevice({required String deviceId, required String model}) async {
-    await _request('POST', '/api/shelly/devices/claim', body: {
-      'deviceId': deviceId,
-      'model': model,
-    });
+  Future<void> claimLanDevice({
+    required String deviceId,
+    required String model,
+  }) async {
+    await _request(
+      'POST',
+      '/api/shelly/devices/claim',
+      body: {'deviceId': deviceId, 'model': model},
+    );
   }
 
-  Future<void> authorizeDeviceControl({required String deviceId, required String operationId}) async {
+  Future<void> authorizeDeviceControl({
+    required String deviceId,
+    required String operationId,
+  }) async {
     final data = await _request(
       'POST',
       '/api/shelly/devices/${Uri.encodeComponent(deviceId)}/authorize',
       body: {'operationId': operationId},
     );
     if (data['authorized'] != true) {
-      throw const SmartChargerException('Không xác minh được quyền điều khiển Shelly.', code: 'ownershipUnavailable', statusCode: 409);
+      throw const SmartChargerException(
+        'Không xác minh được quyền điều khiển Shelly.',
+        code: 'ownershipUnavailable',
+        statusCode: 409,
+      );
     }
   }
 
-  Future<void> releaseDeviceControl({required String deviceId, required String operationId}) async {
+  Future<void> releaseDeviceControl({
+    required String deviceId,
+    required String operationId,
+  }) async {
     await _request(
       'POST',
       '/api/shelly/devices/${Uri.encodeComponent(deviceId)}/release-control',
@@ -272,11 +286,14 @@ class ServerSmartChargerService {
     );
   }
 
-  Future<Map<String, dynamic>> runSafetyTest({required String deviceId, required String operationId}) =>
-      _request('POST', '/api/shelly/devices/${Uri.encodeComponent(deviceId)}/safety-test', body: {
-        'operationId': operationId,
-        'confirmedUnplugged': true,
-      });
+  Future<Map<String, dynamic>> runSafetyTest({
+    required String deviceId,
+    required String operationId,
+  }) => _request(
+    'POST',
+    '/api/shelly/devices/${Uri.encodeComponent(deviceId)}/safety-test',
+    body: {'operationId': operationId, 'confirmedUnplugged': true},
+  );
 
   Future<void> revokeBinding() async =>
       _request('DELETE', '/api/shelly/device');
@@ -322,9 +339,9 @@ class ServerSmartChargerService {
   }
 
   Future<Map<String, dynamic>> getLive({String? vehicleId}) => _request(
-        'GET',
-        '/api/smart-charging/live${vehicleId == null || vehicleId.isEmpty ? '' : '?vehicleId=${Uri.encodeQueryComponent(vehicleId)}'}',
-      );
+    'GET',
+    '/api/smart-charging/live${vehicleId == null || vehicleId.isEmpty ? '' : '?vehicleId=${Uri.encodeQueryComponent(vehicleId)}'}',
+  );
 
   Future<SmartChargingPlanPreview> createPreview(
     SmartChargingPlanDraft draft,
@@ -673,8 +690,10 @@ class ServerSmartChargerService {
     }
     final suffix = query.isEmpty ? '' : '?${query.join('&')}';
     final res = await _request('GET', '/api/ai/dataset$suffix');
-    final recordsRaw = res['records'] ?? (res['data'] is Map ? res['data']['records'] : null);
-    final statsRaw = res['stats'] ?? (res['data'] is Map ? res['data']['stats'] : null);
+    final recordsRaw =
+        res['records'] ?? (res['data'] is Map ? res['data']['records'] : null);
+    final statsRaw =
+        res['stats'] ?? (res['data'] is Map ? res['data']['stats'] : null);
     return {
       'success': true,
       'records': recordsRaw is List ? recordsRaw : const [],
@@ -700,11 +719,7 @@ class ServerSmartChargerService {
   Future<Map<String, dynamic>> addAiDatasetRecord(
     Map<String, dynamic> record,
   ) async {
-    final res = await _request(
-      'POST',
-      '/api/ai/dataset/records',
-      body: record,
-    );
+    final res = await _request('POST', '/api/ai/dataset/records', body: record);
     return {'success': true, 'data': res};
   }
 
@@ -729,15 +744,21 @@ class ServerSmartChargerService {
   }
 
   /// Lấy danh sách mẫu học fine-tune cá nhân từ máy chủ (bỏ qua giới hạn quyền Firestore)
-  Future<List<Map<String, dynamic>>> getPersonalTrainingSamples(String vehicleId) async {
+  Future<List<Map<String, dynamic>>> getPersonalTrainingSamples(
+    String vehicleId,
+  ) async {
     try {
       final res = await _request(
         'GET',
         '/api/smart-charging/training-samples?vehicleId=${Uri.encodeQueryComponent(vehicleId)}',
       );
-      final items = res['items'] ?? (res['data'] is Map ? res['data']['items'] : null);
+      final items =
+          res['items'] ?? (res['data'] is Map ? res['data']['items'] : null);
       if (items is List) {
-        return items.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+        return items
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
       }
     } catch (_) {}
     return const [];

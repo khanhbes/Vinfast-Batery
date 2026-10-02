@@ -62,12 +62,15 @@ class _PasswordResetScreenState extends State<PasswordResetScreen> {
       await prefs.setInt(_cooldownKey, _cooldownUntilMs!);
       _startCooldownTimer();
     } else {
-      setState(
-        () => _error =
-            result['error']?.toString() ??
-            'Chưa thể gửi email lúc này. Vui lòng thử lại.',
-      );
+      setState(() => _error = _safeResetMessage(result['code']?.toString()));
     }
+  }
+
+  String _safeResetMessage(String? code) {
+    if (code == 'too-many-requests') {
+      return 'Yêu cầu đang được giới hạn. Hãy đợi một chút rồi thử lại.';
+    }
+    return 'Chưa thể gửi email lúc này. Kiểm tra kết nối rồi thử lại.';
   }
 
   Future<void> _restoreCooldown() async {

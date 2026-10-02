@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vinfast_battery/data/models/smart_charge_history.dart';
 import 'package:vinfast_battery/data/models/smart_charging_session.dart';
@@ -92,6 +93,7 @@ Future<void> _mount(
 );
 
 void main() {
+  setUpAll(() => initializeDateFormatting('vi'));
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   Future<void> useLargeViewport(WidgetTester tester) async {

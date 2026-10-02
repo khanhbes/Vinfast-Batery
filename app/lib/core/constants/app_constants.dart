@@ -39,6 +39,25 @@ class AppConstants {
 
   static bool get isApiConfigurationError => !isApiConfigured;
 
+  /// Builds an absolute API URI only when a valid base URL is configured.
+  /// Background services must not concatenate an empty base URL because that
+  /// produces a relative URI which the mobile HTTP client cannot send.
+  static Uri? tryBuildApiUri(String endpoint, {Map<String, dynamic>? queryParameters}) {
+    if (!isApiConfigured) return null;
+    final base = apiBaseUrl.trim().replaceAll(RegExp(r'/+$'), '');
+    final path = endpoint.startsWith('/') ? endpoint : '/$endpoint';
+    final uri = Uri.tryParse('$base$path');
+    if (uri == null || !uri.hasScheme || uri.host.isEmpty) return null;
+    if (queryParameters != null && queryParameters.isNotEmpty) {
+      return uri.replace(
+        queryParameters: queryParameters.map(
+          (key, value) => MapEntry(key, value?.toString()),
+        ),
+      );
+    }
+    return uri;
+  }
+
   static void setCustomApiBaseUrl(String? url) {
     final candidate = url?.trim().replaceAll(RegExp(r'/+$'), '');
     if (candidate == null || candidate.isEmpty) {

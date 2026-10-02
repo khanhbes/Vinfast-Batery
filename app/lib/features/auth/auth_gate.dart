@@ -44,6 +44,8 @@ class AuthGate extends ConsumerStatefulWidget {
 }
 
 class _AuthGateState extends ConsumerState<AuthGate> {
+  static const _firebaseBootstrapTimeout = Duration(seconds: 30);
+
   /// Trạng thái khởi tạo: true khi đang chờ Firebase Auth restore lần đầu.
   bool _initializing = true;
   bool _retryingFirebaseInit = false;
@@ -54,11 +56,24 @@ class _AuthGateState extends ConsumerState<AuthGate> {
   /// User đã chủ động Đăng xuất (chỉ khi flag này true mới về Login ngay).
   bool _explicitSignedOut = false;
   bool _updateCheckStarted = false;
+  StreamSubscription<User?>? _authSubscription;
+  Stream<User?>? _authStream;
+  User? _authUser;
+  bool _authResolved = false;
+  final Stopwatch _coldLaunchClock = Stopwatch();
 
   @override
   void initState() {
     super.initState();
+    _coldLaunchClock.start();
     _initialize();
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    _coldLaunchClock.stop();
+    super.dispose();
   }
 
   /// Đọc các session marker và chờ Firebase Auth restore.
@@ -89,34 +104,47 @@ class _AuthGateState extends ConsumerState<AuthGate> {
     if (!FirebaseBootstrapCoordinator.isReady) {
       try {
         await FirebaseBootstrapCoordinator.ensureInitialized().timeout(
-          const Duration(seconds: 15),
+          _firebaseBootstrapTimeout,
         );
         ref.read(firebaseInitErrorProvider.notifier).state = null;
       } catch (e) {
-        debugPrint(
-          '[AuthGate] Firebase initialization failed (${e.runtimeType}).',
-        );
-        if (mounted) {
-          ref.read(firebaseInitErrorProvider.notifier).state = e;
-          setState(() => _initializing = false);
+        // Native initialization can finish immediately after a timeout on a
+        // busy emulator. Do not replace a now-ready app with a stale error.
+        if (FirebaseBootstrapCoordinator.isReady) {
+          ref.read(firebaseInitErrorProvider.notifier).state = null;
+        } else {
+          debugPrint(
+            '[AuthGate] Firebase initialization failed (${e.runtimeType}).',
+          );
+          if (mounted) {
+            ref.read(firebaseInitErrorProvider.notifier).state = e;
+            setState(() => _initializing = false);
+          }
+          return;
         }
-        return;
       }
     }
 
     // Khởi tạo push notification trong nền khi Firebase đã sẵn sàng
     unawaited(
       FirebaseBootstrapCoordinator.initializePushServices().catchError((e) {
-        debugPrint('[AuthGate] Push services init error: $e');
+        debugPrint('[AuthGate] Push services init error (${e.runtimeType}).');
       }),
     );
 
     final completer = Completer<User?>();
-    StreamSubscription<User?>? sub;
     try {
-      sub = FirebaseAuth.instance.authStateChanges().listen((user) {
+      // Keep one auth subscription for this gate. Recreating a StreamBuilder
+      // stream during rebuilds can emit a transient waiting state and replace
+      // the focused login form with the splash.
+      await _authSubscription?.cancel();
+      _authStream = FirebaseAuth.instance.authStateChanges();
+      _authSubscription = _authStream!.listen((user) {
+        ShellyConnectionCoordinator.shared.activateAccount(user?.uid);
+        _authUser = user;
+        _authResolved = true;
         if (!completer.isCompleted) completer.complete(user);
-        sub?.cancel();
+        if (mounted) setState(() {});
       });
 
       // Cold-start case: cho phép wait lâu hơn để token kịp restore.
@@ -125,13 +153,14 @@ class _AuthGateState extends ConsumerState<AuthGate> {
           : const Duration(seconds: 3);
 
       User? restoredUser;
-      try {
-        restoredUser = await completer.future.timeout(
-          timeout,
-          onTimeout: () => null,
-        );
-      } finally {
-        await sub.cancel();
+      restoredUser = await completer.future.timeout(
+        timeout,
+        onTimeout: () => null,
+      );
+      // A stalled auth stream must not keep the user in an endless splash.
+      // The listener remains active and can still promote the session later.
+      if (restoredUser == null && !completer.isCompleted) {
+        _authResolved = true;
       }
 
       // Nếu lần trước đã đăng nhập và chưa bấm Đăng xuất, nhưng Firebase vẫn
@@ -146,6 +175,12 @@ class _AuthGateState extends ConsumerState<AuthGate> {
       }
     } catch (e) {
       debugPrint('[AuthGate] Auth restore failed (${e.runtimeType}).');
+    }
+
+    final remaining =
+        const Duration(milliseconds: 2800) - _coldLaunchClock.elapsed;
+    if (remaining > Duration.zero) {
+      await Future<void>.delayed(remaining);
     }
 
     if (mounted) {
@@ -171,9 +206,11 @@ class _AuthGateState extends ConsumerState<AuthGate> {
       _initializing = true;
     });
     try {
-      await FirebaseBootstrapCoordinator.ensureInitialized().timeout(
-        const Duration(seconds: 15),
-      );
+      if (!FirebaseBootstrapCoordinator.isReady) {
+        await FirebaseBootstrapCoordinator.ensureInitialized().timeout(
+          _firebaseBootstrapTimeout,
+        );
+      }
       if (!mounted) return;
       unawaited(
         FirebaseBootstrapCoordinator.initializePushServices().catchError((e) {
@@ -183,7 +220,11 @@ class _AuthGateState extends ConsumerState<AuthGate> {
       ref.read(firebaseInitErrorProvider.notifier).state = null;
     } catch (e) {
       if (!mounted) return;
-      ref.read(firebaseInitErrorProvider.notifier).state = e;
+      if (FirebaseBootstrapCoordinator.isReady) {
+        ref.read(firebaseInitErrorProvider.notifier).state = null;
+      } else {
+        ref.read(firebaseInitErrorProvider.notifier).state = e;
+      }
     }
     try {
       await _initialize();
@@ -198,49 +239,71 @@ class _AuthGateState extends ConsumerState<AuthGate> {
 
     // 1) Firebase init lỗi hoặc chưa sẵn sàng sau khi hết initializing → màn hình lỗi/retry.
     // Tuyệt đối KHÔNG render StreamBuilder hay truy cập FirebaseAuth.instance ở đây.
+    Widget content;
     if (_retryingFirebaseInit ||
         ((initError != null || !FirebaseBootstrapCoordinator.isReady) &&
             !_initializing)) {
-      return _BootstrapErrorScreen(
-        retrying: _retryingFirebaseInit,
-        onRetry: _retryFirebaseInit,
+      content = KeyedSubtree(
+        key: const ValueKey('gate-error'),
+        child: _BootstrapErrorScreen(
+          retrying: _retryingFirebaseInit,
+          onRetry: _retryFirebaseInit,
+        ),
+      );
+    } else if (_initializing) {
+      // 2) Đang khởi tạo → splash.
+      content = KeyedSubtree(
+        key: const ValueKey('gate-splash'),
+        child: _BootstrapSplashScreen(
+          message: (_wasAuthenticated && !_explicitSignedOut)
+              ? 'Đang khôi phục phiên đăng nhập...'
+              : 'Đang khởi động...',
+        ),
+      );
+    } else {
+      // 3) Sau init: chỉ dùng StreamBuilder khi Firebase chắc chắn đã sẵn sàng.
+      content = KeyedSubtree(
+        key: const ValueKey('gate-stream'),
+        child: StreamBuilder<User?>(
+          stream: _authStream,
+          initialData: _authUser,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting &&
+                !_authResolved &&
+                snapshot.data == null) {
+              return const _BootstrapSplashScreen(message: 'Đang xác thực...');
+            }
+            if (snapshot.hasData && snapshot.data != null) {
+              // User đã authenticated → mark session + vào app.
+              // ignore: discarded_futures
+              SessionService().markAuthenticated();
+              return _AuthenticatedRoot(key: ValueKey(snapshot.data!.uid));
+            }
+            final currentUser = FirebaseAuth.instance.currentUser;
+            if (currentUser != null) {
+              // Trường hợp StreamBuilder bắt đầu bằng snapshot null nhưng Firebase
+              // đã có currentUser sau bước restore ở _initialize().
+              // ignore: discarded_futures
+              SessionService().markAuthenticated();
+              return _AuthenticatedRoot(key: ValueKey(currentUser.uid));
+            }
+            // User null → về Login (không reset markers ở đây để cold-start
+            // sau update vẫn được _initialize() phát hiện).
+            return const LoginScreen();
+          },
+        ),
       );
     }
 
-    // 2) Đang khởi tạo → splash.
-    if (_initializing) {
-      return _BootstrapSplashScreen(
-        message: (_wasAuthenticated && !_explicitSignedOut)
-            ? 'Đang khôi phục phiên đăng nhập...'
-            : 'Đang khởi động...',
-      );
-    }
-
-    // 3) Sau init: chỉ dùng StreamBuilder khi Firebase chắc chắn đã sẵn sàng.
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const _BootstrapSplashScreen(message: 'Đang xác thực...');
-        }
-        if (snapshot.hasData && snapshot.data != null) {
-          // User đã authenticated → mark session + vào app.
-          // ignore: discarded_futures
-          SessionService().markAuthenticated();
-          return _AuthenticatedRoot(key: ValueKey(snapshot.data!.uid));
-        }
-        final currentUser = FirebaseAuth.instance.currentUser;
-        if (currentUser != null) {
-          // Trường hợp StreamBuilder bắt đầu bằng snapshot null nhưng Firebase
-          // đã có currentUser sau bước restore ở _initialize().
-          // ignore: discarded_futures
-          SessionService().markAuthenticated();
-          return _AuthenticatedRoot(key: ValueKey(currentUser.uid));
-        }
-        // User null → về Login (không reset markers ở đây để cold-start
-        // sau update vẫn được _initialize() phát hiện).
-        return const LoginScreen();
-      },
+    final reducedMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    return AnimatedSwitcher(
+      duration: reducedMotion
+          ? Duration.zero
+          : const Duration(milliseconds: 280),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      child: content,
     );
   }
 }
@@ -288,8 +351,8 @@ class _BootstrapErrorScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Kiểm tra kết nối rồi thử lại. Bạn không cần nhập lại '
-                    'thông tin lúc này.',
+                    'Quá trình khởi động đang mất nhiều thời gian. '
+                    'Hãy thử lại; bạn không cần nhập lại thông tin.',
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: colors.onSurfaceVariant,
@@ -332,9 +395,38 @@ class _AuthenticatedRoot extends ConsumerStatefulWidget {
 
 class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
     with WidgetsBindingObserver {
+  static const _profileLoadTimeout = Duration(seconds: 12);
+
   Future<DocumentSnapshot<Map<String, dynamic>>>? _profileFuture;
   Future<OnboardingDraft?>? _draftFuture;
   String? _draftUid;
+
+  Future<void> _retryPendingOnboarding() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    await OnboardingSyncCoordinator.shared.syncIfPending(uid, force: true);
+    if (!mounted || FirebaseAuth.instance.currentUser?.uid != uid) return;
+    _refreshOnboardingRoute();
+  }
+
+  void _refreshOnboardingRoute() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (!mounted || user == null) return;
+    // The shell may have cached an empty fleet while the local-first draft
+    // was pending. Refresh it after commit/retry instead of leaving the new
+    // authoritative vehicle invisible until the next process restart.
+    ref.invalidate(allVehiclesProvider);
+    setState(() {
+      _profileFuture = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get()
+          .timeout(_profileLoadTimeout);
+      _draftUid = user.uid;
+      _draftFuture = OnboardingDraftRepository().load(user.uid);
+    });
+  }
+
   @override
   void dispose() {
     // Khi logout / unmount: gỡ lifecycle observer của AppUpdateService.
@@ -414,13 +506,15 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
       }
       await ShellyConnectionCoordinator.shared.restore();
     } catch (e) {
-      debugPrint('[AuthBootstrap] Smart Charger profile sync error: $e');
+      debugPrint(
+        '[AuthBootstrap] Smart Charger profile sync error (${e.runtimeType}).',
+      );
     }
 
     try {
       await VehicleSpecRepository().getAllSpecs();
     } catch (e) {
-      debugPrint('[AuthBootstrap] VinFast spec sync error: $e');
+      debugPrint('[AuthBootstrap] VinFast spec sync error (${e.runtimeType}).');
     }
 
     if (selectedVehicleId == null || selectedVehicleId.isEmpty) return;
@@ -433,7 +527,7 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
           .get();
       if (doc.exists) vehicleData = doc.data();
     } catch (e) {
-      debugPrint('[AuthBootstrap] Vehicle fetch error: $e');
+      debugPrint('[AuthBootstrap] Vehicle fetch error (${e.runtimeType}).');
     }
     if (vehicleData == null) return;
 
@@ -453,7 +547,7 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
         }
       }
     } catch (e) {
-      debugPrint('[AuthBootstrap] Auto-match error: $e');
+      debugPrint('[AuthBootstrap] Auto-match error (${e.runtimeType}).');
     }
 
     // Maintenance reminder (theo ODO)
@@ -464,7 +558,7 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
         currentOdo: odo.toInt(),
       );
     } catch (e) {
-      debugPrint('[AuthBootstrap] Maintenance check error: $e');
+      debugPrint('[AuthBootstrap] Maintenance check error (${e.runtimeType}).');
     }
   }
 
@@ -489,10 +583,18 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
     // is rebuilt (cold start, foreground restore, or connectivity recovery).
     unawaited(OnboardingSyncCoordinator.shared.syncIfPending(currentUser.uid));
 
+    // Resolve the UID-scoped local draft independently from the profile read.
+    // Production rules or a transient Firestore failure must not hide a
+    // finalized local-first draft and send the user back to step one.
+    if (_draftUid != currentUser.uid) {
+      _draftUid = currentUser.uid;
+      _draftFuture = OnboardingDraftRepository().load(currentUser.uid);
+    }
     _profileFuture ??= FirebaseFirestore.instance
         .collection('users')
         .doc(currentUser.uid)
-        .get();
+        .get()
+        .timeout(_profileLoadTimeout);
     return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       future: _profileFuture,
       builder: (context, snapshot) {
@@ -505,24 +607,36 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
         // Route a new account through its retryable onboarding bootstrap,
         // rather than treating a transient read failure as permission to enter.
         if (snapshot.hasError) {
-          return isNew
-              ? const OnboardingChatScreen()
-              : const InternetConnectionNotice(child: AppNavigation());
+          return FutureBuilder<OnboardingDraft?>(
+            future: _draftFuture,
+            builder: (context, draftSnapshot) {
+              if (draftSnapshot.connectionState == ConnectionState.waiting) {
+                return const Scaffold(
+                  body: Center(child: CircularProgressIndicator()),
+                );
+              }
+              if (draftSnapshot.data?.isEligibleForCommit == true) {
+                return InternetConnectionNotice(
+                  onboardingPending: true,
+                  onRetryOnboarding: _retryPendingOnboarding,
+                  child: const AppNavigation(),
+                );
+              }
+              return isNew || draftSnapshot.data != null
+                  ? OnboardingChatScreen(onCompleted: _refreshOnboardingRoute)
+                  : const InternetConnectionNotice(child: AppNavigation());
+            },
+          );
         }
         if (!snapshot.hasData) {
-          if (!isNew) {
-            return const InternetConnectionNotice(child: AppNavigation());
-          }
+          // Restored older accounts can still have unfinished onboarding.
+          // Never flash the shell while its profile eligibility is unresolved.
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
         }
 
         final data = snapshot.data?.data();
-        if (_draftUid != currentUser.uid) {
-          _draftUid = currentUser.uid;
-          _draftFuture = OnboardingDraftRepository().load(currentUser.uid);
-        }
         return FutureBuilder<OnboardingDraft?>(
           future: _draftFuture,
           builder: (context, draftSnapshot) {
@@ -538,17 +652,29 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
             final syncPending = draft?.isEligibleForCommit == true;
             if (data == null) {
               if (syncPending) {
-                return const InternetConnectionNotice(child: AppNavigation());
+                return InternetConnectionNotice(
+                  onboardingPending: true,
+                  onRetryOnboarding: _retryPendingOnboarding,
+                  child: const AppNavigation(),
+                );
               }
-              if (draft != null || isNew) return const OnboardingChatScreen();
+              if (draft != null || isNew) {
+                return OnboardingChatScreen(
+                  onCompleted: _refreshOnboardingRoute,
+                );
+              }
               return const InternetConnectionNotice(child: AppNavigation());
             }
             final flowVer = data['registrationFlowVersion'] as int? ?? 1;
             final completedAt = data['onboardingCompletedAt'];
             if (flowVer >= 2 && completedAt == null && !syncPending) {
-              return const OnboardingChatScreen();
+              return OnboardingChatScreen(onCompleted: _refreshOnboardingRoute);
             }
-            return const InternetConnectionNotice(child: AppNavigation());
+            return InternetConnectionNotice(
+              onboardingPending: completedAt == null && syncPending,
+              onRetryOnboarding: _retryPendingOnboarding,
+              child: const AppNavigation(),
+            );
           },
         );
       },

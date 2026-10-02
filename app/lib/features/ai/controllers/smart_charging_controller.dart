@@ -12,6 +12,7 @@ import '../../../data/models/smart_charging_session.dart';
 import '../../../data/repositories/charge_log_repository.dart';
 import '../../../data/services/charging_prediction_adapter.dart';
 import '../../../data/services/smart_charger_service.dart';
+import '../../../data/services/shelly_connection_coordinator.dart';
 import '../../../data/services/smart_charge_telemetry_foreground_service.dart';
 import '../../../data/services/smart_charge_energy_accumulator.dart';
 import '../../../data/services/smart_charge_preferences_service.dart';
@@ -591,8 +592,11 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       final status = live.status;
       _connectionCoordinator.markStatusSuccess(shellyReachable: status.online);
       if (!_disposed) {
+        ShellyConnectionCoordinator.shared.updateCodeNotice(status);
         state = state.copyWith(
           chargerStatus: status,
+          // The notice comes from the existing server poll, never an extra
+          // Cloud request and never an authorization to energize the relay.
           session: _sessionWithStatus(live.session ?? state.session, status),
           livePowerSamples: _appendPower(status.powerW),
           statusSyncedAt: _clock(),

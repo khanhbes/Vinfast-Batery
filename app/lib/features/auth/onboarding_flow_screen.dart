@@ -8,7 +8,6 @@ import '../../core/services/onboarding_service.dart';
 import '../../core/widgets/app_popup.dart';
 import '../../data/models/vinfast_model_spec.dart';
 import '../../data/repositories/vehicle_spec_repository.dart';
-import '../../navigation/app_navigation.dart';
 
 /// Luồng Onboarding 5 bước bắt buộc cho tài khoản đăng ký mới (registrationFlowVersion >= 2)
 class OnboardingFlowScreen extends ConsumerStatefulWidget {
@@ -179,10 +178,9 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
     if (res['success'] == true) {
       // Điều hướng vào màn chính AppNavigation
       final navigator = Navigator.of(context, rootNavigator: true);
-      navigator.pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const AppNavigation()),
-        (route) => false,
-      );
+      // Return to the existing AuthGate so auth resolution stays single-flight
+      // and the cold-launch splash is not replayed.
+      navigator.popUntil((route) => route.isFirst);
     } else {
       AppPopup.showError(res['error']?.toString() ?? 'Chưa hoàn tất được onboarding.');
     }

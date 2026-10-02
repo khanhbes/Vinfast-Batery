@@ -160,9 +160,12 @@ class _BatteryBotMascotState extends State<BatteryBotMascot>
         animation: Listenable.merge([_floatCtrl, _pulseCtrl, _blinkCtrl, _tapCtrl]),
         builder: (context, _) {
           final floatVal = (motionEnabled && widget.enableFloating)
-              ? math.sin(_floatCtrl.value * math.pi) * 3.0
+              ? math.sin(_floatCtrl.value * math.pi) * 2.5
               : 0.0;
           final pulseVal = motionEnabled ? _pulseCtrl.value : 0.5;
+          final breathingScale = motionEnabled
+              ? 1.0 + (math.sin(_pulseCtrl.value * math.pi) * 0.035)
+              : 1.0;
 
           double eyeOpenRatio = 1.0;
           final blinkProgress = _blinkCtrl.value;
@@ -180,7 +183,7 @@ class _BatteryBotMascotState extends State<BatteryBotMascot>
           return Transform.translate(
             offset: Offset(0, -floatVal),
             child: Transform.scale(
-              scale: tapScale,
+              scale: tapScale * breathingScale,
               child: CustomPaint(
                 size: Size(avatarSize, avatarSize),
                 painter: _BatteryBotAvatarPainter(
@@ -211,9 +214,12 @@ class _BatteryBotMascotState extends State<BatteryBotMascot>
       animation: Listenable.merge([_floatCtrl, _pulseCtrl, _blinkCtrl, _tapCtrl]),
       builder: (context, _) {
         final floatVal = (motionEnabled && widget.enableFloating)
-            ? math.sin(_floatCtrl.value * math.pi) * 6.0
+            ? math.sin(_floatCtrl.value * math.pi) * 5.0
             : 0.0;
         final pulseVal = motionEnabled ? _pulseCtrl.value : 0.5;
+        final breathingScale = motionEnabled
+            ? 1.0 + (math.sin(_pulseCtrl.value * math.pi) * 0.025)
+            : 1.0;
 
         // Tính chu kỳ chớp mắt (nhắm mắt nhanh ở 90-95% chu kỳ)
         double eyeOpenRatio = 1.0;
@@ -266,7 +272,7 @@ class _BatteryBotMascotState extends State<BatteryBotMascot>
             Transform.translate(
               offset: Offset(0, -floatVal),
               child: Transform.scale(
-                scale: tapScale,
+                scale: tapScale * breathingScale,
                 child: CustomPaint(
                   size: Size(width, height),
                   painter: _BatteryBotPainter(

@@ -173,6 +173,18 @@ async function run() {
       doc(bobDb, 'users/alice/appPreferences/ui'),
       { pendingAutoTours: ['tour_overview_v2'] },
     ));
+    await assertFails(setDoc(
+      doc(aliceDb, 'shellyDeviceOwners/forged-device'),
+      { ownerUid: 'alice', memberUids: ['alice', 'bob'], maxMembers: 2 },
+    ));
+    await assertFails(setDoc(
+      doc(aliceDb, 'shellyConnectionCodes/ABCDEF'),
+      { codeVersion: 999, isRevoked: false },
+    ));
+    await assertFails(setDoc(
+      doc(aliceDb, 'users/alice/shellyDevices/forged-device'),
+      { noLoadTestVerified: true, acknowledgedCodeVersion: 999 },
+    ));
     console.log(`Firestore Rules: ${assertionCount} allow/deny assertions passed.`);
   } finally {
     await teardown();
