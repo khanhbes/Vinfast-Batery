@@ -1,0 +1,20 @@
+{
+  "date": "2026-10-06",
+  "sourceSha": "b7a04fdbcabbd3dedbc473025d26758bffc7bd8e",
+  "dirtyWorktree": true,
+  "scope": "Admin staging artifact and unauthenticated UI only",
+  "url": "https://victorious-tree-076e47d00.6.azurestaticapps.net",
+  "indexSha256": "19DC1C00FE13F78C6C3C9CA9246BF3DD850A07BD8214D3CF0DACF7E4FC06E8D1",
+  "publication": {"exitCode": 0, "seconds": 65.77, "method": "Microsoft checksum-verified native deployment client"},
+  "routes": {"/": {"status": 200, "hashMatches": true}, "/shelly": {"status": 200, "hashMatches": true}},
+  "entryAssets": {"verified": 9, "total": 9, "allSha256Match": true},
+  "audit": {"high": 0, "critical": 0, "total": 0},
+  "tests": {"passed": 27, "failed": 0},
+  "mobileLogin": {"viewportWidth": 390, "documentScrollWidth": 390, "inputHeights": [48,48], "fieldsEmpty": true, "passwordToggleSize": [48,48], "submitHeight": 48, "consoleErrors": 0},
+  "screenshot": "output/playwright/azure-admin-task80-live-mobile.png",
+  "cors": {"status": 200, "exactAdminOriginAllowed": true, "authorizationHeaderAllowed": true},
+  "hardwareDisabledFlag": "1",
+  "blocked": ["Authenticated admin login/RBAC/CRUD", "Chatbot Gemini end-to-end", "Production release gates"],
+  "shellyCommandsExecuted": 0,
+  "geminiCallsExecuted": 0
+}

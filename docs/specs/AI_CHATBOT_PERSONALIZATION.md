@@ -5,6 +5,8 @@
 
 > **Đối chiếu triển khai 06/10/2026:** Các dấu `[x]` bên dưới là ghi nhận lịch sử, không chứng nhận nghiệm thu runtime. Xem Task 66 trong `PROJECT_STATUS.md` cho kết quả hiện hành. Đã sửa auth/UID isolation, SSE/error handling, dữ liệu giả và xác nhận lệnh giả; chưa nghiệm thu Gemini thật, dữ liệu lịch sử đa máy, retention/TTL thực tế hoặc adapter điều khiển sạc. Lưu chat local hiện dùng Secure Storage theo UID, chưa phải Hive/Isar. Văn bản Gemini được đệm để kiểm duyệt trước khi phát, chưa đạt streaming từng token như thiết kế. Nhập giọng nói chưa có recognizer thật và được vô hiệu hóa; chatbot không gửi lệnh relay.
 
+> **Kiểm tra tiếp theo 06/10/2026:** Task 67 trong `PROJECT_STATUS.md` bổ sung regression UID/token, phản hồi và lịch sử, hủy stream/action theo vòng đời session, guardrail an toàn và dependency Gemini trong image. Người dùng đã cho phép QA Gemini giả lập và restart riêng AI sau khi cấu hình private env. Chưa chạy Gemini thật hoặc nối adapter điều khiển sạc; các giới hạn Task 66 vẫn áp dụng.
+
 ---
 
 ## 1. Kiến Trúc Tổng Thể

@@ -14,6 +14,7 @@ try:
     from firebase_admin import credentials, firestore
     HAS_FIREBASE_ADMIN = True
 except ImportError:
+    firebase_admin = credentials = firestore = None
     HAS_FIREBASE_ADMIN = False
 
 
@@ -38,7 +39,7 @@ class FirestoreSessionSync:
             self._init_firebase()
 
     def _init_firebase(self) -> None:
-        if not HAS_FIREBASE_ADMIN:
+        if not HAS_FIREBASE_ADMIN or firebase_admin is None or credentials is None or firestore is None:
             logger.warning("[FirestoreSync] firebase-admin is not installed; sync disabled")
             self.enabled = False
             return

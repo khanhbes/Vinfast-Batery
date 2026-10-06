@@ -295,6 +295,7 @@ class PredictorAdapter:
         """Create predictor for TensorFlow Lite interpreter."""
         if np is None:
             raise RuntimeError("numpy not installed, cannot run TFLite inference")
+        numpy = np
 
         input_details = interpreter.get_input_details()
         output_details = interpreter.get_output_details()
@@ -315,9 +316,9 @@ class PredictorAdapter:
             if hasattr(X, "values"):
                 X = X.values
             if isinstance(X, list):
-                X = np.array(X, dtype=np.float32)
-            elif not isinstance(X, np.ndarray):
-                X = np.array(X, dtype=np.float32)
+                X = numpy.array(X, dtype=numpy.float32)
+            elif not isinstance(X, numpy.ndarray):
+                X = numpy.array(X, dtype=numpy.float32)
 
             X = X.astype(input_dtype)
             if X.ndim == 1:
@@ -604,7 +605,7 @@ class ModelRuntime:
         # Build input with proper column names for sklearn
         if pd is not None:
             if predictor.feature_names:
-                X = pd.DataFrame([smoke_values], columns=predictor.feature_names)
+                X = pd.DataFrame([smoke_values], columns=pd.Index(predictor.feature_names))
             else:
                 X = pd.DataFrame([smoke_values])
         else:
@@ -780,7 +781,7 @@ class ModelRuntime:
 
         # Build input with proper column names for sklearn
         if pd is not None and predictor.feature_names:
-            X = pd.DataFrame([feature_values], columns=predictor.feature_names)
+            X = pd.DataFrame([feature_values], columns=pd.Index(predictor.feature_names))
         elif pd is not None:
             X = pd.DataFrame([feature_values])
         else:

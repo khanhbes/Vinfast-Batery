@@ -1,0 +1,30 @@
+{
+  "baselineSha": "b7a04fdbcabbd3dedbc473025d26758bffc7bd8e",
+  "branch": "feature/ios-platform",
+  "workingTree": "modified; preserved, not reset or stashed",
+  "scope": "17 changed chatbot source/config/test files, not the entire repository",
+  "sha256": {
+    "app/lib/features/ai/assistant_sheet.dart": "8C804EFEF839D7B28412E9D59EDB683D5B94F19823588F35CAAD73EF3A21046E",
+    "app/lib/features/ai/controllers/chat_controller.dart": "83D7AA59A8FC1B6812D627F53028628FDDB316750FF9812D30BA3DDD2E30B209",
+    "app/lib/features/ai/services/behavior_tracker.dart": "0C3750C9A7A81A6BBC9D18B4F5DE71801FA4FD5857BB119D7D8E9729D4FED3D9",
+    "app/lib/features/ai/services/chat_api_service.dart": "2EB8444793CCBEE5C196EAE7EDB1BA3A85B4690AC43E3E5ECA6378093B2B5B99",
+    "app/lib/features/ai/services/chat_history_storage.dart": "9C3425AF509B1363672CF081B258D01E64F9234960B7682216A91B2313CFA5E3",
+    "app/test/unit/chat_safety_regression_test.dart": "69757D2795B4CA743154AF2E60EA17A886FDF726AF9253E9F246051D62B0B276",
+    "app/test/widget/assistant_sheet_lifecycle_test.dart": "70EB53C7A7BD1D436A704B2D962DB1D7C83FDEFBF64421993D6E7FDA34F7F8AE",
+    "web/Dockerfile.ai": "4B19E5ADC917C248F5C0644700C8A0AD0736A1B903777D217E68B06A8480A07A",
+    "web/requirements-ai.txt": "097F335B1028C4D0208CCE52A1D0CE785A5FB6C3148B027102F1B21D1039312D",
+    "web/ai_server/behavior_analyzer.py": "D467938E757F5E6A1B5716DD20A713B55C238986D50FBEEFEA64C1DD7C68292B",
+    "web/ai_server/chat_engine.py": "82723287491BE14E777BE9B592DAE86968C7185AA5B3DFC8FAEFC0E1650F49C3",
+    "web/ai_server/chat_guardrails.py": "82D295EA935B41A0DAFF196F988F69F881A2C2E1CE82C3E09A4CA9DC96A34C04",
+    "web/ai_server/chat_memory.py": "F54ED2EF6761A32FABC8C1A4EF257A1640D16AC36FA1A143F9A27D925B705E4E",
+    "web/ai_server/main.py": "55BEF3ABFB9F97B102FB0388F33B9774EAE50CBF1670C1CFAAEC7788C96C4D88",
+    "web/server.py": "3E8A02670455BE5CCC0F347ECC3DA99097366DDBB598713F00037347A23B7871",
+    "web/tests/test_chat_security_contract.py": "D3FD83913FA5CF6841B9B65A94F40FEA8CA2C9C300BB121A81C4B6933E7FFFCE",
+    "web/tests/test_guardrails_and_personality.py": "A915FEF65A46DCE31E03FD3BE09507B5AB18142B11467FA6BF209ECF0AB18C50"
+  },
+  "sourceScan": {
+    "patterns": ["private key header", "Google API key shape", "JWT shape", "common mojibake byte pairs", "replacement character"],
+    "findings": [],
+    "limitations": "Only the listed files. Not a Git-history, artifact, private-env, deployed-container or exhaustive PII/secret audit. No secret values printed."
+  }
+}

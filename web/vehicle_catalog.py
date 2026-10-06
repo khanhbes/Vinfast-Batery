@@ -23,7 +23,8 @@ from typing import Any, Callable
 from urllib.parse import urljoin, urlparse
 
 import requests
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify
+from auth_context import request
 
 try:  # Optional at import time so unit tests can use pure validation helpers.
     from bs4 import BeautifulSoup

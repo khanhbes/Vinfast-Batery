@@ -321,7 +321,7 @@ export const getChargeLogs = (vehicleId) => {
 
 
 // ── Shelly Connection Codes (Admin) ──
-export const adminShellyDevices = () => apiFetch('/api/admin/shelly-devices')
+export const adminShellyDevices = () => apiFetch('/api/admin/shelly-devices', { silent: true })
 export const adminSaveShellyDevice = (data) =>
   apiFetch('/api/admin/shelly-devices', { method: 'POST', body: JSON.stringify(data) })
 export const adminDeleteShellyDevice = (deviceId) =>

@@ -1,0 +1,15 @@
+{
+  "command": [
+    "powershell",
+    "-NoProfile",
+    "-Command",
+    "$env:Path = 'C:/Users/khanh/AppData/Local/npm-cache/_npx/52027bd8fc0022aa/node_modules/node/bin;' + $env:Path; & './deploy/azure/07-build-admin.ps1' -ConfigPath './deploy/azure/staging.json' -ApiUrl 'https://vinfast-api.nicestone-4d213368.eastasia.azurecontainerapps.io' -FirebaseConfigPath './web/dashboard/.env.local' -DashboardPath 'C:/Users/khanh/AppData/Local/Temp/vinfast-admin-80655132a277417aad9167675a5f8bdf'"
+  ],
+  "cwd": ".",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\azure-20261006-task83-admin-build-clean.log",
+  "timeoutSeconds": 600,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 137.34
+}

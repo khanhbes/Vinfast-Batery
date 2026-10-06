@@ -171,6 +171,32 @@ class BehaviorTracker extends StateNotifier<BehaviorProfile> {
   }
 
   /// Thay thế profile từ server sync
+  void replaceChatFeedback({String? previous, required String rating}) {
+    String? normalize(String? vote) => switch (vote) {
+      'up' => 'like',
+      'down' => 'dislike',
+      _ => vote,
+    };
+    final old = normalize(previous);
+    final next = normalize(rating);
+    if (old == next || !['like', 'dislike'].contains(next)) return;
+    final stats = Map<String, dynamic>.from(
+      state.chatPreferences.feedbackStats,
+    );
+    const keys = {'like': 'totalThumbsUp', 'dislike': 'totalThumbsDown'};
+    if (keys.containsKey(old)) {
+      final count = (stats[keys[old]] as num?)?.toInt() ?? 0;
+      stats[keys[old]!] = count > 0 ? count - 1 : 0;
+    }
+    stats[keys[next]!] = ((stats[keys[next]] as num?)?.toInt() ?? 0) + 1;
+    state = state.copyWith(
+      chatPreferences: state.chatPreferences.copyWith(feedbackStats: stats),
+      updatedAt: DateTime.now(),
+    );
+    saveLocalProfile();
+  }
+
+  /// Thay thế profile từ server sync
   void replaceProfile(BehaviorProfile newProfile) {
     state = newProfile;
     saveLocalProfile();

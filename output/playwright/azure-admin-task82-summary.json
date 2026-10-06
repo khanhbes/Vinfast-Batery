@@ -1,0 +1,31 @@
+{
+  "date": "2026-10-06",
+  "environment": "Azure staging admin",
+  "session": "azure-admin-task82",
+  "mode": "authenticated read-only browser QA",
+  "pages": [
+    {"path": "/", "result": "rendered", "refreshHttpStatus": 200},
+    {"path": "/users", "result": "rendered", "rows": 16, "noMatchSearchRows": 0, "httpStatus": 200},
+    {"path": "/catalog", "result": "rendered", "rows": 11, "httpStatus": 200, "detailsHttpStatus": 200, "detailOpenedAndEscapeUsed": true},
+    {"path": "/shelly", "result": "rendered after slow lazy-module load", "refreshHttpStatus": 200, "firstLazyAssetDurationMs": 82642},
+    {"path": "/ai", "result": "Develop Mode is off gate; AI not exercised"},
+    {"path": "/data", "result": "Develop Mode is off gate reached by Explore all data shortcut"}
+  ],
+  "authMeHttpStatus": 200,
+  "responsive": {"paths": ["/", "/users", "/catalog", "/shelly"], "widths": [320, 390, 412], "horizontalDocumentOverflow": false, "limitation": "No exhaustive clipped-content, theme, keyboard or accessibility certification"},
+  "shellySmallControlsDesktop": [
+    {"label": "unlabelled icon button", "width": 16, "height": 16},
+    {"label": "save device/create code", "width": 264, "height": 40},
+    {"label": "generate new code", "width": 114, "height": 30},
+    {"label": "delete device", "width": 60, "height": 28}
+  ],
+  "observedApiResponses": {"successfulGetCount": 12, "non200ResponseCount": 0},
+  "consoleObservedAfterInstrumentation": {"errors": 0, "warnings": 0},
+  "failedFetchCount": 1,
+  "failedFetchReason": "net::ERR_ABORTED; cause not established",
+  "testRunnerCaveat": "One combined catalog/Shelly command exited 1 on 30s heading wait; later Shelly render and GET were observed. Do not treat this attempt as Pass or infer permanent API failure.",
+  "safety": {"hardwareCommands": 0, "geminiCalls": 0, "dataMutations": 0, "credentialsExtracted": false},
+  "remaining": ["authenticated chatbot/Gemini", "write CRUD with dedicated fixtures", "role-denied account", "full accessibility and theme matrix", "repeat cold lazy-asset timing", "hardware control excluded"],
+  "finalBrowserPage": "/",
+  "finalViewport": {"width": 1280, "height": 900}
+}

@@ -1,0 +1,88 @@
+{
+  "task": 72,
+  "date": "2026-10-06",
+  "head": "b7a04fdbcabbd3dedbc473025d26758bffc7bd8e",
+  "branch": "feature/ios-platform",
+  "dirtyWorktree": true,
+  "scope": "Static diagnostics and fake regression only; no deploy/APK/emulator/hardware/provider calls",
+  "pyrightVersion": "1.1.414",
+  "ideProblemCountVerified": false,
+  "files": [
+    {
+      "sha256": "26B63ECE6F29F7B3AFD63C096C51EED19FB5F6DACC898F9EA4C3A79B3312D404",
+      "path": "pyrightconfig.json"
+    },
+    {
+      "sha256": "A2DE83954BA79F0E07C5E62C54E842EAECB4DA091CE5DA33A15DBB045727F8E2",
+      "path": "web/auth_context.py"
+    },
+    {
+      "sha256": "64B4C5924529E362B97EB143F20F0FDF50BF39F645BC1981671986A78B6833C7",
+      "path": "web/server.py"
+    },
+    {
+      "sha256": "582D00644E87AC196126873C90402175229A111EC940C4BCBDD29BF765BAE4AA",
+      "path": "web/vehicle_catalog.py"
+    },
+    {
+      "sha256": "61202256CD418FD17323A45A777948D8EEA2A04B2E6B04319A12AF21B83F9FE9",
+      "path": "web/Dockerfile.api"
+    },
+    {
+      "sha256": "7DB2FF2CB0DCEE4D350A3D98792BA04C0E8360B0A78C640816BB77E7804BAB25",
+      "path": "web/catalog_research_worker.py"
+    },
+    {
+      "sha256": "D9DA91AD4582F9C17A38649528DD36FD302BAA6D3A046485118F2BC38E29AE1C",
+      "path": "web/ai_server/chat_engine.py"
+    },
+    {
+      "sha256": "00ADFC5FB1F720361B269E56C76D530D0C4164D2B731AED30DB444547792E36F",
+      "path": "web/ai_server/chat_memory.py"
+    },
+    {
+      "sha256": "5DEFC4B865B0A1776CCFD9C68E25345D005279A66DA6DEADEBD869AE35DA30AA",
+      "path": "web/ai_server/behavior_analyzer.py"
+    },
+    {
+      "sha256": "F8CFB5E675870F002B0BA274531726DEF278603AD919A0DD4B26A24EB130824C",
+      "path": "web/ai_server/main.py"
+    },
+    {
+      "sha256": "F9AC8C599A652CF2730403D8366A01284CDB13A066585BAF5B4B5AF1B576EF7F",
+      "path": "web/ai_server/model_runtime.py"
+    },
+    {
+      "sha256": "2887B962B5F03AA5C2F0052411249A0DFFAE258A2E284315B284A91619F5BF85",
+      "path": "web/ai_server/model_store.py"
+    },
+    {
+      "sha256": "C0A26521E2EACEFD8E9D1C27FE3C251C12370B76A74CA82CA978C595DAC1306A",
+      "path": "web/tests/test_python_contract_regressions.py"
+    },
+    {
+      "sha256": "D1DC2EEFF2B0E1138BC1243AFC31DC579A16EDA82BD1EEA32352889C4FAEBCF4",
+      "path": "smart_charger_gateway/firestore_sync.py"
+    },
+    {
+      "sha256": "7B370FE3F238A616267B770F6CCDD6BB14E94F53F9E9EF5DD1CF5EE725D24403",
+      "path": "smart_charger_gateway/shelly.py"
+    },
+    {
+      "sha256": "652572EA78B6A0E236A2F1FCE305FD6CF687B3C3814E87ABF3B3F9AB64F65D36",
+      "path": "smart_charger_gateway/smart_charging.py"
+    },
+    {
+      "sha256": "E4AC2A9BC6A81E93D6EA1A4C1484A8AB4B03ECBD4F3777C88289B911B96EAD16",
+      "path": "smart_charger_gateway/tests/test_smart_charging.py"
+    },
+    {
+      "sha256": "6E70B00121334ED8CFDD69A85868393EFF4F200E7F03A9E06C9C050BDD39CA8B",
+      "path": "tools/run_quality_gate.py"
+    },
+    {
+      "sha256": "6F5100B7ED68114EB1D8FDA2B70BC0243244CFBD3BA9F5EBA6454DED78B8D5B9",
+      "path": "tools/shelly_supervised_container_test.py"
+    }
+  ]
+}

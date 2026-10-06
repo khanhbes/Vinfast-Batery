@@ -13,6 +13,7 @@ import json
 import os
 import re
 import shutil
+import tempfile
 import threading
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
@@ -101,7 +102,7 @@ class ModelStore:
 
     # ── Mutations ────────────────────────────────────────────────
     def save_from_temp(self, tmp_path: str, version: str, note: Optional[str],
-                       ext: str = ".pkl") -> Dict[str, Any]:
+                       ext: str = ".pkl", *, metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Move temp file to final location + register in manifest (inactive by default)."""
         with self._lock:
             if any(v.get("version") == version for v in self._read_manifest().get("versions", [])):
@@ -109,13 +110,15 @@ class ModelStore:
             final = self.path_of(version, ext)
             shutil.move(tmp_path, final)
             final_path = self.path_of(version, ext)
-            meta = {
+            meta: Dict[str, Any] = {
                 "version": version,
                 "uploadedAt": _utc_now_iso(),
                 "note": note or "",
                 "ext": ext,
                 "path": final_path,
             }
+            if metadata is not None:
+                meta["metadata"] = metadata
             data = self._read_manifest()
             versions = data.get("versions", [])
             versions.append(meta)
@@ -123,6 +126,24 @@ class ModelStore:
             self._write_manifest(data)
             self._enforce_retention()
             return meta
+
+    def save_version(self, version: str, source_path: str,
+                     metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Register a training artifact without consuming the export source."""
+        ext = os.path.splitext(source_path)[1] or ".pkl"
+        self.path_of(version, ext)  # Reject invalid paths before creating a temp file.
+        # Snapshot and validate metadata before moving any model file.
+        snapshot = json.loads(json.dumps(metadata or {}))
+        with tempfile.NamedTemporaryFile(dir=self.root, suffix=ext, delete=False) as staged:
+            staged_path = staged.name
+        try:
+            shutil.copyfile(source_path, staged_path)
+            return self.save_from_temp(staged_path, version, None, ext, metadata=snapshot)
+        finally:
+            try:
+                os.remove(staged_path)
+            except FileNotFoundError:
+                pass  # Successful registration moved only our staging file.
 
     def activate(self, version: str) -> None:
         with self._lock:

@@ -1,0 +1,19 @@
+{
+  "command": [
+    "python",
+    "tools/azure_public_chat_qa.py",
+    "--credential-file",
+    "vinfast-873db-firebase-adminsdk-fbsvc-e584000635.json",
+    "--firebase-web-env",
+    "web/dashboard/.env.local",
+    "--api-url",
+    "https://vinfast-api.nicestone-4d213368.eastasia.azurecontainerapps.io"
+  ],
+  "cwd": ".",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\azure-20261006-task83-public-chat-diagnostic.log",
+  "timeoutSeconds": 300,
+  "timedOut": false,
+  "exitCode": 1,
+  "cleanupError": null,
+  "elapsedSeconds": 56.48
+}

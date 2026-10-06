@@ -1,0 +1,19 @@
+{
+  "command": [
+    "docker",
+    "build",
+    "--platform",
+    "linux/amd64",
+    "-f",
+    "Dockerfile.ai",
+    "-t",
+    "vinfast-ai:azure-staging-20261006",
+    "."
+  ],
+  "cwd": "web",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\azure-20261006-ai-build.log",
+  "timeoutSeconds": 1800,
+  "timedOut": false,
+  "exitCode": 4294967295,
+  "elapsedSeconds": 1126.64
+}

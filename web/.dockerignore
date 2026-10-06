@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 *.pyo
 .venv/
+venv/
 *.egg-info/
 
 # Node
@@ -17,6 +18,9 @@ logs/
 
 # AI models (mount via volume, không bake vào image)
 models/
+apk/
+data/
+rules_tests/
 
 # Git
 .git/

@@ -1,0 +1,17 @@
+{
+  "command": [
+    "python",
+    "-m",
+    "pytest",
+    "tests",
+    "-q",
+    "--basetemp",
+    "C:\\Users\\khanh\\AppData\\Local\\Temp\\vinfast-problems-backend-4d9f188268a04f13a2d0f992337112f5"
+  ],
+  "cwd": "web",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\problems-20261006-backend.log",
+  "timeoutSeconds": 240,
+  "timedOut": false,
+  "exitCode": 0,
+  "elapsedSeconds": 50.67
+}

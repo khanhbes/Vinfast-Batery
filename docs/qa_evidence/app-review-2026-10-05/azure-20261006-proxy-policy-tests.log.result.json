@@ -1,0 +1,17 @@
+{
+  "command": [
+    "python",
+    "-m",
+    "pytest",
+    "tests/test_azure_staging_policy.py",
+    "-q",
+    "-p",
+    "no:cacheprovider"
+  ],
+  "cwd": "web",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\azure-20261006-proxy-policy-tests.log",
+  "timeoutSeconds": 120,
+  "timedOut": false,
+  "exitCode": 0,
+  "elapsedSeconds": 3.56
+}

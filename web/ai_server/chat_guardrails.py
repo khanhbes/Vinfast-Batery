@@ -76,62 +76,30 @@ class ChatGuardrails:
         return DEFAULT_CATALOG_SPECS
 
     def validate_electrical_safety(self, text: str) -> tuple[str, List[str]]:
-        """Kiểm duyệt an toàn điện áp, dòng sạc và nhiệt độ (≤ 12A / 2500W)."""
+        """Reject unsafe output, do not turn a limit into a charging recommendation."""
         violations: List[str] = []
-        sanitized = text
-
-        # 1. Kiểm tra dòng sạc (A) vượt quá 12A
-        current_matches = re.finditer(r"(?i)\b(\d+(?:\.\d+)?)\s*(?:a|ampe|ampere)\b", text)
-        for m in current_matches:
-            val = float(m.group(1))
-            if val > MAX_SAFE_AMPS:
-                violations.append(f"GR-ELEC-001: Dòng sạc {val}A vượt ngưỡng an toàn tối đa 12A.")
-                sanitized = re.sub(
-                    rf"\b{re.escape(m.group(0))}\b",
-                    f"10A–12A (tối đa an toàn {MAX_SAFE_AMPS:g}A)",
-                    sanitized,
-                    flags=re.IGNORECASE,
-                )
-
-        # 2. Kiểm tra công suất sạc (W hoặc kW) vượt 2500W
-        watts_matches = re.finditer(r"(?i)\b(\d{4,})\s*(?:w|watt)\b", sanitized)
-        for m in watts_matches:
-            val = float(m.group(1))
-            if val > MAX_SAFE_WATTS:
-                violations.append(f"GR-ELEC-002: Công suất {val}W vượt ngưỡng an toàn tối đa 2500W.")
-                sanitized = re.sub(
-                    rf"\b{re.escape(m.group(0))}\b",
-                    f"2200W (tối đa an toàn {MAX_SAFE_WATTS:g}W)",
-                    sanitized,
-                    flags=re.IGNORECASE,
-                )
-
-        kw_matches = re.finditer(r"(?i)\b(\d+(?:\.\d+)?)\s*kw\b", sanitized)
-        for m in kw_matches:
-            val = float(m.group(1)) * 1000.0
-            if val > MAX_SAFE_WATTS:
-                violations.append(f"GR-ELEC-002: Công suất {val}W vượt ngưỡng an toàn tối đa 2500W.")
-                sanitized = re.sub(
-                    rf"\b{re.escape(m.group(0))}\b",
-                    "2.2 kW (tối đa an toàn 2.5 kW)",
-                    sanitized,
-                    flags=re.IGNORECASE,
-                )
-
-        # 3. Kiểm tra đề xuất sạc ở nhiệt độ nguy hiểm (> 45°C)
-        temp_matches = re.finditer(r"(?i)\b(\d+(?:\.\d+)?)\s*(?:°c|độ c)\b", sanitized)
-        for m in temp_matches:
-            val = float(m.group(1))
-            if val > MAX_CHARGING_SAFE_TEMP_C and any(w in sanitized.lower() for w in ["sạc", "cắm sạc"]):
-                if "cảnh báo quá nhiệt" not in sanitized.lower():
-                    violations.append(f"GR-TEMP-001: Nhiệt độ {val}°C có thể gây rủi ro khi sạc pin.")
-                    sanitized += (
-                        f"\n\n⚠️ *Cảnh báo an toàn*: Không nên cắm sạc khi nhiệt độ pin vượt quá "
-                        f"{MAX_CHARGING_SAFE_TEMP_C}°C để bảo vệ cell pin LFP và phòng chống cháy nổ."
-                    )
-                break
-
-        return sanitized, violations
+        patterns = [
+            (r"(?i)\b(\d+(?:[.,]\d+)?)\s*(?:a|ampe|ampere)\b", MAX_SAFE_AMPS, "GR-ELEC-001"),
+            (r"(?i)\b(\d+(?:[.,]\d+)?)\s*(?:w|watt)\b", MAX_SAFE_WATTS, "GR-ELEC-002"),
+            (r"(?i)\b(\d+(?:[.,]\d+)?)\s*kw\b", MAX_SAFE_WATTS / 1000, "GR-ELEC-002"),
+        ]
+        for pattern, limit, code in patterns:
+            for match in re.finditer(pattern, text):
+                if float(match.group(1).replace(",", ".")) > limit:
+                    violations.append(code + ": Nội dung vượt giới hạn hệ thống.")
+        if any(word in text.lower() for word in ["sạc", "cắm sạc"]):
+            for match in re.finditer(r"(?i)\b(\d+(?:[.,]\d+)?)\s*(?:°c|độ c)\b", text):
+                if float(match.group(1).replace(",", ".")) > MAX_CHARGING_SAFE_TEMP_C:
+                    violations.append("GR-TEMP-001: Cần kiểm tra nhiệt độ trước khi sạc.")
+                    break
+        if violations:
+            return (
+                "Cảnh báo an toàn: Mình không thể khuyến nghị sạc theo thông số này. "
+                "Hãy kiểm tra hướng dẫn của xe và bộ sạc trước khi thao tác. "
+                "Giới hạn hệ thống là 12A / 2500W, không phải dòng hay công suất nên chọn.",
+                violations,
+            )
+        return text, []
 
     def validate_vehicle_specs(
         self, text: str, vehicle_context: Optional[Dict[str, Any]] = None

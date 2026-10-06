@@ -1,0 +1,18 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "secrets": {"value": {"entries": [
+      {"name": "ai-token", "value": "<same-independent-staging-token-as-api>"},
+      {"name": "gemini-key", "value": "<optional-Gemini-key-server-only>"}
+    ]}},
+    "variables": {"value": {
+      "APP_ENV": {"secret": false, "value": "production"},
+      "AI_SERVER_INTERNAL_TOKEN": {"secret": true, "value": "ai-token"},
+      "GEMINI_API_KEY": {"secret": true, "value": "gemini-key"},
+      "GEMINI_CHAT_MODEL": {"secret": false, "value": "<configured-supported-model>"},
+      "AI_SERVER_MODELS_DIR": {"secret": false, "value": "/app/data/models"},
+      "EV_SOC_MODEL_PATH": {"secret": false, "value": "/app/data/models/ev_soc_pipeline.pkl"}
+    }}
+  }
+}

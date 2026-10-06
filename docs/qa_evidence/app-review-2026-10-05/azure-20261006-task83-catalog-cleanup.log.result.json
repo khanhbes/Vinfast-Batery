@@ -1,0 +1,18 @@
+{
+  "command": [
+    "python",
+    "tools/purge_catalog_qa_draft.py",
+    "--credential-file",
+    "vinfast-873db-firebase-adminsdk-fbsvc-e584000635.json",
+    "--catalog-id",
+    "qa-agent-20261006-qa-runtime-20261006t1645-no-hardware-2026-vn",
+    "--execute"
+  ],
+  "cwd": ".",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\azure-20261006-task83-catalog-cleanup.log",
+  "timeoutSeconds": 120,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 12.97
+}

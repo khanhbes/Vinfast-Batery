@@ -61,8 +61,8 @@ export default function Login() {
             <div className="relative mx-auto mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 shadow-[0_0_30px_rgba(16,185,129,0.25)]">
               <BatteryCharging className="h-8 w-8 text-emerald-400" />
             </div>
-            <h1 className="text-2xl font-bold text-foreground">VinFast BMS</h1>
-            <p className="mt-2 text-sm text-muted-foreground">Battery operations and AI workspace</p>
+            <h1 className="text-2xl font-bold text-slate-50">VinFast BMS</h1>
+            <p className="mt-2 text-sm text-slate-300">Battery operations and AI workspace</p>
           </div>
 
           <Card className="border-border/30 bg-card/80 shadow-2xl backdrop-blur-xl">
@@ -81,7 +81,7 @@ export default function Login() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
-                    className="border-border/40 bg-background/60"
+                    className="min-h-12 border-border/40 bg-background/60"
                   />
                 </div>
 
@@ -96,7 +96,7 @@ export default function Login() {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
-                      className="border-border/40 bg-background/60 pr-10"
+                      className="min-h-12 border-border/40 bg-background/60 pr-12"
                     />
                     <Button
                       type="button"
@@ -104,7 +104,7 @@ export default function Login() {
                       aria-pressed={showPassword}
                       variant="ghost"
                       size="icon"
-                      className="absolute right-0 top-0 h-full px-3 text-muted-foreground hover:text-foreground"
+                      className="absolute right-0 top-0 h-full min-h-12 min-w-12 px-3 text-muted-foreground hover:text-foreground"
                       onClick={() => setShowPassword(!showPassword)}
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -114,7 +114,7 @@ export default function Login() {
 
                 <Button
                   type="submit"
-                  className="w-full bg-emerald-500 text-slate-950 hover:bg-emerald-400"
+                  className="min-h-12 w-full bg-emerald-500 text-slate-950 hover:bg-emerald-400"
                   disabled={loading}
                 >
                   {loading ? (
@@ -130,7 +130,7 @@ export default function Login() {
             </CardContent>
           </Card>
 
-          <p className="mt-6 text-center text-xs text-muted-foreground/60">
+          <p className="mt-6 text-center text-xs text-slate-300">
             Authorized administrators only. Activity is logged.
           </p>
         </div>

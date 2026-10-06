@@ -1,0 +1,20 @@
+{
+  "command": [
+    "npx.cmd",
+    "--yes",
+    "--package",
+    "pyright",
+    "pyright",
+    "web/ai_server",
+    "smart_charger_gateway",
+    "tools",
+    "--pythonpath",
+    "C:/Users/khanh/AppData/Local/Programs/Python/Python312/python.exe"
+  ],
+  "cwd": ".",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\problems-20261006-python-types.log",
+  "timeoutSeconds": 180,
+  "timedOut": false,
+  "exitCode": 1,
+  "elapsedSeconds": 55.72
+}

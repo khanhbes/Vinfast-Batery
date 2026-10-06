@@ -1,0 +1,21 @@
+{
+  "command": [
+    "npx.cmd",
+    "--yes",
+    "--package",
+    "node@22",
+    "--",
+    "npm",
+    "install",
+    "--no-fund",
+    "--loglevel",
+    "info"
+  ],
+  "cwd": "web/dashboard",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\azure-20261006-admin-node22-install.log",
+  "timeoutSeconds": 600,
+  "timedOut": true,
+  "exitCode": 1,
+  "cleanupError": null,
+  "elapsedSeconds": 602.03
+}

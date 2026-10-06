@@ -1,0 +1,17 @@
+{
+  "command": [
+    "C:/Users/khanh/AppData/Local/npm-cache/_npx/52027bd8fc0022aa/node_modules/node/bin/node.exe",
+    "C:/Program Files/nodejs/node_modules/npm/bin/npm-cli.js",
+    "install",
+    "--no-fund",
+    "--loglevel",
+    "info"
+  ],
+  "cwd": "C:/Users/khanh/AppData/Local/Temp/vinfast-admin-80655132a277417aad9167675a5f8bdf",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\azure-20261006-admin-clean-install.log",
+  "timeoutSeconds": 240,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 168.77
+}

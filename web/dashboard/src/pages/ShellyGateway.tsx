@@ -43,11 +43,19 @@ function Badge({ variant = 'default', children }: { variant?: string; children: 
 function CodeBox({ code, label = 'Mã kết nối' }: { code: string; label?: string }) {
   const [copied, setCopied] = useState(false);
 
-  const copy = () => {
-    navigator.clipboard.writeText(code);
-    setCopied(true);
-    toast.success(`Đã sao chép mã kết nối: ${code}`);
-    setTimeout(() => setCopied(false), 2000);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      toast.success('Đã sao chép mã kết nối');
+    } catch {
+      toast.error('Không thể sao chép. Hãy chọn và sao chép mã thủ công.');
+    }
   };
 
   return (
@@ -55,7 +63,7 @@ function CodeBox({ code, label = 'Mã kết nối' }: { code: string; label?: st
       <button
         onClick={copy}
         title={`Sao chép ${label.toLowerCase()}`}
-        className="group relative inline-flex items-center gap-2 rounded-xl border-2 border-primary/40 bg-primary/5 px-3.5 py-2 font-mono text-xl font-extrabold tracking-[.25em] text-primary transition-all hover:scale-[1.02] hover:border-primary hover:bg-primary/10 hover:shadow-md active:scale-95"
+        className="min-h-12 group relative inline-flex items-center gap-2 rounded-xl border-2 border-primary/40 bg-primary/5 px-3.5 py-2 font-mono text-xl font-extrabold tracking-[.25em] text-primary transition-all hover:scale-[1.02] hover:border-primary hover:bg-primary/10 hover:shadow-md active:scale-95"
       >
         <span>{code}</span>
         {copied ? (
@@ -72,6 +80,7 @@ function CodeBox({ code, label = 'Mã kết nối' }: { code: string; label?: st
 export default function ShellyGateway() {
   const [devices, setDevices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [generatingFor, setGeneratingFor] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -97,8 +106,9 @@ export default function ShellyGateway() {
     try {
       const res = await adminShellyDevices();
       setDevices(res?.data || []);
-    } catch (err: any) {
-      toast.error('Không thể tải danh sách thiết bị Shelly: ' + (err?.message || 'Lỗi kết nối'));
+      setLoadError(false);
+    } catch {
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -126,7 +136,7 @@ export default function ShellyGateway() {
       const code = res?.data?.code || res?.code;
       const dev = res?.data?.device || res?.device || {};
 
-      toast.success(`Đã lưu thiết bị và tạo mã kết nối: ${code}`);
+      toast.success('Đã lưu thiết bị và tạo mã kết nối');
       setNewlyCreated({
         code,
         deviceName: form.deviceName || dev.displayName || 'Shelly',
@@ -142,8 +152,8 @@ export default function ShellyGateway() {
 
       // Refresh list below
       await refresh();
-    } catch (err: any) {
-      toast.error(err?.message || 'Không thể lưu thiết bị');
+    } catch {
+      toast.error('Không thể lưu thiết bị. Kiểm tra thông tin và thử lại.');
     } finally {
       setSaving(false);
     }
@@ -160,15 +170,15 @@ export default function ShellyGateway() {
         note: `Cấp mã mới cho ${dev.displayName}`,
       });
       const code = res?.data?.code || res?.code;
-      toast.success(`Đã tạo mã mới: ${code} cho thiết bị ${dev.displayName}`);
+      toast.success('Đã tạo mã kết nối mới');
       setNewlyCreated({
         code,
         deviceName: dev.displayName,
         deviceId: dev.deviceId,
       });
       await refresh();
-    } catch (err: any) {
-      toast.error(err?.message || 'Không thể tạo mã mới');
+    } catch {
+      toast.error('Không thể tạo mã mới. Hãy thử lại.');
     } finally {
       setGeneratingFor(null);
     }
@@ -183,8 +193,8 @@ export default function ShellyGateway() {
       await adminDeleteShellyDevice(dev.deviceId);
       toast.success(`Đã xóa thiết bị ${dev.displayName || dev.deviceId}`);
       await refresh();
-    } catch (err: any) {
-      toast.error('Không thể xóa thiết bị: ' + (err?.message || 'Lỗi server'));
+    } catch {
+      toast.error('Không thể xóa thiết bị. Kiểm tra trạng thái và thử lại.');
     }
   };
 
@@ -206,7 +216,7 @@ export default function ShellyGateway() {
         <button
           onClick={refresh}
           disabled={loading}
-          className="inline-flex items-center gap-2 rounded-xl border bg-card px-4 py-2 text-sm font-medium shadow-sm transition hover:bg-muted disabled:opacity-50"
+          className="min-h-12 inline-flex items-center gap-2 rounded-xl border bg-card px-4 py-2 text-sm font-medium shadow-sm transition hover:bg-muted disabled:opacity-50"
         >
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Làm mới danh sách
         </button>
@@ -229,7 +239,7 @@ export default function ShellyGateway() {
               <CodeBox code={newlyCreated.code} />
               <button
                 onClick={() => setNewlyCreated(null)}
-                className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-white/80 transition"
+                className="min-h-12 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-white/80 transition"
               >
                 Đóng
               </button>
@@ -265,7 +275,7 @@ export default function ShellyGateway() {
                 value={form.deviceName}
                 onChange={(e) => setForm((f) => ({ ...f, deviceName: e.target.value }))}
                 placeholder="VD: Shelly Trạm Sạc 1"
-                className="w-full rounded-xl border bg-background px-3.5 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                className="min-h-12 w-full rounded-xl border bg-background px-3.5 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                 required
               />
             </div>
@@ -278,8 +288,8 @@ export default function ShellyGateway() {
                 type="text"
                 value={form.deviceId}
                 onChange={(e) => setForm((f) => ({ ...f, deviceId: e.target.value }))}
-                placeholder="VD: shellyplus1pm-a8032abe1234"
-                className="w-full rounded-xl border bg-background px-3.5 py-2.5 text-sm font-mono outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                placeholder="Nhập mã từ Device Info"
+                className="min-h-12 w-full rounded-xl border bg-background px-3.5 py-2.5 text-sm font-mono outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                 required
               />
               <span className="text-[11px] text-muted-foreground">Lấy từ mục Device Info trong Web/App Shelly</span>
@@ -292,13 +302,18 @@ export default function ShellyGateway() {
               <select
                 value={form.model}
                 onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
-                className="w-full rounded-xl border bg-background px-3.5 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                className="min-h-12 w-full rounded-xl border bg-background px-3.5 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
               >
-                <option value="S3PL-00112EU">Shelly Plug S Gen3 (S3PL-00112EU) [Khuyên dùng sạc EV]</option>
-                <option value="SNSW-001P16EU">Shelly Plus 1PM (Đo công suất)</option>
+                <option value="S3PL-00112EU">Shelly Plug S Gen3</option>
+                <option value="SNSW-001P16EU">Shelly Plus 1PM</option>
                 <option value="SPSW-001PE16EU">Shelly Pro 1PM</option>
                 <option value="CUSTOM">Khác / Tùy chỉnh</option>
               </select>
+              <p className="mt-1 break-words text-xs text-muted-foreground">
+                {form.model === 'S3PL-00112EU'
+                  ? 'Mã model: S3PL-00112EU. Chỉ mở điều khiển sau khi xác minh an toàn.'
+                  : 'Việc lưu thiết bị không xác nhận khả năng sạc an toàn hoặc tương thích với app.'}
+              </p>
             </div>
           </div>
 
@@ -312,7 +327,7 @@ export default function ShellyGateway() {
                 value={form.cloudHost}
                 onChange={(e) => setForm((f) => ({ ...f, cloudHost: e.target.value }))}
                 placeholder="https://shelly-104-eu.shelly.cloud"
-                className="w-full rounded-xl border bg-background px-3.5 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                className="min-h-12 w-full rounded-xl border bg-background px-3.5 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
               <span className="text-[11px] text-muted-foreground">Server Cloud của tài khoản Shelly của bạn</span>
             </div>
@@ -327,12 +342,14 @@ export default function ShellyGateway() {
                   value={form.cloudAuthKey}
                   onChange={(e) => setForm((f) => ({ ...f, cloudAuthKey: e.target.value }))}
                   placeholder="Dán Authorization Cloud Key vào đây"
-                  className="w-full rounded-xl border bg-background px-3.5 py-2.5 pr-10 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  className="min-h-12 w-full rounded-xl border bg-background px-3.5 py-2.5 pr-12 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-2.5 text-muted-foreground hover:text-foreground"
+                  aria-label={showPassword ? 'Ẩn mã xác thực Cloud' : 'Hiện mã xác thực Cloud'}
+                  aria-pressed={showPassword}
+                  className="absolute right-0 top-0 flex min-h-12 min-w-12 items-center justify-center rounded-xl text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -351,7 +368,7 @@ export default function ShellyGateway() {
                 value={form.lanAddress}
                 onChange={(e) => setForm((f) => ({ ...f, lanAddress: e.target.value }))}
                 placeholder="VD: 192.168.1.50"
-                className="w-full rounded-xl border bg-background px-3.5 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                className="min-h-12 w-full rounded-xl border bg-background px-3.5 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
             </div>
 
@@ -364,7 +381,7 @@ export default function ShellyGateway() {
                 value={form.localPassword}
                 onChange={(e) => setForm((f) => ({ ...f, localPassword: e.target.value }))}
                 placeholder="Nếu có đặt mật khẩu trên Web UI"
-                className="w-full rounded-xl border bg-background px-3.5 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                className="min-h-12 w-full rounded-xl border bg-background px-3.5 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
             </div>
 
@@ -377,7 +394,7 @@ export default function ShellyGateway() {
                 value={form.note}
                 onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))}
                 placeholder="VD: Ổ sạc tầng 1 cho xe Feliz"
-                className="w-full rounded-xl border bg-background px-3.5 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                className="min-h-12 w-full rounded-xl border bg-background px-3.5 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
             </div>
           </div>
@@ -390,7 +407,7 @@ export default function ShellyGateway() {
             <button
               type="submit"
               disabled={saving}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-primary/90 disabled:opacity-50"
+              className="min-h-12 inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-primary/90 disabled:opacity-50"
             >
               {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
               {saving ? 'Đang lưu & tạo mã...' : 'Lưu thiết bị & Tạo mã kết nối'}
@@ -413,12 +430,16 @@ export default function ShellyGateway() {
           </span>
         </div>
 
+        {loadError && <div role="alert" className="space-y-2 rounded-xl border border-destructive/30 p-4 text-sm">
+          <p>Không thể tải danh sách. Dữ liệu đang hiển thị có thể chưa cập nhật.</p>
+          <button type="button" disabled={loading} onClick={() => void refresh()} className="min-h-12 rounded-lg border px-4 font-medium disabled:opacity-50">Thử lại</button>
+        </div>}
         {loading ? (
           <div className="rounded-2xl border bg-card p-12 text-center text-muted-foreground">
             <RefreshCw className="mx-auto mb-2 h-6 w-6 animate-spin text-primary" />
             <p>Đang tải danh sách thiết bị Shelly...</p>
           </div>
-        ) : devices.length === 0 ? (
+        ) : devices.length === 0 && loadError ? null : devices.length === 0 ? (
           <div className="rounded-2xl border-2 border-dashed bg-card/50 p-12 text-center text-muted-foreground">
             <Plug className="mx-auto mb-3 h-10 w-10 opacity-30 text-primary" />
             <h3 className="font-semibold text-foreground text-base">Chưa có thiết bị Shelly nào được lưu</h3>
@@ -512,7 +533,7 @@ export default function ShellyGateway() {
                   <button
                     onClick={() => handleGenerateNewCode(dev)}
                     disabled={generatingFor === dev.deviceId}
-                    className="inline-flex items-center gap-1.5 rounded-lg border bg-background px-3 py-1.5 text-xs font-semibold text-primary transition hover:bg-primary/5 disabled:opacity-50"
+                    className="min-h-12 inline-flex items-center gap-1.5 rounded-lg border bg-background px-3 py-1.5 text-xs font-semibold text-primary transition hover:bg-primary/5 disabled:opacity-50"
                   >
                     <RefreshCw className={`h-3.5 w-3.5 ${generatingFor === dev.deviceId ? 'animate-spin' : ''}`} />
                     {generatingFor === dev.deviceId ? 'Đang tạo...' : 'Cấp mã mới'}
@@ -520,7 +541,7 @@ export default function ShellyGateway() {
 
                   <button
                     onClick={() => handleDeleteDevice(dev)}
-                    className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-destructive transition hover:bg-destructive/10"
+                    className="min-h-12 inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-destructive transition hover:bg-destructive/10"
                     title="Xóa thiết bị này"
                   >
                     <Trash2 className="h-3.5 w-3.5" /> Xóa

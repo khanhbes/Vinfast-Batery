@@ -21,6 +21,23 @@ def redact(text):
         r'\1"[redacted]"', text)
 
 
+def wait_with_deadline(process, timeout, started):
+    """Re-check elapsed time after short waits (including machine resume).
+
+    A single long native Windows wait can outlast the elapsed-time deadline
+    across suspension. Poll the deadline instead of trusting that one wait.
+    """
+    deadline = started + timeout
+    while process.poll() is None:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise subprocess.TimeoutExpired(process.args, timeout)
+        try:
+            process.wait(timeout=min(1.0, remaining))
+        except subprocess.TimeoutExpired:
+            continue
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--cwd", required=True)
@@ -35,30 +52,42 @@ def main():
     log.parent.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
     timed_out = False
+    cleanup_error = None
     with log.open("w", encoding="utf-8") as output:
         process = subprocess.Popen(command, cwd=args.cwd, stdout=subprocess.PIPE,
                                    stderr=subprocess.STDOUT, encoding="utf-8", errors="replace")
+        diagnostics = process.stdout
+        assert diagnostics is not None, "PIPE must provide a diagnostic stream"
         def copy_diagnostics():
-            for line in process.stdout:
+            for line in diagnostics:
                 # Filter before persistence, including CLI account diagnostics.
                 output.write(redact(line))
                 output.flush()
         reader = threading.Thread(target=copy_diagnostics, daemon=True)
         reader.start()
         try:
-            process.wait(timeout=args.timeout)
+            wait_with_deadline(process, args.timeout, started)
         except subprocess.TimeoutExpired:
             timed_out = True
             if os.name == "nt":
-                subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"],
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            else:
+                try:
+                    subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                   timeout=5)
+                except (OSError, subprocess.TimeoutExpired):
+                    cleanup_error = "process_tree_cleanup_failed"
+            if process.poll() is None:
+                # Only this runner's child; fallback if taskkill was denied.
                 process.kill()
-            process.wait(timeout=15)
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                cleanup_error = "child_exit_unconfirmed"
         reader.join(timeout=5)
     result = {"command": [redact(argument) for argument in command], "cwd": args.cwd, "log": str(log),
               "timeoutSeconds": args.timeout, "timedOut": timed_out,
               "exitCode": process.returncode,
+              "cleanupError": cleanup_error,
               "elapsedSeconds": round(time.monotonic() - started, 2)}
     log.with_suffix(log.suffix + ".result.json").write_text(
         json.dumps(result, indent=2), encoding="utf-8")

@@ -94,6 +94,7 @@ class ChatController extends StateNotifier<ChatState> {
   int _generation = 0;
   Completer<void>? _streamFinished;
   final Set<String> _pendingActions = {};
+  final Set<String> _feedbackPending = {};
 
   Future<void> _init() async {
     startNewChat(preserveGreeting: true);
@@ -161,7 +162,20 @@ class ChatController extends StateNotifier<ChatState> {
     _generation++;
     final generation = _generation;
     await _streamSub?.cancel();
-    final loaded = await _storage.loadSessionMessages(sessionId);
+    if (_streamFinished?.isCompleted == false) _streamFinished!.complete();
+    if (!mounted || generation != _generation) return;
+    state = state.copyWith(isStreaming: false);
+    List<ChatMessage> loaded;
+    try {
+      loaded = await _storage.loadSessionMessages(sessionId);
+    } catch (_) {
+      if (mounted && generation == _generation) {
+        state = state.copyWith(
+          currentError: 'Chưa mở được cuộc trò chuyện. Hãy thử lại.',
+        );
+      }
+      return;
+    }
     if (mounted && generation == _generation && loaded.isNotEmpty) {
       state = state.copyWith(
         sessionId: sessionId,
@@ -468,6 +482,36 @@ class ChatController extends StateNotifier<ChatState> {
 
   /// Gửi feedback 👍/👎
   Future<void> sendFeedback(String messageId, String rating) async {
+    if (state.sessionId == null || !_feedbackPending.add(messageId)) return;
+    final generation = _generation;
+    final uid = _behaviorTracker.currentProfile.userId;
+    bool accepted;
+    try {
+      accepted = await _apiService.sendFeedback(
+        sessionId: state.sessionId!,
+        messageId: messageId,
+        rating: rating,
+      );
+    } catch (_) {
+      accepted = false;
+    } finally {
+      _feedbackPending.remove(messageId);
+    }
+    if (!mounted ||
+        generation != _generation ||
+        uid != _behaviorTracker.currentProfile.userId) {
+      return;
+    }
+    if (!accepted) {
+      state = state.copyWith(
+        currentError: 'Chưa gửi được đánh giá. Hãy thử lại.',
+      );
+      return;
+    }
+    final previousVote = state.messages
+        .where((m) => m.id == messageId)
+        .firstOrNull
+        ?.userFeedback;
     final updated = state.messages.map((m) {
       if (m.id == messageId) {
         return m.copyWith(userFeedback: rating);
@@ -476,16 +520,12 @@ class ChatController extends StateNotifier<ChatState> {
     }).toList();
 
     state = state.copyWith(messages: updated);
-    _behaviorTracker.trackChatInteraction(feedbackRating: rating);
+    _behaviorTracker.replaceChatFeedback(
+      previous: previousVote,
+      rating: rating,
+    );
 
-    if (state.sessionId != null) {
-      await _apiService.sendFeedback(
-        sessionId: state.sessionId!,
-        messageId: messageId,
-        rating: rating,
-      );
-      _persistSession();
-    }
+    _persistSession();
   }
 
   void _persistSession() {
@@ -494,9 +534,7 @@ class ChatController extends StateNotifier<ChatState> {
         (m) => m.role == ChatRole.user,
         orElse: () => state.messages.first,
       );
-      final title = firstUser.content.length > 30
-          ? '${firstUser.content.substring(0, 30)}...'
-          : firstUser.content;
+      final title = firstUser.content;
 
       unawaited(
         _storage.saveSessionMessages(

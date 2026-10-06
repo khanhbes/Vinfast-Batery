@@ -21,7 +21,7 @@ from models import (
     MAX_SMART_CHARGE_MINUTES,
 )
 from safety_monitor import SafetyMonitor
-from shelly import ShellyClient, ShellyUnavailableError
+from shelly import ShellyClient, ShellyControlTransport, ShellyUnavailableError
 from smart_session_store import SmartSessionStore
 from telemetry_writer import TelemetryWriter
 from firestore_sync import FirestoreSessionSync
@@ -89,7 +89,7 @@ class SmartChargingController:
     def __init__(
         self,
         store: SmartSessionStore,
-        shelly: ShellyClient,
+        shelly: ShellyControlTransport,
         config: SmartChargingConfig,
         clock: Callable[[], datetime] | None = None,
         safety_monitor: SafetyMonitor | None = None,
@@ -383,7 +383,8 @@ class SmartChargingController:
                 "training_eligible": training_eligible,
             })
             saved = self.store.save(completed)
-            if self.graduation_policy and terminal_state == ChargingSessionState.COMPLETED:
+            if (self.graduation_policy and terminal_state == ChargingSessionState.COMPLETED
+                    and saved.stopped_at is not None):
                 actual_duration_min = (saved.stopped_at - (saved.started_at or saved.created_at)).total_seconds() / 60.0
                 self.graduation_policy.record_session_completed(
                     saved.vehicle_id,

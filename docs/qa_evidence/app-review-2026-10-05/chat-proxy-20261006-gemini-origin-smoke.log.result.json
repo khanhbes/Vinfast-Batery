@@ -1,0 +1,15 @@
+{
+  "command": [
+    "docker",
+    "exec",
+    "vinfast_ai",
+    "python",
+    "/tmp/batterybot_provider_smoke.py"
+  ],
+  "cwd": ".",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\chat-proxy-20261006-gemini-origin-smoke.log",
+  "timeoutSeconds": 210,
+  "timedOut": false,
+  "exitCode": 0,
+  "elapsedSeconds": 5.8
+}

@@ -1,0 +1,24 @@
+{
+  "command": [
+    "powershell",
+    "-NoProfile",
+    "-File",
+    "deploy/azure/11-publish-admin-artifact.ps1",
+    "-ConfigPath",
+    "deploy/azure/staging.json",
+    "-ArtifactPath",
+    "C:/Users/khanh/AppData/Local/Temp/vinfast-admin-80655132a277417aad9167675a5f8bdf/dist",
+    "-ExpectedIndexSha256",
+    "E4722A0E3A4CB68762BA7E7AB846071015586764F53DD1779A246245FCB653B0",
+    "-VerifiedBuildLog",
+    "docs/qa_evidence/app-review-2026-10-05/azure-20261006-task83-admin-build-clean.log",
+    "-UseNativeClient"
+  ],
+  "cwd": ".",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\azure-20261006-task83-admin-publish.log",
+  "timeoutSeconds": 180,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 57.16
+}

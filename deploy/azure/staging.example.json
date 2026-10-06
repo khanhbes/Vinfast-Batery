@@ -1,0 +1,9 @@
+{
+  "subscriptionName": "Azure for Students",
+  "location": "eastasia",
+  "resourceGroup": "rg-vinfast-battery",
+  "environmentName": "cae-vinfast-battery-standard",
+  "registryName": "<globally-unique-lowercase-name>",
+  "storageName": "<globally-unique-lowercase-name>",
+  "adminName": "vinfast-admin"
+}

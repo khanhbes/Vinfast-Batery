@@ -1,6 +1,6 @@
 import os
 import time
-from typing import Any
+from typing import Any, Protocol
 
 import httpx
 
@@ -9,6 +9,16 @@ from models import ChargerCommandResponse, ChargerStatus
 
 class ShellyUnavailableError(RuntimeError):
     pass
+
+
+class ShellyControlTransport(Protocol):
+    """The readback/command contract shared by hardware and test transports."""
+
+    def get_status(self) -> ChargerStatus: ...
+
+    def set_relay(
+        self, on: bool, auto_off_delay_seconds: int | None = None
+    ) -> ChargerCommandResponse: ...
 
 
 class ShellyClient:

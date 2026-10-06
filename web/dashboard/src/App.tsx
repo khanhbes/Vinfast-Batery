@@ -1,5 +1,5 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { DashboardShell } from '@/components/layout/DashboardShell';
 import { MotionConfig } from 'motion/react';
 import { toast } from 'sonner';
@@ -11,7 +11,8 @@ const Settings = lazy(() => import('@/pages/Settings'));
 const DataExplorer = lazy(() => import('@/pages/DataExplorer'));
 const VehicleCatalog = lazy(() => import('@/pages/VehicleCatalog'));
 const DeveloperHub = lazy(() => import('@/pages/DeveloperHub'));
-const ShellyGateway = lazy(() => import('@/pages/ShellyGateway'));
+import ShellyGateway from '@/pages/ShellyGateway';
+import { PageLoadBoundary, PageLoading } from '@/components/PageLoadBoundary';
 import Login from '@/pages/Login';
 import { Toaster } from '@/components/ui/sonner';
 import { auth } from '@/firebase';
@@ -22,6 +23,7 @@ import { DevelopModeProvider } from '@/data/DevelopModeContext';
 import { DevelopModeGate } from '@/components/DevelopModeGate';
 
 function AppContent({ user, loading, sessionRevision }: { user: User | null; loading: boolean; sessionRevision: number }) {
+  const { pathname } = useLocation();
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -46,7 +48,7 @@ function AppContent({ user, loading, sessionRevision }: { user: User | null; loa
         userEmail={auth.currentUser?.email}
         onSignOut={() => { void signOut(auth).catch(() => toast.error('Sign out failed. Please try again.')); }}
       >
-            <Suspense fallback={<p role="status" className="py-8 text-muted-foreground">Loading page...</p>}>
+            <PageLoadBoundary key={`${user.uid}:${pathname}`}><Suspense fallback={<PageLoading />}>
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/users" element={<UserManagement />} />
@@ -59,7 +61,7 @@ function AppContent({ user, loading, sessionRevision }: { user: User | null; loa
               <Route path="/settings" element={<DevelopModeGate><Settings /></DevelopModeGate>} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
-            </Suspense>
+            </Suspense></PageLoadBoundary>
       </DashboardShell>
       </AdminDataProvider></DevelopModeProvider>
       </AdminAccessGate>

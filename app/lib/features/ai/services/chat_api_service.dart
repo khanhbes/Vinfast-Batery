@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
@@ -9,7 +10,9 @@ import '../models/chat_session.dart';
 import '../models/function_call_action.dart';
 
 final chatApiServiceProvider = Provider<ChatApiService>((ref) {
-  return ChatApiService();
+  final service = ChatApiService();
+  ref.onDispose(service.dispose);
+  return service;
 });
 
 class ChatApiException implements Exception {
@@ -40,20 +43,36 @@ class ChatApiService {
     http.Client? client,
     this.requestTimeout = const Duration(seconds: 20),
     this.streamIdleTimeout = const Duration(seconds: 30),
-  }) : _client = client ?? http.Client();
+    String? Function()? uidResolver,
+    Future<String?> Function()? tokenResolver,
+  }) : _client = client ?? http.Client(),
+       _uidResolver = uidResolver ?? _firebaseUid,
+       _tokenResolver = tokenResolver ?? _firebaseToken;
   final Duration requestTimeout;
   final Duration streamIdleTimeout;
 
   final http.Client _client;
+  final String? Function() _uidResolver;
+  final Future<String?> Function() _tokenResolver;
+  static String? _firebaseUid() =>
+      Firebase.apps.isEmpty ? null : FirebaseAuth.instance.currentUser?.uid;
+  static Future<String?> _firebaseToken() async => Firebase.apps.isEmpty
+      ? null
+      : FirebaseAuth.instance.currentUser?.getIdToken();
+  void dispose() => _client.close();
+  void _assertAccount(String? uid) {
+    if (uid != _uidResolver()) {
+      throw const ChatApiException(
+        'accountChanged',
+        'Tài khoản đã thay đổi. Hãy mở lại trợ lý.',
+      );
+    }
+  }
 
   Future<Map<String, String>> _getHeaders({bool isStream = false}) async {
-    String? token;
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        token = await user.getIdToken();
-      }
-    } catch (_) {}
+    final uid = _uidResolver();
+    final token = await _tokenResolver().timeout(requestTimeout);
+    _assertAccount(uid);
 
     return {
       'Content-Type': 'application/json',
@@ -78,6 +97,7 @@ class ChatApiService {
     final messageIdCompleter = Completer<String>();
     final sessionIdCompleter = Completer<String>();
     final functionCallCompleter = Completer<FunctionCallAction?>();
+    final ownerUid = _uidResolver();
     bool cancelled = false;
     StreamIterator<String>? input;
     final controller = StreamController<String>(
@@ -123,6 +143,7 @@ class ChatApiService {
           isStream: true,
         ).timeout(requestTimeout);
         if (cancelled) return;
+        _assertAccount(ownerUid);
         final request = http.Request('POST', uri)
           ..headers.addAll(headers)
           ..body = jsonEncode({
@@ -139,6 +160,10 @@ class ChatApiService {
         if (cancelled) {
           await streamedResponse.stream.listen((_) {}).cancel();
           return;
+        }
+        if (ownerUid != _uidResolver()) {
+          await streamedResponse.stream.listen((_) {}).cancel();
+          _assertAccount(ownerUid);
         }
 
         if (streamedResponse.statusCode != 200) {
@@ -157,6 +182,7 @@ class ChatApiService {
         String event = '';
         final data = <String>[];
         void dispatch() {
+          _assertAccount(ownerUid);
           if (data.isEmpty) {
             event = '';
             return;
@@ -309,6 +335,7 @@ class ChatApiService {
     required Map<String, dynamic> args,
     required bool confirmed,
   }) async {
+    final ownerUid = _uidResolver();
     final uri = AppConstants.tryBuildApiUri('/api/chat/action/confirm');
     if (uri == null || !AppConstants.isApiConfigured) {
       return {
@@ -320,6 +347,7 @@ class ChatApiService {
 
     try {
       final headers = await _getHeaders();
+      _assertAccount(ownerUid);
       final res = await _client
           .post(
             uri,
@@ -333,6 +361,7 @@ class ChatApiService {
             }),
           )
           .timeout(const Duration(seconds: 15));
+      _assertAccount(ownerUid);
 
       if (res.statusCode == 200) {
         final body = jsonDecode(res.body) as Map<String, dynamic>;
@@ -367,22 +396,41 @@ class ChatApiService {
 
   /// Lấy danh sách các session
   Future<List<ChatSession>> getSessions() async {
+    final ownerUid = _uidResolver();
     final uri = AppConstants.tryBuildApiUri('/api/chat/sessions');
     if (uri == null) return [];
     try {
       final headers = await _getHeaders();
+      _assertAccount(ownerUid);
       final res = await _client
           .get(uri, headers: headers)
           .timeout(const Duration(seconds: 10));
+      _assertAccount(ownerUid);
       if (res.statusCode == 200) {
         final body = jsonDecode(res.body) as Map<String, dynamic>;
-        final list = body['data'] as List<dynamic>? ?? [];
+        if (body['success'] != true || body['data'] is! List) {
+          throw const ChatApiException(
+            'historyInvalid',
+            'Chưa tải được lịch sử. Hãy thử lại.',
+          );
+        }
+        final list = body['data'] as List<dynamic>;
         return list
             .map((item) => ChatSession.fromJson(item as Map<String, dynamic>))
             .toList();
       }
-    } catch (_) {}
-    return [];
+      throw const ChatApiException(
+        'historyUnavailable',
+        'Chưa tải được lịch sử. Hãy thử lại.',
+      );
+    } on ChatApiException {
+      rethrow;
+    } catch (_) {
+      throw const ChatApiException(
+        'historyUnavailable',
+        'Chưa tải được lịch sử. Hãy thử lại.',
+      );
+    }
   }
 
   /// Gửi đánh giá phản hồi (like/dislike)
@@ -391,10 +439,12 @@ class ChatApiService {
     required String messageId,
     required String rating,
   }) async {
+    final ownerUid = _uidResolver();
     final uri = AppConstants.tryBuildApiUri('/api/chat/feedback');
     if (uri == null) return false;
     try {
       final headers = await _getHeaders();
+      _assertAccount(ownerUid);
       final res = await _client
           .post(
             uri,
@@ -406,7 +456,14 @@ class ChatApiService {
             }),
           )
           .timeout(const Duration(seconds: 10));
-      return res.statusCode == 200;
+      _assertAccount(ownerUid);
+      if (res.statusCode != 200) return false;
+      final body = jsonDecode(res.body);
+      return body is Map &&
+          body['success'] == true &&
+          body['data'] is Map &&
+          body['data']['status'] == 'received' &&
+          body['data']['messageId'] == messageId;
     } catch (_) {
       return false;
     }

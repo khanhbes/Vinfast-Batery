@@ -1,0 +1,22 @@
+{
+  "command": [
+    "docker",
+    "compose",
+    "--env-file",
+    ".env.laptop",
+    "-f",
+    "docker-compose.yml",
+    "-f",
+    "docker-compose.laptop.yml",
+    "up",
+    "-d",
+    "--no-deps",
+    "ai"
+  ],
+  "cwd": "web",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\chat-live-20261006-ai-recreate.log",
+  "timeoutSeconds": 120,
+  "timedOut": false,
+  "exitCode": 0,
+  "elapsedSeconds": 6.52
+}

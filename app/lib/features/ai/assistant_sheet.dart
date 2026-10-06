@@ -13,6 +13,7 @@ import '../../core/utils/battery_bot_faq.dart';
 import '../../core/widgets/battery_bot_mascot.dart';
 import '../smart_charging/shelly_connect_screen.dart';
 import 'models/chat_message.dart';
+import 'models/chat_session.dart';
 import 'models/function_call_action.dart';
 import 'models/proactive_suggestion.dart';
 import 'services/behavior_sync_service.dart';
@@ -66,6 +67,7 @@ class _InteractiveAssistantSheetState
   final Map<String, bool> _actionLoadingMap = {};
   final Set<String> _feedbackPending = {};
   BuildContext? _historyModalContext;
+  bool _historyOpening = false;
   ProactiveSuggestion? _activeSuggestion;
   VoiceInputService? _voiceService;
   bool _isListeningVoice = false;
@@ -247,9 +249,11 @@ class _InteractiveAssistantSheetState
         );
       });
 
-      ref
-          .read(behaviorTrackerProvider.notifier)
-          .trackChatInteraction(topic: 'action_confirmed_${action.toolName}');
+      if (succeeded) {
+        ref
+            .read(behaviorTrackerProvider.notifier)
+            .trackChatInteraction(topic: 'action_confirmed_${action.toolName}');
+      }
 
       if (_sessionId != null) {
         final storage = ref.read(chatHistoryStorageProvider);
@@ -405,10 +409,23 @@ class _InteractiveAssistantSheetState
     final generation = _generation;
     _replyTimer?.cancel();
     await _streamSub?.cancel();
+    if (!_isCurrent(generation)) return;
     _isTyping = false;
-    final loaded = await ref
-        .read(chatHistoryStorageProvider)
-        .loadSessionMessages(sessionId);
+    List<ChatMessage> loaded;
+    try {
+      loaded = await ref
+          .read(chatHistoryStorageProvider)
+          .loadSessionMessages(sessionId);
+    } catch (_) {
+      if (!mounted || !_isCurrent(generation)) return;
+      setState(() => _isTyping = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Chưa mở được cuộc trò chuyện. Hãy thử lại.'),
+        ),
+      );
+      return;
+    }
     if (!_isCurrent(generation)) return;
     if (loaded.isNotEmpty) {
       setState(() {
@@ -417,13 +434,41 @@ class _InteractiveAssistantSheetState
         _messages.addAll(loaded);
       });
       _scrollToBottom();
+    } else {
+      setState(() => _isTyping = false);
     }
   }
 
   Future<void> _showHistoryModal() async {
+    if (_historyOpening) return;
+    _historyOpening = true;
+    try {
+      await _openHistoryModal();
+    } finally {
+      _historyOpening = false;
+      _historyModalContext = null;
+    }
+  }
+
+  Future<void> _openHistoryModal() async {
     final generation = _generation;
     final storage = ref.read(chatHistoryStorageProvider);
-    final sessions = await storage.listSessions();
+    List<ChatSession> sessions;
+    try {
+      sessions = await storage.listSessions();
+    } catch (_) {
+      if (!mounted || !_isCurrent(generation)) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Chưa tải được lịch sử trò chuyện.'),
+          action: SnackBarAction(
+            label: 'Thử lại',
+            onPressed: _showHistoryModal,
+          ),
+        ),
+      );
+      return;
+    }
     if (!mounted || !_isCurrent(generation)) return;
 
     final uiColors = AppUiColors.of(context);
@@ -485,6 +530,10 @@ class _InteractiveAssistantSheetState
                       ],
                     ),
                     const Divider(),
+                    Text(
+                      'Lịch sử lưu trên máy này.',
+                      style: TextStyle(color: uiColors.muted),
+                    ),
                     if (sessions.isEmpty)
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 24),
@@ -548,16 +597,39 @@ class _InteractiveAssistantSheetState
                                 ),
                               ),
                               trailing: IconButton(
+                                tooltip: 'Xóa cuộc trò chuyện trên máy này',
                                 icon: Icon(
                                   Icons.delete_outline,
                                   size: 18,
                                   color: uiColors.muted,
                                 ),
                                 onPressed: () async {
-                                  await storage.deleteSession(sess.id);
-                                  if (!ctx.mounted || !mounted) return;
+                                  try {
+                                    await storage.deleteSession(sess.id);
+                                  } catch (_) {
+                                    if (!ctx.mounted ||
+                                        !mounted ||
+                                        !_isCurrent(generation)) {
+                                      return;
+                                    }
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Chưa xóa được lịch sử trên máy này. Hãy thử lại.',
+                                        ),
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  if (!ctx.mounted ||
+                                      !mounted ||
+                                      !_isCurrent(generation)) {
+                                    return;
+                                  }
                                   setModalState(() {
-                                    sessions.removeAt(i);
+                                    sessions.removeWhere(
+                                      (item) => item.id == sess.id,
+                                    );
                                   });
                                   if (sess.id == _sessionId) {
                                     _startNewChat();
@@ -814,6 +886,8 @@ class _InteractiveAssistantSheetState
             messageId: message.id,
             rating: rating,
           );
+    } catch (_) {
+      accepted = false;
     } finally {
       _feedbackPending.remove(message.id);
     }
@@ -830,7 +904,7 @@ class _InteractiveAssistantSheetState
     setState(() => _messages[index] = message.copyWith(userFeedback: rating));
     ref
         .read(behaviorTrackerProvider.notifier)
-        .trackChatInteraction(feedbackRating: rating);
+        .replaceChatFeedback(previous: message.userFeedback, rating: rating);
     _persistConversation();
   }
 

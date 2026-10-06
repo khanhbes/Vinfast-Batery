@@ -1,0 +1,14 @@
+{
+  "command": [
+    "C:/flutter/bin/cache/dart-sdk/bin/dart.exe",
+    "C:/flutter/bin/cache/flutter_tools.snapshot",
+    "analyze",
+    "--no-pub"
+  ],
+  "cwd": "app",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\chat-followup-20261006-analyze-final.log",
+  "timeoutSeconds": 180,
+  "timedOut": false,
+  "exitCode": 0,
+  "elapsedSeconds": 17.67
+}

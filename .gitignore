@@ -71,6 +71,9 @@ smart_charger_gateway/state/*.sqlite3-shm
 smart_charger_gateway/state/*.sqlite3-wal
 smart_charger_gateway/.env
 web/.env.laptop
+web/.env.azure
+deploy/azure/*.private.json
+deploy/azure/*.rendered.*
 web/models/lifecycle/*.tmp
 
 # Symbolication related

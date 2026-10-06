@@ -1,0 +1,23 @@
+{
+  "command": [
+    "powershell.exe",
+    "-NoProfile",
+    "-File",
+    "deploy/azure/11-publish-admin-artifact.ps1",
+    "-ConfigPath",
+    "deploy/azure/staging.json",
+    "-ArtifactPath",
+    "C:/Users/khanh/AppData/Local/Temp/vinfast-admin-80655132a277417aad9167675a5f8bdf/dist",
+    "-ExpectedIndexSha256",
+    "19DC1C00FE13F78C6C3C9CA9246BF3DD850A07BD8214D3CF0DACF7E4FC06E8D1",
+    "-VerifiedBuildLog",
+    "docs/qa_evidence/app-review-2026-10-05/azure-20261006-admin-publish-retry.log"
+  ],
+  "cwd": ".",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\azure-20261006-admin-artifact-publish-retry.log",
+  "timeoutSeconds": 600,
+  "timedOut": false,
+  "exitCode": 1,
+  "cleanupError": null,
+  "elapsedSeconds": 362.52
+}

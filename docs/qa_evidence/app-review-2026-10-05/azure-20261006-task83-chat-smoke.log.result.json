@@ -1,0 +1,17 @@
+{
+  "command": [
+    "powershell",
+    "-NoProfile",
+    "-File",
+    "deploy/azure/13-chat-smoke.ps1",
+    "-ConfigPath",
+    "deploy/azure/staging.json"
+  ],
+  "cwd": ".",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\azure-20261006-task83-chat-smoke.log",
+  "timeoutSeconds": 180,
+  "timedOut": false,
+  "exitCode": 1,
+  "cleanupError": null,
+  "elapsedSeconds": 32.61
+}
