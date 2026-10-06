@@ -77,9 +77,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: BatteryStatusCard(data: data),
-          ),
+          home: Scaffold(body: BatteryStatusCard(data: data)),
         ),
       );
 
@@ -92,7 +90,9 @@ void main() {
       expect(find.text('28.5 °C'), findsOneWidget);
     });
 
-    testWidgets('ChargingProgressCard renders progress and ≤12A safety limit', (tester) async {
+    testWidgets('ChargingProgressCard renders progress and ≤12A safety limit', (
+      tester,
+    ) async {
       final data = {
         'currentSoc': 40.0,
         'targetSoc': 85.0,
@@ -104,16 +104,15 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: ChargingProgressCard(data: data),
-          ),
+          home: Scaffold(body: ChargingProgressCard(data: data)),
         ),
       );
 
       expect(find.text('Tiến độ Sạc Thông Minh'), findsOneWidget);
       expect(find.text('Hiện tại: 40%'), findsOneWidget);
       expect(find.text('Mục tiêu: 85%'), findsOneWidget);
-      expect(find.text('1.85 kW'), findsOneWidget);
+      // Canonical telemetry is W; 1850 W must not be mistaken for 1.85 W.
+      expect(find.text('1850 W'), findsOneWidget);
       expect(find.text('8.4 A'), findsOneWidget);
       expect(find.text('~45 phút'), findsOneWidget);
       expect(find.textContaining('≤12A'), findsWidgets);
@@ -130,9 +129,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: TripSummaryCard(data: data),
-          ),
+          home: Scaffold(body: TripSummaryCard(data: data)),
         ),
       );
 
@@ -140,33 +137,45 @@ void main() {
       expect(find.text('24.5 km'), findsOneWidget);
       expect(find.text('735 Wh'), findsOneWidget);
       expect(find.text('30.0 Wh/km'), findsOneWidget);
-      expect(find.text('2.1 kg CO₂'), findsOneWidget);
+      expect(find.text('Giảm CO₂'), findsOneWidget);
+      expect(find.text('2.1 kg'), findsOneWidget);
+      // The compact card splits quantity from its semantic label; full
+      // details must still expose the quantity together with its CO₂ unit.
+      await tester.tap(find.text('Tóm tắt Chuyến đi & Hiệu suất'));
+      await tester.pumpAndSettle();
+      expect(find.text('2.10 kg CO₂'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
     });
 
-    testWidgets('QuickReplyChips triggers callback on tap and adapts to context', (tester) async {
-      String? selected;
+    testWidgets(
+      'QuickReplyChips triggers callback on tap and adapts to context',
+      (tester) async {
+        String? selected;
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: QuickReplyChips(
-              currentSoc: 15.0, // Pin yếu
-              onSelect: (text) {
-                selected = text;
-              },
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: QuickReplyChips(
+                currentSoc: 15.0, // Pin yếu
+                onSelect: (text) {
+                  selected = text;
+                },
+              ),
             ),
           ),
-        ),
-      );
+        );
 
-      // Pin yếu -> gợi ý sạc ngay
-      expect(find.text('⚡ Bật sạc thông minh ngay'), findsOneWidget);
-      await tester.tap(find.text('⚡ Bật sạc thông minh ngay'));
-      await tester.pump();
-      expect(selected, equals('⚡ Bật sạc thông minh ngay'));
-    });
+        // Pin yếu -> gợi ý sạc ngay
+        expect(find.text('⚡ Bật sạc thông minh ngay'), findsOneWidget);
+        await tester.tap(find.text('⚡ Bật sạc thông minh ngay'));
+        await tester.pump();
+        expect(selected, equals('⚡ Bật sạc thông minh ngay'));
+      },
+    );
 
-    testWidgets('ChatMessageBubble renders rich cards inside bubble', (tester) async {
+    testWidgets('ChatMessageBubble renders rich cards inside bubble', (
+      tester,
+    ) async {
       final msg = ChatMessage(
         id: 'msg-bubble-test',
         role: ChatRole.model,
@@ -190,35 +199,37 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: ChatMessageBubble(message: msg),
-          ),
+          home: Scaffold(body: ChatMessageBubble(message: msg)),
         ),
       );
 
-      expect(find.text('Dưới đây là thông số pin hiện tại của bạn:'), findsOneWidget);
+      expect(
+        find.text('Dưới đây là thông số pin hiện tại của bạn:'),
+        findsOneWidget,
+      );
       expect(find.byType(BatteryStatusCard), findsOneWidget);
       expect(find.text('80%'), findsOneWidget);
     });
   });
 
   group('Phase 5C: ChatApiService onRichCard Integration', () {
-    test('offline simulation triggers onRichCard when querying battery', () async {
-      final apiService = ChatApiService();
-      Map<String, dynamic>? receivedCard;
+    test(
+      'offline fallback never fabricates missing rich-card readings',
+      () async {
+        final apiService = ChatApiService();
+        Map<String, dynamic>? receivedCard;
 
-      final res = apiService.streamChat(
-        message: 'Pin xe còn bao nhiêu %?',
-        vehicleContext: {'soc': 70, 'model': 'VF Feliz S'},
-        onRichCard: (card) {
-          receivedCard = card;
-        },
-      );
+        final res = apiService.streamChat(
+          message: 'Pin xe còn bao nhiêu %?',
+          vehicleContext: {'soc': 70, 'model': 'VF Feliz S'},
+          onRichCard: (card) {
+            receivedCard = card;
+          },
+        );
 
-      await res.stream.drain();
-      expect(receivedCard, isNotNull);
-      expect(receivedCard!['cardType'], equals('battery_status'));
-      expect(receivedCard!['data']['soc'], equals(70.0));
-    });
+        await res.stream.drain();
+        expect(receivedCard, isNull);
+      },
+    );
   });
 }

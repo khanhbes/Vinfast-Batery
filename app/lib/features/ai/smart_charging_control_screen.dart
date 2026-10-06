@@ -17,13 +17,17 @@ import '../smart_charging/smart_charger_setup_hub_screen.dart';
 import '../auth/auth_providers.dart';
 import 'controllers/smart_charging_controller.dart';
 import 'smart_charge_history_screen.dart';
+import '../energy_journey/controllers/energy_journey_controller.dart';
+import '../energy_journey/energy_journey_screen.dart';
 import 'widgets/active_charging_card_v2.dart';
 import 'widgets/ai_charge_button.dart';
-import 'widgets/battery_visualizer_v2.dart';
+import 'widgets/battery_hero_card.dart';
 import 'widgets/charge_mode_switcher_v2.dart';
 import 'widgets/charging_battery_animation.dart';
+import 'widgets/energy_journey_teaser_card.dart';
 import 'widgets/horizontal_battery_target_selector.dart';
 import 'widgets/prediction_card_v2.dart';
+import 'widgets/prediction_detail_sheet.dart';
 import 'widgets/recent_sessions_section_v2.dart';
 import 'widgets/start_charge_confirmation_sheet.dart';
 import 'widgets/stop_charging_confirmation_sheet.dart';
@@ -252,6 +256,21 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
         persistent: true,
       );
     }
+
+    // Trigger Energy Journey calculation when a charging session finishes
+    if (previous?.hasActiveSession == true && !next.hasActiveSession) {
+      final totalEnergyWh = next.history.fold<double>(
+        0.0,
+        (sum, s) =>
+            sum +
+            (s.energyUsedWh > 0
+                ? s.energyUsedWh
+                : (s.estimatedStoredEnergyWh ?? 0.0)),
+      );
+      ref
+          .read(energyJourneyControllerProvider.notifier)
+          .updateEnergyFromSessions(totalEnergyWh / 1000.0);
+    }
     // Connection changes are also rendered by the shared status strip.  An
     // urgent safety warning is the only background condition that may remain
     // persistent above content.
@@ -333,12 +352,22 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
         ? null
         : energyWh / .90 / 1000 * state.preferences!.tariffVndPerKwh!;
 
+    final totalEnergyWh = state.history.fold<double>(
+      0.0,
+      (sum, s) =>
+          sum +
+          (s.energyUsedWh > 0
+              ? s.energyUsedWh
+              : (s.estimatedStoredEnergyWh ?? 0.0)),
+    );
+    final totalKWh = totalEnergyWh / 1000.0;
+
     return Column(
       key: const ValueKey('ai-mode-v2'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // V2: Premium battery visualizer
-        BatteryVisualizerV2(
+        // V2: Premium battery hero card
+        BatteryHeroCard(
           key: const ValueKey('target-battery-selector'),
           currentPercent: draft.currentSoc,
           targetPercent: currentTarget,
@@ -367,7 +396,37 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                   energyWh: energyWh,
                   costVnd: costVnd,
                   warnings: state.preview!.warnings,
+                  onViewDetails: () => PredictionDetailSheet.show(
+                    context,
+                    currentSoc: draft.currentSoc.round(),
+                    targetSoc: currentTarget.round(),
+                    estimatedMinutes: state.preview!.predictedMinutes,
+                    stopTime: _time(state.preview!.effectiveStopAt),
+                    personalizationLabel: state.preview!.personalizationLabel,
+                    energyWh: energyWh,
+                    costVnd: costVnd,
+                    rangeAddedKm: energyWh != null
+                        ? (energyWh / 1000 * 35).round()
+                        : null,
+                  ),
                 ),
+        ),
+
+        const SizedBox(height: 16),
+
+        // Gamified Energy Journey Teaser Card
+        EnergyJourneyTeaserCard(
+          totalKWh: totalKWh,
+          onTap: () {
+            ref
+                .read(energyJourneyControllerProvider.notifier)
+                .updateEnergyFromSessions(totalKWh);
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const EnergyJourneyScreen(),
+              ),
+            );
+          },
         ),
 
         const SizedBox(height: 20),

@@ -1,0 +1,13 @@
+{
+  "command": [
+    "C:/flutter/bin/cache/dart-sdk/bin/dart.exe",
+    "C:/flutter/bin/cache/flutter_tools.snapshot",
+    "--version"
+  ],
+  "cwd": "app",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\fix-20261006-flutter-version.log",
+  "timeoutSeconds": 60,
+  "timedOut": false,
+  "exitCode": 0,
+  "elapsedSeconds": 1.48
+}

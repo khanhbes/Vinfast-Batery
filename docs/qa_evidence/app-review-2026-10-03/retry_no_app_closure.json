@@ -1,0 +1,64 @@
+{
+  "date": "2026-10-03",
+  "sourceHead": "6dc059ee64b6c1f9d155163c2dec68ee9e58b0cf",
+  "userConstraint": "Do not close user applications; retry testing",
+  "otherApplicationsClosed": false,
+  "artifactSha256": "325198FC38DA1B6C2916FDABECD7233AA50F46CCA669231F0A5848B6278FF9E5",
+  "installedArtifactHashMatched": true,
+  "emulator": {
+    "avd": "Pixel_9a",
+    "api": 36,
+    "headless": true,
+    "requestedGuestMemoryMb": 1536,
+    "gpu": "swiftshader",
+    "vulkanDisabledByCommandLine": true,
+    "framebuffer": "720x1600",
+    "physicalDensity": 420,
+    "temporaryDensityOverride": 320,
+    "logicalWidthDpWhileLaunching": 360,
+    "bootCompleted": true,
+    "bootTimeReportedMs": 203845,
+    "hostFreeRamMbBeforeLaunch": 639,
+    "hostFreeRamMbDuringBoot": 277,
+    "qemuWorkingSetMbObserved": 2143,
+    "activityLaunch": {
+      "commandExitCode": 0,
+      "status": "timeout",
+      "waitTimeMs": 16642,
+      "dashboardReached": false
+    },
+    "eventBufferReadWhileConnected": {
+      "appAnr": 0,
+      "otherAndroidAnr": 13,
+      "appCrash": 0,
+      "doesNotProveApplicationCrashFree": true
+    },
+    "afterLaunch": "ADB device disconnected; functional UI could not be observed",
+    "rootCause": "Not established; this attempt did not confirm a new app ANR or a new Windows crash event"
+  },
+  "cleanup": {
+    "reopenedEmulatorOnlyToRestoreDensity": true,
+    "densityResetConfirmed": true,
+    "physicalDensityAfterReset": 420,
+    "overrideDensityAfterReset": null,
+    "qaEmulatorStopped": true,
+    "appDataCleared": false,
+    "userAccountsChanged": false,
+    "testerRelayOnCommands": 0,
+    "testerRelayOffCommands": 0
+  },
+  "coverage": {
+    "newRuntimeFunctionalScreensVerified": 0,
+    "newRuntimeAppControlsVerified": 0,
+    "coldStart": "Fail on current environment",
+    "functionalTests": "Blocked",
+    "releaseScore": null
+  },
+  "qaUtility": {
+    "file": "probe_runtime.ps1",
+    "requiresPowerShell": "7.0+",
+    "verifiedParserVersion": "7.6.6",
+    "parserErrors": 0,
+    "rawPrivateHierarchyOrLogSaved": false
+  }
+}

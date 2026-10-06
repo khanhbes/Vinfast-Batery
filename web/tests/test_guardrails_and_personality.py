@@ -164,7 +164,7 @@ def test_chat_engine_prompt_incorporates_personality_modifier():
 
 # ── 5. Stream Chat Integration With Guardrails Tests ─────────────────────────
 
-def test_stream_chat_applies_guardrails_and_flags_violations():
+def test_stream_chat_applies_guardrails_and_flags_violations(monkeypatch):
     """Kiểm tra stream_chat chạy guardrails kiểm duyệt và đánh dấu trong usage message_end."""
     engine = ChatEngine()
     # Mock client trả về văn bản chứa vi phạm dòng sạc 16A
@@ -183,6 +183,7 @@ def test_stream_chat_applies_guardrails_and_flags_violations():
     )
     mock_client.models.generate_content_stream.return_value = [mock_resp]
     engine._client = mock_client
+    monkeypatch.setattr("ai_server.chat_engine.DEFAULT_MODEL", "mock-model")
 
     req = ChatSendRequest(
         message="Có cách nào sạc xe nhanh hơn không?",
@@ -197,3 +198,5 @@ def test_stream_chat_applies_guardrails_and_flags_violations():
     assert end_data["usage"]["guardrailPassed"] is False
     assert len(end_data["usage"]["violations"]) >= 1
     assert any("GR-ELEC-001" in v for v in end_data["usage"]["violations"])
+    sent = "".join(json.loads(e.split("data: ")[1])["delta"] for e in events if e.startswith("event: text_delta"))
+    assert "18A" not in sent  # Filter before delivery, not after the user sees it.

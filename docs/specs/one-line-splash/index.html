@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="vi"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VinFast Battery — ONE LINE · Design review</title><link rel="icon" href="data:,">
+<style>
+*{box-sizing:border-box}body{margin:0;background:#121815;color:#f3f0e9;font:15px/1.6 Inter,Arial,sans-serif}main{max-width:1180px;margin:auto;padding:40px 24px}h1{font-size:36px;font-weight:600;letter-spacing:-1px;margin:6px 0}h2{font-size:24px;margin-top:52px}h3{font-size:16px}p{max-width:760px;color:#a9b4ad}.eyebrow{color:#3ddc97;font-size:12px;letter-spacing:3px}.review{display:flex;gap:48px;align-items:flex-start;margin-top:32px}.phone{width:390px;max-width:100%;flex-shrink:0;background:#0b0f0e}.phone svg{width:100%;height:auto;display:block}.controls{flex:1;min-width:0}button,a.download{min-height:48px;padding:12px 18px;background:#3ddc97;border:0;color:#0b0f0e;font:inherit;cursor:pointer;text-decoration:none;display:inline-block}button.secondary{background:#23382d;color:#f3f0e9}button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid #c8f7e2;outline-offset:4px}label{display:block;margin:20px 0}input[type=range]{width:100%;accent-color:#3ddc97;min-height:48px}input[type=checkbox]{width:20px;height:20px;vertical-align:middle}output{font-variant-numeric:tabular-nums;color:#3ddc97}#frames{display:grid;grid-template-columns:repeat(4,1fr);gap:22px}figure{margin:0}figure svg{display:block;width:100%;height:auto}figcaption{font-size:12px;margin:8px 0;color:#a9b4ad}figure button{font-size:12px;background:transparent;color:#3ddc97;padding:8px 0}table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:14px 10px;text-align:left;border-bottom:1px solid #2a3931}th{color:#a9b4ad}.table-wrap{overflow:auto}.diagram{background:#0b0f0e;padding:24px;white-space:pre-wrap;line-height:1.8;font:14px/1.8 monospace;color:#c8f7e2}.lighting{max-width:620px;width:100%}code{color:#c8f7e2}li{margin:10px 0;max-width:900px}.note{border-left:2px solid #3ddc97;padding-left:16px}footer{padding:44px 0;color:#a9b4ad}@media(max-width:760px){.review{flex-direction:column;gap:24px}#frames{grid-template-columns:repeat(2,1fr)}h1{font-size:28px}main{padding:24px 16px}.controls{width:100%}}
+</style>
+<main>
+<div class="eyebrow">DESIGN REVIEW / 03.10.2026</div><h1>ONE LINE</h1>
+<p>VinFast Battery · Splash 390 × 844 · 4,5 giây. Một nét sáng tạo chữ V, giữ lại dấu hiệu nhận diện từ icon hiện có. Không dùng pin 3D, tia điện, hạt hay vòng xoay. Đây là vector đề xuất, không phải logo thương hiệu chính thức đã duyệt.</p>
+<div class="review"><div class="phone" id="preview" aria-label="Preview splash"></div><div class="controls">
+<h2 style="margin-top:0">Yên tĩnh. Rõ ràng. Có điểm dừng.</h2>
+<p>Nền tối, chữ ấm và một sắc xanh. Logo rộng 120px, tên app 28px semibold, tagline 14px. Khoảng trống giúp thương hiệu hiện diện mà không cần hiệu ứng trang trí.</p>
+<button id="play">Phát 4,5 giây</button> <button id="pause" class="secondary">Dừng</button>
+<label for="scrub">Mốc thời gian <output id="time">0,00 s</output></label><input id="scrub" type="range" min="0" max="4500" step="10" value="0">
+<label><input id="reduced" type="checkbox"> Giảm chuyển động — fade 1 giây</label>
+<button id="export" class="secondary">Tải frame hiện tại · SVG</button>
+<p class="note">Preview dừng ở frame cuối. Không tự chuyển route, gọi mạng, chạy Firebase hoặc điều khiển thiết bị. Handoff thực tế chỉ được bắt đầu sau khi startup đã xác định route.</p>
+<p>Font preview dùng Inter nếu máy có, nếu không dùng Arial; cần duyệt lại số đo chữ bằng font đóng gói của Flutter. Không tải font từ Internet.</p>
+</div></div>
+<h2>Storyboard · 8 keyframe / 5 giai đoạn</h2><p>Spark → Line → Draw → Reveal → Hold / hand-off. Haptic tại 2,25s là tùy chọn nhẹ, mặc định tắt; không rung trong preview. Các ảnh SVG tải xuống độc lập, nét ở mọi độ phân giải.</p><div id="frames"></div>
+<h2>Ánh sáng · một nguồn ở hướng 10 giờ</h2>
+<svg class="lighting" viewBox="0 0 620 270" role="img" aria-label="Nguồn sáng trên trái, core 1,8px, halo cục bộ 8 đến 12px; dải sáng nghiêng 20 độ đi xuống phải">
+<defs><linearGradient id="lg"><stop stop-color="#3ddc97"/><stop offset="1" stop-color="#2bb673"/></linearGradient></defs><rect width="620" height="270" fill="#0b0f0e"/><circle cx="60" cy="45" r="7" fill="#fff6e5"/><path d="M80 60 L210 135" stroke="#a9b4ad" stroke-dasharray="4 7"/><path d="M203 123 L210 135 L196 135" stroke="#a9b4ad" fill="none"/><path d="M230 82 L250 82 L286 145 L322 82 L342 82 L295 164 Q286 176 277 164Z" fill="url(#lg)"/><path d="M230 82 H250 L286 145" fill="none" stroke="#c8f7e2"/><path d="M274 68 L247 180" stroke="#fff6e5" stroke-width="12" opacity=".35"/><text x="28" y="26" fill="#a9b4ad" font-size="13">10 giờ · ánh sáng ảo</text><text x="370" y="100" fill="#c8f7e2" font-size="13">Rim trên trái</text><text x="370" y="125" fill="#a9b4ad" font-size="13">Sweep nghiêng 20° →</text><path d="M65 224 H290" stroke="#3ddc97" stroke-width="16" opacity=".12"/><path d="M65 224 H290" stroke="#c8f7e2" stroke-width="1.8"/><text x="325" y="219" fill="#c8f7e2" font-size="13">Core 1,8px · trail 28px</text><text x="325" y="241" fill="#a9b4ad" font-size="13">Halo 8–12px · opacity ≤ 15%</text></svg>
+<h2>Timeline → Flutter Intervals</h2><p>Master controller: 4.500ms. Interval = thời điểm / 4.500. Entrance E = cubic(.22,1,.36,1); Draw/Sweep S = cubic(.65,0,.35,1). Không overshoot. Preview thể hiện các key pose; đoạn line uốn thành outline cần nội suy path tương thích khi triển khai Flutter, không crossfade hai logo.</p>
+<div class="table-wrap"><table><thead><tr><th>ms</th><th>Interval</th><th>Thuộc tính / giá trị</th><th>Easing</th></tr></thead><tbody>
+<tr><td>0–400</td><td>0–.0889</td><td>Điểm sáng opacity 0→1; nền native thuần ở t=0</td><td>E</td></tr>
+<tr><td>400–600</td><td>.0889–.1333</td><td>Giữ điểm sáng</td><td>Tĩnh</td></tr>
+<tr><td>600–1100</td><td>.1333–.2444</td><td>Nét ngang 0→120px</td><td>E</td></tr>
+<tr><td>1100–1250</td><td>.2444–.2778</td><td>Nghỉ 150ms; chuẩn bị path</td><td>Tĩnh</td></tr>
+<tr><td>1250–2250</td><td>.2778–.5000</td><td>Outline 0→100%; đầu sáng + trail 28px</td><td>S</td></tr>
+<tr><td>2250–2350</td><td>.5000–.5222</td><td>Khép nét; nghỉ 100ms, haptic tùy chọn</td><td>Tĩnh</td></tr>
+<tr><td>2350–2650</td><td>.5222–.5889</td><td>Fill opacity 0→1, sáng hơn ở trên trái</td><td>E</td></tr>
+<tr><td>2650–2800</td><td>.5889–.6222</td><td>Giữ logo 150ms</td><td>Tĩnh</td></tr>
+<tr><td>2800–3250</td><td>.6222–.7222</td><td>Sweep 450ms đúng một lần, rim đồng bộ</td><td>S</td></tr>
+<tr><td>3350–3650</td><td>.7444–.8111</td><td>Tên opacity 0→1, y +8→0; sau sweep 100ms</td><td>E</td></tr>
+<tr><td>3470–3770</td><td>.7711–.8378</td><td>Tagline opacity 0→1; sau tên 120ms</td><td>E</td></tr>
+<tr><td>3770–4500</td><td>.8378–1</td><td>Giữ brand; không tự mờ khi route chưa sẵn sàng</td><td>Tĩnh</td></tr>
+<tr><td>Sau gate +240ms</td><td>Route transition riêng</td><td>Crossfade nền đồng màu; Hero chỉ khi đích có anchor thật</td><td>E</td></tr>
+</tbody></table></div>
+<h2>Startup flow · không phát lại khi nhập tài khoản</h2>
+<div class="diagram">Cold start
+ ├─ Animation 4.500ms (reduced motion: 1.000ms)
+ └─ Startup song song, có timeout
+     ├─ Đọc phiên Firebase / trạng thái onboarding
+     ├─ Config cache + kiểm kết nối
+     └─ Chuẩn bị asset màn đích
+                  ↓
+     animationDone AND routeResolved AND mounted
+                  ↓
+     Kiểm generation / UID → navigateOnce = true
+                  ↓
+     Mới → Get Started (nếu route sản phẩm có)
+     Đã dùng, signed-out / session lỗi → Login
+     Session hợp lệ + onboarding hoàn tất → Dashboard
+     Session hợp lệ + onboarding thiếu → tiếp tục khảo sát
+
+Slow &gt;4,5s → giữ frame cuối, không phát lại timeline
+&gt;8s → “Đang kết nối…”; offline: “Thử lại”
+Cache hợp lệ → fallback theo quyền hiện có, không cấp quyền sạc
+Session timeout/error → Login; không chờ API riêng vô hạn
+Warm resume → không splash, giữ route / focus / input
+Background trong cold start → pause; foreground tiếp tục, không reset
+Retry → retry startup, không reset animation hoặc tạo AuthGate mới</div>
+<h2>Ghi chú triển khai Flutter</h2><ul>
+<li>Một master <code>AnimationController(duration: 4500ms)</code>, các <code>Interval</code> theo bảng. Chuyển route là transition riêng 240ms, nên cold launch nhanh nhất khoảng 4,74s; không quảng cáo 4,5s là thời gian tới dashboard.</li>
+<li><code>CustomPainter</code>: cache Path và PathMetric; dùng extractPath + tangent cho đầu sáng. Trail chia nhiều segment alpha giảm dần trong 28px. Preview SVG hiện dùng trail đơn sắc, cần hoàn thiện fade liên tục trong painter.</li>
+<li>Logo vector phẳng trong preview là bản đề xuất. Chuyển line→logo cần path morph hoặc path nối được duyệt để không bật hình đột ngột. Không sử dụng icon PNG làm mask hình vuông.</li>
+<li>Shader sweep clip đúng silhouette, 20°, màu #FFF6E5 opacity tối đa .45. Halo chỉ blur vùng đầu bút; RepaintBoundary quanh vùng logo, nền/vignette tĩnh. Không grain mặc định.</li>
+<li>Painter không gọi mạng. Startup service chạy song song ngoài painter; ưu tiên session/cache cục bộ. Đây là cách giải nghĩa “không gọi mạng trong animation” mà không trì hoãn startup. Config/API lỗi không được chặn Firebase Login.</li>
+<li>Native Android/iOS khớp t=0: #0B0F0E thuần, không icon. Cần kiểm chứng riêng Android 12+ và launcher OEM; không coi bản thiết kế là bằng chứng không lóe trắng.</li>
+<li>Screen reader thông báo một lần “VinFast Battery, đang khởi động”; ExcludeSemantics cho nét vẽ. Nút lỗi ≥48dp. Font scale lớn: cho tên/tagline wrap, tăng vùng chữ; không ellipsis.</li>
+<li>Giảm chuyển động: fade logo/tên 1 giây, không sweep/haptic. Battery saver tắt halo breathing. Slow startup có thể thở halo chu kỳ 3 giây bằng ticker chờ riêng, dừng khi ra nền; mặc định prototype giữ tĩnh.</li>
+<li>60fps/Impeller và asset &lt;100KB là mục tiêu kiểm thử, chưa phải kết quả đo. Nghiệm thu trên APK: frame timings, cold/warm, auth nhanh/chậm/lỗi, background, reduced motion, không double navigation.</li>
+</ul>
+<h2>Tokens / quyết định thiết kế</h2><div class="table-wrap"><table><tbody>
+<tr><th>Nền / center</th><td>#0B0F0E / #111A17 · frame native không gradient</td></tr>
+<tr><th>Accent / fill</th><td>#3DDC97 → #2BB673 · sáng từ trên trái</td></tr>
+<tr><th>Core / halo</th><td>#C8F7E2 · 1,8px / #3DDC97 · 8–12px · ≤.15</td></tr>
+<tr><th>Sweep / rim</th><td>#FFF6E5 · .45 · 20° / #C8F7E2 · ≤.30</td></tr>
+<tr><th>Tên / tagline</th><td>#F3F0E9 · 28px/600/tracking 2,24px / #A9B4AD · 14px</td></tr>
+<tr><th>Khung / khoảng cách</th><td>390×844 · logo 120px · tên baseline 486 · tagline baseline 519</td></tr>
+<tr><th>Chuyển động</th><td>4500ms master · 450ms sweep · 300ms text · 240ms route</td></tr>
+</tbody></table></div><p>Chỉ dùng silhouette V giúp nét vẽ dễ nhận diện và nhẹ hơn icon 3D. Giữ frame cuối trước gate tránh “biến mất rồi hiện lại”. Không có phần trăm tải giả hay nội dung kỹ thuật trong splash.</p>
+<footer>Design only · Chưa thay đổi app, chưa kiểm thử Android, chưa nghiệm thu thương hiệu hoặc hiệu năng.</footer>
+</main><script src="motion.js"></script><script src="preview.js"></script></html>

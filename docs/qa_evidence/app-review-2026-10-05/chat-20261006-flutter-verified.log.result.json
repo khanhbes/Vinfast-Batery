@@ -1,0 +1,14 @@
+{
+  "command": [
+    "C:/flutter/bin/cache/dart-sdk/bin/dart.exe",
+    "C:/flutter/bin/cache/flutter_tools.snapshot",
+    "test",
+    "--no-pub"
+  ],
+  "cwd": "app",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\chat-20261006-flutter-verified.log",
+  "timeoutSeconds": 300,
+  "timedOut": false,
+  "exitCode": 0,
+  "elapsedSeconds": 106.72
+}

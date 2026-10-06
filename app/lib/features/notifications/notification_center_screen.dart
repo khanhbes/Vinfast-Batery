@@ -29,7 +29,18 @@ final unreadCountProvider = StreamProvider.autoDispose.family<int, String>((
 
 /// Notification Center Screen - hiển thị danh sách thông báo
 class NotificationCenterScreen extends ConsumerStatefulWidget {
-  const NotificationCenterScreen({super.key});
+  const NotificationCenterScreen({
+    super.key,
+    this.initialUid,
+    this.accountChanges,
+    this.refreshTimeout = const Duration(seconds: 20),
+  });
+
+  // Injectable account lifecycle for widget tests; repository access remains
+  // protected by Firebase authentication and expectedUid checks.
+  final String? initialUid;
+  final Stream<String?>? accountChanges;
+  final Duration refreshTimeout;
 
   @override
   ConsumerState<NotificationCenterScreen> createState() =>
@@ -40,20 +51,36 @@ class _NotificationCenterScreenState
     extends ConsumerState<NotificationCenterScreen> {
   final _service = NotificationCenterService();
   bool _isDeletingAll = false;
-  String _currentUid = FirebaseAuth.instance.currentUser?.uid ?? '';
-  StreamSubscription<User?>? _authSubscription;
+  late String _currentUid;
+  StreamSubscription<String?>? _authSubscription;
+  List<UserNotification>? _lastNotifications;
+  Object? _refreshError;
+  int _refreshGeneration = 0;
 
   @override
   void initState() {
     super.initState();
-    _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) {
-      final uid = user?.uid ?? '';
-      if (mounted && uid != _currentUid) setState(() => _currentUid = uid);
+    _currentUid =
+        widget.initialUid ?? FirebaseAuth.instance.currentUser?.uid ?? '';
+    final accounts =
+        widget.accountChanges ??
+        FirebaseAuth.instance.authStateChanges().map((user) => user?.uid);
+    _authSubscription = accounts.listen((account) {
+      final uid = account ?? '';
+      if (mounted && uid != _currentUid) {
+        setState(() {
+          _currentUid = uid;
+          _lastNotifications = null;
+          _refreshError = null;
+          _refreshGeneration++;
+        });
+      }
     });
   }
 
   @override
   void dispose() {
+    _refreshGeneration++;
     _authSubscription?.cancel();
     super.dispose();
   }
@@ -71,7 +98,7 @@ class _NotificationCenterScreenState
             AppScreenHeader(
               icon: Icons.notifications_rounded,
               title: 'Thông báo',
-              subtitle: 'Cập nhật hệ thống & model AI',
+              subtitle: 'Cập nhật về pin, sạc và bảo dưỡng',
               showBackButton: true,
               iconColor: colors.primary,
               actions: [
@@ -108,35 +135,33 @@ class _NotificationCenterScreenState
               child: RefreshIndicator(
                 color: colors.primary,
                 backgroundColor: colors.surface,
-                onRefresh: () async {
-                  // Invalidate provider để tạo lại stream → retry query
-                  ref.invalidate(notificationsProvider(_currentUid));
-                  // Đợi 1 frame để stream re-subscribe
-                  await Future<void>.delayed(const Duration(milliseconds: 200));
-                },
+                onRefresh: _refresh,
                 child: notificationsAsync.when(
                   data: (notifications) {
-                    if (notifications.isEmpty) {
-                      return _buildScrollableState(
-                        const EmptyState(
-                          icon: Icons.notifications_off_outlined,
-                          title: 'Chưa có thông báo',
-                          message:
-                              'Các thông báo về model AI, bảo dưỡng và cảnh báo pin sẽ xuất hiện ở đây',
-                        ),
-                      );
-                    }
-                    return _buildNotificationList(notifications);
+                    _lastNotifications = notifications;
+                    return _refreshError == null
+                        ? _buildContent(notifications)
+                        : _buildStaleContent(notifications);
                   },
-                  loading: () => const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: LoadingSkeleton(layout: SkeletonLayout.list),
-                  ),
+                  loading: () => _refreshError != null
+                      ? (_lastNotifications != null
+                            ? _buildStaleContent(_lastNotifications!)
+                            : _buildScrollableState(
+                                _buildErrorState(_refreshError!),
+                              ))
+                      : _lastNotifications != null
+                      ? _buildContent(_lastNotifications!)
+                      : const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: LoadingSkeleton(layout: SkeletonLayout.list),
+                        ),
                   error: (error, stack) {
                     debugPrint(
                       '[NotificationCenter] Stream error (${error.runtimeType})',
                     );
-                    return _buildScrollableState(_buildErrorState(error));
+                    return _lastNotifications != null
+                        ? _buildStaleContent(_lastNotifications!)
+                        : _buildScrollableState(_buildErrorState(error));
                   },
                 ),
               ),
@@ -146,6 +171,59 @@ class _NotificationCenterScreenState
       ),
     );
   }
+
+  Future<void> _refresh() async {
+    final uid = _currentUid;
+    final generation = ++_refreshGeneration;
+    setState(() => _refreshError = null);
+    ref.invalidate(notificationsProvider(uid));
+    try {
+      final notifications = await ref
+          .read(notificationsProvider(uid).future)
+          .timeout(widget.refreshTimeout);
+      if (!mounted || uid != _currentUid || generation != _refreshGeneration) {
+        return;
+      }
+      setState(() {
+        _lastNotifications = notifications;
+        _refreshError = null;
+      });
+      ref.invalidate(unreadCountProvider(uid));
+    } catch (error) {
+      if (!mounted || uid != _currentUid || generation != _refreshGeneration) {
+        return;
+      }
+      setState(() => _refreshError = error);
+    }
+  }
+
+  Widget _buildContent(List<UserNotification> notifications) {
+    if (notifications.isNotEmpty) return _buildNotificationList(notifications);
+    return _buildScrollableState(
+      const EmptyState(
+        icon: Icons.notifications_off_outlined,
+        title: 'Chưa có thông báo',
+        message: 'Thông báo về pin, phiên sạc và bảo dưỡng sẽ xuất hiện ở đây.',
+      ),
+    );
+  }
+
+  Widget _buildStaleContent(List<UserNotification> notifications) => Column(
+    children: [
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: [
+            const Expanded(
+              child: Text('Chưa cập nhật được. Đang hiển thị dữ liệu cũ.'),
+            ),
+            TextButton(onPressed: _refresh, child: const Text('Thử lại')),
+          ],
+        ),
+      ),
+      Expanded(child: _buildContent(notifications)),
+    ],
+  );
 
   /// Bọc widget trong scroll view để pull-to-refresh hoạt động khi list rỗng/lỗi.
   Widget _buildScrollableState(Widget child) {
@@ -167,7 +245,7 @@ class _NotificationCenterScreenState
         child: ErrorState.fromError(
           error: error,
           prefix: 'Không tải được thông báo',
-          onRetry: () => ref.invalidate(notificationsProvider(_currentUid)),
+          onRetry: _refresh,
         ),
       ),
     );

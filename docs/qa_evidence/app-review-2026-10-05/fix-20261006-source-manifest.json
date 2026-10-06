@@ -1,0 +1,32 @@
+{
+  "sourceHead": "6dc059ee64b6c1f9d155163c2dec68ee9e58b0cf",
+  "workingTree": "dirty; pre-existing changes preserved; this manifest hashes task production files, not the entire repository",
+  "apkUnchangedSha256": "5A0EF61FD5F143AE9685B1DB4481FCDBF2DB7E280011F88608B1EABF5F660639",
+  "runtime": "No Android emulator or phone was run this turn. Current source is not installed in the old APK or existing API workers.",
+  "sourceFiles": {
+    "app/lib/core/services/dashboard_preferences_service.dart": "0C31DC59AA421D46D676638268DAC2167D667EBA98A4E0DFBD70A06881157ECB",
+    "app/lib/core/services/guide_tour_coordinator.dart": "0EC42A6E8E664B7182D429DB2258DD541946F4716E5025FE4553161959E3F84C",
+    "app/lib/core/widgets/bootstrap_splash.dart": "51DAC034F5A6BF3CAF0681EAC9C0DB69410D6710542C2565348A78A6058C449A",
+    "app/lib/core/widgets/coach_mark_overlay.dart": "6864A6C39018128B9EBA6DB752EECA8CA256A5D19965309884514B0A0CF7A5E7",
+    "app/lib/core/widgets/app_popup.dart": "7EF242D0C5C2AE9252BFDAAA34189A01B624A5A03A8CB665860E82AC6E64FED9",
+    "app/lib/features/auth/login_screen.dart": "50A67B4C8B969BBE64ADA1D1E4ECE7450B2B5FAC8D73EFAA47B664EE41A80E6F",
+    "app/lib/features/auth/register_screen.dart": "5711A97887DCAC7A7F5E7D25383CF3421F1E861966ACB9712D07D59A98B70685",
+    "app/lib/features/settings/appearance_sheet.dart": "B381718406E186495FF0BC4B50F1124550351BB728C36C28F638A26D487F0EFF",
+    "app/lib/features/settings/settings_screen.dart": "407D1202B4164855A88D3372AFB34546A15E90A7FD4FDE6B331D2CB98906D961",
+    "app/lib/features/settings/guide_screen.dart": "6FFF85B98FDA739A05479DA202833A3960E068834EA7AFD5724E2DE47841D2A6",
+    "app/lib/features/notifications/notification_center_screen.dart": "471BE1DBAA4987BFF82CAAC9D2B7F1260C67B4462F5EFD22CC8ADE763A9E9EB5",
+    "app/lib/navigation/app_navigation.dart": "CC9FA8E33762639855EE186771B6DC03DBC0B7BF5581F582898CE1AD19180964",
+    "app/lib/features/ai/widgets/charging_progress_card.dart": "960D1DB8A033D5BA389007CD2D5424FDC0C352D68E9E5B0A4D8024C7B3FFA66C",
+    "app/lib/features/ai/widgets/trip_summary_card.dart": "E7FA04E5F7DC14D7D3157DBE7518EF3E6C14D738B6D4F492727451A6695FACA0",
+    "app/lib/features/ai/widgets/chat_message_bubble.dart": "5CF8ADAB2FBE8E4A77C278D29834FCED6663B072DC6449EC740C55F4B70DEB4A",
+    "app/lib/features/ai/widgets/quick_reply_chips.dart": "C5F0DA3A6155EFA85223E0C23FCB104A7A698683D1E912021736CCE564488F50",
+    "web/shelly/providers/vault_cloud.py": "67CF6C92F55F86901264F3FB9D540AD72901437E5DEED10B14F66AC4FE85F8F1",
+    "web/tests/test_shelly_vault_safety.py": "9E136A66FD909B7176CB519E5C998F1BB03A177EE799083D8889BC0A5C96E6DE"
+  },
+  "hygieneScan": {
+    "scope": "286 Dart/Python files under app/lib and web/shelly; additional source-secret patterns checked in tools",
+    "mojibakePatternHits": 0,
+    "privateKeyPatternHits": 0,
+    "limits": "Pattern-only text check, not a full Git-history/artifact/credential exposure audit. No secret values were printed."
+  }
+}

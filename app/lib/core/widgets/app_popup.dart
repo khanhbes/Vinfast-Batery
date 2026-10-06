@@ -12,6 +12,8 @@ class AppPopup {
   static final navigatorKey = GlobalKey<NavigatorState>();
   static OverlayEntry? _entry;
   static Timer? _timer;
+  static bool _safetyNoticeVisible = false;
+  static bool get safetyNoticeVisible => _safetyNoticeVisible;
   static String? _lastSignature;
   static DateTime? _lastShownAt;
   static final Map<String, DateTime> _shownSignatures = <String, DateTime>{};
@@ -125,6 +127,7 @@ class AppPopup {
       '$kind|${AppNoticeCopy.category(title)}|${AppNoticeCopy.category(detail ?? '')}';
 
   static void dismiss() {
+    _safetyNoticeVisible = false;
     _timer?.cancel();
     _timer = null;
     final entry = _entry;
@@ -190,6 +193,7 @@ class AppPopup {
       return;
     }
     dismiss();
+    _safetyNoticeVisible = persistent && kind == AppNoticeKind.warning;
     final newEntry = OverlayEntry(
       builder: (context) => _NoticeOverlay(
         kind: kind,
@@ -206,7 +210,10 @@ class AppPopup {
     void insertOverlay() {
       if (!identical(_entry, newEntry) || newEntry.mounted) return;
       final currentOverlay = navigatorKey.currentState?.overlay;
-      if (currentOverlay == null) return;
+      if (currentOverlay == null) {
+        if (identical(_entry, newEntry)) dismiss();
+        return;
+      }
       try {
         currentOverlay.insert(newEntry);
         if (!persistent) {
@@ -219,6 +226,7 @@ class AppPopup {
         }
       } catch (_) {
         // Guard against any lifecycle or insertion race condition
+        if (identical(_entry, newEntry)) dismiss();
       }
     }
 

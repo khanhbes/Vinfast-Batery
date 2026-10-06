@@ -1,0 +1,17 @@
+{
+  "command": [
+    "python",
+    "-m",
+    "pytest",
+    "tests",
+    "-q",
+    "--basetemp",
+    "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\pytest-chat-delivery-ccfd2b8bde2c4ea7b06e5d66f961b56f"
+  ],
+  "cwd": "web",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\chat-20261006-backend-delivery.log",
+  "timeoutSeconds": 240,
+  "timedOut": false,
+  "exitCode": 1,
+  "elapsedSeconds": 43.69
+}

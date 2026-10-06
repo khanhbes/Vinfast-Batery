@@ -1,0 +1,70 @@
+{
+  "runStartedLocalDate": "2026-10-05",
+  "updatedLocalDate": "2026-10-06",
+  "scope": "Existing APK UI-only QA; no rebuild, production changes or relay commands",
+  "artifactSha256": "5A0EF61FD5F143AE9685B1DB4481FCDBF2DB7E280011F88608B1EABF5F660639",
+  "installedApkHashMatchesArtifact": true,
+  "package": "com.bes.vinbatery",
+  "versionName": "1.1.9",
+  "versionCode": 126,
+  "serial": "emulator-5556",
+  "avd": "VinFast_QA_API36_20261005",
+  "bootCompleted": true,
+  "installExitCode": 0,
+  "environment": {
+    "api": 36,
+    "framebuffer": "720x1600",
+    "physicalDensity": 420,
+    "guestRamMB": 1536,
+    "cpuCores": 2,
+    "renderer": "SwiftShader; Vulkan disabled",
+    "initialFontScale": 1.0,
+    "initialNightMode": "no",
+    "initialShowImeWithHardwareKeyboard": 0,
+    "observedKeyboard": "Gboard, narrow floating toolbar rather than standard full keyboard",
+    "anrBaselineBeforeAppInstall": {"app": 0, "otherAndroid": 10},
+    "latestObservedEvents": {"appAnr": 0, "appCrash": 0, "otherAndroidAnr": 11, "probeExitCode": 0},
+    "warning": "Counts apply to observed event buffer, not a whole-app no-crash certification"
+  },
+  "coldLaunches": [
+    {"id": "cold-01", "activityStatus": "timeout", "commandExitCode": 0, "waitTimeMs": 15773, "eventuallyReachedLogin": true, "video": "cold-01.mp4", "durationSeconds": 18.905022, "decodedFrames": 7},
+    {"id": "cold-02", "activityStatus": "timeout", "commandExitCode": 0, "waitTimeMs": 12828, "eventuallyReachedLogin": true, "video": "cold-02.mp4", "durationSeconds": 33.144178, "decodedFrames": 65},
+    {"id": "cold-03", "activityStatus": "timeout", "commandExitCode": 0, "waitTimeMs": 13846, "eventuallyReachedLogin": true, "video": "cold-03.mp4", "durationSeconds": 39.015256, "decodedFrames": 129}
+  ],
+  "timingLimitations": "Recorders include prelaunch time and low frame delivery; waitTime is not time-to-interactive or Flutter animation duration. Native/Flutter segments cannot yet be reliably separated.",
+  "runtimeScreensInspected": ["Login", "Password reset", "Register"],
+  "uniqueControlsAttempted": 11,
+  "controls": [
+    {"id": "L01", "screen": "Login", "control": "Login CTA", "gesture": "two taps with blank form", "result": "Observed validation for both fields, no popup", "evidence": "auth-empty.png"},
+    {"id": "L02", "screen": "Login", "control": "Forgot password link", "gesture": "tap", "result": "Opened reset screen after transition settled", "evidence": "reset-settled.png"},
+    {"id": "L03", "screen": "Login", "control": "Register link", "gesture": "tap", "result": "Opened register screen", "evidence": "register.png"},
+    {"id": "L04", "screen": "Login", "control": "Email input", "gesture": "focus tap", "result": "Focused blank field; no splash replacement in observed snapshot", "evidence": "login-ready.png"},
+    {"id": "L05", "screen": "Login", "control": "Password input", "gesture": "keyboard Tab from email", "result": "Attempted; focus transfer not conclusively verified"},
+    {"id": "L06", "screen": "Login", "control": "Password visibility icon", "gesture": "two taps with empty field", "result": "Attempted; toggled state not conclusively verified"},
+    {"id": "P01", "screen": "Password reset", "control": "Send CTA", "gesture": "submit empty then invalid dummy text", "result": "Local validation; no valid reset request sent", "evidence": ["reset-empty.png", "reset-invalid.png"]},
+    {"id": "P02", "screen": "Password reset", "control": "Email input", "gesture": "focus and invalid dummy input", "result": "Editable; actual injected string differed from intended string under emulator latency", "evidence": "reset-invalid.png"},
+    {"id": "P03", "screen": "Password reset", "control": "App back", "gesture": "tap", "result": "Returned to login"},
+    {"id": "R01", "screen": "Register", "control": "Register CTA", "gesture": "blank submit", "result": "Required-field validation for all five fields; no registration sent", "evidence": "register-empty.png"},
+    {"id": "R02", "screen": "Register", "control": "Confirm password input", "gesture": "focus tap", "result": "Focused; hint truncated in observed screenshot, reproduce two more times", "evidence": "register-ime.png"}
+  ],
+  "otherGestures": [
+    {"screen": "Register", "gesture": "vertical swipe/scroll", "result": "Lower fields and CTA reachable", "evidence": "register-scroll.png"},
+    {"screen": "Register", "gesture": "system Back twice", "result": "Closed IME then returned to login"},
+    {"screen": "Login", "gesture": "vertical swipe at font scale 1.5/2.0", "result": "1.5 readable; 2.0 bottom-link reachability remains unverified due rendering latency", "evidence": ["login-320-font150-scroll.png", "login-320-font200-scroll.png"]}
+  ],
+  "displayMatrix": [
+    {"widthDpApprox": 360, "density": 320, "fontScale": 1.0, "result": "Three auth screens inspected"},
+    {"widthDpApprox": 320, "density": 360, "fontScale": 1.5, "result": "Login readable in captures; not all controls/screens covered"},
+    {"widthDpApprox": 320, "density": 360, "fontScale": 2.0, "result": "Partial; bottom link cut at capture boundary, scroll result not settled"},
+    {"widthDpApprox": 411.4, "density": 280, "fontScale": 1.0, "nightMode": "yes", "result": "Login capture only; system text render lag, not full Dark Mode sign-off"}
+  ],
+  "hardwareCommandsSent": 0,
+  "realDataDeleted": false,
+  "userApplicationsClosed": false,
+  "productionSourceOrBackendChanged": false,
+  "captureStoppedBeforeCredentialEntry": true,
+  "cleanup": {"fontScaleRestored": true, "nightModeRestored": true, "showImeWithHardwareKeyboardRestored": true, "densityRestorePendingUntilQaFinishes": true, "densityAtHandoff": 320, "networkChanged": false, "animationChanged": false},
+  "status": "Partial runtime QA; waiting for user-entered QA login and fixture scope",
+  "postLoginCoverage": "Not executed",
+  "releaseReadinessScore": null
+}

@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../../../core/theme/app_ui_colors.dart';
 import '../../../core/utils/battery_bot_faq.dart';
 import '../models/chat_message.dart';
 import '../models/function_call_action.dart';
@@ -63,7 +62,9 @@ class ChatMessageBubble extends StatelessWidget {
     // Smooth Entrance Animation (Slide-in & Fade-in)
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(begin: 0.0, end: 1.0),
-      duration: const Duration(milliseconds: 260),
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 200),
       curve: Curves.easeOutCubic,
       builder: (context, animValue, child) {
         return Opacity(
@@ -112,10 +113,11 @@ class ChatMessageBubble extends StatelessWidget {
             const SizedBox(width: 6),
             Flexible(
               child: Container(
-                constraints: BoxConstraints(
-                  maxWidth: screenWidth * 0.82,
+                constraints: BoxConstraints(maxWidth: screenWidth * 0.82),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: ChatbotGlassTheme.userBubbleDecoration(
                   context,
                   isQueued: message.isQueued,
@@ -142,7 +144,6 @@ class ChatMessageBubble extends StatelessWidget {
     String timeStr,
     double screenWidth,
   ) {
-    final uiColors = AppUiColors.of(context);
     final hasRichCards =
         (message.richCards != null && message.richCards!.isNotEmpty) ||
         message.actionCard != null;
@@ -160,20 +161,18 @@ class ChatMessageBubble extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Breathing Bot Avatar with halo
-            BreathingBotAvatar(
-              size: 32,
-              isStreaming: message.isStreaming,
-            ),
+            BreathingBotAvatar(size: 32, isStreaming: message.isStreaming),
             const SizedBox(width: 8),
             Flexible(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    constraints: BoxConstraints(
-                      maxWidth: maxBubbleWidth,
+                    constraints: BoxConstraints(maxWidth: maxBubbleWidth),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 13,
+                      vertical: 11,
                     ),
-                    padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
                     decoration: ChatbotGlassTheme.botBubbleDecoration(
                       context,
                       hasError: message.hasError,
@@ -191,11 +190,18 @@ class ChatMessageBubble extends StatelessWidget {
                             onTap: onRetry,
                             borderRadius: BorderRadius.circular(8),
                             child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.refresh_rounded, size: 14, color: theme.colorScheme.error),
+                                  Icon(
+                                    Icons.refresh_rounded,
+                                    size: 14,
+                                    color: theme.colorScheme.error,
+                                  ),
                                   const SizedBox(width: 4),
                                   Text(
                                     'Thử lại câu trả lời',
@@ -215,11 +221,14 @@ class ChatMessageBubble extends StatelessWidget {
                           ActionConfirmationCard(
                             action: message.actionCard!,
                             isLoading: isActionLoading,
-                            onConfirm: () => onConfirmAction?.call(message.actionCard!),
-                            onCancel: () => onCancelAction?.call(message.actionCard!),
+                            onConfirm: () =>
+                                onConfirmAction?.call(message.actionCard!),
+                            onCancel: () =>
+                                onCancelAction?.call(message.actionCard!),
                           ),
                         ],
-                        if (message.richCards != null && message.richCards!.isNotEmpty) ...[
+                        if (message.richCards != null &&
+                            message.richCards!.isNotEmpty) ...[
                           const SizedBox(height: 8),
                           for (final card in message.richCards!)
                             _buildRichCard(context, card),
@@ -234,17 +243,20 @@ class ChatMessageBubble extends StatelessWidget {
                   const SizedBox(height: 4),
 
                   // Bottom action row: Timestamp, Copy, Share, Thumb Up / Down
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       Text(
                         timeStr,
                         style: TextStyle(
                           fontSize: 10,
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.45,
+                          ),
                         ),
                       ),
-                      if (!message.isStreaming && message.content.isNotEmpty) ...[
+                      if (!message.isStreaming &&
+                          message.content.isNotEmpty) ...[
                         const SizedBox(width: 10),
                         // Nút Copy
                         _BubbleActionButton(
@@ -289,9 +301,7 @@ class ChatMessageBubble extends StatelessWidget {
   Widget _buildActionChip(BuildContext context, String actionKey) {
     BatteryBotAction? action;
     try {
-      action = BatteryBotAction.values.firstWhere(
-        (a) => a.name == actionKey,
-      );
+      action = BatteryBotAction.values.firstWhere((a) => a.name == actionKey);
     } catch (_) {}
 
     final label = switch (action) {
@@ -304,13 +314,12 @@ class ChatMessageBubble extends StatelessWidget {
 
     return ElevatedButton.icon(
       style: ElevatedButton.styleFrom(
-        backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+        backgroundColor: Theme.of(
+          context,
+        ).colorScheme.primary.withValues(alpha: 0.12),
         foregroundColor: Theme.of(context).colorScheme.primary,
         elevation: 0,
-        padding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 8,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
           side: BorderSide(color: Theme.of(context).colorScheme.primary),
@@ -319,10 +328,7 @@ class ChatMessageBubble extends StatelessWidget {
       icon: const Icon(Icons.arrow_forward_rounded, size: 16),
       label: Text(
         label,
-        style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-        ),
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
       ),
       onPressed: () {
         if (action != null) {
@@ -336,6 +342,40 @@ class ChatMessageBubble extends StatelessWidget {
     final cardType = card['cardType'] as String? ?? '';
     final title = card['title'] as String? ?? '';
     final data = (card['data'] as Map?)?.cast<String, dynamic>() ?? {};
+    final requiredFields = switch (cardType) {
+      'battery_status' => [
+        'soc',
+        'soh',
+        'voltage',
+        'temperature',
+        'estimatedRangeKm',
+      ],
+      'charging_progress' => [
+        'currentSoc',
+        'targetSoc',
+        'chargingPowerW',
+        'currentAmps',
+        'remainingMinutes',
+      ],
+      'trip_summary' => [
+        'distanceKm',
+        'energyUsedWh',
+        'efficiencyWhKm',
+        'co2SavedKg',
+        'durationMinutes',
+      ],
+      _ => <String>[],
+    };
+    if (requiredFields.any(
+      (key) => data[key] is! num || !(data[key] as num).isFinite,
+    )) {
+      return const Padding(
+        padding: EdgeInsets.all(12),
+        child: Text(
+          'Chưa đủ dữ liệu để hiển thị. Hãy mở màn hình tương ứng để kiểm tra.',
+        ),
+      );
+    }
 
     switch (cardType) {
       case 'battery_status':
@@ -378,12 +418,15 @@ class _BubbleActionButton extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(10),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-          child: Icon(
-            icon,
-            size: 13,
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.42),
+        child: SizedBox(
+          width: 48,
+          height: 48,
+          child: Center(
+            child: Icon(
+              icon,
+              size: 13,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.42),
+            ),
           ),
         ),
       ),
@@ -410,14 +453,22 @@ class _FeedbackButton extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-        child: Icon(
-          isSelected ? activeIcon : icon,
-          size: 13,
-          color: isSelected
-              ? theme.colorScheme.primary
-              : theme.colorScheme.onSurface.withValues(alpha: 0.4),
+      child: Semantics(
+        button: true,
+        selected: isSelected,
+        label: icon == Icons.thumb_up_outlined ? 'Hữu ích' : 'Chưa hữu ích',
+        child: SizedBox(
+          width: 48,
+          height: 48,
+          child: Center(
+            child: Icon(
+              isSelected ? activeIcon : icon,
+              size: 13,
+              color: isSelected
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurface.withValues(alpha: 0.4),
+            ),
+          ),
         ),
       ),
     );

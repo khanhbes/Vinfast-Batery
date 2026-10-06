@@ -1,0 +1,27 @@
+{
+  "active": "a",
+  "versions": [
+    {
+      "version": "a",
+      "uploadedAt": "2026-10-06T03:09:15.290449+00:00",
+      "note": "",
+      "ext": ".onnx",
+      "path": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\pytest-chat-backend-25f0391f5c49443e9ed626ce0f9df5aa\\test_failed_validation_preserv0\\v_a.onnx"
+    },
+    {
+      "version": "b",
+      "uploadedAt": "2026-10-06T03:09:15.310848+00:00",
+      "note": "",
+      "ext": ".onnx",
+      "path": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\pytest-chat-backend-25f0391f5c49443e9ed626ce0f9df5aa\\test_failed_validation_preserv0\\v_b.onnx"
+    },
+    {
+      "version": "c",
+      "uploadedAt": "2026-10-06T03:09:15.331142+00:00",
+      "note": "",
+      "ext": ".onnx",
+      "path": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\pytest-chat-backend-25f0391f5c49443e9ed626ce0f9df5aa\\test_failed_validation_preserv0\\v_c.onnx"
+    }
+  ],
+  "activatedAt": "2026-10-06T03:09:15.350357+00:00"
+}

@@ -212,18 +212,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         // Header tiêu đề
                         Text(
                           'Tạo tài khoản',
-                          style: theme.textTheme.headlineMedium?.copyWith(
+                          style: theme.textTheme.headlineSmall?.copyWith(
                             color: Colors.white,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -0.3,
-                            shadows: [
-                              Shadow(
-                                color: const Color(
-                                  0xFF00F5D4,
-                                ).withValues(alpha: 0.4),
-                                blurRadius: 10,
-                              ),
-                            ],
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                         const SizedBox(height: 6),
@@ -410,7 +402,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 ),
                                 decoration: _inputDecoration(
                                   label: 'Xác nhận mật khẩu',
-                                  hint: 'Nhập lại mật khẩu đã chọn',
+                                  hint: 'Nhập lại mật khẩu',
                                   prefixIcon: Icons.lock_reset_rounded,
                                   suffix: IconButton(
                                     tooltip: _obscureConfirm

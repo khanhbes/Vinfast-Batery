@@ -1,0 +1,15 @@
+{
+  "command": [
+    "python",
+    "-m",
+    "pytest",
+    "tests/test_shelly_vault_safety.py",
+    "-q"
+  ],
+  "cwd": "web",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\fix-20261006-backend-safety-03.log",
+  "timeoutSeconds": 120,
+  "timedOut": false,
+  "exitCode": 1,
+  "elapsedSeconds": 3.67
+}

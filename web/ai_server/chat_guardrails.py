@@ -177,6 +177,11 @@ class ChatGuardrails:
         sanitized = text
 
         # 1. Số điện thoại Việt Nam (10 hoặc 11 chữ số)
+        sanitized = re.sub(r'(?i)[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}', '[Email đã ẩn]', sanitized)
+        sanitized = re.sub(r'(?i)(?:bearer\s+)[A-Za-z0-9._~+/=-]+', '[Token đã ẩn]', sanitized)
+        sanitized = re.sub(r'(?i)(?:cloud[_ ]?key|auth[_ ]?key|api[_ ]?key|password|mật khẩu)\s*[:=]\s*\S+', '[Khóa truy cập đã ẩn]', sanitized)
+        if sanitized != text:
+            violations.append('GR-PII-003: Thông tin riêng tư đã ẩn.')
         phone_pattern = r"(?<!\d)(?:(?:\+84|0)(?:3|5|7|8|9)\d{8}|02\d{9})(?!\d)"
         if re.search(phone_pattern, sanitized):
             violations.append("GR-PII-001: Phát hiện số điện thoại cá nhân.")

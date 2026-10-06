@@ -1,0 +1,23 @@
+{
+  "operationId": "965ef5bd-a8a5-4e27-843f-3dbe4368a0b8",
+  "authorization": "supervised no-load; one ON with 5-second timer; user physically turned OFF before test",
+  "transport": "current source provider in short-lived QA process inside existing API container; no API worker restart",
+  "status": "Fail",
+  "onCommands": 1,
+  "offCommands": 1,
+  "startedAt": "2026-10-05T18:31:03.792329+00:00",
+  "endedAt": "2026-10-05T18:31:31.118980+00:00",
+  "model": "S3PL-00112EU",
+  "httpStatuses": [200, 200, 200, 200, 200, 200, 200],
+  "errorCode": "malformedProviderResponse",
+  "onReadbackObserved": false,
+  "timerReadbackObserved": false,
+  "finalOffVerified": true,
+  "testLeaseReleased": true,
+  "samples": [
+    {"at": "2026-10-05T18:31:17.378943+00:00", "relayOn": false, "timerSeconds": 0, "powerW": 0.0, "voltageV": 231.0, "currentA": 0.0, "energyWh": 18974.949, "temperatureC": 42.8},
+    {"at": "2026-10-05T18:31:26.543446+00:00", "relayOn": false, "timerSeconds": 0, "powerW": 0.0, "voltageV": 231.0, "currentA": 0.0, "energyWh": 18974.949, "temperatureC": 42.8},
+    {"at": "2026-10-05T18:31:28.626180+00:00", "relayOn": false, "timerSeconds": 0, "powerW": 0.0, "voltageV": 231.0, "currentA": 0.0, "energyWh": 18974.949, "temperatureC": 42.8}
+  ],
+  "followUp": "Parser fixed for HTTP-200 command acknowledgements without JSON. No second ON was sent. New supervised test and actual app runtime remain required."
+}

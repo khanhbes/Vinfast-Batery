@@ -865,6 +865,11 @@ def chat_send(
     x_internal_token: Optional[str] = Header(default=None),
 ):
     _check_token(x_internal_token)
+    if req.sessionId:
+        try:
+            chat_engine.memory.get_or_create_session(req.sessionId, req.userId)
+        except PermissionError:
+            return _err(403, "Không thể truy cập cuộc trò chuyện này.")
     return StreamingResponse(
         chat_engine.stream_chat(req),
         media_type="text/event-stream",
@@ -879,19 +884,25 @@ def chat_send(
 @app.get("/v1/chat/sessions")
 def chat_list_sessions(
     limit: int = 20,
+    userId: Optional[str] = None,
     x_internal_token: Optional[str] = Header(default=None),
 ):
     _check_token(x_internal_token)
-    sessions = chat_engine.memory.list_sessions(limit=limit)
+    sessions = chat_engine.memory.list_sessions(limit=min(max(limit, 1), 50), user_id=userId)
     return _ok([s.model_dump() for s in sessions])
 
 
 @app.get("/v1/chat/sessions/{session_id}")
 def chat_get_session(
     session_id: str,
+    userId: Optional[str] = None,
     x_internal_token: Optional[str] = Header(default=None),
 ):
     _check_token(x_internal_token)
+    try:
+        chat_engine.memory.assert_owner(session_id, userId)
+    except PermissionError:
+        return _err(403, "Không thể truy cập cuộc trò chuyện này.")
     messages = chat_engine.memory.get_all_messages(session_id)
     return _ok([m.model_dump() for m in messages])
 
@@ -899,9 +910,14 @@ def chat_get_session(
 @app.delete("/v1/chat/sessions/{session_id}")
 def chat_delete_session(
     session_id: str,
+    userId: Optional[str] = None,
     x_internal_token: Optional[str] = Header(default=None),
 ):
     _check_token(x_internal_token)
+    try:
+        chat_engine.memory.assert_owner(session_id, userId)
+    except PermissionError:
+        return _err(403, "Không thể truy cập cuộc trò chuyện này.")
     deleted = chat_engine.memory.delete_session(session_id)
     return _ok({"deleted": deleted, "sessionId": session_id})
 
@@ -912,7 +928,17 @@ def chat_feedback(
     x_internal_token: Optional[str] = Header(default=None),
 ):
     _check_token(x_internal_token)
-    if req.userId:
+    if req.rating not in ('like', 'dislike', 'up', 'down'):
+        raise HTTPException(status_code=400, detail='Invalid feedback')
+    try:
+        chat_engine.memory.assert_owner(req.sessionId, req.userId)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail='Session unavailable')
+    if not any(m.id == req.messageId and m.role == 'model'
+               for m in chat_engine.memory.get_all_messages(req.sessionId)):
+        raise HTTPException(status_code=404, detail='Message unavailable')
+    changed = chat_engine.memory.set_feedback(req.sessionId, req.userId, req.messageId, req.rating)
+    if req.userId and changed:
         behavior_analyzer.record_chat_interaction(
             user_id=req.userId,
             feedback_rating=req.rating,
@@ -955,6 +981,8 @@ def chat_confirm_action(
         tool_name=req.toolName,
         args=req.args,
         confirmed=req.confirmed,
+        user_id=req.userId,
+        session_id=req.sessionId,
     )
     return _ok(response)
 
@@ -975,9 +1003,9 @@ def behavior_get_suggestions(
 
     v_ctx = {
         "vehicleId": vehicleId or profile.vehicleId,
-        "currentSoc": currentSoc if currentSoc is not None else 50.0,
-        "currentSoh": currentSoh if currentSoh is not None else 98.0,
-        "odoKm": odoKm if odoKm is not None else 0,
+        "currentSoc": currentSoc,
+        "currentSoh": currentSoh,
+        "odoKm": odoKm,
         "chargingStatus": chargingStatus or "idle",
     }
 
@@ -986,6 +1014,3 @@ def behavior_get_suggestions(
         behavior_profile=profile.model_dump(),
     )
     return _ok(suggestions)
-
-
-

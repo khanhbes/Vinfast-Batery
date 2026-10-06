@@ -1,4 +1,3 @@
-
 import 'dart:async';
 import 'package:flutter/material.dart';
 
@@ -20,11 +19,9 @@ class ChargeModeSwitcherV2 extends StatefulWidget {
 
 class _ChargeModeSwitcherV2State extends State<ChargeModeSwitcherV2>
     with TickerProviderStateMixin, WidgetsBindingObserver {
-  late final AnimationController _pulseController;
   late final AnimationController _aiIconController;
   late final AnimationController _timerIconController;
 
-  late final Animation<double> _pulseAnimation;
   late final Animation<double> _aiIconRotation;
   late final Animation<double> _timerIconScale;
 
@@ -32,16 +29,6 @@ class _ChargeModeSwitcherV2State extends State<ChargeModeSwitcherV2>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-
-    // Breathing glow animation
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1500),
-    )..repeat(reverse: true);
-
-    _pulseAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
 
     // AI Icon slow continuous rotation (approx 15 degrees)
     _aiIconController = AnimationController(
@@ -76,22 +63,21 @@ class _ChargeModeSwitcherV2State extends State<ChargeModeSwitcherV2>
   }
 
   void _stopAnimations() {
-    if (_pulseController.isAnimating) _pulseController.stop();
     if (_aiIconController.isAnimating) _aiIconController.stop();
     if (_timerIconController.isAnimating) _timerIconController.stop();
   }
 
   void _resumeAnimations() {
     if (!mounted || MediaQuery.disableAnimationsOf(context)) return;
-    if (!_pulseController.isAnimating) _pulseController.repeat(reverse: true);
     if (!_aiIconController.isAnimating) _aiIconController.repeat(reverse: true);
-    if (!_timerIconController.isAnimating) _timerIconController.repeat(reverse: true);
+    if (!_timerIconController.isAnimating) {
+      _timerIconController.repeat(reverse: true);
+    }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _pulseController.dispose();
     _aiIconController.dispose();
     _timerIconController.dispose();
     super.dispose();
@@ -101,17 +87,23 @@ class _ChargeModeSwitcherV2State extends State<ChargeModeSwitcherV2>
   Widget build(BuildContext context) {
     final reducedMotion = MediaQuery.disableAnimationsOf(context);
     final duration = reducedMotion ? Duration.zero : CockpitMotion.standard;
-    final trailDuration = reducedMotion ? Duration.zero : const Duration(milliseconds: 400);
+    final trailDuration = reducedMotion
+        ? Duration.zero
+        : const Duration(milliseconds: 400);
 
     return Semantics(
-      label: widget.isAiMode ? 'Đang chọn sạc theo AI' : 'Đang chọn sạc hẹn giờ',
+      label: widget.isAiMode
+          ? 'Đang chọn sạc theo AI'
+          : 'Đang chọn sạc hẹn giờ',
       child: Container(
         padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(
           color: CockpitColors.surface,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: CockpitColors.emerald.withValues(alpha: .2), // Subtle outer glow border
+            color: CockpitColors.emerald.withValues(
+              alpha: .2,
+            ), // Subtle outer glow border
           ),
           boxShadow: [
             BoxShadow(
@@ -151,7 +143,7 @@ class _ChargeModeSwitcherV2State extends State<ChargeModeSwitcherV2>
                   ),
                 ),
 
-                // Animated sliding pill background with breathing glow
+                // Animated sliding pill background
                 AnimatedPositioned(
                   duration: duration,
                   curve: Curves.easeOutCubic,
@@ -159,32 +151,18 @@ class _ChargeModeSwitcherV2State extends State<ChargeModeSwitcherV2>
                   top: 0,
                   bottom: 0,
                   width: halfWidth,
-                  child: AnimatedBuilder(
-                    animation: _pulseAnimation,
-                    builder: (context, child) {
-                      final double shadowOpacity = reducedMotion
-                          ? 0.08
-                          : 0.08 + (_pulseAnimation.value * 0.1);
-                      final double spread = reducedMotion ? 0.0 : _pulseAnimation.value * 3;
-
-                      return AnimatedContainer(
-                        duration: duration,
-                        decoration: BoxDecoration(
-                          color: CockpitColors.emerald.withValues(alpha: .14),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: CockpitColors.emerald.withValues(alpha: .28),
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: CockpitColors.emerald.withValues(alpha: shadowOpacity),
-                              blurRadius: 12,
-                              spreadRadius: spread,
-                            ),
-                          ],
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF6EE7B7),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: CockpitColors.emerald.withValues(alpha: .25),
+                          blurRadius: 10,
+                          spreadRadius: 1,
                         ),
-                      );
-                    },
+                      ],
+                    ),
                   ),
                 ),
 
@@ -194,7 +172,7 @@ class _ChargeModeSwitcherV2State extends State<ChargeModeSwitcherV2>
                     Expanded(
                       child: _ModeTab(
                         icon: Icons.auto_awesome_rounded,
-                        label: 'Sạc theo AI',
+                        label: 'Sạc AI',
                         isSelected: widget.isAiMode,
                         onTap: () => widget.onChanged(true),
                         reducedMotion: reducedMotion,
@@ -204,7 +182,7 @@ class _ChargeModeSwitcherV2State extends State<ChargeModeSwitcherV2>
                     ),
                     Expanded(
                       child: _ModeTab(
-                        icon: Icons.timer_outlined,
+                        icon: Icons.access_time_rounded,
                         label: 'Sạc hẹn giờ',
                         isSelected: !widget.isAiMode,
                         onTap: () => widget.onChanged(false),
@@ -277,15 +255,16 @@ class _ModeTabState extends State<_ModeTab> {
 
   @override
   Widget build(BuildContext context) {
-    final duration = widget.reducedMotion ? Duration.zero : CockpitMotion.standard;
+    final duration = widget.reducedMotion
+        ? Duration.zero
+        : CockpitMotion.standard;
 
     Widget buildIcon() {
+      const activeColor = Color(0xFF042F2E);
+      final iconColor = widget.isSelected ? activeColor : CockpitColors.muted;
+
       if (widget.reducedMotion || !widget.isSelected) {
-        return Icon(
-          widget.icon,
-          size: 18,
-          color: widget.isSelected ? CockpitColors.emerald : CockpitColors.muted,
-        );
+        return Icon(widget.icon, size: 18, color: iconColor);
       }
 
       if (widget.isAi) {
@@ -294,22 +273,14 @@ class _ModeTabState extends State<_ModeTab> {
           builder: (context, child) {
             return Transform.rotate(
               angle: widget.iconAnimation.value,
-              child: Icon(
-                widget.icon,
-                size: 18,
-                color: CockpitColors.emerald,
-              ),
+              child: Icon(widget.icon, size: 18, color: activeColor),
             );
           },
         );
       } else {
         return ScaleTransition(
           scale: widget.iconAnimation,
-          child: Icon(
-            widget.icon,
-            size: 18,
-            color: CockpitColors.emerald,
-          ),
+          child: Icon(widget.icon, size: 18, color: activeColor),
         );
       }
     }
@@ -318,50 +289,31 @@ class _ModeTabState extends State<_ModeTab> {
       color: Colors.transparent,
       child: InkWell(
         onTap: widget.onTap,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         child: AnimatedScale(
           duration: const Duration(milliseconds: 150),
           scale: _scale,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    buildIcon(),
-                    const SizedBox(width: 7),
-                    Flexible(
-                      child: AnimatedDefaultTextStyle(
-                        duration: duration,
-                        style: TextStyle(
-                          color: widget.isSelected
-                              ? CockpitColors.emerald
-                              : CockpitColors.muted,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 12,
-                        ),
-                        child: Text(
-                          widget.label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
+                buildIcon(),
+                const SizedBox(width: 7),
+                Flexible(
+                  child: AnimatedDefaultTextStyle(
+                    duration: duration,
+                    style: TextStyle(
+                      color: widget.isSelected
+                          ? const Color(0xFF042F2E)
+                          : CockpitColors.muted,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
                     ),
-                  ],
-                ),
-                // Active dot indicator
-                AnimatedOpacity(
-                  duration: duration,
-                  opacity: widget.isSelected ? 1.0 : 0.0,
-                  child: Container(
-                    margin: const EdgeInsets.only(top: 4),
-                    width: 4,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: CockpitColors.emerald,
-                      shape: BoxShape.circle,
+                    child: Text(
+                      widget.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ),

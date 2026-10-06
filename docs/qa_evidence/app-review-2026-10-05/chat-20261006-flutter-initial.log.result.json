@@ -1,0 +1,19 @@
+{
+  "command": [
+    "C:/flutter/bin/cache/dart-sdk/bin/dart.exe",
+    "C:/flutter/bin/cache/flutter_tools.snapshot",
+    "test",
+    "--no-pub",
+    "test/unit/chat_models_and_service_test.dart",
+    "test/unit/behavior_and_history_test.dart",
+    "test/unit/action_and_suggestion_test.dart",
+    "test/unit/phase5c_rich_cards_test.dart",
+    "test/widget/chatbot_uiux_overflow_test.dart"
+  ],
+  "cwd": "app",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\chat-20261006-flutter-initial.log",
+  "timeoutSeconds": 180,
+  "timedOut": false,
+  "exitCode": 1,
+  "elapsedSeconds": 19.22
+}

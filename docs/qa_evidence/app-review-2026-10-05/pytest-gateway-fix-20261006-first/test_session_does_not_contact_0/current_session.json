@@ -1,0 +1,14 @@
+{
+  "vehicle_id": "VF-001",
+  "start_soc": 20.0,
+  "target_soc": 80.0,
+  "predicted_minutes": 160,
+  "started_at": "2026-08-27T18:30:00+07:00",
+  "predicted_full_at": "2026-08-27T21:10:00+07:00",
+  "charging_mode": "standard",
+  "prediction_source": "ai_model",
+  "prediction_confidence": 82.0,
+  "session_id": "1972daa9-0608-4c18-9851-ef52503431e6",
+  "mode": "monitor_only",
+  "received_at": "2026-10-05T18:38:00.680663+00:00"
+}

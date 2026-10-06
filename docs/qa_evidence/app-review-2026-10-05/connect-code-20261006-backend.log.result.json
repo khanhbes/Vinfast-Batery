@@ -1,0 +1,17 @@
+{
+  "command": [
+    "python",
+    "-m",
+    "pytest",
+    "tests/test_connection_codes.py",
+    "tests/test_shelly_membership.py",
+    "tests/test_shelly_vault_safety.py",
+    "-q"
+  ],
+  "cwd": "web",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\connect-code-20261006-backend.log",
+  "timeoutSeconds": 120,
+  "timedOut": false,
+  "exitCode": 0,
+  "elapsedSeconds": 5.55
+}

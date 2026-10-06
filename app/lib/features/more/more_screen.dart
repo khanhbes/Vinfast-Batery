@@ -24,6 +24,7 @@ import '../settings/settings_screen.dart';
 import '../settings/vehicle_garage_screen.dart';
 import '../smart_charging/smart_charger_setup_hub_screen.dart';
 import '../trip_planner/trip_planner_wrapper.dart';
+import '../energy_journey/energy_journey_screen.dart';
 
 /// Driver Profile Hub (Tab 3 — Quản lý & Cài đặt).
 ///
@@ -254,6 +255,36 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                 ),
               ),
             ],
+            const _CardDivider(),
+            _ActionTile(
+              icon: Icons.bolt_rounded,
+              iconColor: CockpitColors.emerald,
+              title: 'Hành trình năng lượng',
+              subtitle: 'Khám phá 36 mốc cấp độ tích lũy năng lượng sạch',
+              badge: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: CockpitColors.emerald.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: CockpitColors.emerald.withValues(alpha: 0.4),
+                    width: 0.8,
+                  ),
+                ),
+                child: const Text(
+                  '36 Cấp',
+                  style: TextStyle(
+                    color: CockpitColors.emerald,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const EnergyJourneyScreen()),
+              ),
+            ),
           ],
         ).appFadeSlideIn(index: 2),
 

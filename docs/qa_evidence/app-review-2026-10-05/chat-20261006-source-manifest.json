@@ -1,0 +1,280 @@
+{
+  "baselineHead": "6dc059ee64b6c1f9d155163c2dec68ee9e58b0cf",
+  "workingTree": "dirty; preserved previous edits",
+  "scope": "Chat source and selected regression tests/config; not a full repository or APK manifest",
+  "recordedAtUtc": "2026-10-06T03:23:00.5375974Z",
+  "files": [
+    {
+      "path": "app/lib/features/ai/ai_charging_predictor_screen.dart",
+      "sha256": "EBACD72C9C529F0E6D5D09D7FD24BC96EC2DBF7A6FD0B72EB857D6B70D2618A8"
+    },
+    {
+      "path": "app/lib/features/ai/ai_models_screen.dart",
+      "sha256": "3ABB6B11138A6CD1335E645ED611D6A412BAA626EEFF3AD21BA9B279AA56949E"
+    },
+    {
+      "path": "app/lib/features/ai/assistant_sheet.dart",
+      "sha256": "ABA285E4AA3CEA6CDC3D2BD220EADF9F11EBF1489D499181F8977431279C43EA"
+    },
+    {
+      "path": "app/lib/features/ai/controllers/chat_controller.dart",
+      "sha256": "EE4342B547B06B274C6F380CC0869F258235E0F9C97F4EF118F3B1F34259BDE6"
+    },
+    {
+      "path": "app/lib/features/ai/controllers/smart_charging_controller.dart",
+      "sha256": "CB7A18E2E1BB07F11A0580E86F04E77448A778D26A24B3F356BF98E0399A056F"
+    },
+    {
+      "path": "app/lib/features/ai/models/behavior_profile.dart",
+      "sha256": "7F24227AD28DA253C00A5892A832D721CA5E2CB4B5958286683B1BC6B8D4407A"
+    },
+    {
+      "path": "app/lib/features/ai/models/chat_message.dart",
+      "sha256": "F6960CBB8BF689D1871F07081DF1B04FA52C887486B68EEACD4C5416B1DDB02A"
+    },
+    {
+      "path": "app/lib/features/ai/models/chat_session.dart",
+      "sha256": "517EB8DDDDABB0DE08FBCEABA9392DBEB7B7390C38A9ABCB59C633DF819D34BC"
+    },
+    {
+      "path": "app/lib/features/ai/models/function_call_action.dart",
+      "sha256": "30EA7626589893C7CAAEC68C48245D840B6A6E8FA289F8A5655A9B4F30E23778"
+    },
+    {
+      "path": "app/lib/features/ai/models/proactive_suggestion.dart",
+      "sha256": "36B4F2F26022CD5EA2B46E5E9C58BC888C89FCAF2D30B2B88667FB27087C1329"
+    },
+    {
+      "path": "app/lib/features/ai/services/behavior_sync_service.dart",
+      "sha256": "543348437E1B5F6C43FA5C5445506411EF318835A2595F1B95B5BFEA55E0E824"
+    },
+    {
+      "path": "app/lib/features/ai/services/behavior_tracker.dart",
+      "sha256": "235BDEA7CE0125ECA2C6D3FF9E06E5A3E815044196F5543B249E32414E516B38"
+    },
+    {
+      "path": "app/lib/features/ai/services/chat_api_service.dart",
+      "sha256": "D2F411837BBC9E1AC0B1C4BC37B0DA6CE321FDD145248754AA86B909DE0830DB"
+    },
+    {
+      "path": "app/lib/features/ai/services/chat_history_storage.dart",
+      "sha256": "1E56FA1B7F50DA69482FBAAF30C8CA70D560B8062A4C72965CE194CECA3A0444"
+    },
+    {
+      "path": "app/lib/features/ai/services/suggestion_service.dart",
+      "sha256": "47CF3E755FA95446CC4F3DEAD88EFA61A9978C38670CE6730DA7A86CE8416A50"
+    },
+    {
+      "path": "app/lib/features/ai/services/voice_input_service.dart",
+      "sha256": "D99A579AE589002ABB1161CBB22565BBDC40CAE76B8C0225E3FA7748673F9390"
+    },
+    {
+      "path": "app/lib/features/ai/smart_charge_history_screen.dart",
+      "sha256": "5F7312922CAD46C6129AB30BE00963FE129184870A3B6DD5882482E9CEF2CF70"
+    },
+    {
+      "path": "app/lib/features/ai/smart_charging_control_screen.dart",
+      "sha256": "24FF081245F266F823234F7E7BC7ECC0275E49DCA8C5B667E4DFE6A074D6AC5F"
+    },
+    {
+      "path": "app/lib/features/ai/theme/chatbot_glass_theme.dart",
+      "sha256": "AAC79B8CAC819367143FBBF4E6ACD42CA7024300FF2F79C0A256272B7C4332C8"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/action_confirmation_card.dart",
+      "sha256": "9B7635E3413CADAC1A412AEC70ACCB7CABF040214BE8E58BE17523D7346D31A9"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/active_charging_card_v2.dart",
+      "sha256": "1DCA320348980F5CE230512D1823DD85554E05A797ED8ECF38613524BA189F0C"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/ai_charge_button.dart",
+      "sha256": "E87B0FB77B22E5AD73F6B96FAFF86FB478F79E415C32BF7360632C22D6FAC602"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/animated_voice_waveform.dart",
+      "sha256": "FE81D9E355F8F5AAA6DA8CE142C3D5DEF3683E6ED323A3F66E1EA9021D0CC03E"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/battery_hero_card.dart",
+      "sha256": "3DCCBE3C5F620F0F8F3E32F48A5F533FF1C3FDB3D598C7D0854A805A0DDEFCD8"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/battery_soc_selector.dart",
+      "sha256": "4244085D60C421F4CA2137F930D0E10907989C21F651FFF00D868EE866B40FF4"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/battery_status_card.dart",
+      "sha256": "D2B0F0C7D9E3D3D738BBC1CA17BF39610E7909E5DE1366EC9E9BD7F8B1DFAAB3"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/battery_visualizer_v2.dart",
+      "sha256": "CFB3A2DDA4A6CC7AD06A66DB883CAA386E98050003B979439E8DC15CCB7FE4D9"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/breathing_bot_avatar.dart",
+      "sha256": "BFD3E1512625D30EAA07F5D74CA27E752E75451498CE4F0F78AF27E8687901F9"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/calibrate_battery_sheet.dart",
+      "sha256": "37353DCF1C50D485E6BB0E83D8325FDD74F4E0322DE6D858D41163FA0AAE1700"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/charge_mode_switcher_v2.dart",
+      "sha256": "E937AEABB00FC709C930EF5AF44E589852C34A91C3C218D171531F42566E39D3"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/charging_battery_animation.dart",
+      "sha256": "247A4B43890F4FB9B110D0D906EABA26948C44553549518FC41299D82C9FC0C5"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/charging_connection_banner.dart",
+      "sha256": "6BDDB606B668C73418D0ECE8ACB681AAC7DCC11B882B3FE7948DF15186A2E342"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/charging_progress_card.dart",
+      "sha256": "960D1DB8A033D5BA389007CD2D5424FDC0C352D68E9E5B0A4D8024C7B3FFA66C"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/chat_input_bar.dart",
+      "sha256": "6C06FE9BB04BD48BFD13B2F5ADDA271C3CD401C0319ACDE2721F6E1F8D0F57AD"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/chat_message_bubble.dart",
+      "sha256": "18F6A6C12C587B5278ECC38EDBC0B1E8EA06FE8B3E8C07B26A3CEAAE7E1DFC0F"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/confirm_end_soc_sheet.dart",
+      "sha256": "614169250BE783FB07AC3F602953146B47206C553992D1CA0303D69BB6EB5A90"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/confirm_session_soc_dialog.dart",
+      "sha256": "F77A13B6E50E40497A7982F26FB9E690B96A89FB89653CBCC3A6C93EEAE4D0B7"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/edit_current_battery_sheet.dart",
+      "sha256": "1BB1A5C96EB424717555A7056C2895355C80472D3C59317D03BBA61FBFDBC7B3"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/energy_journey_teaser_card.dart",
+      "sha256": "EA4BFD906D62FA47C572C70257D3DFCB4226991C0B58ECC070E72E2E9D7695C7"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/horizontal_battery_target_selector.dart",
+      "sha256": "E098A637A041467D3E43BCA0A9D7702415474713D393F579489F0D9A4F7B36B6"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/persistent_charging_pill.dart",
+      "sha256": "4F6FE899F830DF3C105A2CFC528133B9AF326FFE3C3318524D71160E6C2C1609"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/prediction_card_v2.dart",
+      "sha256": "22468598FF44AEB34B19299D323C9FA8B805F4718A412BF089BAD3C3DB1BDD23"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/prediction_detail_sheet.dart",
+      "sha256": "6F6363EC6E794F588546BAE024AF8DAB2E0F32EC69F072128F95F38C8DF98B14"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/quick_reply_chips.dart",
+      "sha256": "C5F0DA3A6155EFA85223E0C23FCB104A7A698683D1E912021736CCE564488F50"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/recent_sessions_section_v2.dart",
+      "sha256": "0F0DEE84236A5633072B83EE735081376F88081E6F6BB1BCA9CB22B102B0CAAD"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/session_soc_summary.dart",
+      "sha256": "FB1DCE7DBBE4D3221B9C22E7F28C8CB10A8A6A812636FDE8419D3E0106C03BC2"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/smart_charge_cockpit_theme.dart",
+      "sha256": "AB01366A7A9568346AC7D41E51905C555F80D5B6A0CBA8D0050A9190B75CE479"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/smart_charger_card.dart",
+      "sha256": "559D0AE5ABF9A31CE850A3AE524D8FDF9FB1BDB175EEC9B747F267FE947DE9FD"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/start_charge_confirmation_sheet.dart",
+      "sha256": "ECA28FF2A51009F6B594BEFD8016D1C76D8D0E11923F54854E225B56EA58868C"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/stop_charging_confirmation_sheet.dart",
+      "sha256": "C9B37779D21434E1565F479929BC72C24B45DF0F359EC945731AC4352717BAC4"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/streaming_text_widget.dart",
+      "sha256": "57DC724579323890C58208CD09BE2E38E4665D575D11AEEB5ACE6FECF2F77272"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/timed_charging_section_v2.dart",
+      "sha256": "C66ECA0C398B884E8840E9398392BCA4178AFCE2EEC106CFE51AB19B67E3ACAD"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/trip_summary_card.dart",
+      "sha256": "E7FA04E5F7DC14D7D3157DBE7518EF3E6C14D738B6D4F492727451A6695FACA0"
+    },
+    {
+      "path": "app/lib/features/ai/widgets/typing_indicator_dots.dart",
+      "sha256": "A51BEA2A76C1D840EBF519FFDF50BA03281DE3CAB261D2961014BE617EA6E858"
+    },
+    {
+      "path": "app/test/unit/chat_safety_regression_test.dart",
+      "sha256": "6C93F95E3FFB30ED3340FCEA05653857C6F7B28B5DC46A222D85EDE45071E985"
+    },
+    {
+      "path": "app/test/widget/assistant_sheet_lifecycle_test.dart",
+      "sha256": "975E8878CF30C25AF8A4BAE41296E5705B4829A6B7493E1FF688C3A0E48AEDE3"
+    },
+    {
+      "path": "web/.env.docker.example",
+      "sha256": "9DF9FB6E13CD95D25CAD653655A9BF45ACCBFF1D9F835EB18214E3B381A980C8"
+    },
+    {
+      "path": "web/.env.laptop.example",
+      "sha256": "C1A21121B0B452837FE2657B91C0914786EC6EBAD85A4F62429BB823EB52EA71"
+    },
+    {
+      "path": "web/ai_server/chat_engine.py",
+      "sha256": "47750C4132F69E3D03FB2C68710C4553BB5C243F9A4EF342F8E6A39258E481ED"
+    },
+    {
+      "path": "web/ai_server/chat_guardrails.py",
+      "sha256": "E0217C9C795009E0264B15319D07D66E8CED5A8F1D9846186E5DC8876883A738"
+    },
+    {
+      "path": "web/ai_server/chat_memory.py",
+      "sha256": "108F534BD82B5D84C9DF0C13DF28845A7C7B84A0AAD830B73A98036353B18FE4"
+    },
+    {
+      "path": "web/ai_server/chat_schemas.py",
+      "sha256": "AF5333FAA3159AF955B6BEA4B0A5172601E8AA77E82B1C0E718D88DEC2880299"
+    },
+    {
+      "path": "web/ai_server/chat_tools.py",
+      "sha256": "67FA5590565B1F61465FC6EB6F429C2257564B31C2A621770D6FD7D0FD91A2E7"
+    },
+    {
+      "path": "web/ai_server/main.py",
+      "sha256": "9C8BF6F4D8BFEBE2BAD92FA2D526FE9718546439527D2D19485C7C9DB5BDA1FE"
+    },
+    {
+      "path": "web/ai_server/suggestion_engine.py",
+      "sha256": "32707B861FF0EFCBEEB25C5F7B2E1B61B7F384F158E5BF7A3096CF48A8591663"
+    },
+    {
+      "path": "web/docker-compose.yml",
+      "sha256": "9BF961776D6635FF79D7FC334463A2E19E55A87AACF453ACFBA0E17F8BC99544"
+    },
+    {
+      "path": "web/server.py",
+      "sha256": "FE568F39EC241CC6730803FED6574758306CE4118ED53A02E4F18301E0E9981C"
+    },
+    {
+      "path": "web/tests/test_chat_security_contract.py",
+      "sha256": "36E9E5CBD03081BB52F6B4AB05FD6AB244C3E57016D5F223572F801FED4D1D65"
+    }
+  ]
+}

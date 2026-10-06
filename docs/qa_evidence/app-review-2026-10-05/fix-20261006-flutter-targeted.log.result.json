@@ -1,0 +1,21 @@
+{
+  "command": [
+    "C:/flutter/bin/cache/dart-sdk/bin/dart.exe",
+    "C:/flutter/bin/cache/flutter_tools.snapshot",
+    "test",
+    "--no-pub",
+    "test/widget/splash_v5_test.dart",
+    "test/widget/one_line_splash_test.dart",
+    "test/widget/auth_gate_lifecycle_test.dart",
+    "test/widget/guide_screen_test.dart",
+    "test/widget/guide_lifecycle_regression_test.dart",
+    "--reporter",
+    "expanded"
+  ],
+  "cwd": "app",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\fix-20261006-flutter-targeted.log",
+  "timeoutSeconds": 180,
+  "timedOut": false,
+  "exitCode": 1,
+  "elapsedSeconds": 73.8
+}

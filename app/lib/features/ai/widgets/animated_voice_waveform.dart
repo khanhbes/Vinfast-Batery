@@ -58,7 +58,8 @@ class _AnimatedVoiceWaveformState extends State<AnimatedVoiceWaveform>
             children: List.generate(widget.barCount, (index) {
               final phase = (index / widget.barCount) * pi;
               final wave = sin(_animController.value * 2 * pi + phase).abs();
-              final heightMultiplier = (wave * 0.5 + widget.soundLevel * 0.5).clamp(0.15, 1.0);
+              final heightMultiplier = (wave * 0.5 + widget.soundLevel * 0.5)
+                  .clamp(0.15, 1.0);
               final barHeight = widget.height * heightMultiplier;
 
               return Container(

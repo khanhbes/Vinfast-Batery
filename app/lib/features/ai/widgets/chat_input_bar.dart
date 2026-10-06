@@ -81,14 +81,22 @@ class _ChatInputBarState extends State<ChatInputBar> {
     final currentText = _controller.text;
     final selection = _controller.selection;
     if (selection.isValid && selection.start >= 0) {
-      final newText = currentText.replaceRange(selection.start, selection.end, emoji);
+      final newText = currentText.replaceRange(
+        selection.start,
+        selection.end,
+        emoji,
+      );
       _controller.value = TextEditingValue(
         text: newText,
-        selection: TextSelection.collapsed(offset: selection.start + emoji.length),
+        selection: TextSelection.collapsed(
+          offset: selection.start + emoji.length,
+        ),
       );
     } else {
       _controller.text = currentText + emoji;
-      _controller.selection = TextSelection.collapsed(offset: _controller.text.length);
+      _controller.selection = TextSelection.collapsed(
+        offset: _controller.text.length,
+      );
     }
   }
 
@@ -132,7 +140,10 @@ class _ChatInputBarState extends State<ChatInputBar> {
                 ListTile(
                   leading: CircleAvatar(
                     backgroundColor: uiColors.primary.withValues(alpha: 0.15),
-                    child: Icon(Icons.camera_alt_rounded, color: uiColors.primary),
+                    child: Icon(
+                      Icons.camera_alt_rounded,
+                      color: uiColors.primary,
+                    ),
                   ),
                   title: const Text('Chụp đồng hồ ODO / Cụm pin'),
                   subtitle: const Text('AI nhận diện số km và cảnh báo taplo'),
@@ -144,10 +155,15 @@ class _ChatInputBarState extends State<ChatInputBar> {
                 ListTile(
                   leading: CircleAvatar(
                     backgroundColor: Colors.teal.withValues(alpha: 0.15),
-                    child: const Icon(Icons.photo_library_rounded, color: Colors.teal),
+                    child: const Icon(
+                      Icons.photo_library_rounded,
+                      color: Colors.teal,
+                    ),
                   ),
                   title: const Text('Chọn ảnh từ thư viện'),
-                  subtitle: const Text('Gửi hóa đơn, thông số sạc hoặc hình ảnh xe'),
+                  subtitle: const Text(
+                    'Gửi hóa đơn, thông số sạc hoặc hình ảnh xe',
+                  ),
                   onTap: () {
                     Navigator.of(ctx).pop();
                     _controller.text = '🖼️ [Đính kèm ảnh] ';
@@ -156,10 +172,15 @@ class _ChatInputBarState extends State<ChatInputBar> {
                 ListTile(
                   leading: CircleAvatar(
                     backgroundColor: Colors.amber.withValues(alpha: 0.15),
-                    child: Icon(Icons.bolt_rounded, color: Colors.amber.shade800),
+                    child: Icon(
+                      Icons.bolt_rounded,
+                      color: Colors.amber.shade800,
+                    ),
                   ),
                   title: const Text('Gửi dữ liệu pin tức thì'),
-                  subtitle: const Text('Trích xuất điện áp, nhiệt độ pack pin và SoC'),
+                  subtitle: const Text(
+                    'Trích xuất điện áp, nhiệt độ pack pin và SoC',
+                  ),
                   onTap: () {
                     Navigator.of(ctx).pop();
                     widget.onSend('Báo cáo chi tiết thông số pin hiện tại');
@@ -274,9 +295,16 @@ class _ChatInputBarState extends State<ChatInputBar> {
                         ),
                       ),
                     IconButton(
-                      icon: Icon(Icons.close_rounded, size: 16, color: uiColors.muted),
+                      icon: Icon(
+                        Icons.close_rounded,
+                        size: 16,
+                        color: uiColors.muted,
+                      ),
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                      constraints: const BoxConstraints(
+                        minWidth: 24,
+                        minHeight: 24,
+                      ),
                       tooltip: 'Đóng thanh emoji',
                       onPressed: () => setState(() => _showEmojiRow = false),
                     ),
@@ -296,7 +324,10 @@ class _ChatInputBarState extends State<ChatInputBar> {
                   ),
                   tooltip: 'Đính kèm ảnh / dữ liệu',
                   padding: const EdgeInsets.all(6),
-                  constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+                  constraints: const BoxConstraints(
+                    minWidth: 34,
+                    minHeight: 34,
+                  ),
                   onPressed: widget.isStreaming ? null : _showAttachmentOptions,
                 ),
 
@@ -322,7 +353,11 @@ class _ChatInputBarState extends State<ChatInputBar> {
                               IconButton(
                                 padding: EdgeInsets.zero,
                                 constraints: const BoxConstraints(),
-                                icon: const Icon(Icons.close, size: 18, color: Colors.redAccent),
+                                icon: const Icon(
+                                  Icons.close,
+                                  size: 18,
+                                  color: Colors.redAccent,
+                                ),
                                 tooltip: 'Hủy ghi âm',
                                 onPressed: _cancelVoiceInput,
                               ),
@@ -359,11 +394,15 @@ class _ChatInputBarState extends State<ChatInputBar> {
                                   : 'Hỏi về pin, sạc, xe...',
                               hintStyle: TextStyle(
                                 fontSize: 13,
-                                color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.45,
+                                ),
                               ),
                               border: InputBorder.none,
                               isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(vertical: 9),
+                              contentPadding: const EdgeInsets.symmetric(
+                                vertical: 9,
+                              ),
                             ),
                           ),
                   ),
@@ -376,8 +415,8 @@ class _ChatInputBarState extends State<ChatInputBar> {
                   label: _hasText
                       ? 'Gửi tin nhắn'
                       : _isListening
-                          ? 'Dừng ghi âm và gửi'
-                          : 'Nhập bằng giọng nói tiếng Việt',
+                      ? 'Dừng ghi âm và gửi'
+                      : 'Nhập bằng giọng nói tiếng Việt',
                   child: Material(
                     color: Colors.transparent,
                     child: Ink(
@@ -385,13 +424,15 @@ class _ChatInputBarState extends State<ChatInputBar> {
                         color: _isListening
                             ? Colors.redAccent
                             : _hasText && !widget.isStreaming
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.primary.withValues(alpha: 0.15),
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.primary.withValues(alpha: 0.15),
                         shape: BoxShape.circle,
                         boxShadow: _hasText && !widget.isStreaming
                             ? [
                                 BoxShadow(
-                                  color: theme.colorScheme.primary.withValues(alpha: 0.3),
+                                  color: theme.colorScheme.primary.withValues(
+                                    alpha: 0.3,
+                                  ),
                                   blurRadius: 8,
                                   offset: const Offset(0, 2),
                                 ),
@@ -403,8 +444,8 @@ class _ChatInputBarState extends State<ChatInputBar> {
                         onTap: widget.isStreaming
                             ? null
                             : _hasText
-                                ? _submit
-                                : _toggleVoiceInput,
+                            ? _submit
+                            : _toggleVoiceInput,
                         customBorder: const CircleBorder(),
                         child: Container(
                           width: 38,
@@ -425,8 +466,8 @@ class _ChatInputBarState extends State<ChatInputBar> {
                                   _isListening
                                       ? Icons.stop_rounded
                                       : _hasText
-                                          ? Icons.arrow_upward_rounded
-                                          : Icons.mic_rounded,
+                                      ? Icons.arrow_upward_rounded
+                                      : Icons.mic_rounded,
                                   size: 19,
                                   color: _isListening || _hasText
                                       ? Colors.white

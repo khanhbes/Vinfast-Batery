@@ -56,7 +56,11 @@ class BatteryStatusCard extends StatelessWidget {
                 const SizedBox(height: 16),
                 Row(
                   children: [
-                    Icon(Icons.battery_charging_full_rounded, color: primaryColor, size: 24),
+                    Icon(
+                      Icons.battery_charging_full_rounded,
+                      color: primaryColor,
+                      size: 24,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -71,13 +75,44 @@ class BatteryStatusCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 16),
-                _buildDetailRow('Mức pin (SoC):', '${soc.toStringAsFixed(1)}%', uiColors, valueColor: primaryColor),
-                _buildDetailRow('Độ khỏe cell pin (SoH):', '${soh.toStringAsFixed(1)}%', uiColors, valueColor: Colors.teal),
-                _buildDetailRow('Điện áp pack pin:', '${voltage.toStringAsFixed(1)} V', uiColors),
-                _buildDetailRow('Nhiệt độ pack pin:', '${temp.toStringAsFixed(1)} °C', uiColors, valueColor: temp > 40 ? Colors.red : null),
-                _buildDetailRow('Quãng đường ước tính:', '~${estRange.toStringAsFixed(0)} km', uiColors),
-                _buildDetailRow('Trạng thái kết nối BMS:', 'Bình thường (Đã xác thực)', uiColors, valueColor: Colors.green),
-                _buildDetailRow('Chế độ sạc hiện tại:', isCharging ? 'Đang sạc relay' : 'Nghỉ (Chờ sạc)', uiColors),
+                _buildDetailRow(
+                  'Mức pin (SoC):',
+                  '${soc.toStringAsFixed(1)}%',
+                  uiColors,
+                  valueColor: primaryColor,
+                ),
+                _buildDetailRow(
+                  'Độ khỏe cell pin (SoH):',
+                  '${soh.toStringAsFixed(1)}%',
+                  uiColors,
+                  valueColor: Colors.teal,
+                ),
+                _buildDetailRow(
+                  'Điện áp pack pin:',
+                  '${voltage.toStringAsFixed(1)} V',
+                  uiColors,
+                ),
+                _buildDetailRow(
+                  'Nhiệt độ pack pin:',
+                  '${temp.toStringAsFixed(1)} °C',
+                  uiColors,
+                  valueColor: temp > 40 ? Colors.red : null,
+                ),
+                _buildDetailRow(
+                  'Quãng đường ước tính:',
+                  '~${estRange.toStringAsFixed(0)} km',
+                  uiColors,
+                ),
+                _buildDetailRow(
+                  'Nguồn dữ liệu:',
+                  'Ngữ cảnh trong app · Chưa xác minh BMS trực tiếp',
+                  uiColors,
+                ),
+                _buildDetailRow(
+                  'Chế độ sạc hiện tại:',
+                  isCharging ? 'Đang sạc relay' : 'Nghỉ (Chờ sạc)',
+                  uiColors,
+                ),
                 const SizedBox(height: 16),
                 SizedBox(
                   width: double.infinity,
@@ -85,7 +120,9 @@ class BatteryStatusCard extends StatelessWidget {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: uiColors.primary,
                       foregroundColor: uiColors.onPrimary,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                     onPressed: () => Navigator.of(ctx).pop(),
                     child: const Text('Đóng'),
@@ -99,14 +136,26 @@ class BatteryStatusCard extends StatelessWidget {
     );
   }
 
-  static Widget _buildDetailRow(String label, String value, AppUiColors uiColors, {Color? valueColor}) {
+  static Widget _buildDetailRow(
+    String label,
+    String value,
+    AppUiColors uiColors, {
+    Color? valueColor,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: TextStyle(fontSize: 13, color: uiColors.muted)),
-          Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: valueColor ?? uiColors.text)),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: valueColor ?? uiColors.text,
+            ),
+          ),
         ],
       ),
     );
@@ -148,7 +197,10 @@ class BatteryStatusCard extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 6),
         padding: const EdgeInsets.all(14),
-        decoration: ChatbotGlassTheme.cardDecoration(context, accentColor: primaryColor),
+        decoration: ChatbotGlassTheme.cardDecoration(
+          context,
+          accentColor: primaryColor,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -186,10 +238,7 @@ class BatteryStatusCard extends StatelessWidget {
                       ),
                       Text(
                         vehicleId,
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          color: uiColors.muted,
-                        ),
+                        style: TextStyle(fontSize: 11.5, color: uiColors.muted),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -197,19 +246,20 @@ class BatteryStatusCard extends StatelessWidget {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: isCharging
                         ? const Color(0xFF00E676).withValues(alpha: 0.15)
                         : (isLow
-                            ? Colors.orange.withValues(alpha: 0.15)
-                            : uiColors.primary.withValues(alpha: 0.1)),
+                              ? Colors.orange.withValues(alpha: 0.15)
+                              : uiColors.primary.withValues(alpha: 0.1)),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    isCharging
-                        ? 'Đang sạc'
-                        : (isLow ? 'Pin yếu' : 'Sẵn sàng'),
+                    isCharging ? 'Đang sạc' : (isLow ? 'Pin yếu' : 'Sẵn sàng'),
                     style: TextStyle(
                       fontSize: 10.5,
                       fontWeight: FontWeight.w600,
@@ -243,7 +293,10 @@ class BatteryStatusCard extends StatelessWidget {
                         alignment: Alignment.center,
                         children: [
                           TweenAnimationBuilder<double>(
-                            tween: Tween<double>(begin: 0.0, end: (soc / 100.0).clamp(0.0, 1.0)),
+                            tween: Tween<double>(
+                              begin: 0.0,
+                              end: (soc / 100.0).clamp(0.0, 1.0),
+                            ),
                             duration: const Duration(milliseconds: 1000),
                             curve: Curves.easeOutCubic,
                             builder: (context, animValue, _) {
@@ -253,8 +306,12 @@ class BatteryStatusCard extends StatelessWidget {
                                 child: CircularProgressIndicator(
                                   value: animValue,
                                   strokeWidth: strokeW,
-                                  backgroundColor: uiColors.border.withValues(alpha: 0.35),
-                                  valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+                                  backgroundColor: uiColors.border.withValues(
+                                    alpha: 0.35,
+                                  ),
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    primaryColor,
+                                  ),
                                   strokeCap: StrokeCap.round,
                                 ),
                               );
@@ -332,7 +389,9 @@ class BatteryStatusCard extends StatelessWidget {
                                   label: 'Nhiệt độ',
                                   value: '${temp.toStringAsFixed(1)} °C',
                                   icon: Icons.thermostat_rounded,
-                                  iconColor: isHot ? Colors.red : Colors.blueGrey,
+                                  iconColor: isHot
+                                      ? Colors.red
+                                      : Colors.blueGrey,
                                 ),
                               ),
                             ],
@@ -348,10 +407,14 @@ class BatteryStatusCard extends StatelessWidget {
             if (isLow || isHot) ...[
               const SizedBox(height: 10),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
-                  color: (isHot ? Colors.red : Colors.orange)
-                      .withValues(alpha: 0.12),
+                  color: (isHot ? Colors.red : Colors.orange).withValues(
+                    alpha: 0.12,
+                  ),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
@@ -370,7 +433,9 @@ class BatteryStatusCard extends StatelessWidget {
                             : 'Mức pin dưới 20%. Bạn nên sạc thông minh sớm để bảo vệ tuổi thọ cell pin.',
                         style: TextStyle(
                           fontSize: 10.5,
-                          color: isHot ? Colors.red.shade900 : Colors.orange.shade900,
+                          color: isHot
+                              ? Colors.red.shade900
+                              : Colors.orange.shade900,
                         ),
                         softWrap: true,
                       ),
@@ -409,10 +474,7 @@ class BatteryStatusCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   label,
-                  style: TextStyle(
-                    fontSize: 9.0,
-                    color: uiColors.muted,
-                  ),
+                  style: TextStyle(fontSize: 9.0, color: uiColors.muted),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -421,10 +483,7 @@ class BatteryStatusCard extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             value,
-            style: const TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w700,
-            ),
+            style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),

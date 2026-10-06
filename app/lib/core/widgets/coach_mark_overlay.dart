@@ -26,6 +26,7 @@ class CoachMarkOverlay extends StatefulWidget {
   });
 
   static OverlayEntry? _activeEntry;
+  static bool isActive(OverlayEntry entry) => identical(_activeEntry, entry);
 
   static void dismissActive() {
     final entry = _activeEntry;
@@ -40,10 +41,16 @@ class CoachMarkOverlay extends StatefulWidget {
     VoidCallback? onSkip,
     void Function(bool dontShowAgain)? onDontShowAgain,
     bool showDontShowAgain = true,
+    OverlayState? overlay,
   }) {
+    final targetOverlay =
+        overlay ??
+        Overlay.maybeOf(context) ??
+        Navigator.maybeOf(context)?.overlay;
+    if (targetOverlay == null || steps.isEmpty || !targetOverlay.mounted) {
+      return null;
+    }
     dismissActive();
-    final overlay = Overlay.maybeOf(context);
-    if (overlay == null || steps.isEmpty) return null;
     late final OverlayEntry entry;
     void close(VoidCallback? callback) {
       // An obsolete overlay must not close or complete its replacement.
@@ -62,7 +69,7 @@ class CoachMarkOverlay extends StatefulWidget {
       ),
     );
     _activeEntry = entry;
-    overlay.insert(entry);
+    targetOverlay.insert(entry);
     return entry;
   }
 

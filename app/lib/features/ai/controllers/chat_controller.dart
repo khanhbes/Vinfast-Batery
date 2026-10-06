@@ -49,20 +49,23 @@ class ChatState {
 
 final chatControllerProvider =
     StateNotifierProvider.autoDispose<ChatController, ChatState>((ref) {
-  final apiService = ref.watch(chatApiServiceProvider);
-  final storage = ref.watch(chatHistoryStorageProvider);
-  final behaviorTracker = ref.watch(behaviorTrackerProvider.notifier);
-  final behaviorSync = ref.watch(behaviorSyncServiceProvider);
+      final apiService = ref.watch(chatApiServiceProvider);
+      final storage = ref.watch(chatHistoryStorageProvider);
+      final behaviorTracker = ref.watch(behaviorTrackerProvider.notifier);
+      final behaviorSync = ref.watch(behaviorSyncServiceProvider);
 
-  final controller = ChatController(
-    apiService: apiService,
-    storage: storage,
-    behaviorTracker: behaviorTracker,
-    behaviorSync: behaviorSync,
-  );
+      final controller = ChatController(
+        apiService: apiService,
+        storage: storage,
+        behaviorTracker: behaviorTracker,
+        behaviorSync: behaviorSync,
+      );
+      ref.listen(behaviorTrackerProvider, (previous, next) {
+        if (previous?.userId != next.userId) controller.startNewChat();
+      });
 
-  return controller;
-});
+      return controller;
+    });
 
 class ChatController extends StateNotifier<ChatState> {
   ChatController({
@@ -71,12 +74,12 @@ class ChatController extends StateNotifier<ChatState> {
     required BehaviorTracker behaviorTracker,
     required BehaviorSyncService behaviorSync,
     Connectivity? connectivity,
-  })  : _apiService = apiService,
-        _storage = storage,
-        _behaviorTracker = behaviorTracker,
-        _behaviorSync = behaviorSync,
-        _connectivity = connectivity ?? Connectivity(),
-        super(const ChatState()) {
+  }) : _apiService = apiService,
+       _storage = storage,
+       _behaviorTracker = behaviorTracker,
+       _behaviorSync = behaviorSync,
+       _connectivity = connectivity ?? Connectivity(),
+       super(const ChatState()) {
     _init();
   }
 
@@ -88,11 +91,16 @@ class ChatController extends StateNotifier<ChatState> {
 
   StreamSubscription<ConnectivityResult>? _connectivitySub;
   StreamSubscription<String>? _streamSub;
+  int _generation = 0;
+  Completer<void>? _streamFinished;
+  final Set<String> _pendingActions = {};
 
   Future<void> _init() async {
     startNewChat(preserveGreeting: true);
     await _checkConnectivity();
+    if (!mounted) return;
     _connectivitySub = _connectivity.onConnectivityChanged.listen((result) {
+      if (!mounted) return;
       final online = result != ConnectivityResult.none;
       if (online != state.isOnline) {
         state = state.copyWith(isOnline: online);
@@ -105,6 +113,8 @@ class ChatController extends StateNotifier<ChatState> {
 
   @override
   void dispose() {
+    _generation++;
+    if (_streamFinished?.isCompleted == false) _streamFinished!.complete();
     _connectivitySub?.cancel();
     _streamSub?.cancel();
     super.dispose();
@@ -113,13 +123,18 @@ class ChatController extends StateNotifier<ChatState> {
   Future<void> _checkConnectivity() async {
     try {
       final result = await _connectivity.checkConnectivity();
-      state = state.copyWith(isOnline: result != ConnectivityResult.none);
+      if (mounted) {
+        state = state.copyWith(isOnline: result != ConnectivityResult.none);
+      }
     } catch (_) {
-      state = state.copyWith(isOnline: true);
+      if (mounted) state = state.copyWith(isOnline: false);
     }
   }
 
   void startNewChat({bool preserveGreeting = false}) {
+    _generation++;
+    _streamSub?.cancel();
+    if (_streamFinished?.isCompleted == false) _streamFinished!.complete();
     final sid = 'session-${DateTime.now().millisecondsSinceEpoch}';
     final initialList = preserveGreeting
         ? [
@@ -136,14 +151,18 @@ class ChatController extends StateNotifier<ChatState> {
     state = state.copyWith(
       sessionId: sid,
       messages: initialList,
+      offlineQueue: const [],
       isStreaming: false,
       currentError: null,
     );
   }
 
   Future<void> loadSession(String sessionId) async {
+    _generation++;
+    final generation = _generation;
+    await _streamSub?.cancel();
     final loaded = await _storage.loadSessionMessages(sessionId);
-    if (loaded.isNotEmpty) {
+    if (mounted && generation == _generation && loaded.isNotEmpty) {
       state = state.copyWith(
         sessionId: sessionId,
         messages: loaded,
@@ -210,6 +229,17 @@ class ChatController extends StateNotifier<ChatState> {
     Map<String, dynamic>? behaviorProfile,
     void Function(FunctionCallAction action)? onFunctionCall,
   }) async {
+    final generation = _generation;
+    final uid = _behaviorTracker.currentProfile.userId;
+    bool current() =>
+        mounted &&
+        generation == _generation &&
+        uid == _behaviorTracker.currentProfile.userId;
+    final finished = Completer<void>();
+    _streamFinished = finished;
+    bool failed = false;
+    String accumulated = '';
+    String? backendMessageId;
     final botMsgId = 'msg-bot-${DateTime.now().millisecondsSinceEpoch}';
     final botPlaceholder = ChatMessage(
       id: botMsgId,
@@ -229,29 +259,41 @@ class ChatController extends StateNotifier<ChatState> {
       sessionId: state.sessionId,
       vehicleContext: vehicleContext,
       behaviorProfile: behaviorProfile,
+      onTextReplace: (text) {
+        if (!current()) return;
+        accumulated = text;
+        _updateMessageContent(botMsgId, accumulated, isStreaming: true);
+      },
       onFunctionCall: (action) {
+        if (!current()) return;
         _attachActionCard(botMsgId, action);
         onFunctionCall?.call(action);
       },
       onRichCard: (cardData) {
+        if (!current()) return;
         _attachRichCard(botMsgId, cardData);
       },
     );
 
     streamResponse.sessionIdCompleter.future.then((sid) {
-      if (sid.isNotEmpty) {
+      if (current() && sid.isNotEmpty) {
         state = state.copyWith(sessionId: sid);
       }
     });
+    streamResponse.messageIdCompleter.future.then((id) {
+      if (current() && id.isNotEmpty) backendMessageId = id;
+    });
 
-    String accumulated = '';
     _streamSub?.cancel();
     _streamSub = streamResponse.stream.listen(
       (chunk) {
+        if (!current()) return;
         accumulated += chunk;
         _updateMessageContent(botMsgId, accumulated, isStreaming: true);
       },
       onError: (err) {
+        if (!current()) return;
+        failed = true;
         _updateMessageContent(
           botMsgId,
           accumulated.isNotEmpty
@@ -259,20 +301,29 @@ class ChatController extends StateNotifier<ChatState> {
               : 'Đã xảy ra sự cố khi kết nối tới AI. Bạn có thể nhấn Thử lại bên dưới.',
           isStreaming: false,
           hasError: true,
-          errorMessage: err.toString(),
+          errorMessage: 'Chưa nhận được câu trả lời. Hãy thử lại.',
         );
         state = state.copyWith(isStreaming: false);
       },
       onDone: () {
-        _updateMessageContent(
-          botMsgId,
-          accumulated,
-          isStreaming: false,
-        );
+        if (!finished.isCompleted) finished.complete();
+        if (!current() || failed) return;
+        _updateMessageContent(botMsgId, accumulated, isStreaming: false);
         state = state.copyWith(isStreaming: false);
+        if (backendMessageId != null) {
+          state = state.copyWith(
+            messages: state.messages
+                .map(
+                  (m) =>
+                      m.id == botMsgId ? m.copyWith(id: backendMessageId) : m,
+                )
+                .toList(),
+          );
+        }
         _persistSession();
       },
     );
+    await finished.future;
   }
 
   void _attachActionCard(String msgId, FunctionCallAction action) {
@@ -323,7 +374,7 @@ class ChatController extends StateNotifier<ChatState> {
   /// Thử lại một tin nhắn bị lỗi (Retry logic)
   Future<void> retryMessage(String messageId) async {
     final index = state.messages.indexWhere((m) => m.id == messageId);
-    if (index == -1) return;
+    if (index == -1 || state.isStreaming) return;
 
     // Tìm tin nhắn user trước đó
     ChatMessage? targetUserMsg;
@@ -345,12 +396,16 @@ class ChatController extends StateNotifier<ChatState> {
 
   /// Xử lý các tin nhắn trong hàng đợi offline khi kết nối trở lại
   Future<void> processOfflineQueue() async {
-    if (state.offlineQueue.isEmpty || !state.isOnline) return;
+    if (state.offlineQueue.isEmpty || !state.isOnline || state.isStreaming) {
+      return;
+    }
+    final generation = _generation;
 
     final queue = List<ChatMessage>.from(state.offlineQueue);
     state = state.copyWith(offlineQueue: const []);
 
     for (final queuedMsg in queue) {
+      if (!mounted || generation != _generation || !state.isOnline) return;
       // Đổi trạng thái tin nhắn trong UI thành không còn queued
       final updated = state.messages.map((m) {
         if (m.id == queuedMsg.id) {
@@ -371,22 +426,34 @@ class ChatController extends StateNotifier<ChatState> {
     required Map<String, dynamic> args,
     required bool confirmed,
   }) async {
-    final res = await _apiService.confirmAction(
-      sessionId: state.sessionId ?? 'session-local',
-      callId: callId,
-      toolName: toolName,
-      args: args,
-      confirmed: confirmed,
-    );
+    if (!_pendingActions.add(callId)) return false;
+    final generation = _generation;
+    Map<String, dynamic> res;
+    try {
+      res = await _apiService.confirmAction(
+        sessionId: state.sessionId ?? 'session-local',
+        callId: callId,
+        toolName: toolName,
+        args: args,
+        confirmed: confirmed,
+      );
+    } finally {
+      _pendingActions.remove(callId);
+    }
+    if (!mounted || generation != _generation) return false;
 
     final data = (res['data'] as Map<String, dynamic>?) ?? {};
-    final resultMsg = data['message'] as String? ??
-        (confirmed ? 'Đã kích hoạt thành công.' : 'Đã hủy lệnh.');
+    final succeeded = res['success'] == true && data['success'] == true;
+    final resultMsg = succeeded
+        ? (data['message'] as String? ?? 'Đã xác nhận kết quả.')
+        : 'Chưa thực hiện được. Hãy mở Sạc pin để kiểm tra.';
 
     final updated = state.messages.map((m) {
       if (m.actionCard?.callId == callId) {
         final newAction = m.actionCard!.copyWith(
-          status: confirmed ? 'confirmed' : 'cancelled',
+          status: succeeded
+              ? (confirmed ? 'confirmed' : 'cancelled')
+              : 'failed',
           resultMessage: resultMsg,
         );
         return m.copyWith(actionCard: newAction);
@@ -396,7 +463,7 @@ class ChatController extends StateNotifier<ChatState> {
 
     state = state.copyWith(messages: updated);
     _persistSession();
-    return true;
+    return succeeded;
   }
 
   /// Gửi feedback 👍/👎
@@ -431,8 +498,16 @@ class ChatController extends StateNotifier<ChatState> {
           ? '${firstUser.content.substring(0, 30)}...'
           : firstUser.content;
 
-      unawaited(_storage.saveSessionMessages(state.sessionId!, state.messages, title: title));
-      unawaited(_storage.backupToCloud(state.sessionId!, state.messages, title: title));
+      unawaited(
+        _storage.saveSessionMessages(
+          state.sessionId!,
+          state.messages,
+          title: title,
+        ),
+      );
+      unawaited(
+        _storage.backupToCloud(state.sessionId!, state.messages, title: title),
+      );
       _behaviorSync.scheduleSync();
     }
   }

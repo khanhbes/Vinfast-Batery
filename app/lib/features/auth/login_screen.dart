@@ -166,8 +166,10 @@ class _LoginScreenState extends State<LoginScreen> {
               child: SingleChildScrollView(
                 keyboardDismissBehavior:
                     ScrollViewKeyboardDismissBehavior.onDrag,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 20,
+                ),
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 420),
                   child: AutofillGroup(
@@ -188,12 +190,14 @@ class _LoginScreenState extends State<LoginScreen> {
                               vertical: 24,
                             ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF0B132B)
-                                  .withValues(alpha: 0.72),
+                              color: const Color(
+                                0xFF0B132B,
+                              ).withValues(alpha: 0.72),
                               borderRadius: BorderRadius.circular(22),
                               border: Border.all(
-                                color: const Color(0xFF00F5D4)
-                                    .withValues(alpha: 0.22),
+                                color: const Color(
+                                  0xFF00F5D4,
+                                ).withValues(alpha: 0.22),
                                 width: 1.2,
                               ),
                               boxShadow: [
@@ -203,8 +207,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                   offset: const Offset(0, 10),
                                 ),
                                 BoxShadow(
-                                  color: const Color(0xFF00F5D4)
-                                      .withValues(alpha: 0.06),
+                                  color: const Color(
+                                    0xFF00F5D4,
+                                  ).withValues(alpha: 0.06),
                                   blurRadius: 20,
                                   spreadRadius: 1,
                                 ),
@@ -249,20 +254,23 @@ class _LoginScreenState extends State<LoginScreen> {
                                       minHeight: 44,
                                     ),
                                     filled: true,
-                                    fillColor: const Color(0xFF132238)
-                                        .withValues(alpha: 0.6),
+                                    fillColor: const Color(
+                                      0xFF132238,
+                                    ).withValues(alpha: 0.6),
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(14),
                                       borderSide: BorderSide(
-                                        color:
-                                            Colors.white.withValues(alpha: 0.15),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.15,
+                                        ),
                                       ),
                                     ),
                                     enabledBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(14),
                                       borderSide: BorderSide(
-                                        color:
-                                            Colors.white.withValues(alpha: 0.15),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.15,
+                                        ),
                                       ),
                                     ),
                                     focusedBorder: OutlineInputBorder(
@@ -317,8 +325,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                       setState(() => _autofillEnabled = true);
                                     }
                                   },
-                                  onFieldSubmitted:
-                                      canSubmit ? (_) => _submit() : null,
+                                  onFieldSubmitted: canSubmit
+                                      ? (_) => _submit()
+                                      : null,
                                   decoration: InputDecoration(
                                     labelText: 'Mật khẩu',
                                     labelStyle: const TextStyle(
@@ -334,20 +343,23 @@ class _LoginScreenState extends State<LoginScreen> {
                                       minHeight: 44,
                                     ),
                                     filled: true,
-                                    fillColor: const Color(0xFF132238)
-                                        .withValues(alpha: 0.6),
+                                    fillColor: const Color(
+                                      0xFF132238,
+                                    ).withValues(alpha: 0.6),
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(14),
                                       borderSide: BorderSide(
-                                        color:
-                                            Colors.white.withValues(alpha: 0.15),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.15,
+                                        ),
                                       ),
                                     ),
                                     enabledBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(14),
                                       borderSide: BorderSide(
-                                        color:
-                                            Colors.white.withValues(alpha: 0.15),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.15,
+                                        ),
                                       ),
                                     ),
                                     focusedBorder: OutlineInputBorder(
@@ -380,8 +392,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                         minHeight: 48,
                                       ),
                                       onPressed: () => setState(
-                                        () =>
-                                            _obscurePassword = !_obscurePassword,
+                                        () => _obscurePassword =
+                                            !_obscurePassword,
                                       ),
                                       icon: Icon(
                                         _obscurePassword
@@ -393,8 +405,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                   validator: (value) =>
                                       value == null || value.isEmpty
-                                          ? 'Nhập mật khẩu'
-                                          : null,
+                                      ? 'Nhập mật khẩu'
+                                      : null,
                                 ),
 
                                 // Quên mật khẩu
@@ -403,11 +415,13 @@ class _LoginScreenState extends State<LoginScreen> {
                                   child: Padding(
                                     padding: const EdgeInsets.only(top: 4),
                                     child: TextButton(
-                                      onPressed:
-                                          _loading ? null : _openPasswordReset,
+                                      onPressed: _loading
+                                          ? null
+                                          : _openPasswordReset,
                                       style: TextButton.styleFrom(
-                                        foregroundColor:
-                                            const Color(0xFF00F5D4),
+                                        foregroundColor: const Color(
+                                          0xFF00F5D4,
+                                        ),
                                         padding: const EdgeInsets.symmetric(
                                           horizontal: 8,
                                           vertical: 4,
@@ -438,13 +452,14 @@ class _LoginScreenState extends State<LoginScreen> {
                                         vertical: 10,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFFFF5252)
-                                            .withValues(alpha: 0.12),
-                                        borderRadius:
-                                            BorderRadius.circular(12),
+                                        color: const Color(
+                                          0xFFFF5252,
+                                        ).withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(12),
                                         border: Border.all(
-                                          color: const Color(0xFFFF5252)
-                                              .withValues(alpha: 0.4),
+                                          color: const Color(
+                                            0xFFFF5252,
+                                          ).withValues(alpha: 0.4),
                                         ),
                                       ),
                                       child: Row(
@@ -478,10 +493,12 @@ class _LoginScreenState extends State<LoginScreen> {
                                   style: FilledButton.styleFrom(
                                     backgroundColor: const Color(0xFF00F5D4),
                                     foregroundColor: const Color(0xFF04070D),
-                                    disabledBackgroundColor:
-                                        const Color(0xFF334155),
-                                    disabledForegroundColor:
-                                        const Color(0xFF64748B),
+                                    disabledBackgroundColor: const Color(
+                                      0xFF334155,
+                                    ),
+                                    disabledForegroundColor: const Color(
+                                      0xFF64748B,
+                                    ),
                                     minimumSize: const Size.fromHeight(50),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(14),
@@ -530,9 +547,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 children: [
                                   TextSpan(
                                     text: 'Chưa có tài khoản? ',
-                                    style: TextStyle(
-                                      color: Color(0xFF94A3B8),
-                                    ),
+                                    style: TextStyle(color: Color(0xFF94A3B8)),
                                   ),
                                   TextSpan(
                                     text: 'Đăng ký ngay',
@@ -559,117 +574,40 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  /// Header Hero: Logo phát sáng + Tên thương hiệu + Tagline
+  /// Compact brand header: keep the fields and primary action prominent.
   Widget _buildHeroHeader(ThemeData theme) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Outer Glowing Ring & App Icon
-        Stack(
-          alignment: Alignment.center,
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    const Color(0xFF00F5D4).withValues(alpha: 0.35),
-                    CockpitColors.emerald.withValues(alpha: 0.15),
-                    Colors.transparent,
-                  ],
-                  stops: const [0.4, 0.75, 1.0],
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF00F5D4).withValues(alpha: 0.25),
-                    blurRadius: 28,
-                    spreadRadius: 2,
-                  ),
-                ],
-              ),
+        SizedBox.square(
+          dimension: 56,
+          child: ClipOval(
+            child: Image.asset(
+              'assets/icons/app_icon.png',
+              fit: BoxFit.contain,
             ),
-            Container(
-              width: 68,
-              height: 68,
-              decoration: const BoxDecoration(shape: BoxShape.circle),
-              child: ClipOval(
-                child: Image.asset(
-                  'assets/icons/app_icon.png',
-                  fit: BoxFit.contain,
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
         const SizedBox(height: 16),
 
         // Brand Title
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Text(
-            'VinFast Battery',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontSize: 26,
-              fontWeight: FontWeight.w900,
-              color: Colors.white,
-              letterSpacing: 1.8,
-              shadows: [
-                Shadow(
-                  color: const Color(0xFF00F5D4).withValues(alpha: 0.5),
-                  blurRadius: 14,
-                ),
-              ],
-            ),
+        Text(
+          'VinFast Battery',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.headlineSmall?.copyWith(
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
           ),
         ),
         const SizedBox(height: 8),
 
-        // Cyber Tagline Capsule
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-          decoration: BoxDecoration(
-            color: const Color(0xFF0D1B2A).withValues(alpha: 0.85),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: const Color(0xFF00F5D4).withValues(alpha: 0.4),
-              width: 1.0,
-            ),
-          ),
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 6,
-                  height: 6,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF00F5D4),
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Color(0xFF00F5D4),
-                        blurRadius: 6,
-                        spreadRadius: 1,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 7),
-                Text(
-                  'QUẢN LÝ PIN VÀ SẠC XE ĐIỆN',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w800,
-                    color: const Color(0xFF00F5D4),
-                    letterSpacing: 1.2,
-                  ),
-                ),
-              ],
-            ),
+        Text(
+          'Đăng nhập để quản lý pin và sạc xe.',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: const Color(0xFF94A3B8),
+            height: 1.4,
           ),
         ),
       ],

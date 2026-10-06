@@ -29,7 +29,30 @@ class _StreamingTextWidgetState extends State<StreamingTextWidget>
     _cursorController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 500),
-    )..repeat(reverse: true);
+    );
+  }
+
+  void _syncAnimation() {
+    if (widget.isStreaming && !MediaQuery.disableAnimationsOf(context)) {
+      if (!_cursorController.isAnimating) {
+        _cursorController.repeat(reverse: true);
+      }
+    } else {
+      _cursorController.stop();
+      _cursorController.value = 1;
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncAnimation();
+  }
+
+  @override
+  void didUpdateWidget(covariant StreamingTextWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncAnimation();
   }
 
   @override
@@ -42,7 +65,8 @@ class _StreamingTextWidgetState extends State<StreamingTextWidget>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final textStyle = widget.style ??
+    final textStyle =
+        widget.style ??
         theme.textTheme.bodyMedium?.copyWith(
           color: theme.colorScheme.onSurface,
           height: 1.45,
@@ -63,7 +87,7 @@ class _StreamingTextWidgetState extends State<StreamingTextWidget>
             const SizedBox(width: 8),
             Flexible(
               child: Text(
-                'BatteryBot đang suy nghĩ...',
+                'Đang chuẩn bị câu trả lời…',
                 style: textStyle?.copyWith(
                   fontSize: 12,
                   fontStyle: FontStyle.italic,
@@ -104,11 +128,16 @@ class _StreamingTextWidgetState extends State<StreamingTextWidget>
               color: isDark ? const Color(0xFF0B0F17) : const Color(0xFFF8FAFC),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+                color: isDark
+                    ? const Color(0xFF1E293B)
+                    : const Color(0xFFE2E8F0),
                 width: 1.0,
               ),
             ),
-            codeblockPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            codeblockPadding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 8,
+            ),
           ),
         ),
         if (widget.isStreaming) ...[
@@ -133,4 +162,3 @@ class _StreamingTextWidgetState extends State<StreamingTextWidget>
     );
   }
 }
-

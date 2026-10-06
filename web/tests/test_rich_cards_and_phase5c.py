@@ -54,15 +54,16 @@ def test_build_rich_card_battery_status(test_engine):
         "soc": 68.0,
         "soh": 97.5,
         "voltage": 71.8,
-        "temperature": 29.0,
-        "estimatedRangeKm": 78.0,
+        "status": "success",
+        "temperatureC": 29.0,
+        "estimatedRemainingKm": 78.0,
         "chargingStatus": "idle",
     }
     card = test_engine._build_rich_card("get_battery_status", tool_result, None)
     assert card is not None
     assert card["cardType"] == "battery_status"
-    assert card["title"] == "Trạng thái Pin & Xe"
-    assert card["data"]["vehicleId"] == "VF-FELIZ-S"
+    assert card["title"] == "Dữ liệu pin đang xem"
+    assert "vehicleId" not in card["data"]
     assert card["data"]["soc"] == 68.0
     assert card["data"]["temperature"] == 29.0
     assert card["data"]["estimatedRangeKm"] == 78.0
@@ -77,18 +78,13 @@ def test_build_rich_card_charging_progress(test_engine):
     }
     v_ctx = {"soc": 45.0, "targetSoc": 90.0, "chargingStatus": "charging"}
     card = test_engine._build_rich_card("get_charging_history", tool_result, v_ctx)
-    assert card is not None
-    assert card["cardType"] == "charging_progress"
-    assert card["data"]["currentSoc"] == 45.0
-    assert card["data"]["targetSoc"] == 90.0
-    assert card["data"]["chargingPowerW"] == 2100.0
-    assert card["data"]["currentAmps"] <= 12.0  # An toàn điện áp
-    assert card["data"]["status"] == "charging"
+    assert card is None  # No live relay/timer evidence; history is not active charging.
 
 
 def test_build_rich_card_trip_summary(test_engine):
     """Kiểm tra _build_rich_card tạo thẻ trip_summary với quãng đường và CO2."""
     tool_result = {
+        "status": "success",
         "distanceKm": 32.4,
         "energyUsedWh": 972.0,
         "efficiencyWhKm": 30.0,
@@ -124,19 +120,13 @@ def test_detect_rich_card_intent_charging(test_engine):
     """Kiểm tra nhận diện intent tạo charging_progress card."""
     v_ctx = {"soc": 60.0, "targetSoc": 85.0, "chargingStatus": "charging"}
     card = test_engine._detect_rich_card_intent("Xem tiến độ sạc của xe", v_ctx)
-    assert card is not None
-    assert card["cardType"] == "charging_progress"
-    assert card["data"]["currentSoc"] == 60.0
-    assert card["data"]["targetSoc"] == 85.0
+    assert card is None  # No verified measurements, never fabricate a card.
 
 
 def test_detect_rich_card_intent_trip(test_engine):
     """Kiểm tra nhận diện intent tạo trip_summary card."""
     card = test_engine._detect_rich_card_intent("Hôm nay mình đi quãng đường hết bao nhiêu km?", None)
-    assert card is not None
-    assert card["cardType"] == "trip_summary"
-    assert card["data"]["distanceKm"] > 0
-    assert card["data"]["co2SavedKg"] > 0
+    assert card is None  # No verified measurements, never fabricate a card.
 
 
 def test_stream_chat_emits_rich_card_event(test_engine):

@@ -34,8 +34,9 @@ class _BreathingBotAvatarState extends State<BreathingBotAvatar>
   void didUpdateWidget(covariant BreathingBotAvatar oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.isStreaming != widget.isStreaming) {
-      _animController.duration =
-          Duration(milliseconds: widget.isStreaming ? 1000 : 2400);
+      _animController.duration = Duration(
+        milliseconds: widget.isStreaming ? 1000 : 2400,
+      );
       if (!_animController.isAnimating) {
         _animController.repeat(reverse: true);
       }
@@ -74,7 +75,9 @@ class _BreathingBotAvatarState extends State<BreathingBotAvatar>
                     spreadRadius: pulseProgress * 2.0,
                   ),
                   BoxShadow(
-                    color: const Color(0xFF0072BC).withValues(alpha: glowAlpha * 0.8),
+                    color: const Color(
+                      0xFF0072BC,
+                    ).withValues(alpha: glowAlpha * 0.8),
                     blurRadius: glowRadius * 1.2,
                     offset: const Offset(0, 1),
                   ),
@@ -89,10 +92,7 @@ class _BreathingBotAvatarState extends State<BreathingBotAvatar>
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: const LinearGradient(
-                  colors: [
-                    Color(0xFF0072BC),
-                    Color(0xFF00C853),
-                  ],
+                  colors: [Color(0xFF0072BC), Color(0xFF00C853)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),

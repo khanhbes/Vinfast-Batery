@@ -12,6 +12,15 @@ final chatApiServiceProvider = Provider<ChatApiService>((ref) {
   return ChatApiService();
 });
 
+class ChatApiException implements Exception {
+  const ChatApiException(this.code, this.userMessage, {this.httpStatus});
+  final String code;
+  final String userMessage;
+  final int? httpStatus;
+  @override
+  String toString() => userMessage;
+}
+
 class ChatStreamResponse {
   const ChatStreamResponse({
     required this.stream,
@@ -27,7 +36,13 @@ class ChatStreamResponse {
 }
 
 class ChatApiService {
-  ChatApiService({http.Client? client}) : _client = client ?? http.Client();
+  ChatApiService({
+    http.Client? client,
+    this.requestTimeout = const Duration(seconds: 20),
+    this.streamIdleTimeout = const Duration(seconds: 30),
+  }) : _client = client ?? http.Client();
+  final Duration requestTimeout;
+  final Duration streamIdleTimeout;
 
   final http.Client _client;
 
@@ -58,15 +73,28 @@ class ChatApiService {
     void Function(Map<String, dynamic> toolCall)? onToolCall,
     void Function(Map<String, dynamic> toolResult)? onToolResult,
     void Function(Map<String, dynamic> cardData)? onRichCard,
+    void Function(String text)? onTextReplace,
   }) {
     final messageIdCompleter = Completer<String>();
     final sessionIdCompleter = Completer<String>();
     final functionCallCompleter = Completer<FunctionCallAction?>();
-    final controller = StreamController<String>();
+    bool cancelled = false;
+    StreamIterator<String>? input;
+    final controller = StreamController<String>(
+      onCancel: () async {
+        cancelled = true;
+        await input?.cancel();
+        if (!messageIdCompleter.isCompleted) messageIdCompleter.complete('');
+        if (!sessionIdCompleter.isCompleted) {
+          sessionIdCompleter.complete(sessionId ?? '');
+        }
+        if (!functionCallCompleter.isCompleted) {
+          functionCallCompleter.complete(null);
+        }
+      },
+    );
 
-    final uri =
-        AppConstants.tryBuildApiUri('/api/chat/send') ??
-        Uri.tryParse('${AppConstants.apiBaseUrl}/api/chat/send');
+    final uri = AppConstants.tryBuildApiUri('/api/chat/send');
 
     if (uri == null || !AppConstants.isApiConfigured) {
       // Chế độ mô phỏng offline hoặc API chưa được cấu hình URL
@@ -79,6 +107,7 @@ class ChatApiService {
         functionCallCompleter,
         onFunctionCall,
         onRichCard,
+        sessionId,
       );
       return ChatStreamResponse(
         stream: controller.stream,
@@ -90,13 +119,15 @@ class ChatApiService {
 
     () async {
       try {
-        final headers = await _getHeaders(isStream: true);
+        final headers = await _getHeaders(
+          isStream: true,
+        ).timeout(requestTimeout);
+        if (cancelled) return;
         final request = http.Request('POST', uri)
           ..headers.addAll(headers)
           ..body = jsonEncode({
             'message': message,
             'sessionId': ?sessionId,
-            'userId': ?userId,
             'vehicleContext': ?vehicleContext,
             'behaviorProfile': ?behaviorProfile,
             'stream': true,
@@ -104,95 +135,123 @@ class ChatApiService {
 
         final streamedResponse = await _client
             .send(request)
-            .timeout(const Duration(seconds: 45));
-
-        if (streamedResponse.statusCode != 200) {
-          final errorBody = await streamedResponse.stream.bytesToString();
-          controller.addError(
-            'Lỗi kết nối máy chủ (${streamedResponse.statusCode}): $errorBody',
-          );
-          await controller.close();
-          if (!messageIdCompleter.isCompleted) {
-            messageIdCompleter.complete('');
-          }
-          if (!sessionIdCompleter.isCompleted) {
-            sessionIdCompleter.complete('');
-          }
-          if (!functionCallCompleter.isCompleted) {
-            functionCallCompleter.complete(null);
-          }
+            .timeout(requestTimeout);
+        if (cancelled) {
+          await streamedResponse.stream.listen((_) {}).cancel();
           return;
         }
 
-        String currentEvent = '';
-        final lines = streamedResponse.stream
-            .transform(utf8.decoder)
-            .transform(const LineSplitter());
-
-        await for (final line in lines) {
-          final trimmed = line.trim();
-          if (trimmed.isEmpty) continue;
-
-          if (trimmed.startsWith('event:')) {
-            currentEvent = trimmed.substring(6).trim();
-          } else if (trimmed.startsWith('data:')) {
-            final dataStr = trimmed.substring(5).trim();
-            try {
-              final json = jsonDecode(dataStr) as Map<String, dynamic>;
-
-              if (currentEvent == 'message_start') {
-                final mid = json['messageId'] as String? ?? '';
-                final sid = json['sessionId'] as String? ?? '';
-                if (!messageIdCompleter.isCompleted) {
-                  messageIdCompleter.complete(mid);
-                }
-                if (!sessionIdCompleter.isCompleted) {
-                  sessionIdCompleter.complete(sid);
-                }
-              } else if (currentEvent == 'text_delta') {
-                final delta = json['delta'] as String? ?? '';
-                if (delta.isNotEmpty) {
-                  controller.add(delta);
-                }
-              } else if (currentEvent == 'function_call') {
-                final action = FunctionCallAction.fromJson(json);
-                onFunctionCall?.call(action);
-                if (!functionCallCompleter.isCompleted) {
-                  functionCallCompleter.complete(action);
-                }
-              } else if (currentEvent == 'tool_call') {
-                onToolCall?.call(json);
-              } else if (currentEvent == 'tool_result') {
-                onToolResult?.call(json);
-              } else if (currentEvent == 'rich_card') {
-                onRichCard?.call(json);
-              } else if (currentEvent == 'message_end') {
-                // Kết thúc hội thoại
+        if (streamedResponse.statusCode != 200) {
+          await streamedResponse.stream.listen((_) {}).cancel();
+          throw ChatApiException(
+            'httpError',
+            streamedResponse.statusCode == 401
+                ? 'Bạn cần đăng nhập lại để trò chuyện.'
+                : streamedResponse.statusCode == 429
+                ? 'Bạn gửi hơi nhanh. Hãy thử lại sau.'
+                : 'Trợ lý chưa sẵn sàng. Bạn hãy thử lại.',
+            httpStatus: streamedResponse.statusCode,
+          );
+        }
+        bool ended = false;
+        String event = '';
+        final data = <String>[];
+        void dispatch() {
+          if (data.isEmpty) {
+            event = '';
+            return;
+          }
+          final json = jsonDecode(data.join('\n')) as Map<String, dynamic>;
+          switch (event) {
+            case 'message_start':
+              if (!messageIdCompleter.isCompleted) {
+                messageIdCompleter.complete(json['messageId'] as String? ?? '');
               }
-            } catch (_) {
-              // Bỏ qua dòng json không parse được
-            }
+              if (!sessionIdCompleter.isCompleted) {
+                sessionIdCompleter.complete(json['sessionId'] as String? ?? '');
+              }
+            case 'text_delta':
+              controller.add(json['delta'] as String? ?? '');
+            case 'text_replace':
+              onTextReplace?.call(json['text'] as String? ?? '');
+            case 'function_call':
+              final action = FunctionCallAction.fromJson(json);
+              onFunctionCall?.call(action);
+              if (!functionCallCompleter.isCompleted) {
+                functionCallCompleter.complete(action);
+              }
+            case 'tool_call':
+              onToolCall?.call(json);
+            case 'tool_result':
+              onToolResult?.call(json);
+            case 'rich_card':
+              onRichCard?.call(json);
+            case 'error':
+              throw const ChatApiException(
+                'streamFailed',
+                'Trợ lý chưa trả lời được. Bạn hãy thử lại.',
+              );
+            case 'message_end':
+              ended = true;
+          }
+          data.clear();
+          event = '';
+        }
+
+        input = StreamIterator(
+          streamedResponse.stream
+              .transform(utf8.decoder)
+              .transform(const LineSplitter())
+              .timeout(streamIdleTimeout),
+        );
+        final deadline = DateTime.now().add(const Duration(minutes: 2));
+        while (!cancelled && await input!.moveNext()) {
+          if (DateTime.now().isAfter(deadline)) throw TimeoutException('chat');
+          final line = input!.current;
+          if (line.isEmpty) {
+            dispatch();
+            if (ended) break;
+          } else if (line.startsWith('event:')) {
+            event = line.substring(6).trim();
+          } else if (line.startsWith('data:')) {
+            data.add(line.substring(5).trimLeft());
           }
         }
-
-        if (!functionCallCompleter.isCompleted) {
-          functionCallCompleter.complete(null);
+        if (!cancelled) {
+          dispatch();
+          if (!ended) {
+            throw const ChatApiException(
+              'incomplete',
+              'Câu trả lời bị gián đoạn. Bạn hãy thử lại.',
+            );
+          }
         }
-        await controller.close();
-      } catch (e) {
-        if (!controller.isClosed) {
-          controller.addError('Không thể kết nối trợ lý AI: $e');
-          await controller.close();
+      } catch (error) {
+        if (!cancelled && !controller.isClosed) {
+          controller.addError(
+            error is ChatApiException
+                ? error
+                : error is TimeoutException
+                ? const ChatApiException(
+                    'timeout',
+                    'Trợ lý trả lời quá lâu. Bạn hãy thử lại.',
+                  )
+                : const ChatApiException(
+                    'connectionFailed',
+                    'Chưa thể kết nối trợ lý. Bạn hãy thử lại.',
+                  ),
+          );
         }
-        if (!messageIdCompleter.isCompleted) {
-          messageIdCompleter.complete('');
-        }
+      } finally {
+        await input?.cancel();
+        if (!messageIdCompleter.isCompleted) messageIdCompleter.complete('');
         if (!sessionIdCompleter.isCompleted) {
-          sessionIdCompleter.complete('');
+          sessionIdCompleter.complete(sessionId ?? '');
         }
         if (!functionCallCompleter.isCompleted) {
           functionCallCompleter.complete(null);
         }
+        if (!controller.isClosed) unawaited(controller.close());
       }
     }();
 
@@ -213,113 +272,31 @@ class ChatApiService {
     Completer<FunctionCallAction?> fnComp,
     void Function(FunctionCallAction action)? onFunctionCall,
     void Function(Map<String, dynamic> cardData)? onRichCard,
+    String? existingSessionId,
   ) {
     final mid = 'msg-local-${DateTime.now().millisecondsSinceEpoch}';
-    final sid = 'session-local';
+    final sid =
+        existingSessionId ??
+        'session-local-${DateTime.now().microsecondsSinceEpoch}';
     if (!msgIdComp.isCompleted) msgIdComp.complete(mid);
     if (!sessIdComp.isCompleted) sessIdComp.complete(sid);
 
-    final soc = ctx?['currentSoc'] ?? ctx?['soc'] ?? 75;
-    final model = ctx?['model'] ?? 'xe VinFast';
-
-    String reply;
+    final soc = ctx?['currentSoc'] ?? ctx?['soc'];
+    final model = ctx?['model'] ?? 'xe';
     final lower = message.toLowerCase();
-    FunctionCallAction? triggeredAction;
-
-    if (lower.contains('pin') || lower.contains('soc')) {
-      reply =
-          'Hiện tại pin chiếc **$model** của bạn đang ở mức **$soc%**.\n\n'
-          '- Quãng đường ước tính di chuyển còn lại: **~${(soc * 1.8).round()} km**.\n'
-          '- Để pin LFP bền bỉ, bạn nên sạc khi mức pin dưới 20% nhé! 🔋';
-      onRichCard?.call({
-        'cardType': 'battery_status',
-        'title': 'Trạng thái Pin & Xe',
-        'data': {
-          'vehicleId': ctx?['vehicleId'] ?? 'VF-FELIZ-01',
-          'soc': (soc as num).toDouble(),
-          'soh': 98.0,
-          'voltage': 72.0,
-          'temperature': 28.5,
-          'chargingStatus': 'idle',
-          'estimatedRangeKm': (soc * 1.8),
-        },
-      });
-    } else if (lower.contains('sạc') &&
-        (lower.contains('bật') || lower.contains('bắt đầu'))) {
-      reply =
-          'Tôi đã chuẩn bị lệnh sạc thông minh cho xe **$model** với mục tiêu pin 80% (tối đa 10A / 2200W).\n\n'
-          'Vui lòng xác nhận hành động bên dưới để bắt đầu sạc an toàn:';
-      triggeredAction = FunctionCallAction(
-        callId: 'call-${DateTime.now().millisecondsSinceEpoch}',
-        toolName: 'start_smart_charging',
-        args: {'target_soc': 80, 'max_amps': 10.0},
-        requiresConfirmation: true,
-        cardData: const ActionConfirmationCardData(
-          title: 'Bắt đầu sạc thông minh',
-          description:
-              'Cắm sạc qua Shelly Plug S Gen3. Mục tiêu: 80% SoC, dòng sạc tối đa: 10A.',
-          safetyNote: 'Đảm bảo dòng điện ≤ 12A / 2500W',
-          targetSoc: 80,
-          maxAmps: 10.0,
-        ),
-      );
-    } else if (lower.contains('sạc') || lower.contains('shelly')) {
-      reply =
-          'Để sạc xe an toàn qua ổ cắm thông minh **Shelly Plug S Gen3**:\n\n'
-          '1. Cắm sạc và kiểm tra đèn tín hiệu trên ổ cắm.\n'
-          '2. Dòng sạc được giới hạn an toàn dưới **10A / 2200W**.\n'
-          '3. Bạn có thể đặt mức pin ngắt tự động (Target SoC) ở tab Sạc pin.';
-      onRichCard?.call({
-        'cardType': 'charging_progress',
-        'title': 'Tiến độ Sạc Thông Minh',
-        'data': {
-          'currentSoc': (soc as num).toDouble(),
-          'targetSoc': 80.0,
-          'chargingPowerW': 1850.0,
-          'currentAmps': 8.4,
-          'remainingMinutes': 35,
-          'status': 'charging',
-        },
-      });
-    } else if (lower.contains('chuyến đi') || lower.contains('quãng đường')) {
-      reply =
-          'Tóm tắt chuyến đi gần nhất của chiếc **$model**:\n\n'
-          '- Quãng đường: **24.5 km**\n'
-          '- Tiêu thụ: **735 Wh** (~30 Wh/km)\n'
-          '- Giảm phát thải: **2.1 kg CO₂**';
-      onRichCard?.call({
-        'cardType': 'trip_summary',
-        'title': 'Tóm tắt Chuyến đi',
-        'data': {
-          'distanceKm': 24.5,
-          'energyUsedWh': 735.0,
-          'efficiencyWhKm': 30.0,
-          'co2SavedKg': 2.1,
-          'durationMinutes': 42,
-        },
-      });
-    } else {
-      reply =
-          'Chào bạn! BatteryBot đã nhận được câu hỏi: *"$message"*.\n\n'
-          'Chiếc **$model** của bạn đang có **$soc% pin**. Bạn cần mình hỗ trợ kiểm tra pin, hẹn giờ sạc hay mẹo tiết kiệm điện không?';
-    }
-
-    if (triggeredAction != null) {
-      onFunctionCall?.call(triggeredAction);
-      if (!fnComp.isCompleted) fnComp.complete(triggeredAction);
-    } else {
-      if (!fnComp.isCompleted) fnComp.complete(null);
-    }
-
-    final words = reply.split(' ');
-    int index = 0;
-    Timer.periodic(const Duration(milliseconds: 35), (timer) {
-      if (index < words.length) {
-        controller.add('${words[index]}${index < words.length - 1 ? " " : ""}');
-        index++;
-      } else {
-        timer.cancel();
-        controller.close();
+    final reply =
+        (lower.contains('pin') || lower.contains('soc')) &&
+            soc is num &&
+            soc.isFinite &&
+            soc >= 0 &&
+            soc <= 100
+        ? 'Theo dữ liệu bạn đang xem, pin $model là $soc%. Chưa có kết nối để cập nhật dữ liệu mới.'
+        : 'Mình đang ngoại tuyến. Bạn có thể xem pin, lịch sử hoặc kết nối Shelly trong app. Điều khiển cần kết nối máy chủ.';
+    if (!fnComp.isCompleted) fnComp.complete(null);
+    scheduleMicrotask(() {
+      if (!controller.isClosed) {
+        controller.add(reply);
+        unawaited(controller.close());
       }
     });
   }
@@ -335,16 +312,9 @@ class ChatApiService {
     final uri = AppConstants.tryBuildApiUri('/api/chat/action/confirm');
     if (uri == null || !AppConstants.isApiConfigured) {
       return {
-        'status': 'success',
-        'data': {
-          'callId': callId,
-          'toolName': toolName,
-          'status': confirmed ? 'confirmed' : 'cancelled',
-          'executed': confirmed,
-          'message': confirmed
-              ? 'Đã xác nhận thực hiện hành động thành công (mô phỏng).'
-              : 'Đã hủy hành động.',
-        },
+        'success': false,
+        'status': 'error',
+        'message': 'Điều khiển cần kết nối máy chủ.',
       };
     }
 
@@ -365,15 +335,33 @@ class ChatApiService {
           .timeout(const Duration(seconds: 15));
 
       if (res.statusCode == 200) {
-        return jsonDecode(res.body) as Map<String, dynamic>;
+        final body = jsonDecode(res.body) as Map<String, dynamic>;
+        final data = body['data'];
+        final success =
+            body['success'] == true && data is Map && data['success'] == true;
+        return {
+          'success': success,
+          'data': data,
+          'message': success
+              ? 'Thao tác đã được xác minh.'
+              : confirmed
+              ? 'Chưa xác minh được thao tác. Kiểm tra trạng thái trong Sạc pin.'
+              : 'Đã hủy yêu cầu.',
+        };
       } else {
         return {
           'status': 'error',
-          'message': 'Lỗi máy chủ (${res.statusCode}): ${res.body}',
+          'success': false,
+          'message': 'Trợ lý chưa sẵn sàng. Bạn hãy thử lại.',
         };
       }
     } catch (e) {
-      return {'status': 'error', 'message': 'Không thể kết nối máy chủ: $e'};
+      return {
+        'success': false,
+        'status': 'error',
+        'message':
+            'Chưa xác minh được thao tác. Kiểm tra trạng thái trong Sạc pin.',
+      };
     }
   }
 
@@ -404,7 +392,7 @@ class ChatApiService {
     required String rating,
   }) async {
     final uri = AppConstants.tryBuildApiUri('/api/chat/feedback');
-    if (uri == null) return true;
+    if (uri == null) return false;
     try {
       final headers = await _getHeaders();
       final res = await _client

@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -23,12 +22,19 @@ import '../features/ai/controllers/smart_charging_controller.dart';
 import '../features/notifications/notification_center_screen.dart';
 import '../core/services/guide_registry.dart';
 import '../core/services/dashboard_preferences_service.dart';
+import '../core/services/guide_tour_coordinator.dart';
 import '../core/widgets/coach_mark_overlay.dart';
 import '../features/overview/widgets/dashboard_customization_sheet.dart';
 import '../features/overview/overview_screen.dart';
 import '../features/charge/charge_screen.dart';
 import '../features/auth/auth_providers.dart';
 import '../features/more/more_screen.dart';
+
+final guideTourCoordinatorProvider = Provider<GuideTourCoordinator>((ref) {
+  final coordinator = GuideTourCoordinator();
+  ref.onDispose(coordinator.dispose);
+  return coordinator;
+});
 
 /// Unified App Navigation — PLAN1 sync
 /// - Unified AppBar với notification bell
@@ -61,6 +67,16 @@ class AppNavigation extends ConsumerStatefulWidget {
     Navigator.of(context).popUntil((route) => route.isFirst);
     return true;
   }
+
+  static bool replayOverviewTour(BuildContext context) {
+    final coordinator = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(guideTourCoordinatorProvider);
+    if (!openTab(context, 0)) return false;
+    coordinator.replay();
+    return true;
+  }
 }
 
 class _AppNavigationState extends ConsumerState<AppNavigation> {
@@ -68,14 +84,22 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
   late final List<Widget> _screens;
   StreamSubscription<User?>? _authSubscription;
   String? _boundUid;
-  int _guideAttempts = 0;
   bool _guideShown = false;
+  late final GuideTourCoordinator _guide;
+  DashboardPreferencesService? _guidePreferences;
 
   @override
   void initState() {
     super.initState();
     final uid = FirebaseAuth.instance.currentUser?.uid;
     _boundUid = uid;
+    _guide = ref.read(guideTourCoordinatorProvider);
+    _guide.dismissOverlay = CoachMarkOverlay.dismissActive;
+    _guide.entryIsActive = CoachMarkOverlay.isActive;
+    _guide.activateAccount(uid);
+    _guide.onReplay = () => unawaited(_tryShowFirstRunGuide(manual: true));
+    _guidePreferences = ref.read(dashboardPreferencesProvider);
+    _guidePreferences!.addListener(_onGuidePreferencesChanged);
     if (uid != null) {
       unawaited(ref.read(dashboardPreferencesProvider).initializeForUser(uid));
       unawaited(ref.read(activeChargingSessionProvider).bindUser(uid));
@@ -84,9 +108,8 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
       final nextUid = user?.uid;
       if (nextUid == _boundUid) return;
       _boundUid = nextUid;
-      CoachMarkOverlay.dismissActive();
+      _guide.activateAccount(nextUid);
       _guideShown = false;
-      _guideAttempts = 0;
       if (nextUid != null && mounted) {
         unawaited(
           ref.read(dashboardPreferencesProvider).initializeForUser(nextUid),
@@ -113,52 +136,78 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
   @override
   void dispose() {
     _authSubscription?.cancel();
-    CoachMarkOverlay.dismissActive();
+    _guidePreferences?.removeListener(_onGuidePreferencesChanged);
+    _guide.cancel();
+    _guide.onReplay = null;
     super.dispose();
   }
 
-  Future<void> _tryShowFirstRunGuide() async {
-    if (!mounted || _guideShown) return;
+  void _onGuidePreferencesChanged() {
+    if (mounted) unawaited(_tryShowFirstRunGuide());
+  }
+
+  Future<void> _tryShowFirstRunGuide({bool manual = false}) async {
+    if (!mounted || (!manual && _guideShown)) return;
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
     final preferences = ref.read(dashboardPreferencesProvider);
     await preferences.initializeForUser(uid);
     if (!mounted ||
-        _guideShown ||
-        !preferences.shouldAutoShow(GuideRegistry.overviewTourId)) {
+        _boundUid != uid ||
+        FirebaseAuth.instance.currentUser?.uid != uid ||
+        preferences.uid != uid ||
+        (!manual &&
+            (_guideShown ||
+                !preferences.shouldAutoShow(GuideRegistry.overviewTourId)))) {
       return;
     }
-    if (ModalRoute.of(context)?.isCurrent != true ||
-        !GuideRegistry.getOverviewTourSteps().every(
-          (step) => step.anchorKey.currentContext != null,
-        )) {
-      _guideAttempts++;
-      if (_guideAttempts < 120) {
-        // Re-check after actual Flutter frames so keyed anchors can attach;
-        // do not guess readiness with a wall-clock delay.
-        SchedulerBinding.instance.addPostFrameCallback((_) {
-          if (mounted) unawaited(_tryShowFirstRunGuide());
-        });
-        SchedulerBinding.instance.scheduleFrame();
-      }
-      return;
-    }
-    _guideShown = true;
-    CoachMarkOverlay.show(
-      context: context,
-      steps: GuideRegistry.getOverviewTourSteps(),
-      onFinish: () => unawaited(
-        preferences.markTourCompleted(GuideRegistry.overviewTourId),
-      ),
-      onSkip: () => unawaited(
-        preferences.markTourDismissed(GuideRegistry.overviewTourId),
-      ),
-      onDontShowAgain: (dontShow) {
-        if (dontShow) {
-          unawaited(
-            preferences.markTourDismissed(GuideRegistry.overviewTourId),
-          );
-        }
+    bool sameAccount() =>
+        mounted &&
+        _boundUid == uid &&
+        FirebaseAuth.instance.currentUser?.uid == uid &&
+        preferences.uid == uid;
+    _guide.request(
+      uid: uid,
+      manual: manual,
+      ready: () =>
+          sameAccount() &&
+          ModalRoute.of(context)?.isCurrent == true &&
+          ref.read(currentTabProvider) == 0 &&
+          !AppPopup.safetyNoticeVisible &&
+          GuideRegistry.getOverviewTourSteps().every(
+            (step) => step.anchorKey.currentContext != null,
+          ),
+      show: () {
+        if (!sameAccount()) return null;
+        final entry = CoachMarkOverlay.show(
+          context: context,
+          overlay: Navigator.of(context).overlay,
+          steps: GuideRegistry.getOverviewTourSteps(),
+          showDontShowAgain: !manual,
+          onFinish: () {
+            if (!manual && sameAccount()) {
+              unawaited(
+                preferences.markTourCompleted(GuideRegistry.overviewTourId),
+              );
+            }
+          },
+          onSkip: () {
+            if (!manual && sameAccount()) {
+              unawaited(
+                preferences.markTourDismissed(GuideRegistry.overviewTourId),
+              );
+            }
+          },
+          onDontShowAgain: (dontShow) {
+            if (!manual && dontShow && sameAccount()) {
+              unawaited(
+                preferences.markTourDismissed(GuideRegistry.overviewTourId),
+              );
+            }
+          },
+        );
+        if (entry != null) _guideShown = true;
+        return entry;
       },
     );
   }

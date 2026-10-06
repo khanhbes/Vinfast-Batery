@@ -34,14 +34,16 @@ class SuggestionEngine:
         trip_patterns = b_prof.get("tripPatterns", {})
         personal_insights = b_prof.get("personalInsights", {})
 
-        soc = float(v_ctx.get("currentSoc", 50.0))
-        soh = float(v_ctx.get("currentSoh", 98.0))
-        odo = int(v_ctx.get("odoKm", 0))
+        import math
+        def reading(key):
+            value = v_ctx.get(key)
+            return value if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) else None
+        soc, soh, odo = reading("currentSoc"), reading("currentSoh"), reading("odoKm")
         charging_status = str(v_ctx.get("chargingStatus", "idle")).lower()
-        v_name = v_ctx.get("model") or v_ctx.get("vehicleId") or "xe"
+        v_name = v_ctx.get("model") or "xe"
 
         # Rule R001: SoC < 20% và không có sạc đang chạy -> HIGH
-        if soc < 20.0 and charging_status not in ("charging", "active"):
+        if soc is not None and soc < 20.0 and charging_status not in ("charging", "active"):
             suggestions.append({
                 "ruleId": "R001",
                 "title": "Cảnh báo mức pin thấp",
@@ -60,7 +62,7 @@ class SuggestionEngine:
                 days_since_last_charge = (now - last_dt).days
             except Exception:
                 pass
-        if days_since_last_charge >= 3 and soc < 40.0:
+        if soc is not None and days_since_last_charge >= 3 and soc < 40.0:
             suggestions.append({
                 "ruleId": "R002",
                 "title": "Nhắc nhở sạc định kỳ",
@@ -72,7 +74,7 @@ class SuggestionEngine:
 
         # Rule R003: ODO sắp chạm mốc bảo dưỡng (< 500km) -> MEDIUM
         next_maint = int(personal_insights.get("nextMaintenanceOdoKm", 5000))
-        if next_maint > odo and (next_maint - odo) <= 500:
+        if odo is not None and next_maint > odo and (next_maint - odo) <= 500:
             remaining = next_maint - odo
             suggestions.append({
                 "ruleId": "R003",
@@ -85,7 +87,7 @@ class SuggestionEngine:
 
         # Rule R004: SoH giảm nhanh hoặc < 95% -> MEDIUM
         trend = personal_insights.get("batteryHealthTrend", "stable")
-        if trend == "degrading" or (soh > 0 and soh < 94.0):
+        if soh is not None and (trend == "degrading" or (soh > 0 and soh < 94.0)):
             suggestions.append({
                 "ruleId": "R004",
                 "title": "Theo dõi độ chai pin (SoH)",
@@ -101,7 +103,7 @@ class SuggestionEngine:
             suggestions.append({
                 "ruleId": "R005",
                 "title": "Mẹo kéo dài tuổi thọ pin",
-                "message": "Cài đặt mốc sạc dừng ở 80%–85% giúp tăng thêm 20% chu kỳ vòng đời cho khối pin xe điện.",
+                "message": "Chọn mức sạc phù hợp nhu cầu và hướng dẫn của nhà sản xuất; không cần luôn sạc đầy.",
                 "priority": "LOW",
                 "action": "get_energy_tips",
                 "suggestedAt": now.isoformat(),
@@ -125,19 +127,18 @@ class SuggestionEngine:
             suggestions.append({
                 "ruleId": "R007",
                 "title": "Kế hoạch sạc cho lộ trình dài",
-                "message": f"Quãng đường trung bình của bạn là ~{daily_km} km/ngày. Pin hiện tại đủ đáp ứng khoảng {round(soc * 1.5)} km.",
+                "message": f"Quãng đường trung bình của bạn là ~{daily_km} km/ngày. Hãy kiểm tra mức pin và dự báo quãng đường trước chuyến đi.",
                 "priority": "LOW",
                 "action": "get_trip_summary",
                 "suggestedAt": now.isoformat(),
             })
 
         # Rule R008: Sáng mở app (06:00 - 08:30) -> LOW
-        if 6 <= current_hour <= 8:
-            est_km = round(soc * 1.5)
+        if soc is not None and 6 <= current_hour <= 8:
             suggestions.append({
                 "ruleId": "R008",
                 "title": "Chào buổi sáng!",
-                "message": f"Chào buổi sáng! Pin {v_name} đang ở mức {int(soc)}%, đủ cho hành trình khoảng {est_km} km hôm nay.",
+                "message": f"Chào buổi sáng! Pin {v_name} đang ở mức {int(soc)}% theo dữ liệu đang xem. Kiểm tra độ mới trước chuyến đi.",
                 "priority": "LOW",
                 "action": "get_battery_status",
                 "suggestedAt": now.isoformat(),

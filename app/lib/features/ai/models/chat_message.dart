@@ -97,7 +97,9 @@ class ChatMessage {
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
     return ChatMessage(
-      id: json['id'] as String? ?? 'msg-${DateTime.now().millisecondsSinceEpoch}',
+      id:
+          json['id'] as String? ??
+          'msg-${DateTime.now().millisecondsSinceEpoch}',
       role: ChatRole.fromString(json['role'] as String? ?? 'user'),
       content: json['content'] as String? ?? '',
       timestamp: json['timestamp'] != null
@@ -105,12 +107,14 @@ class ChatMessage {
           : DateTime.now(),
       action: json['action'] as String?,
       actionCard: json['actionCard'] != null
-          ? FunctionCallAction.fromJson(json['actionCard'] as Map<String, dynamic>)
+          ? FunctionCallAction.fromJson(
+              json['actionCard'] as Map<String, dynamic>,
+            )
           : null,
       richCards: json['richCards'] != null
           ? (json['richCards'] as List<dynamic>)
-              .map((e) => Map<String, dynamic>.from(e as Map))
-              .toList()
+                .map((e) => Map<String, dynamic>.from(e as Map))
+                .toList()
           : null,
       isStreaming: json['isStreaming'] as bool? ?? false,
       isQueued: json['isQueued'] as bool? ?? false,

@@ -64,11 +64,7 @@ class PredictionCardV2 extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(
-                  Icons.auto_awesome_rounded,
-                  size: 16,
-                  color: _stageColor,
-                ),
+                Icon(Icons.auto_awesome_rounded, size: 16, color: _stageColor),
                 const SizedBox(width: 6),
                 Text(
                   'Kế hoạch sạc',
@@ -82,16 +78,11 @@ class PredictionCardV2 extends StatelessWidget {
             ),
             // SOC range badge
             Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 4,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: _stageColor.withValues(alpha: .12),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: _stageColor.withValues(alpha: .30),
-                ),
+                border: Border.all(color: _stageColor.withValues(alpha: .30)),
               ),
               child: Text(
                 '$fromSoc% → $toSoc%',
@@ -111,36 +102,28 @@ class PredictionCardV2 extends StatelessWidget {
         Text(
           _formatDuration(durationMinutes),
           style: CockpitTypography.numbers(
-            fontSize: 26,
+            fontSize: 28,
             fontWeight: FontWeight.w900,
           ),
         ),
         const SizedBox(height: 4),
         Text(
           'Dự kiến dừng lúc $stopTime',
-          style: TextStyle(
-            color: CockpitColors.muted,
-            fontSize: 12,
-          ),
+          style: TextStyle(color: CockpitColors.muted, fontSize: 12),
         ),
 
         const SizedBox(height: 14),
 
         // Detail rows
         if (energyWh != null) ...[
-          _DetailRow(
-            label: 'Điện cần nạp',
-            value: _formatEnergy(energyWh!),
-          ),
+          _DetailRow(label: 'Điện cần nạp', value: _formatEnergy(energyWh!)),
           const SizedBox(height: 6),
         ],
         if (costVnd != null) ...[
           _DetailRow(
             label: 'Chi phí dự kiến',
-            value: '~${costVnd!.round().toString().replaceAllMapped(
-              RegExp(r'(\d{1,3})(?=(\d{3})+$)'),
-              (m) => '${m[1]}.',
-            )} đ',
+            value:
+                '~${costVnd!.round().toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+$)'), (m) => '${m[1]}.')} đ',
           ),
           const SizedBox(height: 6),
         ],
@@ -151,10 +134,7 @@ class PredictionCardV2 extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 4,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: _stageColor.withValues(alpha: .10),
                 borderRadius: BorderRadius.circular(10),
@@ -181,7 +161,7 @@ class PredictionCardV2 extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'Tinh chỉnh',
+                        'Xem chi tiết',
                         style: TextStyle(
                           color: CockpitColors.emerald,
                           fontSize: 11,
@@ -215,10 +195,7 @@ class PredictionCardV2 extends StatelessWidget {
               Expanded(
                 child: Text(
                   warning,
-                  style: TextStyle(
-                    color: CockpitColors.amber,
-                    fontSize: 11,
-                  ),
+                  style: TextStyle(color: CockpitColors.amber, fontSize: 11),
                 ),
               ),
             ],
@@ -238,13 +215,7 @@ class _DetailRow extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     mainAxisAlignment: MainAxisAlignment.spaceBetween,
     children: [
-      Text(
-        label,
-        style: TextStyle(
-          color: CockpitColors.muted,
-          fontSize: 12,
-        ),
-      ),
+      Text(label, style: TextStyle(color: CockpitColors.muted, fontSize: 12)),
       Text(
         value,
         style: CockpitTypography.numbers(
