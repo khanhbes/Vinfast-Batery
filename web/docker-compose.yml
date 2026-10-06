@@ -10,6 +10,10 @@ services:
       APP_ENV: ${APP_ENV:-production}
       AI_SERVER_INTERNAL_TOKEN: ${AI_SERVER_INTERNAL_TOKEN:?Set AI_SERVER_INTERNAL_TOKEN in the environment}
       AI_SERVER_MODELS_DIR: /app/models
+      # Optional chat provider. Empty values keep truthful offline FAQ mode.
+      # Set a currently supported model explicitly; never use a mobile-supplied model.
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_CHAT_MODEL: ${GEMINI_CHAT_MODEL:-}
     volumes:
       - models_data:/app/models
     networks:

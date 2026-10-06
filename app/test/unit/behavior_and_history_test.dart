@@ -1,3 +1,4 @@
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vinfast_battery/features/ai/models/behavior_profile.dart';
@@ -91,21 +92,27 @@ void main() {
       expect(tracker.state.appUsage.totalSessions, greaterThan(0));
     });
 
-    test('trackChatInteraction increments topic counts and feedback counts', () {
-      final tracker = BehaviorTracker();
-      tracker.setIdentity(userId: 'test-user');
+    test(
+      'trackChatInteraction increments topic counts and feedback counts',
+      () {
+        final tracker = BehaviorTracker();
+        tracker.setIdentity(userId: 'test-user');
 
-      tracker.trackChatInteraction(topic: 'pin');
-      tracker.trackChatInteraction(topic: 'pin');
-      tracker.trackChatInteraction(topic: 'shelly');
-      tracker.trackChatInteraction(feedbackRating: 'up');
-      tracker.trackChatInteraction(feedbackRating: 'up');
-      tracker.trackChatInteraction(feedbackRating: 'down');
+        tracker.trackChatInteraction(topic: 'pin');
+        tracker.trackChatInteraction(topic: 'pin');
+        tracker.trackChatInteraction(topic: 'shelly');
+        tracker.trackChatInteraction(feedbackRating: 'up');
+        tracker.trackChatInteraction(feedbackRating: 'up');
+        tracker.trackChatInteraction(feedbackRating: 'down');
 
-      expect(tracker.state.chatPreferences.topTopics.contains('pin'), isTrue);
-      expect(tracker.state.chatPreferences.feedbackStats['totalThumbsUp'], 2);
-      expect(tracker.state.chatPreferences.feedbackStats['totalThumbsDown'], 1);
-    });
+        expect(tracker.state.chatPreferences.topTopics.contains('pin'), isTrue);
+        expect(tracker.state.chatPreferences.feedbackStats['totalThumbsUp'], 2);
+        expect(
+          tracker.state.chatPreferences.feedbackStats['totalThumbsDown'],
+          1,
+        );
+      },
+    );
 
     test('trackChargingEvent updates charging pattern values', () {
       final tracker = BehaviorTracker();
@@ -124,10 +131,7 @@ void main() {
     test('trackTripEvent updates trip pattern stats', () {
       final tracker = BehaviorTracker();
 
-      tracker.trackTripEvent(
-        distanceKm: 30.0,
-        energyWhPerKm: 32.5,
-      );
+      tracker.trackTripEvent(distanceKm: 30.0, energyWhPerKm: 32.5);
 
       expect(tracker.state.tripPatterns.totalTrips, greaterThan(0));
       expect(tracker.state.tripPatterns.avgDailyDistanceKm, greaterThan(18.5));
@@ -137,46 +141,54 @@ void main() {
   group('ChatHistoryStorage Tests', () {
     setUp(() {
       SharedPreferences.setMockInitialValues({});
+      FlutterSecureStorage.setMockInitialValues({});
     });
 
-    test('saveSessionMessages, listSessions, and loadSessionMessages flow', () async {
-      final storage = ChatHistoryStorage();
+    test(
+      'saveSessionMessages, listSessions, and loadSessionMessages flow',
+      () async {
+        final storage = ChatHistoryStorage();
 
-      final messages = [
-        ChatMessage(
-          id: 'm1',
-          role: ChatRole.user,
-          content: 'Kiểm tra pin xe Feliz',
-          timestamp: DateTime(2026, 10, 2, 10, 0),
-        ),
-        ChatMessage(
-          id: 'm2',
-          role: ChatRole.model,
-          content: 'Pin Feliz còn 82%, dung lượng tốt.',
-          timestamp: DateTime(2026, 10, 2, 10, 1),
-        ),
-      ];
+        final messages = [
+          ChatMessage(
+            id: 'm1',
+            role: ChatRole.user,
+            content: 'Kiểm tra pin xe Feliz',
+            timestamp: DateTime(2026, 10, 2, 10, 0),
+          ),
+          ChatMessage(
+            id: 'm2',
+            role: ChatRole.model,
+            content: 'Pin Feliz còn 82%, dung lượng tốt.',
+            timestamp: DateTime(2026, 10, 2, 10, 1),
+          ),
+        ];
 
-      await storage.saveSessionMessages('sess-100', messages, title: 'Hỏi pin xe Feliz');
+        await storage.saveSessionMessages(
+          'sess-100',
+          messages,
+          title: 'Hỏi pin xe Feliz',
+        );
 
-      final sessions = await storage.listSessions();
-      expect(sessions.length, 1);
-      expect(sessions.first.sessionId, 'sess-100');
-      expect(sessions.first.id, 'sess-100');
-      expect(sessions.first.title, 'Hỏi pin xe Feliz');
-      expect(sessions.first.messageCount, 2);
+        final sessions = await storage.listSessions();
+        expect(sessions.length, 1);
+        expect(sessions.first.sessionId, 'sess-100');
+        expect(sessions.first.id, 'sess-100');
+        expect(sessions.first.title, 'Hỏi pin xe Feliz');
+        expect(sessions.first.messageCount, 2);
 
-      final loadedMsgs = await storage.loadSessionMessages('sess-100');
-      expect(loadedMsgs.length, 2);
-      expect(loadedMsgs[0].content, 'Kiểm tra pin xe Feliz');
-      expect(loadedMsgs[1].content, 'Pin Feliz còn 82%, dung lượng tốt.');
+        final loadedMsgs = await storage.loadSessionMessages('sess-100');
+        expect(loadedMsgs.length, 2);
+        expect(loadedMsgs[0].content, 'Kiểm tra pin xe Feliz');
+        expect(loadedMsgs[1].content, 'Pin Feliz còn 82%, dung lượng tốt.');
 
-      // Test deleteSession
-      await storage.deleteSession('sess-100');
-      final afterDeleteSessions = await storage.listSessions();
-      expect(afterDeleteSessions, isEmpty);
-      final afterDeleteMsgs = await storage.loadSessionMessages('sess-100');
-      expect(afterDeleteMsgs, isEmpty);
-    });
+        // Test deleteSession
+        await storage.deleteSession('sess-100');
+        final afterDeleteSessions = await storage.listSessions();
+        expect(afterDeleteSessions, isEmpty);
+        final afterDeleteMsgs = await storage.loadSessionMessages('sess-100');
+        expect(afterDeleteMsgs, isEmpty);
+      },
+    );
   });
 }

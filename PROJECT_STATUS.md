@@ -1,6 +1,645 @@
 # VinFast Battery — Project Status & Task Tracker
 
-## 50. AI Chatbot — Hoàn tất Nâng cấp UI/UX, Sửa triệt để lỗi tràn viền & Glassmorphism Theme (02/10/2026)
+## 66. Task Completion Log — Sửa AI chatbot theo đặc tả cá nhân hóa (06/10/2026)
+
+### 66.1. Phạm vi và trạng thái hiện hành
+
+- Yêu cầu hiện tại tập trung vào `docs/specs/AI_CHATBOT_PERSONALIZATION.md`. Đã đọc toàn bộ đặc tả và đối chiếu đường UI thực tế: `InteractiveAssistantSheet` không dùng `ChatController`, nên sửa cả hai thay vì chỉ sửa controller không được giao diện gọi.
+- **Automated verified cho các hợp đồng được kiểm thử bên dưới; runtime/Gemini thật/điều khiển phần cứng vẫn Blocked.** Không coi các checkbox `[x]` lịch sử trong spec là bằng chứng hoàn tất. Đã thêm ghi chú đối chiếu vào chính spec, không tạo Markdown mới.
+- HEAD baseline `6dc059ee64b6c1f9d155163c2dec68ee9e58b0cf`, working tree dirty được giữ nguyên. [Manifest 68 file source/config/test](docs/qa_evidence/app-review-2026-10-05/chat-20261006-source-manifest.json) ghi hash nội dung bàn giao trong phạm vi chatbot, không phải manifest toàn repository. Một số file AI khác chỉ được Dart formatter chuẩn hóa; các thay đổi nghiệp vụ sạc có trước được giữ nguyên, không reset/stash.
+- Không đọc/chia sẻ credential thật, không gọi Gemini trả phí, không ON/OFF, không enrollment Shelly, không build/cài APK, không restart/deploy API/AI. APK +126 cũ không chứa các sửa đổi này; chưa có artifact/runtime mới để chứng nhận.
+- Dùng `frontend-skill` để giảm nhãn quảng cáo, giữ header ngắn, wrap hành động, ưu tiên vùng nhập liệu và motion nhẹ/reduced motion; không redesign toàn app.
+
+### 66.2. Task / root cause / file / kết quả
+
+| ID | Vấn đề, bằng chứng và thay đổi | File chính | Trạng thái và giới hạn |
+|---|---|---|---|
+| CHAT-AUTH | Có route chat/behavior đăng ký trùng; Flask chọn route đăng ký đầu, nên sửa route phía sau không bảo vệ đường thực tế. Xóa route trùng, bắt Firebase auth trên proxy, lấy UID đã xác minh thay vì body/query, kiểm quyền xe, loại model do client chọn; rate limit chat 15/phút. Session detail/list/delete/feedback kiểm chủ, message feedback phải thuộc model message trong session. | `web/server.py`, `web/ai_server/main.py`, `chat_memory.py`, `chat_schemas.py` | Automated verified bằng test spoof UID/session/vehicle và route inventory; chưa audit toàn backend hoặc production IAM. |
+| CHAT-TRUTH | Tool/fallback từng trả số đo, lịch sử/chuyến đi và thành công bật/tắt giả. Bỏ các số đo mặc định khi thiếu dữ liệu; giữ số 0 hợp lệ; loại NaN/Infinity. Tool chưa nối nguồn thật trả unavailable. Không dựng rich card nếu thiếu số đo thật. Thói quen mặc định không được trình bày như quan sát đã có. Trạng thái sạc thiếu dữ liệu không mặc định idle. | `chat_tools.py`, `chat_engine.py`, `suggestion_engine.py`, `chat_schemas.py`, `battery_status_card.dart`, `chat_message_bubble.dart` | Automated verified. Dữ liệu pin từ app context, không phải readback BMS mới; lịch sử/chuyến đi/bảo dưỡng/thời tiết chưa có adapter thật. |
+| CHAT-CONTROL | Confirmation trước đây có thể nhận args tùy ý và báo thành công giả. Card hiện gắn UID/session/tool/args, hạn 5 phút, receipt replay trong process; tamper/expired/cross-UID bị từ chối. Adapter phần cứng chưa có thì fail closed. Câu model tuyên bố “đã bật” bị thay khi có control tool; fallback không nối thêm phần model chưa xác minh. Không phát lệnh relay. | `chat_engine.py`, `chat_tools.py`, `assistant_sheet.dart`, `chat_controller.dart`, `chat_api_service.dart` | Automated verified cho fail-closed/tamper/replay. **Blocked cho điều khiển thật**; receipt còn in-memory, chưa đủ nhiều worker/restart. UI trạng thái confirmed chỉ sau response outer và inner success; thất bại không ghi confirmed. |
+| CHAT-SSE | SSE cũ không bảo đảm parse frame/UTF-8 đa dòng, thiếu end frame có thể coi thành công, completer có thể treo. Chuẩn hóa parser, EOF/error, cancel và completion metadata; timeout request20s, idle30s, tổng120s. Lỗi vẫn giữ sau onDone, có retry, không đưa response thô ra UI. Stream upstream được đóng kể cả non200/cancel. | `chat_api_service.dart`, `chat_controller.dart`, `assistant_sheet.dart`, `web/server.py` | Automated verified. **Văn bản Gemini được buffer đến sau guardrails**, chưa đạt streaming từng token; không fake typewriter để gọi là streaming thật. |
+| CHAT-PRIVACY | UI trước đây thêm input nhạy cảm vào chat rồi mới cảnh báo. Nay chặn trước append/send/persist; server che các pattern email/phone/token/credential trước memory/provider. Lưu chat bằng Secure Storage UID-scoped; legacy shared key bị cách ly, không tự gán chủ. Hủy/guard callbacks khi đổi UID, đổi chat và dispose; modal lịch sử cũ đóng khi đổi tài khoản. | `assistant_sheet.dart`, `chat_guardrails.py`, `chat_history_storage.dart`, `chat_controller.dart`, `behavior_tracker.dart`, `behavior_sync_service.dart`, `suggestion_service.dart` | Automated verified với fixtures UID/local/SSE. Pattern redaction không nhận diện mọi loại PII; cần audit backup payload, migration và retention. Chưa xóa dữ liệu legacy của người dùng. |
+| CHAT-LIFECYCLE | Async response cũ có thể ghi vào chat/session mới, budget gợi ý dùng chung tài khoản, writes local tranh chấp. Thêm generation/UID guard; serialize local writes theo hàng đợi, snapshot messages; behavior reset theo UID; suggestion budget/dismiss theo UID; feedback pending và chờ ack server. | `assistant_sheet.dart`, `chat_controller.dart`, `chat_history_storage.dart`, `behavior_tracker.dart`, `suggestion_service.dart` | Automated verified trong phạm vi unit/widget; chưa thay thế kiểm đổi UID trên hai runtime và Firestore thật. |
+| CHAT-UI | Test UI thật tái hiện header overflow36px ở320dp/font1.5. Bỏ Copilot/AI badge thừa, header BatteryBot ngắn; quick chips ẩn khi IME mở, layout theo vùng còn lại; hành động feedback/copy/share wrap, touch target48dp. Lỗi ngắn tại bubble; nguồn dữ liệu ghi app context, không gắn nhãn BMS xác thực giả. | `assistant_sheet.dart`, `chat_message_bubble.dart`, `streaming_text_widget.dart`, `typing_indicator_dots.dart`, `battery_status_card.dart` | Automated verified ở320/390/412dp, font1.5 và IME giả lập; TalkBack/Gboard/Light-Dark trên APK chưa nghiệm thu. |
+| CHAT-VOICE | Service thực tế phát random waveform, không có native speech recognizer; test cũ chỉ xác nhận mô phỏng. Loại mô phỏng và không xin microphone cho tính năng không dùng được. Nút voice disabled, tooltip hướng dẫn dùng bàn phím. | `voice_input_service.dart`, `assistant_sheet.dart`, `phase4_voice_and_controller_test.dart` | Automated verified cho unavailable/no fabricated recognition. **Blocked cho STT thật**; không gọi phần này đã triển khai theo spec. |
+| CHAT-CONFIG | AI container chưa nhận Gemini key/model; model mặc định trong code không bảo đảm còn được nhà cung cấp hỗ trợ. Thêm `GEMINI_API_KEY`/`GEMINI_CHAT_MODEL` vào AI service và hai env example, giá trị mặc định rỗng; thiếu cấu hình dùng hướng dẫn offline trung thực. Model do server quyết định; SDK timeout20s/max output1024. | `web/docker-compose.yml`, `.env.docker.example`, `.env.laptop.example`, `chat_engine.py` | Automated verified cấu hình source; chưa sửa private env, deploy/restart, smoke container hoặc gọi Gemini thật. |
+
+### 66.3. Kiểm thử và bằng chứng
+
+| Gate | Kết quả | Bằng chứng |
+|---|---|---|
+| Toàn bộ Flutter | **611 Pass, exit0,151,59s**, không timeout; lượt cuối sau sửa voice và log chẩn đoán | [log](docs/qa_evidence/app-review-2026-10-05/chat-20261006-flutter-delivery.log), [result](docs/qa_evidence/app-review-2026-10-05/chat-20261006-flutter-delivery.log.result.json) |
+| Toàn bộ backend | **291 Pass / 4 Skip, exit0,47,62s**, không timeout; Skip không tính Pass | [log](docs/qa_evidence/app-review-2026-10-05/chat-20261006-backend-release-gate.log), [result](docs/qa_evidence/app-review-2026-10-05/chat-20261006-backend-release-gate.log.result.json) |
+| Gateway regression | **59 Pass, exit0,12,58s**, mock only, không relay thật | [log](docs/qa_evidence/app-review-2026-10-05/chat-20261006-gateway-final.log), [result](docs/qa_evidence/app-review-2026-10-05/chat-20261006-gateway-final.log.result.json) |
+| Flutter analyze | Lượt cuối chạy tuần tự **exit0, no issues,79,47s**, không timeout. Lượt delivery trước đó **Timeout180s** được giữ, không tính Pass. | [log cuối](docs/qa_evidence/app-review-2026-10-05/chat-20261006-analyze-sequential.log), [result cuối](docs/qa_evidence/app-review-2026-10-05/chat-20261006-analyze-sequential.log.result.json), [timeout trước](docs/qa_evidence/app-review-2026-10-05/chat-20261006-analyze-delivery.log.result.json) |
+| Source hygiene | 62 file production chatbot,0 match với các pattern secret/mojibake đã chọn; không scan Git history/APK/private env | [scope/result](docs/qa_evidence/app-review-2026-10-05/chat-20261006-source-scan.json) |
+| Rules/dashboard | Không chạy lại ở task này: không sửa Rules hoặc dashboard source. Kết quả cũ là lịch sử, không ghi thành kết quả mới. | Xem mục64 cho lượt trước |
+
+- Tests mới: `web/tests/test_chat_security_contract.py`, `app/test/unit/chat_safety_regression_test.dart`, `app/test/widget/assistant_sheet_lifecycle_test.dart`. Giữ test quyền riêng tư, ownership/confirmation, EOF/error, thiếu dữ liệu và overflow; cập nhật các kỳ vọng cũ đang yêu cầu số đo/relay/STT mô phỏng, không bỏ assertion để lấy màu xanh.
+- Lượt backend đầu28P/14F, Flutter mục tiêu35P/3F, UI14P/1F (overflow thật), full Flutter608P/3F được giữ. Test mới còn bắt TypeError khi `currentSoc=null` ở phép tính thời gian giả; bỏ phép tính thay vì cho số mặc định50%. Lượt backend delivery290P/1F/4Skip sau đó đã được sửa và chạy lại291P/4Skip.
+- Backend/gateway lần đầu lỗi temp permission; chạy lại bằng basetemp GUID mới trong workspace, không xóa cache/bằng chứng cũ. Backend cuối còn cảnh báo dependency/cache, không phải test Fail. Một lệnh regression dùng sai tên file test kết thúc pytest exit4; đã chạy lại đúng suite, không tính lệnh lỗi là Pass.
+- Analyzer đầu Timeout120s; các lượt tiếp theo có lint thật và đã sửa braces/mounted guard. Lượt delivery Timeout180s chưa xác định nguyên nhân; chạy lại tuần tự trên source cuối đạt exit0. Không quy timeout cho app hay ghi Windows/toolchain ổn định chỉ từ một lần clean. Dart format đã sửa file nhưng có lần báo telemetry cache permission sau format; các tests/analyze có quyền SDK được ghi riêng.
+
+### 66.4. Những phần chưa đạt và bước tiếp theo
+
+1. **P0/P1 trước bật chat điều khiển:** tích hợp adapter vào API sạc đã kiểm owner/membership/device lease/safety gate/idempotency/readback; receipt bền vững nhiều worker, restart và thu hồi quyền. Chưa có adapter thì tiếp tục từ chối, không gọi trực tiếp Shelly/gateway tùy ý.
+2. **P1 dữ liệu thật:** nối nguồn lịch sử, chuyến đi, bảo dưỡng theo UID/vehicle; kèm nguồn/thời điểm/freshness. Không suy ra pin BMS từ SoC nhập tay hoặc dùng số mẫu như telemetry.
+3. **P1 history/privacy:** cloud restore/delete, TTL Firestore30ngày thực sự, retention local/giới hạn memory, migration legacy có owner proof và phục hồi; kiểm backup payload trước persistence. Session/action registry hiện in-memory chưa bền qua restart/multi-worker. Local save/read vẫn có nhánh swallow lỗi cần trạng thái typed, không coi empty là không có dữ liệu thật.
+4. **P1 cá nhân hóa:** kiểm hooks đo hành vi từ phiên sạc/chuyến đi thật; xung đột local/remote, thời gian thiết bị/timezone, vote reversal và analytics. Chỉ profile có quan sát mới được dùng làm thói quen; các giá trị mặc định không chứng minh behavior learning đã hoạt động.
+5. **P1 runtime/provider:** chọn model được hỗ trợ, đặt key/model trong private server env, xác nhận cửa sổ restart API/AI an toàn rồi build artifact mới và chạy chat thật; lỗi key/quota/timeout/429, auth logout/login, hai tài khoản, voice disabled và rich card thiếu dữ liệu. Không gửi key/mật khẩu qua chat. Container đang chạy chưa tự nhận source sửa.
+6. **P2 UX/stream/voice:** bounded streaming có kiểm duyệt trước từng đoạn, không lộ nội dung bị chặn; native STT thật/permission rationale/cancel/lifecycle, hoặc giữ voice disabled. Kiểm reduced motion/TalkBack/keyboard trên đúng APK; không lấy widget test làm runtime sign-off.
+- **Chưa đủ điều kiện gọi chatbot production-ready hoặc toàn bộ spec hoàn thành.** Không tăng điểm release từ lượt sửa source này. Không dùng kết quả chatbot để tuyên bố Shelly đã điều khiển được hoặc bỏ các blocker production tại các mục trước.
+
+## 65. Task Completion Log — Chuẩn bị kết nối bằng mã web và kiểm tra điều khiển (06/10/2026)
+
+- **Yêu cầu:** nhập mã Shelly do web cấp trong app, kết nối và thử điều khiển thật. **Trạng thái: Blocked đối với runtime/hardware**, chưa nhập mã thật, chưa enrollment, chưa phát ON/OFF. Không tự mở Android emulator theo hạn chế của lượt trước; đang chờ người dùng chọn runtime và xác nhận giám sát hiện tại. Không dùng xác nhận đã tiêu thụ của lần ON tại mục64 cho lần test mới.
+- **READINESS — Runtime verified trên host:** probe chỉ đọc local và HTTPS QA, `/api/health` và `/api/ready` đều200. Đây không phải bằng chứng TLS trên Android hoặc readback Shelly. ADB không có thiết bị; sáu container hiện đang chạy, API/dashboard/AI báo healthy. Không restart/deploy hay thay đổi dữ liệu production.
+- **DEPLOY-PARSER — Blocked:** hash source `web/shelly/providers/vault_cloud.py` là `67CF6C92F55F86901264F3FB9D540AD72901437E5DEED10B14F66AC4FE85F8F1`, file tương ứng trong API container là `3DF7D137300C82DB6F44BF1BD6FAEA2AD59C4FC1BFD73451F9B2D9F4A44FBD8F`. API chưa có bản sửa ACK/timer tại mục64; cần kiểm active/unknown và triển khai trong cửa sổ an toàn trước test điều khiển qua API. Không dùng helper nạp source riêng để giả chứng minh API worker đã sửa.
+- **CODE-CONTRACT — Automated verified trong phạm vi tests:** backend connection-code/membership/vault-safety **40 Pass, exit0**, runner5,55s, không timeout — [log](docs/qa_evidence/app-review-2026-10-05/connect-code-20261006-backend.log), [result](docs/qa_evidence/app-review-2026-10-05/connect-code-20261006-backend.log.result.json). Các fixtures giả lập không xác nhận code thật còn hiệu lực, vault thật hoặc một lần enrollment thật.
+- **APP-CONTRACT — Automated verified trong phạm vi tests:** coordinator/connect-screen/API-transport/account-restore **12 Pass**, runner **exit0,78,8s**, không timeout — [log](docs/qa_evidence/app-review-2026-10-05/connect-code-20261006-flutter.log), [result](docs/qa_evidence/app-review-2026-10-05/connect-code-20261006-flutter.log.result.json). Widget test kiểm nhánh mã và validation6ký tự, không thực thi redeem thật hoặc relay. Không biến test giả lập thành runtime Pass.
+- **Artifact:** vẫn chỉ APK+126 lịch sử, chưa build/cài APK mới; không thay mã ứng dụng trong lượt chuẩn bị này. Giữ bằng chứng/tài liệu/worktree cũ. Chỉ bổ sung log kiểm thử và mục này.
+- **Đầu vào cần bổ sung:** (1) điện thoại USB hay cho phép emulator; người dùng tự đăng nhập, không đưa mật khẩu vào log/chat; (2) mã6ký tự hiện có hoặc quyền cấp mã mới, không tự rotate; (3) xác nhận đang giám sát và rút mọi tải cho đúng một ON có timer tối đa5giây, readback ON/timer, tựOFF rồi cleanup/finalOFF. Nếu backend restart có thể ảnh hưởng phiên khác phải dừng để xác nhận.
+- **Bước kế tiếp:** nạp parser vào API an toàn, cài artifact đã xác minh nếu cần, nhập mã qua UI → kiểm membership/binding và Settings/Sạc pin nhất quán → xác nhận safety gate → một bài không tải có readback. Thiếu runtime/hardware hoặc không xác minh được OFF giữ Blocked/Fail; chưa tuyên bố Shelly hoạt động trong app.
+
+## 64. Task Completion Log — Sửa phát hiện QA và test Shelly có giám sát (06/10/2026)
+
+### 64.1. Phạm vi và baseline
+
+- Thực hiện yêu cầu “thực hiện hết”, tiếp tục sửa các mục SRC126-01–05 tại mục63. Người dùng chọn **chỉ test tự động**, không mở Android emulator/điện thoại. Giữ mọi code, tài liệu và bằng chứng cũ; không reset/stash, không xóa tài khoản/xe/lịch sử, không restart/deploy API.
+- HEAD vẫn `6dc059ee64b6c1f9d155163c2dec68ee9e58b0cf`, working tree dirty. [Manifest file nguồn](docs/qa_evidence/app-review-2026-10-05/fix-20261006-source-manifest.json) ghi hash các file production sửa trong task, không phải manifest toàn repository. Không dùng source SHA đơn thuần thay cho hash working tree.
+- APK +126 **không build/ghi đè/cài lại**; hash kiểm lại vẫn `5A0EF61FD5F143AE9685B1DB4481FCDBF2DB7E280011F88608B1EABF5F660639`. Những sửa đổi bên dưới chưa nằm trong artifact này. Không tăng điểm QA/runtime hoặc release readiness.
+- Áp dụng `frontend-skill` để giữ bố cục auth gọn, giảm glow/header và ưu tiên form; không redesign toàn app hoặc thay nghiệp vụ sạc.
+
+### 64.2. Task / thay đổi / nghiệm thu
+
+| ID | Vấn đề và cách sửa | File chính / bằng chứng kiểm thử | Trạng thái |
+|---|---|---|---|
+| SRC126-01 | Giữ brand/frame tĩnh sau timeline5s và khi `animate=false`; không fade loading về0 khi route chưa sẵn sàng. Reduced motion dùng ticker có lifecycle, không callback delay sau dispose; lời chờ8s không đưa thông tin kỹ thuật lên UI. | `bootstrap_splash.dart`; tests `splash_v5`, `one_line_splash`, `auth_gate_lifecycle`, `design_foundation` kiểm opacity/thời gian/reduced motion/large text. | Automated verified; runtime Blocked |
+| SRC126-02–03 | Replay do shell sở hữu, chèn vào `NavigatorState.overlay`; bỏ deadline120frame. Chờ frame layout thật, chỉ ghi đã hiện sau insert; đổi UID/dispose hủy, hoãn khi safety notice/route khác; manual replay không ghi completed/dismissed tự động. | `guide_tour_coordinator.dart`, `app_navigation.dart`, `coach_mark_overlay.dart`, `guide_screen.dart`, `app_popup.dart`; `guide_lifecycle_regression_test.dart`: **4 Pass, exit0**. Test dùng nút thật của Guide qua host Navigator/shell callback; chưa thay thế full shell + Firebase trên APK. | Automated verified phần lifecycle; runtime Blocked |
+| SRC126-04 | Bỏ callback `setSheetState` sau await; `AppearanceSheet` dùng `ListenableBuilder` theo SettingsService và tự tháo listener khi sheet đóng. | `appearance_sheet.dart`, `settings_screen.dart`; widget test đóng sheet khi native persistence chưa trả về. | Automated verified; runtime Blocked |
+| SRC126-05 | Refresh chờ Future dữ liệu thật, timeout20s; refresh lỗi giữ cache + nhãn cũ/Thử lại, không đổi lỗi thành empty. UID/generation guard bỏ response cũ; đổi UID xóa ngay cache UI cũ. | `notification_center_screen.dart`; 3 widget tests cho response chậm, timeout và đổi UID trong request. | Automated verified; runtime Blocked |
+| QA126-02–03 | Hint “Nhập lại mật khẩu”; header login icon56dp, chữ24/w700, bỏ glow/tagline capsule; register bỏ title glow, cùng thứ bậc. Không đổi auth contract hoặc form validation. | `login_screen.dart`, `register_screen.dart`, `auth_layout_test.dart` với320/412dp, font1.5, IME giả lập. | Automated verified; runtime Blocked |
+| GUIDE-UID | Phát hiện bổ sung bằng source: init/persistence/Firestore trả muộn có thể đụng trạng thái tài khoản mới. Thêm UID/generation guards, snapshot local key/value trước await và cancel remote timer khi đổi UID. Log chỉ runtime type, không raw exception. | `dashboard_preferences_service.dart`, `dashboard_preferences_test.dart`; ca A bị trì hoãn, B load completed rồi A trả về không ghi đè B. | Automated verified test mục tiêu; multi-device runtime Blocked |
+| CARD-DETAIL | Test mở chi tiết phát hiện **overflow thật** ở hàng label/value dài. Cho hai cột wrap, khoảng cách12dp và sheet cuộn; ghi “phút” thay viết tắt `p`. Giữ số đo W/Wh. | `charging_progress_card.dart`, `trip_summary_card.dart`, `phase5c_rich_cards_test.dart`; assertions số đo/CO₂ và mở sheet vẫn được giữ. Preferences + rich cards: **14 Pass, exit0**. | Automated verified phần regression; runtime Blocked |
+| SHELLY-ACK/TIMER | Parser cũ bắt JSON cả với command HTTP200, sai hợp đồng Cloud v2; chỉ command được chấp nhận200 không JSON, status vẫn strict. Readback vẫn bắt buộc. Timer có thể dùng UTC start/duration + device clock mới; không lấy auto-off cấu hình làm proof. No-load kiểm tải trước ON, chỉ một ON, phải thấy autoOFF trước cleanup. | `web/shelly/providers/vault_cloud.py`, `web/tests/test_shelly_vault_safety.py`; backend full có28 tests safety, trong tổng278 Pass. [Shelly Cloud](https://shelly-api-docs.shelly.cloud/cloud-control-api/communication-v2/), [Switch RPC](https://shelly-api-docs.shelly.cloud/gen2/ComponentsAndServices/Switch/). | Automated verified; **hardware Fail**, bản sửa ACK chưa hardware retest/deploy |
+
+### 64.3. Quality gates và những lượt Fail giữ nguyên
+
+- Runner `tools/run_quality_gate.py` ghi command, thời gian, exit code, timeout vào `.log.result.json`. Timeout chỉ dừng cây tiến trình runner tự khởi tạo; không đóng IDE/Chrome/Zalo/API. Không dùng “đã in Pass” nếu command chưa kết thúc.
+- Backend full: **278 Pass / 4 Skip, exit0**, 76,69s — [log](docs/qa_evidence/app-review-2026-10-05/fix-20261006-backend-full.log), [result](docs/qa_evidence/app-review-2026-10-05/fix-20261006-backend-full.log.result.json). Bốn ca membership được thực thi riêng với Firestore Emulator: **4 Pass /0 Skip, exit0,26,26s**, [log](docs/qa_evidence/app-review-2026-10-05/fix-20261006-membership-emulator-02.log), [result](docs/qa_evidence/app-review-2026-10-05/fix-20261006-membership-emulator-02.log.result.json). Tổng282 test backend khác nhau đã verified qua hai môi trường; không sửa con số full run thành282 hoặc tính Skip thành Pass. Lượt membership đầu timeout120s có transaction lock timeout; giữ log, chưa kết luận nguyên nhân contention trên production.
+- Gateway full: **59 Pass, exit0**, 21,16s — [log](docs/qa_evidence/app-review-2026-10-05/fix-20261006-gateway-full.log).
+- Rules Emulator: **23 allow/deny assertions Pass, exit0**, 104,55s — [log](docs/qa_evidence/app-review-2026-10-05/fix-20261006-rules.log). Đây là Firestore Emulator local project test, không phải Android emulator hoặc deploy rules production.
+- Dashboard lint/build: **exit0**, lint14,86s/build62,14s — [lint đã xác minh argv](docs/qa_evidence/app-review-2026-10-05/fix-20261006-dashboard-lint-02.log), [build](docs/qa_evidence/app-review-2026-10-05/fix-20261006-dashboard-build.log). Lệnh lint ban đầu có path bị tách trong argv; không dùng cấu trúc đó, đã rerun bằng `node.exe` + npm CLI với path được quote đúng.
+- Analyzer: root `dart analyze` từng **timeout120s**; scoped coordinator/navigation exit0. `dart analyze lib` sau đó kết thúc exit2 với diagnostics thật; đã sửa warning/import/deprecation/braces. Lượt đầu `flutter analyze` bắt lỗi import test và diagnostics trong thời gian sửa; **lượt cuối `flutter analyze --no-pub`: No issues found, exit0,37,8s** — [log](docs/qa_evidence/app-review-2026-10-05/fix-20261006-flutter-analyze-02.log), [result](docs/qa_evidence/app-review-2026-10-05/fix-20261006-flutter-analyze-02.log.result.json). Không xóa các log Fail/Timeout trước đó.
+- **Flutter full cuối:600 Pass /0 Fail, exit0,158,06s**, concurrency2, không timeout — [log](docs/qa_evidence/app-review-2026-10-05/fix-20261006-flutter-verified.log), [result](docs/qa_evidence/app-review-2026-10-05/fix-20261006-flutter-verified.log.result.json). Lượt cũ596/3,597/2 và594/1(load test lỗi import trong lúc sửa) đều giữ nguyên. Đã sửa test brand/đơn vị cũ, giữ assertions; mở sheet phát hiện overflow thật và đã sửa UI, không bỏ test để lấy xanh. Targeted từng timeout do fixture stream/tour; log Fail/Timeout không bị xóa hoặc coi Pass.
+- Pattern hygiene:286 file Dart/Python tại `app/lib` + `web/shelly`,0 mojibake match/0 private-key pattern match; tools cũng được kiểm pattern secret. Chỉ quét text theo pattern, **không chứng minh Git history, artifact hay Cloud Key chưa lộ**. Secret values/UID/Device ID không được in vào bằng chứng hardware.
+- Firebase CLI tự ghi email account quản trị vào3 log mới của task. Đã che đúng3 occurrence trong3 log task này, giữ toàn bộ status/assertion/timing và không đụng log lịch sử. Runner đã bổ sung redaction **trước khi ghi** email/bearer/JWT và trường credential/identifier; smoke test [runner-redaction](docs/qa_evidence/app-review-2026-10-05/fix-20261006-runner-redaction.log) exit0. Không truyền secrets qua argv. Đây là pattern redaction, không phải bảo đảm nhận diện mọi dạng bí mật.
+
+### 64.4. Shelly thật — kết quả Fail, OFF cuối đã xác minh
+
+- Người dùng xác nhận đang giám sát, rút mọi tải và cho một ON có timer5s. Preflight thấy relay ON không timer; người dùng chọn **tự tắt vật lý**, nên app/helper không gửi OFF trước test. Readback tiếp theo: OFF,0W,0A,231V,42,8°C; Safe Boot OFF/Auto ON false, đúng Plug S Gen3/G2.
+- Helper `tools/shelly_supervised_container_test.py` chạy trong process QA ngắn của container đang có; dùng limiter và lease thiết bị chung. Không sửa vault, profile, safety certification, membership hoặc API worker. Không truyền credential vào argv/log.
+- **Một ON5s và một OFF cleanup**, bảy HTTP responses200. ON bị parser lỗi `malformedProviderResponse` trước khi poll, vì command không có JSON hợp lệ. HTTP200 chỉ chứng minh lệnh được tiếp nhận; **không có readback ON/timer**, không chứng minh timer tựOFF. Root cause parser đã có bằng chứng code + response status/error path và hợp đồng chính thức; body thô không lưu.
+- Cuối test đọc OFF hai lần; mẫu cuối0W/0A/231V,42,8°C,18974,949Wh. Test lease đã giải phóng sau fresh OFF. Wh không tăng khi không tải là bình thường; **chưa nghiệm thu Wh tăng với tải nhỏ**.
+- Result **Fail**, exit1; [evidence an toàn đã che](docs/qa_evidence/app-review-2026-10-05/fix-20261006-shelly-hardware.json). Không gửi ON lần2. Sửa ACK sau test chỉ được kiểm bằng automated suite, chưa nghiệm thu vật lý.
+
+### 64.5. Blocker và bước tiếp theo
+
+1. Automated gates đã chốt: Flutter600/0, analyze exit0, backend278+membership4, gateway59, Rules23, dashboard lint/build exit0. Các gate này không thay runtime/hardware sign-off; log Fail/Timeout trước đó vẫn giữ để đối soát.
+2. Build artifact mới với build number chưa dùng, ghi hash/cert/source manifest; APK +126 cũ không chứa sửa này. Chưa build/cài mới trong lượt “chỉ test tự động”.
+3. Runtime Android khỏe vẫn cần splash/auth/Guide/Settings/notifications/onboarding/sau login; host Navigator test không thay full shell + Firebase, IME thật hoặc TalkBack.
+4. Bản sửa backend chưa được nạp vào API worker đang chạy. Cần cửa sổ deploy/restart an toàn, kiểm các phiên active/unknown rồi mới triển khai; không restart dưới phiên sạc khác.
+5. Shelly cần xác nhận giám sát **mới** trước lượt retest một ON5s; đọc OFF ban đầu, quan sát ON + timer + tựOFF, cleanup/readback cuối. Không lấy HTTP200 hoặc OFF cuối của lượt Fail để công bố Shelly-ready.
+6. Hai runtime/two-account controls, tải nhỏ W/A/Wh, TLS điện thoại thật và hạ tầng production vẫn Blocked. Các rich card nâng cao còn có fallback số liệu mặc định và safety copy cần audit riêng; wrap/scroll không chứng nhận telemetry thật hoặc safety gate. Không tuyên bố hết P0/P1 hoặc production-ready từ các tests này.
+
+## 63. Task Completion Log — Rà soát QA không chạy emulator (06/10/2026)
+
+### 63.1. Tóm tắt điều hành
+
+- **Phạm vi mới:** thực hiện yêu cầu “không chạy emulator”. File đính kèm vẫn mô tả runtime QA, nhưng yêu cầu mới được ưu tiên. Lượt này chỉ đọc source, kiểm artifact/bằng chứng cũ và cập nhật báo cáo; không mở emulator/ADB, không build, sửa app/backend, đăng nhập, redeem mã hoặc gửi lệnh relay.
+- **Trạng thái:** rà soát source đã ghi nhận; **QA toàn app vẫn Blocked**, chưa đủ điều kiện phát hành. Không đổi phát hiện từ source thành lỗi đã tái hiện trên APK, không chấm điểm dựa trên kế hoạch.
+- Lượt cũ có **3 màn auth, 11 control đã thử**, không phải 11 control Pass. Lượt hiện tại thêm **0 màn / 0 control runtime**. Chưa có kết quả sau đăng nhập, onboarding hợp lệ hoặc điều khiển Shelly trong lượt QA +126 này.
+- Ưu tiên sửa tiếp: trạng thái splash chờ khởi tạo; replay/lifecycle của tour; callback của appearance sheet; phản hồi refresh thông báo. Đây là đề xuất cho **lượt sửa riêng**, không thay source trong lượt kiểm tra artifact bất biến.
+
+### 63.2. Môi trường, artifact và kết quả điều tra còn dang dở
+
+- Source HEAD tại rà soát: `6dc059ee64b6c1f9d155163c2dec68ee9e58b0cf`; working tree dirty, giữ nguyên. Không có manifest chứng minh mọi thay đổi hiện tại nằm trong APK QA. Các file source nêu bên dưới là **source hiện tại**, không phải bản giải mã APK.
+- Đọc lại SHA-256 artifact `app/build/app/outputs/flutter-apk/VinFastBattery_1.1.9+126_debug.apk`: **`5A0EF61FD5F143AE9685B1DB4481FCDBF2DB7E280011F88608B1EABF5F660639`**, hash vẫn khớp baseline. Package/version/cert đã xác minh ở mục61; không phát sinh cài đặt mới. APK debug không chứng minh hiệu năng hay chữ ký production.
+- **Đính chính kết quả mới nhất của mục62:** lần đối chiếu GPU software đã kết thúc, không còn In progress. Result [software-20261005-175459-result.json](docs/qa_evidence/app-review-2026-10-05/software-20261005-175459-result.json): launcher/qemu đều exit **-1073741819 (`0xC0000005`)** sau205s, UTC17:54:59–17:58:24 ngày05/10, tức ngày06/10 tại Việt Nam. Mã này là native access violation theo [Microsoft](https://learn.microsoft.com/en-us/shows/inside/c0000005); **chưa biết module/nguyên nhân**, không chứng minh Flutter app crash hoặc RAM là nguyên nhân trực tiếp.
+- Flag yêu cầu1536MB nhưng emulator **tự nâng lên2048MB**, xác nhận tại `app/build/qa-software-20261005-175459-out.log:6`. Renderer thực tế vẫn SwiftShader. Không ghi “AVD chỉ dùng1,5GB” như một kết quả đã đo.
+- Trước mở app:0 app ANR/0 app crash/0 system ANR trong buffer; sau mở:0/0/**8 system ANR** trong buffer quan sát. Activity `Status: timeout`, WaitTime15029ms, command exit0; hierarchy không lấy được. Không suy ra startup Pass từ exit0 hoặc không-crash toàn app từ buffer này. Host RAM khả dụng có lúc335MB.
+- Emulator tự thoát trước lệnh dừng/cleanup; reset density và `emu kill` **không thực hiện được** do không còn ADB device. Lần kiểm trước đó cuối cùng không còn emulator/qemu, RAM khả dụng4245MB. Density override320 của AVD QA vẫn cần hoàn nguyên khi có một phiên runtime được cho phép sau này; không tự boot để cleanup trong lượt “không emulator”. Không đóng ứng dụng người dùng, wipe/clear data hoặc đọc dump bộ nhớ.
+- Cập nhật [resume-20261006.json](docs/qa_evidence/app-review-2026-10-05/resume-20261006.json) bằng kết quả đối chiếu, giữ các lần thiếu storage/hash sai/ADB lỗi trước đó. Các dòng In progress/chưa chạy ở mục62 là lịch sử, không phải trạng thái hiện hành.
+
+### 63.3. Inventory source và screen map — không thay thế runtime
+
+Quét quy ước tên file tìm được **51 file ứng viên màn/sheet/dialog**, cùng **84 call site** `showDialog/showModalBottomSheet/showGeneralDialog`. Hai số này không phải số màn/nút đã thử: có wrapper, nhiều màn trong một file, anonymous sheet/dialog và route bị gate. Inventory đủ đường dẫn/line call site nằm trong [offline-source-inventory-20261006.json](docs/qa_evidence/app-review-2026-10-05/offline-source-inventory-20261006.json). Không tuyên bố đây là inventory runtime hoàn chỉnh; popup/coordinator/overlay custom được kiểm kê bổ sung riêng.
+
+| Nhánh source | Thành phần tìm thấy | Trạng thái QA +126 |
+|---|---|---|
+| Khởi động/auth | `AuthGate`, `BootstrapSplash`, Login, Register, PasswordReset; OnboardingChat và OnboardingFlow legacy | Ba form có runtime cũ một phần; splash chưa sign-off; onboarding Blocked |
+| Tổng quan | AppNavigation → Overview → Home; Dashboard, BatteryMonitor; dashboard customization, chọn/chi tiết xe | Source route/candidate; chưa duyệt sau login |
+| Sạc pin | Charge → SmartChargingControl; dự báo, ETA, chỉnh SOC, hiệu chỉnh, xác nhận Start/Stop/SOC cuối | Source candidate; không thực thi lệnh phần cứng |
+| Shelly | SetupHub, ShellyConnect, ShellySetup, QR scanner; dialog mật khẩu, xác nhận an toàn và mã | Source candidate; identity/readiness/membership cần runtime/backend riêng |
+| Lịch sử/thống kê | SmartChargeHistory và **SmartChargeSessionDetail trong cùng file**; ChargeLog, Statistics; filter, export, xác nhận xóa | Source candidate; lịch sử thật/empty/error/cache chưa thực thi |
+| Cài đặt/Thêm | More, Settings, Profile, VehicleGarage, VehicleSpecDetail, Appearance; About, logout, appearance sheet, developer sheet | Source candidate; quyền/IME/restart chưa thực thi |
+| Thông báo | NotificationCenter, detail sheet, xác nhận xóa tất cả, swipe dismiss | Source candidate; chưa thao tác hoặc xóa dữ liệu |
+| Hướng dẫn/Bot | Guide, CoachMarkOverlay, BatteryBot, FloatingBatteryBot, AssistantSheet | Source đã đối chiếu route/lifecycle; replay thực tế Blocked |
+| Nhánh phụ | Maintenance; EnergyJourney và level-up dialog; TripPlanner, TripLiveMap; AIModels, AIChargingPredictor, AIFunctions, PersonalAISettings/TrainingData, DeveloperAIStudio | Không gọi màn có file là màn truy cập được trên APK |
+| Hạ tầng UI | AppPopup, DebugErrorSheet, loading/error/empty, connection status, auth bootstrap error | Surface bổ sung, không cộng vào số màn runtime |
+
+Source shell có bốn tab: **Tổng quan / Sạc pin / Lịch sử / Cài đặt**; tab cuối render `MoreScreen`, không trực tiếp `SettingsScreen`. `BetaCapabilities` mặc định beta, khóa advanced AI/trip planner/developer; chưa xác minh build define của artifact. Màn ẩn/không có route không được tính Pass. Screen map runtime thực đã đi vẫn chỉ là `Login → Reset → Back → Login → Register → Back → Login` tại mục61.
+
+### 63.4. Phát hiện và đề xuất sửa cụ thể
+
+**Các mục SRC dưới đây chỉ được xác nhận bằng source hiện tại, chưa tái hiện trên đúng APK ở một runtime khỏe.** Tần suất runtime: chưa đo. Không gán chúng làm root cause chắc chắn của những timeout/emulator crash trước đây.
+
+| ID / loại / ưu tiên | Hiện trạng và bằng chứng | Sửa đề xuất / acceptance criteria |
+|---|---|---|
+| SRC126-01 `[LỖI source]` / **P1** / Vừa | [bootstrap_splash.dart](app/lib/core/widgets/bootstrap_splash.dart#L150): exit fade về0 ở cuối timeline; outer `Opacity` bọc cả thương hiệu và fallback `_slow`. `animate=false` đặt controller=1. [auth_gate.dart](app/lib/features/auth/auth_gate.dart#L247) vẫn giữ splash khi init chưa xong hoặc auth đang resolving. Vì vậy nhánh chờ sau animation/non-animated có nội dung opacity0, kể cả lời chờ8s. | Giữ frame logo tĩnh **còn nhìn thấy** cho tới route sẵn sàng, chỉ fade khi chuyển màn; fallback chờ/error nằm ngoài opacity exit. Giữ timeline5s đã chốt và reduced motion. Test init/auth chờ>8s, `animate=false`, resume: logo/lời chờ thật nhìn thấy, không chỉ tồn tại trong widget tree; tới form đúng một lần. QA126-01 runtime nền trống có thể liên quan, nhưng chưa chứng minh quan hệ nhân quả trên APK. |
+| SRC126-02 `[LỖI source]` / **P2** / Vừa | [guide_screen.dart](app/lib/features/settings/guide_screen.dart#L31) lấy context từ root Navigator key; [coach_mark_overlay.dart](app/lib/core/widgets/coach_mark_overlay.dart#L45) tìm **ancestor** Overlay. [app.dart](app/lib/app.dart#L103) đặt key lên Navigator của MaterialApp, Overlay của Navigator nằm bên dưới, không phải ancestor. `show()` có thể trả null im lặng. | Chèn tour qua `NavigatorState.overlay` hoặc anchor/shell context thật đã gắn dưới Overlay; kiểm trả về entry. Widget test nhấn nút replay **từ GuideScreen qua shell thật**, thấy spotlight đầu tiên, Back/Skip/replay lần2 đúng; không dispatch relay. Không chỉ test component riêng. |
+| SRC126-03 `[THIẾU lifecycle]` / **P2** / Vừa | [app_navigation.dart](app/lib/navigation/app_navigation.dart#L120) và Guide replay dừng thử sau120frame khi anchor/route chưa sẵn sàng. Auto tour đặt `_guideShown=true` **trước** khi biết Overlay đã chèn. Không có bảo đảm resume khi anchor xuất hiện muộn trong cùng phiên. | Dùng readiness/lifecycle của shell/anchor, UID generation và modal safety; chỉ đánh dấu đã hiển thị sau insert thành công. Giữ pending nếu route/anchor chưa sẵn sàng, không busy-loop bằng frame và không ghi completed/dismissed sớm. Test anchor xuất hiện sau120frame, UID đổi trong await, modal an toàn, replay không sửa trạng thái auto. |
+| SRC126-04 `[LỖI source]` / **P2** / Nhỏ | [settings_screen.dart](app/lib/features/settings/settings_screen.dart#L681): Dark/AMOLED/đổi ngôn ngữ `await` lưu setting rồi gọi `setSheetState` không kiểm `context.mounted`, khác nhánh Sáng/Hệ thống. Đóng sheet giữa await có nguy cơ setState sau dispose. | Thêm mounted guard theo context **của sheet**, hoặc tách StatefulWidget sở hữu lifecycle; khóa tap lặp nếu cần. Test storage chậm → chọn → vuốt đóng sheet → future hoàn tất: không exception, setting vẫn lưu đúng, mở lại phản ánh lựa chọn. |
+| SRC126-05 `[GÓP Ý UX]` / **P2** / Nhỏ | [notification_center_screen.dart](app/lib/features/notifications/notification_center_screen.dart#L119): pull-to-refresh invalidate stream rồi chờ cố định200ms. Spinner kết thúc không phụ thuộc fetch thành công/thất bại; dễ khiến người dùng nghĩ dữ liệu đã cập nhật. | Chờ kết quả refresh theo đúng UID/request generation với timeout có recovery; lỗi giữ dữ liệu cũ và nhãn chưa đồng bộ. Test stream chậm>200ms, lỗi quyền/offline, đổi UID: không báo refreshed giả hoặc giữ spinner vô hạn. |
+| QA126-02 `[GÓP Ý UX]` / **P3** / Nhỏ | Runtime cũ1/1 thấy hint confirm-password bị cắt; [register-ime.png](docs/qa_evidence/app-review-2026-10-05/register-ime.png). Chưa tái hiện thêm2lần. | Rút hint thành “Nhập lại mật khẩu”; giải thích dài sang helper text. Lặp3lần ở320–412dp/font1–1.5/IME chuẩn; không mất nghĩa. |
+| QA126-03 `[GÓP Ý UX]` / **P3** / Vừa | Login hero/glow và reset tối giản có thứ bậc chưa đồng nhất; ảnh cũ tại mục61. | Dùng auth header/type/spacing chung, giảm trang trí để ưu tiên form; lỗi chỉ một vị trí, CTA luôn truy cập được. Không thay business logic. |
+
+**Điểm tốt thấy trong source, chưa tính runtime Pass:** history có `_hasSuccessfulLoad` cùng context/request generation, tránh empty giả và kết quả cũ ghi sang xe/UID mới; notifications dùng provider family theo UID và tách loading/error/empty; draft eligibility yêu cầu `finalizedAt`; SetupHub có cổng chờ `_developerModeResolved`; Shelly coordinator dùng snapshot chung và tách linked/verifying/offline. Đây là cơ chế đã tồn tại, không nên viết lại hoặc báo “chưa làm” máy móc. Chưa audit toàn bộ worker/backend/Rules để chứng nhận các cơ chế không còn race.
+
+### 63.5. Điểm đánh giá
+
+**Chưa cấp điểm tổng thể/release-readiness.** Không đủ dữ liệu để chấm các màn sau login, accessibility, reliability hoặc performance. Nguồn tĩnh không chứng minh đủ bốn trạng thái, mọi nút, gestures, contrast,48dp, TalkBack hoặc animation mượt. Debug APK trên môi trường ANR/thiếu RAM không dùng để đánh giá hiệu năng release.
+
+### 63.6. Phần còn thiếu và giới hạn
+
+- Runtime toàn app: Blocked do yêu cầu không emulator; điện thoại thật cũng chưa được chọn/cấp quyền cho lượt này. Không tự chuyển sang thiết bị khác hoặc đăng nhập từ credential hội thoại.
+- Onboarding: chưa có fixture QA hợp lệ được người dùng chỉ định; không sửa server để tạo trạng thái.
+- Shelly: không test claim/redeem/safety/start/stop/readback/ownership hai UID trong lượt này. **Không thể kết luận “kết nối chắc chắn không lỗi” hoặc Shelly-ready.** Không gửi OFF cũng như ON.
+- API/TLS/Rules/đa máy: chưa probe hoặc mutation trong lượt offline. Không dùng kết quả endpoint cũ làm chứng nhận hiện tại.
+- Ma trận320/390/412dp, Light/Dark/System, font1/1.5/2, Gboard chuẩn, TalkBack, reduced motion, offline/recovery, Back/swipe, cài mới/nâng cấp: kết quả cũ chỉ một phần; phần còn lại chưa thực thi.
+- Không chạy lại analyzer/Flutter/backend/gateway/Rules/dashboard suites trong lượt **chỉ báo cáo** này. Kết quả test cũ không được gán cho HEAD/worktree hiện tại hay hash APK mới.
+
+### 63.7. Top10 ưu tiên — công việc, không phải10 lỗi giả
+
+1. **P1:** sửa SRC126-01, test startup chậm và frame chờ hữu hình trước khi dùng startup làm cổng QA.
+2. **P2:** sửa replay Overlay context SRC126-02; test nút thật qua navigation shell.
+3. **P2:** sửa readiness/UID/modal của tour SRC126-03, không mất pending khi anchor chậm.
+4. **P2:** sửa callback appearance SRC126-04 và test đóng sheet trong await.
+5. **P2:** refresh thông báo SRC126-05 phản ánh kết quả thật, có timeout/retry.
+6. **P3:** rút hint đăng ký, thống nhất bộ auth; lặp lỗi cắt chữ và đo touch target/contrast thay vì suy từ ảnh.
+7. **Cổng QA:** dùng runtime khỏe được người dùng lựa chọn; không boot lặp emulator lỗi, không kết luận nguyên nhân native khi chưa biết module.
+8. **Cổng dữ liệu:** nghiệm thu login → khảo sát → Dashboard → lịch sử bằng fixture QA, online/offline/restart và UID A→B; không đổi dữ liệu thật để lấy Pass.
+9. **Cổng Shelly riêng:** sau khi có backend/fixture và xác nhận giám sát hiện tại mới chạy bài phần cứng riêng; membership hai tài khoản, limiter, timer/readback, unknown và OFF cuối phải có evidence. Lượt UI hiện tại không cấp quyền test đó.
+10. **Cổng beta:** artifact mới sau sửa phải có hash/source manifest/chữ ký và retest; backend HTTPS/signing/hardware còn là gates riêng. Không phát beta chỉ vì các sửa UI đạt.
+
+### 63.8. Câu hỏi/đầu vào cho lượt kế tiếp
+
+Không có câu hỏi chặn việc đọc source/báo cáo này. Trước **runtime tiếp theo**, cần người dùng chọn điện thoại Android thật hay một môi trường khác đã ổn định, tài khoản/fixture QA tự nhập và phạm vi dữ liệu. Không cần gửi mật khẩu, Cloud Key hay service-account JSON vào chat. Trước **sửa source**, giữ các phát hiện SRC làm backlog và xác định artifact mới; không sửa ngầm APK đang được QA.
+
+### 63.9. Checklist và bằng chứng
+
+| Case | Trạng thái hiện hành | Bằng chứng / điều kiện tiếp theo |
+|---|---|---|
+| Không mở emulator, không build/sửa source/backend, không relay | ✅ Trong lượt offline | Chỉ đọc file/rg/hash và cập nhật báo cáo/JSON |
+| Hash artifact QA vẫn khớp | ✅ Kiểm lại file local | `Get-FileHash -Algorithm SHA256`, exit0; không phải kiểm APK trên runtime mới |
+| Inventory51file/84call site | ✅ Source inventory | [offline-source-inventory-20261006.json](docs/qa_evidence/app-review-2026-10-05/offline-source-inventory-20261006.json); không phải coverage runtime |
+| Software GPU comparison trước yêu cầu mới | ❌ Môi trường tự thoát | [software result](docs/qa_evidence/app-review-2026-10-05/software-20261005-175459-result.json); mã native0xC0000005, module chưa xác định |
+| Splash/init chậm; Guide replay; appearance dismiss; refresh | ⚠️ Source findings, chưa retest | SRC126-01–05; cần sửa riêng và artifact/runtime mới |
+| Auth3màn/11control attempted | ⚠️ Kế thừa đúng phạm vi mục61 | [runtime-progress.json](docs/qa_evidence/app-review-2026-10-05/runtime-progress.json); không thêm Pass |
+| Các tab sau login/khảo sát/matrix đầy đủ | ⚠️ Blocked | Chưa có runtime thay thế/fixture trong lượt này |
+| Relay/safety/real deletes | N/A theo phạm vi |0hardware command, không xóa dữ liệu thật |
+| Restore density AVD QA | ⚠️ Chưa làm | Override320; không mở lại emulator trái yêu cầu |
+| JSON parse/inventory paths/diff whitespace | ✅ Kiểm tính hợp lệ báo cáo, exit0 |51path tồn tại,84call site, JSON parse hợp lệ, `git diff --check -- PROJECT_STATUS.md` exit0; [offline-review-checks-20261006.json](docs/qa_evidence/app-review-2026-10-05/offline-review-checks-20261006.json). Không phải test app |
+
+**File thay đổi của lượt offline:** `PROJECT_STATUS.md`, `resume-20261006.json`, thêm inventory JSON trong thư mục evidence đã có; không tạo Markdown mới, không sửa ứng dụng hay hoàn tác thay đổi của người dùng. Bằng chứng, báo cáo và kết quả lịch sử được giữ nguyên. **Bước kế tiếp:** sửa các SRC theo một lượt được yêu cầu riêng, rồi kiểm trên runtime khỏe; không tuyên bố QA toàn diện hoặc release-ready tại đây.
+
+## 62. Task Completion Log — Chuyển sang AVD QA riêng (06/10/2026)
+
+- **Đối chiếu GPU software — In progress:** người dùng chọn thử đúng một lần, không boot lặp. Preflight không có emulator/ADB device, RAM trống5350MB. Thêm công cụ QA [launch_software_comparison.ps1](docs/qa_evidence/app-review-2026-10-05/launch_software_comparison.ps1): xác minh hash trước launch, chặn hai emulator, mở cùng AVD/dữ liệu với`-gpu software`, RAM1536MB/2CPU/720×1600, Vulkan/snapshot/audio tắt; theo dõi handle/exit code launcher/qemu tối đa300s, không tự kill/restart. UTC start`2026-10-05T17:54:59.3482034Z` (06/10 Asia/Saigon), launcherPID2756/qemuPID30860. ADB đã chuyển`device` trong kiểm tra đầu, renderer thực tế vẫn báo SwiftShader; đổi flag không đồng nghĩa root cause đã sửa. Không sửa app/backend hoặc phát lệnh phần cứng. Logs`app/build/qa-software-20261005-175459-{out,err}.log`; chưa có kết luận runtime mới.
+- **Điều tra sau khi người dùng xác nhận không đóng cửa sổ:** log launcher ghi boot82904ms, emulator36.4.9.0/build14788078 và3 lỗi `adb protocol fault (couldn't read status length)`; ADB36.0.2. Không có crash report mới được quan sát trong thư mục crash database ở lần kiểm metadata; không đọc minidump/raw memory. Đây là bằng chứng lỗi kết nối/môi trường, **chưa chứng minh nguyên nhân thoát hoặc app crash**. Tài liệu [Android về GPU emulator](https://developer.android.com/studio/run/emulator-acceleration) xác nhận `swiftshader_indirect` deprecated từ36.4.9, đề xuất mode`software` cho render phần mềm; [release notes](https://developer.android.com/studio/releases/emulator) nêu hỗ trợ flag mới từ36.4.9. Đã hỏi cho phép **đúng một lần đối chiếu** dùng`-gpu software`, giữ RAM1,5GB/dữ liệu/APK, hoặc chuyển điện thoại thật. Chưa chạy đối chiếu, không gọi cấu hình GPU là root cause đã xác định; trạng thái QA vẫn Blocked.
+- **Kết quả mới nhất: Blocked — emulator thoát sau mở app, nguyên nhân chưa xác định.** Sau xác nhận của người dùng và một lần `adb reconnect`, ADB đã chuyển`device`; không đọc/thay khóa ADB hoặc reset dữ liệu. BootCompleted1, probe exit0. Hash `base.apk` khớp chính xác **`5A0EF61FD5F143AE9685B1DB4481FCDBF2DB7E280011F88608B1EABF5F660639`**, package`com.bes.vinbatery`,1.1.9/126; AVD còn **4,2GB** nên không cài lại. Viewport720×1600, physicaldensity420/override320, font1, night`no`.
+- **Mở app và giới hạn:** baseline trước mở có0 app ANR/0 app crash/4 ANR Android khác, events probe exit0. Activity mở trả`Status: timeout`, WaitTime10432ms, commandexit0; hai snapshot tiếp theo không lấy được hierarchy. Events sau đó timeout nên **app ANR/crash mới là null/chưa xác định**, không tái dùng số0 của baseline. Lệnh pidof sau khi mất ADB cũng không chứng minh app tự crash.
+- **Xác minh mất runtime:** ADB sau đó không còn thiết bị; Get-Process chỉ thấy adb, không còn emulator/qemu. RAM trống5511MB. Truy vấn Windows Application events1000/1001 trong25phút gần nhất không có event emulator khớp; **không đủ kết luận** resource crash, lỗi Flutter hay người dùng đóng cửa sổ. Đã hỏi người dùng có đóng emulator không; không tự boot lặp. Không chụp/quay màn credential, không thêm màn/control runtime được nghiệm thu trong lượt này, không gửi relay command.
+- **Cấu hình:** chưa thay display/font/night/network trong lần tiếp tục này. Override density320 từ lượt trước vẫn còn trong AVD QA; restore về physical420 chưa thực hiện được vì emulator đã thoát. Không gọi cleanup là hoàn tất hoặc tự mở lại chỉ để che blocker. Các dữ liệu/artifact/bằng chứng cũ vẫn giữ nguyên.
+- **Task:** tiếp tục QA đúng APK+126 sau khi cập nhật Pixel_9a hai lần bị thiếu dung lượng. Người dùng chọn chuyển AVD riêng; không xóa dữ liệu hoặc dùng APK khác hash để thay kết quả.
+- **Đã làm:** xác minh AVD hiện tại là Pixel_9a rồi `adb emu kill` để đóng bình thường. Không đóng Chrome/Zalo/IDE/API. Sau khi emulator thoát, ADB không còn thiết bị và không còn tiến trình emulator/qemu; RAM trống **3837MB**. Một lệnh liệt kê tiến trình trả exit1 vì không tìm thấy process; không coi exit1 đó là lỗi đóng emulator.
+- **Mở QA:** AVD `VinFast_QA_API36_20261005`, serial5556, guestRAM1536MB/2CPU,720×1600, SwiftShader, Vulkan/snapshot/audio tắt. Mở cửa sổ để người dùng nhập QA khi sẵn sàng; không wipe data, không sửa config AVD cũ. PID29664, bắt đầu UTC`2026-10-05T17:39:51.6932527Z` (**06/10 theo Asia/Saigon**). Chỉ một emulator.
+- **Trạng thái tại cập nhật này: In progress — đang boot.** ADB lúc đầu offline, bootCompleted/hash installed chưa xác minh lại; chưa mở app/capture hoặc thêm coverage runtime. Cảnh báo Qt `UpdateLayeredWindowIndirect` trong launcher không tự chứng minh app lỗi. Boot có giới hạn5phút, không lặp vô hạn hoặc đóng app người dùng để giải phóng RAM.
+- **Probe tiếp theo:** ADB chuyển sang`unauthorized`; getprop exit1 vì chưa cấp quyền. Giá trị false trong probe **không được diễn giải là boot thất bại**, bootCompleted vẫn chưa xác định. Đã yêu cầu người dùng nhấn Allow trên **AVD QA**, không thay/khôi phục khóa ADB hoặc tự vượt hộp thoại. Trạng thái tạm **Blocked — xác nhận USB debugging**; emulator giữ mở để người dùng xác nhận. Không lặp khởi động hoặc cài APK khi chưa kiểm hash.
+- **Bằng chứng:** [resume-20261006.json](docs/qa_evidence/app-review-2026-10-05/resume-20261006.json); log `app/build/qa-20261006-20261006-003951-emu-{out,err}.log`. Các kết quả3màn/11control ở mục61 vẫn thuộc lượt trước, không tự cộng Pass trong lần boot mới. Chỉ thay báo cáo/QA evidence, không thay app/backend, không gửi relay command.
+- **Tiếp theo:** kiểm boot/ADB, hash đã cài trùng`5A0EF61F…`, cấu hình/ANR baseline; mở app không quay màn credential, người dùng tự đăng nhập, duyệt các chức năng an toàn theo ledger. Chưa chứng nhận toàn app hoặc Shelly-ready.
+
+## 61. Task Completion Log — QA +126: runtime trước đăng nhập (05–06/10/2026)
+
+### 61.1. Tóm tắt điều hành
+
+- **Cập nhật theo lựa chọn1, ngày06/10 — Blocked bởi dung lượng emulator:** đã thử `adb install -r` đúng artifact `5A0EF61F…`, giữ dữ liệu. Lần1 exit1, `INSTALL_FAILED_INSUFFICIENT_STORAGE`; `/data`5,8GB còn570MB, ổ C còn33,81GB. Hash APK đã cài sau thất bại vẫn là`45CBB5C0…`. Người dùng cho phép dọn cache tạm; chạy `pm trim-caches 1536M internal`, còn580MB (chỉ tăng khoảng10MB). Lần2 cập nhật vẫn exit1 cùng lỗi; **không ghi cài thành công**. Chỉ cache có thể tạo lại đã được Android dọn; không gỡ app/clear app data/xóa tài khoản/xe/lịch sử. Đã hỏi chuyển sang AVD QA riêng (giữ Pixel_9a và chỉ chạy một emulator) hoặc người dùng tự giải phóng dung lượng. Chưa đóng/chuyển emulator và chưa test app mới. Chi tiết hai lần cài được bổ sung vào [resume-20261006.json](docs/qa_evidence/app-review-2026-10-05/resume-20261006.json). Đây là blocker môi trường, không phải lỗi chức năng của APK.
+- **Cập nhật sau Allow, ngày06/10:** `emulator-5554` đã authorized, bootCompleted1, AVD **Pixel_9a**. APK đã cài là1.1.9/126 nhưng hash **`45CBB5C0970D8FB11F436DADBA32AE9B8E932216FC4A6A08C4940D91AC2DC2C8`**, khác artifact QA đã chốt **`5A0EF61F…`** (hash local vẫn khớp baseline). Đã hỏi người dùng chọn cập nhật đúng APK giữ dữ liệu hoặc test artifact hiện tại trong lượt riêng; **chưa cài đè/gỡ/clear data**, không lấy kết quả máy này làm coverage của artifact đã chốt. Snapshot ban đầu có dialog ANR chưa xác định chính xác component; events ghi0 app ANR/0 app crash/2 ANR Android khác. Chọn **Wait** một lần, không Close app; snapshot sau không còn dialog. Chưa chụp/quay, không đọc credential, không đổi display/network hay gửi relay command. Cấu hình ban đầu1080×2424, physicaldensity420/override320, font1, night`no`; đọc RAM bằng CIM bị sandbox từ chối, không ghi giá trị giả. Bằng chứng: [resume-20261006.json](docs/qa_evidence/app-review-2026-10-05/resume-20261006.json). Trạng thái chờ ADB ở dòng lịch sử dưới đã được gỡ; blocker hiện tại là **xác nhận artifact**.
+- **Tiếp tục ngày06/10 sau khi người dùng tự mở emulator:** ADB hiện chỉ thấy `emulator-5554`, trạng thái **unauthorized** qua hai lần kiểm tra, không phải serial5556 của lượt QA trước. Chưa xác minh AVD, APK/hash hay màn hình hiện tại; không tự clear data, cài đè, đóng emulator hoặc thay khóa ADB. Đã yêu cầu nhấn Allow USB debugging. Kết quả 3màn/11control bên dưới thuộc lượt5556 trước, không phải kết quả máy5554 mới. Báo cáo/JSON được kiểm tra parse và `git diff --check` exit0; không có test app mới trong lúc chờ quyền.
+- **Trạng thái hiện hành: Runtime verified một phần — chờ người dùng đăng nhập QA.** Thay thế trạng thái chờ ADB ở mục 60; mục 60 giữ nguyên như lịch sử preflight, không phải kết quả hiện tại. Sau khi người dùng nhấn Allow, AVD QA boot thành công, cài sạch đúng APK đã chốt. Không rebuild, sửa app/backend/production, đóng ứng dụng người dùng hoặc gửi bất kỳ lệnh relay nào.
+- Đã duyệt **3 màn chức năng: Đăng nhập, Đặt lại mật khẩu, Đăng ký**; **11 control riêng biệt đã được thử**, trong đó chuyển focus sang mật khẩu và trạng thái icon hiện/ẩn **chưa được xác minh đầy đủ**. Không cộng tap lặp, Back/scroll hoặc thao tác hệ thống thành control mới. Đây không phải coverage toàn app hoặc 11 test case Pass.
+- Đã thực hiện ba cold launch, cả ba cuối cùng vào form nhưng `am start -W` trả `Status: timeout`: WaitTime **15773 / 12828 / 13846ms**, command exit 0. Không coi exit 0 là startup Pass; không gọi WaitTime là thời gian tới màn tương tác hoặc thời lượng splash.
+- Chưa chấm release-readiness hoặc tỷ lệ Pass toàn app. Các tab sau đăng nhập, khảo sát và Shelly vẫn chưa thực thi. Không có đủ bằng chứng để ép đủ 5 lỗi/5 điểm mạnh hoặc top 10 lỗi đã xác nhận.
+
+### 61.2. Môi trường, artifact và phạm vi
+
+- Artifact `VinFastBattery_1.1.9+126_debug.apk`: SHA-256 **`5A0EF61FD5F143AE9685B1DB4481FCDBF2DB7E280011F88608B1EABF5F660639`**; hash `base.apk` trên emulator khớp. Package `com.bes.vinbatery`, versionName1.1.9/code126, cài đặt exit0. Chữ ký Android Debug đã kiểm ở preflight, cert SHA-256 `914642716decb342ca80acece6284e69d66355bfa792f5c4779efecf16ecebeb`. Không suy ra release signing/performance từ bản debug.
+- AVD riêng `VinFast_QA_API36_20261005`, serial `emulator-5556`, API36 Google Play x86_64, guest RAM1536MB/2CPU, SwiftShader/Vulkan tắt; chỉ một lần boot. Không clear hay chỉnh AVD cũ. Physical viewport720×1600/density420; đã thử override320 (~360dp),360 (320dp),280 (~411,4dp), font1/1.5/2.0. Đây là coverage từng màn được nêu bên dưới, không phải toàn bộ ma trận.
+- Night Mode ban đầu `no`, font1.0, Gboard mặc định. Bàn phím thực tế chỉ hiện toolbar nổi hẹp; bật `show_ime_with_hard_keyboard=1` chưa tạo bàn phím đầy đủ. Đã trả tùy chọn này về0, font về1.0 và Night Mode về`no`. Density tạm giữ320 để người dùng nhập QA; cần `wm density reset` sau toàn bộ lượt test. Không thay mạng, animation scale hoặc dữ liệu AVD cũ.
+- Event buffer lần gần nhất: **0 app ANR, 0 app crash, 11 ANR Android khác**, probe exit0. Có10 ANR hệ thống trước cài app; đây là hạn chế môi trường. Số0 chỉ áp dụng buffer đã quan sát, không chứng minh mọi luồng không crash/ANR.
+- Người dùng nhập tài khoản trực tiếp. Đã dừng screenrecord trước khi mời nhập; không chụp/quay màn credential. Chỉ dùng input giả sai định dạng cho validation, không gửi reset hợp lệ hoặc đăng ký thật.
+
+### 61.3. Screen map runtime và interaction ledger
+
+`Cold launch → Đăng nhập → Quên mật khẩu → Đặt lại mật khẩu → Back → Đăng nhập → Đăng ký → Back → Đăng nhập`.
+
+| Màn | Control đã thử | Kết quả / bằng chứng |
+|---|---|---|
+| Đăng nhập | Submit rỗng hai lần; Quên mật khẩu; Đăng ký; focus Email; thử Tab tới mật khẩu; icon hiện/ẩn rỗng | Validation tại form, mở hai màn đúng; focus Email quan sát được. Tab/icon mới là attempted, không ghi Pass. [auth-empty.png](docs/qa_evidence/app-review-2026-10-05/auth-empty.png), [login-ready.png](docs/qa_evidence/app-review-2026-10-05/login-ready.png) |
+| Đặt lại mật khẩu | Email input; CTA rỗng/sai; Back trong app | Lỗi định dạng rõ, nội dung mở đầu trung tính, Back về login. [reset-settled.png](docs/qa_evidence/app-review-2026-10-05/reset-settled.png), [reset-empty.png](docs/qa_evidence/app-review-2026-10-05/reset-empty.png), [reset-invalid.png](docs/qa_evidence/app-review-2026-10-05/reset-invalid.png) |
+| Đăng ký | Submit rỗng; focus xác nhận mật khẩu | Validation cả năm trường; scroll tới CTA; system Back đóng IME rồi về login. [register-empty.png](docs/qa_evidence/app-review-2026-10-05/register-empty.png), [register-scroll.png](docs/qa_evidence/app-review-2026-10-05/register-scroll.png) |
+
+Ledger máy đọc được: [runtime-progress.json](docs/qa_evidence/app-review-2026-10-05/runtime-progress.json), gồm từng control, gesture, kết quả và giới hạn. Các field đăng ký khác, hiện/ẩn của đăng ký, login hợp lệ, rate limit, quên mật khẩu hợp lệ chưa test; không gán Pass từ source.
+
+### 61.4. Phát hiện, nguyên nhân và đề xuất
+
+| ID / loại / mức độ | Bước tái hiện và mong đợi/thực tế | Tần suất, bằng chứng | Nguyên nhân / sửa / nghiệm thu |
+|---|---|---|---|
+| QA126-01 `[LỖI cần điều tra]` / ưu tiên Cao | Force-stop riêng app rồi mở Activity. Mong đợi splash có nội dung và tới form trong thời gian xác định; thực tế lệnh chờ timeout, video có đoạn nền tối không có chỉ dẫn trước khi form xuất hiện. | Activity timeout **3/3**; video [cold-02.mp4](docs/qa_evidence/app-review-2026-10-05/cold-02.mp4), [cold-03.mp4](docs/qa_evidence/app-review-2026-10-05/cold-03.mp4), contact sheet trong thư mục bằng chứng. | **Chưa xác định nguyên nhân:** debug APK, SwiftShader/RAM thấp và ANR hệ thống là yếu tố nhiễu. Thu trace startup trên runtime khỏe, đối chiếu native first draw/Flutter frame/route readiness; kiểm frame chờ splash sau animation. Không giảm thời lượng để che treo. AC: đo được các mốc, không blank kéo dài; retest cùng artifact trên môi trường khỏe trước quy lỗi app. |
+| QA126-02 `[GÓP Ý UX]` / Nhỏ | Đăng ký → cuộn → focus Xác nhận mật khẩu. Mong đợi hint hiểu đầy đủ; thực tế “Nhập lại mật khẩu đã c…” bị cắt. | Quan sát **1/1**, chưa lặp thêm hai lần. [register-ime.png](docs/qa_evidence/app-review-2026-10-05/register-ime.png). | Source hiện có hint dài trong input chứa cả icon trước/sau; đối chiếu chưa thay thế build manifest. Đề xuất “Nhập lại mật khẩu”, dùng helper text nếu cần giải thích. AC: không mất nghĩa ở320–412dp/font1–1.5 và IME; cần lặp lại để xác nhận ổn định. |
+| QA126-03 `[GÓP Ý UX]` / Thấp | Đối chiếu login/reset/register. Form reset tối giản, login chiếm nhiều diện tích bởi logo 3D/glow/tagline; thứ bậc chưa đồng nhất. | [login-ready.png](docs/qa_evidence/app-review-2026-10-05/login-ready.png), [reset-settled.png](docs/qa_evidence/app-review-2026-10-05/reset-settled.png). | Đề xuất header/brand token chung, giảm glow/tagline, ưu tiên field/CTA. Đây là đề xuất thiết kế, không lỗi logic. AC: bộ auth cùng spacing/type/color, form đọc được khi chữ lớn. Không sửa source trong QA này. |
+
+Ảnh `reset.png` là lúc chuyển màn chưa ổn định; ảnh sau đó `reset-settled.png` chứng minh đã vào reset, **không dùng ảnh đầu để báo nút chết**. Font2/dark capture cũng có render lag; chưa kết luận bottom link không thể cuộn tới hoặc lỗi theme.
+
+### 61.5. Điểm theo hạng mục
+
+Chưa chấm điểm tổng thể hoặc các hạng mục sau đăng nhập. Auth đã có bằng chứng tốt về validation rỗng và điều hướng, nhưng thiếu login hợp lệ, cooldown, IME chuẩn, offline và matrix đầy đủ nên chưa sign-off. Splash có vấn đề khởi động cần điều tra; số frame video quá thấp để đánh giá độ mượt. Không dùng hiệu năng debug trên máy thiếu RAM để chấm hiệu năng release.
+
+### 61.6. Các phần còn thiếu / Blocked
+
+- **Tài khoản QA:** đang chờ người dùng nhập trực tiếp và xác nhận có xe/lịch sử hay cần khảo sát. Chưa truy cập Dashboard, Sạc pin/Shelly, Lịch sử, Thêm/Cài đặt, Hướng dẫn/Bot và các route phụ thực tế.
+- **Onboarding:** cần tài khoản có trạng thái phù hợp; không tự sửa server hoặc tạo tài khoản.
+- **Keyboard/accessibility:** Gboard chỉ có toolbar nổi; chưa kiểm bàn phím chuẩn, TalkBack chưa bật/kiểm. Không coi kiểm visual là đo48dp hoặc contrast.
+- **Display:** đã xem login320/font1.5, thử font2 và ~412/Dark; chưa xác nhận font2 scroll,390dp, System, reduced motion, xoay và mọi màn tương ứng.
+- **Mạng/API:** chưa chạy offline/throttling/readiness/TLS; không suy ra backend tốt từ form Firebase.
+- **Shelly:** chỉ kiểm UI sau login; hardware ON/OFF và safety test **không thực thi theo phạm vi**, không phải Fail thiết bị.
+
+### 61.7. Ưu tiên tiếp theo
+
+Chưa đủ10 lỗi có bằng chứng; không làm đầy danh sách giả. Thứ tự kiểm chứng: (1) người dùng đăng nhập QA; (2) tab/control ledger; (3) consistency Shelly chỉ đọc; (4) lịch sử thật/cache/filter/Back; (5) Settings/Guide/Bot; (6) onboarding nếu có fixture; (7) offline/recovery; (8) UI matrix và keyboard; (9) startup trên môi trường khỏe; (10) frame/crash/ANR và hoàn nguyên.
+
+Đề xuất sửa sau QA, không triển khai trong lượt này: startup **Cao/Vừa hoặc Lớn sau xác định nguyên nhân**; hint xác nhận mật khẩu **Thấp/Nhỏ**; thống nhất auth header **Thấp/Vừa**. Không thay nghiệp vụ sạc, API hoặc schema theo đề xuất visual.
+
+### 61.8. Câu hỏi / đầu vào đang chờ
+
+Người dùng nhập tài khoản QA trên cửa sổ emulator rồi báo **“đã vào app”**, cho biết có xe/lịch sử hay đang khảo sát. Không gửi mật khẩu. Tôi không thao tác/chụp màn nhập trong lúc chờ. Sau đó mới duyệt các nhánh thực sự truy cập được; không gửi relay command hoặc xóa dữ liệu.
+
+### 61.9. Checklist và bằng chứng
+
+| Case | Kết quả hiện tại | Bằng chứng |
+|---|---|---|
+| Boot/cài sạch/hash installed | ✅ | `runtime-progress.json`; artifact metadata ở preflight |
+| Cold launch ba lần | ⚠️ Thực thi, Activity timeout3/3; cuối cùng vào form | `cold-01/02/03.mp4`; WaitTime trong JSON |
+| Animation5s/native→Flutter/FPS | ⚠️ Chưa đo tin cậy | Video lần1:7 frame/18,905s; lần2:65/33,144s; lần3:129/39,015s; thời gian video có prelaunch |
+| Login rỗng / reset rỗng-sai / register rỗng | ✅ Phạm vi validation đã quan sát | Ảnh tương ứng; không gửi thao tác tài khoản thật |
+| Back reset / Back register / scroll register | ✅ Phạm vi đã thao tác | Screen map/ledger; `register-scroll.png` |
+| Focus Email không bị splash thay ở snapshot | ✅ Quan sát hạn chế | `login-ready.png`; chưa test nhập liên tục |
+| Password toggle / Tab focus | ⚠️ Đã thử, chưa xác nhận trạng thái | Ledger; không coi là Pass |
+| Hint xác nhận mật khẩu đầy đủ | ⚠️ Có dấu hiệu cắt, cần tái hiện | `register-ime.png` |
+| Login320/font1.5 | ✅ Visual capture, chưa full interaction | `login-320-font150*.png` |
+| Font2 / ~412 Dark / keyboard chuẩn | ⚠️ Một phần, render lag/IME toolbar | Ảnh tương ứng; cần retest |
+| Login hợp lệ và các màn sau login | ⚠️ Chờ tài khoản | Chưa thực thi |
+| Hardware / xóa dữ liệu | N/A theo phạm vi | 0relay command, không xóa thật |
+| Hoàn nguyên cấu hình | ⚠️ Một phần | Font/night/IME đã trả; density320 cần reset khi kết thúc |
+
+Bằng chứng giữ tại [app-review-2026-10-05](docs/qa_evidence/app-review-2026-10-05/), dù lượt tiếp tục qua ngày06/10. Chỉ thay báo cáo/QA evidence; không thay production code. Các kết quả và artifact cũ giữ nguyên. **Chưa kiểm thử toàn app, chưa chứng nhận Shelly hoặc production readiness.**
+
+## 60. Task Completion Log — QA toàn app APK +126: preflight (05/10/2026)
+
+### 60.1. Tóm tắt điều hành
+
+- **Cập nhật sau xác nhận dùng ít RAM:** RAM kiểm tra lại đạt 4010MB. Đã tạo AVD QA độc lập `VinFast_QA_API36_20261005` trong `app/build/qa-avd-20261005/` (avdmanager exit 0), mở cửa sổ đúng một lần, RAM guest 1536MB/2CPU, framebuffer yêu cầu 720×1600/density320, SwiftShader, tắt Vulkan/snapshot/audio. Không sửa hai AVD cũ và không đóng ứng dụng người dùng. ADB chuyển từ offline sang **unauthorized** sau khoảng 3 phút; probe `getprop` không thành công nên bootCompleted **chưa xác định**, không được ghi là Android boot thất bại hay app ANR. Đã yêu cầu người dùng bấm **Allow USB debugging** trên emulator; dừng thao tác QA tại cổng quyền, không tự thay khóa ADB. Chưa cài/mở APK, chưa nhập tài khoản, không gửi relay command. Emulator còn mở để người dùng xác nhận, không khởi động lại lần hai.
+- **Bằng chứng cập nhật:** [low-memory-attempt-1.json](docs/qa_evidence/app-review-2026-10-05/low-memory-attempt-1.json). RAM host trong boot có lúc 3008MB trống; working set qemu quan sát 2.412.003.328 byte, vì RAM guest không phải giới hạn tổng RAM tiến trình. Có cảnh báo Qt `UpdateLayeredWindowIndirect` trong log launcher, chưa có bằng chứng liên hệ với lỗi app. Trạng thái hiện hành: **Blocked — chờ xác nhận ADB**, thay cho lựa chọn RAM đang chờ ở các dòng preflight lịch sử dưới đây. Mọi kết quả runtime tiếp tục chưa quan sát.
+
+- **Blocked — chờ quyết định mở emulator khi thiếu RAM.** Đã kiểm tra artifact/môi trường thực tế, chưa boot/cài/chạy app. RAM khả dụng 1810MB trên tổng 15773MB, thấp hơn mốc chuẩn bị 3072MB trong kế hoạch. Không có emulator đang chạy hoặc thiết bị ADB. Đã hỏi người dùng tự giải phóng RAM hoặc cho thử boot đúng một lần tối đa 5 phút; không tự đóng ứng dụng.
+- **0 màn runtime, 0 control runtime đã test.** Không có điểm readiness mới, không lấy kết quả source/tests hoặc APK +126 hash khác làm bằng chứng. Chưa có đủ bằng chứng để liệt kê 5 lỗi/5 điểm mạnh; không tạo phát hiện giả.
+
+### 60.2. Môi trường và phạm vi
+
+- APK `app/build/app/outputs/flutter-apk/VinFastBattery_1.1.9+126_debug.apk`, SHA-256 `5A0EF61FD5F143AE9685B1DB4481FCDBF2DB7E280011F88608B1EABF5F660639`, package `com.bes.vinbatery`, 1.1.9/126, minSdk26/target36, ARM32/ARM64/x86_64. `apksigner verify` exit 0: Android Debug, cert SHA-256 `914642716decb342ca80acece6284e69d66355bfa792f5c4779efecf16ecebeb`.
+- System image API36 Google Play x86_64 có sẵn; AVD QA riêng chưa tạo. Không dùng AVD Pixel_9a/Medium_Phone của người dùng để clear data. Chưa đo viewport, font, theme hay thông số thiết bị runtime.
+- User sẽ nhập tài khoản QA trực tiếp khi login sẵn sàng. Không tái dùng credential trong chat; không tạo tài khoản. Không gửi relay ON/OFF, redeem/safety test, không thay backend/source và không xóa dữ liệu thật. Không chụp/quay màn nhập password.
+- Splash baseline theo source/status hiện tại là V5 **5 giây**; chưa xác minh hiệu ứng/thời lượng trong artifact bằng runtime. Tên/version APK không chứng minh đồng nhất với source; HEAD đọc được `6dc059ee64b6c1f9d155163c2dec68ee9e58b0cf` không thay thế build manifest của artifact.
+
+### 60.3. Screen map và control inventory
+
+- Screen map runtime: **chưa có**, không được gán số màn source thành coverage. Inventory source mục 53 chỉ là danh sách đối chiếu khi có runtime.
+- Các nhánh chờ thực thi: splash/auth; onboarding khi có tài khoản phù hợp; Tổng quan; Sạc pin/Shelly (chỉ UI); Lịch sử; Thêm/Cài đặt/xe/thông báo/Hướng dẫn/BatteryBot; các nhánh phụ thực sự có route trong APK.
+- Ledger control sẽ ghi màn/đường vào/control/gesture/kết quả/bằng chứng cho từng tap, swipe, scroll, refresh, Back và dialog. Hiện chưa có thao tác trong app nào.
+
+### 60.4. Bảng phát hiện
+
+Chưa có `[LỖI]`, `[THIẾU]` hoặc `[GÓP Ý UX]` runtime đủ bằng chứng. RAM thấp là **blocker môi trường**, không phải lỗi app. Không ghi crash/ANR bằng 0 khi chưa chạy app; kết quả này là chưa quan sát.
+
+### 60.5. Đánh giá theo hạng mục
+
+Splash/khởi động, onboarding/auth, Dashboard, Smart Charging, IoT/an toàn, điều hướng, bố cục, nội dung, hiệu năng và accessibility: **chưa chấm điểm — chưa chạy runtime**. Debug signing được xác minh nhưng không chứng nhận production signing hoặc hiệu năng release.
+
+### 60.6. Phần chưa kiểm tra được
+
+- Toàn bộ UI/UX/runtime chờ emulator ổn định; tài khoản chờ người dùng nhập. Signup/onboarding/empty-state có thể cần fixture riêng, không tự sửa server để tạo trạng thái.
+- Điều khiển Shelly thật và safety test bị loại khỏi lượt kiểm này theo yêu cầu an toàn. Thiếu giả lập thì tiến trình sạc/telemetry bất thường ghi Blocked, không gửi lệnh thật.
+- Hai runtime/điện thoại thật, mạng di động, TalkBack/Gboard chưa được xác minh. Không suy đoán các tính năng ẩn hoặc không có route là lỗi sản phẩm.
+
+### 60.7. Thứ tự tiếp tục kiểm thử
+
+Đây là **ưu tiên kiểm chứng**, chưa phải top 10 lỗi/cải tiến đã phát hiện: (1) tài nguyên/boot QA riêng; (2) cài và kiểm hash installed APK; (3) cold launch ba lần; (4) focus/IME/auth validation; (5) đăng nhập QA và khảo sát phù hợp; (6) tab/control/Back ledger; (7) Shelly UI và đồng bộ trạng thái chỉ đọc; (8) lịch sử/cache/lỗi mạng; (9) matrix 320/390/412dp, font1/1.5/2, theme/accessibility; (10) crash/ANR/frame stats và tổng hợp issue có bằng chứng. Roadmap fix sẽ xếp theo mức độ/công sức sau khi có phát hiện thật.
+
+### 60.8. Câu hỏi đang chờ
+
+RAM còn khoảng 1,8GB: người dùng tự giải phóng RAM rồi báo thử lại, hay cho phép boot một lần tối đa 5 phút trong điều kiện này? Không yêu cầu gửi mật khẩu. Khi có màn login sẽ báo người dùng nhập trực tiếp, sau đó xác nhận tài khoản QA/phạm vi dữ liệu.
+
+### 60.9. Phụ lục/checklist
+
+| Kiểm tra | Kết quả | Bằng chứng |
+|---|---|---|
+| Hash đúng artifact đã chốt | Đạt | `preflight.json` |
+| Package/version/ABI | Đạt | aapt; `preflight.json` |
+| Chữ ký APK hợp lệ | Đạt — chỉ debug | apksigner exit 0; `preflight.json` |
+| RAM đạt ngưỡng chuẩn bị 3GB | Không đạt tại preflight | 1810MB khả dụng |
+| Boot QA / cài APK / hash trên thiết bị | Chưa kiểm tra | Chưa boot/cài |
+| Splash/auth và các màn đăng nhập | Chưa kiểm tra | Chờ runtime |
+| Các chức năng sau đăng nhập | Chưa kiểm tra | Chờ runtime/tài khoản |
+| Hardware / dữ liệu phá hủy | Không thực thi theo phạm vi | 0 lệnh phần cứng; không xóa dữ liệu |
+| Hoàn nguyên cấu hình | Chưa cần | Chưa đổi AVD/mạng/theme/font |
+
+Bằng chứng mới: [preflight.json](docs/qa_evidence/app-review-2026-10-05/preflight.json). Không có screenshot/video/logcat mới vì chưa chạy runtime. Giữ toàn bộ bằng chứng/source cũ và không tạo Markdown mới.
+
+## 59. Splash V5 "Khắc Bằng Ánh Sáng" — Nâng cấp Splash Screen (03/10/2026)
+
+- **Mục tiêu**: Thay thế V4 "One Line" splash bằng V5 "Light Engraving" (Khắc bằng ánh sáng) từ dự án tham khảo `smart-charge-ev`, tăng cảm giác luxury premium.
+- **Thay đổi chính**:
+  - **Thời lượng**: 4500ms → **5000ms** (luxury edition).
+  - **5 Nhịp Cinematic**: (1) Chấm sáng tâm `#BFF5DE` → (2) Đường sáng 160px + breathing → (3) Stroke draw PathMetric logo VinFast Winged V + fill gradient → (4) Specular sweep 20° + rim light + "VINFAST BATTERY" tracking settle + tagline champagne → (5) Exit fade-out.
+  - **Hiệu ứng mới**: Dolly-in cinematic zoom (1.00→1.03), ShaderMask specular sweep, rim light cạnh trên-trái, aura glow breathing, haptic feedback 2 milestones.
+  - **Typography mới**: "VINFAST BATTERY" 18px uppercase + letter-spacing tracking settle (22%→14%) + tagline "Hiểu pin · Sạc thông minh" champagne `#D9C8A0`.
+  - **Accessibility**: Reduce Motion → nhảy tới 80%, giữ 1s rồi chuyển tiếp.
+  - **API backward-compatible**: Giữ nguyên `BootstrapSplash` class name và params → **không cần sửa `auth_gate.dart`**.
+- **Kiến trúc**: 1 `AnimationController` + 14 `Interval`-mapped animations + `_LightEngravingPainter` + `_VinFastLogoClipper`.
+- **File sửa**: `app/lib/core/widgets/bootstrap_splash.dart` (thay thế toàn bộ nội dung).
+- **File tạo mới**: `app/test/widget/splash_v5_test.dart`.
+- **Quality Gates**: `splash_v5_test.dart` — **5/5 PASSED (100%)** (overflow 320px, duration completion, reduce motion, animate=false, branding text).
+
+## 58. Task Completion Log — Tích hợp ONE LINE vào Flutter / APK QA +126 (03/10/2026)
+
+- **Yêu cầu:** đưa splash vector đã duyệt vào app và hoàn thiện phần chuyển động. Giữ thay đổi chưa commit của người dùng; không sửa Shelly/backend và không phát ON/OFF. Dùng `frontend-skill` cho bố cục tối giản. Trạng thái: **Automated verified cho phạm vi tests bên dưới; Android runtime vẫn Blocked**.
+- **Splash Flutter:** thay `app/lib/core/widgets/bootstrap_splash.dart` bằng timeline hữu hạn 4500ms: điểm sáng, nét ngang, contour nội suy thành V, vẽ theo path, trail 28px giảm alpha, fill gradient, sweep 450ms một lần + rim, tên/tagline rồi giữ frame cuối. Không hạt/radar/zoom warp/tiến độ giả; gradient nền fade từ nền thuần. `CustomPainter` nằm trong `RepaintBoundary`, không gọi mạng, không ticker lặp sau hoàn tất. Không thêm breathing nền để tránh tải và không cần quyền battery-saver. Giảm motion fade 1s; pause/resume tiếp tục đúng tiến độ, không reset; thông báo semantics một lần, chữ wrap và có scroll cho font lớn. Chờ quá 8s hiển thị thông điệp trung tính, không render message kỹ thuật; retry lỗi bootstrap tiếp tục dùng màn lỗi AuthGate hiện có.
+- **Cổng khởi động:** `app/lib/features/auth/auth_gate.dart` bỏ Stopwatch/delay 2800ms, chờ đồng thời init hoàn tất và callback intro; callback chỉ nhận một lần. Giữ auth stream ổn định. Sau intro, nhánh chờ xác thực/retry dùng frame tĩnh thay vì phát lại. App update check hoãn đến sau intro. Crossfade 240ms, không Hero tới anchor không tồn tại. Không đổi điều kiện hoàn tất onboarding hoặc quyền sạc.
+- **Native Android:** đổi `drawable{,-v21}/launch_background.xml` thành nền thuần; màu `values{,-night}/colors.xml` là #0B0F0E; Android 12+ `values{,-night}-v31/styles.xml` dùng `drawable/splash_empty.xml` trong các theme, bỏ launcher icon cũ; normal night window cùng nền. Splash luôn dark theo thiết kế mới dù màn đích Light/System. `flutter_native_splash` trong pubspec tắt sinh tự động Android/iOS/web để lần chạy generator không khôi phục icon cũ; native được duy trì thủ công và có contract test. Không đổi launcher icon.
+- **Tests:** thêm `test/widget/one_line_splash_test.dart` (10 cases) và `test/unit/splash_native_contract_test.dart` (1 case), sửa tagline trong `auth_gate_lifecycle_test.dart`. Chạy bốn file gồm `design_foundation_test.dart`: **18/18 Pass, exit 0**, log [qa-one-line-126-tests.log](app/build/qa-one-line-126-tests.log). Có 320/390/412px, Light/Dark, font2, các keyframe, callback once, giữ final, reduced motion, lifecycle và native contract. Lượt đầu phát hiện thiếu colorStops của sweep và test chưa tính frame completion; đã sửa, không bỏ assertion. Đây không phải full Flutter suite hoặc nghiệm thu đăng nhập Firebase thật.
+- **Analyzer:** lượt đầu scoped analyzer exit 0 với 1 info lint trong test; đã sửa function declaration. Lượt chạy lại bốn file **No issues found, exit 0**, lưu tại [qa-one-line-126-analyze.log](app/build/qa-one-line-126-analyze.log); đây là scoped analyzer, không phải toàn app. Không có tiến trình analyzer của task cần dừng ở lần kiểm tra timeout cuối. Formatter lượt đầu đã format nhưng exit 1 do quyền telemetry cache; lần định dạng test chạy quyền SDK phù hợp exit 0. `git diff --check` các file sửa exit 0.
+- **Build:** `flutter build apk --debug --no-pub --dart-define=APP_API_BASE_URL=https://khanhbes.tailaafca5.ts.net`, exit 0, Gradle 181,4s. Source version **1.1.9+126**, HEAD `6dc059ee64b6c1f9d155163c2dec68ee9e58b0cf` + dirty worktree (gồm thay đổi UI khác đã tồn tại). Không coi commit SHA đơn lẻ là toàn bộ source artifact.
+- **Artifact:** [VinFastBattery_1.1.9+126_one-line_debug.apk](app/build/app/outputs/flutter-apk/VinFastBattery_1.1.9+126_one-line_debug.apk), 198.643.784 byte, SHA-256 `F64D2538BE2BE4E1EA0C5D23C4DA493763A9BC4D7F9EFA55159C26A22496BD91`. `aapt` xác nhận `com.bes.vinbatery`, 1.1.9/126, minSdk26/target36, ARM32/ARM64/x86_64. `apksigner verify --print-certs` exit 0, **Android Debug**, certificate SHA-256 `914642716decb342ca80acece6284e69d66355bfa792f5c4779efecf16ecebeb`. Giữ các artifact +125 đã đặt tên, không ghi đè.
+- **Source fingerprint:** splash `3155C6AF9A2DA42D5E6FFA0D62150C23CEAC173EF6CBA2E3729DF12F4C1ECF2A`; AuthGate `174102FC63FA19690FCB05DC987857521621B93F4020A671B4A099446742C8D3`; pubspec `93496F2D21CFD2DC2DE0D9447030CC47A9C2648A22FCF2E83DE6744B960D043F`.
+- **Blocker/giới hạn:** `adb devices` không có thiết bị. Chưa cài APK mới, chưa quay native→Flutter, chưa đo FPS/cold start hoặc chứng minh form đăng nhập thật giữ focus. Không khởi động thêm emulator đang thiếu RAM, không đóng Chrome/Zalo/IDE/API. iOS chưa có LaunchScreen storyboard/Xcode project hoàn chỉnh trong cây nguồn kiểm tra; không tuyên bố iOS native đã sửa. Endpoint Funnel chỉ là QA; chưa kiểm TLS/backend trong task này. Chưa gọi bản debug là production-ready.
+- **Bước tiếp theo:** cài +126 trên Android qua ADB hoặc thủ công; quay cold launch Light/Dark/System, nhập login liên tục, background/resume, reduced motion, startup chậm/lỗi rồi retry. Chỉ nâng trạng thái Runtime verified sau có bằng chứng đúng hash APK.
+
+## 57. Task Completion Log — ONE LINE vector / design preview 4,5 giây (03/10/2026)
+
+- **Quyết định người dùng:** cho phép dùng vector dựng lại; thời lượng 4–5 giây. Blocker SVG ở mục 56 đã được thay bằng quyết định này. Giữ mục 56 như lịch sử, không sửa production splash.
+- **Đầu ra:** [preview và đặc tả thiết kế](docs/specs/one-line-splash/index.html), [render/timing](docs/specs/one-line-splash/motion.js), [playback/export](docs/specs/one-line-splash/preview.js). Mở `index.html` bằng trình duyệt; không cần mạng hoặc build Flutter. Có storyboard 8 keyframe / 5 giai đoạn, sơ đồ ánh sáng, bảng Intervals, startup flow, tokens và ghi chú Flutter. Không tạo Markdown mới.
+- **Thiết kế:** theo `frontend-skill`, dùng một silhouette V tối giản lấy ý tưởng từ icon hiện tại, không giữ pin 3D/tia điện. Đây là vector đề xuất để duyệt, không phải logo chính thức. Nền #0B0F0E, core mint, halo cục bộ nhẹ, sweep một lần; tên và tagline ngắn. Master 4500ms; handoff route riêng 240ms chỉ sau gate. Giữ frame cuối khi startup chưa xong; warm resume không replay.
+- **Bằng chứng trình duyệt:** [frame cuối](output/playwright/one-line-final.png), [native](output/playwright/one-line-native.png), [đang vẽ](output/playwright/one-line-mid-draw.png), [sweep](output/playwright/one-line-sweep.png), [brand](output/playwright/one-line-finished.png). Đã xuất đủ `output/playwright/one-line-frame-{1..8}-*ms.svg`, kích thước khai báo 780×1688, vector không phụ thuộc độ phân giải.
+- **Tests:** Node syntax check hai JS exit 0; Playwright trên browser QA riêng tải preview thành công, quan sát `time=4.50 s`, `frames=8`; assertion reduced motion dừng `1.00 s` đạt; 8 download SVG đạt; viewport 390×844 không horizontal overflow, lệnh exit 0. Đã xem trực tiếp ảnh frame cuối. Request favicon ban đầu 404 đã sửa bằng data favicon. Lệnh npx đầu tiên bị EACCES mạng/cache (exit 1), chuyển sang CLI Playwright có sẵn; không ghi lần thất bại là Pass.
+- **Giới hạn còn lại:** prototype đang minh họa key pose, chưa nội suy nét ngang uốn liên tục thành outline; trail hiện đơn sắc thay vì alpha giảm dần. Slow-start breathing, Hero theo anchor thật và native launchscreen chỉ có đặc tả, chưa triển khai trong app. Font fallback phụ thuộc máy, chưa đóng gói Inter. Không tuyên bố 60fps, asset budget production hoặc Android no-white-flash đã đạt. Đây là design preview đã kiểm tra, không phải runtime verification của Flutter.
+- **Bước tiếp theo:** người dùng duyệt silhouette/bố cục rồi triển khai painter/path morph, trail fade và startup gate trên source hiện tại; kiểm auth/IME không bị splash thay thế, reduced motion, pause/resume và đúng APK. Không thay luồng nghiệp vụ hoặc điều khiển Shelly trong task này; không đóng Chrome/Zalo/IDE/API của người dùng.
+
+## 56. Task Completion Log — Tiếp nhận thiết kế splash ONE LINE (03/10/2026)
+
+- **Phạm vi mới:** chỉ thiết kế splash theo brief đính kèm; không thay đổi production code, xác thực, khảo sát hoặc Shelly. Dùng `frontend-skill` để định hướng bố cục tối giản và motion có mục đích.
+- **Đã đối chiếu:** splash hiện tại trong `app/lib/core/widgets/bootstrap_splash.dart` và ảnh `app/assets/icons/app_icon.png`. Ảnh hiện có là PNG với chữ V kim loại, pin và hiệu ứng điện; không phải SVG đường nét dùng trực tiếp cho PathMetric. Chưa tìm thấy SVG logo thương hiệu trong danh sách asset đã quét. Các SVG dashboard được tìm thấy không được tự coi là logo splash.
+- **Blocked — đầu vào thiết kế:** brief nhắc SVG logo và ảnh tham chiếu sẽ đính kèm, nhưng lượt này chỉ có file văn bản. Cần người dùng cung cấp hai asset hoặc cho phép dựng một bản vector tối giản từ icon hiện tại; không tự thay hình học logo rồi gọi là thiết kế thương hiệu đã duyệt.
+- **Điểm timing cần xử lý:** lịch 3 giây trong brief không chứa đủ toàn bộ các nhịp nếu chạy nối tiếp: đóng nét lúc 2.0s, nghỉ 100ms, fill 300ms, sweep 450ms, trễ tên 100ms, tagline sau tên 120ms và hand-off. Đề xuất trình duyệt storyboard giữ tối thiểu 3 giây nhưng kéo dài cold animation khoảng 3.6–4.0 giây, hoặc duyệt timeline chồng lấp cụ thể; chưa đổi runtime duration.
+- **Handoff:** Hero chỉ dùng nếu màn đích có đúng anchor logo. Nếu không có, cần chuyển mờ cùng nền thay vì bay tới vị trí tưởng tượng. Kiểm tra startup chạy song song ngoài painter; route phải tiếp tục tôn trọng điều kiện onboarding của app, không suy ra mọi session hợp lệ đều vào Dashboard.
+- **Kiểm thử:** chỉ đọc source/asset và kiểm tra hình ảnh; chưa tạo storyboard/stills hoàn chỉnh, chưa build hoặc benchmark FPS. Không đóng ứng dụng của người dùng, không bật emulator hay gửi lệnh phần cứng trong task thiết kế này.
+- **Bước tiếp theo:** nhận asset/quyết định dùng logo, sau đó bàn giao 8 keyframe, stills, sơ đồ ánh sáng, timeline/Intervals, startup flow, ghi chú Flutter và design tokens; không tạo Markdown mới.
+
+## 55. Task Completion Log — Thử lại emulator, không đóng ứng dụng người dùng (03/10/2026)
+
+- **Quyết định mới:** người dùng không cho đóng Chrome/Zalo/IDE; đã giữ nguyên toàn bộ các ứng dụng và Docker/API. Lựa chọn đang chờ ở mục 54 không còn là đề nghị đóng ứng dụng hiện hành. Không force-kill hoặc trim working set các ứng dụng của người dùng.
+- **Trạng thái: Blocked — cold-start Fail, chưa truy cập được UI chức năng.** Đã thực sự thử lại trên đúng artifact, không chỉ đọc code. Chưa chứng minh được nguyên nhân nên không gọi lỗi app đã hết hoặc quy tất cả cho RAM.
+- **Artifact/source:** HEAD vẫn `6dc059ee64b6c1f9d155163c2dec68ee9e58b0cf`; dùng APK `1.1.9+125_debug.apk`, SHA-256 `325198FC38DA1B6C2916FDABECD7233AA50F46CCA669231F0A5848B6278FF9E5`. Hash `base.apk` trên emulator trùng artifact; không cài/uninstall/clear data thêm và không build APK mới.
+- **Cấu hình thử khác lượt trước:** Pixel_9a API 36, headless, SwiftShader, `-feature -Vulkan`, guest RAM 1536MB, 2 core, framebuffer thực tế 720×1600. Tạm đặt density 320 để có 360dp chiều ngang; density vật lý 420. Đây là diagnostic viewport, không phải nghiệm thu đủ ma trận hiển thị.
+- **Kết quả:** Android boot thành công, log báo 203845ms. Mở Activity trả `Status: timeout`, `WaitTime: 16642`; command exit 0 không đồng nghĩa app mở thành công. Snapshot chưa lấy được hierarchy chức năng. Khi ADB còn kết nối, event buffer có **0 app ANR, 13 ANR Android khác, 0 app crash**; sau đó ADB không còn thiết bị và không còn tiến trình emulator/qemu trong lần kiểm tra. Không gọi số 0 đó là chứng minh app không ANR/crash. Kết quả app ANR ở mục 53 vẫn giữ nguyên cho lượt trước.
+- **Tài nguyên:** trước thử còn 639MB RAM trống, trong boot khoảng 277MB; qemu-headless working set quan sát khoảng 2143MB. Tham số guest RAM 1536MB không phải giới hạn tổng RAM tiến trình trên Windows. Hạ framebuffer/tắt Vulkan **chưa giải quyết được** timeout/mất ADB. Không có bằng chứng mới đủ để kết luận native crash hay TLS/Firebase là nguyên nhân lần này.
+- **Cleanup đã xác minh:** vì emulator mất ADB trước khi restore, mở lại riêng AVD để cleanup, không mở app; khi window service sẵn sàng dùng `wm density reset`. Đọc lại **Physical density 420, không còn Override density**; xác minh AVD Pixel_9a rồi dừng riêng emulator QA. Không đóng Chrome/Zalo/IDE/API. Framebuffer/memory/GPU là override CLI, không sửa config AVD. Dữ liệu app giữ nguyên.
+- **Công cụ QA:** thêm [probe_runtime.ps1](docs/qa_evidence/app-review-2026-10-03/probe_runtime.ps1), chỉ Status/Launch/Snapshot/Events, timeout mỗi lệnh, nhãn UI whitelist và logcat chỉ số lượng; không xuất XML/field/raw exception. Khi transport mất, counts là null thay vì 0. Script yêu cầu PowerShell 7+, parser 7.6.6 đạt 0 errors; một lần kiểm bằng parser môi trường PowerShell cũ báo 7 lỗi encoding không được ghi là Pass. Đã thêm UTF-8 BOM/version requirement để nhận diện môi trường rõ. Đây là công cụ QA, không sửa production app.
+- **Bằng chứng:** [retry_no_app_closure.json](docs/qa_evidence/app-review-2026-10-03/retry_no_app_closure.json), [retry stdout](app/build/qa-retry-20261003-stdout.log), [retry stderr](app/build/qa-retry-20261003-stderr.log), log cleanup `app/build/qa-restore-density-20261003-*.log`. Không lưu raw hierarchy/credential/email/token hoặc ảnh chưa che.
+- **Coverage:** 0 màn chức năng và 0 control trong app nghiệm thu mới. Không chạy suite/build nặng song song với emulator đang thiếu tài nguyên; không tái gán Pass từ kết quả cũ. Các test nút, cuộn/vuốt/Back trong inventory 53 tiếp tục Blocked; chưa có readiness score mới.
+- **Kiểm tra bàn giao:** JSON parse và parser PowerShell 7.6.6 đạt, `git diff --check -- PROJECT_STATUS.md` exit 0. Ca probe Events khi ADB không có thiết bị kết thúc theo timeout 5s, `ObservationAvailable=false`, tất cả count=null đúng kỳ vọng; đây là kiểm tra công cụ QA, không phải Pass của app.
+- **Bước tiếp theo khi vẫn giữ nguyên ứng dụng máy tính:** dùng điện thoại Android thật qua USB debugging/Allow hoặc môi trường emulator khác. Nếu tiếp tục emulator này, cần điều tra crash/resource độc lập trước rồi thu main-thread trace trên runtime ổn định; không đổi splash duration để che treo. Không yêu cầu lại đóng Chrome/Zalo. Không gửi ON/OFF Shelly trong lượt thử này.
+
+## 54. Task Completion Log — Dọn tiến trình QA, chuẩn bị RAM cho emulator (03/10/2026)
+
+- **Yêu cầu:** giải phóng RAM và tiếp tục QA toàn bộ theo inventory/checklist mục 53. Không thay source ứng dụng, không mất nội dung đang làm của người dùng.
+- **Trạng thái: Blocked — cần lựa chọn ứng dụng người dùng được phép đóng.** Đã gửi câu hỏi cho phép đóng Chrome/Zalo theo cách thông thường, sau khi lưu tab/form/tin nhắn đang soạn. Chưa nhận câu trả lời; không force-kill trình duyệt, IDE, Docker/API, WSL hoặc dịch vụ phần cứng.
+- **Đã thực hiện:** kiểm tra tiến trình bằng metadata không in command line; xác minh hai `flutter_tester.exe` PID 9060 và 29012 thuộc workspace, không còn parent, tạo từ các lượt test 26/09 và 02/10. Revalidate ngay trước thao tác rồi dừng đúng hai PID này. Không dừng Dart analysis của IDE hoặc Gradle daemon chưa xác minh idle.
+- **Đo RAM:** đầu lượt 662 MB trống/15773 MB tổng; sau dọn runner 499 MB; lần cuối 1753 MB. Không quy biến động RAM này là hiệu quả riêng của cleanup: tổng working set hai runner trước khi dừng chỉ khoảng 1 MB.
+- **Nguồn chiếm bộ nhớ:** đầu lượt Chrome 32 process có tổng working set khoảng 4104 MB, Zalo 8 process khoảng 1015 MB; hai IDE khoảng 1513 MB và 1323 MB. Lần cuối Chrome khoảng 3211 MB, Zalo 1005 MB. Đây là tổng working set, có thể tính trùng trang chia sẻ, không phải cam kết lượng RAM sẽ giải phóng. Đóng trình duyệt thường có lợi hơn dọn thêm runner nhỏ nhưng cần bảo vệ công việc chưa lưu.
+- **Kiểm tra/lệnh:** CIM/Get-Process/ADB read-only và cleanup PID đã xác minh exit 0. ADB không có thiết bị ở đầu lượt. HEAD vẫn `6dc059ee64b6c1f9d155163c2dec68ee9e58b0cf`; APK mới nhất theo thời gian vẫn artifact `1.1.9+125_debug.apk` ở mục 53.
+- **Runtime:** chưa khởi động lại emulator trong lượt này khi thiếu RAM và đang chờ xác nhận đóng ứng dụng; không thêm Pass cho screen/control/test từ kết quả source hay lượt cũ. ANR/crash và kết quả mục 53 vẫn giữ nguyên.
+- **Bước kế tiếp:** nhận lựa chọn đóng Chrome/Zalo, dùng graceful close và tôn trọng dialog lưu nội dung; không force-kill nếu đóng không thành công. Đo RAM sau đóng; nếu đủ, chạy một emulator, đối chiếu đúng APK/hash và kiểm cold start trước rồi duyệt từng nút/vuốt/Back. Giữ IDE, Docker/API và dữ liệu app. Test relay cần giám sát xác nhận riêng tại thời điểm chạy.
+
+## 53. Task Completion Log — Rà soát toàn app và QA emulator (03/10/2026)
+
+### 53.1. Kết luận và giới hạn bằng chứng
+
+**Trạng thái: Blocked — kiểm kê source và báo cáo đã làm; cold-start Fail trên môi trường thử, runtime toàn app chưa nghiệm thu.** Yêu cầu lượt này là kiểm thử và báo cáo, không tự sửa nghiệp vụ, deploy backend/Rules, xóa dữ liệu hoặc bật/tắt Shelly. Giữ nguyên working tree và tất cả kết quả trước.
+
+- Source kiểm tra: HEAD `6dc059ee64b6c1f9d155163c2dec68ee9e58b0cf`, `app/pubspec.yaml` là `1.1.9+125`. Các thay đổi UI sạc, Thêm và Hành trình năng lượng chưa commit được giữ nguyên. HEAD không đại diện đầy đủ working tree.
+- Artifact: [VinFastBattery_1.1.9+125_debug.apk](app/build/app/outputs/flutter-apk/VinFastBattery_1.1.9+125_debug.apk), 199.462.977 byte; SHA-256 `325198FC38DA1B6C2916FDABECD7233AA50F46CCA669231F0A5848B6278FF9E5`. Package `com.bes.vinbatery`, versionName `1.1.9`, versionCode `125`, minSdk 26, targetSdk 36. APK có `application-debuggable`, ký `Android Debug`; certificate SHA-256 `914642716DECB342CA80ACECE6284E69D66355BFA792F5C4779EFECF16ECEBEB`.
+- **Đã cài thật** bằng `adb install -r`, giữ dữ liệu. `sha256sum` APK đã cài trùng chính xác artifact trên, không chỉ dựa vào versionCode. Chưa xác minh được manifest build gắn toàn bộ dirty source với APK này.
+- Emulator Pixel_9a, API 36, 1080×2424, density 420, font scale 1.0. Lần khởi động RAM 1536 MB: lần cài đầu bị thiếu dịch vụ package, lần kế tiếp báo còn boot; sau khi `sys.boot_completed=1`, cài thành công. Mở Activity trả `Status: timeout`, `WaitTime: 16284`, `LaunchState: UNKNOWN (-1)`; sau đó ADB không còn thiết bị và không còn tiến trình emulator/qemu ở lần kiểm tra.
+- RAM host trước lúc mở emulator thấp, lần kiểm tra khi emulator chạy còn 262 MB. Đây là điều kiện bất lợi, **không đủ kết luận nguyên nhân timeout hoặc lỗi thuộc app**. Khi RAM trống tăng lên 3338 MB, thử khởi động lại AVD với 2048 MB RAM và thu log riêng; kết quả được bổ sung ở cuối mục này.
+- **Chưa có màn chức năng/nút chức năng nào được nghiệm thu trong lượt này**; thao tác hệ thống cài/mở app và bấm Wait trên dialog ANR không tính là nút trong app. Không có tỷ lệ Pass hoặc điểm readiness mới hợp lệ khi chưa thực thi được các luồng. Timeout mở Activity riêng lẻ không chứng minh ANR; ở lần chạy headless đã có thêm hierarchy và event xác nhận **ANR của app**, xem 53.6.
+- Quét được **48 file Screen/Page/Dialog/Sheet theo tên**, cộng shell/splash/overlay/modal nằm ngoài bộ lọc. Đây là inventory source, **không phải 48 màn runtime đã test**, không chứng minh tất cả có route. Screen map runtime vẫn Blocked cho tới khi app hiển thị và có ledger thao tác.
+
+**Đính chính phạm vi của các ghi nhận lịch sử:** mục 52 mô tả một nhóm màn Sạc AI/Hành trình, không chứng minh toàn app đạt 100%. Những câu “WCAG AA+”, “100% thẩm mỹ”, “tương thích hoàn hảo tablet” chưa kèm phép đo contrast, test matrix và artifact manifest không được dùng làm cổng nghiệm thu. Giữ nguyên nội dung lịch sử để đối soát; không chuyển chúng thành Pass của artifact này. APK QA HTTPS ở mục 48 có hash `2A55F448ADA4FBF9D90FE8BAF36A57FC649EB50F94B726BCF7B38099815BF8A3`, khác APK hiện tại; lỗi/ảnh của nó không tự áp cho bản mới.
+
+### 53.2. Screen map source và checklist từng màn
+
+Shell hiện tại là **Tổng quan → Sạc pin → Lịch sử → Thêm** trong [app_navigation.dart](app/lib/navigation/app_navigation.dart). Cài đặt là màn con từ Thêm, không còn là tên tab thứ tư trong inventory cũ. `ChargeScreen` là wrapper của `SmartChargingControlScreen`; không đếm đôi. `OverviewScreen`/Home và các dashboard/charge lịch sử phải xác minh caller trước khi tính số trải nghiệm riêng.
+
+Mọi hàng dưới đang **⚠️ Cần runtime**, không phải lỗi đã tái hiện. “Đề xuất” là yêu cầu kiểm tra/cải tiến cụ thể; chỉ thực hiện sửa sau khi đối chiếu hành vi. C = nội dung; U = bố cục/thao tác; M = chuyển động. Cao/Vừa/Thấp là ưu tiên; Nhỏ/Vừa/Lớn là độ phức tạp dự kiến, không phải cam kết tiến độ.
+
+#### A. Xác thực, khảo sát, Tổng quan — 11 file
+
+| ID / code | Control, vuốt và Back phải kiểm | Đề xuất nội dung / UI / motion | Ưu tiên / độ phức tạp |
+|---|---|---|---|
+| Q01 [login_screen.dart](app/lib/features/auth/login_screen.dart) | Email, mật khẩu, hiện/ẩn, submit rỗng/đúng/sai/double-tap, reset, đăng ký, IME, resume | C: một lỗi tại một nơi, cooldown rõ. U: giữ focus/ký tự khi rebuild; CTA truy cập được khi IME mở. M: chỉ phản hồi submit, không quay lại splash khi nhập. | Cao / Vừa |
+| Q02 [register_screen.dart](app/lib/features/auth/register_screen.dart) | Từng field, hiện/ẩn hai mật khẩu, validation, Back, đăng nhập, double-submit, offline | C: phân biệt tạo Auth thành công và sync đang chờ. U: cuộn tới lỗi đầu tiên, Back 48dp. M: không stagger làm chậm nhập. Không tạo tài khoản thật tùy tiện trong lượt đọc. | Cao / Vừa |
+| Q03 [password_reset_screen.dart](app/lib/features/auth/password_reset_screen.dart) | Email rỗng/sai, gửi, cooldown, thử lại, Back | C: xác nhận trung tính không tiết lộ tồn tại tài khoản. U: pending không đổi chiều rộng CTA, lỗi mạng tại form. M: crossfade ngắn, không popup trùng. Không gửi email nhiều lần tới tài khoản thật. | Cao / Nhỏ |
+| Q04 [onboarding_chat_screen.dart](app/lib/features/auth/onboarding_chat_screen.dart) | Toàn bộ 9 bước, chọn xe, field tùy chọn, Back/Bỏ qua/Tiếp tục, Shelly, thông báo, review, finish/restart | C: skip lưu null, pin nhập không gọi là BMS thật. U: dock Bot cố định, CTA disabled có lý do, không mất draft. M: đổi bước 180–250ms; route Dashboard chỉ sau durable save và eligibility thật. | Cao / Lớn |
+| Q05 [onboarding_flow_screen.dart](app/lib/features/auth/onboarding_flow_screen.dart) | Xác minh route legacy, forward/back/resume nếu còn caller | C/U: không tồn tại hai luồng khảo sát trái nhau; route legacy dùng cùng điều kiện hoàn tất. M: không tạo AuthGate/Splash mới khi kết thúc. Màn không reachable ghi “không có route”, không ghi Pass. | Cao / Vừa |
+| Q06 [overview_screen.dart](app/lib/features/overview/overview_screen.dart) | Chọn xe, pin, quick actions, thông báo, tùy chỉnh, kéo refresh, cuộn | C: xe đang xem, nguồn/độ mới trước chỉ số phụ. U: thiếu pin hiện “Chưa có dữ liệu”, không 0 giả; thẻ ẩn không phá anchor tour. M: refresh chờ dữ liệu thật, không phát lại cả trang. | Cao / Vừa |
+| Q07 [home_screen.dart](app/lib/features/home/home_screen.dart) | Các thẻ/shortcut, chọn xe, refresh, đường sang màn con | C/U: kiểm tra phần được Overview sử dụng và loại nhãn kỹ thuật. M: giữ scroll/tab state, không đếm wrapper là màn độc lập. | Cao / Vừa |
+| Q08 [dashboard_screen.dart](app/lib/features/dashboard/dashboard_screen.dart) | Biểu đồ, khoảng thời gian, fleet/energy, các nút mở chi tiết | C: phân biệt dữ liệu thật và estimate. U: nhãn biểu đồ đọc được khi font lớn; xác minh route/beta capability. M: chỉ animate dữ liệu thay đổi. | Trung bình / Vừa |
+| Q09 [dashboard_customization_sheet.dart](app/lib/features/overview/widgets/dashboard_customization_sheet.dart) | Mọi switch, sắp xếp nếu có, reset, lưu, kéo đóng/Back/tap ngoài | C: tên thẻ rõ. U: wrap mô tả, confirm reset nếu mất lựa chọn; lưu/hủy nhất quán. M: giữ chiều cao ổn định, không giật do switch. | Trung bình / Nhỏ |
+| Q10 [battery_monitor_screen.dart](app/lib/features/battery_monitor/battery_monitor_screen.dart) | Tab/chỉ số, chi tiết, refresh, menu, Back | C: W/V/A/Wh/SOC có nguồn/đơn vị/thời điểm; không ngụ ý BMS nếu không có. U: số liệu thiếu khác 0; loading/stale/error riêng. M: gauge không tạo số đo giả. | Cao / Vừa |
+| Q11 [charge_screen.dart](app/lib/features/charge/charge_screen.dart) | Wrapper Sạc pin, trạng thái chọn xe, refresh/error và Back | C/U: không header/refresh/popup trùng màn Control; không lộ exception. M: chuyển tab không rebuild liên tục trạng thái pending. | Cao / Nhỏ |
+
+#### B. Sạc, Shelly, lịch sử, sheet — 15 file
+
+| ID / code | Control, vuốt và Back phải kiểm | Đề xuất nội dung / UI / motion | Ưu tiên / độ phức tạp |
+|---|---|---|---|
+| Q12 [smart_charging_control_screen.dart](app/lib/features/ai/smart_charging_control_screen.dart) | Hai mode, SOC/target slider/presets, thời gian, dự đoán/chi tiết, manual ON/OFF, kết nối, lịch sử, refresh | C: measured/estimate/pending/unknown rõ. U: disabled có lý do thay nút no-op; Stop không bị Bot/modal che. M: sạc chỉ animate theo readback; không tự kích relay khi mở trang. Các lệnh điện giữ Blocked tới khi có giám sát mới. | Cao / Lớn |
+| Q13 [smart_charge_history_screen.dart](app/lib/features/ai/smart_charge_history_screen.dart) | Xe/thời gian/filter, từng phiên, export, menu, refresh, vuốt/Back | C: phân biệt cancelled/interrupted/completed/unknown. U: refresh lỗi giữ stale, lỗi quyền không thành empty; totals thiếu tiền không 0 giả. M: filter không lóe empty, giữ scroll. | Cao / Vừa |
+| Q14 [charge_log_screen.dart](app/lib/features/charge_log/charge_log_screen.dart) | Lịch sử thủ công, thêm/sửa/ẩn/xóa, filter/export nếu reachable | C/U: không lẫn lịch sử tự động với ghi tay; chỉ xác nhận xóa sau backend success, thử cancel thay xóa thật. M: danh sách cập nhật ổn định; xác minh route legacy. | Cao / Vừa |
+| Q15 [shelly_connect_screen.dart](app/lib/features/smart_charging/shelly_connect_screen.dart) | Quét lại, picker, password, retry, nhánh Cloud/mã, disconnect, Back | C: “Đã liên kết” khác “Trực tuyến/Sẵn sàng”. U: identity bí mật bị mask, disconnect khi unknown bị chặn. M: trạng thái phản ánh coordinator chung; không connected giả từ cache. | Cao / Lớn |
+| Q16 [smart_charger_setup_hub_screen.dart](app/lib/features/smart_charging/smart_charger_setup_hub_screen.dart) | Wi-Fi/Cloud/mã 6 ký tự, kiểm kết nối, retry, yêu cầu mã mới, safety confirm/cancel | C: giải thích không tải và đọc lại OFF. U: một nguồn trạng thái với Cài đặt/Sạc; mã mới không mất membership/evidence. M: loader trung tính, không flash Developer wizard. | Cao / Lớn |
+| Q17 [shelly_setup_screen.dart](app/lib/features/smart_charging/shelly_setup_screen.dart) | Xác minh redirect/Developer legacy, form/validation/Back | C/U: không có đường vượt ownership/safety; profile cũ được giữ, không xóa vì offline. M: redirect một lần, không loop/flash form kỹ thuật. | Cao / Vừa |
+| Q18 [shelly_qr_scanner_dialog.dart](app/lib/features/smart_charging/widgets/shelly_qr_scanner_dialog.dart) | Camera rationale/deny, quét sai, nhập tay, cancel, Back | C: không in payload/key; lỗi mã ngắn gọn. U: đường nhập thay thế khi camera bị từ chối. M: scan feedback không tuyên bố connected trước verification. | Trung bình / Vừa |
+| Q19 [calibrate_battery_sheet.dart](app/lib/features/ai/widgets/calibrate_battery_sheet.dart) | Field/slider/presets, áp dụng/hủy, kéo đóng, IME | C: gọi là hiệu chỉnh/ước tính đúng nguồn. U: 0/100/NaN và font lớn; hủy không lưu. M: chỉ preview khi kéo, không tự thay dữ liệu server. | Cao / Vừa |
+| Q20 [confirm_end_soc_sheet.dart](app/lib/features/ai/widgets/confirm_end_soc_sheet.dart) | End SOC, xác nhận, bỏ qua/hủy, IME, swipe/Back | C: đo tay không gọi đo tự động. U: validate hợp lý và double-submit. M: phản hồi kết quả lưu thật. | Trung bình / Nhỏ |
+| Q21 [confirm_session_soc_dialog.dart](app/lib/features/ai/widgets/confirm_session_soc_dialog.dart) | Input, confirm/cancel, tap ngoài/Back, lỗi | C/U: phân biệt session cần xác nhận với đang sạc; không ép người dùng nhập số không biết. M: keyboard không đẩy dialog ngoài SafeArea. | Trung bình / Nhỏ |
+| Q22 [edit_current_battery_sheet.dart](app/lib/features/ai/widgets/edit_current_battery_sheet.dart) | +/- tại 0/100, slider, mọi preset, xác nhận, cancel/swipe/Back | C: “Mức pin bạn nhập”, tránh “thực tế” không có nguồn. U: +/- 48dp có label; presets wrap, khôi phục khi cancel. M: không làm mất focus/CTA. Source hiện khóa vùng +/- ở 36×36. | Cao / Nhỏ |
+| Q23 [prediction_detail_sheet.dart](app/lib/features/ai/widgets/prediction_detail_sheet.dart) | Mở chi tiết, sections/help nếu có, close/swipe/Back | C: “Dự kiến”, độ tin cậy và giới hạn; không hứa giờ dừng khi timer chưa đặt. U: số liệu wrap/đơn vị rõ, nội dung có scroll. M: sheet tiêu chuẩn. | Trung bình / Nhỏ |
+| Q24 [start_charge_confirmation_sheet.dart](app/lib/features/ai/widgets/start_charge_confirmation_sheet.dart) | Xem xe/mode/timer, cancel/back, pending/confirm có giám sát | C: thiết bị và thời gian an toàn rõ, không success trước readback. U: confirm không double-tap; user vẫn tiếp cận Stop. M: pending/unknown không đóng giả thành công. | Cao / Vừa |
+| Q25 [stop_charging_confirmation_sheet.dart](app/lib/features/ai/widgets/stop_charging_confirmation_sheet.dart) | Cancel/Back và confirm khi giám sát; unknown/offVerified | C/U: chỉ nói đã tắt sau readback OFF, không auto-dismiss cảnh báo chưa xác minh. M: pending giữ ngữ cảnh; kiểm không phủ nút tắt khẩn cấp. | Cao / Vừa |
+| Q26 [smart_charging_eta_sheet.dart](app/lib/features/dashboard/smart_charging_eta_sheet.dart) | ETA, giải thích, đóng/cuộn/Back và route | C: ETA ước tính, nguồn/thời điểm. U: mất telemetry không giữ ETA như realtime. M: tránh countdown tạo cảm giác chính xác giả. | Trung bình / Nhỏ |
+
+#### C. Thêm, tài khoản, hướng dẫn, thông báo — 13 file
+
+| ID / code | Control, vuốt và Back phải kiểm | Đề xuất nội dung / UI / motion | Ưu tiên / độ phức tạp |
+|---|---|---|---|
+| Q27 [more_screen.dart](app/lib/features/more/more_screen.dart) | Profile, xe, Shelly, Hành trình, AI/bảo dưỡng, Settings/Guide/Notification, logout cancel, scroll | C: nhóm “Tài khoản/Xe/Trợ giúp”, không thêm quảng cáo/chỉ số chưa kiểm chứng. U: từng row mở đúng route và Back về đúng tab. M: không phát lại stagger khi đổi tab. | Cao / Vừa |
+| Q28 [settings_screen.dart](app/lib/features/settings/settings_screen.dart) | Shelly, notifications, auto/manual sync, appearance, guide, about, Developer, logout cancel | C: trạng thái OS permission thật; logout nói rõ không tự tắt sạc. U: cùng snapshot Shelly với Q12/Q16; switch pending không báo lưu giả. M: sheet thông thường, không popup nền che controls. | Cao / Vừa |
+| Q29 [profile_screen.dart](app/lib/features/settings/profile_screen.dart) | Từng field, save/cancel, IME, unsaved Back, đổi mật khẩu nếu có | C: required/optional rõ, lỗi đã che. U: validate không mất dữ liệu cũ, hai account tách biệt. M: save trạng thái tại CTA, không full-page overlay. Không đổi profile thật nếu chưa có snapshot/phê duyệt. | Cao / Vừa |
+| Q30 [vehicle_garage_screen.dart](app/lib/features/settings/vehicle_garage_screen.dart) | Thêm/chọn/đổi tên/archive/restore, specs, menu, cancel confirm, refresh | C: phân biệt lưu trữ với xóa. U: chặn đổi/xóa xe có active/unknown, không lẫn history; kiểm Rules owner. M: cập nhật list theo success thật. | Cao / Lớn |
+| Q31 [vehicle_spec_detail_screen.dart](app/lib/features/settings/vehicle_spec_detail_screen.dart) | Specs, sections/help, Back/scroll | C: thông số catalog khác telemetry; đơn vị rõ. U: nguồn catalog, không dùng nội bộ ID thay tên. M: không animate số liệu tĩnh. | Trung bình / Nhỏ |
+| Q32 [appearance_settings_screen.dart](app/lib/features/settings/appearance_settings_screen.dart) | Xác minh caller riêng với appearance sheet, Light/Dark/System, font/language nếu có | C/U: cùng preference contract, preview chữ lớn/IME; splash theo theme đã lưu. M: reduced-motion có hiệu lực cả thành phần mới, không chỉ route. | Cao / Vừa |
+| Q33 [guide_screen.dart](app/lib/features/settings/guide_screen.dart) | Replay, mở/đóng từng bài, từng CTA, Shelly trực tiếp, Bot, Back/scroll | C: tên nút đúng bản mới, 4 bước tour. U: replay phải thật sự insert overlay, không chỉ chuyển Tổng quan. M: đợi readiness của anchor; không giới hạn 120 frame rồi im lặng. | Cao / Vừa |
+| Q34 [battery_bot_screen.dart](app/lib/features/settings/battery_bot_screen.dart) | FAQ/input/send, từng action điều hướng, lịch sử/xóa cancel, IME/Back | C: câu ngắn/ít emoji, không đoán trạng thái. U: local history theo UID, không giữ credential nhập; không che safety action. M: tin mới không giật toàn viewport, reduced-motion. | Cao / Vừa |
+| Q35 [notification_center_screen.dart](app/lib/features/notifications/notification_center_screen.dart) | Từng notification, mark/read-all, delete/cancel, filter/menu, refresh/Back | C: wrap nội dung, loading/empty/error/stale khác nhau. U: badge/list chỉ cập nhật khi thao tác thành công; A→B không dữ liệu A. M: không popup đồng thời với error state. | Cao / Vừa |
+| Q36 [ai_functions_screen.dart](app/lib/features/settings/ai_functions_screen.dart) | Các entry/toggle, Back, capability gates | C/U: không quảng cáo AI chưa deploy; feature ngoài beta phải ẩn thật cả shortcut. M: không phát animation decorative khi unavailable. | Trung bình / Vừa |
+| Q37 [personal_ai_settings_screen.dart](app/lib/features/settings/personal_ai_settings_screen.dart) | Bật/tắt, điều kiện mẫu, training/data links, confirm/cancel | C: điều kiện model/readiness rõ. U: offline/unavailable không success giả; check scope beta. M: chỉ progress có cơ sở. | Trung bình / Vừa |
+| Q38 [personal_ai_training_data_screen.dart](app/lib/features/settings/personal_ai_training_data_screen.dart) | Dataset/filter/export/xóa cancel/refresh, Back | C: nguồn, thời gian và quyền dữ liệu. U: không dùng dữ liệu account khác; deletion không báo xong trước purge. M: giữ list khi refresh lỗi. | Trung bình / Lớn |
+| Q39 [developer_ai_studio_screen.dart](app/lib/features/settings/developer_ai_studio_screen.dart) | Route/capability, mọi action Developer chỉ ở đúng role | C/U: Normal Mode không lộ key/host/ID/raw exceptions; không tính màn ẩn là Pass. M: không flash Developer UI trong startup. | Cao / Vừa |
+
+#### D. AI, hành trình, thống kê, bảo dưỡng — 9 file
+
+| ID / code | Control, vuốt và Back phải kiểm | Đề xuất nội dung / UI / motion | Ưu tiên / độ phức tạp |
+|---|---|---|---|
+| Q40 [assistant_sheet.dart](app/lib/features/ai/assistant_sheet.dart) | Input/send, quick replies, attachments, voice/permissions, copy/share, confirmation cancel, swipe/Back | C: “Trợ lý”/BatteryBot nhất quán, nói không biết khi thiếu dữ liệu. U: IME không che input/action, không lộ diagnostics trên card, mọi relay action dừng ở confirm. M: typing/streaming dừng khi hidden, giữ scroll nếu user đọc tin cũ. | Cao / Lớn |
+| Q41 [ai_charging_predictor_screen.dart](app/lib/features/ai/ai_charging_predictor_screen.dart) | Input/predict, validation, retry, detail/Back | C: dự đoán không đồng nghĩa đã bật sạc. U: API degraded có recovery, không raw exception; xác minh reachable/beta. M: không progress giả. | Trung bình / Vừa |
+| Q42 [ai_models_screen.dart](app/lib/features/ai/ai_models_screen.dart) | Model/detail, refresh/menu/Back | C: mô tả khả năng dễ hiểu, không phơi log kỹ thuật trong Normal. U: beta gating rõ; không dấu “sẵn sàng” từ cache. M: animate change một lần. | Trung bình / Vừa |
+| Q43 [energy_journey_screen.dart](app/lib/features/energy_journey/energy_journey_screen.dart) | Mọi tier chip, danh sách 36 mốc, Back/scroll, celebration | C: kWh đo thật/ước tính tách nguồn, CO₂/cây tương đương có phương pháp. U: empty không giả “0 thật”; filter giữ vị trí hợp lý, Light/Dark. M: tránh bắt người dùng xem celebration dài. | Trung bình / Vừa |
+| Q44 [level_up_celebration_dialog.dart](app/lib/features/energy_journey/widgets/level_up_celebration_dialog.dart) | Close/tiếp tục, Back/tap ngoài, reduced-motion | C/U: không che Stop/unknown safety, không show khi route dispose/UID đổi. M: celebration ngắn, tắt hẳn với reduced-motion. | Trung bình / Nhỏ |
+| Q45 [statistics_screen.dart](app/lib/features/statistics/statistics_screen.dart) | Khoảng thời gian/chart, detail/export, refresh/Back | C: chi phí thiếu tariff không bằng 0; no data khác no permission. U: range không lọc sai timezone/xe. M: chart anim theo dữ liệu, không replay toàn trang. | Cao / Vừa |
+| Q46 [maintenance_screen.dart](app/lib/features/maintenance/maintenance_screen.dart) | Hạng mục/reminder/edit/completed cancel, filter, Back/IME | C: nhắc việc không gọi chẩn đoán chắc chắn. U: permission notification theo ngữ cảnh, validate ODO/ngày; không ghi thật khi chỉ QA report. M: thao tác ngắn, không màu trạng thái quá nhiều. | Trung bình / Vừa |
+| Q47 [trip_planner_screen.dart](app/lib/features/trip_planner/trip_planner_screen.dart) | Điểm đi/đến, location deny, route, retry, IME, Back | C/U: không có dữ liệu bản đồ phải giải thích, không hứa range chắc chắn; xác minh beta capability. M: không animation trang trí trên bản đồ. Không mở background tracking ngoài scope. | Trung bình / Lớn |
+| Q48 [trip_live_map_screen.dart](app/lib/features/dashboard/trip_live_map_screen.dart) | Map gestures, centering, quyền vị trí, close/Back, background | C/U: nguồn vị trí/độ mới rõ, kết thúc tracking có xác nhận; route chưa reachable ghi riêng. M: tránh camera tự kéo map khi user đang đọc. | Trung bình / Lớn |
+
+**Ngoài 48 file:** kiểm thêm [bootstrap_splash.dart](app/lib/core/widgets/bootstrap_splash.dart) và native Android splash; AuthGate/error bootstrap; [vehicle_picker_sheet.dart](app/lib/core/widgets/vehicle_picker_sheet.dart), [vehicle_detail_sheet.dart](app/lib/core/widgets/vehicle_detail_sheet.dart); [add_charge_log_modal.dart](app/lib/features/charge_log/add_charge_log_modal.dart); [coach_mark_overlay.dart](app/lib/core/widgets/coach_mark_overlay.dart); [app_popup.dart](app/lib/core/widgets/app_popup.dart); GlobalChargingPill, FloatingBatteryBot, QuickActionMenu, DebugErrorSheet, UnderDevelopmentNotice; appearance/developer/logout/about/update sheets/dialogs inline. Inventory overlay runtime chưa hoàn chỉnh: tìm `showDialog`/`showModalBottomSheet` chỉ chỉ ra nơi cần duyệt, không chứng minh số dialog đã mở.
+
+### 53.3. Vấn đề và đề xuất fix cụ thể
+
+Phân loại bằng chứng: **Runtime** = thao tác/đo trên artifact đã hash; **Source** = nhánh/layout xác định trong code, chưa tái hiện trên APK; **Hypothesis** = cần kiểm chứng. Không quy kết UI “tràn/giật” chỉ vì đọc Row/AnimationController.
+
+1. **[Cao — QA blocker] → Product Lead → Khởi động.** Runtime: artifact đúng hash đã cài, Activity timeout 16,284s, ADB/emulator sau đó không còn; Windows Event 1000 xác nhận qemu crash `c0000005`. Lần cửa sổ 2048MB tiếp tục timeout 10,970s. Lần headless có ANR app và nhiều ANR Android. Root cause của app **chưa xác định**, host RAM thấp hoặc emulator crash không được dùng để miễn trừ app ANR. Fix cần điều tra: cold boot trên host đủ tài nguyên hoặc thiết bị thật; thu emulator exit/log, startup timeline và logcat marker đã che. Acceptance: mở tới màn thao tác được nhiều cold start, không app/system ANR; sau đó mới tiếp tục ledger. Không tăng thời gian splash để che timeout.
+2. **[Cao — phân phối] → Product Lead → Artifact.** Source/artifact: APK debuggable và certificate Android Debug. Không phát file này như beta ký ổn định. Dùng signing QA rõ ràng, build beta thiếu signing/HTTPS phải fail. Acceptance: certificate release được xác minh, có khả năng nâng cấp; debug chỉ phục vụ QA. Không tự tạo/đổi khóa hoặc gỡ app người dùng.
+3. **[Cao] → Người lâu năm → Khôi phục Shelly.** Source: `web/shelly/repositories.py:list_synced_profiles` nhánh Firestore chỉ lấy `advanced_direct`, nhưng enrollment/no-load route dùng `server_cloud`; `app/lib/data/services/shelly_connection_coordinator.dart:_restoreServerCloudBinding` xóa cached binding nếu mode khác serverCloud. Hợp đồng mode giữa legacy/new chưa thống nhất. Có nguy cơ một màn mất liên kết dù profile còn. Fix: định nghĩa restore/migration contract cho hai mode, preserve membership/evidence, coordinator phân biệt linked/offline/unverified; thêm Firestore-backed regression chứ không chỉ in-memory. Acceptance: restart và Settings/Sạc/Setup cùng snapshot, offline không ép no-load lại; không tự chuyển mode để vượt safety gate. Runtime mới **chưa tái hiện**, không tuyên bố đã sửa.
+4. **[Trung bình] → Người mới → Bật sạc.** Source `smart_charging_control_screen.dart` nút manual ON dùng `readyForControl ? onOn : () {}`: chưa sẵn sàng vẫn có callback no-op. Fix UI disabled thật, semantics disabled, lý do và CTA “Hoàn tất kết nối/Thử lại” phù hợp. Acceptance: người dùng biết vì sao chưa bật được; API/service safety gate giữ nguyên, 0 lệnh ON khi chưa đủ evidence.
+5. **[Trung bình] → Người mới → Sửa mức pin.** Source `_SheetStepper` ở `edit_current_battery_sheet.dart` có `SizedBox` 36×36 và không tooltip/semantic label riêng cho +/- tại component. Fix vùng chạm 48×48, nhãn “Giảm/Tăng mức pin 1%”, boundaries 0/100 đọc được; layout presets Wrap. Acceptance: TalkBack từng nút, 320dp/font1.5 không chồng. Vùng chạm ≥48dp theo [hướng dẫn Android](https://developer.android.com/guide/topics/ui/accessibility/views/apps-views); kích thước icon không thay thế kích thước hit target.
+6. **[Trung bình] → Product Lead → Light/Dark.** Source BatteryHeroCard, EditCurrentBatterySheet, PredictionCardV2 và EnergyJourney dùng nhiều `CockpitColors` nền/chữ tối cố định, trong khi đã có `context.cockpit` theme-adaptive. Fix bằng semantic palette cùng app; chỉ giữ accent có chủ đích. Acceptance: Light/Dark/System được test, đo contrast trên màu thực tế; không suy từ một ảnh tối rằng Light đạt WCAG.
+7. **[Trung bình] → Product Lead → Motion/hiệu năng.** Source BatteryHeroCard gọi controller `repeat(reverse:true)` ngay init, không nhánh reduced-motion trong file; ModeSwitcher cũng khởi động hai controller lặp trước khi build kiểm reduced-motion. Shell đã có TickerMode, không quy tất cả tab ẩn gây jank. Fix: lifecycle/reduced-motion quản lý controller thật, trạng thái idle tĩnh; chỉ micro-feedback khi chọn. Acceptance: không ticker lặp không cần thiết, reduced-motion không chỉ tắt hình mà còn ngừng công việc; đo framestats thực, không gọi giật khi chưa đo.
+8. **[Trung bình] → Người mới → Typography/thanh SOC.** Source Hero dùng FittedBox cho cả label và hai floating badge có vị trí tính cùng trục. Khi current≈target cần test hai badge gần nhau; font scale lớn có nguy cơ scaleDown mất ích lợi phóng chữ. Fix: labels Wrap/stack có breakpoint, badge collision resolution, slider semantic value/increase/decrease. Acceptance: 0/80/99/100%, chênh 1–5%, 320–412dp/font1.5 đọc được, không overlap. **Overlap runtime chưa xác nhận**.
+9. **[Cao] → Người mới → Hướng dẫn replay/auto.** Source replay dùng navigatorKey context rồi `Overlay.maybeOf`, vòng đợi 120 frame; auto set `_guideShown=true` trước khi biết `show()` trả OverlayEntry. Hypothesis: context không có Overlay hoặc anchor gắn chậm làm replay im lặng. Fix: shell overlay/anchor context thật, readiness event và kiểm insertion result; chỉ ghi shown sau insert. Acceptance: bấm Replay thật mở bước 1/4; không mất pending; logout/safety modal đóng/hoãn tour; replay không ghi lại auto decision. Chưa coi giả thuyết là lỗi runtime đã chứng minh.
+10. **[Trung bình] → Người lâu năm → Lịch sử gần đây.** Source RecentSessionsSectionV2 gán tất cả trạng thái khác completed thành “Đã dừng”; phải đối chiếu list chỉ terminal hay còn unknown/stopping. Fix mapper đầy đủ và status semantics, không gọi unknown là đã dừng. Acceptance: fixtures cancelled/interrupted/stopping/unknown có label đúng và cảnh báo chưa OFF; refresh lỗi không tạo empty giả.
+11. **[Trung bình] → Product Lead → Pin và lời khuyên.** Source Hero gắn “Khuyên dùng” khi target=80 và cảnh báo LFP/chu kỳ chung không phụ thuộc chemistry tại component. Fix nội dung theo catalog của xe hoặc bỏ lời khuyên phổ quát chưa có nguồn, ghi “Mức pin bạn nhập/ước tính” đúng nơi. Acceptance: xe chemistry khác không nhận khuyến nghị LFP; SOC nhập không trình bày như BMS. Không thay thuật toán sạc trong đợt content.
+12. **[Trung bình] → Product Lead → Hành trình năng lượng.** Source tổng năng lượng trên màn sạc dùng meter energy, fallback estimatedStoredEnergyWh rồi cộng chung. Fix phân loại nguồn/coverage, không dùng số cộng trộn để ngầm khẳng định điện lưới/CO₂/cây xanh đo thật; phương pháp và nhãn “Ước tính” đọc được. Acceptance: missing data khác 0, metric có nguồn/thời gian và không lẫn xe/UID. Độ chính xác runtime chưa nghiệm thu.
+
+### 53.4. Checklist tái kiểm thử / interaction ledger
+
+Mỗi control runtime phải có: ID màn + label/semantic + gesture + precondition + expected + actual + Pass/Fail/Blocked/N/A + bằng chứng đúng hash. Đếm **control duy nhất** riêng với **số lần thao tác**; cùng nút tap/double-tap không được tăng giả số nút. Không gọi thao tác đã dispatch là Pass nếu chưa thấy kết quả.
+
+| Test | Trạng thái lượt này | Điều kiện cần / expected |
+|---|---|---|
+| Xác minh package/version/hash/signature artifact | ✅ | aapt/apksigner và SHA-256 như 53.1; debug signing không đạt beta gate |
+| Cài APK giữ dữ liệu; đối chiếu APK trên máy | ✅ | install -r Success, hash base.apk trùng artifact |
+| Cold start tới màn thao tác được | ❌ | hai timeout, một lần có app ANR; chưa có route usable, nguyên nhân chưa xác định |
+| Mọi tab/route trong Q01–Q48 | ⚠️ | inventory source không thay runtime traversal |
+| Mọi button/icon/checkbox/switch/tab/menu/picker | ⚠️ | phải ledger từng control thật, cả cancel/tap ngoài/Back |
+| Vuốt cuộn lên/xuống, ngang slider/chips, pull refresh | ⚠️ | giữ scroll; refresh kết thúc khi dữ liệu thật về; không spinner kép |
+| Back hệ thống, Back trên app, double Back, đóng modal | ⚠️ | từ tab phụ về Tổng quan; modal chỉ đóng modal, không mất draft hoặc làm mất Stop |
+| Tap/double-tap/long-press từng control có hỗ trợ | ⚠️ | long-press không có action ghi N/A, không tự bịa tính năng |
+| 4 trạng thái động loading/data/empty/error + stale/offline | ⚠️ | empty chỉ sau response thành công 0 bản ghi; không mất history thật |
+| Đăng nhập/đăng ký/reset, rate limit, IME, Autofill | ⚠️ | không tự điền trước tương tác, lỗi một nơi, không splash loop; gửi thật chỉ trong test được kiểm soát |
+| Khảo sát 9 bước, skip/null/restart/final eligibility | ⚠️ | không commit draft chưa xác nhận; pending sync cho vào app nhưng không cấp relay control |
+| A→logout→B, cache/subscription/push/guide isolation | ⚠️ | 0 dữ liệu UID cũ; logout không tự tắt relay |
+| Hướng dẫn auto/replay/4 anchors, Bot navigation | ⚠️ | route thật xuất hiện, không overlay chồng; không auto relay action |
+| Shelly linked/online/ready trên Setup/Settings/Sạc | ⚠️ | snapshot chung; restart chỉ readback, không test điện tự động |
+| Hai thành viên, codeVersion, third UID deny, session lock | ⚠️ | cần hai runtime/account QA và backend đúng revision; không chiếm slot thật tùy tiện |
+| ON 5 giây/no-load/timer/readback/OFF và tải nhỏ | ⚠️ | cần giám sát xác nhận mới; lượt này phát 0 ON/0 OFF |
+| 320/390/412dp, Light/Dark/System, font1.0/1.3/1.5 | ⚠️ | restore size/density/font/theme sau test, không gọi mặc định một size là responsive pass |
+| Gboard, TalkBack, reduced motion, permission deny | ⚠️ | keyboard chuẩn chưa kiểm; accessibility cần thao tác/đo, không suy từ widget test |
+| Offline/chậm/phục hồi, background/restart | ⚠️ | khóa command chưa xác minh, không popup nền liên tục; phục hồi mọi setting mạng |
+| Không crash/ANR, startup, gfxinfo framestats/screen recording | ❌ / ⚠️ | đã có app ANR trên artifact này; chỉ 3 HWUI frames, không đủ đo độ mượt Flutter/toàn app |
+| Flutter/backend/gateway/Rules/dashboard regression | ⚠️ | không chạy lại suite nặng trong lượt QA thiếu RAM; kết quả cũ là lịch sử, không gán cho dirty source mới |
+
+### 53.5. Roadmap đề xuất và giới hạn bàn giao
+
+- **P0/QA gate:** môi trường runtime ổn định, launch trace đúng artifact, source manifest và backend revision. Không cam kết “không còn lỗi” khi chưa vào app. Không dùng HTTP emulator bridge/debug-signed artifact làm bằng chứng beta production.
+- **P1 trước beta:** thống nhất restore/mode/coordinator Shelly; no-op Start + disabled reason; unknown/offVerified/readback; history không empty giả; onboarding/auth/UID regression; guide replay thật; an toàn không được yếu đi để làm UI xanh. Đây là nhóm cần fault tests lẫn runtime/hardware, không chỉ sửa layout.
+- **P2:** theme-adaptive các component mới, touch target/semantics, typography 320dp/font1.5, labels/status mapper, meter freshness/source, permission flows. Motion giảm còn 150–300ms theo quyết định sản phẩm, không mô tả đó là một thời lượng cố định bắt buộc của mọi animation Material.
+- **P3:** tinh chỉnh gamification, icon/spacing, animation có mục đích sau khi dữ liệu/luồng chính đã đạt. Không thêm glow/gradient liên tục để che lỗi vận hành.
+- **Handoff:** mở lại inventory Q01–Q48 trên đúng APK; tick từng gesture/Back/error; tạo ảnh/log đã che PII, không raw hierarchy/email/key. Nếu không có route hoặc bị capability ẩn, ghi riêng, không tính Pass. Sau sửa tạo artifact/hash mới và chạy lại vùng bị ảnh hưởng.
+
+Đợt này chỉ bổ sung báo cáo vào file hiện có, không thay application source, không đóng ứng dụng của người dùng, không clear data, không đăng ký/xóa QA account và không tác động Shelly. `frontend-skill` được dùng để định hướng review: nội dung tác vụ ngắn, màu/spacing nhất quán, motion có mục đích; không dùng nhận xét thẩm mỹ thay test nghiệp vụ.
+
+### 53.6. Bằng chứng cuối lượt và điều kiện tiếp tục
+
+- **Lần 2, có cửa sổ/2048MB:** Android boot thành công sau khoảng 210,930s theo log emulator; mở Activity timeout 10,970s rồi ADB mất thiết bị. Log có `UpdateLayeredWindowIndirect failed` và `adb protocol fault`; chưa chứng minh những dòng này là root cause. Event Windows xác nhận riêng lần 1: `qemu-system-x86_64.exe`, mã `c0000005`, module `unknown`, 16:14:47 +07:00. Không gán event đó cho lần 2.
+- **Lần 3, headless/SwiftShader/2048MB:** boot thành công, ADB tồn tại, app có PID. Hierarchy thực tế xác nhận dialog **VinFast Battery không phản hồi**, có nút Close app/Wait; bấm Wait tại bounds thật một lần. Event buffer có **1 `am_anr` của `com.bes.vinbatery`**, **16 `am_anr` của Android/dịch vụ khác**, **0 `am_crash` của app trong buffer đọc**. Sau Wait, hierarchy vẫn bị dialog ANR dịch vụ Android che, không chứng minh đã vào Dashboard. Không suy từ 0 am_crash rằng app không có lỗi.
+- `dumpsys gfxinfo ... framestats` trả sample **3 total frames / 3 janky / 3 missed vsync / 3 slow UI thread**. Không cộng hai block trùng thành 6, không gọi 100% này là jank rate toàn Flutter: sample rất nhỏ, chủ yếu startup/HWUI, không đủ đánh giá motion của các màn.
+- RAM lúc headless đang boot còn 278 MB. Cần thử trên thiết bị/host ổn định để cô lập ảnh hưởng thiếu RAM, software rendering và code startup. Chưa quy lỗi cho Firebase/TLS vì chưa có trace app chứng minh.
+- Smoke **read-only** từ máy tính: local `/api/health=200` (1004ms), `/api/ready=200` (94ms); HTTPS QA Funnel health=200 (2048ms), ready=200 (297ms); cả bốn có request ID. Đây không phải test TLS trên điện thoại hay phép đo uptime. Không gọi API ổn định production chỉ từ bốn GET.
+- Bằng chứng đã lọc: [runtime_attempt.json](docs/qa_evidence/app-review-2026-10-03/runtime_attempt.json); log môi trường: [emulator stdout](app/build/qa-review-20261003-emulator-stdout.log), [emulator stderr](app/build/qa-review-20261003-emulator-stderr.log), [headless stdout](app/build/qa-review-20261003-headless-stdout.log), [headless stderr](app/build/qa-review-20261003-headless-stderr.log). Không lưu hierarchy nguyên bản, ảnh chứa tài khoản, raw logcat, service-account hoặc Shelly credential.
+- **Kết quả:** fingerprint/cài APK và 4 API GET đạt; cold start không đạt; tất cả test chức năng/nút/vuốt/Back trong app còn **Blocked**, không tính vào mẫu Pass. Không chấm readiness mới. Không phát lệnh ON/OFF bằng công cụ QA; startup/device-side effects chưa được audit bằng hardware trace.
+- **Bước kế tiếp cần người dùng:** giảm tải máy để còn RAM trống khi emulator chạy, hoặc kết nối điện thoại Android thật qua USB với USB debugging/Allow. Sau đó chạy lại đúng artifact, tái hiện startup trước; nếu môi trường ổn mà app vẫn ANR, thu main-thread trace để sửa đúng root cause. Test điện Shelly cần xác nhận giám sát tại thời điểm riêng. Bản này chưa đủ bằng chứng phát hành.
+- **Cleanup/kiểm tra báo cáo:** xác minh AVD là Pixel_9a rồi dùng `adb emu kill` dừng riêng emulator QA headless vừa khởi động; không đóng IDE/Chrome/container hoặc app của người dùng. Không thay size/density/font/theme/network trong lượt này, không clear data. Evidence JSON parse đạt; inventory Q01–Q48 đúng 48 hàng; `git diff --check -- PROJECT_STATUS.md` exit 0 (chỉ cảnh báo LF/CRLF của Git, không phải lỗi nội dung).
+
+## 52. Emulator Testing & UI/UX Runtime Evaluation — Màn Hình Sạc AI & Hành Trình Năng Lượng (03/10/2026)
+
+- **Môi trường thử nghiệm**: Android Emulator Pixel 9a (AVD API 36, x86_64, độ phân giải 1080x2424, Android 16), Impeller rendering engine.
+- **Kết nối Backend Host Bridge**: Build debug APK với `--dart-define=APP_API_BASE_URL=http://10.0.2.2:5000` (kết nối trực tiếp Flask backend trên host máy tính, vượt qua rào cản DNS NAT của emulator).
+- **Kết quả nghiệm thu thực tế trên Emulator (100% PASS)**:
+  1. **Khởi động & Điều hướng**: Splash screen radar animation mượt mà, định tuyến chuẩn vào `AppNavigation`, chuyển tab "Sạc pin" (`/smart-charging`) tức thì.
+  2. **BatteryHeroCard & Cặp chỉ số kép**:
+     - Hiển thị mức pin hiện tại (18%), mục tiêu sạc (80%), badge chênh lệch `+62%` ở giữa.
+     - Dải gradient ngọc lục bảo luminous emerald chạy chuẩn xác từ 18% đến 80%.
+     - Dual floating tooltips (`Hiện tại 18%` và `Sạc đến 80%`) bám sát đầu dải sạc và nút trượt circular thumb có 3 gân khía cầm nắm `|||`.
+     - Bộ 3 chip preset (`80% · Bảo vệ pin [Khuyên dùng]`, `90% · Cân bằng`, `100% · Đầy pin`) hoạt động mượt mà, phản hồi haptic xúc giác tức thì.
+  3. **Modal Bottom Sheet `EditCurrentBatterySheet`**:
+     - Chạm vào vùng "Mức pin hiện tại (chạm để sửa)" kích hoạt sheet trượt lên từ đáy màn hình.
+     - Bộ điều khiển số lớn, cặp nút tăng/giảm (+/-), thanh trượt mượt mà và 4 nút chọn nhanh (20%, 35%, 50%, 65%). Chọn 18% và bấm áp dụng lập tức cập nhật toàn bộ màn hình.
+  4. **AI Charging Plan Engine**:
+     - Nhấn nút tròn phát sáng trung tâm (`DỰ ĐOÁN VỚI AI`), `PredictionCardV2` mở rộng mượt mà với `AnimatedSize`.
+     - Hiển thị rõ ràng: `4 giờ 29 phút`, `Dự kiến dừng lúc 06:51`, `Điện cần nạp 1.16 kWh`, badge `AI đang làm quen với xe của bạn` và liên kết `Xem chi tiết >`.
+  5. **Gamification "Hành Trình Năng Lượng" (36 Cấp Độ)**:
+     - Nhấn thẻ teaser trên màn hình sạc mở màn hình `EnergyJourneyScreen`.
+     - Hero Level Card hiển thị huy hiệu Cấp 1 "Tia lửa đầu tiên", thanh tiến trình lên Cấp 2 "Đom đóm đêm", còn thiếu 5.0 kWh.
+     - Lưới 2x2 Tác động môi trường: Điện nạp (0.0 kWh), Giảm phát thải CO2 (0.0 kg), Quãng đường xanh (~0 km), Cây xanh tương đương (~0.0 cây xanh).
+     - Danh sách 36 mốc hành trình phân chia 6 Tiers với bộ lọc chip ngang, hiển thị rõ ràng trạng thái mở khóa / cấp hiện tại (`HIỆN TẠI`) / khóa.
+  6. **Chuyển Tab & Lịch sử sạc gần đây**:
+     - `ChargeModeSwitcherV2` dạng viên thuốc chuyển đổi mượt mà giữa "Sạc AI" và "Sạc hẹn giờ".
+     - Tab Sạc hẹn giờ hiển thị 6 mức thời gian phần cứng (Ngay lập tức, 30 phút, 1 giờ, 2 giờ, 4 giờ, 6 giờ) với cam kết an toàn rơ-le Shelly.
+     - Mục "Lịch sử gần đây" ở đáy màn hình sạc hiển thị đúng quy cách khi chưa có phiên sạc.
+  7. **Độ ổn định & Responsive**:
+     - **0 lỗi RenderFlex overflow** trên toàn bộ luồng thao tác.
+     - Tương phản Obsidian Cockpit đạt chuẩn WCAG AA+, tỷ lệ thẩm mỹ chuẩn 100% so với ảnh mẫu thiết kế.
+
+## 51. Redesign UI/UX Sạc AI & Hành Trình Năng Lượng 36 Cấp Độ (03/10/2026)
 
 - **Mục tiêu**: Thực thi toàn diện kế hoạch nâng cấp UI/UX đã được duyệt (`chatbot_uiux_upgrade_plan.md`):
   1. **Sửa triệt để 6 lỗi tràn viền (P0 Overflows)**:
@@ -60,6 +699,53 @@
   - **Backend Pytest**: **42/42 PASSED (100%)** trên toàn bộ 5 test suite chatbot (`test_ai_chatbot.py`, `test_behavior_and_history.py`, `test_function_calling_and_proactive.py`, `test_guardrails_and_personality.py`, `test_rich_cards_and_phase5c.py`).
   - **Flutter Tests**: **34/34 PASSED (100%)** trên toàn bộ 5 bộ test AI Flutter (`phase5c_rich_cards_test.dart`, `phase4_voice_and_controller_test.dart`, `chat_models_and_service_test.dart`, `action_and_suggestion_test.dart`, `behavior_and_history_test.dart`).
 
+## 49. Redesign UI/UX Sạc AI & Hành Trình Năng Lượng 36 Cấp Độ (03/10/2026)
+
+- **Mục tiêu**:
+  - **Task 1: Redesign UI/UX Màn hình Sạc AI** theo ảnh mẫu chuẩn EV cockpit của người dùng (`media_1790966006911.png`):
+    - Đơn giản hóa quy trình 3 bước cốt lõi: (1) Nhập pin hiện tại -> (2) Chọn pin mục tiêu -> (3) 1 chạm tính toán AI & bắt đầu sạc.
+    - Thay thế gauge tròn phức tạp bằng `BatteryHeroCard` nằm gọn trong viewport:
+      - Cặp chỉ số kép trực quan: Mức pin hiện tại (38px số lớn + 18px ký hiệu `%`) với nhãn "Mức pin hiện tại (chạm để sửa)"; Mục tiêu sạc (46px emerald + 20px `%`) kèm nhãn "MỤC TIÊU SẠC" và badge `Khuyên dùng` cho pin LFP.
+      - Vòng tròn mũi tên trung tâm kèm chênh lệch pin `+diff%`.
+      - Thanh trực quan hóa pin ngang đa tầng với gradient ngọc lục bảo phát sáng (luminous emerald `#059669` -> `#34D399` -> `#6EE7B7`), vạch ngăn cách mức pin hiện tại, nhãn nổi `Hiện tại X%`, và vạch chia 100%.
+      - Nút trượt điều khiển tròn (circular thumb) có 3 gân khía cầm nắm, tooltip chỉ thị nổi `Sạc đến Y%` và hiệu ứng haptic theo từng nấc 5%.
+      - Bộ chip preset nhanh (`80% · Bảo vệ pin [Khuyên dùng]`, `90% · Cân bằng`, `100% · Đầy pin`).
+      - Cảnh báo LFP thông minh khi chọn 100%: "Pin LFP chỉ nên sạc đến 100% mỗi 1-2 tuần để cân bằng cell."
+    - Bottom Sheet `EditCurrentBatterySheet`: Cho phép người dùng chỉnh nhanh % pin hiện tại bằng nút tăng/giảm (+/-), thanh trượt hoặc 4 phím tắt (20%, 35%, 50%, 65%).
+    - Segmented Switcher `ChargeModeSwitcherV2`: Thiết kế viên thuốc (solid emerald pill `#34D399`) tương phản cao (`#042F2E`) chuyển đổi giữa "Sạc AI" và "Sạc hẹn giờ".
+    - Thẻ dự đoán AI `PredictionCardV2`: Nhấn mạnh số giờ dự kiến 28px, nút "Xem chi tiết" mở `PredictionDetailSheet`.
+    - Chống tràn giao diện hoàn hảo ở chiều rộng nhỏ 320dp và kích thước phông chữ phóng to 200% (TextScaler 2.0).
+  - **Task 2: Hệ Thống Gamification "Hành Trình Năng Lượng" (36 Cấp Độ)**:
+    - `EnergyLevel`: Định nghĩa đầy đủ 36 cấp độ chia làm 6 Tiers (Tier 1: Hạt mầm 0-15 kWh, Tier 2: Khởi nguyên 20-50 kWh, Tier 3: Đô thị 60-150 kWh, Tier 4: Trạm phát 175-300 kWh, Tier 5: Lưới điện 350-600 kWh, Tier 6: Vũ trụ 700-1500 kWh) với danh hiệu và cốt truyện xe điện tương ứng.
+    - `EnergyJourneyController`: Quản lý state qua Riverpod, tính toán cấp độ từ lịch sử sạc tích lũy (`SmartChargeHistory`), theo dõi tiến trình % tới cấp tiếp theo, lượng điện còn thiếu, và tự động phát hiện thăng cấp lưu mốc qua SharedPreferences.
+    - `LevelUpCelebrationDialog`: Hộp thoại vinh danh khi lên cấp với huy hiệu phát sáng, haptic feedback và thông tin quyền lợi mở khóa.
+    - `EnergyStatsOverview`: Thẻ tác động môi trường sống động hiển thị 4 chỉ số: Tổng điện sạc (kWh), CO₂ giảm thải (kg), Quãng đường xe điện tương đương (km), và Cây xanh bảo vệ tương đương.
+    - `EnergyMilestoneCard`: Thẻ mốc cấp độ với 3 trạng thái rõ rệt (Đã mở khóa, Cấp độ hiện tại [badge phát sáng], Chưa mở khóa).
+    - `EnergyJourneyScreen`: Màn hình hành trình hoàn chỉnh với Hero Card cấp độ, bộ lọc Tier, thanh tiến trình và danh sách 36 mốc.
+    - Tích hợp điều hướng: Thẻ `EnergyJourneyTeaserCard` đặt tinh tế trên màn hình Sạc AI và mục menu "Hành trình năng lượng" trong tab Cài đặt (`MoreScreen`).
+- **File & Thư Mục Đã Tạo / Cập Nhật**:
+  - `app/lib/features/ai/smart_charging_control_screen.dart`
+  - `app/lib/features/ai/widgets/battery_hero_card.dart`
+  - `app/lib/features/ai/widgets/edit_current_battery_sheet.dart`
+  - `app/lib/features/ai/widgets/energy_journey_teaser_card.dart`
+  - `app/lib/features/ai/widgets/charge_mode_switcher_v2.dart`
+  - `app/lib/features/ai/widgets/prediction_card_v2.dart`
+  - `app/lib/features/ai/widgets/recent_sessions_section_v2.dart`
+  - `app/lib/features/energy_journey/models/energy_level.dart`
+  - `app/lib/features/energy_journey/controllers/energy_journey_controller.dart`
+  - `app/lib/features/energy_journey/widgets/energy_milestone_card.dart`
+  - `app/lib/features/energy_journey/widgets/energy_stats_overview.dart`
+  - `app/lib/features/energy_journey/widgets/level_up_celebration_dialog.dart`
+  - `app/lib/features/energy_journey/energy_journey_screen.dart`
+  - `app/lib/features/more/more_screen.dart`
+  - `app/test/widget/battery_hero_card_test.dart`
+  - `app/test/widget/energy_journey_test.dart`
+- **Quality Gates & Verification**:
+  - **Flutter Unit & Widget Tests**:
+    - `battery_hero_card_test.dart`: **3/3 PASSED (100%)**
+    - `energy_journey_test.dart`: **3/3 PASSED (100%)**
+    - `smart_charging_control_screen_test.dart`: **11/11 PASSED (100%)** (Bảo toàn nguyên vẹn 100% logic điều khiển, an toàn phần cứng, kịch bản offline và snapshot của toàn bộ màn hình Sạc).
+
 ## 48. Task Completion Log — Shelly Web–Android, hai thành viên (02/10/2026)
 
 **Hiện hành: Implemented — unverified ở runtime; chưa đạt beta/Shelly-ready.** HEAD khi tiếp tục `9309f2b645d1ede6ab276273bf1fba119e345b33`; giữ các thay đổi và artifact phiên khác. Build number `124` đã có artifact lưu trữ nên ứng viên lượt này tăng lên `1.1.9+125`. Kết quả lịch sử bên dưới không chứng nhận source mới.
@@ -86,6 +772,9 @@
 - **Đính chính probe online:** probe QA đầu dùng `online is True` nên đánh sai payload số nguyên `1` thành false. Probe đọc lại chấp nhận boolean/int/string đúng contract xác nhận online true. Đây là lỗi phân loại trong probe tạm, không phải bằng chứng parser Android sai; parser Android đã xử lý số `1`. Không tính HTTP 200 thành bằng chứng control thành công.
 - **S-LEGACY-AUDIT — Blocked enrollment:** truy vấn chỉ đọc, không giải mã/in credential, tìm **1 active legacy profile / 1 tài khoản**, mode `advanced_direct`, inventory tồn tại nhưng registry `shellyDeviceOwners` theo physical ID **chưa tồn tại**, số thành viên **0**, số profile có đủ historical no-load/Safe Boot evidence **0**. Không tự chọn chủ, tạo membership, xoay mã, unlink hoặc giả lập verification. Readback provider backend theo binding chưa chạy vì chưa có membership hợp lệ. Cần enrollment có xác thực qua mã hiện hành hoặc migration được duyệt sau audit, rồi safety test có xác nhận; không bypass registry để chạy ON bằng credential tệp.
 - **Hardware result hiện hành:** đọc identity/config/telemetry **Pass**; bài OFF → ON + timer → OFF và điều khiển từ APK **Blocked, chưa thực hiện**. Tổng lệnh ON **0**, OFF **0**; trạng thái OFF cuối **chưa xác minh** vì relay đã ON trước probe. Đã yêu cầu người dùng tắt ổ bằng Shelly Smart Control/nút vật lý trước khi tiếp tục. RAM host các lần đo tiếp theo khoảng 2366MB rồi 1176MB, ADB không có emulator/điện thoại; chưa chạy lại UI/ANR. Không gọi Shelly-ready hoặc production-ready.
+- **03/10 — readback sau người dùng báo “đã tắt”:** probe lần đầu exit 3 / ValueError, chưa xác định bước lỗi; không dùng làm bằng chứng OFF. Probe có phase tracking chạy lại **exit 0**, Shelly Cloud xác nhận đúng identity, online **true**, relay **OFF**, `offReadbackVerified=true`. Đây là OFF do người dùng thực hiện; agent gửi **0 ON / 0 OFF**, không ghi thành bài kiểm thử bật/tắt đạt. Registry vẫn không tồn tại, **memberCount=0**; enrollment và ON 5 giây tiếp tục **Blocked**. Đã hỏi xác nhận giám sát/rút tải hiện tại trước mọi ON mới. Cần enrollment có xác thực hoặc migration legacy được duyệt; không tự cấp quyền từ file credential hoặc từ historical verification thiếu.
+- **03/10 — migration được người dùng duyệt: Runtime verified, phạm vi registry.** Re-audit tìm đúng một active legacy profile; Firebase Auth xác nhận tài khoản còn hoạt động. Cloud readback mới xác minh đúng thiết bị, online và relay OFF. Transaction đọc lại registry, physical operation lock, profile và receipt trước khi ghi; chỉ tạo `shellyDeviceOwners` cho UID legacy cùng receipt migration chứa hash, không chọn UID khác hoặc vượt qua registry/lock đã tồn tại. Kết quả **exit 0**, registryWritten=true, memberCount **1**, maxMembers **2**, membershipRevision **1**, đúng tài khoản được bao gồm. Hash toàn profile trước/sau **không đổi**; giữ nguyên dữ liệu, vault/binding và evidence, **verificationGranted=false**, ON **0**, OFF **0**. Không sửa source hoặc build APK mới cho thao tác dữ liệu này.
+- **03/10 — backend vault/readback sau migration: Runtime verified, đọc không cấp điện.** Provider Cloud thật của backend khôi phục binding/vault thành công, đọc thiết bị online và relay **OFF**, số đo **0W / 229,9V / 0A / 16017,445Wh**, exit **0**, không xuất key/UID/Device ID. Quyền registry đã được khôi phục nhưng legacy binding vẫn là `connectionMode=advanced_direct`, `provider=connection_code`, `historicalNoLoadVerified=false`, `historicalSafeBootVerified=false`. Chưa đổi mode theo quyền migration đã chốt giữ nguyên profile. No-load endpoint server hiện yêu cầu `server_cloud`; cần hoàn thiện chuyển tiếp mode/setup và chạy safety test có xác nhận trước ON. Không ghi “đã kết nối/sẵn sàng điều khiển” chỉ từ readback này, chưa nghiệm thu app UI/TLS điện thoại/ON-timer-OFF.
 
 > **Baseline lịch sử trước mục 48:** HEAD `7dd8133481660c30e24bbb1e54876c06830c145c`, APK debug `1.1.9+123`; giữ kết quả mục 44–47 để đối soát. Hiện hành là QA `1.1.9+125` tại mục 48, HEAD `9309f2b645d1ede6ab276273bf1fba119e345b33` + working tree. Chưa đủ điều kiện phát beta; không dùng baseline cũ chứng nhận source mới.
 

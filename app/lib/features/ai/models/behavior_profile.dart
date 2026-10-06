@@ -58,15 +58,15 @@ class ChargingPatterns {
   }
 
   Map<String, dynamic> toJson() => {
-        'preferredStartHour': preferredStartHour,
-        'preferredEndHour': preferredEndHour,
-        'avgTargetSoc': avgTargetSoc,
-        'avgSessionsPerWeek': avgSessionsPerWeek,
-        'preferNightCharging': preferNightCharging,
-        'avgChargeDurationMinutes': avgChargeDurationMinutes,
-        if (lastChargingEvent != null)
-          'lastChargingEvent': lastChargingEvent!.toIso8601String(),
-      };
+    'preferredStartHour': preferredStartHour,
+    'preferredEndHour': preferredEndHour,
+    'avgTargetSoc': avgTargetSoc,
+    'avgSessionsPerWeek': avgSessionsPerWeek,
+    'preferNightCharging': preferNightCharging,
+    'avgChargeDurationMinutes': avgChargeDurationMinutes,
+    if (lastChargingEvent != null)
+      'lastChargingEvent': lastChargingEvent!.toIso8601String(),
+  };
 }
 
 @immutable
@@ -104,7 +104,8 @@ class TripPatterns {
           (json['avgDailyDistanceKm'] as num?)?.toDouble() ?? 18.5,
       avgEnergyConsumptionWhPerKm:
           (json['avgEnergyConsumptionWhPerKm'] as num?)?.toDouble() ?? 32.0,
-      peakUsageHours: (json['peakUsageHours'] as List<dynamic>?)
+      peakUsageHours:
+          (json['peakUsageHours'] as List<dynamic>?)
               ?.map((e) => (e as num).toInt())
               .toList() ??
           const [7, 8, 17, 18],
@@ -113,11 +114,11 @@ class TripPatterns {
   }
 
   Map<String, dynamic> toJson() => {
-        'avgDailyDistanceKm': avgDailyDistanceKm,
-        'avgEnergyConsumptionWhPerKm': avgEnergyConsumptionWhPerKm,
-        'peakUsageHours': peakUsageHours,
-        'totalTrips': totalTrips,
-      };
+    'avgDailyDistanceKm': avgDailyDistanceKm,
+    'avgEnergyConsumptionWhPerKm': avgEnergyConsumptionWhPerKm,
+    'peakUsageHours': peakUsageHours,
+    'totalTrips': totalTrips,
+  };
 }
 
 @immutable
@@ -154,14 +155,15 @@ class AppUsagePatterns {
 
   factory AppUsagePatterns.fromJson(Map<String, dynamic> json) {
     return AppUsagePatterns(
-      avgSessionMinutes:
-          (json['avgSessionMinutes'] as num?)?.toDouble() ?? 3.5,
-      mostVisitedTabs: (json['mostVisitedTabs'] as List<dynamic>?)
+      avgSessionMinutes: (json['avgSessionMinutes'] as num?)?.toDouble() ?? 3.5,
+      mostVisitedTabs:
+          (json['mostVisitedTabs'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
           const ['dashboard', 'smart_charging'],
       preferredTheme: json['preferredTheme'] as String? ?? 'dark',
-      appOpenHours: (json['appOpenHours'] as List<dynamic>?)
+      appOpenHours:
+          (json['appOpenHours'] as List<dynamic>?)
               ?.map((e) => (e as num).toInt())
               .toList() ??
           const [7, 12, 18, 22],
@@ -170,12 +172,12 @@ class AppUsagePatterns {
   }
 
   Map<String, dynamic> toJson() => {
-        'avgSessionMinutes': avgSessionMinutes,
-        'mostVisitedTabs': mostVisitedTabs,
-        'preferredTheme': preferredTheme,
-        'appOpenHours': appOpenHours,
-        'totalSessions': totalSessions,
-      };
+    'avgSessionMinutes': avgSessionMinutes,
+    'mostVisitedTabs': mostVisitedTabs,
+    'preferredTheme': preferredTheme,
+    'appOpenHours': appOpenHours,
+    'totalSessions': totalSessions,
+  };
 }
 
 @immutable
@@ -213,27 +215,28 @@ class ChatPreferences {
 
   factory ChatPreferences.fromJson(Map<String, dynamic> json) {
     return ChatPreferences(
-      topTopics: (json['topTopics'] as List<dynamic>?)
+      topTopics:
+          (json['topTopics'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
           const ['charging_schedule', 'battery_health'],
-      feedbackStats: json['feedbackStats'] as Map<String, dynamic>? ??
+      feedbackStats:
+          json['feedbackStats'] as Map<String, dynamic>? ??
           const {'totalThumbsUp': 0, 'totalThumbsDown': 0},
       preferredResponseLength:
           json['preferredResponseLength'] as String? ?? 'concise',
-      personalityStyle:
-          json['personalityStyle'] as String? ?? 'concise',
+      personalityStyle: json['personalityStyle'] as String? ?? 'concise',
       languagePreference: json['languagePreference'] as String? ?? 'vi',
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'topTopics': topTopics,
-        'feedbackStats': feedbackStats,
-        'preferredResponseLength': preferredResponseLength,
-        'personalityStyle': personalityStyle,
-        'languagePreference': languagePreference,
-      };
+    'topTopics': topTopics,
+    'feedbackStats': feedbackStats,
+    'preferredResponseLength': preferredResponseLength,
+    'personalityStyle': personalityStyle,
+    'languagePreference': languagePreference,
+  };
 }
 
 @immutable
@@ -284,12 +287,12 @@ class PersonalInsights {
   }
 
   Map<String, dynamic> toJson() => {
-        'batteryHealthTrend': batteryHealthTrend,
-        'chargingEfficiencyScore': chargingEfficiencyScore,
-        'estimatedMonthlyCostVND': estimatedMonthlyCostVND,
-        'nextMaintenanceOdoKm': nextMaintenanceOdoKm,
-        'currentOdoKm': currentOdoKm,
-      };
+    'batteryHealthTrend': batteryHealthTrend,
+    'chargingEfficiencyScore': chargingEfficiencyScore,
+    'estimatedMonthlyCostVND': estimatedMonthlyCostVND,
+    'nextMaintenanceOdoKm': nextMaintenanceOdoKm,
+    'currentOdoKm': currentOdoKm,
+  };
 }
 
 @immutable
@@ -361,8 +364,7 @@ class BehaviorProfile {
 
   factory BehaviorProfile.fromJson(Map<String, dynamic> json) {
     return BehaviorProfile(
-      schemaVersion:
-          json['schemaVersion'] as String? ?? 'behavior-profile/v1',
+      schemaVersion: json['schemaVersion'] as String? ?? 'behavior-profile/v1',
       userId: json['userId'] as String? ?? '',
       vehicleId: json['vehicleId'] as String?,
       updatedAt: json['updatedAt'] != null
@@ -373,23 +375,24 @@ class BehaviorProfile {
           : null,
       chargingPatterns: json['chargingPatterns'] != null
           ? ChargingPatterns.fromJson(
-              json['chargingPatterns'] as Map<String, dynamic>)
+              json['chargingPatterns'] as Map<String, dynamic>,
+            )
           : const ChargingPatterns(),
       tripPatterns: json['tripPatterns'] != null
-          ? TripPatterns.fromJson(
-              json['tripPatterns'] as Map<String, dynamic>)
+          ? TripPatterns.fromJson(json['tripPatterns'] as Map<String, dynamic>)
           : const TripPatterns(),
       appUsage: json['appUsage'] != null
-          ? AppUsagePatterns.fromJson(
-              json['appUsage'] as Map<String, dynamic>)
+          ? AppUsagePatterns.fromJson(json['appUsage'] as Map<String, dynamic>)
           : const AppUsagePatterns(),
       chatPreferences: json['chatPreferences'] != null
           ? ChatPreferences.fromJson(
-              json['chatPreferences'] as Map<String, dynamic>)
+              json['chatPreferences'] as Map<String, dynamic>,
+            )
           : const ChatPreferences(),
       personalInsights: json['personalInsights'] != null
           ? PersonalInsights.fromJson(
-              json['personalInsights'] as Map<String, dynamic>)
+              json['personalInsights'] as Map<String, dynamic>,
+            )
           : const PersonalInsights(),
       guardrailViolationCount:
           (json['guardrailViolationCount'] as num?)?.toInt() ?? 0,
@@ -397,16 +400,16 @@ class BehaviorProfile {
   }
 
   Map<String, dynamic> toJson() => {
-        'schemaVersion': schemaVersion,
-        'userId': userId,
-        if (vehicleId != null) 'vehicleId': vehicleId,
-        'updatedAt': updatedAt.toIso8601String(),
-        if (syncedAt != null) 'syncedAt': syncedAt!.toIso8601String(),
-        'chargingPatterns': chargingPatterns.toJson(),
-        'tripPatterns': tripPatterns.toJson(),
-        'appUsage': appUsage.toJson(),
-        'chatPreferences': chatPreferences.toJson(),
-        'personalInsights': personalInsights.toJson(),
-        'guardrailViolationCount': guardrailViolationCount,
-      };
+    'schemaVersion': schemaVersion,
+    'userId': userId,
+    if (vehicleId != null) 'vehicleId': vehicleId,
+    'updatedAt': updatedAt.toIso8601String(),
+    if (syncedAt != null) 'syncedAt': syncedAt!.toIso8601String(),
+    'chargingPatterns': chargingPatterns.toJson(),
+    'tripPatterns': tripPatterns.toJson(),
+    'appUsage': appUsage.toJson(),
+    'chatPreferences': chatPreferences.toJson(),
+    'personalInsights': personalInsights.toJson(),
+    'guardrailViolationCount': guardrailViolationCount,
+  };
 }

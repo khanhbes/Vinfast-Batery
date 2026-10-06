@@ -132,27 +132,32 @@ void main() {
       SharedPreferences.setMockInitialValues({});
     });
 
-    test('canShowProactiveBubble allows first show and blocks within 30 minutes', () async {
-      final service = SuggestionService();
+    test(
+      'canShowProactiveBubble allows first show and blocks within 30 minutes',
+      () async {
+        final service = SuggestionService();
 
-      // First time: allowed
-      final canShow1 = await service.canShowProactiveBubble();
-      expect(canShow1, isTrue);
+        // First time: allowed
+        final canShow1 = await service.canShowProactiveBubble();
+        expect(canShow1, isTrue);
 
-      // Record shown
-      await service.recordSuggestionShown();
+        // Record shown
+        await service.recordSuggestionShown();
 
-      // Immediately checking again: blocked by 30-min window
-      final canShow2 = await service.canShowProactiveBubble();
-      expect(canShow2, isFalse);
-    });
+        // Immediately checking again: blocked by 30-min window
+        final canShow2 = await service.canShowProactiveBubble();
+        expect(canShow2, isFalse);
+      },
+    );
 
     test('dismissSuggestion stores timestamp and filters out rules', () async {
       final service = SuggestionService();
       await service.dismissSuggestion('R001');
 
       final prefs = await SharedPreferences.getInstance();
-      final dismissedRaw = prefs.getString('vinfast_dismissed_suggestions_v1');
+      final dismissedRaw = prefs.getString(
+        'vinfast_dismissed_suggestions_v2_guest',
+      );
       expect(dismissedRaw, isNotNull);
       expect(dismissedRaw!.contains('R001'), isTrue);
     });
@@ -171,34 +176,33 @@ void main() {
   });
 
   group('ChatApiService Action Confirmation Tests', () {
-    test('confirmAction handles simulated confirmed and cancelled execution', () async {
-      final service = ChatApiService();
+    test(
+      'confirmAction handles simulated confirmed and cancelled execution',
+      () async {
+        final service = ChatApiService();
 
-      final resConfirmed = await service.confirmAction(
-        sessionId: 'test-session',
-        callId: 'call-abc',
-        toolName: 'start_smart_charging',
-        args: {'target_soc': 80},
-        confirmed: true,
-      );
+        final resConfirmed = await service.confirmAction(
+          sessionId: 'test-session',
+          callId: 'call-abc',
+          toolName: 'start_smart_charging',
+          args: {'target_soc': 80},
+          confirmed: true,
+        );
 
-      expect(resConfirmed['status'], 'success');
-      final dataConf = resConfirmed['data'] as Map<String, dynamic>;
-      expect(dataConf['status'], 'confirmed');
-      expect(dataConf['executed'], isTrue);
+        expect(resConfirmed['success'], isFalse);
+        expect(resConfirmed.containsKey('data'), isFalse);
 
-      final resCancelled = await service.confirmAction(
-        sessionId: 'test-session',
-        callId: 'call-abc',
-        toolName: 'start_smart_charging',
-        args: {'target_soc': 80},
-        confirmed: false,
-      );
+        final resCancelled = await service.confirmAction(
+          sessionId: 'test-session',
+          callId: 'call-abc',
+          toolName: 'start_smart_charging',
+          args: {'target_soc': 80},
+          confirmed: false,
+        );
 
-      expect(resCancelled['status'], 'success');
-      final dataCanc = resCancelled['data'] as Map<String, dynamic>;
-      expect(dataCanc['status'], 'cancelled');
-      expect(dataCanc['executed'], isFalse);
-    });
+        expect(resCancelled['success'], isFalse);
+        expect(resCancelled.containsKey('data'), isFalse);
+      },
+    );
   });
 }

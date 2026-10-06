@@ -87,7 +87,14 @@ class DashboardPreferencesService extends ChangeNotifier {
   /// Scoped instances avoid a disposed singleton leaking across Riverpod
   /// containers (notably after a widget test or a hot restart). The provider
   /// owns this notifier and safely disposes it with its scope.
-  DashboardPreferencesService();
+  DashboardPreferencesService({
+    Future<SharedPreferences> Function()? loadPreferences,
+  }) : _loadPreferences = loadPreferences ?? SharedPreferences.getInstance;
+  final Future<SharedPreferences> Function() _loadPreferences;
+  int _generation = 0;
+  bool _disposed = false;
+  bool _sameAccount(String? uid, int generation) =>
+      !_disposed && uid != null && uid == _uid && generation == _generation;
 
   static const _prefOrderKey = 'dashboard_order';
   static const _prefHiddenKey = 'dashboard_hidden';
@@ -133,6 +140,11 @@ class DashboardPreferencesService extends ChangeNotifier {
   Future<void> initializeForUser(String uid) async {
     if (uid.trim().isEmpty) return;
     if (_uid == uid && _initialized) return;
+    if (_uid != uid) {
+      _generation++;
+      _remoteSyncTimer?.cancel();
+      _remoteDirty = false;
+    }
     _uid = uid;
     _initialized = false;
     _order = List.from(DashboardWidgetId.all);
@@ -154,8 +166,11 @@ class DashboardPreferencesService extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    final uid = _uid;
+    final generation = _generation;
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await _loadPreferences();
+      if (!_sameAccount(uid, generation)) return;
 
       final cachedOrderJson = prefs.getString(_scopedKey(_prefOrderKey));
       if (cachedOrderJson != null) {
@@ -175,16 +190,22 @@ class DashboardPreferencesService extends ChangeNotifier {
         }
       }
 
-      final cachedToursJson = prefs.getString(_scopedKey(_prefCompletedToursKey));
+      final cachedToursJson = prefs.getString(
+        _scopedKey(_prefCompletedToursKey),
+      );
       if (cachedToursJson != null) {
         _completedTours = Set<String>.from(jsonDecode(cachedToursJson));
       }
 
-      final pendingToursJson = prefs.getString(_scopedKey(_prefPendingToursKey));
+      final pendingToursJson = prefs.getString(
+        _scopedKey(_prefPendingToursKey),
+      );
       if (pendingToursJson != null) {
         _pendingAutoTours = Set<String>.from(jsonDecode(pendingToursJson));
       }
-      final dismissedToursJson = prefs.getString(_scopedKey(_prefDismissedToursKey));
+      final dismissedToursJson = prefs.getString(
+        _scopedKey(_prefDismissedToursKey),
+      );
       if (dismissedToursJson != null) {
         _dismissedTours = Set<String>.from(jsonDecode(dismissedToursJson));
       }
@@ -201,7 +222,10 @@ class DashboardPreferencesService extends ChangeNotifier {
       // ignore: unawaited_futures
       syncWithFirestore();
     } catch (e) {
-      debugPrint('[DashboardPreferencesService] Init error: $e');
+      if (!_sameAccount(uid, generation)) return;
+      debugPrint(
+        '[DashboardPreferencesService] Init error (${e.runtimeType}).',
+      );
       _order = List.from(DashboardWidgetId.all);
       _hidden.clear();
       _initialized = true;
@@ -285,7 +309,10 @@ class DashboardPreferencesService extends ChangeNotifier {
 
   /// Đánh dấu tour hướng dẫn đã hoàn thành
   Future<void> markTourCompleted(String tourId) async {
-    if (_completedTours.contains(tourId) && !_pendingAutoTours.contains(tourId)) return;
+    if (_completedTours.contains(tourId) &&
+        !_pendingAutoTours.contains(tourId)) {
+      return;
+    }
     _completedTours.add(tourId);
     _pendingAutoTours.remove(tourId);
     _dismissedTours.remove(tourId);
@@ -359,33 +386,41 @@ class DashboardPreferencesService extends ChangeNotifier {
 
   /// Lưu vào SharedPreferences
   Future<void> _persistLocal() async {
+    final uid = _uid;
+    final generation = _generation;
+    if (!_sameAccount(uid, generation)) return;
+    // Snapshot keys and values before awaiting. Never write account A's state
+    // under account B's keys if authentication changes during persistence.
+    final values = <String, String>{
+      '$_prefOrderKey.$uid': jsonEncode(_order),
+      '$_prefHiddenKey.$uid': jsonEncode(_hidden.toList()),
+      '$_prefCompletedToursKey.$uid': jsonEncode(_completedTours.toList()),
+      '$_prefPendingToursKey.$uid': jsonEncode(_pendingAutoTours.toList()),
+      '$_prefDismissedToursKey.$uid': jsonEncode(_dismissedTours.toList()),
+      '$_prefUpdatedAtKey.$uid': _updatedAt,
+    };
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_scopedKey(_prefOrderKey), jsonEncode(_order));
-      await prefs.setString(_scopedKey(_prefHiddenKey), jsonEncode(_hidden.toList()));
-      await prefs.setString(
-        _scopedKey(_prefCompletedToursKey),
-        jsonEncode(_completedTours.toList()),
-      );
-      await prefs.setString(
-        _scopedKey(_prefPendingToursKey),
-        jsonEncode(_pendingAutoTours.toList()),
-      );
-      await prefs.setString(
-        _scopedKey(_prefDismissedToursKey),
-        jsonEncode(_dismissedTours.toList()),
-      );
-      await prefs.setString(_scopedKey(_prefUpdatedAtKey), _updatedAt);
+      final prefs = await _loadPreferences();
+      for (final entry in values.entries) {
+        if (!_sameAccount(uid, generation)) return;
+        await prefs.setString(entry.key, entry.value);
+      }
     } catch (e) {
-      debugPrint('[DashboardPreferencesService] Persist error: $e');
+      debugPrint(
+        '[DashboardPreferencesService] Persist error (${e.runtimeType}).',
+      );
     }
   }
 
   /// Đồng bộ với Firestore `users/{uid}/appPreferences/ui` (xử lý xung đột LWW theo `updatedAt`)
   Future<void> syncWithFirestore() async {
+    final uid = _uid;
+    final generation = _generation;
     try {
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
+      if (user == null || user.uid != uid || !_sameAccount(uid, generation)) {
+        return;
+      }
 
       final docRef = FirebaseFirestore.instance
           .collection('users')
@@ -394,6 +429,10 @@ class DashboardPreferencesService extends ChangeNotifier {
           .doc('ui');
 
       final snapshot = await docRef.get();
+      if (!_sameAccount(uid, generation) ||
+          FirebaseAuth.instance.currentUser?.uid != uid) {
+        return;
+      }
       if (!snapshot.exists || snapshot.data() == null) {
         // Chưa có trên cloud -> đẩy bản local lên
         await _syncRemote();
@@ -440,6 +479,7 @@ class DashboardPreferencesService extends ChangeNotifier {
           if (remoteDismissed != null) _dismissedTours = remoteDismissed;
           _updatedAt = remoteUpdatedAtStr;
           await _persistLocal();
+          if (!_sameAccount(uid, generation)) return;
           notifyListeners();
           return;
         }
@@ -448,14 +488,16 @@ class DashboardPreferencesService extends ChangeNotifier {
       // Local mới hơn hoặc bằng -> đẩy lên cloud
       await _syncRemote();
     } catch (e) {
-      debugPrint('[DashboardPreferencesService] Sync error: $e');
+      debugPrint(
+        '[DashboardPreferencesService] Sync error (${e.runtimeType}).',
+      );
     }
   }
 
   Future<void> _syncRemote() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
+      if (user == null || user.uid != _uid || _disposed) return;
 
       final docRef = FirebaseFirestore.instance
           .collection('users')
@@ -473,15 +515,19 @@ class DashboardPreferencesService extends ChangeNotifier {
         'updatedAt': _updatedAt,
       }, SetOptions(merge: true));
     } catch (e) {
-      debugPrint('[DashboardPreferencesService] Remote sync failed: $e');
+      debugPrint(
+        '[DashboardPreferencesService] Remote sync failed (${e.runtimeType}).',
+      );
     }
   }
 
   void _scheduleRemoteSync() {
+    final uid = _uid;
+    final generation = _generation;
     _remoteDirty = true;
     _remoteSyncTimer?.cancel();
     _remoteSyncTimer = Timer(const Duration(seconds: 2), () async {
-      if (!_remoteDirty) return;
+      if (!_remoteDirty || !_sameAccount(uid, generation)) return;
       _remoteDirty = false;
       await _syncRemote();
     });
@@ -489,6 +535,8 @@ class DashboardPreferencesService extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
+    _generation++;
     _remoteSyncTimer?.cancel();
     super.dispose();
   }

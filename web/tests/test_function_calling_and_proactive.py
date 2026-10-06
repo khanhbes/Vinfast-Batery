@@ -78,9 +78,9 @@ def test_tool_execution_flow_unconfirmed_and_confirmed():
         {"currentSoc": 50},
         is_confirmed=True,
     )
-    assert confirmed["status"] == "success"
-    assert confirmed["relayState"] == "ON"
-    assert confirmed["targetSoc"] == 80
+    assert confirmed["status"] == "unavailable"
+    assert confirmed["code"] == "controlAdapterUnavailable"
+    assert "relayState" not in confirmed
 
 
 def test_read_tools_execution():
@@ -91,12 +91,12 @@ def test_read_tools_execution():
     batt = dispatcher.execute_tool("get_battery_status", {"vehicle_id": "VF01"}, {"currentSoc": 68.0, "currentSoh": 97.5})
     assert batt["status"] == "success"
     assert batt["soc"] == 68.0
-    assert batt["estimatedRemainingKm"] > 0
+    assert "estimatedRemainingKm" not in batt
 
     # Maintenance info
     maint = dispatcher.execute_tool("get_maintenance_info", {"vehicle_id": "VF01"}, {"odoKm": 4700})
-    assert maint["status"] == "success"
-    assert maint["remainingKm"] == 300
+    assert maint["status"] == "unavailable"
+    assert "remainingKm" not in maint
 
 
 def test_suggestion_engine_rules():
@@ -140,7 +140,8 @@ def test_fastapi_action_confirm_and_suggestions_endpoints():
     assert res_confirm.status_code == 200
     data_confirm = res_confirm.json()
     assert data_confirm["success"] is True
-    assert data_confirm["data"]["result"]["relayState"] == "ON"
+    assert data_confirm["data"]["success"] is False
+    assert data_confirm["data"]["code"] == "actionInvalid"
 
     # Action Cancel
     res_cancel = client.post(
@@ -157,7 +158,7 @@ def test_fastapi_action_confirm_and_suggestions_endpoints():
     data_cancel = res_cancel.json()
     assert data_cancel["success"] is True
     assert data_cancel["data"]["success"] is False
-    assert data_cancel["data"]["result"]["status"] == "cancelled"
+    assert data_cancel["data"]["code"] == "actionInvalid"
 
     # 2. Suggestions endpoint
     res_sugg = client.get(
@@ -187,7 +188,7 @@ def test_get_gemini_tools_structure():
     assert "schedule_charging" in names
 
 
-def test_native_gemini_read_tool_auto_execution_loop():
+def test_native_gemini_read_tool_auto_execution_loop(monkeypatch):
     """Kiểm tra Gemini gọi read tool -> auto execute -> inject result -> sinh text trả lời."""
     import json
     from unittest.mock import MagicMock
@@ -234,6 +235,7 @@ def test_native_gemini_read_tool_auto_execution_loop():
         [chunk_turn2],
     ]
     engine._client = mock_client
+    monkeypatch.setattr("ai_server.chat_engine.DEFAULT_MODEL", "mock-model")
 
     req = ChatSendRequest(
         message="Pin của mình hiện tại còn bao nhiêu?",
@@ -266,7 +268,7 @@ def test_native_gemini_read_tool_auto_execution_loop():
     assert mock_client.models.generate_content_stream.call_count == 2
 
 
-def test_native_gemini_control_tool_safety_gating():
+def test_native_gemini_control_tool_safety_gating(monkeypatch):
     """Kiểm tra Gemini gọi control tool -> chặn auto-execute -> sinh ActionConfirmationCard (HITL)."""
     import json
     from unittest.mock import MagicMock
@@ -298,6 +300,7 @@ def test_native_gemini_control_tool_safety_gating():
 
     mock_client.models.generate_content_stream.return_value = [chunk_turn1]
     engine._client = mock_client
+    monkeypatch.setattr("ai_server.chat_engine.DEFAULT_MODEL", "mock-model")
 
     req = ChatSendRequest(
         message="Hôm nay hãy sạc giúp mình lên 85% nhé",
@@ -327,4 +330,3 @@ def test_native_gemini_control_tool_safety_gating():
     assert card_data["requiresConfirmation"] is True
     assert card_data["args"]["target_soc"] == 85
     assert card_data["confirmationCard"]["maxAmps"] <= 12.0
-

@@ -137,10 +137,11 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: (widget.isStopping || widget.isStarting
-                                  ? CockpitColors.amber
-                                  : CockpitColors.emerald)
-                              .withValues(alpha: .5),
+                          color:
+                              (widget.isStopping || widget.isStarting
+                                      ? CockpitColors.amber
+                                      : CockpitColors.emerald)
+                                  .withValues(alpha: .5),
                           blurRadius: 8,
                         ),
                       ],
@@ -396,7 +397,10 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
                   : const Icon(Icons.power_settings_new_rounded, size: 18),
               label: Text(
                 widget.isStopping ? 'Đang dừng sạc...' : 'Dừng sạc',
-                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
               ),
             ),
           ),
@@ -468,7 +472,9 @@ class _ChargingBatteryBarState extends State<_ChargingBatteryBar>
             ),
             boxShadow: [
               BoxShadow(
-                color: CockpitColors.emerald.withValues(alpha: .10 + glowVal * .10),
+                color: CockpitColors.emerald.withValues(
+                  alpha: .10 + glowVal * .10,
+                ),
                 blurRadius: 12,
                 spreadRadius: 1,
               ),
@@ -491,9 +497,7 @@ class _ChargingBatteryBarState extends State<_ChargingBatteryBar>
                 children: [
                   // ── Battery segment notches (20%, 40%, 60%, 80%) ──
                   Positioned.fill(
-                    child: CustomPaint(
-                      painter: _BatteryNotchesPainter(),
-                    ),
+                    child: CustomPaint(painter: _BatteryNotchesPainter()),
                   ),
 
                   // ── Active fill with energy flow ──
@@ -517,7 +521,9 @@ class _ChargingBatteryBarState extends State<_ChargingBatteryBar>
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF10B981).withValues(alpha: .40),
+                            color: const Color(
+                              0xFF10B981,
+                            ).withValues(alpha: .40),
                             blurRadius: 10,
                             spreadRadius: 1,
                           ),
@@ -552,7 +558,9 @@ class _ChargingBatteryBarState extends State<_ChargingBatteryBar>
                               spreadRadius: 2,
                             ),
                             BoxShadow(
-                              color: const Color(0xFF34D399).withValues(alpha: .8),
+                              color: const Color(
+                                0xFF34D399,
+                              ).withValues(alpha: .8),
                               blurRadius: 12,
                               spreadRadius: 4,
                             ),
@@ -589,7 +597,9 @@ class _ChargingBatteryBarState extends State<_ChargingBatteryBar>
                             vertical: 1.5,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF0A0F0D).withValues(alpha: .92),
+                            color: const Color(
+                              0xFF0A0F0D,
+                            ).withValues(alpha: .92),
                             borderRadius: BorderRadius.circular(5),
                             border: Border.all(
                               color: Colors.white.withValues(alpha: .5),
@@ -642,7 +652,11 @@ class _BatteryNotchesPainter extends CustomPainter {
     for (final fraction in [0.25, 0.50, 0.75]) {
       final x = size.width * fraction;
       canvas.drawLine(Offset(x, 4), Offset(x, 10), paint);
-      canvas.drawLine(Offset(x, size.height - 10), Offset(x, size.height - 4), paint);
+      canvas.drawLine(
+        Offset(x, size.height - 10),
+        Offset(x, size.height - 4),
+        paint,
+      );
     }
   }
 
@@ -680,9 +694,7 @@ class _EnergyFlowStreamPainter extends CustomPainter {
           Colors.transparent,
         ],
         stops: const [0.0, 0.35, 0.5, 0.65, 1.0],
-      ).createShader(
-        Rect.fromLTWH(currentOffset, 0, rayWidth, size.height),
-      );
+      ).createShader(Rect.fromLTWH(currentOffset, 0, rayWidth, size.height));
 
     canvas.drawRect(Offset.zero & size, shimmerPaint);
 

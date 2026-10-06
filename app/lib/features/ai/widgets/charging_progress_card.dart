@@ -38,59 +38,93 @@ class ChargingProgressCard extends StatelessWidget {
             border: Border.all(color: uiColors.glassBorder),
           ),
           child: SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: uiColors.border,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Icon(Icons.bolt_rounded, color: accentColor, size: 24),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Chi tiết Phiên Sạc Thông Minh',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: uiColors.text,
-                        ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: uiColors.border,
+                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                _buildDetailRow('Trạng thái relay:', isCharging ? 'ĐANG CẤP ĐIỆN' : 'NGẮT NGUỒN', uiColors, valueColor: accentColor),
-                _buildDetailRow('Mức pin hiện tại:', '${currentSoc.toStringAsFixed(1)}%', uiColors),
-                _buildDetailRow('Mục tiêu ngắt sạc:', '${targetSoc.toStringAsFixed(0)}%', uiColors),
-                _buildDetailRow('Công suất đo được:', '${powerW.toStringAsFixed(0)} W', uiColors),
-                _buildDetailRow('Cường độ dòng điện:', '${amps.toStringAsFixed(1)} A (Định mức ≤12A)', uiColors),
-                _buildDetailRow('Thời gian ước tính đầy:', '$remainingMin phút', uiColors),
-                _buildDetailRow('Bảo vệ an toàn phần cứng:', 'Kích hoạt (Watchdog 60s)', uiColors, valueColor: Colors.green),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: uiColors.primary,
-                      foregroundColor: uiColors.onPrimary,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onPressed: () => Navigator.of(ctx).pop(),
-                    child: const Text('Đóng'),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Icon(Icons.bolt_rounded, color: accentColor, size: 24),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Chi tiết Phiên Sạc Thông Minh',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: uiColors.text,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  _buildDetailRow(
+                    'Trạng thái relay:',
+                    isCharging ? 'ĐANG CẤP ĐIỆN' : 'NGẮT NGUỒN',
+                    uiColors,
+                    valueColor: accentColor,
+                  ),
+                  _buildDetailRow(
+                    'Mức pin hiện tại:',
+                    '${currentSoc.toStringAsFixed(1)}%',
+                    uiColors,
+                  ),
+                  _buildDetailRow(
+                    'Mục tiêu ngắt sạc:',
+                    '${targetSoc.toStringAsFixed(0)}%',
+                    uiColors,
+                  ),
+                  _buildDetailRow(
+                    'Công suất đo được:',
+                    '${powerW.toStringAsFixed(0)} W',
+                    uiColors,
+                  ),
+                  _buildDetailRow(
+                    'Cường độ dòng điện:',
+                    '${amps.toStringAsFixed(1)} A (Định mức ≤12A)',
+                    uiColors,
+                  ),
+                  _buildDetailRow(
+                    'Thời gian ước tính đầy:',
+                    '$remainingMin phút',
+                    uiColors,
+                  ),
+                  _buildDetailRow(
+                    'Bảo vệ an toàn phần cứng:',
+                    'Kích hoạt (Watchdog 60s)',
+                    uiColors,
+                    valueColor: Colors.green,
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: uiColors.primary,
+                        foregroundColor: uiColors.onPrimary,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: const Text('Đóng'),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -98,14 +132,36 @@ class ChargingProgressCard extends StatelessWidget {
     );
   }
 
-  Widget _buildDetailRow(String label, String value, AppUiColors uiColors, {Color? valueColor}) {
+  Widget _buildDetailRow(
+    String label,
+    String value,
+    AppUiColors uiColors, {
+    Color? valueColor,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(fontSize: 13, color: uiColors.muted)),
-          Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: valueColor ?? uiColors.text)),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(fontSize: 13, color: uiColors.muted),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: valueColor ?? uiColors.text,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -140,7 +196,10 @@ class ChargingProgressCard extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 6),
         padding: const EdgeInsets.all(14),
-        decoration: ChatbotGlassTheme.cardDecoration(context, accentColor: accentColor),
+        decoration: ChatbotGlassTheme.cardDecoration(
+          context,
+          accentColor: accentColor,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -178,10 +237,7 @@ class ChargingProgressCard extends StatelessWidget {
                         isCharging
                             ? 'Đang cấp nguồn relay Shelly'
                             : 'Sẵn sàng kích hoạt sạc',
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          color: uiColors.muted,
-                        ),
+                        style: TextStyle(fontSize: 11.5, color: uiColors.muted),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -189,7 +245,10 @@ class ChargingProgressCard extends StatelessWidget {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: accentColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(20),
@@ -244,7 +303,10 @@ class ChargingProgressCard extends StatelessWidget {
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: TweenAnimationBuilder<double>(
-                tween: Tween<double>(begin: 0.0, end: (currentSoc / 100.0).clamp(0.0, 1.0)),
+                tween: Tween<double>(
+                  begin: 0.0,
+                  end: (currentSoc / 100.0).clamp(0.0, 1.0),
+                ),
                 duration: const Duration(milliseconds: 900),
                 curve: Curves.easeOutCubic,
                 builder: (context, value, child) {
@@ -287,7 +349,7 @@ class ChargingProgressCard extends StatelessWidget {
                   child: _buildMetricTile(
                     context: context,
                     label: 'Ước tính',
-                    value: remainingMin > 0 ? '~$remainingMin p' : 'Sắp đầy',
+                    value: remainingMin > 0 ? '~$remainingMin phút' : 'Sắp đầy',
                     icon: Icons.timer_outlined,
                     color: Colors.purple,
                   ),
@@ -350,10 +412,7 @@ class ChargingProgressCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   label,
-                  style: TextStyle(
-                    fontSize: 9.5,
-                    color: uiColors.muted,
-                  ),
+                  style: TextStyle(fontSize: 9.5, color: uiColors.muted),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -362,10 +421,7 @@ class ChargingProgressCard extends StatelessWidget {
           const SizedBox(height: 3),
           Text(
             value,
-            style: const TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w700,
-            ),
+            style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),

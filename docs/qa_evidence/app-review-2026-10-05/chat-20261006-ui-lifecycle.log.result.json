@@ -1,0 +1,16 @@
+{
+  "command": [
+    "C:/flutter/bin/cache/dart-sdk/bin/dart.exe",
+    "C:/flutter/bin/cache/flutter_tools.snapshot",
+    "test",
+    "--no-pub",
+    "test/widget/assistant_sheet_lifecycle_test.dart",
+    "test/widget/chatbot_uiux_overflow_test.dart"
+  ],
+  "cwd": "app",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\chat-20261006-ui-lifecycle.log",
+  "timeoutSeconds": 180,
+  "timedOut": false,
+  "exitCode": 1,
+  "elapsedSeconds": 16.58
+}

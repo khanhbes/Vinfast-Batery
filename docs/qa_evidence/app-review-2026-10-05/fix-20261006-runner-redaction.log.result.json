@@ -1,0 +1,13 @@
+{
+  "command": [
+    "python",
+    "-c",
+    "from tools.run_quality_gate import redact; text='[redacted-email] Authorization: Bearer [redacted-token] uid=\"[redacted]\" masked=redact(text); assert 'qa-fixture@' not in masked and 'fixture-secret' not in masked and 'fixture-owner' not in masked; print(masked)"
+  ],
+  "cwd": ".",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\fix-20261006-runner-redaction.log",
+  "timeoutSeconds": 10,
+  "timedOut": false,
+  "exitCode": 0,
+  "elapsedSeconds": 0.16
+}

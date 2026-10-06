@@ -1,0 +1,6 @@
+{
+  "scope": "62 chatbot production source files only; before documentation/config follow-up",
+  "patterns": ["private key header", "Google API key shape", "JWT shape", "common mojibake byte pairs", "replacement character"],
+  "findings": [],
+  "limitations": "Not an exhaustive secret scan; does not audit Git history, APK/artifact, private environment files or deployed containers. No secret values were printed."
+}

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 390 844" width="780" height="1688" role="img" aria-label="VinFast Battery, đang khởi động">
+      <defs>
+        <radialGradient id="bg"><stop stop-color="#111A17"/><stop offset="1" stop-color="#0B0F0E"/></radialGradient>
+        <linearGradient id="fill" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#3DDC97"/><stop offset="1" stop-color="#2BB673"/></linearGradient>
+        <linearGradient id="light"><stop stop-color="#FFF6E5" stop-opacity="0"/><stop offset=".5" stop-color="#FFF6E5" stop-opacity=".45"/><stop offset="1" stop-color="#FFF6E5" stop-opacity="0"/></linearGradient>
+        <linearGradient id="taper"><stop stop-color="#C8F7E2" stop-opacity="0"/><stop offset=".2" stop-color="#C8F7E2"/><stop offset=".8" stop-color="#C8F7E2"/><stop offset="1" stop-color="#C8F7E2" stop-opacity="0"/></linearGradient>
+        <filter id="halo" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4"/></filter>
+        <clipPath id="logo"><path d="M 135 344 L 157 344 L 195 405 L 233 344 L 255 344 L 205 425 Q 195 441 185 425 Z"/></clipPath>
+      </defs>
+      <rect width="390" height="844" fill="#0B0F0E"/>
+      <rect width="390" height="844" fill="url(#bg)" opacity="1"/>
+      <g opacity="1">
+        <path d="M 135 344 H 255" stroke="#3DDC97" stroke-width="8" opacity=".14" filter="url(#halo)"/>
+        <path d="M 135 344 H 255" stroke="url(#taper)" stroke-width="1.8"/>
+        <circle cx="195" cy="344" r="1.5" fill="#C8F7E2" opacity="0"/>
+      </g>
+      <g opacity="0">
+        <path d="M 135 344 L 157 344 L 195 405 L 233 344 L 255 344 L 205 425 Q 195 441 185 425 Z" fill="url(#fill)" fill-opacity="0" stroke="none"/>
+        <path data-metric="true" d="M 135 344 L 157 344 L 195 405 L 233 344 L 255 344 L 205 425 Q 195 441 185 425 Z" pathLength="1" fill="none" stroke="#3DDC97" stroke-opacity=".55" stroke-width="1.5" stroke-linejoin="round" stroke-dasharray="0 1"/>
+        <path data-trail="true" d="M 135 344 L 157 344 L 195 405 L 233 344 L 255 344 L 205 425 Q 195 441 185 425 Z" fill="none" stroke="#C8F7E2" stroke-width="1.8" opacity="0" stroke-dasharray="0 404.7886962890625" stroke-dashoffset="0"/>
+        <circle data-halo="true" r="7" fill="#3DDC97" filter="url(#halo)" opacity="0" cx="135" cy="344"/>
+        <circle data-head="true" r="1.6" fill="#C8F7E2" opacity="0" cx="135" cy="344"/>
+        <g clip-path="url(#logo)"><rect x="95" y="310" width="40" height="170" transform="rotate(20 195 390)" fill="url(#light)" opacity="0"/></g>
+        <path d="M135 344 H157 L195 405" stroke="#C8F7E2" stroke-width=".8" fill="none" opacity="0"/>
+      </g>
+      <text x="195" y="494" text-anchor="middle" fill="#F3F0E9" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="600" letter-spacing="2.24" opacity="0">VinFast Battery</text>
+      <text x="195" y="519" text-anchor="middle" fill="#A9B4AD" font-family="Inter, Arial, sans-serif" font-size="14" opacity="0">Hiểu pin. Sạc thông minh.</text>
+    </svg>

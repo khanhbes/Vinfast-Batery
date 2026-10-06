@@ -37,64 +37,98 @@ class TripSummaryCard extends StatelessWidget {
             border: Border.all(color: uiColors.glassBorder),
           ),
           child: SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: uiColors.border,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    const Icon(Icons.two_wheeler_rounded, color: Color(0xFF0072BC), size: 24),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Phân Tích Chi Tiết Chuyến Đi',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: uiColors.text,
-                        ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: uiColors.border,
+                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                _buildDetailRow('Tổng quãng đường:', '${distanceKm.toStringAsFixed(1)} km', uiColors),
-                _buildDetailRow('Thời gian di chuyển:', '$durationMin phút', uiColors),
-                _buildDetailRow(
-                  'Tổng điện năng tiêu thụ:',
-                  energyWh >= 1000
-                      ? '${(energyWh / 1000).toStringAsFixed(2)} kWh'
-                      : '${energyWh.toStringAsFixed(0)} Wh',
-                  uiColors,
-                ),
-                _buildDetailRow('Suất tiêu hao trung bình:', '${efficiency.toStringAsFixed(1)} Wh/km', uiColors, valueColor: isEfficient ? Colors.green : Colors.amber.shade800),
-                _buildDetailRow('CO₂ đã cắt giảm:', '${co2Saved.toStringAsFixed(2)} kg CO₂', uiColors, valueColor: Colors.green),
-                _buildDetailRow('Đánh giá phong cách lái:', isEfficient ? 'Tối ưu năng lượng (Eco Champion)' : 'Cần điều tiết tay ga đều hơn', uiColors),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: uiColors.primary,
-                      foregroundColor: uiColors.onPrimary,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onPressed: () => Navigator.of(ctx).pop(),
-                    child: const Text('Đóng'),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.two_wheeler_rounded,
+                        color: Color(0xFF0072BC),
+                        size: 24,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Phân Tích Chi Tiết Chuyến Đi',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: uiColors.text,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  _buildDetailRow(
+                    'Tổng quãng đường:',
+                    '${distanceKm.toStringAsFixed(1)} km',
+                    uiColors,
+                  ),
+                  _buildDetailRow(
+                    'Thời gian di chuyển:',
+                    '$durationMin phút',
+                    uiColors,
+                  ),
+                  _buildDetailRow(
+                    'Tổng điện năng tiêu thụ:',
+                    energyWh >= 1000
+                        ? '${(energyWh / 1000).toStringAsFixed(2)} kWh'
+                        : '${energyWh.toStringAsFixed(0)} Wh',
+                    uiColors,
+                  ),
+                  _buildDetailRow(
+                    'Suất tiêu hao trung bình:',
+                    '${efficiency.toStringAsFixed(1)} Wh/km',
+                    uiColors,
+                    valueColor: isEfficient
+                        ? Colors.green
+                        : Colors.amber.shade800,
+                  ),
+                  _buildDetailRow(
+                    'CO₂ đã cắt giảm:',
+                    '${co2Saved.toStringAsFixed(2)} kg CO₂',
+                    uiColors,
+                    valueColor: Colors.green,
+                  ),
+                  _buildDetailRow(
+                    'Đánh giá phong cách lái:',
+                    isEfficient
+                        ? 'Tối ưu năng lượng (Eco Champion)'
+                        : 'Cần điều tiết tay ga đều hơn',
+                    uiColors,
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: uiColors.primary,
+                        foregroundColor: uiColors.onPrimary,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: const Text('Đóng'),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -102,14 +136,36 @@ class TripSummaryCard extends StatelessWidget {
     );
   }
 
-  static Widget _buildDetailRow(String label, String value, AppUiColors uiColors, {Color? valueColor}) {
+  static Widget _buildDetailRow(
+    String label,
+    String value,
+    AppUiColors uiColors, {
+    Color? valueColor,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(fontSize: 13, color: uiColors.muted)),
-          Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: valueColor ?? uiColors.text)),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(fontSize: 13, color: uiColors.muted),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: valueColor ?? uiColors.text,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -180,10 +236,7 @@ class TripSummaryCard extends StatelessWidget {
                       ),
                       Text(
                         'Thời gian: ~$durationMin phút',
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          color: uiColors.muted,
-                        ),
+                        style: TextStyle(fontSize: 11.5, color: uiColors.muted),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -191,7 +244,10 @@ class TripSummaryCard extends StatelessWidget {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: (isEfficient ? Colors.green : Colors.orange)
                         .withValues(alpha: 0.15),
@@ -202,7 +258,9 @@ class TripSummaryCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 10.5,
                       fontWeight: FontWeight.w600,
-                      color: isEfficient ? Colors.green.shade800 : Colors.orange.shade800,
+                      color: isEfficient
+                          ? Colors.green.shade800
+                          : Colors.orange.shade800,
                     ),
                   ),
                 ),
@@ -323,10 +381,7 @@ class TripSummaryCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   label,
-                  style: TextStyle(
-                    fontSize: 9.5,
-                    color: uiColors.muted,
-                  ),
+                  style: TextStyle(fontSize: 9.5, color: uiColors.muted),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -335,10 +390,7 @@ class TripSummaryCard extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             value,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-            ),
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),

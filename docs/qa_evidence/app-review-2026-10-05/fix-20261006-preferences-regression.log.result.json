@@ -1,0 +1,20 @@
+{
+  "command": [
+    "C:/flutter/bin/cache/dart-sdk/bin/dart.exe",
+    "C:/flutter/bin/cache/flutter_tools.snapshot",
+    "test",
+    "--no-pub",
+    "test/dashboard_preferences_test.dart",
+    "test/unit/phase5c_rich_cards_test.dart",
+    "--reporter",
+    "expanded",
+    "--concurrency",
+    "1"
+  ],
+  "cwd": "app",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\fix-20261006-preferences-regression.log",
+  "timeoutSeconds": 60,
+  "timedOut": false,
+  "exitCode": 0,
+  "elapsedSeconds": 19.39
+}

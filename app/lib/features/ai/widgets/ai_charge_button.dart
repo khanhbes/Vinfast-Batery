@@ -40,27 +40,27 @@ class _AIChargeButtonState extends State<AIChargeButton>
       vsync: this,
       duration: const Duration(milliseconds: 2800),
     )..repeat(reverse: true);
-    
+
     _rotateController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 20),
     )..repeat();
-    
+
     _ringController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2000),
     )..repeat(reverse: true);
-    
+
     _rippleController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 3),
     )..repeat();
-    
+
     _gradientController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 8),
     )..repeat();
-    
+
     _shimmerController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2500),
@@ -220,8 +220,14 @@ class _AIChargeButtonState extends State<AIChargeButton>
                         shape: BoxShape.circle,
                         gradient: enabled
                             ? LinearGradient(
-                                begin: _getAlignment(_gradientController.value, 0),
-                                end: _getAlignment(_gradientController.value, math.pi),
+                                begin: _getAlignment(
+                                  _gradientController.value,
+                                  0,
+                                ),
+                                end: _getAlignment(
+                                  _gradientController.value,
+                                  math.pi,
+                                ),
                                 colors: const [
                                   CockpitColors.emeraldStrong,
                                   CockpitColors.emerald,
@@ -290,24 +296,24 @@ class _RipplePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final maxRadius = size.width / 2;
-    
+
     final radius = baseRadius + (maxRadius - baseRadius) * animation.value;
     final opacity = 0.3 * (1 - animation.value);
-    
+
     if (opacity <= 0) return;
-    
+
     final paint = Paint()
       ..color = color.withValues(alpha: opacity)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
-      
+
     canvas.drawCircle(center, radius, paint);
   }
 
   @override
-  bool shouldRepaint(_RipplePainter old) => 
-      old.animation != animation || 
-      old.color != color || 
+  bool shouldRepaint(_RipplePainter old) =>
+      old.animation != animation ||
+      old.color != color ||
       old.baseRadius != baseRadius;
 }
 
@@ -333,7 +339,7 @@ class _ShimmerPainter extends CustomPainter {
 
     canvas.drawPath(path, paint);
   }
-  
+
   @override
   bool shouldRepaint(_ShimmerPainter old) => old.animation != animation;
 }
@@ -356,20 +362,20 @@ class _ParticleRingPainter extends CustomPainter {
       final baseAngle = i * angleStep;
       // Modulate size and opacity for an organic feel
       final phase = math.sin(baseAngle * 4 + rotateValue * 2 * math.pi * 6);
-      
+
       final pRadius = 1.0 + 1.2 * (0.5 + 0.5 * phase);
       final pOpacity = 0.15 + 0.85 * (0.5 + 0.5 * phase);
-      
+
       paint.color = color.withValues(alpha: pOpacity);
-      
+
       final x = center.dx + radius * math.cos(baseAngle);
       final y = center.dy + radius * math.sin(baseAngle);
-      
+
       canvas.drawCircle(Offset(x, y), pRadius, paint);
     }
   }
 
   @override
-  bool shouldRepaint(_ParticleRingPainter old) => 
+  bool shouldRepaint(_ParticleRingPainter old) =>
       old.color != color || old.rotateValue != rotateValue;
 }

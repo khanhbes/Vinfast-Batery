@@ -1,0 +1,27 @@
+{
+  "active": "c",
+  "versions": [
+    {
+      "version": "a",
+      "uploadedAt": "2026-10-05T18:38:42.698167+00:00",
+      "note": "",
+      "ext": ".onnx",
+      "path": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\pytest-web-fix-20261006-first\\test_concurrent_deploys_publis0\\v_a.onnx"
+    },
+    {
+      "version": "b",
+      "uploadedAt": "2026-10-05T18:38:42.723786+00:00",
+      "note": "",
+      "ext": ".onnx",
+      "path": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\pytest-web-fix-20261006-first\\test_concurrent_deploys_publis0\\v_b.onnx"
+    },
+    {
+      "version": "c",
+      "uploadedAt": "2026-10-05T18:38:42.749892+00:00",
+      "note": "",
+      "ext": ".onnx",
+      "path": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\pytest-web-fix-20261006-first\\test_concurrent_deploys_publis0\\v_c.onnx"
+    }
+  ],
+  "activatedAt": "2026-10-05T18:38:43.212338+00:00"
+}

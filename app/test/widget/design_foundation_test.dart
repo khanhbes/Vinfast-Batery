@@ -80,9 +80,10 @@ void main() {
       ),
     );
     await tester.pump(const Duration(milliseconds: 1));
-    expect(find.text('VinFast Battery'), findsOneWidget);
+    expect(find.text('VINFAST BATTERY'), findsOneWidget);
     expect(find.byType(LinearProgressIndicator), findsNothing);
     expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets(

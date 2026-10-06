@@ -1,0 +1,751 @@
+{
+  "dateLocal": "2026-10-06",
+  "mode": "Offline source inventory; user instructed not to run emulator",
+  "sourceHead": "6dc059ee64b6c1f9d155163c2dec68ee9e58b0cf",
+  "sourceWorkingTree": "Dirty; not an exact build manifest for the approved APK",
+  "approvedArtifactSha256": "5A0EF61FD5F143AE9685B1DB4481FCDBF2DB7E280011F88608B1EABF5F660639",
+  "runtimeScreensAdded": 0,
+  "runtimeControlsAdded": 0,
+  "hardwareCommandsSent": 0,
+  "candidateFileCount": 51,
+  "files": [
+    {
+      "file": "app/lib/core/widgets/debug_error_sheet.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/core/widgets/vehicle_detail_sheet.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/core/widgets/vehicle_picker_sheet.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/ai/ai_charging_predictor_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/ai/ai_models_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/ai/assistant_sheet.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/ai/smart_charge_history_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/ai/smart_charging_control_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/ai/widgets/calibrate_battery_sheet.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/ai/widgets/confirm_end_soc_sheet.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/ai/widgets/confirm_session_soc_dialog.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/ai/widgets/edit_current_battery_sheet.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/ai/widgets/prediction_detail_sheet.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/ai/widgets/start_charge_confirmation_sheet.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/ai/widgets/stop_charging_confirmation_sheet.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/auth/login_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/auth/onboarding_chat_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/auth/onboarding_flow_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/auth/password_reset_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/auth/register_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/battery_monitor/battery_monitor_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/charge/charge_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/charge_log/charge_log_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/dashboard/dashboard_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/dashboard/smart_charging_eta_sheet.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/dashboard/trip_live_map_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/energy_journey/energy_journey_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/energy_journey/widgets/level_up_celebration_dialog.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/home/home_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/maintenance/maintenance_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/more/more_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/notifications/notification_center_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/overview/overview_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/overview/widgets/dashboard_customization_sheet.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/settings/ai_functions_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/settings/appearance_settings_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/settings/battery_bot_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/settings/developer_ai_studio_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/settings/guide_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/settings/personal_ai_settings_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/settings/personal_ai_training_data_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/settings/profile_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/settings/settings_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/settings/vehicle_garage_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/settings/vehicle_spec_detail_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/smart_charging/shelly_connect_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/smart_charging/shelly_setup_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/smart_charging/smart_charger_setup_hub_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/smart_charging/widgets/shelly_qr_scanner_dialog.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/statistics/statistics_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    },
+    {
+      "file": "app/lib/features/trip_planner/trip_planner_screen.dart",
+      "status": "Source inventory only; artifact route and complete runtime coverage unverified"
+    }
+  ],
+  "overlayCallSiteCount": 84,
+  "overlayCallSites": [
+    {
+      "file": "app/lib/features/notifications/notification_center_screen.dart",
+      "line": 214,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/notifications/notification_center_screen.dart",
+      "line": 279,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/battery_monitor/battery_monitor_screen.dart",
+      "line": 686,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/trip_planner/trip_planner_screen.dart",
+      "line": 150,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/more/more_screen.dart",
+      "line": 77,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/energy_journey/widgets/level_up_celebration_dialog.dart",
+      "line": 23,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/maintenance/maintenance_screen.dart",
+      "line": 397,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/maintenance/maintenance_screen.dart",
+      "line": 451,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/maintenance/maintenance_screen.dart",
+      "line": 1461,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/smart_charging/widgets/shelly_qr_scanner_dialog.dart",
+      "line": 10,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/smart_charging/smart_charger_setup_hub_screen.dart",
+      "line": 512,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/smart_charging/smart_charger_setup_hub_screen.dart",
+      "line": 622,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/smart_charging/smart_charger_setup_hub_screen.dart",
+      "line": 2659,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/smart_charging/smart_charger_setup_hub_screen.dart",
+      "line": 2753,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/smart_charging/smart_charger_setup_hub_screen.dart",
+      "line": 2822,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/smart_charging/smart_charger_setup_hub_screen.dart",
+      "line": 2906,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/smart_charging/smart_charger_setup_hub_screen.dart",
+      "line": 3000,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/smart_charging/shelly_setup_screen.dart",
+      "line": 127,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/smart_charging/shelly_connect_screen.dart",
+      "line": 176,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/smart_charging/shelly_connect_screen.dart",
+      "line": 269,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/smart_charging/shelly_connect_screen.dart",
+      "line": 391,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/dashboard/trip_live_map_screen.dart",
+      "line": 292,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/charge_log/charge_log_screen.dart",
+      "line": 248,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/charge_log/add_charge_log_modal.dart",
+      "line": 20,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/settings/vehicle_garage_screen.dart",
+      "line": 67,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/settings/vehicle_garage_screen.dart",
+      "line": 86,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/settings/vehicle_garage_screen.dart",
+      "line": 699,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/settings/vehicle_garage_screen.dart",
+      "line": 1042,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/settings/settings_screen.dart",
+      "line": 192,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/settings/settings_screen.dart",
+      "line": 629,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/settings/settings_screen.dart",
+      "line": 752,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/dashboard/dashboard_screen.dart",
+      "line": 167,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/dashboard/dashboard_screen.dart",
+      "line": 728,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/dashboard/dashboard_screen.dart",
+      "line": 1243,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/dashboard/dashboard_screen.dart",
+      "line": 1392,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/dashboard/dashboard_screen.dart",
+      "line": 1539,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/dashboard/dashboard_screen.dart",
+      "line": 1608,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/settings/profile_screen.dart",
+      "line": 128,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/settings/personal_ai_training_data_screen.dart",
+      "line": 430,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/settings/personal_ai_training_data_screen.dart",
+      "line": 506,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/home/widgets/session_summary_modal.dart",
+      "line": 41,
+      "kind": "showGeneralDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/settings/personal_ai_settings_screen.dart",
+      "line": 61,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/home/widgets/quick_actions_floating.dart",
+      "line": 78,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/home/widgets/quick_actions_floating.dart",
+      "line": 92,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/home/widgets/quick_actions_floating.dart",
+      "line": 113,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/settings/developer_ai_studio_screen.dart",
+      "line": 192,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/settings/developer_ai_studio_screen.dart",
+      "line": 404,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/settings/developer_ai_studio_screen.dart",
+      "line": 817,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/settings/battery_bot_screen.dart",
+      "line": 264,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/home/widgets/ai_insights_section.dart",
+      "line": 80,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/home/widgets/ai_insights_section.dart",
+      "line": 102,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/home/widgets/ai_insights_section.dart",
+      "line": 124,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/home/home_screen.dart",
+      "line": 305,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/overview/widgets/dashboard_customization_sheet.dart",
+      "line": 13,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/ai/widgets/trip_summary_card.dart",
+      "line": 27,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/ai/widgets/stop_charging_confirmation_sheet.dart",
+      "line": 15,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/ai/widgets/calibrate_battery_sheet.dart",
+      "line": 21,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/ai/widgets/start_charge_confirmation_sheet.dart",
+      "line": 34,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/ai/widgets/chat_input_bar.dart",
+      "line": 97,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/ai/widgets/battery_status_card.dart",
+      "line": 29,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/ai/widgets/edit_current_battery_sheet.dart",
+      "line": 23,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/ai/widgets/charging_progress_card.dart",
+      "line": 28,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/ai/widgets/confirm_end_soc_sheet.dart",
+      "line": 27,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/ai/widgets/prediction_detail_sheet.dart",
+      "line": 46,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/ai/smart_charging_control_screen.dart",
+      "line": 206,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/ai/smart_charging_control_screen.dart",
+      "line": 546,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/ai/smart_charging_control_screen.dart",
+      "line": 688,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/ai/smart_charging_control_screen.dart",
+      "line": 1608,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/ai/smart_charge_history_screen.dart",
+      "line": 532,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/ai/smart_charge_history_screen.dart",
+      "line": 570,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/ai/smart_charge_history_screen.dart",
+      "line": 656,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/ai/smart_charge_history_screen.dart",
+      "line": 1954,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/ai/smart_charge_history_screen.dart",
+      "line": 1992,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/ai/smart_charge_history_screen.dart",
+      "line": 2060,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/core/widgets/debug_error_sheet.dart",
+      "line": 55,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/core/widgets/global_charging_pill.dart",
+      "line": 237,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/ai/assistant_sheet.dart",
+      "line": 35,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/features/ai/assistant_sheet.dart",
+      "line": 369,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/core/services/app_update_service.dart",
+      "line": 225,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/core/widgets/quick_action_menu.dart",
+      "line": 48,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/core/widgets/under_development_notice.dart",
+      "line": 19,
+      "kind": "showDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/core/widgets/under_development_notice.dart",
+      "line": 24,
+      "kind": "showGeneralDialog",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/core/widgets/vehicle_detail_sheet.dart",
+      "line": 28,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    },
+    {
+      "file": "app/lib/core/widgets/vehicle_picker_sheet.dart",
+      "line": 15,
+      "kind": "showModalBottomSheet",
+      "status": "Source call site; runtime not verified"
+    }
+  ],
+  "additionalSurfaces": [
+    {
+      "file": "app/lib/features/auth/auth_gate.dart",
+      "surface": "Auth routing, bootstrap error and loading"
+    },
+    {
+      "file": "app/lib/core/widgets/bootstrap_splash.dart",
+      "surface": "Flutter splash"
+    },
+    {
+      "file": "app/lib/navigation/app_navigation.dart",
+      "surface": "Four-tab shell"
+    },
+    {
+      "file": "app/lib/core/widgets/coach_mark_overlay.dart",
+      "surface": "Tour overlay"
+    },
+    {
+      "file": "app/lib/core/widgets/floating_battery_bot.dart",
+      "surface": "Floating assistant"
+    },
+    {
+      "file": "app/lib/core/widgets/app_popup.dart",
+      "surface": "Application notices"
+    }
+  ],
+  "limitation": "File names and call sites are not runtime screen/control counts; wrappers, inline surfaces, dynamic routes and compile-time gates require separate runtime validation."
+}

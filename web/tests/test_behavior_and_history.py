@@ -58,10 +58,12 @@ def test_chat_engine_prompt_personalization():
             preferredStartHour=23,
             preferredEndHour=7,
             avgTargetSoc=85.0,
+            lastChargingEvent='2026-10-06T00:00:00+00:00',
         ),
         tripPatterns=TripPatterns(
             avgDailyDistanceKm=24.5,
             avgEnergyConsumptionWhPerKm=31.5,
+            totalTrips=3,
         ),
     )
 
@@ -94,7 +96,10 @@ def test_chat_engine_fallback_with_behavior():
         for c in chunks
         if c.startswith("event: text_delta")
     )
-    assert "Gợi ý cá nhân hóa" in full_text or "22h" in full_text
+    import json
+    reply = "".join(json.loads(c.split("data: ")[1])["delta"] for c in chunks if c.startswith("event: text_delta"))
+    assert "65%" in reply
+    assert "18.5" not in reply  # Default behavior is not observed range.
 
 
 def test_fastapi_behavior_sync_and_profile():

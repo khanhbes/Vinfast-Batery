@@ -1,0 +1,14 @@
+{
+  "command": [
+    "C:/Program Files/nodejs/node.exe",
+    "C:/Program Files/nodejs/node_modules/npm/bin/npm-cli.js",
+    "run",
+    "lint"
+  ],
+  "cwd": "web/dashboard",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\fix-20261006-dashboard-lint-02.log",
+  "timeoutSeconds": 90,
+  "timedOut": false,
+  "exitCode": 0,
+  "elapsedSeconds": 14.86
+}

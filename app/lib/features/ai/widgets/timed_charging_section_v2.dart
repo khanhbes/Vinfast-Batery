@@ -354,7 +354,9 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
                             gradient: enabled
                                 ? const RadialGradient(
                                     colors: [
-                                      Color(0xFF6EE7B7), // emerald-300 highlight
+                                      Color(
+                                        0xFF6EE7B7,
+                                      ), // emerald-300 highlight
                                       CockpitColors.emeraldStrong,
                                       Color(0xFF047857), // emerald-700 depth
                                     ],
@@ -364,21 +366,24 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
                             color: enabled ? null : CockpitColors.elevated,
                             border: Border.all(
                               color: enabled
-                                  ? const Color(0xFFA7F3D0).withValues(alpha: 0.6)
+                                  ? const Color(
+                                      0xFFA7F3D0,
+                                    ).withValues(alpha: 0.6)
                                   : CockpitColors.border,
                               width: 2.5,
                             ),
                             boxShadow: enabled
                                 ? [
                                     BoxShadow(
-                                      color: CockpitColors.emeraldStrong.withValues(
-                                        alpha: 0.38,
-                                      ),
+                                      color: CockpitColors.emeraldStrong
+                                          .withValues(alpha: 0.38),
                                       blurRadius: 28,
                                       spreadRadius: 3,
                                     ),
                                     BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.4),
+                                      color: Colors.black.withValues(
+                                        alpha: 0.4,
+                                      ),
                                       blurRadius: 10,
                                       offset: const Offset(0, 4),
                                     ),
@@ -418,7 +423,9 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
                                   Icons.power_settings_new_rounded,
                                   size: 50,
                                   color: enabled
-                                      ? const Color(0xFF022C22) // dark emerald text
+                                      ? const Color(
+                                          0xFF022C22,
+                                        ) // dark emerald text
                                       : CockpitColors.dim,
                                 ),
                               ),

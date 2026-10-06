@@ -55,10 +55,7 @@ class RecentSessionsSectionV2 extends StatelessWidget {
               onTap: onViewAll,
               borderRadius: BorderRadius.circular(8),
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 4,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -87,10 +84,7 @@ class RecentSessionsSectionV2 extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             'Đồng bộ lần cuối ${DateFormat('HH:mm').format(syncedAt!.toLocal())}',
-            style: TextStyle(
-              color: CockpitColors.dim,
-              fontSize: 10,
-            ),
+            style: TextStyle(color: CockpitColors.dim, fontSize: 10),
           ),
         ],
 
@@ -100,11 +94,7 @@ class RecentSessionsSectionV2 extends StatelessWidget {
         for (final session in sessions.take(3)) ...[
           _SessionTile(session: session, onTap: () => onOpen(session)),
           if (session != sessions.take(3).last)
-            Divider(
-              height: 1,
-              color: CockpitColors.border,
-              indent: 42,
-            ),
+            Divider(height: 1, color: CockpitColors.border, indent: 42),
         ],
       ],
     );
@@ -129,7 +119,9 @@ class _SessionTile extends StatelessWidget {
 
     // Terminal state styling
     final isCompleted = session.state == ChargingSessionState.completed;
-    final stateColor = isCompleted ? CockpitColors.emerald : CockpitColors.amber;
+    final stateColor = isCompleted
+        ? CockpitColors.emerald
+        : CockpitColors.amber;
     final stateLabel = isCompleted ? 'Hoàn thành' : 'Đã dừng';
 
     return Material(
@@ -150,9 +142,7 @@ class _SessionTile extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
-                  isAi
-                      ? Icons.auto_awesome_rounded
-                      : Icons.timer_rounded,
+                  isAi ? Icons.auto_awesome_rounded : Icons.timer_rounded,
                   size: 16,
                   color: stateColor,
                 ),
@@ -248,18 +238,16 @@ class _EmptyState extends StatelessWidget {
     children: [
       Row(
         children: [
-          Icon(
-            Icons.history_rounded,
-            size: 18,
-            color: CockpitColors.emerald,
-          ),
+          Icon(Icons.history_rounded, size: 18, color: CockpitColors.emerald),
           const SizedBox(width: 8),
-          Text(
-            'Lịch sử gần đây',
-            style: TextStyle(
-              color: CockpitColors.text,
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
+          Flexible(
+            child: Text(
+              'Lịch sử gần đây',
+              style: TextStyle(
+                color: CockpitColors.text,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],
@@ -285,10 +273,7 @@ class _EmptyState extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               'Phiên Smart Charge hoàn tất sẽ xuất hiện tại đây.',
-              style: TextStyle(
-                color: CockpitColors.dim,
-                fontSize: 11,
-              ),
+              style: TextStyle(color: CockpitColors.dim, fontSize: 11),
               textAlign: TextAlign.center,
             ),
           ],

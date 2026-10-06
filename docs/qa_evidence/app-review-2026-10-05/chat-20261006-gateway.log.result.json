@@ -1,0 +1,15 @@
+{
+  "command": [
+    "python",
+    "-m",
+    "pytest",
+    "tests",
+    "-q"
+  ],
+  "cwd": "smart_charger_gateway",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\chat-20261006-gateway.log",
+  "timeoutSeconds": 120,
+  "timedOut": false,
+  "exitCode": 1,
+  "elapsedSeconds": 74.08
+}

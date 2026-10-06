@@ -1,0 +1,19 @@
+{
+  "command": [
+    "C:/Users/khanh/AppData/Roaming/npm/firebase.cmd",
+    "emulators:exec",
+    "--config",
+    "firebase.rules-local.json",
+    "--only",
+    "firestore",
+    "--project",
+    "vinfast-rules-test",
+    "python -m pytest tests/test_shelly_membership_emulator.py -vv -p no:cacheprovider"
+  ],
+  "cwd": "web",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\fix-20261006-membership-emulator-02.log",
+  "timeoutSeconds": 300,
+  "timedOut": false,
+  "exitCode": 0,
+  "elapsedSeconds": 26.26
+}

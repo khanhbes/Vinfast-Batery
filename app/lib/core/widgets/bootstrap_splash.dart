@@ -1,753 +1,655 @@
-import 'dart:math' as math;
+import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import '../theme/cockpit_design_system.dart';
+import 'package:flutter/services.dart';
 
-/// Màn hình Splash khởi động phong cách Điện ảnh Công nghệ (Cinematic EV Awakening).
-///
-/// Hoạt cảnh mô phỏng phim ngắn 3 hồi:
-/// 1. Tụ hội năng lượng lượng tử từ không gian sâu thẳm.
-/// 2. Bùng nổ công nghệ: Tia sét điện tử kích hoạt logo VinFast cánh chim & thanh pin năng lượng.
-/// 3. Sóng radar Cockpit quét mở lối và hiệu ứng phóng to (Seamless Zoom Transition) hòa nhập vào Login.
+/// ============================================================================
+/// VINFAST BATTERY — V5 "KHẮC BẰNG ÁNH SÁNG" (LIGHT ENGRAVING SPLASH)
+/// Architecture: Single AnimationController (5000ms) with Interval Mappings
+/// 5 Nhịp: Khởi nguồn → Đường sáng → Khắc logo → Phản quang & Typography → Exit
+/// ============================================================================
+
+/// Finite LIGHT ENGRAVING animation; AuthGate owns startup work and navigation.
 class BootstrapSplash extends StatefulWidget {
-  const BootstrapSplash({super.key, required this.message, this.onFinished});
-
+  const BootstrapSplash({
+    super.key,
+    required this.message,
+    this.onFinished,
+    this.animate = true,
+  });
+  static const background = Color(0xFF060908);
+  static const duration = Duration(milliseconds: 5000);
   final String message;
   final VoidCallback? onFinished;
-
+  final bool animate;
   @override
   State<BootstrapSplash> createState() => _BootstrapSplashState();
 }
 
 class _BootstrapSplashState extends State<BootstrapSplash>
-    with TickerProviderStateMixin {
-  // Master timeline cho phim ngắn (2800ms)
-  late final AnimationController _timelineController;
-  // Ambient continuous breathing & grid movement
-  late final AnimationController _ambientController;
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+  late final AnimationController _ctrl;
+  bool _started = false, _reduced = false, _finished = false;
+  bool _resume = false, _slow = false;
+  Timer? _slowTimer;
 
-  // Keyframe animations theo timeline 3 hồi:
-  // Hồi 1 (0.0 -> 0.32): Khởi sinh & Tụ hội hạt năng lượng
-  late final Animation<double> _particleConvergence;
-  late final Animation<double> _coreSingularity;
+  // ── Haptic milestone flags ──
+  bool _hasFiredHapticStroke = false;
+  bool _hasFiredHapticSweep = false;
 
-  // Hồi 2 (0.30 -> 0.75): Đánh thức Logo & Tia sét V-Wing
-  late final Animation<double> _logoScale;
-  late final Animation<double> _logoFade;
-  late final Animation<double> _lightningArcs;
-  late final Animation<double> _sheenProgress;
-  late final Animation<double> _titleFade;
-  late final Animation<Offset> _titleSlide;
-  late final Animation<double> _hudExpand;
+  // ═══════════════════════════════════════════════════════════════════════════
+  // INTERVAL MAPPINGS — 14 Animations on Single Controller (5000ms)
+  // ═══════════════════════════════════════════════════════════════════════════
 
-  // Hồi 3 (0.75 -> 1.0): Nạp đầy & Phóng to chuyển cảnh vào Login
-  late final Animation<double> _zoomWarp;
-  late final Animation<double> _warpFade;
+  // Entire Scene: Slow cinematic dolly-in (scale 1.00 -> 1.03)
+  late final Animation<double> _dollyIn = Tween<double>(
+    begin: 1.00,
+    end: 1.03,
+  ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
 
-  // Các hạt lượng tử ngẫu nhiên
-  final List<_QuantumParticle> _particles = [];
-  final math.Random _random = math.Random(42);
+  // ── NHỊP 1: Khởi Nguồn (150ms → 750ms) — Dot Fade-in & Radius ──
+  late final Animation<double> _dotOpacity = Tween<double>(begin: 0.0, end: 1.0)
+      .animate(
+        CurvedAnimation(
+          parent: _ctrl,
+          curve: const Interval(0.030, 0.150, curve: Curves.easeOutCubic),
+        ),
+      );
 
-  bool _finishedCalled = false;
+  late final Animation<double> _dotRadius = Tween<double>(begin: 0.0, end: 2.2)
+      .animate(
+        CurvedAnimation(
+          parent: _ctrl,
+          curve: const Interval(0.030, 0.150, curve: Curves.easeOutCubic),
+        ),
+      );
+
+  // ── NHỊP 2: Đường Sáng (750ms → 1625ms) — Line Expansion & Breathing ──
+  late final Animation<double> _lineWidth =
+      Tween<double>(begin: 0.0, end: 160.0).animate(
+        CurvedAnimation(
+          parent: _ctrl,
+          curve: const Interval(0.150, 0.325, curve: Curves.easeInOutCubic),
+        ),
+      );
+
+  late final Animation<double> _lineBreathOpacity =
+      TweenSequence<double>([
+        TweenSequenceItem(
+          tween: Tween<double>(begin: 0.85, end: 1.0),
+          weight: 50,
+        ),
+        TweenSequenceItem(
+          tween: Tween<double>(begin: 1.0, end: 0.85),
+          weight: 50,
+        ),
+      ]).animate(
+        CurvedAnimation(
+          parent: _ctrl,
+          curve: const Interval(0.200, 0.325, curve: Curves.easeInOut),
+        ),
+      );
+
+  // ── NHỊP 3: Khắc Logo (1775ms → 3125ms) — Stroke Drawing & Fill ──
+  late final Animation<double> _strokeDrawProgress =
+      Tween<double>(begin: 0.0, end: 1.0).animate(
+        CurvedAnimation(
+          parent: _ctrl,
+          curve: const Interval(
+            0.355,
+            0.525,
+            curve: Cubic(0.65, 0.0, 0.35, 1.0),
+          ),
+        ),
+      );
+
+  late final Animation<double> _fillGradientOpacity =
+      Tween<double>(begin: 0.0, end: 1.0).animate(
+        CurvedAnimation(
+          parent: _ctrl,
+          curve: const Interval(0.555, 0.625, curve: Curves.easeOut),
+        ),
+      );
+
+  // ── NHỊP 4: Phản Quang & Typography (3125ms → 4060ms) ──
+  late final Animation<double> _specularSweepOffset =
+      Tween<double>(begin: -1.5, end: 2.0).animate(
+        CurvedAnimation(
+          parent: _ctrl,
+          curve: const Interval(
+            0.625,
+            0.762,
+            curve: Cubic(0.22, 1.0, 0.36, 1.0),
+          ),
+        ),
+      );
+
+  late final Animation<double> _rimLightIntensity =
+      TweenSequence<double>([
+        TweenSequenceItem(
+          tween: Tween<double>(begin: 0.25, end: 0.95),
+          weight: 40,
+        ),
+        TweenSequenceItem(
+          tween: Tween<double>(begin: 0.95, end: 0.25),
+          weight: 60,
+        ),
+      ]).animate(
+        CurvedAnimation(
+          parent: _ctrl,
+          curve: const Interval(
+            0.625,
+            0.762,
+            curve: Cubic(0.22, 1.0, 0.36, 1.0),
+          ),
+        ),
+      );
+
+  // Tracking Settle: letter-spacing 22% → 14%
+  late final Animation<double> _trackingAnimation =
+      Tween<double>(begin: 0.22, end: 0.14).animate(
+        CurvedAnimation(
+          parent: _ctrl,
+          curve: const Interval(
+            0.650,
+            0.812,
+            curve: Cubic(0.22, 1.0, 0.36, 1.0),
+          ),
+        ),
+      );
+
+  // Typography "VINFAST BATTERY" fade-in
+  late final Animation<double> _typoOpacity =
+      Tween<double>(begin: 0.0, end: 1.0).animate(
+        CurvedAnimation(
+          parent: _ctrl,
+          curve: const Interval(0.650, 0.750, curve: Curves.easeOut),
+        ),
+      );
+
+  // Tagline "Hiểu pin · Sạc thông minh" champagne fade-in
+  late final Animation<double> _taglineOpacity =
+      Tween<double>(begin: 0.0, end: 1.0).animate(
+        CurvedAnimation(
+          parent: _ctrl,
+          curve: const Interval(0.687, 0.812, curve: Curves.easeOut),
+        ),
+      );
+
+  // Hold the final brand while AuthGate resolves startup. The route owner
+  // fades the splash out only when the destination is actually ready.
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // LIFECYCLE
+  // ═══════════════════════════════════════════════════════════════════════════
 
   @override
   void initState() {
     super.initState();
-
-    // Sinh 28 hạt lượng tử hội tụ
-    for (int i = 0; i < 28; i++) {
-      final angle = (i / 28) * 2 * math.pi + (_random.nextDouble() * 0.3);
-      final radius = 130.0 + _random.nextDouble() * 140.0;
-      final speed = 0.8 + _random.nextDouble() * 0.5;
-      final size = 2.0 + _random.nextDouble() * 2.8;
-      final isCyan = i % 2 == 0;
-      _particles.add(
-        _QuantumParticle(
-          initialAngle: angle,
-          initialRadius: radius,
-          speed: speed,
-          size: size,
-          color: isCyan ? const Color(0xFF00F5D4) : CockpitColors.emerald,
-        ),
-      );
-    }
-
-    _ambientController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 3200),
-    )..repeat();
-
-    _timelineController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2800),
-    );
-
-    // 1. Particle convergence
-    _particleConvergence = Tween<double>(begin: 1.0, end: 0.0).animate(
-      CurvedAnimation(
-        parent: _timelineController,
-        curve: const Interval(0.0, 0.40, curve: Curves.easeInCubic),
-      ),
-    );
-
-    // Singularity glow
-    _coreSingularity = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _timelineController,
-        curve: const Interval(0.05, 0.35, curve: Curves.easeOutQuad),
-      ),
-    );
-
-    // 2. Logo entrance & lightning
-    _logoScale = Tween<double>(begin: 0.65, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _timelineController,
-        curve: const Interval(0.28, 0.62, curve: Curves.easeOutBack),
-      ),
-    );
-
-    _logoFade = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _timelineController,
-        curve: const Interval(0.25, 0.48, curve: Curves.easeOut),
-      ),
-    );
-
-    _lightningArcs = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _timelineController,
-        curve: const Interval(0.35, 0.70, curve: Curves.easeInOutSine),
-      ),
-    );
-
-    _sheenProgress = Tween<double>(begin: -0.4, end: 1.4).animate(
-      CurvedAnimation(
-        parent: _timelineController,
-        curve: const Interval(0.48, 0.78, curve: Curves.easeInOutCubic),
-      ),
-    );
-
-    _hudExpand = Tween<double>(begin: 0.3, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _timelineController,
-        curve: const Interval(0.32, 0.72, curve: Curves.easeOutCubic),
-      ),
-    );
-
-    // Title & Tagline
-    _titleFade = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _timelineController,
-        curve: const Interval(0.42, 0.75, curve: Curves.easeOut),
-      ),
-    );
-
-    _titleSlide = Tween<Offset>(begin: const Offset(0, 0.20), end: Offset.zero)
-        .animate(
-          CurvedAnimation(
-            parent: _timelineController,
-            curve: const Interval(0.42, 0.75, curve: Curves.easeOutCubic),
-          ),
-        );
-
-    // 3. Zoom warp transition to login
-    _zoomWarp = Tween<double>(begin: 1.0, end: 1.45).animate(
-      CurvedAnimation(
-        parent: _timelineController,
-        curve: const Interval(0.82, 1.0, curve: Curves.easeInCubic),
-      ),
-    );
-
-    _warpFade = Tween<double>(begin: 1.0, end: 0.0).animate(
-      CurvedAnimation(
-        parent: _timelineController,
-        curve: const Interval(0.88, 1.0, curve: Curves.easeIn),
-      ),
-    );
-
-    _timelineController.addStatusListener((status) {
-      if (status == AnimationStatus.completed) {
-        _triggerFinish();
-      }
+    WidgetsBinding.instance.addObserver(this);
+    _ctrl =
+        AnimationController(
+          vsync: this,
+          duration: BootstrapSplash.duration,
+          animationBehavior: AnimationBehavior.preserve,
+        )..addStatusListener((status) {
+          if (status == AnimationStatus.completed && !_finished) {
+            _finished = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) widget.onFinished?.call();
+            });
+          }
+        });
+    _ctrl.addListener(_handleMilestoneHaptics);
+    _slowTimer = Timer(const Duration(seconds: 8), () {
+      if (mounted) setState(() => _slow = true);
     });
-
-    _timelineController.forward();
-  }
-
-  void _triggerFinish() {
-    if (_finishedCalled) return;
-    _finishedCalled = true;
-    if (mounted && widget.onFinished != null) {
-      widget.onFinished!();
-    }
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (MediaQuery.disableAnimationsOf(context)) {
-      if (!_timelineController.isCompleted) _timelineController.value = 1.0;
-      if (_ambientController.isAnimating) _ambientController.stop();
+    final reduced = MediaQuery.disableAnimationsOf(context);
+    if (!_started) {
+      _started = true;
+      _reduced = reduced;
+      if (!widget.animate) {
+        _ctrl.value = 1;
+      } else if (reduced) {
+        // A nearly static one-second hold uses the lifecycle-aware ticker,
+        // rather than a delayed callback that could finish in the background.
+        _ctrl.value = 0.80;
+        _ctrl.animateTo(0.81, duration: const Duration(seconds: 1));
+      } else {
+        _ctrl.forward();
+      }
+    } else if (reduced != _reduced) {
+      _reduced = reduced;
+      if (reduced && !_finished) {
+        _ctrl.value = 0.80;
+        _ctrl.animateTo(0.81, duration: const Duration(seconds: 1));
+      } else if (_ctrl.isAnimating) {
+        _ctrl.forward();
+      }
+    }
+  }
+
+  /// Fire haptic feedback at key animation milestones.
+  void _handleMilestoneHaptics() {
+    if (_reduced || !widget.animate) return;
+    // ~2625ms (Interval 0.525): Soft impact khi nét vẽ logo vừa khép
+    if (_ctrl.value >= 0.525 && !_hasFiredHapticStroke) {
+      _hasFiredHapticStroke = true;
+      HapticFeedback.lightImpact();
+    }
+    // ~3435ms (Interval 0.687): Nhịp rung siêu nhẹ khi vệt phản quang qua tâm
+    if (_ctrl.value >= 0.687 && !_hasFiredHapticSweep) {
+      _hasFiredHapticSweep = true;
+      HapticFeedback.selectionClick();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      if (_resume && !_finished) {
+        if (_reduced) {
+          _ctrl.animateTo(0.81, duration: const Duration(seconds: 1));
+        } else {
+          _ctrl.forward();
+        }
+      }
+      _resume = false;
+    } else {
+      _resume = _resume || _ctrl.isAnimating;
+      _ctrl.stop(canceled: false);
     }
   }
 
   @override
   void dispose() {
-    _timelineController.dispose();
-    _ambientController.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    _slowTimer?.cancel();
+    _ctrl.removeListener(_handleMilestoneHaptics);
+    _ctrl.dispose();
     super.dispose();
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // BUILD — 4-Layer Stack: Vignette → Logo → Specular → Typography
+  // ═══════════════════════════════════════════════════════════════════════════
+
   @override
-  Widget build(BuildContext context) {
-    final reducedMotion = MediaQuery.disableAnimationsOf(context);
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
-
-    return Scaffold(
-      // Match the Android launch theme so the hand-off never flashes white.
-      backgroundColor: isDark ? const Color(0xFF0A0C10) : scheme.surface,
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          // 1. Phông nền Cockpit & Lưới không gian 3D Perspective Cyber Grid
-          if (!reducedMotion && isDark)
-            Positioned.fill(
-              child: AnimatedBuilder(
-                animation: _ambientController,
-                builder: (context, _) {
-                  return CustomPaint(
-                    painter: _CockpitGridPainter(
-                      progress: _ambientController.value,
-                    ),
-                  );
-                },
-              ),
-            ),
-
-          // 2. Hào quang năng lượng trung tâm đa tầng (Ambient Aura Nebulae)
-          Center(
-            child: AnimatedBuilder(
-              animation: Listenable.merge([
-                _timelineController,
-                _ambientController,
-              ]),
-              builder: (context, child) {
-                final pulse = reducedMotion
-                    ? 1.0
-                    : 0.94 +
-                          0.12 *
-                              math.sin(_ambientController.value * 2 * math.pi);
-                final coreAlpha = reducedMotion ? 0.35 : _coreSingularity.value;
-                return Transform.scale(
-                  scale: pulse,
-                  child: Container(
-                    width: 380,
-                    height: 380,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: RadialGradient(
-                        colors: [
-                          const Color(0xFF00F5D4).withValues(
-                            alpha: (coreAlpha * 0.30).clamp(0.0, 1.0),
+  Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
+    value: const SystemUiOverlayStyle(
+      statusBarColor: BootstrapSplash.background,
+      statusBarIconBrightness: Brightness.light,
+      systemNavigationBarColor: BootstrapSplash.background,
+      systemNavigationBarIconBrightness: Brightness.light,
+    ),
+    child: Scaffold(
+      backgroundColor: BootstrapSplash.background,
+      body: Semantics(
+        label: 'VinFast Battery, đang khởi động',
+        liveRegion: true,
+        child: AnimatedBuilder(
+          animation: _ctrl,
+          builder: (context, _) {
+            return Opacity(
+              // Never hide the loading surface before navigation resolves.
+              opacity: 1.0,
+              child: Transform.scale(
+                scale: _dollyIn.value,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // ── LAYER 1: Radial Gradient Background ──
+                    const Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: RadialGradient(
+                            center: Alignment(0.0, -0.08),
+                            radius: 0.9,
+                            colors: [Color(0xFF0E1412), Color(0xFF060908)],
+                            stops: [0.0, 0.72],
                           ),
-                          CockpitColors.emerald.withValues(
-                            alpha: (coreAlpha * 0.18).clamp(0.0, 1.0),
-                          ),
-                          const Color(0xFF0A192F).withValues(
-                            alpha: (coreAlpha * 0.08).clamp(0.0, 1.0),
-                          ),
-                          Colors.transparent,
-                        ],
-                        stops: const [0.0, 0.38, 0.68, 1.0],
+                        ),
                       ),
                     ),
-                  ),
-                );
-              },
-            ),
-          ),
 
-          // 3. Sóng Radar Sonar & Vòng tia quét HUD
-          if (!reducedMotion && isDark)
-            Center(
-              child: AnimatedBuilder(
-                animation: Listenable.merge([
-                  _timelineController,
-                  _ambientController,
-                ]),
-                builder: (context, _) {
-                  return CustomPaint(
-                    size: const Size(320, 320),
-                    painter: _HudRadarPainter(
-                      expandProgress: _hudExpand.value,
-                      sweepProgress: _ambientController.value,
-                      lightningProgress: _lightningArcs.value,
-                    ),
-                  );
-                },
-              ),
-            ),
-
-          // 4. Bão hạt lượng tử tụ hội (Quantum Particle Convergence)
-          if (!reducedMotion && isDark)
-            Center(
-              child: AnimatedBuilder(
-                animation: _timelineController,
-                builder: (context, _) {
-                  return CustomPaint(
-                    size: const Size(340, 340),
-                    painter: _QuantumParticlesPainter(
-                      particles: _particles,
-                      convergence: _particleConvergence.value,
-                    ),
-                  );
-                },
-              ),
-            ),
-
-          // 5. Nội dung trung tâm: Logo VinFast V-Wing + Tiêu đề + Pin nạp
-          SafeArea(
-            child: AnimatedBuilder(
-              animation: _timelineController,
-              builder: (context, child) {
-                final scale = reducedMotion
-                    ? 1.0
-                    : (_logoScale.value * _zoomWarp.value);
-                final opacity = reducedMotion ? 1.0 : _warpFade.value;
-
-                return Opacity(
-                  opacity: opacity.clamp(0.0, 1.0),
-                  child: Transform.scale(
-                    scale: scale,
-                    child: Center(
-                      child: SingleChildScrollView(
-                        physics: const ClampingScrollPhysics(),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 28,
-                          vertical: 20,
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // Logo Badge với Electric Sheen Sweep
-                            _buildLogoWithSheen(reducedMotion),
-
-                            const SizedBox(height: 28),
-
-                            // Tên thương hiệu & Tagline
-                            _buildTitleAndTagline(
-                              theme,
-                              scheme,
-                              reducedMotion,
-                              isDark,
+                    // ── LAYER 2: Vignette 35% at 4 Corners ──
+                    Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.35),
+                              blurRadius: 100,
+                              spreadRadius: 20,
                             ),
-
-                            const SizedBox(height: 28),
-
-                            // Trạng thái thông điệp hệ thống
-                            AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 250),
-                              child: Text(
-                                widget.message,
-                                key: ValueKey(widget.message),
-                                textAlign: TextAlign.center,
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  color: scheme.onSurfaceVariant,
-                                  letterSpacing: 0.3,
-                                ),
-                              ),
-                            ),
-
-                            const SizedBox(height: 18),
-
-                            // EV Energy Progress Bar (Bắt buộc giữ cho test)
-                            // No fabricated percentage: boot progress is
-                            // represented by the real status message above.
                           ],
                         ),
                       ),
                     ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
-  Widget _buildLogoWithSheen(bool reducedMotion) {
-    return AnimatedBuilder(
-      animation: Listenable.merge([_timelineController, _ambientController]),
-      builder: (context, child) {
-        final fade = reducedMotion ? 1.0 : _logoFade.value;
-        final sheenVal = _sheenProgress.value;
+                    // ── LAYER 3: Center — Engraving Logo & Specular ──
+                    Center(
+                      child: RepaintBoundary(
+                        child: SizedBox(
+                          width: 140,
+                          height: 140,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              // AURA GLOW (Emerald #2FBF86, breathing)
+                              if (_ctrl.value >= 0.150)
+                                Container(
+                                  width: 120,
+                                  height: 120,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Color.fromRGBO(
+                                      47,
+                                      191,
+                                      134,
+                                      0.12 * _lineBreathOpacity.value,
+                                    ),
+                                  ),
+                                ),
 
-        return Opacity(
-          opacity: fade,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              // Outer Glowing Ring Halo
-              Container(
-                width: 130,
-                height: 130,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      const Color(0xFF00F5D4).withValues(alpha: 0.35),
-                      CockpitColors.emerald.withValues(alpha: 0.22),
-                      Colors.transparent,
-                    ],
-                    stops: const [0.4, 0.75, 1.0],
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF00F5D4).withValues(alpha: 0.30),
-                      blurRadius: 36,
-                      spreadRadius: 4,
+                              // CUSTOM PAINTER: Dot → Line → Logo
+                              CustomPaint(
+                                size: const Size(140, 140),
+                                painter: _LightEngravingPainter(
+                                  progress: _ctrl.value,
+                                  dotOpacity: _dotOpacity.value,
+                                  dotRadius: _dotRadius.value,
+                                  lineWidth: _lineWidth.value,
+                                  strokeProgress: _strokeDrawProgress.value,
+                                  fillOpacity: _fillGradientOpacity.value,
+                                  rimLightIntensity: _rimLightIntensity.value,
+                                ),
+                              ),
+
+                              // SPECULAR SWEEP via ShaderMask
+                              if (_ctrl.value >= 0.625 && _ctrl.value <= 0.850)
+                                Positioned.fill(
+                                  child: ClipPath(
+                                    clipper: _VinFastLogoClipper(),
+                                    child: ShaderMask(
+                                      blendMode: BlendMode.srcATop,
+                                      shaderCallback: (bounds) {
+                                        return LinearGradient(
+                                          begin: Alignment(
+                                            _specularSweepOffset.value - 0.6,
+                                            -1.0,
+                                          ),
+                                          end: Alignment(
+                                            _specularSweepOffset.value + 0.6,
+                                            1.0,
+                                          ),
+                                          colors: [
+                                            Colors.transparent,
+                                            const Color(
+                                              0xFFD9C8A0,
+                                            ).withValues(alpha: 0.20),
+                                            const Color(
+                                              0xFFFFF6E5,
+                                            ).withValues(alpha: 0.70),
+                                            Colors.transparent,
+                                          ],
+                                          stops: const [0.0, 0.4, 0.6, 1.0],
+                                        ).createShader(bounds);
+                                      },
+                                      child: Container(color: Colors.white),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // ── LAYER 4: Bottom — Typography & Tagline ──
+                    Positioned(
+                      left: 24,
+                      right: 24,
+                      bottom: 56,
+                      child: SafeArea(
+                        top: false,
+                        child: Opacity(
+                          opacity: _typoOpacity.value,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // APP NAME with tracking settle
+                              ExcludeSemantics(
+                                child: Text(
+                                  'VINFAST BATTERY',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: const Color(0xFFF2EFE8),
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w500,
+                                    letterSpacing:
+                                        18 * _trackingAnimation.value,
+                                    fontFamily: 'Inter',
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+
+                              // TAGLINE in Champagne #D9C8A0
+                              ExcludeSemantics(
+                                child: Opacity(
+                                  opacity: _taglineOpacity.value,
+                                  child: const Text(
+                                    'Hiểu pin · Sạc thông minh',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: Color(0xFFD9C8A0),
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w300,
+                                      letterSpacing: 1.2,
+                                      fontFamily: 'Inter',
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+
+                              // SLOW NETWORK FALLBACK
+                              Visibility(
+                                visible: _slow,
+                                maintainSize: true,
+                                maintainState: true,
+                                maintainAnimation: true,
+                                child: Text(
+                                  'Đang kết nối…',
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    color: Color(0xFFA9B4AD),
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ),
-
-              // Logo Image Asset
-              Container(
-                width: 108,
-                height: 108,
-                decoration: const BoxDecoration(shape: BoxShape.circle),
-                child: ClipOval(
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Image.asset(
-                        'assets/icons/app_icon.png',
-                        fit: BoxFit.contain,
-                      ),
-                      // Metallic Light Sheen Sweep across the logo
-                      if (!reducedMotion && sheenVal > -0.3 && sheenVal < 1.3)
-                        FractionallySizedBox(
-                          alignment: Alignment((sheenVal * 2.0) - 1.0, 0.0),
-                          widthFactor: 0.45,
-                          child: Transform.rotate(
-                            angle: math.pi / 4,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    Colors.transparent,
-                                    Colors.white.withValues(alpha: 0.55),
-                                    Colors.transparent,
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildTitleAndTagline(
-    ThemeData theme,
-    ColorScheme scheme,
-    bool reducedMotion,
-    bool isDark,
-  ) {
-    return AnimatedBuilder(
-      animation: _timelineController,
-      builder: (context, child) {
-        final fade = reducedMotion ? 1.0 : _titleFade.value;
-        return Opacity(
-          opacity: fade,
-          child: SlideTransition(
-            position: reducedMotion
-                ? const AlwaysStoppedAnimation(Offset.zero)
-                : _titleSlide,
-            child: child,
-          ),
-        );
-      },
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Tiêu đề thương hiệu
-          Text(
-            'VinFast Battery',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontSize: 28,
-              fontWeight: FontWeight.w900,
-              color: scheme.onSurface,
-              letterSpacing: 2.0,
-              height: 1.15,
-              shadows: [
-                Shadow(
-                  color: const Color(0xFF00F5D4).withValues(alpha: 0.65),
-                  blurRadius: 18,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-
-          // Cyber Tagline Capsule
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            decoration: BoxDecoration(
-              color: isDark
-                  ? const Color(0xFF0D1B2A).withValues(alpha: 0.8)
-                  : scheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: scheme.primary.withValues(alpha: 0.45),
-                width: 1.2,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF00F5D4).withValues(alpha: 0.2),
-                  blurRadius: 12,
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Electric Pulsing Dot
-                Container(
-                  width: 7,
-                  height: 7,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF00F5D4),
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Color(0xFF00F5D4),
-                        blurRadius: 8,
-                        spreadRadius: 1.5,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'QUẢN LÝ PIN VÀ SẠC XE ĐIỆN',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w800,
-                    color: const Color(0xFF00F5D4),
-                    letterSpacing: 1.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+            );
+          },
+        ),
       ),
-    );
-  }
+    ),
+  );
 }
 
-// ============================================================================
-// CUSTOM PAINTERS: Phim ngắn điện ảnh công nghệ
-// ============================================================================
+// ═══════════════════════════════════════════════════════════════════════════════
+// CUSTOM PAINTER: DUAL-LAYER CORE / AURA, PATHMETRIC STROKE & RIM LIGHT
+// ═══════════════════════════════════════════════════════════════════════════════
 
-/// Lưới không gian 3D Perspective Cockpit Grid
-class _CockpitGridPainter extends CustomPainter {
+class _LightEngravingPainter extends CustomPainter {
   final double progress;
-  _CockpitGridPainter({required this.progress});
+  final double dotOpacity;
+  final double dotRadius;
+  final double lineWidth;
+  final double strokeProgress;
+  final double fillOpacity;
+  final double rimLightIntensity;
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFF00F5D4).withValues(alpha: 0.05)
-      ..strokeWidth = 1.0
-      ..style = PaintingStyle.stroke;
-
-    final centerX = size.width / 2;
-    final centerY = size.height * 0.48;
-
-    // Vẽ các đường phối cảnh tỏa ra từ tâm
-    for (int i = -6; i <= 6; i++) {
-      final targetX = centerX + (i * size.width * 0.16);
-      canvas.drawLine(
-        Offset(centerX, centerY),
-        Offset(targetX, size.height),
-        paint,
-      );
-    }
-
-    // Các đường lưới ngang chuyển động tiến về phía trước
-    final offset = (progress * 40.0) % 40.0;
-    for (double y = centerY; y < size.height; y += 40.0) {
-      final currentY = y + offset;
-      if (currentY > size.height) continue;
-      final factor = (currentY - centerY) / (size.height - centerY);
-      final alpha = (factor * 0.08).clamp(0.0, 0.15);
-      final horizontalPaint = Paint()
-        ..color = const Color(0xFF00F5D4).withValues(alpha: alpha)
-        ..strokeWidth = 1.0;
-      canvas.drawLine(
-        Offset(0, currentY),
-        Offset(size.width, currentY),
-        horizontalPaint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _CockpitGridPainter oldDelegate) =>
-      oldDelegate.progress != progress;
-}
-
-/// Sóng Radar & Vòng hiển thị HUD telemetry xung quanh logo
-class _HudRadarPainter extends CustomPainter {
-  final double expandProgress;
-  final double sweepProgress;
-  final double lightningProgress;
-
-  _HudRadarPainter({
-    required this.expandProgress,
-    required this.sweepProgress,
-    required this.lightningProgress,
+  _LightEngravingPainter({
+    required this.progress,
+    required this.dotOpacity,
+    required this.dotRadius,
+    required this.lineWidth,
+    required this.strokeProgress,
+    required this.fillOpacity,
+    required this.rimLightIntensity,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final baseRadius = 88.0 * expandProgress;
 
-    // Vòng cung HUD telemetry nét đứt
-    final hudPaint = Paint()
-      ..color = const Color(0xFF00F5D4).withValues(alpha: 0.28)
-      ..strokeWidth = 1.5
-      ..style = PaintingStyle.stroke;
-
-    canvas.drawCircle(center, baseRadius, hudPaint);
-
-    // 4 Vạch góc nhắm mục tiêu (Corner target brackets)
-    final bracketPaint = Paint()
-      ..color = const Color(0xFF00F5D4).withValues(alpha: 0.55)
-      ..strokeWidth = 2.5
-      ..style = PaintingStyle.stroke;
-
-    final bracketRadius = baseRadius + 14.0;
-    for (int i = 0; i < 4; i++) {
-      final startAngle = (i * math.pi / 2) + 0.18;
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: bracketRadius),
-        startAngle,
-        math.pi / 4,
-        false,
-        bracketPaint,
-      );
+    // ── NHỊP 1: Chấm sáng nhỏ ở tâm (Lõi #BFF5DE) ──
+    if (progress < 0.150) {
+      final corePaint = Paint()
+        ..color = Color.fromRGBO(191, 245, 222, dotOpacity)
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(center, dotRadius, corePaint);
+      return;
     }
 
-    // Sóng Radar quét 360 độ
-    final sweepAngle = sweepProgress * 2 * math.pi;
-    final sweepPaint = Paint()
-      ..shader = ui.Gradient.sweep(
-        center,
-        [Colors.transparent, const Color(0xFF00F5D4).withValues(alpha: 0.18)],
-        [0.75, 1.0],
-        TileMode.clamp,
-        sweepAngle - 0.5,
-        sweepAngle,
+    // ── NHỊP 2: Đường sáng ngang 160px thon hai đầu ──
+    if (progress >= 0.150 && progress < 0.355) {
+      final halfW = lineWidth / 2;
+      final linePaint = Paint()
+        ..color = const Color(0xFFBFF5DE)
+        ..strokeWidth = 1.3
+        ..strokeCap = StrokeCap.round;
+      canvas.drawLine(
+        Offset(center.dx - halfW, center.dy),
+        Offset(center.dx + halfW, center.dy),
+        linePaint,
       );
-    canvas.drawCircle(center, bracketRadius + 8.0, sweepPaint);
+      return;
+    }
 
-    // Tia sét hồ quang điện tử nhỏ (Electric arcs)
-    if (lightningProgress > 0.1 && lightningProgress < 0.95) {
-      final arcPaint = Paint()
-        ..color = Colors.white.withValues(alpha: 0.75)
-        ..strokeWidth = 1.8
-        ..style = PaintingStyle.stroke;
+    // ── NHỊP 3+: Logo nét vẽ PathMetric (VinFast Winged V) ──
+    if (progress >= 0.355) {
+      final logoPath = _createVinFastLogoPath(size);
 
-      final rand = math.Random((lightningProgress * 100).toInt());
-      for (int k = 0; k < 3; k++) {
-        final a1 = rand.nextDouble() * 2 * math.pi;
-        final r1 = baseRadius - 5 + rand.nextDouble() * 12;
-        final p1 = center + Offset(math.cos(a1) * r1, math.sin(a1) * r1);
-        final p2 =
-            p1 + Offset(rand.nextDouble() * 16 - 8, rand.nextDouble() * 16 - 8);
-        canvas.drawLine(p1, p2, arcPaint);
+      // A. Fill Gradient theo hướng 10 giờ
+      if (fillOpacity > 0.0) {
+        final fillPaint = Paint()
+          ..shader = ui.Gradient.linear(
+            Offset(size.width * -0.8, 0),
+            Offset(size.width * 0.8, size.height),
+            [
+              Color.fromRGBO(123, 232, 188, 0.16 * fillOpacity),
+              Color.fromRGBO(31, 122, 84, 0.04 * fillOpacity),
+            ],
+          )
+          ..style = PaintingStyle.fill;
+        canvas.drawPath(logoPath, fillPaint);
       }
-    }
-  }
 
-  @override
-  bool shouldRepaint(covariant _HudRadarPainter oldDelegate) =>
-      oldDelegate.expandProgress != expandProgress ||
-      oldDelegate.sweepProgress != sweepProgress ||
-      oldDelegate.lightningProgress != lightningProgress;
-}
+      // B. Hairline Base Outline (1.2px) — shown after fill completes
+      final basePaint = Paint()
+        ..shader = ui.Gradient.linear(
+          Offset.zero,
+          Offset(size.width, size.height),
+          const [Color(0xFF7BE8BC), Color(0xFF2FBF86), Color(0xFF1E7A54)],
+          const [0.0, 0.5, 1.0],
+        )
+        ..strokeWidth = 1.2
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round;
 
-/// Mô hình hạt lượng tử hội tụ về tâm
-class _QuantumParticle {
-  final double initialAngle;
-  final double initialRadius;
-  final double speed;
-  final double size;
-  final Color color;
-
-  _QuantumParticle({
-    required this.initialAngle,
-    required this.initialRadius,
-    required this.speed,
-    required this.size,
-    required this.color,
-  });
-}
-
-class _QuantumParticlesPainter extends CustomPainter {
-  final List<_QuantumParticle> particles;
-  final double convergence;
-
-  _QuantumParticlesPainter({
-    required this.particles,
-    required this.convergence,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (convergence <= 0.01) return;
-
-    final center = Offset(size.width / 2, size.height / 2);
-    final paint = Paint()..style = PaintingStyle.fill;
-
-    for (final p in particles) {
-      final currentRadius = p.initialRadius * convergence;
-      final currentAngle =
-          p.initialAngle + ((1.0 - convergence) * 2.2 * p.speed);
-      final offset =
-          center +
-          Offset(
-            math.cos(currentAngle) * currentRadius,
-            math.sin(currentAngle) * currentRadius,
+      if (fillOpacity >= 1.0) {
+        // Fill complete → draw full base outline
+        canvas.drawPath(logoPath, basePaint);
+      } else {
+        // C. Stroke Draw theo PathMetric kèm Trailing Falloff
+        for (final metric in logoPath.computeMetrics()) {
+          final extract = metric.extractPath(
+            0.0,
+            metric.length * strokeProgress,
           );
+          final strokePaint = Paint()
+            ..color = const Color(0xFFBFF5DE)
+            ..strokeWidth = 1.4
+            ..style = PaintingStyle.stroke
+            ..strokeCap = StrokeCap.round
+            ..strokeJoin = StrokeJoin.round;
+          canvas.drawPath(extract, strokePaint);
+        }
+      }
 
-      paint.color = p.color.withValues(
-        alpha: (convergence * 0.75).clamp(0.0, 1.0),
-      );
-      canvas.drawCircle(offset, p.size * convergence, paint);
+      // D. Rim Light Cạnh Trên-Trái (Đồng bộ hướng sáng 10h)
+      final rimPath = Path()
+        ..moveTo(size.width * 0.16, size.height * 0.33)
+        ..lineTo(size.width * 0.33, size.height * 0.33)
+        ..lineTo(size.width * 0.50, size.height * 0.58);
+
+      final rimPaint = Paint()
+        ..color = Color.fromRGBO(255, 246, 229, rimLightIntensity)
+        ..strokeWidth = rimLightIntensity > 0.5 ? 2.0 : 0.8
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round;
+
+      canvas.drawPath(rimPath, rimPaint);
     }
   }
 
+  /// VinFast Winged V logo path on a normalized canvas.
+  Path _createVinFastLogoPath(Size size) {
+    final w = size.width;
+    final h = size.height;
+    return Path()
+      ..moveTo(w * 0.16, h * 0.33)
+      ..lineTo(w * 0.50, h * 0.78)
+      ..lineTo(w * 0.84, h * 0.33)
+      ..lineTo(w * 0.67, h * 0.33)
+      ..lineTo(w * 0.50, h * 0.58)
+      ..lineTo(w * 0.33, h * 0.33)
+      ..close();
+  }
+
   @override
-  bool shouldRepaint(covariant _QuantumParticlesPainter oldDelegate) =>
-      oldDelegate.convergence != convergence;
+  bool shouldRepaint(covariant _LightEngravingPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.fillOpacity != fillOpacity ||
+        oldDelegate.rimLightIntensity != rimLightIntensity;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CLIPPER FOR SHADERMASK SPECULAR LIGHT SWEEP
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class _VinFastLogoClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    final w = size.width;
+    final h = size.height;
+    return Path()
+      ..moveTo(w * 0.16, h * 0.33)
+      ..lineTo(w * 0.50, h * 0.78)
+      ..lineTo(w * 0.84, h * 0.33)
+      ..lineTo(w * 0.67, h * 0.33)
+      ..lineTo(w * 0.50, h * 0.58)
+      ..lineTo(w * 0.33, h * 0.33)
+      ..close();
+  }
+
+  @override
+  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
 }

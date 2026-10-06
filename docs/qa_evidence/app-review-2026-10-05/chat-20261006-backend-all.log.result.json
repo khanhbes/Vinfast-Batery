@@ -1,0 +1,15 @@
+{
+  "command": [
+    "python",
+    "-m",
+    "pytest",
+    "tests",
+    "-q"
+  ],
+  "cwd": "web",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\chat-20261006-backend-all.log",
+  "timeoutSeconds": 240,
+  "timedOut": false,
+  "exitCode": 1,
+  "elapsedSeconds": 111.66
+}

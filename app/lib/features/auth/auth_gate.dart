@@ -60,19 +60,17 @@ class _AuthGateState extends ConsumerState<AuthGate> {
   Stream<User?>? _authStream;
   User? _authUser;
   bool _authResolved = false;
-  final Stopwatch _coldLaunchClock = Stopwatch();
+  bool _introFinished = false;
 
   @override
   void initState() {
     super.initState();
-    _coldLaunchClock.start();
     _initialize();
   }
 
   @override
   void dispose() {
     _authSubscription?.cancel();
-    _coldLaunchClock.stop();
     super.dispose();
   }
 
@@ -175,12 +173,7 @@ class _AuthGateState extends ConsumerState<AuthGate> {
       }
     } catch (e) {
       debugPrint('[AuthGate] Auth restore failed (${e.runtimeType}).');
-    }
-
-    final remaining =
-        const Duration(milliseconds: 2800) - _coldLaunchClock.elapsed;
-    if (remaining > Duration.zero) {
-      await Future<void>.delayed(remaining);
+      _authResolved = true;
     }
 
     if (mounted) {
@@ -190,6 +183,7 @@ class _AuthGateState extends ConsumerState<AuthGate> {
   }
 
   void _scheduleUpdateCheck() {
+    if (_initializing || !_introFinished) return;
     if (_updateCheckStarted) return;
     _updateCheckStarted = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -250,11 +244,18 @@ class _AuthGateState extends ConsumerState<AuthGate> {
           onRetry: _retryFirebaseInit,
         ),
       );
-    } else if (_initializing) {
+    } else if (_initializing || !_introFinished) {
       // 2) Đang khởi tạo → splash.
       content = KeyedSubtree(
         key: const ValueKey('gate-splash'),
         child: _BootstrapSplashScreen(
+          animate: !_introFinished,
+          onFinished: () {
+            if (mounted && !_introFinished) {
+              setState(() => _introFinished = true);
+              _scheduleUpdateCheck();
+            }
+          },
           message: (_wasAuthenticated && !_explicitSignedOut)
               ? 'Đang khôi phục phiên đăng nhập...'
               : 'Đang khởi động...',
@@ -271,7 +272,10 @@ class _AuthGateState extends ConsumerState<AuthGate> {
             if (snapshot.connectionState == ConnectionState.waiting &&
                 !_authResolved &&
                 snapshot.data == null) {
-              return const _BootstrapSplashScreen(message: 'Đang xác thực...');
+              return const _BootstrapSplashScreen(
+                message: 'Đang xác thực...',
+                animate: false,
+              );
             }
             if (snapshot.hasData && snapshot.data != null) {
               // User đã authenticated → mark session + vào app.
@@ -300,7 +304,7 @@ class _AuthGateState extends ConsumerState<AuthGate> {
     return AnimatedSwitcher(
       duration: reducedMotion
           ? Duration.zero
-          : const Duration(milliseconds: 280),
+          : const Duration(milliseconds: 240),
       switchInCurve: Curves.easeOutCubic,
       switchOutCurve: Curves.easeInCubic,
       child: content,
@@ -310,11 +314,21 @@ class _AuthGateState extends ConsumerState<AuthGate> {
 
 class _BootstrapSplashScreen extends StatelessWidget {
   final String message;
-  const _BootstrapSplashScreen({required this.message});
+  final bool animate;
+  final VoidCallback? onFinished;
+  const _BootstrapSplashScreen({
+    required this.message,
+    this.animate = true,
+    this.onFinished,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return BootstrapSplash(message: message);
+    return BootstrapSplash(
+      message: message,
+      animate: animate,
+      onFinished: onFinished,
+    );
   }
 }
 

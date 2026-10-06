@@ -219,15 +219,16 @@ class ChatToolDispatcher:
         call_id = f"call-{uuid.uuid4().hex[:8]}"
         v_name = (
             (vehicle_context.get("model") if vehicle_context else None)
-            or (vehicle_context.get("vehicleId") if vehicle_context else None)
-            or args.get("vehicle_id", "xe điện")
+            or "xe của bạn"
         )
 
         if tool_name == "start_smart_charging":
             target_soc = int(args.get("target_soc", 80))
             max_amps = min(float(args.get("max_amps", 10.0)), MAX_SAFE_AMPS)
-            current_soc = float(vehicle_context.get("currentSoc", 50) if vehicle_context else 50)
-            est_hours = max(1, round(abs(target_soc - current_soc) / 20, 1))
+            import math
+            if not 1 <= target_soc <= 100 or not math.isfinite(max_amps) or max_amps <= 0:
+                raise ValueError('invalidActionArguments')
+            max_amps = min(max_amps, 2500.0 / 255.0)
 
             return {
                 "callId": call_id,
@@ -236,9 +237,9 @@ class ChatToolDispatcher:
                 "requiresConfirmation": True,
                 "confirmationCard": {
                     "title": "Bật sạc thông minh",
-                    "description": f"Sạc {v_name} đến {target_soc}%, giới hạn dòng sạc {max_amps}A ({round(max_amps * 220)}W)",
-                    "estimatedTime": f"~{est_hours} giờ",
-                    "safetyNote": "Tự động ngắt relay khi đạt mức pin mục tiêu hoặc vượt ngưỡng 12A / quá nhiệt 75°C.",
+                    "description": f"Yêu cầu sạc {v_name} đến {target_soc}%. Chưa thực hiện thao tác.",
+                    "estimatedTime": "Chưa có ước tính đã xác minh",
+                    "safetyNote": "Điều khiển từ chat chưa sẵn sàng. Mở Sạc pin để thao tác an toàn.",
                     "actions": ["confirm", "cancel"],
                     "targetSoc": target_soc,
                     "maxAmps": max_amps,
@@ -253,9 +254,9 @@ class ChatToolDispatcher:
                 "requiresConfirmation": True,
                 "confirmationCard": {
                     "title": "Dừng sạc pin",
-                    "description": f"Ngắt nguồn sạc Shelly cho {v_name} ngay lập tức.",
-                    "estimatedTime": "Ngay tức thì",
-                    "safetyNote": "Đảm bảo rút dây sạc an toàn sau khi relay ngắt nguồn điện.",
+                    "description": f"Yêu cầu dừng sạc {v_name}. Chưa thực hiện thao tác.",
+                    "estimatedTime": "Chưa xác minh thiết bị",
+                    "safetyNote": "Điều khiển từ chat chưa sẵn sàng. Mở Sạc pin để dừng và kiểm tra thiết bị.",
                     "actions": ["confirm", "cancel"],
                 },
             }
@@ -270,9 +271,9 @@ class ChatToolDispatcher:
                 "requiresConfirmation": True,
                 "confirmationCard": {
                     "title": "Hẹn giờ sạc ban đêm",
-                    "description": f"Tự động bật sạc {v_name} lúc {start_time} đến mốc {target_soc}%",
+                    "description": f"Yêu cầu sạc {v_name} lúc {start_time} đến {target_soc}%. Chưa tạo lịch.",
                     "estimatedTime": f"Bắt đầu: {start_time}",
-                    "safetyNote": "Tiết kiệm chi phí và hạ nhiệt độ cell pin trong khung giờ thấp điểm.",
+                    "safetyNote": "Chưa tạo lịch sạc. Mở Sạc pin để kiểm tra tính năng này.",
                     "actions": ["confirm", "cancel"],
                     "startTime": start_time,
                     "targetSoc": target_soc,
@@ -306,127 +307,33 @@ class ChatToolDispatcher:
             return self.create_confirmation_card(tool_name, args, vehicle_context)
 
         v_ctx = vehicle_context or {}
-        vehicle_id = args.get("vehicle_id", v_ctx.get("vehicleId", "VF-DEFAULT"))
-
+        v_ctx = dict(v_ctx)
+        for alias, key in [('soc', 'currentSoc'), ('soh', 'currentSoh'), ('temperature', 'batteryTemp')]:
+            if key not in v_ctx and alias in v_ctx:
+                v_ctx[key] = v_ctx[alias]
+        vehicle_id = args.get("vehicle_id") or v_ctx.get("vehicleId")
+        if tool_name in SAFETY_GATED_TOOLS:
+            # Never simulate physical success. The trusted charging adapter must
+            # enforce membership, device lease, safety gate and relay readback.
+            return {"status": "unavailable", "code": "controlAdapterUnavailable",
+                    "message": "Điều khiển từ chat chưa sẵn sàng. Mở Sạc pin để kiểm tra và thao tác."}
         if tool_name == "get_battery_status":
-            soc = v_ctx.get("currentSoc", 75.0)
-            soh = v_ctx.get("currentSoh", 98.0)
-            voltage = float(v_ctx.get("voltage", 72.4) or 72.4)
-            temp = float(v_ctx.get("batteryTemp", 31.5) or 31.5)
-            status = v_ctx.get("chargingStatus", "idle") or "idle"
-            est_km = float(v_ctx.get("estimatedRangeKm") or round(float(soc) * 1.5, 1))
-            return {
-                "status": "success",
-                "vehicleId": vehicle_id,
-                "soc": soc,
-                "soh": soh,
-                "voltage": voltage,
-                "temperatureC": temp,
-                "chargingStatus": status,
-                "estimatedRemainingKm": est_km,
-            }
-
-        elif tool_name == "get_charging_history":
-            days = int(args.get("days", 7))
-            return {
-                "status": "success",
-                "vehicleId": vehicle_id,
-                "days": days,
-                "totalSessions": 4,
-                "totalEnergyWh": 8450,
-                "estimatedCostVnd": 25350,
-                "avgDurationMinutes": 165,
-                "frequentCharger": "Shelly Plug S (Nhà riêng)",
-            }
-
-        elif tool_name == "start_smart_charging":
-            target_soc = int(args.get("target_soc", 80))
-            max_amps = min(float(args.get("max_amps", 10.0)), MAX_SAFE_AMPS)
-            logger.info("Executing confirmed start_smart_charging: %s target=%s amps=%s", vehicle_id, target_soc, max_amps)
-            return {
-                "status": "success",
-                "action": "start_charging",
-                "vehicleId": vehicle_id,
-                "relayState": "ON",
-                "targetSoc": target_soc,
-                "maxAmps": max_amps,
-                "maxWatts": round(max_amps * 220),
-                "message": f"Đã kích hoạt sạc cho {vehicle_id} đến {target_soc}% (giới hạn {max_amps}A). Relay Shelly đã bật!",
-            }
-
-        elif tool_name == "stop_smart_charging":
-            logger.info("Executing confirmed stop_smart_charging: %s", vehicle_id)
-            return {
-                "status": "success",
-                "action": "stop_charging",
-                "vehicleId": vehicle_id,
-                "relayState": "OFF",
-                "message": f"Đã ngắt nguồn sạc cho {vehicle_id}. Relay Shelly đã tắt an toàn.",
-            }
-
-        elif tool_name == "schedule_charging":
-            start_time = args.get("start_time", "22:00")
-            target_soc = int(args.get("target_soc", 80))
-            return {
-                "status": "success",
-                "action": "schedule_charging",
-                "vehicleId": vehicle_id,
-                "scheduledStartTime": start_time,
-                "targetSoc": target_soc,
-                "message": f"Đã đặt lịch sạc thành công cho {vehicle_id}: Bắt đầu lúc {start_time}, tự ngắt khi đạt {target_soc}%.",
-            }
-
-        elif tool_name == "get_trip_summary":
-            days = int(args.get("days", 7))
-            return {
-                "status": "success",
-                "vehicleId": vehicle_id,
-                "days": days,
-                "totalKm": 115.4,
-                "avgConsumptionWhPerKm": 31.8,
-                "totalTripsCount": 14,
-                "savedCo2Kg": 18.2,
-            }
-
-        elif tool_name == "get_maintenance_info":
-            current_odo = int(v_ctx.get("odoKm", 4500))
-            next_odo = 5000 if current_odo < 5000 else 10000
-            return {
-                "status": "success",
-                "vehicleId": vehicle_id,
-                "currentOdoKm": current_odo,
-                "nextMaintenanceOdoKm": next_odo,
-                "remainingKm": max(0, next_odo - current_odo),
-                "items": ["Kiểm tra độ chụm lốp", "Kiểm tra siết ốc cell pin", "Vệ sinh giắc cắm sạc"],
-                "statusLabel": "Bình thường",
-            }
-
-        elif tool_name == "get_energy_tips":
-            return {
-                "status": "success",
-                "tips": [
-                    "Duy trì SoC từ 20% đến 85% giúp kéo dài tuổi thọ cell pin LFP lên đến 2000+ chu kỳ.",
-                    "Hạn chế tăng ga đột ngột ở dốc cao giúp tiết kiệm 12-18% năng lượng tiêu hao.",
-                    "Sạc qua đêm ở dòng sạc 8-10A giúp cell pin cân bằng điện áp tự nhiên tốt hơn.",
-                ],
-            }
-
-        elif tool_name == "get_weather_impact":
-            location = args.get("location", "Hà Nội")
-            return {
-                "status": "success",
-                "location": location,
-                "temperatureC": 28,
-                "efficiencyFactor": 0.98,
-                "impactNote": "Nhiệt độ lý tưởng (20°C - 30°C), pin đạt 98-100% phạm vi di chuyển tiêu chuẩn.",
-            }
-
-        return {
-            "status": "error",
-            "message": f"Công cụ '{tool_name}' chưa được hỗ trợ.",
-        }
+            import math
+            fields = {"soc": "currentSoc", "soh": "currentSoh", "voltage": "voltage",
+                      "temperatureC": "batteryTemp", "estimatedRemainingKm": "estimatedRangeKm"}
+            values = {out: v_ctx.get(key) for out, key in fields.items()}
+            values = {k: v for k, v in values.items()
+                      if isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)}
+            return {"status": "success" if values else "unavailable", "source": "app_context",
+                    "vehicleId": vehicle_id, "chargingStatus": v_ctx.get("chargingStatus", "unknown"), **values}
+        if tool_name == "get_energy_tips":
+            return {"status": "success", "source": "general_guidance", "tips": [
+                "Dùng bộ sạc phù hợp với xe và làm theo hướng dẫn nhà sản xuất.",
+                "Kiểm tra dây, ổ cắm và giữ khu vực sạc khô thoáng.",
+                "Khi có cảnh báo bất thường, dừng thao tác và kiểm tra thiết bị."]}
+        return {"status": "unavailable", "code": "dataUnavailable",
+                "message": "Chưa có dữ liệu đã xác minh cho mục này. Hãy mở màn hình tương ứng trong app."}
 
 
 # Global dispatcher instance
 chat_tool_dispatcher = ChatToolDispatcher()
-

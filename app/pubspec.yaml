@@ -1,7 +1,7 @@
 name: vinfast_battery
 description: "VinFast Battery - Quản lý pin xe máy điện VinFast"
 publish_to: 'none'
-version: 1.1.9+125
+version: 1.1.9+126
 
 environment:
   sdk: ^3.11.0
@@ -107,13 +107,14 @@ flutter_launcher_icons:
   adaptive_icon_foreground: "assets/icons/app_icon.png"
 
 flutter_native_splash:
-  color: "#F4F6F8"
-  color_dark: "#0A0C10"
-  image: assets/icons/app_icon.png
+  # Native resources are maintained explicitly: Android 12 must use a
+  # transparent drawable, not the generator's default launcher icon.
+  android: false
+  ios: false
+  web: false
+  color: "#0B0F0E"
+  color_dark: "#0B0F0E"
   android_12:
-    color: "#F4F6F8"
-    color_dark: "#0A0C10"
-    image: assets/icons/app_icon.png
-    icon_background_color: "#0F0F1A"
-    icon_background_color_dark: "#0F0F1A"
+    color: "#0B0F0E"
+    color_dark: "#0B0F0E"
   ios_content_mode: center

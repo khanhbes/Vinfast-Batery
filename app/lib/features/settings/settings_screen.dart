@@ -26,6 +26,7 @@ import '../smart_charging/smart_charger_setup_hub_screen.dart';
 import 'profile_screen.dart';
 import 'vehicle_garage_screen.dart';
 import 'guide_screen.dart';
+import 'appearance_sheet.dart';
 import 'personal_ai_settings_screen.dart';
 import 'personal_ai_training_data_screen.dart';
 import 'developer_ai_studio_screen.dart';
@@ -634,119 +635,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
     ),
-    builder: (sheetContext) => SafeArea(
-      child: StatefulBuilder(
-        builder: (context, setSheetState) => SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(20, 0, 20, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Giao diện và ngôn ngữ',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              SizedBox(height: 18),
-              CockpitSectionLabel('Giao diện'),
-              _sheetChoice(
-                context,
-                icon: Icons.light_mode_rounded,
-                title: 'Sáng',
-                selected: _settingsService.getThemeMode() == AppThemeMode.light,
-                onTap: () async {
-                  await _settingsService.setThemeMode(AppThemeMode.light);
-                  if (context.mounted) setSheetState(() {});
-                },
-              ),
-              _sheetChoice(
-                context,
-                icon: Icons.brightness_auto_rounded,
-                title: 'Theo hệ thống',
-                selected:
-                    _settingsService.getThemeMode() == AppThemeMode.system,
-                onTap: () async {
-                  await _settingsService.setThemeMode(AppThemeMode.system);
-                  if (context.mounted) setSheetState(() {});
-                },
-              ),
-              _sheetChoice(
-                context,
-                icon: Icons.dark_mode_rounded,
-                title: 'Dark Cockpit',
-                selected: _settingsService.getThemeMode() == AppThemeMode.dark,
-                onTap: () async {
-                  await _settingsService.setThemeMode(AppThemeMode.dark);
-                  setSheetState(() {});
-                },
-              ),
-              _sheetChoice(
-                context,
-                icon: Icons.brightness_2_rounded,
-                title: 'AMOLED',
-                selected:
-                    _settingsService.getThemeMode() == AppThemeMode.amoled,
-                onTap: () async {
-                  await _settingsService.setThemeMode(AppThemeMode.amoled);
-                  setSheetState(() {});
-                },
-              ),
-              SizedBox(height: 18),
-              CockpitSectionLabel('Ngôn ngữ'),
-              _sheetChoice(
-                context,
-                icon: Icons.language_rounded,
-                title: 'Tiếng Việt',
-                selected:
-                    _settingsService.getLanguage() == AppLanguage.vietnamese,
-                onTap: () async {
-                  await _settingsService.setLanguage(AppLanguage.vietnamese);
-                  setSheetState(() {});
-                },
-              ),
-              _sheetChoice(
-                context,
-                icon: Icons.translate_rounded,
-                title: 'English',
-                selected: _settingsService.getLanguage() == AppLanguage.english,
-                onTap: () async {
-                  await _settingsService.setLanguage(AppLanguage.english);
-                  setSheetState(() {});
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
-
-  Widget _sheetChoice(
-    BuildContext context, {
-    required IconData icon,
-    required String title,
-    required bool selected,
-    required VoidCallback onTap,
-  }) => ListTile(
-    onTap: onTap,
-    minTileHeight: 56,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-    tileColor: selected
-        ? AppUiColors.of(context).primary.withValues(alpha: .10)
-        : Colors.transparent,
-    leading: Icon(
-      icon,
-      color: selected
-          ? AppUiColors.of(context).primary
-          : AppUiColors.of(context).muted,
-    ),
-    title: Text(title, style: TextStyle(fontWeight: FontWeight.w700)),
-    trailing: selected
-        ? Icon(
-            Icons.check_circle_rounded,
-            color: AppUiColors.of(context).primary,
-          )
-        : null,
+    builder: (_) => AppearanceSheet(settings: _settingsService),
   );
 
   Future<void> _showDeveloperSheet() => showModalBottomSheet<void>(

@@ -254,7 +254,10 @@ class _StartChargeConfirmationSheetState
 
               // Buttons
               ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 52, minWidth: double.infinity),
+                constraints: const BoxConstraints(
+                  minHeight: 52,
+                  minWidth: double.infinity,
+                ),
                 child: FilledButton.icon(
                   onPressed: _acknowledged
                       ? () => Navigator.pop(context, true)
@@ -315,7 +318,8 @@ class _InfoRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final stacked = constraints.maxWidth < 270 ||
+      final stacked =
+          constraints.maxWidth < 270 ||
           MediaQuery.textScalerOf(context).scale(1) > 1.25;
       final valueText = Text(
         value,
@@ -338,7 +342,10 @@ class _InfoRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: TextStyle(color: CockpitColors.muted, fontSize: 13)),
+                  Text(
+                    label,
+                    style: TextStyle(color: CockpitColors.muted, fontSize: 13),
+                  ),
                   const SizedBox(height: 4),
                   valueText,
                 ],
@@ -351,7 +358,12 @@ class _InfoRow extends StatelessWidget {
         children: [
           Icon(icon, size: 18, color: CockpitColors.muted),
           const SizedBox(width: 10),
-          Expanded(child: Text(label, style: TextStyle(color: CockpitColors.muted, fontSize: 13))),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(color: CockpitColors.muted, fontSize: 13),
+            ),
+          ),
           const SizedBox(width: 8),
           Flexible(child: valueText),
         ],

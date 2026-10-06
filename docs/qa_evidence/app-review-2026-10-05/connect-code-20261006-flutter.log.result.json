@@ -1,0 +1,19 @@
+{
+  "command": [
+    "C:/flutter/bin/cache/dart-sdk/bin/dart.exe",
+    "C:/flutter/bin/cache/flutter_tools.snapshot",
+    "test",
+    "--no-pub",
+    "--concurrency=2",
+    "test/unit/shelly_connection_coordinator_test.dart",
+    "test/widget/shelly_connect_screen_test.dart",
+    "test/unit/shelly_api_transport_test.dart",
+    "test/unit/shelly_account_restore_test.dart"
+  ],
+  "cwd": "app",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\connect-code-20261006-flutter.log",
+  "timeoutSeconds": 180,
+  "timedOut": false,
+  "exitCode": 0,
+  "elapsedSeconds": 78.8
+}

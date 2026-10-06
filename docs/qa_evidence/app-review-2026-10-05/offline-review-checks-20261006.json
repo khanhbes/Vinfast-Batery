@@ -1,0 +1,17 @@
+{
+  "dateLocal": "2026-10-06",
+  "scope": "Report integrity checks only; no app tests or emulator in this review",
+  "sourceHead": "6dc059ee64b6c1f9d155163c2dec68ee9e58b0cf",
+  "sourceWorkingTree": "Dirty; preserved",
+  "artifactSha256": "5A0EF61FD5F143AE9685B1DB4481FCDBF2DB7E280011F88608B1EABF5F660639",
+  "checks": [
+    {"command": "Get-FileHash approved QA APK -Algorithm SHA256", "exitCode": 0, "matchesApprovedArtifact": true},
+    {"command": "ConvertFrom-Json offline source inventory and resume evidence", "exitCode": 0, "candidateFileCount": 51, "overlayCallSiteCount": 84, "missingCandidateFilePaths": 0},
+    {"command": "git diff --check -- PROJECT_STATUS.md", "exitCode": 0, "note": "Git emitted a line-ending conversion warning; no whitespace errors"}
+  ],
+  "runtimeScreensAdded": 0,
+  "runtimeControlsAdded": 0,
+  "hardwareCommandsSent": 0,
+  "applicationSuitesRun": false,
+  "runtimeQaStatus": "Blocked; partial historical evidence retained"
+}

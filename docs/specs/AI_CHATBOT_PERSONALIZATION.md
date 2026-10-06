@@ -3,6 +3,8 @@
 > **Phiên bản**: v1.0.0 — 02/10/2026
 > **Mục tiêu**: Nâng cấp BatteryBot từ FAQ cứng thành AI Chatbot thông minh, cá nhân hóa dựa trên hành vi người dùng, sử dụng Google Gemini API, tích hợp function calling, streaming response (SSE), feedback loop và lưu trữ hybrid (local + Firestore).
 
+> **Đối chiếu triển khai 06/10/2026:** Các dấu `[x]` bên dưới là ghi nhận lịch sử, không chứng nhận nghiệm thu runtime. Xem Task 66 trong `PROJECT_STATUS.md` cho kết quả hiện hành. Đã sửa auth/UID isolation, SSE/error handling, dữ liệu giả và xác nhận lệnh giả; chưa nghiệm thu Gemini thật, dữ liệu lịch sử đa máy, retention/TTL thực tế hoặc adapter điều khiển sạc. Lưu chat local hiện dùng Secure Storage theo UID, chưa phải Hive/Isar. Văn bản Gemini được đệm để kiểm duyệt trước khi phát, chưa đạt streaming từng token như thiết kế. Nhập giọng nói chưa có recognizer thật và được vô hiệu hóa; chatbot không gửi lệnh relay.
+
 ---
 
 ## 1. Kiến Trúc Tổng Thể

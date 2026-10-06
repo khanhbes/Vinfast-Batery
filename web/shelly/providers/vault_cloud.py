@@ -20,10 +20,11 @@ class VaultCloudControlProvider:
     supports_manual_on = True
     supports_device_timer = True
 
-    def __init__(self, repository, session=None, sleeper=time.sleep):
+    def __init__(self, repository, session=None, sleeper=time.sleep, clock=time.time):
         self.repository = repository
         self.http = session or requests.Session()
         self.sleep = sleeper
+        self.clock = clock
 
     def _profile(self, binding: DeviceBinding) -> tuple[str, str]:
         uid = binding.owner_uid
@@ -43,7 +44,7 @@ class VaultCloudControlProvider:
             raise ProviderError("invalidProviderConfig", "Cấu hình Shelly Cloud không hợp lệ")
         return host, key
 
-    def _post(self, binding: DeviceBinding, path: str, payload: dict) -> object:
+    def _post(self, binding: DeviceBinding, path: str, payload: dict, *, command=False) -> object:
         host, key = self._profile(binding)
         fingerprint = hashlib.sha256(key.encode("utf-8")).hexdigest()
         try:
@@ -60,11 +61,16 @@ class VaultCloudControlProvider:
             raise ProviderError("needsReauthentication", "Quyền truy cập Shelly Cloud không hợp lệ")
         if response.status_code == 429:
             raise ProviderError("cloudRateLimited", "Shelly Cloud đang giới hạn tần suất", True)
-        if not 200 <= response.status_code < 300:
+        if response.status_code != 200:
             raise ProviderError("providerRejected", f"Shelly Cloud từ chối yêu cầu ({response.status_code})", response.status_code >= 500)
         try:
             value = response.json()
         except ValueError as exc:
+            # Cloud v2 acknowledges switch commands with HTTP 200; a JSON
+            # body is not part of that acknowledgement contract. This is only
+            # acceptance, never relay/timer verification. Reads remain strict.
+            if command:
+                return None
             raise ProviderError("malformedProviderResponse", "Shelly Cloud trả dữ liệu không hợp lệ") from exc
         if isinstance(value, dict) and (value.get("isok") is False or value.get("error")):
             raise ProviderError("providerRejected", "Shelly Cloud từ chối yêu cầu")
@@ -113,18 +119,13 @@ class VaultCloudControlProvider:
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
                 raise ProviderError("malformedProviderResponse", f"Số đo {field} không hợp lệ")
             return float(value)
-        # Never infer an active countdown from a configured duration: that
-        # value can remain after expiry. Only a live remaining-time field is
-        # acceptable as evidence for an armed safety timer.
-        timer = switch.get("timer_remaining")
-        if timer is None:
-            timer = 0
+        timer = self._timer_remaining(snapshot, switch)
         temperature = switch.get("temperature") or {}
         settings = snapshot.get("settings") or {}
         return DeviceStatus(
             online=True,
             relay=switch["output"],
-            timer_remaining=max(0, int(float(timer or 0))),
+            timer_remaining=timer,
             power_w=meter(switch["apower"], "W"),
             voltage_v=meter(switch["voltage"], "V"),
             current_a=meter(switch["current"], "A"),
@@ -133,11 +134,39 @@ class VaultCloudControlProvider:
             device_id=binding.device_id,
         )
 
+    def _timer_remaining(self, snapshot: dict, switch: dict) -> int:
+        # Gen2+ RPC reports an actual triggered timer using its UTC start and
+        # duration, not necessarily timer_remaining. A configured auto_off
+        # delay alone is never proof that a device timer is running.
+        def finite_number(value):
+            return (not isinstance(value, bool) and isinstance(value, (int, float))
+                    and math.isfinite(value))
+
+        if switch.get("output") is not True:
+            return 0
+        remaining = switch.get("timer_remaining")
+        if remaining is not None:
+            if not finite_number(remaining) or not 0 <= remaining <= 36000:
+                raise ProviderError("malformedProviderResponse", "Timer Shelly không hợp lệ")
+            return max(0, math.floor(remaining))
+        started, duration = switch.get("timer_started_at"), switch.get("timer_duration")
+        sys_status = (snapshot.get("status") or {}).get("sys") or {}
+        device_now = sys_status.get("unixtime") if isinstance(sys_status, dict) else None
+        now = self.clock()
+        if not all(finite_number(value) for value in (started, duration, device_now, now)):
+            return 0
+        if (started < 1577836800 or not 0 < duration <= 36000 or
+                abs(device_now - now) > 30 or started > device_now + 2):
+            return 0
+        # Use the later clock: skew or cached clock data must never prolong
+        # the countdown. Expired timestamps resolve to zero, not full duration.
+        return max(0, math.floor(min(duration, started + duration - max(now, device_now))))
+
     def turn_on_with_timer(self, binding: DeviceBinding, duration_seconds: int) -> None:
-        self._post(binding, "/v2/devices/api/set/switch", {"id": binding.device_id, "channel": 0, "on": True, "toggle_after": int(duration_seconds)})
+        self._post(binding, "/v2/devices/api/set/switch", {"id": binding.device_id, "channel": 0, "on": True, "toggle_after": int(duration_seconds)}, command=True)
 
     def turn_off(self, binding: DeviceBinding) -> None:
-        self._post(binding, "/v2/devices/api/set/switch", {"id": binding.device_id, "channel": 0, "on": False})
+        self._post(binding, "/v2/devices/api/set/switch", {"id": binding.device_id, "channel": 0, "on": False}, command=True)
 
     def revoke(self, binding: DeviceBinding) -> None:
         return None
@@ -155,6 +184,8 @@ class VaultCloudControlProvider:
             raise ProviderError("safeBootUnverified", "Relay phải OFF, Power-on default OFF và Auto ON tắt")
         if not 190 <= initial.voltage_v <= 255:
             raise ProviderError("unsafeVoltage", "Điện áp ngoài ngưỡng an toàn")
+        if not 0 <= initial.power_w <= 5 or not 0 <= initial.current_a <= .1:
+            raise ProviderError("unexpectedLoad", "Có tải điện trong lúc kiểm tra không tải")
         on_observed = False
         timer_observed = False
         timer_auto_off_observed = False
@@ -170,7 +201,8 @@ class VaultCloudControlProvider:
                     break
             if not on_observed:
                 raise ProviderError("timerNotArmed", "Không xác minh được relay ON và timer")
-            if on_status.power_w > 5 or on_status.current_a > .1:
+            if (not 0 <= on_status.power_w <= 5 or not 0 <= on_status.current_a <= .1 or
+                    not 190 <= on_status.voltage_v <= 255):
                 raise ProviderError("unexpectedLoad", "Có tải điện trong lúc kiểm tra không tải")
             # A manual cleanup OFF is not evidence that the device timer works.
             # Observe the device turn itself OFF before sending cleanup OFF.

@@ -42,30 +42,29 @@ class PredictionDetailSheet extends StatelessWidget {
     int? rangeAddedKm,
     List<ChargingPhaseInfo> phases = const [],
     List<EtaCandidateInfo> etaCandidates = const [],
-  }) =>
-      showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        barrierColor: Colors.black.withValues(alpha: .72),
-        builder: (_) => DraggableScrollableSheet(
-          initialChildSize: 0.75,
-          maxChildSize: 0.92,
-          minChildSize: 0.5,
-          builder: (context, scrollController) => PredictionDetailSheet(
-            currentSoc: currentSoc,
-            targetSoc: targetSoc,
-            estimatedMinutes: estimatedMinutes,
-            stopTime: stopTime,
-            personalizationLabel: personalizationLabel,
-            energyWh: energyWh,
-            costVnd: costVnd,
-            rangeAddedKm: rangeAddedKm,
-            phases: phases,
-            etaCandidates: etaCandidates,
-          ),
-        ),
-      );
+  }) => showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    barrierColor: Colors.black.withValues(alpha: .72),
+    builder: (_) => DraggableScrollableSheet(
+      initialChildSize: 0.75,
+      maxChildSize: 0.92,
+      minChildSize: 0.5,
+      builder: (context, scrollController) => PredictionDetailSheet(
+        currentSoc: currentSoc,
+        targetSoc: targetSoc,
+        estimatedMinutes: estimatedMinutes,
+        stopTime: stopTime,
+        personalizationLabel: personalizationLabel,
+        energyWh: energyWh,
+        costVnd: costVnd,
+        rangeAddedKm: rangeAddedKm,
+        phases: phases,
+        etaCandidates: etaCandidates,
+      ),
+    ),
+  );
 
   String _formatDuration(int totalMinutes) {
     final h = totalMinutes ~/ 60;
@@ -79,184 +78,180 @@ class PredictionDetailSheet extends StatelessWidget {
       : '${wh.toStringAsFixed(0)} Wh';
 
   String _formatCost(double vnd) =>
-      '~${vnd.round().toString().replaceAllMapped(
-            RegExp(r'(\d{1,3})(?=(\d{3})+$)'),
-            (m) => '${m[1]}.',
-          )} đ';
+      '~${vnd.round().toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+$)'), (m) => '${m[1]}.')} đ';
 
   @override
   Widget build(BuildContext context) => Container(
-        decoration: BoxDecoration(
-          color: CockpitColors.shell,
-          borderRadius: const BorderRadius.vertical(
-            top: Radius.circular(CockpitRadius.sheet),
+    decoration: BoxDecoration(
+      color: CockpitColors.shell,
+      borderRadius: const BorderRadius.vertical(
+        top: Radius.circular(CockpitRadius.sheet),
+      ),
+      border: Border.all(color: CockpitColors.border),
+    ),
+    child: ListView(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+      children: [
+        // Drag handle
+        Center(
+          child: Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: CockpitColors.dim,
+              borderRadius: BorderRadius.circular(2),
+            ),
           ),
-          border: Border.all(color: CockpitColors.border),
         ),
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+        const SizedBox(height: 20),
+
+        // Title
+        Row(
           children: [
-            // Drag handle
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: CockpitColors.dim,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
+            Icon(
+              Icons.analytics_rounded,
+              size: 22,
+              color: CockpitColors.emerald,
             ),
-            const SizedBox(height: 20),
-
-            // Title
-            Row(
-              children: [
-                Icon(
-                  Icons.analytics_rounded,
-                  size: 22,
-                  color: CockpitColors.emerald,
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  'Chi tiết dự đoán sạc',
-                  style: TextStyle(
-                    color: CockpitColors.text,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
+            const SizedBox(width: 10),
             Text(
-              personalizationLabel,
+              'Chi tiết dự đoán sạc',
               style: TextStyle(
-                color: CockpitColors.emerald,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+                color: CockpitColors.text,
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
               ),
             ),
-
-            const SizedBox(height: 20),
-
-            // Hero stats grid
-            Row(
-              children: [
-                Expanded(
-                  child: _HeroStat(
-                    label: 'Thời gian',
-                    value: _formatDuration(estimatedMinutes),
-                    icon: Icons.schedule_rounded,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _HeroStat(
-                    label: 'Mục tiêu',
-                    value: '$currentSoc% → $targetSoc%',
-                    icon: Icons.battery_charging_full_rounded,
-                    valueColor: CockpitColors.emerald,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                if (energyWh != null)
-                  Expanded(
-                    child: _HeroStat(
-                      label: 'Năng lượng',
-                      value: _formatEnergy(energyWh!),
-                      icon: Icons.bolt_rounded,
-                    ),
-                  ),
-                if (energyWh != null && costVnd != null)
-                  const SizedBox(width: 10),
-                if (costVnd != null)
-                  Expanded(
-                    child: _HeroStat(
-                      label: 'Chi phí',
-                      value: _formatCost(costVnd!),
-                      icon: Icons.payments_rounded,
-                      valueColor: CockpitColors.amber,
-                    ),
-                  ),
-              ],
-            ),
-            if (rangeAddedKm != null) ...[
-              const SizedBox(height: 10),
-              _HeroStat(
-                label: 'Quãng đường thêm',
-                value: '+$rangeAddedKm km',
-                icon: Icons.route_rounded,
-                valueColor: CockpitColors.info,
-              ),
-            ],
-
-            const SizedBox(height: 10),
-            _InfoTile(
-              icon: Icons.alarm_rounded,
-              label: 'Dự kiến hoàn thành',
-              value: stopTime,
-              valueColor: CockpitColors.amber,
-            ),
-
-            // CC/CV Phase breakdown
-            if (phases.isNotEmpty) ...[
-              const SizedBox(height: 24),
-              Text(
-                'CÁC PHA SẠC',
-                style: TextStyle(
-                  color: CockpitColors.muted,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1,
-                ),
-              ),
-              const SizedBox(height: 12),
-              for (final phase in phases) ...[
-                _PhaseTile(phase: phase),
-                if (phase != phases.last)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      children: [
-                        const SizedBox(width: 18),
-                        Container(
-                          width: 2,
-                          height: 16,
-                          decoration: BoxDecoration(
-                            color: CockpitColors.border,
-                            borderRadius: BorderRadius.circular(1),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ],
-
-            // ETA Candidates
-            if (etaCandidates.isNotEmpty) ...[
-              const SizedBox(height: 24),
-              Text(
-                'NGUỒN DỰ ĐOÁN',
-                style: TextStyle(
-                  color: CockpitColors.muted,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1,
-                ),
-              ),
-              const SizedBox(height: 12),
-              for (final candidate in etaCandidates)
-                _EtaCandidateTile(candidate: candidate),
-            ],
           ],
         ),
-      );
+        const SizedBox(height: 6),
+        Text(
+          personalizationLabel,
+          style: TextStyle(
+            color: CockpitColors.emerald,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+
+        const SizedBox(height: 20),
+
+        // Hero stats grid
+        Row(
+          children: [
+            Expanded(
+              child: _HeroStat(
+                label: 'Thời gian',
+                value: _formatDuration(estimatedMinutes),
+                icon: Icons.schedule_rounded,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _HeroStat(
+                label: 'Mục tiêu',
+                value: '$currentSoc% → $targetSoc%',
+                icon: Icons.battery_charging_full_rounded,
+                valueColor: CockpitColors.emerald,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            if (energyWh != null)
+              Expanded(
+                child: _HeroStat(
+                  label: 'Năng lượng',
+                  value: _formatEnergy(energyWh!),
+                  icon: Icons.bolt_rounded,
+                ),
+              ),
+            if (energyWh != null && costVnd != null) const SizedBox(width: 10),
+            if (costVnd != null)
+              Expanded(
+                child: _HeroStat(
+                  label: 'Chi phí',
+                  value: _formatCost(costVnd!),
+                  icon: Icons.payments_rounded,
+                  valueColor: CockpitColors.amber,
+                ),
+              ),
+          ],
+        ),
+        if (rangeAddedKm != null) ...[
+          const SizedBox(height: 10),
+          _HeroStat(
+            label: 'Quãng đường thêm',
+            value: '+$rangeAddedKm km',
+            icon: Icons.route_rounded,
+            valueColor: CockpitColors.info,
+          ),
+        ],
+
+        const SizedBox(height: 10),
+        _InfoTile(
+          icon: Icons.alarm_rounded,
+          label: 'Dự kiến hoàn thành',
+          value: stopTime,
+          valueColor: CockpitColors.amber,
+        ),
+
+        // CC/CV Phase breakdown
+        if (phases.isNotEmpty) ...[
+          const SizedBox(height: 24),
+          Text(
+            'CÁC PHA SẠC',
+            style: TextStyle(
+              color: CockpitColors.muted,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1,
+            ),
+          ),
+          const SizedBox(height: 12),
+          for (final phase in phases) ...[
+            _PhaseTile(phase: phase),
+            if (phase != phases.last)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    const SizedBox(width: 18),
+                    Container(
+                      width: 2,
+                      height: 16,
+                      decoration: BoxDecoration(
+                        color: CockpitColors.border,
+                        borderRadius: BorderRadius.circular(1),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ],
+
+        // ETA Candidates
+        if (etaCandidates.isNotEmpty) ...[
+          const SizedBox(height: 24),
+          Text(
+            'NGUỒN DỰ ĐOÁN',
+            style: TextStyle(
+              color: CockpitColors.muted,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1,
+            ),
+          ),
+          const SizedBox(height: 12),
+          for (final candidate in etaCandidates)
+            _EtaCandidateTile(candidate: candidate),
+        ],
+      ],
+    ),
+  );
 }
 
 /// Data classes for phase info
@@ -306,41 +301,41 @@ class _HeroStat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: CockpitColors.surface,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: CockpitColors.border),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: CockpitColors.surface,
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: CockpitColors.border),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
-            Row(
-              children: [
-                Icon(icon, size: 14, color: CockpitColors.muted),
-                const SizedBox(width: 6),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: CockpitColors.muted,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
+            Icon(icon, size: 14, color: CockpitColors.muted),
+            const SizedBox(width: 6),
             Text(
-              value,
-              style: CockpitTypography.numbers(
-                fontSize: 15,
-                fontWeight: FontWeight.w800,
-                color: valueColor ?? CockpitColors.text,
+              label,
+              style: TextStyle(
+                color: CockpitColors.muted,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ],
         ),
-      );
+        const SizedBox(height: 6),
+        Text(
+          value,
+          style: CockpitTypography.numbers(
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+            color: valueColor ?? CockpitColors.text,
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _InfoTile extends StatelessWidget {
@@ -357,36 +352,33 @@ class _InfoTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: CockpitColors.surface,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: CockpitColors.border),
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: CockpitColors.surface,
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: CockpitColors.border),
+    ),
+    child: Row(
+      children: [
+        Icon(icon, size: 18, color: CockpitColors.muted),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(color: CockpitColors.muted, fontSize: 13),
+          ),
         ),
-        child: Row(
-          children: [
-            Icon(icon, size: 18, color: CockpitColors.muted),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: CockpitColors.muted,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-            Text(
-              value,
-              style: CockpitTypography.numbers(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: valueColor ?? CockpitColors.text,
-              ),
-            ),
-          ],
+        Text(
+          value,
+          style: CockpitTypography.numbers(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: valueColor ?? CockpitColors.text,
+          ),
         ),
-      );
+      ],
+    ),
+  );
 }
 
 class _PhaseTile extends StatelessWidget {
@@ -403,9 +395,7 @@ class _PhaseTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: CockpitColors.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: phaseColor.withValues(alpha: .20),
-        ),
+        border: Border.all(color: phaseColor.withValues(alpha: .20)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -444,10 +434,7 @@ class _PhaseTile extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             phase.description,
-            style: TextStyle(
-              color: CockpitColors.dim,
-              fontSize: 11,
-            ),
+            style: TextStyle(color: CockpitColors.dim, fontSize: 11),
           ),
           const SizedBox(height: 8),
           Row(
@@ -457,10 +444,7 @@ class _PhaseTile extends StatelessWidget {
                 value: '${phase.minutes} phút',
               ),
               const SizedBox(width: 8),
-              _PhaseChip(
-                icon: Icons.bolt_rounded,
-                value: '${phase.powerW} W',
-              ),
+              _PhaseChip(icon: Icons.bolt_rounded, value: '${phase.powerW} W'),
             ],
           ),
         ],
@@ -476,26 +460,26 @@ class _PhaseChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: .04),
-          borderRadius: BorderRadius.circular(8),
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      color: Colors.white.withValues(alpha: .04),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 12, color: CockpitColors.muted),
+        const SizedBox(width: 4),
+        Text(
+          value,
+          style: CockpitTypography.numbers(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+          ),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 12, color: CockpitColors.muted),
-            const SizedBox(width: 4),
-            Text(
-              value,
-              style: CockpitTypography.numbers(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      );
+      ],
+    ),
+  );
 }
 
 class _EtaCandidateTile extends StatelessWidget {
@@ -579,9 +563,9 @@ class _EtaCandidateTile extends StatelessWidget {
   }
 
   IconData _iconForSource(String source) => switch (source) {
-        'personal' => Icons.person_rounded,
-        'global_ai' => Icons.psychology_rounded,
-        'physics' => Icons.science_rounded,
-        _ => Icons.auto_awesome_rounded,
-      };
+    'personal' => Icons.person_rounded,
+    'global_ai' => Icons.psychology_rounded,
+    'physics' => Icons.science_rounded,
+    _ => Icons.auto_awesome_rounded,
+  };
 }

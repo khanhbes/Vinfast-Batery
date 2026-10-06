@@ -1,0 +1,13 @@
+{
+  "command": [
+    "C:/flutter/bin/cache/dart-sdk/bin/dart.exe",
+    "analyze",
+    "lib/core/services/guide_tour_coordinator.dart"
+  ],
+  "cwd": "app",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\fix-20261006-analyze-scoped.log",
+  "timeoutSeconds": 45,
+  "timedOut": false,
+  "exitCode": 0,
+  "elapsedSeconds": 2.34
+}

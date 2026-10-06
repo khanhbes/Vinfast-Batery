@@ -1,0 +1,100 @@
+{
+  "date": "2026-10-03",
+  "sourceHead": "6dc059ee64b6c1f9d155163c2dec68ee9e58b0cf",
+  "workingTreeDirty": true,
+  "sourceToArtifactManifestVerified": false,
+  "artifact": {
+    "path": "app/build/app/outputs/flutter-apk/VinFastBattery_1.1.9+125_debug.apk",
+    "bytes": 199462977,
+    "sha256": "325198FC38DA1B6C2916FDABECD7233AA50F46CCA669231F0A5848B6278FF9E5",
+    "installedArtifactHashMatched": true,
+    "package": "com.bes.vinbatery",
+    "versionName": "1.1.9",
+    "versionCode": 125,
+    "minSdk": 26,
+    "targetSdk": 36,
+    "debuggable": true,
+    "signer": "Android Debug",
+    "certificateSha256": "914642716DECB342CA80ACECE6284E69D66355BFA792F5C4779EFECF16ECEBEB"
+  },
+  "emulator": {
+    "avd": "Pixel_9a",
+    "api": 36,
+    "resolution": "1080x2424",
+    "density": 420,
+    "fontScale": 1.0,
+    "installation": "adb install -r succeeded; app data preserved",
+    "launchAttempts": [
+      {
+        "memoryMb": 1536,
+        "window": true,
+        "bootCompleted": true,
+        "activityResult": "timeout",
+        "waitTimeMs": 16284,
+        "launchState": "UNKNOWN (-1)",
+        "adbLostAfterLaunch": true,
+        "hostFreeRamMbObservedWhileRunning": 262,
+        "windowsEvent": {
+          "timestamp": "2026-10-03T16:14:47.4369713+07:00",
+          "eventId": 1000,
+          "application": "qemu-system-x86_64.exe",
+          "exceptionCode": "c0000005",
+          "faultingModule": "unknown"
+        }
+      },
+      {
+        "memoryMb": 2048,
+        "window": true,
+        "hostFreeRamMbBeforeLaunch": 3338,
+        "bootCompleted": true,
+        "activityResult": "timeout",
+        "waitTimeMs": 10970,
+        "launchState": "UNKNOWN (-1)",
+        "adbLostAfterLaunch": true,
+        "windowsCrashEventForThisAttemptVerified": false
+      }
+    ],
+    "headlessAttempt": {
+      "memoryMb": 2048,
+      "gpu": "swiftshader",
+      "bootCompleted": true,
+      "adbConnectedAfterLaunch": true,
+      "applicationAnrDialogConfirmedByHierarchy": true,
+      "nativeDialogWaitTaps": 1,
+      "afterWait": "Android service ANR dialog; dashboard not verified",
+      "eventBuffer": {"appAnr": 1, "systemAnr": 16, "appCrash": 0},
+      "gfxinfoSample": {"totalFrames": 3, "jankyFrames": 3, "missedVsync": 3, "slowUiThread": 3},
+      "representativeFlutterPerformanceMeasurement": false,
+      "hostFreeRamMbObservedWhileBooting": 278
+    },
+    "appCrashOrAnrConfirmedForThisArtifact": true,
+    "rootCause": "Not established; native emulator crash confirmed for first launch, app and system ANRs confirmed on headless launch under host memory pressure"
+  },
+  "apiReadOnlyProbes": [
+    {"transport": "local", "path": "/api/health", "status": 200, "elapsedMs": 1004, "requestIdPresent": true},
+    {"transport": "local", "path": "/api/ready", "status": 200, "elapsedMs": 94, "requestIdPresent": true},
+    {"transport": "qaHttpsFunnel", "path": "/api/health", "status": 200, "elapsedMs": 2048, "requestIdPresent": true},
+    {"transport": "qaHttpsFunnel", "path": "/api/ready", "status": 200, "elapsedMs": 297, "requestIdPresent": true}
+  ],
+  "coverage": {
+    "screenRelatedSourceFiles": 48,
+    "runtimeFunctionalScreensVerified": 0,
+    "runtimeUniqueAppControlsVerified": 0,
+    "passRate": null,
+    "readinessScore": null,
+    "coldStart": "Fail in current test environment",
+    "state": "Functional testing blocked until stable app runtime is accessible"
+  },
+  "safety": {
+    "testerRelayOnCommands": 0,
+    "testerRelayOffCommands": 0,
+    "startupDeviceSideEffectsAudited": false,
+    "clearDataPerformed": false,
+    "userAccountsOrSettingsChanged": false,
+    "applicationSourceModified": false,
+    "rawHierarchyOrCredentialSaved": false,
+    "qaEmulatorStoppedAfterReview": true,
+    "displayFontThemeNetworkSettingsChanged": false,
+    "otherUserApplicationsStopped": false
+  }
+}

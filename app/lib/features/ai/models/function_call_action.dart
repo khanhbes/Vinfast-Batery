@@ -28,7 +28,8 @@ class ActionConfirmationCardData {
       description: json['description'] as String? ?? '',
       estimatedTime: json['estimatedTime'] as String?,
       safetyNote: json['safetyNote'] as String?,
-      actions: (json['actions'] as List<dynamic>?)
+      actions:
+          (json['actions'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
           const ['confirm', 'cancel'],
@@ -39,15 +40,15 @@ class ActionConfirmationCardData {
   }
 
   Map<String, dynamic> toJson() => {
-        'title': title,
-        'description': description,
-        if (estimatedTime != null) 'estimatedTime': estimatedTime,
-        if (safetyNote != null) 'safetyNote': safetyNote,
-        'actions': actions,
-        if (targetSoc != null) 'targetSoc': targetSoc,
-        if (maxAmps != null) 'maxAmps': maxAmps,
-        if (startTime != null) 'startTime': startTime,
-      };
+    'title': title,
+    'description': description,
+    if (estimatedTime != null) 'estimatedTime': estimatedTime,
+    if (safetyNote != null) 'safetyNote': safetyNote,
+    'actions': actions,
+    if (targetSoc != null) 'targetSoc': targetSoc,
+    if (maxAmps != null) 'maxAmps': maxAmps,
+    if (startTime != null) 'startTime': startTime,
+  };
 }
 
 @immutable
@@ -58,7 +59,8 @@ class FunctionCallAction {
     this.args = const {},
     this.requiresConfirmation = true,
     this.cardData,
-    this.status = 'pending', // 'pending' | 'confirmed' | 'cancelled' | 'executed'
+    this.status =
+        'pending', // 'pending' | 'confirmed' | 'cancelled' | 'executed'
     this.resultMessage,
   });
 
@@ -102,7 +104,8 @@ class FunctionCallAction {
       requiresConfirmation: json['requiresConfirmation'] as bool? ?? true,
       cardData: json['confirmationCard'] != null
           ? ActionConfirmationCardData.fromJson(
-              json['confirmationCard'] as Map<String, dynamic>)
+              json['confirmationCard'] as Map<String, dynamic>,
+            )
           : null,
       status: json['status'] as String? ?? 'pending',
       resultMessage: json['resultMessage'] as String?,
@@ -110,12 +113,12 @@ class FunctionCallAction {
   }
 
   Map<String, dynamic> toJson() => {
-        'callId': callId,
-        'toolName': toolName,
-        'args': args,
-        'requiresConfirmation': requiresConfirmation,
-        if (cardData != null) 'confirmationCard': cardData!.toJson(),
-        'status': status,
-        if (resultMessage != null) 'resultMessage': resultMessage,
-      };
+    'callId': callId,
+    'toolName': toolName,
+    'args': args,
+    'requiresConfirmation': requiresConfirmation,
+    if (cardData != null) 'confirmationCard': cardData!.toJson(),
+    'status': status,
+    if (resultMessage != null) 'resultMessage': resultMessage,
+  };
 }

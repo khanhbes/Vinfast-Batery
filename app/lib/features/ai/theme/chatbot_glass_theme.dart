@@ -39,9 +39,11 @@ class GlassContainer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uiColors = AppUiColors.of(context);
-    final effectiveRadius = customBorderRadius ?? BorderRadius.circular(borderRadius);
+    final effectiveRadius =
+        customBorderRadius ?? BorderRadius.circular(borderRadius);
 
-    final effectiveGradient = gradient ??
+    final effectiveGradient =
+        gradient ??
         (uiColors.dark
             ? LinearGradient(
                 colors: [
@@ -60,13 +62,11 @@ class GlassContainer extends StatelessWidget {
                 end: Alignment.bottomRight,
               ));
 
-    final effectiveBorder = border ??
-        Border.all(
-          color: uiColors.glassBorder,
-          width: 1.0,
-        );
+    final effectiveBorder =
+        border ?? Border.all(color: uiColors.glassBorder, width: 1.0);
 
-    final effectiveShadow = boxShadow ??
+    final effectiveShadow =
+        boxShadow ??
         [
           BoxShadow(
             color: uiColors.glassShadow,
@@ -123,7 +123,10 @@ class GlassContainer extends StatelessWidget {
 /// Helper styles and decorations for the AI Chatbot UI/UX
 class ChatbotGlassTheme {
   /// User chat bubble decoration (iMessage-inspired blue gradient)
-  static BoxDecoration userBubbleDecoration(BuildContext context, {bool isQueued = false}) {
+  static BoxDecoration userBubbleDecoration(
+    BuildContext context, {
+    bool isQueued = false,
+  }) {
     final theme = Theme.of(context);
     final primary = theme.colorScheme.primary;
 
@@ -141,10 +144,7 @@ class ChatbotGlassTheme {
 
     return BoxDecoration(
       gradient: const LinearGradient(
-        colors: [
-          Color(0xFF0072BC),
-          Color(0xFF005B94),
-        ],
+        colors: [Color(0xFF0072BC), Color(0xFF005B94)],
         begin: Alignment.topRight,
         end: Alignment.bottomLeft,
       ),
@@ -191,10 +191,7 @@ class ChatbotGlassTheme {
       color: uiColors.dark
           ? const Color(0xFF1E293B).withValues(alpha: 0.75)
           : Colors.white.withValues(alpha: 0.92),
-      border: Border.all(
-        color: uiColors.glassBorder,
-        width: 1.0,
-      ),
+      border: Border.all(color: uiColors.glassBorder, width: 1.0),
       borderRadius: const BorderRadius.only(
         topLeft: Radius.circular(6),
         topRight: Radius.circular(18),

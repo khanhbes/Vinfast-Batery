@@ -39,12 +39,12 @@ class ProactiveSuggestion {
   }
 
   Map<String, dynamic> toJson() => {
-        'ruleId': ruleId,
-        'title': title,
-        'message': message,
-        'priority': priority,
-        if (action != null) 'action': action,
-        'suggestedAt': suggestedAt.toIso8601String(),
-        if (metadata != null) 'metadata': metadata,
-      };
+    'ruleId': ruleId,
+    'title': title,
+    'message': message,
+    'priority': priority,
+    if (action != null) 'action': action,
+    'suggestedAt': suggestedAt.toIso8601String(),
+    if (metadata != null) 'metadata': metadata,
+  };
 }

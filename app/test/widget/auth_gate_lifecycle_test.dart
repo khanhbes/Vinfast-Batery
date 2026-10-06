@@ -36,8 +36,8 @@ void main() {
       );
 
       // Initial frame renders splash screen
-      expect(find.text('VinFast Battery'), findsOneWidget);
-      expect(find.text('QUẢN LÝ PIN VÀ SẠC XE ĐIỆN'), findsOneWidget);
+      expect(find.text('VINFAST BATTERY'), findsOneWidget);
+      expect(find.text('Hiểu pin · Sạc thông minh'), findsOneWidget);
       // Splash exposes the real bootstrap message only; it must not show a
       // fabricated percentage while Firebase is still resolving.
       expect(find.byType(LinearProgressIndicator), findsNothing);

@@ -2,17 +2,19 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class VehicleContext(BaseModel):
     """Snapshot context xe/pin để inject vào chatbot prompt."""
+    model_config = ConfigDict(allow_inf_nan=False)
+    voltage: Optional[float] = None
     vehicleId: Optional[str] = None
     model: Optional[str] = None
     currentSoc: Optional[float] = Field(default=None, ge=0, le=100)
     currentSoh: Optional[float] = Field(default=None, ge=0, le=100)
     batteryTemp: Optional[float] = None
-    chargingStatus: Optional[str] = "idle"  # idle | charging | error | full
+    chargingStatus: Optional[str] = None  # Missing is unknown, never implicit idle.
     chargingPower: Optional[float] = None
     targetSoc: Optional[float] = Field(default=None, ge=0, le=100)
     odoKm: Optional[float] = Field(default=None, ge=0)
@@ -125,10 +127,10 @@ class ChatSendRequest(BaseModel):
     """Request gửi tin nhắn tới chatbot."""
     sessionId: Optional[str] = None
     userId: Optional[str] = None
-    message: str = Field(..., min_length=1)
+    message: str = Field(..., min_length=1, max_length=4000)
     vehicleContext: Optional[VehicleContext] = None
     behaviorProfile: Optional[BehaviorProfile] = None
-    model: Optional[str] = "gemini-2.0-flash"
+    model: Optional[str] = None
     stream: bool = True
     history: Optional[List[ChatMessage]] = None
 
@@ -169,7 +171,7 @@ class ActionConfirmRequest(BaseModel):
     callId: str
     toolName: str
     args: Dict[str, Any] = Field(default_factory=dict)
-    confirmed: bool = True
+    confirmed: bool = False
     userId: Optional[str] = None
 
 
@@ -190,4 +192,3 @@ class ProactiveSuggestionItem(BaseModel):
     priority: str  # 'HIGH' | 'MEDIUM' | 'LOW'
     action: Optional[str] = None
     suggestedAt: str
-

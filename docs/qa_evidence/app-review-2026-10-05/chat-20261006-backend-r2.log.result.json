@@ -1,0 +1,19 @@
+{
+  "command": [
+    "python",
+    "-m",
+    "pytest",
+    "tests/test_ai_chatbot.py",
+    "tests/test_behavior_and_history.py",
+    "tests/test_function_calling_and_proactive.py",
+    "tests/test_guardrails_and_personality.py",
+    "tests/test_rich_cards_and_phase5c.py",
+    "-q"
+  ],
+  "cwd": "web",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\chat-20261006-backend-r2.log",
+  "timeoutSeconds": 180,
+  "timedOut": false,
+  "exitCode": 0,
+  "elapsedSeconds": 30.66
+}

@@ -1,13 +1,8 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 
 import '../../core/services/guide_registry.dart';
 import '../../core/theme/app_ui_colors.dart';
-import '../../core/widgets/app_popup.dart';
 import '../../core/widgets/battery_bot_mascot.dart';
-import '../../core/widgets/coach_mark_overlay.dart';
 import '../../navigation/app_navigation.dart';
 import '../smart_charging/smart_charger_setup_hub_screen.dart';
 import 'battery_bot_screen.dart';
@@ -22,35 +17,7 @@ class _GuideScreenState extends State<GuideScreen> {
   String? _expandedId;
 
   void _replayTour() {
-    if (!AppNavigation.openTab(context, 0)) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(_showTourAfterAnchorsAttach());
-    });
-  }
-
-  Future<void> _showTourAfterAnchorsAttach() async {
-    final appContext = AppPopup.navigatorKey.currentContext;
-    if (appContext == null || !appContext.mounted) return;
-    AppNavigation.navigateToTab(appContext, 0);
-    final steps = GuideRegistry.getOverviewTourSteps();
-    var ready = false;
-    for (var frame = 0; frame < 120 && appContext.mounted; frame++) {
-      SchedulerBinding.instance.scheduleFrame();
-      await SchedulerBinding.instance.endOfFrame;
-      if (steps.every((step) => step.anchorKey.currentContext != null)) {
-        ready = true;
-        break;
-      }
-    }
-    if (!ready || !appContext.mounted) return;
-    CoachMarkOverlay.show(
-      context: appContext,
-      steps: steps,
-      showDontShowAgain: false,
-      onFinish: () {},
-      onSkip: () {},
-      onDontShowAgain: (_) {},
-    );
+    AppNavigation.replayOverviewTour(context);
   }
 
   void _open(GuideDestination destination) {

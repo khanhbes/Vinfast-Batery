@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vinfast_battery/features/ai/controllers/chat_controller.dart';
 import 'package:vinfast_battery/features/ai/models/chat_message.dart';
@@ -46,44 +47,47 @@ void main() {
   });
 
   group('Phase 4: VoiceInputService Tests', () {
-    test('VoiceInputService lifecycle and sound level stream', () async {
-      final service = VoiceInputService();
+    test(
+      'voice without a native adapter does not simulate recognition',
+      () async {
+        final service = VoiceInputService();
 
-      final initSuccess = await service.initialize();
-      expect(initSuccess, isTrue);
-      expect(service.isListening, isFalse);
+        final initSuccess = await service.initialize();
+        expect(initSuccess, isFalse);
+        expect(VoiceInputService.isSupported, isFalse);
+        expect(await service.requestMicrophonePermission(), isFalse);
+        expect(service.isListening, isFalse);
 
-      String? recognizedResult;
-      double? receivedLevel;
+        String? recognizedResult;
+        double? receivedLevel;
 
-      final started = await service.startListening(
-        localeId: 'vi_VN',
-        onResult: (t) => recognizedResult = t,
-        onSoundLevel: (lvl) => receivedLevel = lvl,
-      );
+        final started = await service.startListening(
+          localeId: 'vi_VN',
+          onResult: (t) => recognizedResult = t,
+          onSoundLevel: (lvl) => receivedLevel = lvl,
+        );
 
-      expect(started, isTrue);
-      expect(service.isListening, isTrue);
+        expect(started, isFalse);
+        expect(service.isListening, isFalse);
 
-      service.updateTranscript('Kiểm tra pin xe Feliz');
-      expect(recognizedResult, 'Kiểm tra pin xe Feliz');
+        service.updateTranscript('Kiểm tra pin xe Feliz');
+        expect(recognizedResult, isNull);
 
-      // Đợi ngắn để timer sound level phát
-      await Future<void>.delayed(const Duration(milliseconds: 150));
-      expect(receivedLevel, isNotNull);
+        // There must be no random waveform or fabricated transcript.
+        await Future<void>.delayed(const Duration(milliseconds: 150));
+        expect(receivedLevel, isNull);
 
-      final finalTranscript = await service.stopListening();
-      expect(finalTranscript, 'Kiểm tra pin xe Feliz');
-      expect(service.isListening, isFalse);
+        final finalTranscript = await service.stopListening();
+        expect(finalTranscript, isEmpty);
+        expect(service.isListening, isFalse);
 
-      service.dispose();
-    });
+        service.dispose();
+      },
+    );
 
     test('VoiceInputService cancelListening clears transcript', () async {
       final service = VoiceInputService();
-      await service.startListening(
-        onResult: (_) {},
-      );
+      await service.startListening(onResult: (_) {});
       service.updateTranscript('Đang nói dở');
       await service.cancelListening();
 
@@ -95,6 +99,7 @@ void main() {
   group('Phase 4: ChatHistoryStorage Pagination Tests', () {
     setUp(() {
       SharedPreferences.setMockInitialValues({});
+      FlutterSecureStorage.setMockInitialValues({});
     });
 
     test('supports limit and offset pagination', () async {
@@ -102,18 +107,14 @@ void main() {
 
       // Lưu 5 session
       for (int i = 1; i <= 5; i++) {
-        await storage.saveSessionMessages(
-          'session-00$i',
-          [
-            ChatMessage(
-              id: 'm-$i',
-              role: ChatRole.user,
-              content: 'Tin nhắn phiên $i',
-              timestamp: DateTime.now(),
-            ),
-          ],
-          title: 'Phiên trò chuyện số $i',
-        );
+        await storage.saveSessionMessages('session-00$i', [
+          ChatMessage(
+            id: 'm-$i',
+            role: ChatRole.user,
+            content: 'Tin nhắn phiên $i',
+            timestamp: DateTime.now(),
+          ),
+        ], title: 'Phiên trò chuyện số $i');
       }
 
       // Lấy trang 1: limit 2, offset 0
@@ -138,45 +139,52 @@ void main() {
   group('Phase 4: ChatController Offline Queue & Retry Tests', () {
     setUp(() {
       SharedPreferences.setMockInitialValues({});
+      FlutterSecureStorage.setMockInitialValues({});
     });
 
-    test('offline queuing: queues messages when offline and drains on processOfflineQueue', () async {
-      final apiService = ChatApiService();
-      final storage = ChatHistoryStorage();
-      final tracker = BehaviorTracker();
-      final sync = BehaviorSyncService(tracker: tracker);
+    test(
+      'offline queuing: queues messages when offline and drains on processOfflineQueue',
+      () async {
+        final apiService = ChatApiService();
+        final storage = ChatHistoryStorage();
+        final tracker = BehaviorTracker();
+        final sync = BehaviorSyncService(tracker: tracker);
 
-      final controller = ChatController(
-        apiService: apiService,
-        storage: storage,
-        behaviorTracker: tracker,
-        behaviorSync: sync,
-      );
+        final controller = ChatController(
+          apiService: apiService,
+          storage: storage,
+          behaviorTracker: tracker,
+          behaviorSync: sync,
+        );
 
-      // Ban đầu có tin nhắn chào mừng
-      expect(controller.state.messages.isNotEmpty, isTrue);
+        // Ban đầu có tin nhắn chào mừng
+        expect(controller.state.messages.isNotEmpty, isTrue);
 
-      // Giả lập trạng thái offline
-      controller.state = controller.state.copyWith(isOnline: false);
+        // Giả lập trạng thái offline
+        controller.state = controller.state.copyWith(isOnline: false);
 
-      // Gửi tin nhắn khi offline
-      await controller.sendMessage(text: 'Sạc đầy cho tôi nhé');
+        // Gửi tin nhắn khi offline
+        await controller.sendMessage(text: 'Sạc đầy cho tôi nhé');
 
-      // Phải có trong offlineQueue
-      expect(controller.state.offlineQueue.length, 1);
-      expect(controller.state.offlineQueue.first.content, 'Sạc đầy cho tôi nhé');
+        // Phải có trong offlineQueue
+        expect(controller.state.offlineQueue.length, 1);
+        expect(
+          controller.state.offlineQueue.first.content,
+          'Sạc đầy cho tôi nhé',
+        );
 
-      // Trong danh sách tin nhắn có thông báo offline
-      final lastMsg = controller.state.messages.last;
-      expect(lastMsg.content.contains('ngoại tuyến'), isTrue);
+        // Trong danh sách tin nhắn có thông báo offline
+        final lastMsg = controller.state.messages.last;
+        expect(lastMsg.content.contains('ngoại tuyến'), isTrue);
 
-      // Giả lập online trở lại và xả hàng đợi
-      controller.state = controller.state.copyWith(isOnline: true);
-      await controller.processOfflineQueue();
+        // Giả lập online trở lại và xả hàng đợi
+        controller.state = controller.state.copyWith(isOnline: true);
+        await controller.processOfflineQueue();
 
-      // Hàng đợi offline được làm rỗng
-      expect(controller.state.offlineQueue.isEmpty, isTrue);
-    });
+        // Hàng đợi offline được làm rỗng
+        expect(controller.state.offlineQueue.isEmpty, isTrue);
+      },
+    );
 
     test('confirmAction updates message actionCard status', () async {
       final apiService = ChatApiService();
@@ -220,10 +228,10 @@ void main() {
         confirmed: true,
       );
 
-      expect(success, isTrue);
+      expect(success, isFalse);
       final updatedMsg = controller.state.messages.first;
-      expect(updatedMsg.actionCard?.isConfirmed, isTrue);
-      expect(updatedMsg.actionCard?.status, 'confirmed');
+      expect(updatedMsg.actionCard?.isConfirmed, isFalse);
+      expect(updatedMsg.actionCard?.status, 'failed');
     });
   });
 }

@@ -1,0 +1,20 @@
+{
+  "StartedUtc": "2026-10-05T17:54:59.3482034Z",
+  "Gpu": "software",
+  "GuestRamMB": 1536,
+  "CpuCores": 2,
+  "ArtifactSha256": "5A0EF61FD5F143AE9685B1DB4481FCDBF2DB7E280011F88608B1EABF5F660639",
+  "LauncherPid": 2756,
+  "QemuPid": 30860,
+  "StdoutLog": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\app\\build\\qa-software-20261005-175459-out.log",
+  "StderrLog": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\app\\build\\qa-software-20261005-175459-err.log",
+  "MonitorSeconds": 300,
+  "LauncherExitCode": -1073741819,
+  "QemuExitCode": -1073741819,
+  "ProcessExitObserved": true,
+  "AppOrHardwareCommandsSent": 0,
+  "WipeData": false,
+  "RawCredentialsOrMemoryDumpStored": false,
+  "EndedUtc": "2026-10-05T17:58:24.7049134Z",
+  "ElapsedSeconds": 205
+}

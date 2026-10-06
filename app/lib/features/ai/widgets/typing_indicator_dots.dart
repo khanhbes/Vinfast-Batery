@@ -27,7 +27,18 @@ class _TypingIndicatorDotsState extends State<TypingIndicatorDots>
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
-    )..repeat();
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _controller.stop();
+      _controller.value = 0;
+    } else if (!_controller.isAnimating) {
+      _controller.repeat();
+    }
   }
 
   @override
@@ -72,7 +83,9 @@ class _TypingIndicatorDotsState extends State<TypingIndicatorDots>
                   child: Transform.scale(
                     scale: scale,
                     child: Container(
-                      margin: EdgeInsets.symmetric(horizontal: widget.spacing / 2),
+                      margin: EdgeInsets.symmetric(
+                        horizontal: widget.spacing / 2,
+                      ),
                       width: widget.dotSize,
                       height: widget.dotSize,
                       decoration: BoxDecoration(
@@ -80,7 +93,9 @@ class _TypingIndicatorDotsState extends State<TypingIndicatorDots>
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: effectiveColor.withValues(alpha: opacity * 0.4),
+                            color: effectiveColor.withValues(
+                              alpha: opacity * 0.4,
+                            ),
                             blurRadius: 4,
                             offset: const Offset(0, 1),
                           ),

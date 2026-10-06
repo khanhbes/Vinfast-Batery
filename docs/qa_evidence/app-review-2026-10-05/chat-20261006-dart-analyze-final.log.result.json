@@ -1,0 +1,15 @@
+{
+  "command": [
+    "C:/flutter/bin/cache/dart-sdk/bin/dart.exe",
+    "analyze",
+    "lib/features/ai",
+    "test/unit/chat_safety_regression_test.dart",
+    "test/widget/assistant_sheet_lifecycle_test.dart"
+  ],
+  "cwd": "app",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\chat-20261006-dart-analyze-final.log",
+  "timeoutSeconds": 120,
+  "timedOut": false,
+  "exitCode": 0,
+  "elapsedSeconds": 106.53
+}
