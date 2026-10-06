@@ -152,5 +152,23 @@ class BehaviorAnalyzer:
             return p
 
 
+    def replace_feedback(self, user_id: str, previous: Optional[str], rating: str) -> None:
+        """One message contributes one vote, even after an alias/reversal/retry."""
+        aliases = {'up': 'like', 'down': 'dislike'}
+        previous = aliases.get(previous, previous) if previous is not None else None
+        rating = aliases.get(rating, rating)
+        with self._lock:
+            if previous == rating:
+                return
+            profile = self.get_or_create_profile(user_id)
+            stats = profile.chatPreferences.feedbackStats
+            keys = {'like': 'totalThumbsUp', 'dislike': 'totalThumbsDown'}
+            if previous in keys:
+                stats[keys[previous]] = max(0, stats.get(keys[previous], 0) - 1)
+            if rating in keys:
+                stats[keys[rating]] = stats.get(keys[rating], 0) + 1
+            profile.updatedAt = datetime.now(timezone.utc).isoformat()
+
+
 # Global analyzer singleton
 behavior_analyzer = BehaviorAnalyzer()

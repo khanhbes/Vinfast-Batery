@@ -21,11 +21,11 @@ export function AdminAccessGate({ uid, children, onSignOut }: {
   if (status === 'allowed') return children;
   return <main className="min-h-dvh grid place-items-center bg-background p-6">
     <section className="w-full max-w-md space-y-4" aria-busy={status === 'loading'}>
-      <h1 className="text-2xl font-semibold">{status === 'loading' ? 'Verifying access' : status === 'denied' ? 'Administrator access required' : 'Access could not be verified'}</h1>
-      <p role="status" className="text-muted-foreground">{status === 'loading' ? 'Waiting for the server to verify your account.' : status === 'denied' ? 'This workspace is restricted to administrators. You can continue using the mobile app with this account.' : 'Check the connection and try again. Administrative data has not been loaded.'}</p>
+      <h1 className="text-2xl font-semibold">{status === 'loading' ? 'Đang xác minh quyền truy cập' : status === 'denied' ? 'Cần quyền quản trị viên' : 'Chưa thể xác minh quyền truy cập'}</h1>
+      <p role="status" className="text-muted-foreground">{status === 'loading' ? 'Đang chờ máy chủ xác minh tài khoản.' : status === 'denied' ? 'Trang này chỉ dành cho quản trị viên. Bạn vẫn có thể dùng ứng dụng điện thoại với tài khoản này.' : 'Kiểm tra kết nối rồi thử lại. Dữ liệu quản trị chưa được tải.'}</p>
       <div className="flex flex-wrap gap-3">
-        {status === 'error' && <Button onClick={() => setAttempt(value => value + 1)}>Try again</Button>}
-        <Button variant="outline" onClick={onSignOut}>Sign out</Button>
+        {status === 'error' && <Button onClick={() => setAttempt(value => value + 1)}>Thử lại</Button>}
+        <Button variant="outline" onClick={onSignOut}>Đăng xuất</Button>
       </div>
     </section>
   </main>;

@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import io
 import json
 import sys
+from types import ModuleType
 import uuid
 
 
@@ -17,7 +18,7 @@ def main():
     result = {"operationId": str(uuid.uuid4()), "onCommands": 0, "offCommands": 0,
               "status": "Blocked", "samples": [], "httpStatuses": [],
               "startedAt": datetime.now(timezone.utc).isoformat()}
-    provider = repository = binding = uid = None
+    provider = repository = binding = uid = db = None
     claimed = False
     try:
         if "--supervised-no-load-confirmed" not in sys.argv:
@@ -25,20 +26,28 @@ def main():
         request = json.load(sys.stdin)
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             import server
-        if server._firestore_db is None:
+        db = server._firestore_db
+        if db is None:
             raise RuntimeError("firebaseUnavailable")
         import requests
         from shelly.models import DeviceBinding
         from shelly.repositories import SmartChargeRepository
-        import shelly.providers.vault_cloud as module
+        from google.cloud.firestore_v1.base_document import DocumentSnapshot
+        from importlib import import_module
+        module = import_module("shelly.providers.vault_cloud")
+        if not isinstance(module, ModuleType):
+            raise RuntimeError("providerUnavailable")
         # Only this short-lived QA process loads current source; API workers
         # are not restarted or patched underneath an existing charging session.
         exec(compile(request["providerSource"], "qa-vault-cloud", "exec"), module.__dict__)
-        repository = SmartChargeRepository(server._firestore_db)
+        repository = SmartChargeRepository(db)
         profile = request["profile"]
         device = profile["deviceId"]
-        owner = repository.db.collection("shellyDeviceOwners").document(
-            repository._device_owner_doc_id(device)).get().to_dict() or {}
+        owner_snapshot = db.collection("shellyDeviceOwners").document(
+            repository._device_owner_doc_id(device)).get()
+        if not isinstance(owner_snapshot, DocumentSnapshot):
+            raise RuntimeError("firebaseReadbackInvalid")
+        owner = owner_snapshot.to_dict() or {}
         members = repository._membership_uids(owner)
         uid = owner.get("ownerUid")
         if uid not in members:
@@ -104,15 +113,21 @@ def main():
         if result["onCommands"]:
             result["status"] = "Fail"
     finally:
-        if claimed and provider and binding:
+        if (claimed and provider and binding and repository is not None
+                and uid is not None and db is not None):
             try:
                 final = provider.get_status(binding)
                 result["finalOffVerified"] = final.relay is False
                 if result["finalOffVerified"]:
                     repository.release_device_session(uid, binding.device_id, result["operationId"])
-                    lease = repository.db.collection("shellyDeviceLocks").document(
+                    lease = db.collection("shellyDeviceLocks").document(
                         repository._device_owner_doc_id(binding.device_id)).get()
-                    result["testLeaseReleased"] = not lease.exists
+                    if not isinstance(lease, DocumentSnapshot):
+                        raise RuntimeError("firebaseReadbackInvalid")
+                    lease_exists = getattr(lease, "exists", None)
+                    if not isinstance(lease_exists, bool):
+                        raise RuntimeError("firebaseReadbackInvalid")
+                    result["testLeaseReleased"] = not lease_exists
                 else:
                     result["status"] = "Fail"
                     result["physicalDisconnectRequired"] = True

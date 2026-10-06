@@ -1,0 +1,17 @@
+{
+  "command": [
+    "python",
+    "-m",
+    "pytest",
+    "tests",
+    "-q",
+    "--basetemp",
+    "C:\\Users\\khanh\\AppData\\Local\\Temp\\vinfast-problems-gateway-d17f5dd201994a69b2fac0323d63252a"
+  ],
+  "cwd": "smart_charger_gateway",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\problems-20261006-gateway.log",
+  "timeoutSeconds": 180,
+  "timedOut": false,
+  "exitCode": 0,
+  "elapsedSeconds": 14.36
+}

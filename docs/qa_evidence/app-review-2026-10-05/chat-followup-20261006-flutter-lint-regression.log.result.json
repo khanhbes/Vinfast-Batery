@@ -1,0 +1,17 @@
+{
+  "command": [
+    "C:/flutter/bin/cache/dart-sdk/bin/dart.exe",
+    "C:/flutter/bin/cache/flutter_tools.snapshot",
+    "test",
+    "--no-pub",
+    "test/unit/chat_safety_regression_test.dart",
+    "test/widget/assistant_sheet_lifecycle_test.dart",
+    "test/unit/phase4_voice_and_controller_test.dart"
+  ],
+  "cwd": "app",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\chat-followup-20261006-flutter-lint-regression.log",
+  "timeoutSeconds": 180,
+  "timedOut": false,
+  "exitCode": 0,
+  "elapsedSeconds": 15.53
+}

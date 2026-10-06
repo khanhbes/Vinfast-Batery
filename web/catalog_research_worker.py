@@ -13,8 +13,9 @@ from firebase_admin import credentials, firestore
 
 try:
     from google.api_core.exceptions import DeadlineExceeded, ResourceExhausted, ServiceUnavailable
+    TRANSIENT_FIRESTORE_ERRORS = (ResourceExhausted, DeadlineExceeded, ServiceUnavailable)
 except Exception:  # pragma: no cover - dependency is present in production
-    DeadlineExceeded = ResourceExhausted = ServiceUnavailable = ()
+    TRANSIENT_FIRESTORE_ERRORS = ()
 
 from vehicle_catalog import claim_and_process_research_job
 
@@ -47,7 +48,7 @@ def main() -> None:
             backoff = 0.0
             if not worked:
                 time.sleep(idle_seconds)
-        except (ResourceExhausted, DeadlineExceeded, ServiceUnavailable) as exc:
+        except TRANSIENT_FIRESTORE_ERRORS as exc:
             backoff = min(max_backoff, max(idle_seconds, backoff * 2 or idle_seconds))
             delay = backoff + random.uniform(0, min(5.0, backoff * 0.1))
             print(f"Catalog worker backing off after Firestore transient error: {type(exc).__name__}; retrying in {delay:.1f}s", flush=True)

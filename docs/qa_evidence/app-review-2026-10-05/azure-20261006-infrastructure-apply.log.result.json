@@ -1,0 +1,22 @@
+{
+  "command": [
+    "powershell",
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    "deploy/azure/02-infrastructure.ps1",
+    "-ConfigPath",
+    "deploy/azure/staging.json",
+    "-EntitlementsConfirmed",
+    "-LocalGatePassed",
+    "-Apply"
+  ],
+  "cwd": ".",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\azure-20261006-infrastructure-apply.log",
+  "timeoutSeconds": 900,
+  "timedOut": false,
+  "exitCode": 1,
+  "cleanupError": null,
+  "elapsedSeconds": 22.67
+}

@@ -1,0 +1,18 @@
+{
+  "command": [
+    "python",
+    "-m",
+    "pytest",
+    "tests/test_python_contract_regressions.py",
+    "tests/test_chat_security_contract.py",
+    "-q",
+    "--basetemp",
+    "C:\\Users\\khanh\\AppData\\Local\\Temp\\vinfast-problems-regression-a577dbaf5c6a4190a0e5e48505262771"
+  ],
+  "cwd": "web",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\problems-20261006-contract-tests.log",
+  "timeoutSeconds": 120,
+  "timedOut": false,
+  "exitCode": 0,
+  "elapsedSeconds": 24.86
+}

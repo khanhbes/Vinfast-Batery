@@ -1,0 +1,15 @@
+{
+  "command": [
+    "powershell",
+    "-NoProfile",
+    "-Command",
+    "& \"C:\\Program Files\\Microsoft SDKs\\Azure\\CLI2\\wbin\\az.cmd\" acr login --name vinfastbatteryf1c11a09 --only-show-errors; if ($LASTEXITCODE -ne 0) { throw \"Registry login failed\" }; docker tag vinfast-api:azure-staging-20261006 vinfastbatteryf1c11a09.azurecr.io/vinfast-api:b7a04fdbca-qa-20261006-task78; if ($LASTEXITCODE -ne 0) { throw \"API tag failed\" }; docker tag vinfast-ai:azure-staging-20261006-retry2 vinfastbatteryf1c11a09.azurecr.io/vinfast-ai:b7a04fdbca-qa-20261006-task78; if ($LASTEXITCODE -ne 0) { throw \"AI tag failed\" }; docker push vinfastbatteryf1c11a09.azurecr.io/vinfast-api:b7a04fdbca-qa-20261006-task78; if ($LASTEXITCODE -ne 0) { throw \"API push failed\" }; docker push vinfastbatteryf1c11a09.azurecr.io/vinfast-ai:b7a04fdbca-qa-20261006-task78; if ($LASTEXITCODE -ne 0) { throw \"AI push failed\" }"
+  ],
+  "cwd": ".",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\azure-20261006-registry-push.log",
+  "timeoutSeconds": 900,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 148.72
+}

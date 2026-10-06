@@ -1,5 +1,8 @@
 # ── FastAPI AI Server (port 8001) ─────────────────────────────
-FROM python:3.11-slim
+# Clean builds use Python; local QA may reuse a known AI runtime image to avoid
+# re-downloading unchanged ML libraries. Do not use a QA base for release gates.
+ARG AI_RUNTIME_BASE=python:3.11-slim
+FROM ${AI_RUNTIME_BASE}
 
 WORKDIR /app
 
@@ -8,12 +11,33 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements-ai.txt .
-RUN pip install --no-cache-dir -r requirements-ai.txt
+ARG AI_REQUIREMENTS=requirements-ai.txt
+ARG AI_PIP_TIMEOUT=15
+ARG AI_PIP_RETRIES=5
+COPY requirements-ai.txt requirements-ai.azure.txt ./
+RUN --mount=type=cache,id=vinfast-ai-pypi-verified,target=/root/.cache/pip,sharing=locked \
+    if [ "${AI_REQUIREMENTS}" = "requirements-ai.azure.txt" ]; then \
+      pip install --index-url https://pypi.org/simple --timeout "${AI_PIP_TIMEOUT}" --retries "${AI_PIP_RETRIES}" -r "${AI_REQUIREMENTS}"; \
+    else \
+      pip install --no-cache-dir --timeout "${AI_PIP_TIMEOUT}" --retries "${AI_PIP_RETRIES}" -r "${AI_REQUIREMENTS}"; \
+    fi
+
+COPY requirements-chat.txt .
+RUN --mount=type=cache,id=vinfast-ai-pypi-verified,target=/root/.cache/pip,sharing=locked \
+    if [ "${AI_REQUIREMENTS}" = "requirements-ai.azure.txt" ]; then \
+      pip install --index-url https://pypi.org/simple --timeout "${AI_PIP_TIMEOUT}" --retries "${AI_PIP_RETRIES}" -r requirements-chat.txt; \
+    else \
+      pip install --no-cache-dir --timeout "${AI_PIP_TIMEOUT}" --retries "${AI_PIP_RETRIES}" -r requirements-chat.txt; \
+    fi
 
 COPY ai_server/ ./ai_server/
 # dataset_manager.py reuses the shared CSV hardening helper.
 COPY csv_security.py .
+COPY assets/vinfast_specs_fallback.json ./assets/vinfast_specs_fallback.json
+
+# Fail the image build if the chat provider/schema dependencies are absent.
+# Import only: no provider request, Firebase access or hardware operation.
+RUN python -c "from google import genai; from ai_server.chat_schemas import ChatSendRequest; from ai_server.chat_engine import ChatEngine; assert genai.Client; assert ChatSendRequest(message='QA import check'); assert ChatEngine"
 
 RUN mkdir -p /app/models
 

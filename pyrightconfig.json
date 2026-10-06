@@ -1,0 +1,15 @@
+{
+  "include": ["web", "smart_charger_gateway", "tools"],
+  "exclude": [
+    "**/node_modules", "**/__pycache__", "**/.venv", "**/.pytest*",
+    "web/dashboard", "web/data", "web/models", "web/qa-evidence",
+    "smart_charger_gateway/state"
+  ],
+  "typeCheckingMode": "basic",
+  "executionEnvironments": [
+    {"root": "web/tests", "extraPaths": ["web"]},
+    {"root": "web", "extraPaths": ["web"]},
+    {"root": "smart_charger_gateway", "extraPaths": ["smart_charger_gateway"]},
+    {"root": "tools", "extraPaths": ["web", "smart_charger_gateway"]}
+  ]
+}

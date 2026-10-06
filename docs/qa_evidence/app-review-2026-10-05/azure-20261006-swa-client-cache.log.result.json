@@ -1,0 +1,15 @@
+{
+  "command": [
+    "powershell.exe",
+    "-NoProfile",
+    "-File",
+    "deploy/azure/12-cache-swa-client.ps1"
+  ],
+  "cwd": ".",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\azure-20261006-swa-client-cache.log",
+  "timeoutSeconds": 240,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 7.95
+}

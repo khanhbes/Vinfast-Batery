@@ -1,0 +1,48 @@
+{
+  "scope": "Authorized local API/AI update; not production, mobile or hardware sign-off",
+  "apiContainerBefore": "88025c37c9f5",
+  "apiContainerAfter": "d2f3d13a42d8",
+  "aiContainerBefore": "a4482005c5c8",
+  "aiContainerAfter": "85f556aafaad",
+  "oldApiImage": "sha256:94a0c36ea0dc28995852dc847800b5ab7c3d56806db6ade56882480cab34a892",
+  "oldApiRollbackTag": "vinfast-api-runtime:before-chat-20261006",
+  "newApiImage": "sha256:db2586c42d5feb57869934626920d774d3dba9f6edb334fbe6ca86b6b27f1d4b",
+  "newAiImage": "sha256:3dcbbae179f0b3fa73c3f2fd02716a34e6903a829c1955f87eeb696eb4e2dbe5",
+  "apiHealthy": true,
+  "aiHealthy": true,
+  "unchangedContainerIds": {
+    "dashboard": "986dd3ba1566", "catalogWorker": "5cc07eca925d",
+    "laptopGateway": "55bb23d8a9a5", "caddy": "46ce4a5a0677"
+  },
+  "sourceHashesMatchContainers": true,
+  "sourceHashes": {
+    "web/server.py": "3E8A02670455BE5CCC0F347ECC3DA99097366DDBB598713F00037347A23B7871",
+    "web/ai_server/chat_engine.py": "406E32FED64158010BFBFB91CCA38A32D1DE65B6D1FD58E87238FB6B69E33D32",
+    "tools/api_chat_smoke.py": "CF0A628F5E1AD517DECAB3B21DE073738EDFFFDE30E0E689D0513497AF3057DC",
+    "tools/chat_provider_smoke.py": "AB1701C8CE6483D4D82D167CBE66092606C8C8D462DADAD141DD62B417859360"
+  },
+  "preflight": {
+    "initialFilteredQuery": "FailedPrecondition; not interpreted as empty",
+    "missingCollectionGroupIndexConfirmed": true,
+    "fallback": "Bounded state projection of smartChargingSessions group and device-lease check",
+    "documentsScanned": 0,
+    "nonterminalSessionPresent": false,
+    "unknownSchemaPresent": false,
+    "scanTruncated": false,
+    "deviceLeasePresent": false,
+    "limitations": "Metadata only, not physical relay readback or an audit of every legacy client-local session."
+  },
+  "apiHealthStatus": 200,
+  "apiReadinessStatus": 200,
+  "requestIdsPresent": true,
+  "unauthenticatedChatFeedbackConfirmation": "401",
+  "apiContainerToAi": {"source":"gemini","providerStatus":"succeeded"},
+  "providerSdkAndInternalAiSse": "Passed with synthetic questions; QA sessions cleaned up",
+  "authenticatedPublicProxyEndToEnd": "Not executed; requires a user-authorized QA login/token/runtime",
+  "hardwareCommands": 0,
+  "automated": {
+    "workspaceTemp": {"pass":316,"fail":1,"skip":4,"failure":"WinError5 replacing model manifest in concurrent deploy regression"},
+    "isolatedTempOutsideOneDrive": {"pass":317,"fail":0,"skip":4,"exitCode":0},
+    "limitations":"Isolated pass does not prove the root cause of the intermittent Windows manifest permission failure."
+  }
+}

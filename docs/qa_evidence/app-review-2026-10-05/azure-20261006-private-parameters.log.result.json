@@ -1,0 +1,21 @@
+{
+  "command": [
+    "powershell",
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    "deploy/azure/10-prepare-private-parameters.ps1",
+    "-PrivateEnvPath",
+    "web/.env.laptop",
+    "-DashboardUrl",
+    "https://victorious-tree-076e47d00.6.azurestaticapps.net"
+  ],
+  "cwd": ".",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\azure-20261006-private-parameters.log",
+  "timeoutSeconds": 120,
+  "timedOut": false,
+  "exitCode": 1,
+  "cleanupError": null,
+  "elapsedSeconds": 1.67
+}

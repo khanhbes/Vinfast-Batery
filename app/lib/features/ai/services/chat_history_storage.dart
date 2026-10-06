@@ -12,8 +12,17 @@ import '../models/chat_message.dart';
 import '../models/chat_session.dart';
 
 final chatHistoryStorageProvider = Provider<ChatHistoryStorage>((ref) {
-  return ChatHistoryStorage();
+  final storage = ChatHistoryStorage();
+  ref.onDispose(storage.dispose);
+  return storage;
 });
+
+class ChatHistoryException implements Exception {
+  const ChatHistoryException(this.userMessage);
+  final String userMessage;
+  @override
+  String toString() => userMessage;
+}
 
 class ChatHistoryStorage {
   ChatHistoryStorage({http.Client? client, String? Function()? uidResolver})
@@ -28,6 +37,7 @@ class ChatHistoryStorage {
   String get _msgPrefix => 'vinfast_chat_msgs_v2_${_scope}_';
 
   final http.Client _client;
+  void dispose() => _client.close();
   final FlutterSecureStorage _secure = const FlutterSecureStorage();
   Future<void> _writeTail = Future<void>.value();
 
@@ -126,7 +136,9 @@ class ChatHistoryStorage {
             .toList();
       }
     } catch (e) {
-      debugPrint('[ChatHistoryStorage] Lỗi loadSessionMessages.');
+      throw const ChatHistoryException(
+        'Chưa mở được cuộc trò chuyện. Hãy thử lại.',
+      );
     }
     return [];
   }
@@ -136,6 +148,9 @@ class ChatHistoryStorage {
     int limit = 50,
     int offset = 0,
   }) async {
+    if (limit < 1 || offset < 0) {
+      throw ArgumentError('Invalid history pagination');
+    }
     try {
       final uid = _uidResolver();
       final indexKey = _sessionIndexKey;
@@ -148,12 +163,17 @@ class ChatHistoryStorage {
         final all = list
             .map((item) => ChatSession.fromJson(item as Map<String, dynamic>))
             .toList();
+        if (all.any((session) => session.id.isEmpty)) {
+          throw const FormatException('Invalid history index');
+        }
         if (offset >= all.length) return [];
         final end = (offset + limit < all.length) ? offset + limit : all.length;
         return all.sublist(offset, end);
       }
     } catch (e) {
-      debugPrint('[ChatHistoryStorage] Lỗi listSavedSessions.');
+      throw const ChatHistoryException(
+        'Chưa tải được lịch sử trò chuyện. Hãy thử lại.',
+      );
     }
     return [];
   }
@@ -174,8 +194,9 @@ class ChatHistoryStorage {
       final msgPrefix = _msgPrefix;
       final prefs = _secure;
       if (uid != _uidResolver()) return;
-      await prefs.delete(key: '$msgPrefix$sessionId');
       final sessions = await listSavedSessions(limit: 100000);
+      if (uid != _uidResolver()) return;
+      await prefs.delete(key: '$msgPrefix$sessionId');
       if (uid != _uidResolver()) return;
       sessions.removeWhere((s) => s.sessionId == sessionId);
       await prefs.write(
@@ -183,7 +204,9 @@ class ChatHistoryStorage {
         value: jsonEncode(sessions.map((s) => s.toJson()).toList()),
       );
     } catch (e) {
-      debugPrint('[ChatHistoryStorage] Lỗi deleteSession.');
+      throw const ChatHistoryException(
+        'Chưa xóa được lịch sử trên máy này. Hãy thử lại.',
+      );
     }
   }
 

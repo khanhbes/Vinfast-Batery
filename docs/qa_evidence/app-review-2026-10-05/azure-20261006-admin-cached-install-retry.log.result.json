@@ -1,0 +1,17 @@
+{
+  "command": [
+    "C:/Users/khanh/AppData/Local/npm-cache/_npx/52027bd8fc0022aa/node_modules/node/bin/node.exe",
+    "C:/Program Files/nodejs/node_modules/npm/bin/npm-cli.js",
+    "install",
+    "--offline",
+    "--no-audit",
+    "--no-fund"
+  ],
+  "cwd": "web/dashboard",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\azure-20261006-admin-cached-install-retry.log",
+  "timeoutSeconds": 240,
+  "timedOut": true,
+  "exitCode": 1,
+  "cleanupError": null,
+  "elapsedSeconds": 241.7
+}

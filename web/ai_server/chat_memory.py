@@ -24,6 +24,7 @@ class ChatMemoryManager:
         self._sessions: Dict[str, List[ChatMessage]] = {}
         self._session_meta: Dict[str, ChatSession] = {}
         self._owners: Dict[str, Optional[str]] = {}
+        self._epochs: Dict[str, str] = {}
 
     def get_or_create_session(self, session_id: Optional[str] = None, user_id: Optional[str] = None) -> str:
         """Đảm bảo session tồn tại và trả về session_id hợp lệ."""
@@ -34,6 +35,7 @@ class ChatMemoryManager:
                 now_iso = datetime.now(timezone.utc).isoformat()
                 self._sessions[session_id] = []
                 self._owners[session_id] = user_id
+                self._epochs[session_id] = uuid.uuid4().hex
                 self._session_meta[session_id] = ChatSession(
                     sessionId=session_id,
                     title="Cuộc trò chuyện mới",
@@ -51,6 +53,16 @@ class ChatMemoryManager:
             if session_id not in self._sessions or self._owners.get(session_id) != user_id:
                 raise PermissionError('chatSessionForbidden')
 
+    def session_epoch(self, session_id: str, user_id: Optional[str]) -> str:
+        with self._lock:
+            self.assert_owner(session_id, user_id)
+            return self._epochs[session_id]
+
+    def assert_epoch(self, session_id: str, expected_epoch: str) -> None:
+        with self._lock:
+            if self._epochs.get(session_id) != expected_epoch:
+                raise PermissionError('chatSessionChanged')
+
     def add_message(
         self,
         session_id: str,
@@ -59,9 +71,12 @@ class ChatMemoryManager:
         message_id: Optional[str] = None,
         action: Optional[str] = None,
         rich_cards: Optional[List[Any]] = None,
+        expected_epoch: Optional[str] = None,
     ) -> ChatMessage:
         """Thêm 1 tin nhắn vào session."""
         with self._lock:
+            if expected_epoch is not None:
+                self.assert_epoch(session_id, expected_epoch)
             sid = session_id if session_id in self._sessions else self.get_or_create_session(session_id)
             mid = message_id or f"msg-{uuid.uuid4().hex[:12]}"
             now_iso = datetime.now(timezone.utc).isoformat()
@@ -97,12 +112,18 @@ class ChatMemoryManager:
             msgs = self._sessions.get(session_id, [])
             return msgs[-self._max_context_messages :] if len(msgs) > self._max_context_messages else list(msgs)
 
-    def set_feedback(self, session_id, user_id, message_id, rating):
+    def set_feedback(self, session_id, user_id, message_id, rating, on_change=None):
         with self._lock:
             self.assert_owner(session_id, user_id)
+            rating = {'up': 'like', 'down': 'dislike'}.get(rating, rating)
             for message in self._sessions[session_id]:
                 if message.id == message_id and message.role == 'model':
-                    changed = message.userFeedback != rating
+                    previous = message.userFeedback
+                    if previous is not None:
+                        previous = {'up': 'like', 'down': 'dislike'}.get(previous, previous)
+                    changed = previous != rating
+                    if changed and on_change is not None:
+                        on_change(previous, rating)
                     message.userFeedback = rating
                     return changed
             raise KeyError('messageUnavailable')
@@ -122,12 +143,15 @@ class ChatMemoryManager:
             )
             return sorted_sessions[:limit]
 
-    def delete_session(self, session_id: str) -> bool:
+    def delete_session(self, session_id: str, *, owner_uid: Optional[str] = None, check_owner: bool = False) -> bool:
         """Xóa một session khỏi bộ nhớ."""
         with self._lock:
+            if check_owner:
+                self.assert_owner(session_id, owner_uid)
             removed = self._sessions.pop(session_id, None) is not None
             self._session_meta.pop(session_id, None)
             self._owners.pop(session_id, None)
+            self._epochs.pop(session_id, None)
             return removed
 
     def clear(self) -> None:
@@ -136,6 +160,7 @@ class ChatMemoryManager:
             self._sessions.clear()
             self._session_meta.clear()
             self._owners.clear()
+            self._epochs.clear()
 
 
 # Global in-memory instance

@@ -122,6 +122,39 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('broken history shows retry, not an empty success state', (
+    tester,
+  ) async {
+    FlutterSecureStorage.setMockInitialValues({
+      'vinfast_chat_sessions_index_v2_guest': 'broken',
+    });
+    await open(tester, _FakeChat());
+    await tester.tap(find.byKey(const Key('assistant_history_button')));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.text('Chưa tải được lịch sử trò chuyện.'), findsOneWidget);
+    expect(find.text('Chưa có lịch sử hội thoại nào.'), findsNothing);
+    expect(find.text('Thử lại'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('double tap history creates only one modal', (tester) async {
+    await open(tester, _FakeChat());
+    // Keep the real button callback to simulate a second queued pointer action
+    // even if the first opens the modal before another hit test can run.
+    final historyAction = tester
+        .widget<IconButton>(find.byKey(const Key('assistant_history_button')))
+        .onPressed;
+    expect(historyAction, isNotNull);
+    await tester.tap(find.byKey(const Key('assistant_history_button')));
+    historyAction!();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Lịch sử trò chuyện'), findsOneWidget);
+    expect(find.text('Lịch sử lưu trên máy này.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   for (final width in [320.0, 390.0, 412.0]) {
     testWidgets('actual sheet fits $width dp, font 1.5 and keyboard', (
       tester,

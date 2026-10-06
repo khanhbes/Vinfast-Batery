@@ -6,6 +6,10 @@ Firebase Auth middleware + RBAC (user/admin).
 Port: 5000
 """
 import sys
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from google.cloud.firestore_v1.client import Client as FirestoreClient
 if sys.platform == 'win32':
     try:
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -39,7 +43,8 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, wait
 import numpy as np
 from datetime import datetime, timedelta, timezone
-from flask import Flask, request, jsonify, Response, redirect, send_file, g, stream_with_context
+from flask import Flask, jsonify, Response, redirect, send_file, g, stream_with_context
+from auth_context import AuthenticatedRequest, request
 from flask_cors import CORS
 from werkzeug.exceptions import HTTPException
 
@@ -123,7 +128,7 @@ _CONSUMPTION_FEATURES = [
     'soc_start', 'vehicle_age_months', 'odometer_km',
 ]
 
-def _build_consumption_features(body: dict) -> list:
+def _build_consumption_features(body: dict) -> tuple[list, int]:
     """Build 19-dim feature vector from request body.
     Supports two modes:
     1. Full features: client sends all 19 fields.
@@ -227,7 +232,7 @@ def _heuristic_consumption(distance: float, soc_start: float, payload_kg: float,
 # FIREBASE ADMIN SDK
 # ═══════════════════════════════════════════════════════════════
 _firebase_available = False
-_firestore_db = None
+_firestore_db: "FirestoreClient | None" = None
 _firebase_auth = None
 _firebase_messaging = None
 _allow_demo_data = os.environ.get('ALLOW_DEMO_DATA', '0').lower() in ('1', 'true', 'yes')
@@ -310,6 +315,7 @@ try:
         raise RuntimeError('Firebase initialization disabled in isolated tests')
     import firebase_admin
     from firebase_admin import credentials, firestore, auth as fb_auth, messaging
+    from google.cloud.firestore_v1.client import Client as FirestoreClient
 
     # Ưu tiên 1: FIREBASE_CREDENTIALS_JSON (base64) — dùng cho Docker
     cred_path = _load_firebase_cred_from_env()
@@ -327,7 +333,10 @@ try:
     else:
         firebase_admin.initialize_app()
         print('✅ Firebase Admin SDK initialized with Application Default Credentials')
-    _firestore_db = firestore.client()
+    client = firestore.client()
+    if not isinstance(client, FirestoreClient):
+        raise TypeError('The API requires a synchronous Firestore client')
+    _firestore_db = client
     _firebase_auth = fb_auth
     _firebase_messaging = messaging
     _firebase_available = True
@@ -345,6 +354,7 @@ except Exception as e:
 # FLASK APP
 # ═══════════════════════════════════════════════════════════════
 app = Flask(__name__)
+app.request_class = AuthenticatedRequest
 app.config['MAX_CONTENT_LENGTH'] = 65 * 1024 * 1024
 _cors_origins_raw = os.environ.get('CORS_ORIGINS', '').strip()
 if _IS_PRODUCTION and not _cors_origins_raw:
@@ -381,6 +391,8 @@ def _request_id() -> str:
 @app.before_request
 def assign_request_id():
     _request_id()
+    from deployment_policy import staging_hardware_guard
+    return staging_hardware_guard()
 
 
 @app.after_request
@@ -5050,10 +5062,12 @@ def soc_history():
 def chat_send_proxy():
     """Forward chat request to FastAPI AI service and stream SSE response back."""
     if _http is None:
-        return jsonify({'success': False, 'error': 'requests library not installed'}), 500
+        return jsonify({'success': False, 'code': 'chatUnavailable', 'userMessage': 'Trợ lý chưa sẵn sàng. Hãy thử lại.'}), 503
 
     url = f'{AI_SERVER_URL}/v1/chat/send'
     json_body = request.get_json(silent=True) or {}
+    if not isinstance(json_body, dict):
+        return jsonify({'success': False, 'code': 'invalidChatRequest', 'userMessage': 'Yêu cầu trò chuyện không hợp lệ.'}), 400
     json_body['userId'] = request._uid
     json_body.pop('model', None)
     profile = json_body.get('behaviorProfile')
@@ -5129,6 +5143,8 @@ def chat_delete_session_proxy(session_id):
 def chat_feedback_proxy():
     """Gửi đánh giá tin nhắn (like/dislike)."""
     body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict):
+        return jsonify({'success': False, 'code': 'invalidChatRequest', 'userMessage': 'Yêu cầu trò chuyện không hợp lệ.'}), 400
     body['userId'] = request._uid
     return _ai_proxy_json('POST', '/v1/chat/feedback', json_body=body)
 
@@ -5139,14 +5155,20 @@ def chat_feedback_proxy():
 def behavior_sync_proxy():
     """Đồng bộ behavior profile từ Mobile vào AI Server và sao lưu Firestore."""
     body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict) or not isinstance(body.get('profile'), dict):
+        return jsonify({'success': False, 'code': 'invalidBehaviorProfile', 'userMessage': 'Chưa đồng bộ được tùy chọn trợ lý.'}), 400
     user_id = request._uid
     
     # 1. Forward sang AI Server
-    data, code = _ai_request_json(
-        'POST',
-        '/v1/behavior/sync',
-        json_body={'userId': user_id, 'profile': {**body.get('profile', {}), 'userId': user_id}},
-    )
+    try:
+        data, code = _ai_request_json(
+            'POST', '/v1/behavior/sync',
+            json_body={'userId': user_id, 'profile': {**body['profile'], 'userId': user_id}},
+        )
+    except Exception:
+        return jsonify({'success': False, 'code': 'behaviorUnavailable', 'userMessage': 'Chưa đồng bộ được tùy chọn trợ lý. Hãy thử lại.'}), 503
+    if code != 200 or not isinstance(data, dict) or data.get('success') is not True:
+        return jsonify({'success': False, 'code': 'behaviorUnavailable', 'userMessage': 'Chưa đồng bộ được tùy chọn trợ lý. Hãy thử lại.'}), 503
     
     # 2. Sao lưu Firestore nếu có kết nối
     if code == 200 and _firestore_db and user_id != 'anonymous':
@@ -5155,7 +5177,7 @@ def behavior_sync_proxy():
             profile_data['syncedAt'] = datetime.now(timezone.utc).isoformat()
             _firestore_db.collection('users').document(user_id).collection('behaviorProfile').document('current').set(profile_data, merge=True)
         except Exception as e:
-            print(f'⚠ Lỗi sao lưu Firestore behavior profile: {e}')
+            print('Behavior backup unavailable')
 
     return jsonify(data), code
 
@@ -5179,7 +5201,7 @@ def behavior_get_profile_proxy():
                     json_body={'userId': user_id, 'profile': saved},
                 )
         except Exception as e:
-            print(f'⚠ Lỗi đọc Firestore behavior profile: {e}')
+            print('Behavior restore unavailable')
 
     return _ai_proxy_json(
         'GET',
@@ -5193,11 +5215,13 @@ def behavior_get_profile_proxy():
 def chat_backup_proxy():
     """Sao lưu lịch sử phiên chat lên Firestore với TTL 30 ngày."""
     body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict):
+        return jsonify({'success': False, 'code': 'invalidChatRequest', 'userMessage': 'Yêu cầu sao lưu không hợp lệ.'}), 400
     user_id = request._uid
     session_id = body.get('sessionId')
 
     if not valid_document_id(session_id) or not isinstance(body.get('messages'), list) or len(body['messages']) > 200:
-        return jsonify({'success': False, 'error': 'sessionId is required'}), 400
+        return jsonify({'success': False, 'code': 'invalidChatBackup', 'userMessage': 'Nội dung sao lưu không hợp lệ.'}), 400
 
     if not _firestore_db or user_id == 'anonymous':
         return jsonify({'success': False, 'code': 'backupUnavailable', 'userMessage': 'Lịch sử đang chờ sao lưu.'}), 503
@@ -5684,7 +5708,7 @@ def ai_add_dataset_record():
 def ai_fine_tune_charging_time():
     """Trigger fine-tuning of charging_time model using physical dataset and export joblib + tflite."""
     try:
-        _require_user_or_admin()
+        uid, _ = _require_user_or_admin()
     except ValueError as e:
         return jsonify({'success': False, 'error': str(e)}), 401
 
@@ -5702,9 +5726,11 @@ def ai_fine_tune_charging_time():
         sessions = [dict(r) for r in dataset_records if not r.get('training_excluded')]
 
         # 2. Augment with any live shelly history
-        if shelly_repo and hasattr(shelly_repo, 'history'):
+        service = app.extensions.get('smart_charge_service')
+        repository = service.repository if service is not None else None
+        if repository is not None:
             try:
-                history = shelly_repo.history('all', 100)
+                history = repository.history(uid, 100)
                 known_ids = {r.get('session_id') for r in sessions}
                 for s in history:
                     s_dict = s.to_dict() if hasattr(s, 'to_dict') else s
@@ -5763,7 +5789,7 @@ def ai_fine_tune_charging_time():
 def ai_fine_tune_vehicle_charging_time():
     """Trigger personalized fine-tuning of vehicle-specific adapter."""
     try:
-        _require_user_or_admin()
+        uid, _ = _require_user_or_admin()
     except ValueError as e:
         return jsonify({'success': False, 'error': str(e)}), 401
 
@@ -5773,12 +5799,21 @@ def ai_fine_tune_vehicle_charging_time():
         if not vehicle_id:
             return jsonify({'success': False, 'error': 'Thiếu vehicle_id'}), 400
 
+        service = app.extensions.get('smart_charge_service')
+        repository = service.repository if service is not None else None
+        if repository is None:
+            return jsonify({'success': False, 'code': 'dependenciesUnavailable',
+                            'error': 'Dịch vụ tạm thời chưa sẵn sàng.'}), 503
+        if repository.vehicle_for_owner(uid, vehicle_id) is None:
+            return jsonify({'success': False, 'error': 'Forbidden'}), 403
+
         sessions = body.get('sessions')
         if not isinstance(sessions, list) or not sessions:
             sessions = []
-            if shelly_repo and hasattr(shelly_repo, 'history'):
+            if repository is not None:
                 try:
-                    history = shelly_repo.history(vehicle_id, 200)
+                    history = [session for session in repository.history(uid, 200)
+                               if session.vehicle_id == vehicle_id]
                     sessions = [s.to_dict() if hasattr(s, 'to_dict') else s for s in history]
                 except Exception as ex:
                     print(f"Could not read vehicle shelly history: {ex}")
@@ -5956,15 +5991,22 @@ def ai_vehicle_training_readiness(vehicle_id):
 def smart_charge_shadow_status():
     """Return shadow mode promotion readiness evaluation."""
     try:
-        uid = _current_user_id()
+        uid, _ = _require_user_or_admin()
     except ValueError as e:
         return jsonify({'success': False, 'error': str(e)}), 401
 
     try:
         vehicle_id = request.args.get('vehicle_id') or request.args.get('vehicleId')
         sessions = []
-        if shelly_repo and hasattr(shelly_repo, 'history'):
-            history = shelly_repo.history(uid, 50, vehicle_id=vehicle_id)
+        service = app.extensions.get('smart_charge_service')
+        repository = service.repository if service is not None else None
+        if repository is None:
+            return jsonify({'success': False, 'code': 'dependenciesUnavailable',
+                            'error': 'Dịch vụ tạm thời chưa sẵn sàng.'}), 503
+        if repository is not None:
+            history = repository.history(uid, 50)
+            if vehicle_id:
+                history = [session for session in history if session.vehicle_id == vehicle_id]
             sessions = [s.to_dict() if hasattr(s, 'to_dict') else s for s in history]
         
         from shelly.shadow_promotion import evaluate_shadow_promotion
@@ -6652,6 +6694,8 @@ def admin_migrate_collections():
 @require_auth
 def proxy_chat_action_confirm():
     body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict):
+        return jsonify({'success': False, 'code': 'invalidChatRequest', 'userMessage': 'Yêu cầu trò chuyện không hợp lệ.'}), 400
     body['userId'] = request._uid
     return _ai_proxy_json('POST', '/v1/chat/action/confirm', json_body=body)
 

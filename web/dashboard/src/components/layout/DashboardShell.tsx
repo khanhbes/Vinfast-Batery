@@ -27,14 +27,13 @@ export function DashboardShell({ children, userName, userEmail, onSignOut }: {
   }, []);
 
   return <div className="dashboard-shell">
-    <a className="skip-link" href="#main-content">Skip to main content</a>
+    <a className="skip-link" href="#main-content">Bỏ qua để đến nội dung chính</a>
     <Sidebar onSignOut={onSignOut} />
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
       <Topbar userName={userName} userEmail={userEmail} onSignOut={onSignOut} scrolled={scrolled} />
       <main id="main-content" ref={main} tabIndex={-1} className="dashboard-main" onScroll={handleScroll}>
-        <div key={pathname} className="page-enter mx-auto w-full max-w-7xl min-w-0">{children}</div>
+        <div key={pathname} className="page-enter w-full min-w-0">{children}</div>
       </main>
     </div>
   </div>;
 }
-

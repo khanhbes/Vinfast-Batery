@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { requestPortal } from '../src/lib/httpClient.ts';
 import { isVerifiedAdmin } from '../src/lib/portalAccess.ts';
 import { validateModelUpload } from '../src/components/ai-center/uploadPolicy.ts';
@@ -58,8 +59,53 @@ test('HTML response is not treated as successful API data', async () => {
   await assert.rejects(requestPortal('/fixture', {}, { fetch: async () => new Response('<html>proxy error</html>', { headers: { 'content-type': 'text/html' } }) }), /invalid response/);
 });
 
+test('JSON error fields never expose provider secrets or internal details', async () => {
+  await assert.rejects(requestPortal('/fixture', { method: 'POST' }, { fetch: async () => new Response(JSON.stringify({
+    success: false, error: 'private-key/internal/path', userMessage: 'private-user-id', code: 'BAD_REQUEST', requestId: 'qa-request',
+  }), { status: 400, headers: { 'content-type': 'application/json' } }) }), error => {
+    assert.ok(error instanceof Error);
+    assert.doesNotMatch(error.message, /private-key|internal\/path|private-user-id/);
+    return true;
+  });
+});
+
+test('normal-mode shortcuts and data rows cannot open developer-only routes', () => {
+  const source = readFileSync(new URL('../src/pages/Dashboard.tsx', import.meta.url), 'utf8');
+  assert.match(source, /developMode && <div className="mt-6/);
+  assert.match(source, /disabled={!developMode && metric.label !== 'Tài khoản'}/);
+  assert.match(source, /type="button" disabled={!developMode} onClick/);
+});
+
+test('core Shelly page has no lazy chunk and lazy routes have recovery boundary', () => {
+  const source = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  assert.match(source, /import ShellyGateway from/);
+  assert.doesNotMatch(source, /const ShellyGateway = lazy/);
+  assert.match(source, /<PageLoadBoundary/);
+  assert.match(source, /fallback={<PageLoading/);
+});
+
+test('Shelly setup exposes a named 48px credential toggle and error is not empty', () => {
+  const source = readFileSync(new URL('../src/pages/ShellyGateway.tsx', import.meta.url), 'utf8');
+  assert.match(source, /aria-label={showPassword/);
+  assert.match(source, /min-h-12 min-w-12/);
+  assert.match(source, /devices.length === 0 && loadError \? null/);
+  assert.doesNotMatch(source, /toast\.error\([^\n]*err/);
+});
+
 test('upload validates supported format, size, and stable version', () => {
   assert.equal(validateModelUpload({ name: 'model.ONNX', size: 100 }, '2026.09-a'), null);
   for (const file of [null, { name: 'model.pkl', size: 10 }, { name: 'model.onnx', size: 0 }, { name: 'model.tflite', size: 64 * 1024 * 1024 + 1 }]) assert.ok(validateModelUpload(file, 'v1'));
   assert.ok(validateModelUpload({ name: 'model.onnx', size: 10 }, '../v1'));
+});
+
+test('workspace fills available width and Shelly model label stays concise', () => {
+  const shell = readFileSync(new URL('../src/components/layout/DashboardShell.tsx', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
+  const topbar = readFileSync(new URL('../src/components/layout/Topbar.tsx', import.meta.url), 'utf8');
+  const shelly = readFileSync(new URL('../src/pages/ShellyGateway.tsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(shell, /max-w-7xl/);
+  assert.match(css, /\.dashboard-shell \{ display: flex; width: 100%/);
+  assert.match(topbar, /'\/shelly': 'Thiết bị Shelly'/);
+  assert.match(shelly, /<option value="S3PL-00112EU">Shelly Plug S Gen3<\/option>/);
+  assert.match(shelly, /Mã model: S3PL-00112EU/);
 });

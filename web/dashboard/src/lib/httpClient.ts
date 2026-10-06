@@ -25,12 +25,9 @@ function statusMessage(status: number): string {
 
 function errorBodyMessage(body: unknown, status: number): PortalHttpError {
   const data = body && typeof body === 'object' ? body as Record<string, unknown> : {};
-  const raw = data.error;
-  const message = typeof raw === 'string' && raw.trim()
-    ? raw
-    : typeof raw === 'object' && raw && typeof (raw as Record<string, unknown>).message === 'string'
-      ? String((raw as Record<string, unknown>).message)
-      : statusMessage(status);
+  // Provider error/message fields may contain credentials, IDs or stack traces.
+  // Keep diagnostics structured; only curated client copy reaches the UI.
+  const message = statusMessage(status);
   return new PortalHttpError(message, status, String(data.code ?? ''), data, String(data.requestId ?? ''));
 }
 

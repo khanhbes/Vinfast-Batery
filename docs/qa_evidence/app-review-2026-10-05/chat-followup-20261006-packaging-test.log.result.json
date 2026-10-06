@@ -1,0 +1,16 @@
+{
+  "command": [
+    "python",
+    "-m",
+    "pytest",
+    "tests/test_chat_security_contract.py",
+    "tests/test_guardrails_and_personality.py",
+    "-q"
+  ],
+  "cwd": "web",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\chat-followup-20261006-packaging-test.log",
+  "timeoutSeconds": 120,
+  "timedOut": false,
+  "exitCode": 0,
+  "elapsedSeconds": 10.14
+}

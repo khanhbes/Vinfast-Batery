@@ -1,0 +1,17 @@
+{
+  "command": [
+    "python",
+    "-m",
+    "pytest",
+    "tests",
+    "-q",
+    "--basetemp",
+    "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\pytest-chat-handoff-d3765c83ca504d4fb88e3427e1bc666a"
+  ],
+  "cwd": "web",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\chat-followup-20261006-backend-handoff.log",
+  "timeoutSeconds": 180,
+  "timedOut": false,
+  "exitCode": 0,
+  "elapsedSeconds": 37.02
+}

@@ -1,0 +1,17 @@
+{
+  "command": [
+    "python",
+    "-m",
+    "pytest",
+    "tests/test_chat_security_contract.py",
+    "-q",
+    "--basetemp",
+    "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\pytest-chat-packaging-live-8cc50c473acb4c1ebedc003233640dff"
+  ],
+  "cwd": "web",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\chat-live-20261006-packaging-regression.log",
+  "timeoutSeconds": 90,
+  "timedOut": false,
+  "exitCode": 0,
+  "elapsedSeconds": 12.67
+}

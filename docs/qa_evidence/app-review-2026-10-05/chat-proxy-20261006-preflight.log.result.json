@@ -1,0 +1,16 @@
+{
+  "command": [
+    "docker",
+    "exec",
+    "vinfast_api",
+    "python",
+    "/tmp/api_chat_smoke.py",
+    "--preflight"
+  ],
+  "cwd": ".",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\chat-proxy-20261006-preflight.log",
+  "timeoutSeconds": 60,
+  "timedOut": false,
+  "exitCode": 1,
+  "elapsedSeconds": 3.45
+}

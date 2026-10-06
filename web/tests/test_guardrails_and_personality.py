@@ -35,7 +35,8 @@ def test_guardrails_max_amps_sanitized():
     assert any("GR-ELEC-001" in v for v in violations)
     assert "16A" not in sanitized
     assert "20 Ampe" not in sanitized
-    assert f"tối đa an toàn {MAX_SAFE_AMPS:g}A" in sanitized
+    assert 'không phải dòng hay công suất nên chọn' in sanitized
+    assert '10A–12A' not in sanitized
 
 
 def test_guardrails_max_watts_sanitized():
@@ -46,7 +47,8 @@ def test_guardrails_max_watts_sanitized():
     assert any("GR-ELEC-002" in v for v in violations)
     assert "3500W" not in sanitized
     assert "3.5 kW" not in sanitized
-    assert "tối đa an toàn 2500W" in sanitized
+    assert '12A / 2500W' in sanitized
+    assert '2200W' not in sanitized
 
 
 def test_guardrails_high_temp_charging_warning():
@@ -56,6 +58,15 @@ def test_guardrails_high_temp_charging_warning():
     assert len(violations) >= 1
     assert any("GR-TEMP-001" in v for v in violations)
     assert "Cảnh báo an toàn" in sanitized
+    assert 'cắm sạc ngay bây giờ' not in sanitized
+
+
+@pytest.mark.parametrize('unsafe', ['Hãy sạc ở 2,6 kW', 'Cứ cắm sạc 2500.5 W', 'Hãy đặt 12,5 A'])
+def test_unsafe_decimal_values_are_rejected_not_recommended(unsafe):
+    sanitized, violations = chat_guardrails.validate_electrical_safety(unsafe)
+    assert violations
+    assert unsafe not in sanitized
+    assert 'không phải dòng hay công suất nên chọn' in sanitized
 
 
 # ── 2. Guardrails Vehicle Spec Hallucination Defense Tests ───────────────────

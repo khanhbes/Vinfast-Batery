@@ -85,7 +85,7 @@ def request(clock, strategy=ChargingStrategy.SMART_COMBINED, minutes=60, deadlin
     )
 
 
-def controller(tmp_path, *, shadow=True, cutoff=False, max_minutes=240):
+def controller(tmp_path, *, shadow=True, cutoff=False, max_minutes: int | None = 240):
     clock = MutableClock()
     shelly = FakeShelly()
     ctrl = SmartChargingController(
@@ -249,6 +249,7 @@ def test_unexpected_relay_off_interrupts_without_auto_on(tmp_path):
     active = ctrl.start(request(clock), "key")
     shelly.relay = False
     result = ctrl.tick()
+    assert result is not None
     assert result.state == ChargingSessionState.INTERRUPTED
     assert result.stop_reason == ChargingStopReason.RELAY_OFF
     assert shelly.set_calls == [True]
@@ -260,6 +261,7 @@ def test_energy_delta_and_estimated_soc_are_display_only(tmp_path):
     ctrl.start(request(clock), "key")
     shelly.energy_wh = 340
     result = ctrl.tick()
+    assert result is not None
     assert result.energy_used_wh == 240
     assert result.estimated_soc == pytest.approx(30)
     assert result.state == ChargingSessionState.ACTIVE
@@ -270,10 +272,12 @@ def test_meter_reset_never_creates_negative_energy(tmp_path):
     ctrl.start(request(clock), "key")
     shelly.energy_wh = 10
     result = ctrl.tick()
+    assert result is not None
     assert result.energy_used_wh == 0
     assert result.energy_quality == "meter_reset"
     shelly.energy_wh = 20
     result = ctrl.tick()
+    assert result is not None
     assert result.energy_used_wh == 10
 
 
@@ -281,9 +285,12 @@ def test_small_meter_jitter_is_not_a_counter_reset(tmp_path):
     ctrl, shelly, clock = controller(tmp_path)
     ctrl.start(request(clock), "key")
     shelly.energy_wh = 200
-    assert ctrl.tick().energy_used_wh == 100
+    tick_result = ctrl.tick()
+    assert tick_result is not None
+    assert tick_result.energy_used_wh == 100
     shelly.energy_wh = 198
     result = ctrl.tick()
+    assert result is not None
     assert result.energy_used_wh == 100
     assert result.energy_quality == "good"
 
@@ -293,8 +300,10 @@ def test_over_temperature_auto_off_after_two_samples(tmp_path):
     ctrl.start(request(clock), "key")
     shelly.temperature_c = 76
     first = ctrl.tick()
+    assert first is not None
     assert first.state == ChargingSessionState.ACTIVE
     terminal = ctrl.tick()
+    assert terminal is not None
     assert terminal.state == ChargingSessionState.INTERRUPTED
     assert terminal.stop_reason == ChargingStopReason.OVER_TEMPERATURE
     assert terminal.safety_events[-1].off_verified is True
@@ -307,6 +316,7 @@ def test_over_voltage_auto_off_is_audited(tmp_path):
     shelly.voltage_v = 260
     ctrl.tick()
     terminal = ctrl.tick()
+    assert terminal is not None
     assert terminal.stop_reason == ChargingStopReason.OVER_VOLTAGE
     assert terminal.safety_events[-1].observed_value == 260
 
@@ -316,6 +326,7 @@ def test_shadow_mode_records_cutoff_without_turning_off(tmp_path):
     ctrl.start(request(clock, minutes=30, deadline_minutes=60), "key")
     clock.advance(minutes=31)
     result = ctrl.tick()
+    assert result is not None
     assert result.would_have_turned_off_at == clock()
     assert result.state == ChargingSessionState.ACTIVE
     assert shelly.relay is True
@@ -326,6 +337,7 @@ def test_live_mode_turns_off_at_effective_stop(tmp_path):
     ctrl.start(request(clock, minutes=30, deadline_minutes=60), "key")
     clock.advance(minutes=31)
     result = ctrl.tick()
+    assert result is not None
     assert result.state == ChargingSessionState.COMPLETED
     assert result.stop_reason == ChargingStopReason.SMART_COMBINED
     assert shelly.relay is False
@@ -336,6 +348,7 @@ def test_hard_deadline_reason_has_priority_over_ai(tmp_path):
     ctrl.start(request(clock, minutes=60, deadline_minutes=20), "key")
     clock.advance(minutes=21)
     result = ctrl.tick()
+    assert result is not None
     assert result.stop_reason == ChargingStopReason.DEADLINE
 
 
@@ -344,6 +357,7 @@ def test_absolute_safety_reason_has_priority(tmp_path):
     ctrl.start(request(clock, minutes=60, deadline_minutes=90), "key")
     clock.advance(minutes=11)
     result = ctrl.tick()
+    assert result is not None
     assert result.stop_reason == ChargingStopReason.ABSOLUTE_SAFETY
 
 
@@ -352,6 +366,7 @@ def test_restart_with_relay_off_marks_interrupted(tmp_path):
     active = ctrl.start(request(clock), "key")
     shelly.relay = False
     restored = ctrl.recover()
+    assert restored is not None
     assert restored.state == ChargingSessionState.INTERRUPTED
     assert ctrl.get(active.session_id).stop_reason == ChargingStopReason.RELAY_OFF
 
@@ -361,6 +376,7 @@ def test_restart_with_relay_on_never_sends_on(tmp_path):
     ctrl.start(request(clock), "key")
     calls = list(shelly.set_calls)
     restored = ctrl.recover()
+    assert restored is not None
     assert restored.state == ChargingSessionState.ACTIVE
     assert shelly.set_calls == calls
 
@@ -371,6 +387,7 @@ def test_restart_recovers_starting_with_relay_on_without_second_on(tmp_path):
     ctrl.store.save(active.model_copy(update={"state": ChargingSessionState.STARTING}))
     calls = list(shelly.set_calls)
     restored = ctrl.recover()
+    assert restored is not None
     assert restored.state == ChargingSessionState.ACTIVE
     assert shelly.set_calls == calls
 
@@ -381,6 +398,7 @@ def test_restart_finishes_stopping_when_relay_is_already_off(tmp_path):
     ctrl.store.save(active.model_copy(update={"state": ChargingSessionState.STOPPING}))
     shelly.relay = False
     restored = ctrl.recover()
+    assert restored is not None
     assert restored.state == ChargingSessionState.CANCELLED
     assert restored.stop_reason == ChargingStopReason.MANUAL
 
@@ -390,6 +408,7 @@ def test_restart_expired_live_session_turns_off(tmp_path):
     ctrl.start(request(clock, minutes=10, deadline_minutes=20), "key")
     clock.advance(minutes=11)
     restored = ctrl.recover()
+    assert restored is not None
     assert restored.stop_reason == ChargingStopReason.GATEWAY_RESTART_EXPIRED
     assert shelly.relay is False
 
@@ -401,6 +420,7 @@ def test_failed_on_attempts_compensating_off(tmp_path):
         ctrl.start(request(clock), "key")
     assert raised.value.code == "RELAY_VERIFICATION_FAILED"
     stored = ctrl.store.get_by_idempotency_key("key")
+    assert stored is not None
     assert stored.state == ChargingSessionState.FAILED
     assert shelly.set_calls == [True, False]
 
@@ -412,7 +432,9 @@ def test_sqlite_restores_and_lists_newest_first(tmp_path):
     clock.advance(minutes=1)
     second = ctrl.start(request(clock), "two")
     reopened = SmartSessionStore(tmp_path / "sessions.sqlite3")
-    assert reopened.get(second.session_id).state == ChargingSessionState.ACTIVE
+    persisted = reopened.get(second.session_id)
+    assert persisted is not None
+    assert persisted.state == ChargingSessionState.ACTIVE
     assert [item.session_id for item in reopened.list(2)] == [second.session_id, first.session_id]
 
 
@@ -438,6 +460,7 @@ def test_battery_temp_safety_cutoff(tmp_path):
     assert shelly.relay is True
     # Tick 2: second consecutive sample over threshold triggers safety cutoff
     stopped = ctrl.tick()
+    assert stopped is not None
     assert stopped.state == ChargingSessionState.INTERRUPTED
     assert stopped.stop_reason == ChargingStopReason.BATTERY_OVER_TEMPERATURE
     assert shelly.relay is False
@@ -454,6 +477,7 @@ def test_telemetry_samples_and_training_eligibility(tmp_path):
     ctrl.tick()
     
     current = ctrl.store.current()
+    assert current is not None
     assert len(current.telemetry_samples) >= 1
     sample = current.telemetry_samples[-1]
     assert "t" in sample
@@ -471,4 +495,3 @@ def test_telemetry_samples_and_training_eligibility(tmp_path):
     assert completed.training_eligible is True
     assert completed.wh_per_soc_percent is not None
     assert completed.wh_per_soc_percent > 0
-

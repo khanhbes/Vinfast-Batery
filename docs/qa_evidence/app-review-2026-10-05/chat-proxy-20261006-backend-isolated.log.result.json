@@ -1,0 +1,17 @@
+{
+  "command": [
+    "python",
+    "-m",
+    "pytest",
+    "tests",
+    "-q",
+    "--basetemp",
+    "C:\\Users\\khanh\\AppData\\Local\\Temp\\vinfast-chat-regression-85e599b5c99540a0bb570f3f42c4df9d"
+  ],
+  "cwd": "web",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\chat-proxy-20261006-backend-isolated.log",
+  "timeoutSeconds": 180,
+  "timedOut": false,
+  "exitCode": 0,
+  "elapsedSeconds": 30.53
+}

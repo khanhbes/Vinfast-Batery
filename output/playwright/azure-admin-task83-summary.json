@@ -1,0 +1,42 @@
+{
+  "scope": "Azure staging admin UI and synthetic authenticated public chatbot",
+  "adminArtifact": {
+    "indexSha256": "E4722A0E3A4CB68762BA7E7AB846071015586764F53DD1779A246245FCB653B0",
+    "entry": "/assets/index-DaxM6lbu.js",
+    "liveHashMatches": true,
+    "dashboardTestsPassed": 31,
+    "backendSelectedTestsPassed": 59
+  },
+  "browser": {
+    "normalModeDeveloperShortcutsHidden": true,
+    "shellyPasswordToggleSize": [48, 48],
+    "shellyLoadErrorNotEmpty": true,
+    "authRetryHttpStatus": 200,
+    "catalogDocumentHorizontalOverflow": {"320": false, "390": false, "412": false},
+    "restoredViewport": [1280, 900],
+    "catalogUpdateVerified": false,
+    "fullVietnameseLocalizationComplete": false,
+    "loadingBoundaryRuntimeFaultInjection": "not tested"
+  },
+  "catalogQa": {
+    "createHttpStatus": 201,
+    "published": false,
+    "cleanupVerifiedAbsent": true,
+    "auditRetained": true
+  },
+  "chatbot": {
+    "syntheticQuestions": 4,
+    "sseHttpStatus": 200,
+    "providerHttpStatus": 400,
+    "providerErrorCode": "providerUnavailable",
+    "source": "offline-guidance",
+    "geminiPassed": false,
+    "qaAccountsAndSessionsCleaned": true,
+    "rootCause": "undetermined; region/configuration/schema need provider reason"
+  },
+  "hardware": {
+    "commandsIssued": 0,
+    "actionGuardHttpStatus": 503,
+    "result": "Blocked: staging policy disables hardware and no charging worker"
+  }
+}

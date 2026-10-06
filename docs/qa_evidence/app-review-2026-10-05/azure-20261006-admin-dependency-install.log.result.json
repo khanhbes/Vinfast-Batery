@@ -1,0 +1,13 @@
+{
+  "command": [
+    "npm.cmd",
+    "install"
+  ],
+  "cwd": "web/dashboard",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\azure-20261006-admin-dependency-install.log",
+  "timeoutSeconds": 600,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 29.67
+}

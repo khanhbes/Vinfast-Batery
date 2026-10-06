@@ -1,0 +1,20 @@
+{
+  "command": [
+    "docker",
+    "compose",
+    "--env-file",
+    ".env.laptop",
+    "-f",
+    "docker-compose.yml",
+    "-f",
+    "docker-compose.laptop.yml",
+    "build",
+    "ai"
+  ],
+  "cwd": "web",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\chat-live-20261006-ai-build-layered.log",
+  "timeoutSeconds": 600,
+  "timedOut": true,
+  "exitCode": 1,
+  "elapsedSeconds": 600.61
+}

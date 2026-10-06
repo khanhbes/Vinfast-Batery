@@ -399,36 +399,6 @@ def deploy_model(
         return _err(500, f"deploy thất bại: {e}")
 
 
-@app.post("/v1/models/{type_key}/load-active")
-def load_active_model(
-    type_key: str,
-    x_internal_token: Optional[str] = Header(default=None),
-):
-    """Load the currently-active version (from manifest) into runtime memory.
-
-    Called by the Flask API server after it writes the active-version pointer to the
-    manifest (e.g. during the ``/deploy`` flow).  Without this endpoint the FastAPI
-    runtime never learns about the new active version and ``runtimeStatus.activeVersion``
-    stays null, causing the UI to show the amber "Có version chưa active" warning
-    indefinitely.
-    """
-    _check_token(x_internal_token)
-    st = _get_store(type_key)
-    rt = _get_runtime(type_key)
-
-    active = st.active_version()
-    if not active:
-        return _err(404, f"Không có version nào đang active cho '{type_key}'")
-
-    try:
-        smoke = rt.load_persisted()
-        return _ok({
-            "activeVersion": active,
-            "smokeTest": smoke,
-            "message": f"Đã tải version '{active}' vào runtime.",
-        })
-    except Exception as e:
-        return _err(500, f"load-active thất bại: {e}")
 
 
 
@@ -657,10 +627,11 @@ def load_active_model(
         })
 
     try:
-        rt.load_persisted()
+        smoke = rt.load_persisted()
         return _ok({
             "status": "loaded",
             "activeVersion": active,
+            "smokeTest": smoke,
             "message": f"Đã nạp model '{type_key}' version '{active}' thành công.",
         })
     except Exception as e:
@@ -915,10 +886,9 @@ def chat_delete_session(
 ):
     _check_token(x_internal_token)
     try:
-        chat_engine.memory.assert_owner(session_id, userId)
+        deleted = chat_engine.memory.delete_session(session_id, owner_uid=userId, check_owner=True)
     except PermissionError:
         return _err(403, "Không thể truy cập cuộc trò chuyện này.")
-    deleted = chat_engine.memory.delete_session(session_id)
     return _ok({"deleted": deleted, "sessionId": session_id})
 
 
@@ -937,13 +907,16 @@ def chat_feedback(
     if not any(m.id == req.messageId and m.role == 'model'
                for m in chat_engine.memory.get_all_messages(req.sessionId)):
         raise HTTPException(status_code=404, detail='Message unavailable')
-    changed = chat_engine.memory.set_feedback(req.sessionId, req.userId, req.messageId, req.rating)
-    if req.userId and changed:
-        behavior_analyzer.record_chat_interaction(
-            user_id=req.userId,
-            feedback_rating=req.rating,
-        )
-    return _ok({"status": "received", "messageId": req.messageId, "rating": req.rating})
+    rating = {'up': 'like', 'down': 'dislike'}.get(req.rating, req.rating)
+    try:
+        chat_engine.memory.set_feedback(req.sessionId, req.userId, req.messageId, rating,
+            on_change=lambda previous, current: behavior_analyzer.replace_feedback(req.userId, previous, current)
+            if req.userId else None)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail='Session unavailable')
+    except KeyError:
+        raise HTTPException(status_code=404, detail='Message unavailable')
+    return _ok({"status": "received", "messageId": req.messageId, "rating": rating})
 
 
 # ── Behavior Learning Endpoints (Phase 2) ─────────────────────────

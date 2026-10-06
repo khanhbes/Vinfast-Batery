@@ -1,7 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+@config '../tailwind.config.js';
 
 @layer base {
   :root {
@@ -67,7 +66,11 @@
   body {
     @apply bg-background text-foreground;
     font-family: 'Inter', sans-serif;
+    margin: 0;
+    width: 100%;
+    min-width: 0;
   }
+  html, #root { width: 100%; min-width: 0; min-height: 100%; }
 }
 
 /* Custom surface colors for VinFast theme */
@@ -172,7 +175,7 @@
   --space-page: 28px 32px;
   --space-page-mobile: 20px 16px;
 }
-.dashboard-shell { display: flex; height: 100dvh; min-height: 0; background: hsl(var(--muted) / .4); }
+.dashboard-shell { display: flex; width: 100%; height: 100dvh; min-height: 0; background: hsl(var(--muted) / .4); }
 .dashboard-sidebar { flex-shrink: 0; display: flex; flex-direction: column; height: 100dvh; overflow: hidden; background: hsl(var(--card)); border-right: 1px solid hsl(var(--border)); }
 .sidebar-nav { display: flex; flex-direction: column; gap: 6px; padding: 8px 12px; overflow-y: auto; }
 .sidebar-link { position: relative; display: flex; align-items: center; gap: 12px; min-height: 46px; padding: 10px 14px; border-radius: 10px; color: hsl(var(--muted-foreground)); font-size: 14px; transition: color var(--motion-fast), background-color var(--motion-fast), transform var(--motion-fast); }

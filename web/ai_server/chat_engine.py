@@ -7,7 +7,10 @@ import os
 import uuid
 import threading
 import time
-from typing import AsyncGenerator, Generator, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, Generator, List, Optional
+
+if TYPE_CHECKING:
+    from google.genai.types import ContentUnionDict
 
 try:
     from google import genai
@@ -46,7 +49,7 @@ class ChatEngine:
         self._pending_actions = {}
         self._action_lock = threading.RLock()
         self._client = None
-        if self.api_key and genai is not None:
+        if self.api_key and genai is not None and types is not None:
             try:
                 self._client = genai.Client(api_key=self.api_key, http_options=types.HttpOptions(timeout=20000))
                 logger.info("Initialized Google Gemini client with configured API key.")
@@ -117,11 +120,11 @@ class ChatEngine:
 
     def _format_history_for_gemini(
         self, history: List[ChatMessage]
-    ) -> List[types.Content]:
+    ) -> List[ContentUnionDict]:
         """Chuyển đổi danh sách tin nhắn thành cấu trúc Content của Gemini SDK."""
         if not types:
             return []
-        contents = []
+        contents: List[ContentUnionDict] = []
         for msg in history:
             role = "model" if msg.role in ("assistant", "model", "bot") else "user"
             content_str = msg.content if msg.content and msg.content.strip() else "..."
@@ -229,10 +232,16 @@ class ChatEngine:
             return self._build_rich_card("get_battery_status", result, vehicle_context)
         return None
 
-    def _create_confirmation_card(self, *, user_id, session_id, tool_name, args, vehicle_context):
+    def _create_confirmation_card(self, *, user_id, session_id, tool_name, args, vehicle_context,
+                                  expected_epoch=None):
         if not vehicle_context or not vehicle_context.get("vehicleId") or args.get("vehicle_id") != vehicle_context["vehicleId"]:
             raise ValueError("vehicleContextMismatch")
         card = chat_tool_dispatcher.create_confirmation_card(tool_name, args, vehicle_context)
+        if expected_epoch is None:
+            self.memory.get_or_create_session(session_id, user_id)
+        else:
+            self.memory.assert_epoch(session_id, expected_epoch)
+        epoch = self.memory.session_epoch(session_id, user_id)
         with self._action_lock:
             now = time.monotonic()
             self._pending_actions = {k: v for k, v in self._pending_actions.items() if v["expires"] > now}
@@ -240,7 +249,7 @@ class ChatEngine:
                 raise ValueError("actionCapacityReached")
             self._pending_actions[card["callId"]] = {
                 "userId": user_id, "sessionId": session_id, "toolName": tool_name,
-                "args": card["args"], "expires": now + 300, "result": None}
+                "args": card["args"], "epoch": epoch, "expires": now + 300, "result": None}
         card["confirmationCard"]["safetyNote"] = "Chỉ báo thành công sau khi máy chủ xác minh thiết bị. Bạn có thể thao tác tại Sạc pin."
         card["confirmationCard"]["estimatedTime"] = "Chưa có thời gian đã xác minh"
         return card
@@ -250,6 +259,7 @@ class ChatEngine:
     ) -> Generator[str, None, None]:
         """Tạo generator SSE stream cho câu trả lời của chatbot."""
         session_id = self.memory.get_or_create_session(req.sessionId, req.userId)
+        epoch = self.memory.session_epoch(session_id, req.userId)
         req.message, _ = chat_guardrails.sanitize_pii(req.message)
         message_id = f"msg-{uuid.uuid4().hex[:12]}"
         emitted_rich_cards: List[Dict[str, Any]] = []
@@ -259,6 +269,7 @@ class ChatEngine:
             session_id=session_id,
             role="user",
             content=req.message,
+            expected_epoch=epoch,
         )
 
         # 2. Emit event: message_start
@@ -270,10 +281,16 @@ class ChatEngine:
             behavior = behavior_analyzer.get_or_create_profile(req.userId)
 
         full_reply = ""
+        response_source = "offline-guidance"
+        provider_status = "unavailable"
+        provider_error_code = "providerNotConfigured"
+        provider_http_status = None
         system_instruction = self.build_system_prompt(req.vehicleContext, behavior)
 
-        if self.is_configured and genai and types:
+        client = self._client
+        if self.is_configured and client is not None and genai and types:
             try:
+                provider_error_code = None
                 context_msgs = self.memory.get_context_messages(session_id)
                 gemini_contents = self._format_history_for_gemini(context_msgs)
 
@@ -292,7 +309,7 @@ class ChatEngine:
 
                 while tool_turn < max_tool_turns and not action_card_emitted:
                     tool_turn += 1
-                    response_stream = self._client.models.generate_content_stream(
+                    response_stream = client.models.generate_content_stream(
                         model=model_name,
                         contents=gemini_contents,
                         config=config,
@@ -324,7 +341,7 @@ class ChatEngine:
                         if chat_tool_dispatcher.requires_confirmation(tool_name):
                             # Control tool: Safety-Gated (≤ 12A / 2500W) -> ActionConfirmationCard
                             card_payload = self._create_confirmation_card(
-                        user_id=req.userId, session_id=session_id,
+                                user_id=req.userId, session_id=session_id, expected_epoch=epoch,
                                 tool_name=tool_name,
                                 args=tool_args,
                                 vehicle_context=req.vehicleContext.model_dump() if req.vehicleContext else None,
@@ -377,6 +394,11 @@ class ChatEngine:
                                 )
                             )
 
+                if not full_reply.strip():
+                    raise ValueError("providerEmptyResponse")
+                provider_status = "succeeded"
+                response_source = "safety-guidance" if action_card_emitted else "gemini"
+
                 # Nếu Gemini không gọi tool nhưng người dùng hỏi về pin/sạc/chuyến đi
                 if not emitted_rich_cards and not action_card_emitted:
                     rc_intent = self._detect_rich_card_intent(
@@ -389,12 +411,28 @@ class ChatEngine:
 
             except Exception as e:
                 logger.warning("Gemini stream failed: %s", type(e).__name__)
+                response_source = "offline-guidance"
+                provider_status = "failed"
+                code = getattr(e, "code", None)
+                provider_http_status = code if isinstance(code, int) and 400 <= code <= 599 else None
+                if provider_http_status == 429:
+                    provider_error_code = "providerRateLimited"
+                elif provider_http_status in (401, 403):
+                    provider_error_code = "providerAuthRejected"
+                elif provider_http_status == 404:
+                    provider_error_code = "providerModelUnavailable"
+                elif isinstance(e, TimeoutError) or type(e).__name__ in ("ReadTimeout", "ConnectTimeout", "TimeoutException"):
+                    provider_error_code = "providerTimeout"
+                elif isinstance(e, ValueError) and str(e) == "providerEmptyResponse":
+                    provider_error_code = "providerEmptyResponse"
+                else:
+                    provider_error_code = "providerUnavailable"
                 # Discard partial model output; never concatenate it with fallback.
                 full_reply = ""
                 action_intent = self._detect_action_intent(req.message, req.vehicleContext)
                 if action_intent:
                     card_payload = self._create_confirmation_card(
-                        user_id=req.userId, session_id=session_id,
+                        user_id=req.userId, session_id=session_id, expected_epoch=epoch,
                         tool_name=action_intent["toolName"],
                         args=action_intent["args"],
                         vehicle_context=req.vehicleContext.model_dump() if req.vehicleContext else None,
@@ -436,7 +474,7 @@ class ChatEngine:
             action_intent = self._detect_action_intent(req.message, req.vehicleContext)
             if action_intent:
                 card_payload = self._create_confirmation_card(
-                        user_id=req.userId, session_id=session_id,
+                    user_id=req.userId, session_id=session_id, expected_epoch=epoch,
                     tool_name=action_intent["toolName"],
                     args=action_intent["args"],
                     vehicle_context=req.vehicleContext.model_dump() if req.vehicleContext else None,
@@ -476,6 +514,7 @@ class ChatEngine:
                 # Emit only after sanitization.
 
         # 3. Áp dụng Guardrails kiểm duyệt an toàn, thông số xe và PII
+        self.memory.assert_epoch(session_id, epoch)
         v_ctx_dict = req.vehicleContext.model_dump() if req.vehicleContext else None
         guardrail_res = chat_guardrails.apply_guardrails(full_reply, v_ctx_dict)
         full_reply = guardrail_res.sanitized_text
@@ -488,6 +527,7 @@ class ChatEngine:
             content=full_reply,
             message_id=message_id,
             rich_cards=emitted_rich_cards if emitted_rich_cards else None,
+            expected_epoch=epoch,
         )
 
         # 5. Emit event: message_end
@@ -497,7 +537,11 @@ class ChatEngine:
             "richCards": emitted_rich_cards,
             "usage": {
                 "chars": len(full_reply),
-                "model": DEFAULT_MODEL if self.is_configured else "offline-guidance",
+                "model": DEFAULT_MODEL if response_source == "gemini" else response_source,
+                "source": response_source,
+                "providerStatus": provider_status,
+                "providerErrorCode": provider_error_code,
+                "providerHttpStatus": provider_http_status,
                 "guardrailPassed": guardrail_res.is_safe,
                 "violations": guardrail_res.violations,
             },
@@ -510,13 +554,20 @@ class ChatEngine:
         # Hold the lock until the receipt is written; a replay never executes twice.
         with self._action_lock:
             pending = self._pending_actions.get(call_id)
-            if (not pending or pending["expires"] <= time.monotonic()
+            if (not isinstance(session_id, str) or not session_id
+                    or not pending or pending["expires"] <= time.monotonic()
                     or pending["userId"] != user_id or pending["sessionId"] != session_id
                     or pending["toolName"] != tool_name or pending["args"] != args):
                 return {"success": False, "code": "actionInvalid", "callId": call_id,
                         "message": "Yêu cầu không còn hợp lệ. Hãy mở Sạc pin để kiểm tra."}
             if pending["result"] is not None:
                 return pending["result"]
+            try:
+                self.memory.assert_owner(session_id, user_id)
+                self.memory.assert_epoch(session_id, pending["epoch"])
+            except PermissionError:
+                return {"success": False, "code": "actionInvalid", "callId": call_id,
+                        "message": "Cuộc trò chuyện đã thay đổi. Hãy mở Sạc pin để kiểm tra."}
             if not confirmed:
                 response = {"success": True, "callId": call_id, "result": {"status": "cancelled"},
                             "message": "Đã hủy yêu cầu."}

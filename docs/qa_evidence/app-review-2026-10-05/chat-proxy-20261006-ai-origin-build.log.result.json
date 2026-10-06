@@ -1,0 +1,22 @@
+{
+  "command": [
+    "docker",
+    "compose",
+    "--env-file",
+    ".env.laptop",
+    "-f",
+    "docker-compose.yml",
+    "-f",
+    "docker-compose.laptop.yml",
+    "build",
+    "--build-arg",
+    "AI_RUNTIME_BASE=vinfast-ai-runtime:qa-20261006",
+    "ai"
+  ],
+  "cwd": "web",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\chat-proxy-20261006-ai-origin-build.log",
+  "timeoutSeconds": 240,
+  "timedOut": false,
+  "exitCode": 0,
+  "elapsedSeconds": 4.81
+}

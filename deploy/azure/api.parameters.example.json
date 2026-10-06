@@ -1,0 +1,29 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "secrets": {"value": {"entries": [
+      {"name": "firebase", "value": "<base64-service-account-json>"},
+      {"name": "ai-token", "value": "<independent-staging-token>"},
+      {"name": "admin-key", "value": "<independent-staging-admin-key>"},
+      {"name": "vault-key", "value": "<preserve-existing-master-key>"}
+    ]}},
+    "variables": {"value": {
+      "APP_ENV": {"secret": false, "value": "production"},
+      "AZURE_STAGING_HARDWARE_DISABLED": {"secret": false, "value": "1"},
+      "FIREBASE_CREDENTIALS_JSON": {"secret": true, "value": "firebase"},
+      "AI_SERVER_INTERNAL_TOKEN": {"secret": true, "value": "ai-token"},
+      "DEV_ADMIN_KEY": {"secret": true, "value": "admin-key"},
+      "SHELLY_PROFILE_MASTER_KEY": {"secret": true, "value": "vault-key"},
+      "ADMIN_EMAILS": {"secret": false, "value": "<explicit-admin-email>"},
+      "AI_SERVER_URL": {"secret": false, "value": "https://<internal-ai-fqdn>"},
+      "AI_SERVER_TIMEOUT": {"secret": false, "value": "90"},
+      "AI_SERVER_MODELS_DIR": {"secret": false, "value": "/app/data/models"},
+      "EV_SOC_MODEL_PATH": {"secret": false, "value": "/app/data/models/ev_soc_pipeline.pkl"},
+      "APK_DIR": {"secret": false, "value": "/app/data/apk"},
+      "APP_CONFIG_FILE": {"secret": false, "value": "/app/data/apk/app_config.json"},
+      "DASHBOARD_URL": {"secret": false, "value": "https://<admin>.azurestaticapps.net"},
+      "CORS_ORIGINS": {"secret": false, "value": "https://<admin>.azurestaticapps.net"}
+    }}
+  }
+}
