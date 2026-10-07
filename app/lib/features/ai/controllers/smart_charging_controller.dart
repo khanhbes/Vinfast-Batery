@@ -598,7 +598,10 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       final status = live.status;
       _connectionCoordinator.markStatusSuccess(shellyReachable: status.online);
       if (!_disposed) {
-        ShellyConnectionCoordinator.shared.updateCodeNotice(status);
+        ShellyConnectionCoordinator.shared.updateCodeNotice(
+          status,
+          vehicleId: state.draft.vehicleId,
+        );
         state = state.copyWith(
           chargerStatus: status,
           // The notice comes from the existing server poll, never an extra
@@ -728,7 +731,17 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       final value = await _repository!.capabilities(
         vehicleId: state.draft.vehicleId,
       );
-      if (!_disposed) state = state.copyWith(capabilities: value);
+      if (!_disposed) {
+        state = state.copyWith(capabilities: value);
+        final status = state.chargerStatus;
+        if (status != null) {
+          ShellyConnectionCoordinator.shared.updateCodeNotice(
+            status,
+            vehicleId: state.draft.vehicleId,
+            capabilities: value,
+          );
+        }
+      }
     } on SmartChargerException {
       if (!_disposed) {
         state = state.copyWith(

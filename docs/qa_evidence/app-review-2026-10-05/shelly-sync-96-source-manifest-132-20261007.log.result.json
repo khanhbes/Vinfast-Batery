@@ -1,0 +1,13 @@
+{
+  "command": [
+    "python",
+    "tools/check_batterybot_source.py"
+  ],
+  "cwd": ".",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\shelly-sync-96-source-manifest-132-20261007.log",
+  "timeoutSeconds": 60,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 1.3
+}

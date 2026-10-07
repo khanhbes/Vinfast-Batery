@@ -13,6 +13,7 @@ import '../../core/widgets/debug_error_sheet.dart';
 import '../../data/models/smart_charge_history.dart';
 import '../../data/models/smart_charging_session.dart';
 import '../../data/services/shelly_connection_coordinator.dart';
+import '../../data/models/shelly_connection_state.dart';
 import '../smart_charging/smart_charger_setup_hub_screen.dart';
 import '../auth/auth_providers.dart';
 import 'controllers/smart_charging_controller.dart';
@@ -955,38 +956,18 @@ class _SmartChargeHeaderState extends State<_SmartChargeHeader>
     final state = widget.state;
     final soc = state.draft.currentSoc.round();
     final now = DateFormat('HH:mm').format(state.now.toLocal());
-    final displayState = state.displayState;
     final reducedMotion = MediaQuery.disableAnimationsOf(context);
 
-    // Connection status
-    final Color dotColor;
-    final String statusText;
-    switch (displayState) {
-      case ChargerDisplayState.charging:
-        dotColor = CockpitColors.emerald;
-        statusText = 'Đang sạc';
-        break;
-      case ChargerDisplayState.off:
-        dotColor = state.capabilities.readyForControl
-            ? CockpitColors.emerald
-            : CockpitColors.amber;
-        statusText = state.capabilities.readyForControl
-            ? 'Shelly sẵn sàng điều khiển'
-            : 'Shelly trực tuyến · Chưa sẵn sàng bật sạc';
-        break;
-      case ChargerDisplayState.connecting:
-        dotColor = CockpitColors.amber;
-        statusText = 'Đang kết nối...';
-        break;
-      case ChargerDisplayState.offline:
-        dotColor = CockpitColors.amber;
-        statusText = 'Mất kết nối ổ sạc';
-        break;
-      case ChargerDisplayState.error:
-        dotColor = CockpitColors.amber;
-        statusText = 'Chưa kết nối bộ sạc';
-        break;
-    }
+    // A transport response without a verified binding is not enrollment.
+    // Use exactly the same connection label as Settings and Setup, even when
+    // the independent status poll happens to report an online relay.
+    final connection = widget.connection;
+    final dotColor =
+        connection?.state == ShellyConnectionFlowState.connected &&
+            connection?.controlUncertain != true
+        ? CockpitColors.emerald
+        : CockpitColors.amber;
+    final statusText = connection?.connectionLabel ?? 'Chưa kết nối Shelly';
 
     // Slide-in animation wrapper
     Widget slideIn({required Widget child, double delay = 0.0}) {
@@ -1122,10 +1103,7 @@ class _SmartChargeHeaderState extends State<_SmartChargeHeader>
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  widget.connection?.isLinked == true &&
-                          displayState != ChargerDisplayState.charging
-                      ? widget.connection!.connectionLabel
-                      : statusText,
+                  statusText,
                   style: TextStyle(color: CockpitColors.muted, fontSize: 13),
                 ),
               ),

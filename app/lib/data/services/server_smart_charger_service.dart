@@ -173,6 +173,12 @@ class ServerSmartChargerService {
       }
       code ??= decoded['code']?.toString();
       final message = switch (code) {
+        'STAGING_HARDWARE_DISABLED' =>
+          'Máy chủ thử nghiệm chưa mở thao tác này. Liên kết Shelly hiện có vẫn được giữ.',
+        'bindingVehicleConflict' =>
+          'Shelly đang liên kết với xe khác. Hãy chọn lại bộ sạc cho xe này.',
+        'bindingChanged' => 'Liên kết đã thay đổi. Hãy xác nhận yêu cầu mới.',
+        'vehicleForbidden' => 'Hãy chọn xe hợp lệ thuộc tài khoản này.',
         'DEVICE_MEMBER_LIMIT_REACHED' =>
           'Shelly đã liên kết tối đa hai tài khoản.',
         'connectionCodeUnavailable' ||
@@ -332,11 +338,20 @@ class ServerSmartChargerService {
       _request('DELETE', '/api/shelly/device');
 
   /// Redeem an admin-generated connection code to bind a Shelly device.
-  Future<ShellyConnectionProfile> redeemConnectionCode(String code) async {
+  Future<ShellyConnectionProfile> redeemConnectionCode(
+    String code, {
+    String? vehicleId,
+    String? operationId,
+  }) async {
     final raw = await _request(
       'POST',
       '/api/shelly/redeem-code',
-      body: {'code': code.trim().toUpperCase()},
+      body: {
+        'code': code.trim().toUpperCase(),
+        if (vehicleId != null) 'vehicleId': vehicleId,
+        if (operationId != null) 'operationId': operationId,
+      },
+      headers: {'Idempotency-Key': ?operationId},
     );
     final profileData = raw['profile'] is Map
         ? Map<String, dynamic>.from(raw['profile'] as Map)
@@ -364,10 +379,16 @@ class ServerSmartChargerService {
       currentA: status.currentA,
       frequencyHz: status.frequencyHz,
       temperatureC: status.temperatureC,
+      shellyTemperatureC: status.shellyTemperatureC,
+      batteryTemperatureC: status.batteryTemperatureC,
       energyWh: status.energyWh,
       timerRemaining: status.timerRemaining,
-      transport: ShellyTransport.cloud,
-      deviceName: selected?.displayName ?? 'Shelly sạc xe',
+      transport: status.transport ?? ShellyTransport.cloud,
+      deviceId: status.deviceId,
+      codeRefreshRequired: status.codeRefreshRequired,
+      deviceName: selected?.deviceId == status.deviceId
+          ? selected?.displayName
+          : status.deviceName ?? 'Shelly sạc xe',
     );
   }
 
@@ -530,6 +551,8 @@ class ServerSmartChargerService {
   Future<SmartChargingSession?> off({
     String? sessionId,
     String? vehicleId,
+    String? expectedDeviceId,
+    String? operationId,
   }) async {
     final query = sessionId == null && vehicleId != null && vehicleId.isNotEmpty
         ? '?vehicleId=${Uri.encodeQueryComponent(vehicleId)}'
@@ -539,6 +562,8 @@ class ServerSmartChargerService {
       sessionId == null
           ? '/api/smart-charging/off$query'
           : '/api/smart-charging/session/$sessionId/stop',
+      body: {'expectedDeviceId': ?expectedDeviceId},
+      headers: {'Idempotency-Key': ?operationId},
     );
     return data['_null'] == true ? null : SmartChargingSession.fromJson(data);
   }
@@ -566,6 +591,7 @@ class ServerSmartChargerService {
     required String idempotencyKey,
     required String vehicleId,
     required double currentSoc,
+    String? expectedDeviceId,
   }) async => SmartChargingSession.fromJson(
     await _request(
       'POST',
@@ -574,6 +600,7 @@ class ServerSmartChargerService {
         'durationSeconds': duration.inSeconds,
         'vehicleId': vehicleId,
         'currentSoc': currentSoc,
+        'expectedDeviceId': ?expectedDeviceId,
       },
       headers: {'Idempotency-Key': idempotencyKey},
     ),

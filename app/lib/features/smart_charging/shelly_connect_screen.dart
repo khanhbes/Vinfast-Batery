@@ -136,7 +136,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
 
   Future<void> _redeemAdminCode() async {
     final code = _codeController.text.trim().toUpperCase();
-    if (code.length != 6) {
+    if (!RegExp(r'^[A-Z0-9]{6}$').hasMatch(code)) {
       setState(() => _codeError = 'Mã kết nối phải có đúng 6 ký tự.');
       return;
     }
@@ -145,12 +145,20 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
       _codeError = null;
     });
     try {
-      final result = await _coordinator.redeemCode(code);
+      final vehicleId = ref.read(vehicleContextProvider).vehicleId;
+      if (vehicleId.isEmpty) {
+        setState(() {
+          _redeemingCode = false;
+          _codeError = 'Hãy chọn xe trước khi nhập mã kết nối.';
+        });
+        return;
+      }
+      final result = await _coordinator.redeemCode(code, vehicleId: vehicleId);
       if (!mounted) return;
       setState(() {
         _redeemingCode = false;
         _snapshot = result;
-        if (result.state == ShellyConnectionFlowState.connectionFailed) {
+        if (result.errorMessage != null) {
           _codeError = result.errorMessage ?? 'Không thể kích hoạt mã kết nối';
         }
       });
@@ -550,6 +558,15 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                   style: CockpitTypography.body(fontSize: 13, color: ui.muted),
                 ),
                 const SizedBox(height: 14),
+                if (_snapshot.isLinked &&
+                    _snapshot.controlBlockedMessage != null) ...[
+                  Text(
+                    _snapshot.controlBlockedMessage!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: ui.muted, fontSize: 13),
+                  ),
+                  const SizedBox(height: 14),
+                ],
                 if (busy && state != ShellyConnectionFlowState.discovering) ...[
                   const Center(child: CircularProgressIndicator()),
                   const SizedBox(height: 14),
@@ -1255,7 +1272,9 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                 ),
                 const Spacer(),
                 Text(
-                  'Gen 3 • LAN Direct',
+                  _snapshot.serverBinding != null
+                      ? 'Qua máy chủ'
+                      : 'Cùng Wi-Fi',
                   style: TextStyle(color: ui.muted, fontSize: 12),
                 ),
               ],
@@ -1271,7 +1290,9 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Đã vượt qua kiểm tra an toàn phần cứng và đang sẵn sàng giám sát.',
+              _snapshot.serverBinding != null
+                  ? 'Đã liên kết và đọc được trạng thái thiết bị. Quyền bật sạc do máy chủ kiểm tra.'
+                  : 'Đã vượt qua kiểm tra an toàn và đọc được trạng thái thiết bị.',
               style: TextStyle(color: ui.muted, fontSize: 13),
             ),
             if (status != null) ...[

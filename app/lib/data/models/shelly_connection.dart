@@ -129,7 +129,9 @@ class ShellyConnectionProfile {
         cloudHost: json['cloudHost']?.toString() ?? '',
         cloudAuthKey: json['cloudAuthKey']?.toString() ?? '',
         deviceId: json['deviceId']?.toString() ?? '',
-        deviceName: json['deviceName']?.toString() ?? 'Shelly Plug S Gen3',
+        deviceName:
+            (json['deviceName'] ?? json['displayName'])?.toString() ??
+            'Shelly Plug S Gen3',
         model: json['model']?.toString() ?? 'S3PL-00112EU',
         firmware: json['firmware']?.toString(),
         lanAddress: json['lanAddress']?.toString(),

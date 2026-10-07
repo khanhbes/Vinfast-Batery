@@ -1,0 +1,70 @@
+{
+  "task": "95",
+  "date": "2026-10-07",
+  "device": {
+    "model": "LE2125",
+    "api": 34
+  },
+  "artifactSha256": "2484210B74DD1AAC2D4C107CBEF2B7D997DE6E5A130C2DAE9E6E6B717297DDC3",
+  "evidenceMethod": "Live in-memory screenshots and app UI; no raw hierarchy, inputs, credentials or screenshots persisted",
+  "scope": "Dedicated QA BatteryBot appointment only",
+  "cases": [
+    {
+      "id": "create-preview",
+      "result": "pass",
+      "confirmed": false,
+      "date": "2026-11-20"
+    },
+    {
+      "id": "create-confirm",
+      "result": "pass",
+      "pendingSync": false,
+      "notificationsEnabled": false
+    },
+    {
+      "id": "edit-preview-confirm",
+      "result": "pass",
+      "oldDate": "2026-11-20",
+      "newDate": "2026-11-21",
+      "doubleTap": true,
+      "duplicateUiObserved": false,
+      "providerWriteCount": "not independently measured"
+    },
+    {
+      "id": "restart-read-edited",
+      "result": "pass",
+      "date": "2026-11-21"
+    },
+    {
+      "id": "cancel-preview-confirm",
+      "result": "pass",
+      "date": "2026-11-21",
+      "pendingSync": false
+    },
+    {
+      "id": "restart-read-cancelled",
+      "result": "pass",
+      "observedResponse": "Chưa có lịch nhắc cho xe này.",
+      "remoteVerified": true,
+      "cleanup": "cancelled tombstone retained; no active QA reminder"
+    }
+  ],
+  "notificationDelivery": "blocked: permission currently disabled, not changed by agent",
+  "hierarchyInspection": "CalledProcessError; not counted as pass",
+  "diagnostics": {
+    "pidAvailable": true,
+    "logReadExitCode": 0,
+    "sampleLines": 311,
+    "counts": {
+      "FATAL EXCEPTION": 0,
+      "ANR in com.bes.vinbatery": 0,
+      "overflowed by": 0,
+      "HandshakeException": 0,
+      "PERMISSION_DENIED": 0,
+      "OutOfMemoryError": 0
+    }
+  },
+  "relayCommands": 0,
+  "backendPolicyChanged": false,
+  "betaProductionSignoff": false
+}

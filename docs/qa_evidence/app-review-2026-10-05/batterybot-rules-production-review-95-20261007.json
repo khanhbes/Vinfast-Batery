@@ -28,6 +28,7 @@
     "assertions": 41,
     "exitCode": 0
   },
-  "deployAuthorized": false,
-  "deployed": false
+  "deployAuthorized": true,
+  "deployed": true,
+  "deployment": {"scope": "firestore:rules only", "exitCode": 0, "elapsedSeconds": 64.5, "activeRuleset": "projects/vinfast-873db/rulesets/5c384356-0660-488c-97e4-feb511ed38a3", "sourceMatchesLocal": true, "sha256": "A8987E440F5ABB89128E48540F36A7221582834251DCA781B7A042498BB998B7"}
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -50,6 +52,15 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
   void initState() {
     super.initState();
     _loadUserData();
+    _restoreShellyForVehicle(ref.read(selectedVehicleIdProvider));
+  }
+
+  void _restoreShellyForVehicle(String vehicleId) {
+    if (vehicleId.isNotEmpty) {
+      unawaited(
+        ShellyConnectionCoordinator.shared.restore(vehicleId: vehicleId),
+      );
+    }
   }
 
   Future<void> _loadUserData() async {
@@ -153,6 +164,9 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<String>(selectedVehicleIdProvider, (_, next) {
+      _restoreShellyForVehicle(next);
+    });
     final vehicleContext = ref.watch(vehicleContextProvider);
     final user = Firebase.apps.isEmpty
         ? null

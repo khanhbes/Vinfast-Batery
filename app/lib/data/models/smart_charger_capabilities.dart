@@ -30,6 +30,15 @@ class SmartChargerCapabilities {
   final String? controlBlockedCode;
 
   String? get controlBlockedMessage {
+    if (controlBlockedCode == 'relayUnverified') {
+      return 'Chưa xác minh được trạng thái Shelly. Hãy đọc lại hoặc dừng sạc trước khi bật phiên mới.';
+    }
+    if (controlBlockedCode == 'activeSessionConflict') {
+      return 'Shelly đang có phiên sạc. Hãy xem trạng thái hoặc dừng phiên hiện tại.';
+    }
+    if (controlBlockedCode == 'deviceCoordinationUnavailable') {
+      return 'Chưa kiểm tra được quyền điều khiển. Hãy thử lại; chưa thể bật sạc.';
+    }
     if (controlBlockedCode == 'STAGING_HARDWARE_DISABLED') {
       return 'Máy chủ thử nghiệm chưa cho phép bật sạc. Bạn vẫn có thể xem trạng thái và dừng sạc.';
     }

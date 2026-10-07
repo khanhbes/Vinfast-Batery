@@ -7,7 +7,8 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 AREAS = [ROOT / "app/lib", ROOT / "app/pubspec.yaml", ROOT / "app/pubspec.lock",
-         ROOT / "web/ai_server/fine_tune.py", ROOT / "web/firestore.rules"]
+         ROOT / "web/ai_server/fine_tune.py", ROOT / "web/firestore.rules",
+         ROOT / "web/shelly"]
 PATTERNS = {
     "private-key": re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
     "literal-secret": re.compile(r'''(?i)(?:cloudAuthKey|auth_key|GEMINI_API_KEY)\s*[:=]\s*["'][a-zA-Z0-9_./+\-=]{24,}["']'''),
@@ -16,7 +17,9 @@ PATTERNS = {
 }
 
 def main():
-    files = sorted({p for area in AREAS for p in (area.rglob("*.dart") if area.is_dir() else [area])})
+    files = sorted({p for area in AREAS for p in (
+        (path for path in area.rglob("*") if path.suffix in {".dart", ".py"})
+        if area.is_dir() else [area])})
     findings, manifest = [], []
     for path in files:
         payload = path.read_bytes()
@@ -28,7 +31,7 @@ def main():
                     findings.append({"path": relative, "line": number, "kind": kind})
     sha = subprocess.check_output(["git", "-c", f"safe.directory={ROOT.as_posix()}", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     print(json.dumps({"sourceHead": sha, "filesScanned": len(files), "findings": findings,
-        "files": manifest, "scope": "app/lib + dependency manifest + training pipeline + Firestore Rules; excludes env, Git history and APK"}, ensure_ascii=False))
+        "files": manifest, "scope": "app/lib + dependency manifest + training pipeline + Firestore Rules + web/shelly; excludes env, Git history and APK"}, ensure_ascii=False))
     return 1 if findings else 0
 
 if __name__ == "__main__":
