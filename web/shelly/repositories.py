@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import threading
 import hashlib
+import random
+import time
 from urllib.parse import urlparse
 from datetime import datetime, timezone, timedelta
 
@@ -52,6 +54,25 @@ class SmartChargeRepository:
     @property
     def profile_vault_configured(self) -> bool:
         return self._profile_vault.configured
+
+    def _run_metadata_transaction(self, action):
+        """Bounded jitter for exhausted ABORTED conflicts, never relay commands.
+
+        The SDK retries commits, but independent workers can repeatedly collide
+        on the same document. Permission, validation and storage failures must
+        propagate without being relabelled as a full member registry.
+        """
+        from google.api_core.exceptions import Aborted
+        for attempt in range(3):
+            try:
+                return action(self.db.transaction())
+            except (Aborted, ValueError) as error:
+                cause = error
+                while cause is not None and not isinstance(cause, Aborted):
+                    cause = cause.__cause__
+                if cause is None or attempt == 2:
+                    raise
+                time.sleep(random.SystemRandom().uniform(.1, .4) * (2 ** attempt))
 
     @property
     def last_history_skipped(self) -> int:
@@ -197,7 +218,7 @@ class SmartChargeRepository:
                 }, merge=True)
                 return True
 
-            return bool(claim(transaction))
+            return bool(self._run_metadata_transaction(claim))
         except Exception as error:
             # Ownership must fail closed if its authoritative registry is unavailable.
             raise RuntimeError("deviceRegistryUnavailable") from error
@@ -327,7 +348,7 @@ class SmartChargeRepository:
                 }, merge=True)
                 return True
 
-            return bool(release(transaction))
+            return bool(self._run_metadata_transaction(release))
         except Exception:
             return False
 
@@ -358,8 +379,11 @@ class SmartChargeRepository:
     def list_bindings(self, uid: str) -> list[DeviceBinding]:
         with self._lock:
             cached = list(self._bindings.get(uid, {}).values())
-        if cached or not self.db:
+        if not self.db:
             return cached
+        # Other workers may change enrollment/evidence/binding. An unbounded
+        # process cache must never override the authoritative metadata.
+        bindings = []
         for snapshot in self.db.collection("users").document(uid).collection("shellyDevices").stream():
             data = snapshot.to_dict() or {}
             binding = DeviceBinding(
@@ -380,17 +404,20 @@ class SmartChargeRepository:
                 shared=bool(data.get("shared")),
                 owner_uid=uid,
             )
-            with self._lock:
-                self._bindings.setdefault(uid, {})[binding.device_id] = binding
+            bindings.append(binding)
         with self._lock:
-            return list(self._bindings.get(uid, {}).values())
+            self._bindings[uid] = {item.device_id: item for item in bindings}
+        return bindings
 
     def get_binding(self, uid: str, vehicle_id: str | None = None) -> DeviceBinding | None:
         active = [item for item in self.list_bindings(uid) if item.revoked_at is None]
         if vehicle_id:
-            matched = [item for item in active if item.vehicle_id == vehicle_id or item.shared]
-            if matched:
-                return matched[0]
+            exact = [item for item in active if item.vehicle_id == vehicle_id]
+            if exact:
+                return exact[0] if len(exact) == 1 else None
+            shared = [item for item in active if item.shared]
+            if shared:
+                return shared[0] if len(shared) == 1 else None
             # A legacy unscoped binding is usable only while the account has
             # no explicit vehicle bindings. Once any binding is vehicle-bound,
             # never fall through to another vehicle's charger.
@@ -398,10 +425,10 @@ class SmartChargeRepository:
             # An unscoped legacy device may only be used transparently while
             # the account still has a single active vehicle. With multiple
             # vehicles, force explicit setup rather than guessing.
-            if legacy and not any(item.vehicle_id for item in active) and not self.has_multiple_active_vehicles(uid):
+            if len(legacy) == 1 and len(active) == 1 and not self.has_multiple_active_vehicles(uid):
                 return legacy[0]
             return None
-        return active[0] if active else None
+        return active[0] if len(active) == 1 else None
 
     def has_multiple_active_vehicles(self, uid: str) -> bool:
         if self.db:
@@ -472,7 +499,8 @@ class SmartChargeRepository:
             if self.db:
                 self.db.collection("users").document(uid).collection("shellyDevices").document(device_id).set(binding.to_dict(), merge=True)
 
-    def enroll_connection_code(self, uid: str, entry, operation_id: str) -> dict:
+    def enroll_connection_code(self, uid: str, entry, operation_id: str,
+                               vehicle_id: str | None = None) -> dict:
         """Commit membership, vault, binding and receipt together after Cloud validation.
 
         Code rotation is not credential rotation: an existing enrollment keeps
@@ -488,7 +516,8 @@ class SmartChargeRepository:
         new_binding = DeviceBinding(
             device_id=device_id, display_name=entry.device_name, model=entry.model,
             generation=3, provider="vault_cloud", connection_mode="server_cloud",
-            owner_uid=uid, shared=True, no_load_test_verified=False,
+            owner_uid=uid, vehicle_id=vehicle_id, shared=False,
+            no_load_test_verified=False,
         )
         new_metadata.update(new_binding.to_dict())
         receipt_id = hashlib.sha256(f"{entry.code}|{uid}".encode()).hexdigest()
@@ -507,13 +536,23 @@ class SmartChargeRepository:
 
         if not self.db:
             with self._lock:
+                if vehicle_id and self.vehicle_for_owner(uid, vehicle_id) is None:
+                    raise PermissionError("vehicleForbidden")
                 key = self._device_owner_doc_id(device_id)
                 members = list(self._device_members.get(key, [self._device_owners[key]] if key in self._device_owners else []))
                 receipts = getattr(self, "_enrollment_receipts", {})
                 validate(entry.to_dict(), members, receipt_id in receipts, {})
                 existing = self._synced_profiles.get((uid, device_id), {})
                 keep_existing = uid in members and existing and existing.get("revokedAt") is None
+                if (keep_existing and vehicle_id and existing.get("vehicleId")
+                        not in (None, "", vehicle_id) and not existing.get("shared")):
+                    raise ValueError("bindingVehicleConflict")
                 metadata = dict(existing if keep_existing else new_metadata)
+                # Upgrade an unscoped legacy enrollment only when explicitly
+                # selected by this member; retain evidence and never auto-share.
+                if keep_existing and vehicle_id and not metadata.get("vehicleId"):
+                    metadata["vehicleId"] = vehicle_id
+                    metadata["shared"] = False
                 metadata["acknowledgedCodeVersion"] = entry.code_version
                 if uid not in members:
                     members.append(uid)
@@ -523,6 +562,11 @@ class SmartChargeRepository:
                 if not keep_existing:
                     self._profile_vault_records[(uid, device_id)] = {"ownerUid": uid, **encrypted}
                     self._bindings.setdefault(uid, {})[device_id] = new_binding
+                elif vehicle_id and not existing.get("vehicleId"):
+                    binding = self._bindings.get(uid, {}).get(device_id)
+                    if binding:
+                        binding.vehicle_id = vehicle_id
+                        binding.shared = False
                 if receipt_id not in receipts:
                     entry.redemption_count += 1
                 receipts[receipt_id] = {"operationId": operation_id}
@@ -544,6 +588,13 @@ class SmartChargeRepository:
             receipt = receipt_ref.get(transaction=txn)
             old_profile = profile_ref.get(transaction=txn)
             inventory_snapshot = inventory_ref.get(transaction=txn)
+            if vehicle_id:
+                vehicle_snapshot = self.db.collection("Vehicles").document(vehicle_id).get(transaction=txn)
+                vehicle = vehicle_snapshot.to_dict() or {}
+                if (not vehicle_snapshot.exists or vehicle.get("ownerUid") != uid or
+                        vehicle.get("isDeleted") is True or vehicle.get("isArchived") is True or
+                        vehicle.get("archivedAt") is not None):
+                    raise PermissionError("vehicleForbidden")
             owner_data = owner_snapshot.to_dict() or {}
             members = self._membership_uids(owner_data)
             if not code_snapshot.exists:
@@ -553,7 +604,13 @@ class SmartChargeRepository:
             validate(code_data, members, receipt.exists, inventory)
             previous = old_profile.to_dict() or {} if old_profile.exists else {}
             keep_existing = uid in members and previous and previous.get("revokedAt") is None
+            if (keep_existing and vehicle_id and previous.get("vehicleId")
+                    not in (None, "", vehicle_id) and not previous.get("shared")):
+                raise ValueError("bindingVehicleConflict")
             metadata = dict(previous if keep_existing else new_metadata)
+            if keep_existing and vehicle_id and not metadata.get("vehicleId"):
+                metadata["vehicleId"] = vehicle_id
+                metadata["shared"] = False
             metadata["acknowledgedCodeVersion"] = int(code_data.get("codeVersion") or 0)
             if uid not in members:
                 members.append(uid)
@@ -569,7 +626,7 @@ class SmartChargeRepository:
                 txn.update(code_ref, {"redemptionCount": int(code_data.get("redemptionCount") or 0) + 1})
             return metadata
 
-        metadata = enroll(self.db.transaction())
+        metadata = self._run_metadata_transaction(enroll)
         with self._lock:
             self._synced_profiles[(uid, device_id)] = dict(metadata)
         return metadata
@@ -944,7 +1001,7 @@ class SmartChargeRepository:
                 txn.set(ref, {"ownerUid": uid, "sessionId": session_id, "deviceIdHash": self._device_owner_doc_id(device_id), "updatedAt": now})
                 return True
 
-            claimed = bool(claim(transaction))
+            claimed = bool(self._run_metadata_transaction(claim))
             if not claimed:
                 with self._lock:
                     self._device_leases.pop(lease_key, None)

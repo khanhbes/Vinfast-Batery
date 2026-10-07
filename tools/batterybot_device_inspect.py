@@ -13,6 +13,7 @@ ADB = 'C:/Users/khanh/AppData/Local/Android/Sdk/platform-tools/adb.exe'
 
 
 def sanitize(value):
+    value = re.sub(r'\b(?:\+?\d[\s.-]?){8,15}\b', '[phone]', value)
     value = re.sub(r'[^\s@]+@[^\s@]+', '[email]', value)
     value = re.sub(r'https?://\S+', '[url]', value)
     value = re.sub(r'\b[0-9a-fA-F]{12,}\b', '[identifier]', value)

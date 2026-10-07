@@ -1,0 +1,18 @@
+{
+  "command": [
+    "C:\\flutter\\bin\\cache\\dart-sdk\\bin\\dart.exe",
+    "format",
+    "lib/data/services/shelly_connection_coordinator.dart",
+    "lib/features/ai/services/app_chat_tool_gateway.dart",
+    "lib/data/models/smart_charger_capabilities.dart",
+    "test/unit/shelly_connection_snapshot_test.dart",
+    "test/unit/chat_shelly_backend_integration_test.dart"
+  ],
+  "cwd": "app",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\shelly-sync-96-format-unknown-20261007.log",
+  "timeoutSeconds": 60,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 0.74
+}

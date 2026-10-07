@@ -91,3 +91,25 @@ def test_failed_commit_leaves_no_partial_enrollment_or_consumed_code(fixture):
     assert repo.device_member_count(device) == 0
     assert not repo._profile_doc('account-a', device).get().exists
     assert db.collection('shellyConnectionCodes').document(code.code).get().to_dict()['redemptionCount'] == 0
+
+
+def test_scoped_enrollment_and_binding_changes_are_visible_to_other_workers(fixture):
+    db, device, _, code = fixture
+    vehicle_id = 'qa-vehicle-' + uuid.uuid4().hex
+    db.collection('Vehicles').document(vehicle_id).set({'ownerUid': 'account-a'})
+    repo_a = SmartChargeRepository(db)
+    repo_b = SmartChargeRepository(db)
+    with pytest.raises(PermissionError, match='vehicleForbidden'):
+        repo_a.enroll_connection_code('account-b', code, 'op-wrong-vehicle', vehicle_id=vehicle_id)
+    assert repo_a.device_member_count(device) == 0
+    profile = repo_a.enroll_connection_code('account-a', code, 'op-a', vehicle_id=vehicle_id)
+    assert profile['vehicleId'] == vehicle_id
+    assert profile['shared'] is False
+    assert repo_b.get_binding('account-a', vehicle_id).no_load_test_verified is False
+    # Worker B must not retain its pre-verification cache forever.
+    repo_a._profile_doc('account-a', device).set({'noLoadTestVerified': True}, merge=True)
+    assert repo_b.get_binding('account-a', vehicle_id).no_load_test_verified is True
+    db.collection('Vehicles').document(vehicle_id).update({'isArchived': True})
+    with pytest.raises(PermissionError, match='vehicleForbidden'):
+        repo_a.enroll_connection_code('account-a', code, 'op-after-archive', vehicle_id=vehicle_id)
+    assert db.collection('shellyConnectionCodes').document(code.code).get().to_dict()['redemptionCount'] == 1

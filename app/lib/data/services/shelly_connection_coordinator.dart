@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../models/shelly_connection.dart';
 import '../models/shelly_connection_state.dart';
 import '../models/smart_charger_binding.dart';
+import '../models/smart_charger_capabilities.dart';
 import '../models/smart_charger_status.dart';
 import '../repositories/smart_charger_repository.dart';
 import 'server_smart_charger_service.dart';
@@ -26,6 +27,9 @@ class ShellyConnectionSnapshot {
     this.isWifiUnavailable = false,
     this.isLinked = false,
     this.codeRefreshRequired = false,
+    this.serverBinding,
+    this.capabilities,
+    this.controlUncertain = false,
   });
 
   final ShellyConnectionFlowState state;
@@ -37,22 +41,43 @@ class ShellyConnectionSnapshot {
   final bool isWifiUnavailable;
   final bool isLinked;
   final bool codeRefreshRequired;
+  final SmartChargerBinding? serverBinding;
+  final SmartChargerCapabilities? capabilities;
+  final bool controlUncertain;
 
-  String get connectionLabel => switch (state) {
-    ShellyConnectionFlowState.connected => 'Đã kết nối Shelly',
-    ShellyConnectionFlowState.offline =>
-      isLinked ? 'Đã liên kết · Tạm mất kết nối' : 'Tạm mất kết nối',
-    ShellyConnectionFlowState.verifying =>
-      isLinked
-          ? 'Đã liên kết · Đang kiểm tra kết nối'
-          : 'Đang kiểm tra kết nối',
-    ShellyConnectionFlowState.verificationRequired => 'Cần kiểm tra an toàn',
-    _ => isLinked ? 'Đã liên kết Shelly' : 'Chưa kết nối Shelly',
-  };
+  // Historical evidence and a live connection are not authorization to turn ON.
+  bool get readyForControl =>
+      state == ShellyConnectionFlowState.connected &&
+      !controlUncertain &&
+      status?.relay == false &&
+      capabilities?.readyForControl == true &&
+      capabilities?.canManualOn == true;
+  String? get controlBlockedMessage => controlUncertain
+      ? 'Chưa xác minh được trạng thái ổ cắm. Hãy đọc lại hoặc dừng sạc; không bật lại.'
+      : status?.relay == true
+      ? 'Shelly đang bật. Hãy dừng và xác minh đã tắt trước khi bật phiên mới.'
+      : capabilities?.controlBlockedMessage;
+
+  String get connectionLabel => controlUncertain
+      ? 'Đã liên kết · Chưa xác minh trạng thái'
+      : switch (state) {
+          ShellyConnectionFlowState.connected => 'Đã kết nối Shelly',
+          ShellyConnectionFlowState.offline =>
+            isLinked ? 'Đã liên kết · Tạm mất kết nối' : 'Tạm mất kết nối',
+          ShellyConnectionFlowState.verifying =>
+            isLinked
+                ? 'Đã liên kết · Đang kiểm tra kết nối'
+                : 'Đang kiểm tra kết nối',
+          ShellyConnectionFlowState.verificationRequired =>
+            'Cần kiểm tra an toàn',
+          _ => isLinked ? 'Đã liên kết Shelly' : 'Chưa kết nối Shelly',
+        };
 
   factory ShellyConnectionSnapshot.fromServerBinding(
     SmartChargerBinding binding, {
     SmartChargerStatus? status,
+    SmartChargerCapabilities? capabilities,
+    String? errorMessage,
   }) {
     final evidence =
         binding.model.toUpperCase() == 'S3PL-00112EU' &&
@@ -64,11 +89,26 @@ class ShellyConnectionSnapshot {
           ? ShellyConnectionFlowState.verifying
           : !status.online
           ? ShellyConnectionFlowState.offline
+          : !sameShellyDevice(status.deviceId, binding.deviceId)
+          ? ShellyConnectionFlowState.verificationRequired
           : evidence
           ? ShellyConnectionFlowState.connected
           : ShellyConnectionFlowState.verificationRequired,
       isLinked: true,
-      codeRefreshRequired: binding.codeRefreshRequired,
+      codeRefreshRequired:
+          status?.codeRefreshRequired ?? binding.codeRefreshRequired,
+      serverBinding: binding,
+      capabilities: capabilities,
+      controlUncertain: capabilities?.controlBlockedCode == 'relayUnverified',
+      errorMessage:
+          errorMessage ??
+          (status != null &&
+                  status.online &&
+                  !sameShellyDevice(status.deviceId, binding.deviceId)
+              ? 'Chưa xác minh được đúng Shelly đã liên kết.'
+              : !evidence
+              ? 'Shelly cần được kiểm tra an toàn trước khi điều khiển.'
+              : null),
       devices: [
         DiscoveredShellyDevice(
           id: binding.deviceId,
@@ -82,6 +122,15 @@ class ShellyConnectionSnapshot {
       status: status,
     );
   }
+}
+
+bool sameShellyDevice(String? a, String? b) {
+  String normalize(String value) =>
+      value.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toLowerCase();
+  return a != null &&
+      b != null &&
+      normalize(a).isNotEmpty &&
+      normalize(a) == normalize(b);
 }
 
 /// Shared, LAN-first Normal Mode coordinator. It never accepts Cloud secrets
@@ -173,7 +222,15 @@ class ShellyConnectionCoordinator {
     return task;
   }
 
-  void updateCodeNotice(SmartChargerStatus status) {
+  void updateCodeNotice(
+    SmartChargerStatus status, {
+    String? uid,
+    String? vehicleId,
+    SmartChargerCapabilities? capabilities,
+  }) {
+    if ((uid != null && uid != _accountUid) ||
+        (vehicleId != null && vehicleId != _vehicleId))
+      return;
     if (!_current.isLinked ||
         _current.devices.length != 1 ||
         status.deviceId == null ||
@@ -181,6 +238,16 @@ class ShellyConnectionCoordinator {
       return;
     }
     final old = _current;
+    if (old.serverBinding != null) {
+      _emit(
+        ShellyConnectionSnapshot.fromServerBinding(
+          old.serverBinding!,
+          status: status,
+          capabilities: capabilities ?? old.capabilities,
+        ),
+      );
+      return;
+    }
     _emit(
       ShellyConnectionSnapshot(
         state: !status.online
@@ -197,6 +264,54 @@ class ShellyConnectionCoordinator {
         isWifiUnavailable: old.isWifiUnavailable,
         codeRefreshRequired:
             status.codeRefreshRequired ?? old.codeRefreshRequired,
+      ),
+    );
+  }
+
+  /// Remove pre-command readback until a fresh response resolves the operation.
+  /// This updates presentation only and never issues a hardware command.
+  void markControlUnknown({
+    required String uid,
+    required String vehicleId,
+    required String deviceId,
+  }) {
+    final old = _current;
+    if (uid != _accountUid ||
+        vehicleId != _vehicleId ||
+        !old.isLinked ||
+        !sameShellyDevice(old.serverBinding?.deviceId, deviceId))
+      return;
+    _emit(
+      ShellyConnectionSnapshot(
+        state: ShellyConnectionFlowState.verifying,
+        isLinked: true,
+        devices: old.devices,
+        deviceName: old.deviceName,
+        codeRefreshRequired: old.codeRefreshRequired,
+        serverBinding: old.serverBinding,
+        capabilities: old.capabilities,
+        controlUncertain: true,
+      ),
+    );
+  }
+
+  /// Publish read-only evidence from chat/control to the same account snapshot.
+  /// Never accepts a different account or silently changes an existing vehicle.
+  void updateServerSnapshot({
+    required String uid,
+    required String vehicleId,
+    required SmartChargerBinding binding,
+    required SmartChargerStatus status,
+    SmartChargerCapabilities? capabilities,
+  }) {
+    if (uid != _accountUid || (_vehicleId != null && _vehicleId != vehicleId))
+      return;
+    _vehicleId = vehicleId;
+    _emit(
+      ShellyConnectionSnapshot.fromServerBinding(
+        binding,
+        status: status,
+        capabilities: capabilities,
       ),
     );
   }
@@ -377,24 +492,36 @@ class ShellyConnectionCoordinator {
         name: binding.displayName,
         generation: 3,
       );
+      SmartChargerCapabilities capabilities;
+      try {
+        capabilities = await serverCharger.getCapabilities(
+          vehicleId: _vehicleId,
+        );
+      } on SmartChargerException {
+        capabilities = SmartChargerCapabilities.unavailable;
+      }
+      if (generation != _accountGeneration) return _current;
       final restored = ShellyConnectionSnapshot.fromServerBinding(
         binding,
         status: status,
+        capabilities: capabilities,
       );
-      _emit(
-        ShellyConnectionSnapshot(
-          state: restored.state,
-          codeRefreshRequired: restored.codeRefreshRequired,
-          isLinked: true,
-          devices: [device],
-          status: status,
+      if (!binding.noLoadTestVerified ||
+          !binding.safeBootVerified ||
+          !binding.powerMeterVerified) {
+        _pendingProfile = ShellyConnectionProfile(
+          deviceId: binding.deviceId,
+          model: binding.model,
           deviceName: binding.displayName,
-          errorMessage:
-              restored.state == ShellyConnectionFlowState.verificationRequired
-              ? 'Shelly cần được kiểm tra an toàn trước khi điều khiển.'
-              : null,
-        ),
-      );
+        );
+        _pendingDevice = device;
+        _pendingServerCloud = true;
+      } else {
+        _pendingProfile = null;
+        _pendingDevice = null;
+        _pendingServerCloud = false;
+      }
+      _emit(restored);
       return _current;
     } on SmartChargerException catch (error) {
       if (generation != _accountGeneration) return _current;
@@ -405,6 +532,7 @@ class ShellyConnectionCoordinator {
           devices: _current.devices,
           codeRefreshRequired: restoredBinding?.codeRefreshRequired ?? false,
           isLinked: restoredBinding != null,
+          serverBinding: restoredBinding,
           errorMessage: error.message,
         ),
       );
@@ -418,6 +546,7 @@ class ShellyConnectionCoordinator {
           devices: _current.devices,
           codeRefreshRequired: restoredBinding?.codeRefreshRequired ?? false,
           isLinked: restoredBinding != null,
+          serverBinding: restoredBinding,
           errorMessage:
               'Không thể xác minh Shelly với máy chủ lúc này. Hãy thử lại khi có mạng.',
         ),
@@ -625,6 +754,9 @@ class ShellyConnectionCoordinator {
   /// The only Normal Mode path that may toggle the relay. The UI must show
   /// explicit user consent before invoking this method.
   Future<ShellyConnectionSnapshot> runConfirmedSafetyTest() async {
+    final generation = _accountGeneration;
+    final vehicleId = _vehicleId;
+    final previous = _current;
     final profile = _pendingProfile;
     final device = _pendingDevice;
     if (_busy || profile == null || device == null) return _current;
@@ -634,6 +766,9 @@ class ShellyConnectionCoordinator {
         state: ShellyConnectionFlowState.verifying,
         devices: [device],
         deviceName: profile.deviceName,
+        isLinked: previous.isLinked,
+        serverBinding: previous.serverBinding,
+        capabilities: previous.capabilities,
       ),
     );
     try {
@@ -643,14 +778,18 @@ class ShellyConnectionCoordinator {
           operationId:
               'safety-${DateTime.now().toUtc().microsecondsSinceEpoch}',
         );
+        if (generation != _accountGeneration) return _current;
         if (result['verified'] != true) {
           throw const SmartChargerException(
             'Shelly chưa vượt qua kiểm tra an toàn.',
             code: 'verificationFailed',
           );
         }
-        final status = await serverCharger.getStatus();
-        if (status.relay) {
+        final status = await serverCharger.getStatus(vehicleId: vehicleId);
+        if (generation != _accountGeneration) return _current;
+        if (!status.online ||
+            status.relay ||
+            !sameShellyDevice(status.deviceId, profile.deviceId)) {
           throw const SmartChargerException(
             'Không xác minh được relay OFF sau kiểm tra.',
             code: 'relayUnverified',
@@ -659,6 +798,7 @@ class ShellyConnectionCoordinator {
         await SmartChargerRepositoryFactory.setMode(
           SmartChargerConnectionMode.serverCloud,
         );
+        if (generation != _accountGeneration) return _current;
         _pendingProfile = null;
         _pendingDevice = null;
         _pendingServerCloud = false;
@@ -668,7 +808,9 @@ class ShellyConnectionCoordinator {
         return _current;
       }
       await _charger.configureSafeBoot(profile: profile);
+      if (generation != _accountGeneration) return _current;
       final test = await _charger.testConnection(profile: profile);
+      if (generation != _accountGeneration) return _current;
       if (!test.deviceVerified ||
           test.model?.toUpperCase() != 'S3PL-00112EU' ||
           !test.powerMeterAvailable ||
@@ -681,6 +823,7 @@ class ShellyConnectionCoordinator {
         );
       }
       final safety = await _charger.runNoLoadTest(profile: profile);
+      if (generation != _accountGeneration) return _current;
       if (!safety.passed ||
           safety.noLoadPowerW > 5 ||
           safety.noLoadCurrentA > .1 ||
@@ -692,6 +835,7 @@ class ShellyConnectionCoordinator {
         );
       }
       await _credentials.saveProfile(profile);
+      if (generation != _accountGeneration) return _current;
       await _credentials.saveVerification(
         SmartChargerVerificationState(
           cloudVerified: test.cloudStatus != null,
@@ -710,9 +854,11 @@ class ShellyConnectionCoordinator {
               ),
         ),
       );
+      if (generation != _accountGeneration) return _current;
       await SmartChargerRepositoryFactory.setMode(
         SmartChargerConnectionMode.advancedDirect,
       );
+      if (generation != _accountGeneration) return _current;
       _pendingProfile = null;
       _pendingDevice = null;
       _emit(
@@ -725,15 +871,20 @@ class ShellyConnectionCoordinator {
         ),
       );
     } on SmartChargerException catch (error) {
+      if (generation != _accountGeneration) return _current;
       _emit(
         ShellyConnectionSnapshot(
           state: ShellyConnectionFlowState.connectionFailed,
           devices: [device],
           errorMessage: error.message,
           deviceName: profile.deviceName,
+          isLinked: previous.isLinked,
+          serverBinding: previous.serverBinding,
+          capabilities: previous.capabilities,
         ),
       );
     } on Object {
+      if (generation != _accountGeneration) return _current;
       _emit(
         ShellyConnectionSnapshot(
           state: ShellyConnectionFlowState.connectionFailed,
@@ -741,20 +892,31 @@ class ShellyConnectionCoordinator {
           errorMessage:
               'Không hoàn tất được kiểm tra an toàn. Shelly chưa được kích hoạt điều khiển.',
           deviceName: profile.deviceName,
+          isLinked: previous.isLinked,
+          serverBinding: previous.serverBinding,
+          capabilities: previous.capabilities,
         ),
       );
     } finally {
-      _busy = false;
+      if (generation == _accountGeneration) _busy = false;
     }
     return _current;
   }
 
   /// Connects using an admin-generated connection code (Flow 3).
-  Future<ShellyConnectionSnapshot> redeemCode(String code) async {
+  Future<ShellyConnectionSnapshot> redeemCode(
+    String code, {
+    String? vehicleId,
+    String? operationId,
+  }) async {
     if (_busy) return _current;
+    if (vehicleId != null && vehicleId != _vehicleId) {
+      await restore(vehicleId: vehicleId);
+    }
     final generation = _accountGeneration;
+    final previous = _current;
     final normalized = code.trim().toUpperCase();
-    if (normalized.length != 6) {
+    if (!RegExp(r'^[A-Z0-9]{6}$').hasMatch(normalized)) {
       _emit(
         const ShellyConnectionSnapshot(
           state: ShellyConnectionFlowState.connectionFailed,
@@ -770,7 +932,13 @@ class ShellyConnectionCoordinator {
       ),
     );
     try {
-      final profile = await serverCharger.redeemConnectionCode(normalized);
+      final profile = await serverCharger.redeemConnectionCode(
+        normalized,
+        vehicleId: _vehicleId,
+        operationId:
+            operationId ??
+            'enroll-${DateTime.now().toUtc().microsecondsSinceEpoch}',
+      );
       if (generation != _accountGeneration) return _current;
       await SmartChargerRepositoryFactory.setMode(
         SmartChargerConnectionMode.serverCloud,
@@ -781,7 +949,7 @@ class ShellyConnectionCoordinator {
       _pendingDevice = DiscoveredShellyDevice(
         id: profile.deviceId,
         address: 'Shelly Cloud',
-        model: 'S3PL-00112EU',
+        model: profile.model,
         name: profile.deviceName,
         generation: 3,
       );
@@ -796,6 +964,17 @@ class ShellyConnectionCoordinator {
       }
     } on SmartChargerException catch (error) {
       if (generation != _accountGeneration) return _current;
+      if (previous.serverBinding != null) {
+        _emit(
+          ShellyConnectionSnapshot.fromServerBinding(
+            previous.serverBinding!,
+            status: previous.status,
+            capabilities: previous.capabilities,
+            errorMessage: error.message,
+          ),
+        );
+        return _current;
+      }
       _emit(
         ShellyConnectionSnapshot(
           state: ShellyConnectionFlowState.connectionFailed,
@@ -804,6 +983,18 @@ class ShellyConnectionCoordinator {
       );
     } on Object {
       if (generation != _accountGeneration) return _current;
+      if (previous.serverBinding != null) {
+        _emit(
+          ShellyConnectionSnapshot.fromServerBinding(
+            previous.serverBinding!,
+            status: previous.status,
+            capabilities: previous.capabilities,
+            errorMessage:
+                'Chưa thể xác minh mã mới. Liên kết hiện tại vẫn được giữ.',
+          ),
+        );
+        return _current;
+      }
       _emit(
         ShellyConnectionSnapshot(
           state: ShellyConnectionFlowState.connectionFailed,

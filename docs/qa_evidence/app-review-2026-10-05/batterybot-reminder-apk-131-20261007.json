@@ -22,7 +22,7 @@
   "flutterAnalyzeRoot": {"timedOut": true, "timeoutSeconds": 120, "exitCode": 1},
   "rulesEmulator": {"assertions": 41, "exitCode": 0},
   "installed": {"deviceModel": "LE2125", "installMode": "replace-preserve-data", "success": true, "versionCode": 131, "baseApkSha256Matches": true},
-  "runtime": {"dashboardOpened": true, "batteryBotOpened": true, "qaReminderPreviewVerified": true, "qaReminderCreated": false, "qaReminderEdited": false, "qaReminderCancelled": false, "relayCommands": 0},
-  "rulesProductionDeployed": false,
+  "runtime": {"dashboardOpened": true, "batteryBotOpened": true, "qaReminderPreviewVerified": true, "qaReminderCreated": true, "qaReminderEdited": true, "editRetainedAfterRestart": true, "qaReminderCancelled": true, "noActiveReminderAfterCancelRestart": true, "reminderNotificationsEnabled": false, "relayCommands": 0},
+  "rulesProductionDeployed": true,
   "betaProductionSignoff": false
 }

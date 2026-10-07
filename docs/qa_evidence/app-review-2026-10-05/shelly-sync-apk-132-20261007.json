@@ -1,0 +1,33 @@
+{
+  "task": "96",
+  "sourceHead": "e5850d61544a1acb079a373164bd410005696604",
+  "workingTree": "dirty-preserved",
+  "artifact": "app/build/app/outputs/flutter-apk/VinFastBattery_1.1.9+132_debug.apk",
+  "sha256": "C95461F7D3A9458EEF5CDEDAB59E8BA71AFCB5775BA44BE25AF8D803C2B61DCD",
+  "bytes": 197106976,
+  "package": "com.bes.vinbatery",
+  "versionName": "1.1.9",
+  "versionCode": 132,
+  "minSdk": 26,
+  "targetSdk": 36,
+  "certificateSha256": "914642716decb342ca80acece6284e69d66355bfa792f5c4779efecf16ecebeb",
+  "signing": "Android Debug",
+  "apiBaseUrl": "https://vinfast-api.nicestone-4d213368.eastasia.azurecontainerapps.io",
+  "build": {"exitCode": 0, "elapsedSeconds": 111.47},
+  "apksignerExitCode": 0,
+  "sourceManifest": "shelly-sync-96-source-manifest-132-20261007.log",
+  "installed": {"model": "LE2125", "api": 34, "success": true, "versionCode": 132, "installedSha256Matches": true, "appDataPreserved": true},
+  "runtime": {
+    "dashboardOpened": true,
+    "chargingOpened": true,
+    "settingsOpened": true,
+    "inconsistentConnectionLabelsReproduced": true,
+    "chargingLabel": "Shelly trực tuyến · Chưa sẵn sàng bật sạc",
+    "settingsLabel": "Chưa kết nối Shelly",
+    "rootCause": "Header fallback read an independent transport status without a verified shared binding",
+    "relayCommands": 0
+  },
+  "supersededByPlannedQA": "1.1.9+133",
+  "hardwareVerified": false,
+  "backendDeployedThisTask": false
+}

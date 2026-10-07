@@ -6,6 +6,7 @@ import '../../../data/repositories/smart_charger_repository.dart';
 import '../../../data/services/server_smart_charger_service.dart';
 import '../../../data/services/charging_tflite_runner.dart';
 import '../../../data/services/account_reminder_service.dart';
+import '../../../data/services/shelly_connection_coordinator.dart';
 import '../../../core/utils/battery_bot_faq.dart';
 import 'local_chat_engine.dart';
 
@@ -14,10 +15,17 @@ class AppChatToolGateway implements ChatToolGateway {
     required this.selectedVehicle,
     required this.reminders,
     String? Function()? uidResolver,
-  }) : _uidResolver = uidResolver ?? _firebaseUid;
+    ServerSmartChargerRepository? serverRepository,
+    ShellyConnectionCoordinator? connectionCoordinator,
+  }) : _uidResolver = uidResolver ?? _firebaseUid,
+       _injectedRepository = serverRepository,
+       _connections =
+           connectionCoordinator ?? ShellyConnectionCoordinator.shared;
   final VehicleModel? Function() selectedVehicle;
   final AccountReminderService reminders;
   final String? Function() _uidResolver;
+  final ServerSmartChargerRepository? _injectedRepository;
+  final ShellyConnectionCoordinator _connections;
   static String? _firebaseUid() =>
       Firebase.apps.isEmpty ? null : FirebaseAuth.instance.currentUser?.uid;
   @override
@@ -33,6 +41,7 @@ class AppChatToolGateway implements ChatToolGateway {
   ServerSmartChargerRepository? _repository;
   String? _repositoryUid, _repositoryVehicle;
   ServerSmartChargerRepository get _server {
+    if (_injectedRepository != null) return _injectedRepository;
     final generation = _generation, owner = uid, vehicle = vehicleId;
     if (_repository != null &&
         owner == _repositoryUid &&
@@ -146,11 +155,30 @@ class AppChatToolGateway implements ChatToolGateway {
           },
         );
       case 'charger_status':
-        final live = await _server.live(vehicleId: vehicle.vehicleId);
+        final repo = _server;
+        final binding = await repo.binding(vehicleId: vehicle.vehicleId);
         _guard(owner, vehicle.vehicleId, generation);
+        if (binding == null) {
+          return const LocalChatReply(
+            'Xe này chưa có bộ sạc Shelly đã liên kết. Mở thiết lập để nhập mã kết nối.',
+          );
+        }
+        final live = await repo.live(vehicleId: vehicle.vehicleId);
+        _guard(owner, vehicle.vehicleId, generation);
+        _connections.updateServerSnapshot(
+          uid: owner,
+          vehicleId: vehicle.vehicleId,
+          binding: binding,
+          status: live.status,
+        );
         if (!live.status.online) {
           return const LocalChatReply(
             'Shelly tạm mất kết nối. Không thể xác nhận trạng thái relay.',
+          );
+        }
+        if (!sameShellyDevice(live.status.deviceId, binding.deviceId)) {
+          return const LocalChatReply(
+            'Chưa xác minh được đúng Shelly đã liên kết. Hãy đọc lại trong Sạc pin.',
           );
         }
         return LocalChatReply(
@@ -271,7 +299,14 @@ class AppChatToolGateway implements ChatToolGateway {
     }
     final live = await repo.live(vehicleId: vehicle.vehicleId);
     _guard(owner, vehicle.vehicleId, generation);
-    if (!live.status.online || live.status.deviceId != binding.deviceId) {
+    _connections.updateServerSnapshot(
+      uid: owner,
+      vehicleId: vehicle.vehicleId,
+      binding: binding,
+      status: live.status,
+    );
+    if (!live.status.online ||
+        !sameShellyDevice(live.status.deviceId, binding.deviceId)) {
       return {
         'allowed': false,
         'userMessage':
@@ -280,7 +315,36 @@ class AppChatToolGateway implements ChatToolGateway {
     }
     if (tool == 'stop_charging') {
       final session = live.session;
-      if (session == null || session.deviceId != binding.deviceId) {
+      if (session == null) {
+        final caps = await repo.capabilities(vehicleId: vehicle.vehicleId);
+        _guard(owner, vehicle.vehicleId, generation);
+        _connections.updateServerSnapshot(
+          uid: owner,
+          vehicleId: vehicle.vehicleId,
+          binding: binding,
+          status: live.status,
+          capabilities: caps,
+        );
+        if (!live.status.relay || !caps.canManualOff) {
+          return {
+            'allowed': false,
+            'userMessage': live.status.relay
+                ? 'Máy chủ chưa cho phép dừng bộ sạc này. Mở Sạc pin để xử lý an toàn.'
+                : 'Shelly đã tắt theo trạng thái vừa đọc.',
+          };
+        }
+        // A second member sees hardware, never the first member's private log.
+        return {
+          'allowed': true,
+          'title': 'Xác nhận tắt bộ sạc',
+          'description': '${vehicle.displayName} · ${binding.displayName}',
+          'safetyNote':
+              'Ổ cắm đang bật. Thao tác này có thể dừng phiên đang dùng chung; chỉ báo đã tắt sau khi đọc lại OFF.',
+          'deviceId': binding.deviceId,
+          'bindingOnlyStop': true,
+        };
+      }
+      if (!sameShellyDevice(session.deviceId, binding.deviceId)) {
         return {
           'allowed': false,
           'userMessage':
@@ -314,6 +378,13 @@ class AppChatToolGateway implements ChatToolGateway {
     }
     final caps = await repo.capabilities(vehicleId: vehicle.vehicleId);
     _guard(owner, vehicle.vehicleId, generation);
+    _connections.updateServerSnapshot(
+      uid: owner,
+      vehicleId: vehicle.vehicleId,
+      binding: binding,
+      status: live.status,
+      capabilities: caps,
+    );
     if (!caps.readyForControl ||
         !caps.canManualOn ||
         !caps.supportsDeviceTimer ||
@@ -414,7 +485,17 @@ class AppChatToolGateway implements ChatToolGateway {
     }
     final live = await repo.live(vehicleId: vehicle.vehicleId);
     _guard(owner, vehicle.vehicleId, generation);
-    if (!live.status.online || live.status.deviceId != evidence['deviceId']) {
+    _connections.updateServerSnapshot(
+      uid: owner,
+      vehicleId: vehicle.vehicleId,
+      binding: binding!,
+      status: live.status,
+    );
+    if (!live.status.online ||
+        !sameShellyDevice(
+          live.status.deviceId,
+          evidence['deviceId'] as String?,
+        )) {
       return _result(
         false,
         'Chưa xác minh được thiết bị. Hãy đọc lại trong Sạc pin.',
@@ -424,6 +505,13 @@ class AppChatToolGateway implements ChatToolGateway {
     if (tool == 'start_timed_charging') {
       final caps = await repo.capabilities(vehicleId: vehicle.vehicleId);
       _guard(owner, vehicle.vehicleId, generation);
+      _connections.updateServerSnapshot(
+        uid: owner,
+        vehicleId: vehicle.vehicleId,
+        binding: binding,
+        status: live.status,
+        capabilities: caps,
+      );
       if (!caps.readyForControl ||
           !caps.canManualOn ||
           !caps.supportsDeviceTimer ||
@@ -435,15 +523,28 @@ class AppChatToolGateway implements ChatToolGateway {
           'blocked',
         );
       }
-      final session = await repo.manualOn(
+      _connections.markControlUnknown(
+        uid: owner,
+        vehicleId: vehicle.vehicleId,
+        deviceId: binding.deviceId,
+      );
+      final session = await repo.service.manualOn(
         Duration(seconds: evidence['durationSeconds'] as int),
-        operationId,
+        idempotencyKey: operationId,
         vehicleId: vehicle.vehicleId,
         currentSoc: (evidence['currentSoc'] as num).toDouble(),
+        expectedDeviceId: binding.deviceId,
       );
       _guard(owner, vehicle.vehicleId, generation);
       final readback = await repo.live(vehicleId: vehicle.vehicleId);
       _guard(owner, vehicle.vehicleId, generation);
+      _connections.updateServerSnapshot(
+        uid: owner,
+        vehicleId: vehicle.vehicleId,
+        binding: binding,
+        status: readback.status,
+        capabilities: caps,
+      );
       final ok =
           readback.status.deviceId == evidence['deviceId'] &&
           readback.status.online &&
@@ -460,6 +561,48 @@ class AppChatToolGateway implements ChatToolGateway {
       );
     }
     if (tool == 'stop_charging') {
+      if (evidence['bindingOnlyStop'] == true) {
+        final caps = await repo.capabilities(vehicleId: vehicle.vehicleId);
+        _guard(owner, vehicle.vehicleId, generation);
+        if (!caps.canManualOff)
+          return _result(
+            false,
+            'Máy chủ chưa cho phép dừng bộ sạc này.',
+            'blocked',
+          );
+        _connections.markControlUnknown(
+          uid: owner,
+          vehicleId: vehicle.vehicleId,
+          deviceId: binding.deviceId,
+        );
+        final stopped = await repo.service.off(
+          vehicleId: vehicle.vehicleId,
+          expectedDeviceId: binding.deviceId,
+          operationId: operationId,
+        );
+        _guard(owner, vehicle.vehicleId, generation);
+        final readback = await repo.live(vehicleId: vehicle.vehicleId);
+        _guard(owner, vehicle.vehicleId, generation);
+        _connections.updateServerSnapshot(
+          uid: owner,
+          vehicleId: vehicle.vehicleId,
+          binding: binding,
+          status: readback.status,
+          capabilities: caps,
+        );
+        final ok =
+            (stopped == null || stopped.relayVerified) &&
+            readback.status.online &&
+            !readback.status.relay &&
+            sameShellyDevice(readback.status.deviceId, binding.deviceId);
+        return _result(
+          ok,
+          ok
+              ? 'Đã đọc lại và xác minh Shelly OFF.'
+              : 'Chưa xác minh được OFF. Mở Sạc pin để xử lý an toàn.',
+          ok ? 'verified' : 'unknown',
+        );
+      }
       if (live.session?.sessionId != evidence['sessionId'] ||
           live.session?.deviceId != evidence['deviceId'] ||
           live.session?.version != evidence['version']) {
@@ -469,6 +612,11 @@ class AppChatToolGateway implements ChatToolGateway {
           'expired',
         );
       }
+      _connections.markControlUnknown(
+        uid: owner,
+        vehicleId: vehicle.vehicleId,
+        deviceId: binding.deviceId,
+      );
       final stopped = await repo.service.stop(
         evidence['sessionId'] as String,
         expectedVersion: evidence['version'] as int,
@@ -477,6 +625,12 @@ class AppChatToolGateway implements ChatToolGateway {
       _guard(owner, vehicle.vehicleId, generation);
       final readback = await repo.live(vehicleId: vehicle.vehicleId);
       _guard(owner, vehicle.vehicleId, generation);
+      _connections.updateServerSnapshot(
+        uid: owner,
+        vehicleId: vehicle.vehicleId,
+        binding: binding,
+        status: readback.status,
+      );
       final ok =
           (stopped == null || stopped.relayVerified) &&
           readback.status.online &&

@@ -5,6 +5,8 @@ import 'package:vinfast_battery/data/models/smart_charger_status.dart';
 import 'package:vinfast_battery/data/models/smart_charger_capabilities.dart';
 import 'package:vinfast_battery/data/models/smart_charge_history.dart';
 import 'package:vinfast_battery/data/models/smart_charging_session.dart';
+import 'package:vinfast_battery/data/models/smart_charger_binding.dart';
+import 'package:vinfast_battery/data/services/shelly_connection_coordinator.dart';
 import 'package:vinfast_battery/data/services/charging_prediction_adapter.dart';
 import 'package:vinfast_battery/data/services/smart_charger_service.dart';
 import 'package:vinfast_battery/core/widgets/app_popup.dart';
@@ -12,6 +14,7 @@ import 'package:vinfast_battery/features/ai/controllers/smart_charging_controlle
 import 'package:vinfast_battery/features/ai/smart_charging_control_screen.dart';
 
 void main() {
+  setUp(() => ShellyConnectionCoordinator.shared.activateAccount(null));
   tearDown(AppPopup.dismiss);
   testWidgets('renders user-friendly terminology and target slider', (
     tester,
@@ -239,7 +242,7 @@ void main() {
     expect(find.text('Dừng sạc'), findsOneWidget);
   });
 
-  testWidgets('charger display state maps correctly to UI indicators', (
+  testWidgets('transport online alone never contradicts unlinked Settings', (
     tester,
   ) async {
     final controller = harness();
@@ -259,7 +262,7 @@ void main() {
       ),
     );
     await tester.pumpWidget(app(controller));
-    expect(find.text('Mất kết nối ổ sạc'), findsOneWidget);
+    expect(find.text('Chưa kết nối Shelly'), findsOneWidget);
 
     // Test online relay off state
     controller.seed(
@@ -277,18 +280,59 @@ void main() {
       ),
     );
     await tester.pumpWidget(app(controller));
-    expect(find.text('Shelly sẵn sàng điều khiển'), findsOneWidget);
+    expect(find.text('Chưa kết nối Shelly'), findsOneWidget);
+    expect(find.textContaining('Shelly trực tuyến'), findsNothing);
     controller.seed(
       controller.state.copyWith(
         capabilities: SmartChargerCapabilities.unavailable,
       ),
     );
     await tester.pumpWidget(app(controller));
-    expect(
-      find.text('Shelly trực tuyến · Chưa sẵn sàng bật sạc'),
-      findsOneWidget,
-    );
+    expect(find.text('Chưa kết nối Shelly'), findsOneWidget);
   });
+
+  testWidgets(
+    'header follows the shared verified connection and unknown state',
+    (tester) async {
+      final coordinator = ShellyConnectionCoordinator.shared;
+      coordinator.activateAccount('qa-header');
+      final controller = harness();
+      const binding = SmartChargerBinding(
+        deviceId: 'qa-device',
+        displayName: 'Shelly QA',
+        model: 'S3PL-00112EU',
+        provider: 'vault_cloud',
+        mode: SmartChargerConnectionMode.serverCloud,
+        powerMeterVerified: true,
+        safeBootVerified: true,
+        noLoadTestVerified: true,
+      );
+      coordinator.updateServerSnapshot(
+        uid: 'qa-header',
+        vehicleId: 'VF-001',
+        binding: binding,
+        status: SmartChargerStatus.fromJson({
+          'online': true,
+          'relay': false,
+          'device_id': 'qa-device',
+        }),
+      );
+      await tester.pumpWidget(app(controller));
+      expect(find.text('Đã kết nối Shelly'), findsOneWidget);
+      coordinator.markControlUnknown(
+        uid: 'qa-header',
+        vehicleId: 'VF-001',
+        deviceId: 'qa-device',
+      );
+      await tester.pump();
+      expect(
+        find.text('Đã liên kết · Chưa xác minh trạng thái'),
+        findsOneWidget,
+      );
+      expect(find.text('Đã kết nối Shelly'), findsNothing);
+      coordinator.activateAccount(null);
+    },
+  );
 
   testWidgets('history is visible and cleanly formatted', (tester) async {
     final controller = harness();

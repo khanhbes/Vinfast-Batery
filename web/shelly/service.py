@@ -83,9 +83,21 @@ class SmartChargeService:
         safe_boot = bool(binding and binding.safe_boot_verified)
         no_load = bool(binding and binding.no_load_test_verified)
         staging_disabled = os.environ.get("AZURE_STAGING_HARDWARE_DISABLED", "0") == "1"
+        blocked_code = "STAGING_HARDWARE_DISABLED" if staging_disabled else None
+        if binding and not staging_disabled:
+            try:
+                shared_session = self.repository.shared_device_session(uid, binding.device_id)
+                if shared_session and shared_session.state in NONTERMINAL_SESSION_STATES:
+                    blocked_code = (
+                        "relayUnverified" if shared_session.state in {"unknown", "stopping", "onUnverified"}
+                        else "activeSessionConflict"
+                    )
+            except (PermissionError, RuntimeError):
+                blocked_code = "deviceCoordinationUnavailable"
+        can_start = not staging_disabled and blocked_code is None
         return {
             "canReadStatus": status,
-            "canManualOn": manual_on and timer and not staging_disabled,
+            "canManualOn": manual_on and timer and can_start,
             "canManualOff": manual_off,
             "supportsDeviceTimer": timer,
             "canReadPower": power,
@@ -95,9 +107,9 @@ class SmartChargeService:
             "safeBootVerified": safe_boot,
             "noLoadTestVerified": no_load,
             "readyForControl": bool(
-                not staging_disabled and binding and status and manual_off and manual_on and timer and power and safe_boot and no_load
+                can_start and binding and status and manual_off and manual_on and timer and power and safe_boot and no_load
             ),
-            "controlBlockedCode": "STAGING_HARDWARE_DISABLED" if staging_disabled else None,
+            "controlBlockedCode": blocked_code,
             "provider": self.provider.name,
         }
 
@@ -462,6 +474,7 @@ class SmartChargeService:
         expected_version: int | None = None,
         user_stop_reason: str = "none",
         vehicle_id: str | None = None,
+        expected_device_id: str | None = None,
     ) -> ChargingSession | None:
         # An explicit session id must resolve that exact session. Using the
         # account-wide first active session breaks when two physical Shellys
@@ -478,6 +491,10 @@ class SmartChargeService:
                    if session else self.binding(uid, vehicle_id))
         if not binding:
             raise SmartChargeError("notConfigured", "Shelly chưa được kết nối", 404)
+        if expected_device_id is not None and (not isinstance(expected_device_id, str) or
+                not expected_device_id.strip() or
+                self.repository._device_owner_doc_id(expected_device_id) != self.repository._device_owner_doc_id(binding.device_id)):
+            raise SmartChargeError("bindingChanged", "Liên kết đã thay đổi; hãy xác nhận yêu cầu mới", 409)
         if session and binding.device_id != session.device_id:
             raise SmartChargeError("bindingChanged", "Liên kết bộ sạc đã thay đổi; không thể điều khiển sai thiết bị", 409)
         if session and expected_version is not None and session.version != expected_version:
@@ -485,18 +502,32 @@ class SmartChargeService:
         allowed_reasons = {"need_vehicle", "enough_charge", "safety_concern", "other", "none"}
         if user_stop_reason not in allowed_reasons:
             raise SmartChargeError("invalidStopReason", "Lý do dừng sạc không hợp lệ")
+        if session:
+            session.state = "stopping"
+            session.relay_verified = False
+            session.updated_at = self.clock()
+            session.version += 1
+            self.repository.save_session(uid, session)
         try:
             self.provider.turn_off(binding)
             verified = None
             for _ in range(3):
                 status = self.provider.get_status(binding)
-                if not status.relay:
+                if (status.online and not status.relay and
+                        self.repository._device_owner_doc_id(status.device_id) == self.repository._device_owner_doc_id(binding.device_id)):
                     verified = status
                     break
                 self.sleep(1)
             if not verified:
                 raise ProviderError("relayUnverified", "Không xác minh được relay OFF")
         except ProviderError as exc:
+            if session:
+                session.state = "unknown"
+                session.relay_verified = False
+                session.last_error = exc.code
+                session.updated_at = self.clock()
+                session.version += 1
+                self.repository.save_session(uid, session)
             raise self._provider_error(exc) from exc
         if session:
             self._finalize_session(
@@ -900,11 +931,17 @@ class SmartChargeService:
         idempotency_key: str,
         vehicle_id: str = "manual",
         current_soc: float = 0,
+        *,
+        expected_device_id: str | None = None,
     ) -> ChargingSession:
         """Manual ON is permitted only with a device-side safety timer."""
         binding = self.binding(uid, vehicle_id if vehicle_id != "manual" else None)
         if not binding:
             raise SmartChargeError("notConfigured", "Shelly chưa được kết nối", 404)
+        if expected_device_id is not None and (not isinstance(expected_device_id, str) or
+                not expected_device_id.strip() or
+                self.repository._device_owner_doc_id(expected_device_id) != self.repository._device_owner_doc_id(binding.device_id)):
+            raise SmartChargeError("bindingChanged", "Liên kết đã thay đổi; hãy xác nhận yêu cầu mới", 409)
         vehicle = self._owned_vehicle(uid, vehicle_id) if vehicle_id != "manual" else {}
         duration_seconds = int(duration_seconds)
         if duration_seconds < 5 or duration_seconds > self.max_minutes * 60:

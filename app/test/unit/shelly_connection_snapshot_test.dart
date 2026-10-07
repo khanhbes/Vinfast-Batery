@@ -15,6 +15,7 @@ const binding = SmartChargerBinding(
   noLoadTestVerified: true,
 );
 SmartChargerStatus status(bool online) => SmartChargerStatus(
+  deviceId: 'test-device',
   online: online,
   relay: false,
   powerW: 0,
@@ -49,6 +50,17 @@ void main() {
     expect(snapshot.state, ShellyConnectionFlowState.connected);
     expect(snapshot.connectionLabel, 'Đã kết nối Shelly');
   });
+  test('uncertain operation retains linking but never advertises control', () {
+    const snapshot = ShellyConnectionSnapshot(
+      state: ShellyConnectionFlowState.verifying,
+      isLinked: true,
+      serverBinding: binding,
+      controlUncertain: true,
+    );
+    expect(snapshot.connectionLabel, contains('Chưa xác minh'));
+    expect(snapshot.controlBlockedMessage, contains('không bật lại'));
+    expect(snapshot.readyForControl, false);
+  });
   test('online alone never grants control readiness', () {
     const incomplete = SmartChargerBinding(
       deviceId: 'test-device',
@@ -75,4 +87,30 @@ void main() {
       ShellyConnectionFlowState.verifying,
     );
   });
+  test('online readback for another device never claims connected', () {
+    final wrong = SmartChargerStatus.fromJson({
+      'online': true,
+      'relay': false,
+      'device_id': 'other-device',
+    });
+    final snapshot = ShellyConnectionSnapshot.fromServerBinding(
+      binding,
+      status: wrong,
+    );
+    expect(snapshot.state, ShellyConnectionFlowState.verificationRequired);
+    expect(snapshot.readyForControl, false);
+    expect(snapshot.errorMessage, contains('đúng Shelly'));
+  });
+  test(
+    'historical no-load evidence and online never authorize ON by themselves',
+    () {
+      final snapshot = ShellyConnectionSnapshot.fromServerBinding(
+        binding,
+        status: status(true),
+      );
+      expect(snapshot.readyForControl, false);
+      expect(sameShellyDevice('AA:BB:CC', 'aabbcc'), true);
+      expect(sameShellyDevice('', ''), false);
+    },
+  );
 }

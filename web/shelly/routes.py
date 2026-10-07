@@ -59,6 +59,10 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
 
     def profile_error(error):
         message = str(error)
+        if message == "bindingVehicleConflict":
+            return jsonify({"success": False, "error": {"code": message, "message": "Shelly đang liên kết với xe khác. Hãy chọn lại bộ sạc cho xe này."}}), 409
+        if message == "vehicleForbidden":
+            return jsonify({"success": False, "error": {"code": message, "message": "Không tìm thấy xe hợp lệ thuộc tài khoản này."}}), 403
         if message == "deviceRegistryUnavailable":
             return jsonify({"success": False, "error": {"code": message, "message": "Chưa thể xác minh liên kết thiết bị. Hãy thử lại.", "retryable": True}}), 503
         if message == "DEVICE_MEMBER_LIMIT_REACHED":
@@ -535,6 +539,11 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
         def action():
             vehicle_id = str(body.get("vehicleId") or request.args.get("vehicleId") or "").strip() or None
             binding = service.binding(uid, vehicle_id)
+            expected_device_id = body.get("expectedDeviceId")
+            if expected_device_id is not None and (not isinstance(expected_device_id, str) or
+                    not expected_device_id.strip() or not binding or
+                    repository._device_owner_doc_id(expected_device_id) != repository._device_owner_doc_id(binding.device_id)):
+                raise SmartChargeError("bindingChanged", "Liên kết đã thay đổi. Hãy đọc lại và xác nhận yêu cầu mới.", 409)
             shared_session = repository.shared_device_session(uid, binding.device_id) if binding else None
             if shared_session and shared_session.owner_uid != uid:
                 try:
@@ -544,7 +553,8 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
                 except Exception:
                     raise SmartChargeError("deviceUnverified", "Chưa xác minh được đúng bộ sạc. Hãy thử lại.", 409)
                 service.stop(shared_session.owner_uid, shared_session.session_id,
-                    user_stop_reason=str(body.get("userStopReason") or "none"))
+                    user_stop_reason=str(body.get("userStopReason") or "none"),
+                    expected_device_id=expected_device_id)
                 repository.append_audit(uid, "shared_relay_off_verified", device_id=binding.device_id)
                 # Do not return another account's history, vehicle or identity.
                 return ok(None, relayOffVerified=True)
@@ -553,6 +563,7 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
                 expected_version=body.get("expectedVersion"),
                 user_stop_reason=str(body.get("userStopReason") or "none"),
                 vehicle_id=vehicle_id,
+                expected_device_id=expected_device_id,
             )
             return ok(session.to_dict() if session else None)
         return execute(action)
@@ -568,6 +579,7 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
             key,
             str(body.get("vehicleId") or "manual"),
             float(body.get("currentSoc") or 0),
+            expected_device_id=body.get("expectedDeviceId"),
         ).to_dict()))
 
     @bp.post("/api/smart-charging/session/<session_id>/stop")
@@ -859,11 +871,18 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
         """User redeems a connection code to get a Shelly profile."""
         body = request.get_json(silent=True) or {}
         code = str(body.get("code") or "").strip().upper()
-        if len(code) != 6:
+        if len(code) != 6 or not code.isascii() or not code.isalnum():
             return jsonify({"success": False, "error": {"code": "invalidCode", "message": "Mã kết nối không hợp lệ"}}), 400
         entry = code_store.get(code)
         if entry is None or entry.is_revoked or entry.is_expired:
             return jsonify({"success": False, "error": {"code": "connectionCodeUnavailable", "message": "Mã kết nối không còn hiệu lực."}}), 422
+        vehicle_id = body.get("vehicleId")
+        if vehicle_id is not None:
+            if not isinstance(vehicle_id, str) or not vehicle_id.strip() or len(vehicle_id) > 128:
+                return jsonify({"success": False, "error": {"code": "invalidVehicle", "message": "Hãy chọn xe hợp lệ trước khi nhập mã."}}), 400
+            vehicle_id = vehicle_id.strip()
+            if repository.vehicle_for_owner(uid, vehicle_id) is None:
+                return profile_error(PermissionError("vehicleForbidden"))
         # Save the profile for this user via the existing vault mechanism
         profile_data = entry.to_profile_dict()
         profile_data["source"] = "connection_code"
@@ -875,7 +894,7 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
             operation_id = str(body.get("operationId") or request.headers.get("Idempotency-Key") or fallback_operation).strip()
             if not operation_id or len(operation_id) > 128:
                 return jsonify({"success": False, "error": {"code": "invalidOperation", "message": "Yêu cầu kết nối không hợp lệ."}}), 400
-            metadata = repository.enroll_connection_code(uid, entry, operation_id)
+            metadata = repository.enroll_connection_code(uid, entry, operation_id, vehicle_id=vehicle_id)
         except (ProfileVaultError, PermissionError, RuntimeError, ValueError) as error:
             return profile_error(error)
         except Exception:

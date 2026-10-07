@@ -75,7 +75,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _loadShellyState() async {
-    final snapshot = await ShellyConnectionCoordinator.shared.restore();
+    final vehicleId = ref.read(selectedVehicleIdProvider);
+    final snapshot = await ShellyConnectionCoordinator.shared.restore(
+      vehicleId: vehicleId.isEmpty ? null : vehicleId,
+    );
     _applyShellyState(snapshot);
   }
 
