@@ -70,8 +70,6 @@ class ActionConfirmationCard extends StatelessWidget {
                     fontWeight: FontWeight.bold,
                     color: uiColors.text,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               const SizedBox(width: 4),
@@ -87,10 +85,11 @@ class ActionConfirmationCard extends StatelessWidget {
                 ),
                 child: Text(
                   action.isConfirmed
-                      ? 'ĐÃ KÍCH HOẠT'
+                      ? 'ĐÃ XÁC MINH'
                       : action.isCancelled
                       ? 'ĐÃ HỦY'
-                      : 'CẦN XÁC NHẬN',
+                      : action.status == 'unknown' ? 'CHƯA XÁC MINH'
+                      : action.isPending ? 'CHỜ XÁC NHẬN' : 'CHƯA THỰC HIỆN',
                   style: TextStyle(
                     fontSize: 9.5,
                     fontWeight: FontWeight.bold,
@@ -129,7 +128,6 @@ class ActionConfirmationCard extends StatelessWidget {
                   child: Text(
                     'Thời gian: $estTime',
                     style: TextStyle(fontSize: 11.5, color: uiColors.muted),
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -189,12 +187,13 @@ class ActionConfirmationCard extends StatelessWidget {
                 ),
               )
             else
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+              Wrap(
+                alignment: WrapAlignment.end,
                 children: [
                   OutlinedButton(
                     key: const Key('action_card_cancel_button'),
                     style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(48, 48),
                       padding: const EdgeInsets.symmetric(
                         horizontal: 12,
                         vertical: 6,
@@ -214,6 +213,7 @@ class ActionConfirmationCard extends StatelessWidget {
                   ElevatedButton.icon(
                     key: const Key('action_card_confirm_button'),
                     style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(48, 48),
                       backgroundColor: uiColors.primary,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(
@@ -226,7 +226,7 @@ class ActionConfirmationCard extends StatelessWidget {
                     ),
                     icon: const Icon(Icons.check_rounded, size: 15),
                     label: const Text(
-                      'XÁC NHẬN SẠC',
+                      'XÁC NHẬN',
                       style: TextStyle(
                         fontSize: 11.5,
                         fontWeight: FontWeight.bold,
@@ -256,8 +256,6 @@ class ActionConfirmationCard extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                         color: Colors.green,
                       ),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 2,
                     ),
                   ),
                 ],
@@ -272,6 +270,9 @@ class ActionConfirmationCard extends StatelessWidget {
                 color: uiColors.muted,
               ),
             ),
+          ] else if (action.resultMessage != null) ...[
+            Semantics(liveRegion: true, child: Text(action.resultMessage!,
+              style: TextStyle(color: uiColors.text, height: 1.4))),
           ],
         ],
       ),

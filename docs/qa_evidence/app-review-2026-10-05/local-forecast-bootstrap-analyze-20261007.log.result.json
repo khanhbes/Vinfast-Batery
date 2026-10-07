@@ -1,0 +1,15 @@
+{
+  "command": [
+    "C:/flutter/bin/dart.bat",
+    "analyze",
+    "lib/features/more/more_screen.dart",
+    "test/widget/shelly_connect_screen_test.dart"
+  ],
+  "cwd": "app",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\local-forecast-bootstrap-analyze-20261007.log",
+  "timeoutSeconds": 120,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 42.16
+}

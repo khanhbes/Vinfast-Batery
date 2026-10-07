@@ -110,10 +110,10 @@ class SmartChargingPlanDraft {
   String? validate({DateTime? now}) {
     final reference = now ?? DateTime.now();
     if (vehicleId.trim().isEmpty) return 'Chưa chọn xe.';
-    if (currentSoc < 0 || currentSoc > 100) {
+    if (!currentSoc.isFinite || currentSoc < 0 || currentSoc > 100) {
       return 'Mức pin hiện tại phải từ 0–100%.';
     }
-    if (targetSoc <= currentSoc || targetSoc > 100) {
+    if (!targetSoc.isFinite || targetSoc <= currentSoc || targetSoc > 100) {
       return 'Mức pin muốn sạc phải cao hơn pin hiện tại.';
     }
     if (!hardDeadlineAt.isAfter(reference)) {
@@ -147,6 +147,7 @@ class SmartChargingPlanPreview {
     this.fallbackReason,
     this.analyzedAt,
     this.aiChargeEligible = true,
+    this.isDisplayOnly = false,
     this.etaCandidates = const [],
     this.fusionReason = 'global_ai_only',
     this.profileVersion,
@@ -176,6 +177,9 @@ class SmartChargingPlanPreview {
   final String? fallbackReason;
   final DateTime? analyzedAt;
   final bool aiChargeEligible;
+
+  /// A forecast is not a backend authorization or a device safety receipt.
+  final bool isDisplayOnly;
   final List<EtaCandidate> etaCandidates;
   final String fusionReason;
   final String? profileVersion;
@@ -206,6 +210,7 @@ class SmartChargingPlanPreview {
     int? predictedDurationSeconds,
     DateTime? now,
     bool? aiChargeEligible,
+    bool isDisplayOnly = false,
   }) {
     final reference = now ?? DateTime.now();
     final durationSeconds = predictedDurationSeconds ?? predictedMinutes * 60;
@@ -233,7 +238,10 @@ class SmartChargingPlanPreview {
       runtimeHealth: source == 'ai_model' ? 'loaded' : 'fallback',
       modelVersion: source == 'ai_model' ? 'unknown' : 'heuristic-v1',
       fallbackReason: source == 'ai_model' ? null : source,
-      aiChargeEligible: aiChargeEligible ?? (source == 'ai_model' || source == 'physics_fallback'),
+      aiChargeEligible:
+          aiChargeEligible ??
+          (source == 'ai_model' || source == 'physics_fallback'),
+      isDisplayOnly: isDisplayOnly,
       analyzedAt: reference,
       warning: impossible
           ? 'Không đủ thời gian để đạt mức pin muốn sạc trước hạn dừng.'
@@ -530,7 +538,6 @@ class SmartChargingSession {
   final List<Map<String, dynamic>> telemetrySamples;
 
   Duration remaining([DateTime? now]) {
-
     final value = effectiveStopAt.difference(now ?? DateTime.now());
     return value.isNegative ? Duration.zero : value;
   }
@@ -579,8 +586,8 @@ class SmartChargingSession {
       energyUsedWh: number('energy_used_wh'),
       energyQuality: json['energy_quality']?.toString() ?? 'good',
       estimatedSoc: (json['estimated_soc'] as num?)?.toDouble(),
-      estimatedStoredEnergyWh:
-          (json['estimated_stored_energy_wh'] as num?)?.toDouble(),
+      estimatedStoredEnergyWh: (json['estimated_stored_energy_wh'] as num?)
+          ?.toDouble(),
       chargingEfficiency: (json['charging_efficiency'] as num?)?.toDouble(),
       capacitySource: json['capacity_source']?.toString(),
       capacityRevision: (json['capacity_revision'] as num?)?.toInt(),
@@ -680,7 +687,6 @@ class SmartChargingSession {
     );
   }
 
-
   Map<String, dynamic> toJson() => {
     'session_id': sessionId,
     'vehicle_id': vehicleId,
@@ -705,8 +711,7 @@ class SmartChargingSession {
     if (stopReason != null) 'stop_reason': stopReason!.wireValue,
     'relay_verified': relayVerified,
     if (baselineEnergyWh != null) 'baseline_energy_wh': baselineEnergyWh,
-    if (lastMeterEnergyWh != null)
-      'last_meter_energy_wh': lastMeterEnergyWh,
+    if (lastMeterEnergyWh != null) 'last_meter_energy_wh': lastMeterEnergyWh,
     'energy_used_wh': energyUsedWh,
     'energy_quality': energyQuality,
     if (estimatedSoc != null) 'estimated_soc': estimatedSoc,
@@ -796,7 +801,6 @@ class SmartChargingSession {
       'hardware_timeout_seconds': hardwareTimeoutSeconds,
     'telemetry_samples': telemetrySamples,
   };
-
 
   SmartChargingSession copyWith({
     ChargingSessionState? state,

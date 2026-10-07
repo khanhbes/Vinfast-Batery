@@ -24,7 +24,6 @@ import '../../../data/repositories/vehicle_spec_repository.dart';
 import '../../../core/services/notification_center_service.dart';
 import '../../../core/services/app_error_reporter.dart';
 import '../../../core/services/connection_coordinator.dart';
-import '../../../core/services/model_sync_service.dart';
 import '../../../data/services/charging_training_sync_service.dart';
 
 typedef SmartChargingNotificationSink =
@@ -311,6 +310,13 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
   Future<void> initialize() async {
     try {
       _repository ??= await SmartChargerRepositoryFactory.create();
+      if (_repository is ServerSmartChargerRepository) {
+        unawaited(
+          ShellyConnectionCoordinator.shared.restore(
+            vehicleId: state.draft.vehicleId,
+          ),
+        );
+      }
       await _connectionCoordinator.start();
       _connectionSubscription ??= _connectionCoordinator.stream.listen((value) {
         if (!_disposed) state = state.copyWith(connectionState: value);
@@ -967,13 +973,8 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       actionError: null,
     );
     try {
-      // Smart Charge previews must observe the server's currently active
-      // model, even when the general catalog sync is throttled. The preview
-      // endpoint remains authoritative; this best-effort refresh only keeps
-      // local model metadata/version indicators current.
-      // Do not put catalog I/O on the prediction's critical path. The preview
-      // API below is authoritative and already returns the active version.
-      unawaited(ModelSyncService().sync(force: true));
+      // Forecasting is local and does not refresh/download models or grant
+      // relay authorization. Timed control still goes through its repository.
       final preview = await _repository!.preview(draft);
       if (_disposed) return;
       final predictedSeconds =
@@ -1117,6 +1118,13 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
   Future<bool> start({required bool confirmed}) async {
     final preview = state.preview;
     if (!confirmed || preview == null) return false;
+    if (preview.isDisplayOnly) {
+      state = state.copyWith(
+        actionError:
+            'Dự đoán chỉ để tham khảo. Hãy dùng Sạc hẹn giờ để xác nhận thời gian.',
+      );
+      return false;
+    }
     if (_pendingRelayCommand ||
         state.phase == SmartChargingViewPhase.starting ||
         state.phase == SmartChargingViewPhase.stopping) {

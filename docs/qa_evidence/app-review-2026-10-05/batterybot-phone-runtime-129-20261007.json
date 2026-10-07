@@ -1,0 +1,33 @@
+{
+  "date": "2026-10-07",
+  "device": "OnePlus 9 Pro LE2125 / API 34 / arm64-v8a",
+  "artifactMetadata": "batterybot-phone-apk-129-20261007.json",
+  "screenshotsPersisted": false,
+  "hierarchyPersisted": false,
+  "rawLogcatPersisted": false,
+  "hardwareCommands": 0,
+  "remindersConfirmed": 0,
+  "systemSettingsChanged": false,
+  "boundedPackageLogSample": {"lines": 156, "fatal": 0, "anr": 0, "overflow": 0, "tls": 0, "permission": 0, "oom": 0, "secureStorageFailure": 0},
+  "cases": [
+    {"id": "upgrade", "result": "Pass", "observed": "install -r preserved login and selected vehicle; installed APK hash matches artifact"},
+    {"id": "header", "result": "Pass", "observed": "Full vehicle label, profile-data source and short greeting visible"},
+    {"id": "battery", "result": "Pass", "observed": "Reports profile SOC and explicitly unverified direct measurement/freshness"},
+    {"id": "range", "result": "Pass", "observed": "Unavailable; no invented prediction"},
+    {"id": "charging_prediction", "result": "Pass", "observed": "20% to 80% recognized, model unavailable; no invented time/energy/price"},
+    {"id": "reminder_preview_cancel", "result": "Pass", "observed": "Correct date and default reminder offsets; Cancel shows cancelled, no Confirm pressed"},
+    {"id": "out_of_scope", "result": "Pass", "observed": "Python question redirected to app scope"},
+    {"id": "personalization_view", "result": "Pass", "observed": "Learning disabled and model limitations shown; closed without toggling/resetting"},
+    {"id": "back", "result": "Pass", "observed": "Back returned to dashboard without replaying splash"},
+    {"id": "late_banner", "result": "Pass within observed session", "observed": "No late server morning banner during these queries; unit test verifies no metadata upload"},
+    {"id": "history_reopen", "result": "Fail", "observed": "History listed current conversation but empty after sheet close/reopen; +130 storage fix needs separate runtime verification"},
+    {"id": "llm_and_real_predictions", "result": "Blocked", "observed": "Native LLM and verified mobile model not implemented"},
+    {"id": "hardware", "result": "Blocked", "observed": "No supervised hardware test in this task; staging ON remains locked"}
+  ],
+  "notes": [
+    "Temporary hierarchy helper initially failed with cp1252 UnicodeEncodeError, then worked with python -X utf8; no persistent dump retained.",
+    "Live images were inspected transiently, not saved as files. IME Autofill suggestion can contain personal content, so no keyboard image is retained.",
+    "Reminder preview includes a generic warranty disclaimer even for maintenance; copy refinement remains planned.",
+    "Dashboard range label is not a chatbot/model quality result; its provenance UI needs separate review."
+  ]
+}

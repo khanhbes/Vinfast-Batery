@@ -40,8 +40,9 @@ class ChargingPredictionAdapter {
     this.efficiency = 0.9,
     this.strictAi = true,
     this.allowPhysicsFallback = false,
-  })  : _predictionCall = predictionCall ?? ApiService().previewSmartCharge,
-        _tfliteRunner = tfliteRunner ?? ChargingTfliteRunner();
+    this.localOnly = true,
+  }) : _predictionCall = predictionCall ?? ApiService().previewSmartCharge,
+       _tfliteRunner = tfliteRunner ?? ChargingTfliteRunner();
 
   final ChargingPredictionCall _predictionCall;
   final ChargingTfliteRunner _tfliteRunner;
@@ -50,7 +51,7 @@ class ChargingPredictionAdapter {
   final double efficiency;
   final bool strictAi;
   final bool allowPhysicsFallback;
-
+  final bool localOnly;
 
   Future<SmartChargingPlanPreview> predict(
     SmartChargingPlanDraft draft, {
@@ -59,6 +60,17 @@ class ChargingPredictionAdapter {
     final reference = now ?? DateTime.now();
     final validation = draft.validate(now: reference);
     if (validation != null) throw ArgumentError(validation);
+
+    if (localOnly) {
+      final local = await _tryTfliteFallback(draft, reference);
+      if (local != null) return local;
+      if (allowPhysicsFallback) return physicsFallback(draft, now: reference);
+      throw SmartChargePredictionException(
+        message:
+            'Chưa có model dự đoán trên điện thoại. Bạn có thể dùng Sạc hẹn giờ.',
+        debugCode: 'LOCAL_MODEL_UNAVAILABLE',
+      );
+    }
 
     try {
       final response = await _predictionCall(
@@ -74,9 +86,8 @@ class ChargingPredictionAdapter {
           return tfliteResult;
         }
 
-        final errorMsg =
-            response['error']?.toString() ??
-            'Không thể tính thời gian sạc từ AI model.';
+        const errorMsg =
+            'Chưa dự đoán được thời gian sạc. Hãy thử lại hoặc dùng Sạc hẹn giờ.';
         final debugCode = response['debugCode']?.toString();
         final debugDetail = response['debugDetail']?.toString();
         final statusCode = response['statusCode'] as int?;
@@ -103,7 +114,6 @@ class ChargingPredictionAdapter {
         }
         throw exc;
       }
-
 
       final rawData = response['data'];
       if (rawData is! Map) {
@@ -143,9 +153,7 @@ class ChargingPredictionAdapter {
       final aiChargeEligible = eligibilityValue is bool
           ? eligibilityValue
           : source == 'ai_model';
-      final durationSeconds =
-          durationSecondsValue ??
-          minutes * 60;
+      final durationSeconds = durationSecondsValue ?? minutes * 60;
       final base = SmartChargingPlanPreview.fromPrediction(
         draft: draft,
         predictedMinutes: minutes,
@@ -162,7 +170,8 @@ class ChargingPredictionAdapter {
         effectiveStopAt: base.effectiveStopAt,
         predictionSource: source,
         predictionConfidence: base.predictionConfidence,
-        isPhysicsFallback: !aiChargeEligible ||
+        isPhysicsFallback:
+            !aiChargeEligible ||
             source == 'physics_fallback' ||
             source == 'heuristic',
         isImpossible: base.isImpossible,
@@ -170,7 +179,8 @@ class ChargingPredictionAdapter {
         predictedDurationSeconds: durationSeconds,
         modelKey: 'charging_time',
         modelVersion: data['modelVersion']?.toString() ?? 'unknown',
-        runtimeHealth: data['runtimeHealth']?.toString() ??
+        runtimeHealth:
+            data['runtimeHealth']?.toString() ??
             (aiChargeEligible ? 'loaded' : 'fallback'),
         warnings: ((data['warnings'] as List?) ?? const [])
             .map((item) => item.toString())
@@ -202,7 +212,8 @@ class ChargingPredictionAdapter {
         return physicsFallback(draft, now: reference);
       }
       throw SmartChargePredictionException(
-        message: 'Không thể tính thời gian sạc: $e',
+        message:
+            'Chưa dự đoán được thời gian sạc. Hãy thử lại hoặc dùng Sạc hẹn giờ.',
         debugCode: 'PREDICTION_EXCEPTION',
       );
     }
@@ -220,12 +231,12 @@ class ChargingPredictionAdapter {
         nominalCapacityWh: draft.estimatedCapacityWh,
       );
       if (seconds == null || seconds <= 0) return null;
-      final minutes = (seconds / 60).round();
+      if (seconds > AppConstants.smartChargeMaxMinutes * 60) return null;
+      final minutes = (seconds / 60).ceil();
       final base = SmartChargingPlanPreview.fromPrediction(
         draft: draft,
         predictedMinutes: minutes,
         source: 'tflite',
-        confidence: 85.0,
         predictedDurationSeconds: seconds,
         now: now,
       );
@@ -235,35 +246,41 @@ class ChargingPredictionAdapter {
         aiStopAt: base.aiStopAt,
         effectiveStopAt: base.effectiveStopAt,
         predictionSource: 'tflite',
-        predictionConfidence: 85.0,
+        predictionConfidence: null,
         isPhysicsFallback: false,
         isImpossible: base.isImpossible,
-        warning: null,
+        warning: base.warning,
         predictedDurationSeconds: seconds,
         modelKey: 'charging_time',
         modelVersion: _tfliteRunner.getLocalVersion(),
         runtimeHealth: 'loaded',
-        warnings: const [],
+        warnings: const [
+          'Dự đoán trên điện thoại chỉ để tham khảo; dùng Sạc hẹn giờ để đặt thời gian điều khiển.',
+        ],
         fallbackReason: null,
         analyzedAt: now,
-        aiChargeEligible: true,
+        aiChargeEligible: false,
+        isDisplayOnly: true,
       );
     } catch (_) {
       return null;
     }
   }
 
-
   SmartChargingPlanPreview physicsFallback(
     SmartChargingPlanDraft draft, {
     DateTime? now,
   }) {
     final powerW = draft.chargingMode == 'fast' ? fastPowerW : standardPowerW;
-    if (powerW <= 0 || efficiency <= 0 || efficiency > 1) {
+    if (!powerW.isFinite ||
+        !efficiency.isFinite ||
+        powerW <= 0 ||
+        efficiency <= 0 ||
+        efficiency > 1) {
       throw StateError('Cấu hình công suất/hiệu suất bộ sạc không hợp lệ.');
     }
     final capacityWh = draft.estimatedCapacityWh;
-    if (capacityWh <= 0) {
+    if (!capacityWh.isFinite || capacityWh <= 0) {
       throw SmartChargePredictionException(
         message:
             'Xe chưa có dung lượng pin đã được xác minh; không thể tạo kế hoạch theo SOC.',
@@ -280,7 +297,8 @@ class ChargingPredictionAdapter {
       predictedMinutes: minutes,
       source: 'physics_fallback',
       now: now,
-      aiChargeEligible: true,
+      aiChargeEligible: !localOnly,
+      isDisplayOnly: localOnly,
     );
   }
 }

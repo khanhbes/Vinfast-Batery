@@ -1,0 +1,14 @@
+{
+  "command": [
+    "C:/flutter/bin/flutter.bat",
+    "test",
+    "--no-pub"
+  ],
+  "cwd": "app",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\local-forecast-full-flutter-20261007.log",
+  "timeoutSeconds": 240,
+  "timedOut": false,
+  "exitCode": 1,
+  "cleanupError": null,
+  "elapsedSeconds": 116.44
+}

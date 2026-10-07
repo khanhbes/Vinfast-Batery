@@ -14,6 +14,35 @@ void main() {
   });
 
   group('BehaviorProfile Unit Tests', () {
+    test(
+      'personal learning is opt-in and can be revoked/reset per UID',
+      () async {
+        final tracker = BehaviorTracker();
+        tracker.setIdentity(userId: 'qa-consent');
+        await tracker.loadLocalProfile();
+        tracker.trackChatInteraction(topic: 'ignored');
+        expect(
+          tracker.state.chatPreferences.topTopics,
+          isNot(contains('ignored')),
+        );
+        await tracker.setPersonalizationEnabled(true);
+        tracker.trackChatInteraction(topic: 'accepted');
+        expect(tracker.state.chatPreferences.topTopics, contains('accepted'));
+        await tracker.setPersonalizationEnabled(false);
+        tracker.trackChatInteraction(topic: 'revoked');
+        expect(
+          tracker.state.chatPreferences.topTopics,
+          isNot(contains('revoked')),
+        );
+        await tracker.resetPersonalization();
+        expect(tracker.personalizationEnabled, false);
+        expect(
+          tracker.state.chatPreferences.topTopics,
+          isNot(contains('accepted')),
+        );
+        tracker.dispose();
+      },
+    );
     test('defaultFor creates standard initial values', () {
       final profile = BehaviorProfile.defaultFor('u123', 'VF01');
       expect(profile.userId, 'u123');
@@ -81,9 +110,10 @@ void main() {
   });
 
   group('BehaviorTracker StateNotifier Tests', () {
-    test('trackAppUsage updates visited tabs and active hours', () {
+    test('trackAppUsage updates visited tabs and active hours', () async {
       final tracker = BehaviorTracker();
       tracker.setIdentity(userId: 'test-user', vehicleId: 'VF01');
+      await tracker.setPersonalizationEnabled(true);
 
       tracker.trackAppUsage(tabName: 'smart_charging');
       expect(tracker.state.userId, 'test-user');
@@ -94,9 +124,10 @@ void main() {
 
     test(
       'trackChatInteraction increments topic counts and feedback counts',
-      () {
+      () async {
         final tracker = BehaviorTracker();
         tracker.setIdentity(userId: 'test-user');
+        await tracker.setPersonalizationEnabled(true);
 
         tracker.trackChatInteraction(topic: 'pin');
         tracker.trackChatInteraction(topic: 'pin');
@@ -114,8 +145,9 @@ void main() {
       },
     );
 
-    test('trackChargingEvent updates charging pattern values', () {
+    test('trackChargingEvent updates charging pattern values', () async {
       final tracker = BehaviorTracker();
+      await tracker.setPersonalizationEnabled(true);
 
       tracker.trackChargingEvent(
         startHour: 22,
@@ -128,8 +160,9 @@ void main() {
       expect(tracker.state.chargingPatterns.preferNightCharging, isTrue);
     });
 
-    test('trackTripEvent updates trip pattern stats', () {
+    test('trackTripEvent updates trip pattern stats', () async {
       final tracker = BehaviorTracker();
+      await tracker.setPersonalizationEnabled(true);
 
       tracker.trackTripEvent(distanceKm: 30.0, energyWhPerKm: 32.5);
 

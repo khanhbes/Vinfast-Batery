@@ -1,0 +1,40 @@
+{
+  "recordedOn": "2026-10-07",
+  "source": "User clarification in this work session",
+  "externalDatasetsModified": false,
+  "datasets": [
+    {
+      "file": "charging_900.csv",
+      "sha256": "184283144d55ca4973f7244d241d056dc5faf2238f0fb46bec4809db5290954a",
+      "rows": 900,
+      "origin": "Augmented/simulated from charging.csv, confirmed by user",
+      "socSource": "manual entry, confirmed by user",
+      "eligibleAsIndependentMeasuredTest": false,
+      "qualityVerified": false
+    },
+    {
+      "file": "charging.csv",
+      "sha256": "b3e820a7e4447c7cb456e1c40391637bffbac6596c9d9867b86b120c12de0613",
+      "rows": 6,
+      "socSource": "manual entry, confirmed by user",
+      "sessionMeasurementProvenanceVerified": false,
+      "qualityVerified": false
+    },
+    {
+      "file": "trips_enriched.csv",
+      "rows": 77108,
+      "distinctTrips": 77,
+      "independentTrainingExamples": "At most 77 trips, not 77108 independent sessions",
+      "labelMeasurementProvenanceVerified": false,
+      "qualityVerified": false
+    }
+  ],
+  "trainingFindings": [
+    "External scripts/train_charging_time.py derives avg_charge_rate from duration_min, the target; existing quality metrics cannot establish deployment quality.",
+    "External script uses test set for early stopping/model selection; an untouched grouped chronological holdout is still required.",
+    "Trip script calls measured max/mean speed and acceleration pre-trip features, but those values are not known before a future trip without explicit user inputs/forecasts.",
+    "Synthetic descendants of an original session must remain in the same split; independent measured test must not use these descendants.",
+    "Six charging examples cannot satisfy minimum 20 independent held-out test cases plus disjoint train/validation."
+  ],
+  "decision": "Keep mobile predictions unavailable until task-specific artifact and independent measured evaluation pass. Synthetic-only research is not release certification."
+}

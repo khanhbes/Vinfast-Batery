@@ -8,8 +8,11 @@ const {
 const {
   collection,
   doc,
+  deleteDoc,
+  getDoc,
   getDocs,
   query,
+  runTransaction,
   setDoc,
   updateDoc,
   where,
@@ -120,6 +123,61 @@ async function run() {
     await assertFails(updateDoc(doc(aliceDb, 'TripLogs/trip-alice'), {
       ownerUid: 'bob',
     }));
+
+    const reminder = {id: 'qa-reminder', uid: 'alice', vehicleId: 'vehicle-alice',
+      title: 'Bảo dưỡng phanh', kind: 'maintenance', dueDate: '2026-11-20T00:00:00.000',
+      timezone: 'Asia/Ho_Chi_Minh', reminderDays: [7, 1], revision: 1,
+      pendingSync: false, notificationsEnabled: false};
+    await assertSucceeds(setDoc(doc(aliceDb, 'users/alice/reminders/qa-reminder'), reminder));
+    await assertFails(getDocs(collection(bobDb, 'users/alice/reminders')));
+    await assertFails(setDoc(doc(aliceDb, 'users/alice/reminders/qa-foreign'), {...reminder, id: 'qa-foreign', vehicleId: 'vehicle-bob'}));
+    await assertFails(updateDoc(doc(aliceDb, 'users/alice/reminders/qa-reminder'), {uid: 'bob', revision: 2}));
+    await assertFails(updateDoc(doc(aliceDb, 'users/alice/reminders/qa-reminder'), {revision: 2, cloudAuthKey: 'not-a-real-key'}));
+    await assertSucceeds(updateDoc(doc(aliceDb, 'users/alice/reminders/qa-reminder'), {title: 'Bảo dưỡng pin', revision: 2}));
+    await assertFails(updateDoc(doc(aliceDb, 'users/alice/reminders/qa-reminder'), {revision: 2}));
+    await assertSucceeds(updateDoc(doc(aliceDb, 'users/alice/reminders/qa-reminder'), {
+      dueDate: '2026-12-20T00:00:00.000', state: 'active', operationId: 'edit-qa', revision: 3,
+    }));
+    await assertFails(updateDoc(doc(bobDb, 'users/alice/reminders/qa-reminder'), {revision: 4, state: 'cancelled'}));
+    await assertFails(updateDoc(doc(aliceDb, 'users/alice/reminders/qa-reminder'), {revision: 4, state: 'unknown'}));
+    await assertFails(updateDoc(doc(aliceDb, 'users/alice/reminders/qa-reminder'), {revision: 4, operationId: ''}));
+    await assertSucceeds(updateDoc(doc(aliceDb, 'users/alice/reminders/qa-reminder'), {
+      state: 'cancelled', operationId: 'cancel-qa', revision: 4,
+    }));
+    await assertFails(updateDoc(doc(aliceDb, 'users/alice/reminders/qa-reminder'), {revision: 5, state: 'active'}));
+    await assertFails(setDoc(doc(aliceDb, 'users/alice/reminders/qa-cancelled'), {
+      ...reminder, id: 'qa-cancelled', state: 'cancelled', operationId: 'invalid-create',
+    }));
+    await assertFails(deleteDoc(doc(aliceDb, 'users/alice/reminders/qa-reminder')));
+
+    // Two independent authenticated runtimes, same account and expected
+    // revision. A retry must not apply a stale edit after the other commits.
+    const aliceSecondDb = env.authenticatedContext('alice').firestore();
+    await assertSucceeds(setDoc(doc(aliceDb, 'users/alice/reminders/qa-race'), {
+      ...reminder, id: 'qa-race', state: 'active', operationId: 'create-race',
+    }));
+    const mutate = (db, operation, state) => runTransaction(db, async tx => {
+      const ref = doc(db, 'users/alice/reminders/qa-race');
+      const existing = (await tx.get(ref)).data();
+      if (existing.revision !== 1 || existing.state !== 'active') {
+        throw new Error('reminderConflict');
+      }
+      tx.update(ref, {revision: 2, operationId: operation, state});
+    });
+    const race = await Promise.allSettled([
+      mutate(aliceDb, 'edit-race', 'active'),
+      mutate(aliceSecondDb, 'cancel-race', 'cancelled'),
+    ]);
+    if (race.filter(result => result.status === 'fulfilled').length !== 1 ||
+        race.filter(result => result.status === 'rejected').length !== 1) {
+      throw new Error('Concurrent reminder operations must have exactly one winner');
+    }
+    assertionCount += 1;
+    const raceDoc = (await getDoc(doc(aliceDb, 'users/alice/reminders/qa-race'))).data();
+    if (raceDoc.revision !== 2 || !['edit-race', 'cancel-race'].includes(raceDoc.operationId)) {
+      throw new Error('Concurrent result has an unexpected revision/operation');
+    }
+    assertionCount += 1;
 
     // ChargeLogs queries must remain readable for the owner even when legacy
     // documents do not carry deletion flags.  The app filters presentation

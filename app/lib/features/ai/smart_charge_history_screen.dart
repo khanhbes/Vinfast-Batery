@@ -1793,7 +1793,21 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
               ),
             ),
             leftTitles: AxisTitles(
-              sideTitles: SideTitles(showTitles: true, reservedSize: 42),
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 52,
+                getTitlesWidget: (value, meta) {
+                  final text = value == value.roundToDouble()
+                      ? '${value.toInt()}'
+                      : value.toStringAsFixed(1);
+                  return Text(
+                    text,
+                    style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
+                    maxLines: 1,
+                    softWrap: false,
+                  );
+                },
+              ),
             ),
           ),
           lineTouchData: LineTouchData(

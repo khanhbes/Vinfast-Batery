@@ -190,25 +190,26 @@ void main() {
     expect(enabled.onPressed, isNotNull);
   });
 
-  testWidgets('Shelly background error stays in the non-blocking status strip', (
-    tester,
-  ) async {
-    final controller = harness();
-    controller.seed(
-      controller.state.copyWith(gatewayError: 'Không thể kết nối ổ sạc'),
-    );
-    await tester.pumpWidget(app(controller));
-    await tester.pump();
-    await tester.pump();
+  testWidgets(
+    'Shelly background error stays in the non-blocking status strip',
+    (tester) async {
+      final controller = harness();
+      controller.seed(
+        controller.state.copyWith(gatewayError: 'Không thể kết nối ổ sạc'),
+      );
+      await tester.pumpWidget(app(controller));
+      await tester.pump();
+      await tester.pump();
 
-    // Background refresh failures must not open an overlay: the tab bar and
-    // Smart Charger controls remain usable while the connection strip carries
-    // the current state.
-    expect(find.text('Kết nối Shelly chưa ổn định'), findsNothing);
-    expect(find.text('CHI TIẾT'), findsNothing);
-    expect(find.byTooltip('Đóng thông báo'), findsNothing);
-    expect(find.text('Không kết nối được ổ sạc.'), findsNothing);
-  });
+      // Background refresh failures must not open an overlay: the tab bar and
+      // Smart Charger controls remain usable while the connection strip carries
+      // the current state.
+      expect(find.text('Kết nối Shelly chưa ổn định'), findsNothing);
+      expect(find.text('CHI TIẾT'), findsNothing);
+      expect(find.byTooltip('Đóng thông báo'), findsNothing);
+      expect(find.text('Không kết nối được ổ sạc.'), findsNothing);
+    },
+  );
 
   testWidgets('active session displays live countdown and stop button', (
     tester,
@@ -276,7 +277,17 @@ void main() {
       ),
     );
     await tester.pumpWidget(app(controller));
-    expect(find.text('Bộ sạc đã kết nối'), findsOneWidget);
+    expect(find.text('Shelly sẵn sàng điều khiển'), findsOneWidget);
+    controller.seed(
+      controller.state.copyWith(
+        capabilities: SmartChargerCapabilities.unavailable,
+      ),
+    );
+    await tester.pumpWidget(app(controller));
+    expect(
+      find.text('Shelly trực tuyến · Chưa sẵn sàng bật sạc'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('history is visible and cleanly formatted', (tester) async {
@@ -345,6 +356,7 @@ class HarnessController extends SmartChargingController {
         estimatedCapacityWh: 3000,
         service: WidgetFakeService(),
         predictionAdapter: ChargingPredictionAdapter(
+          localOnly: false,
           predictionCall:
               ({
                 required vehicleId,

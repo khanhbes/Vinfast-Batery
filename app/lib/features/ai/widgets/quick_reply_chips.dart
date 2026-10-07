@@ -55,7 +55,8 @@ class QuickReplyChips extends StatelessWidget {
     final suggestions = _getSuggestions();
 
     return SizedBox(
-      height: 38,
+      height:
+          48 + (MediaQuery.textScalerOf(context).scale(12) - 12).clamp(0, 24),
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -64,6 +65,8 @@ class QuickReplyChips extends StatelessWidget {
         itemBuilder: (context, index) {
           final text = suggestions[index];
           return ActionChip(
+            materialTapTargetSize: MaterialTapTargetSize.padded,
+            visualDensity: VisualDensity.standard,
             label: Text(
               text,
               style: TextStyle(

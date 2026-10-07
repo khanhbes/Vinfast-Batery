@@ -1,0 +1,18 @@
+{
+  "command": [
+    "C:\\Users\\khanh\\AppData\\Roaming\\npm\\firebase.cmd",
+    "deploy",
+    "--only",
+    "firestore:rules",
+    "--project",
+    "vinfast-873db",
+    "--non-interactive"
+  ],
+  "cwd": "web",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\batterybot-reminder-95-rules-deploy-20261007.log",
+  "timeoutSeconds": 180,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 64.5
+}

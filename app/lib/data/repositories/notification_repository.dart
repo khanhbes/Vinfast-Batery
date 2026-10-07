@@ -98,8 +98,13 @@ class NotificationRepository {
   ///
   /// Dùng 1 where filter rồi đếm `status == 'unread'` ở client (tránh composite
   /// index khi backend chưa deploy). Lỗi không spam UI (badge fallback 0).
-  Stream<int> watchUnreadCount({String? expectedUid}) =>
-      Stream.fromFuture(getUnreadCount(expectedUid: expectedUid));
+  Stream<int> watchUnreadCount({String? expectedUid}) {
+    final uid = expectedUid ?? _uid;
+    if (uid == null || uid.isEmpty) {
+      return Stream.value(0).asBroadcastStream();
+    }
+    return Stream.fromFuture(getUnreadCount(expectedUid: uid)).asBroadcastStream();
+  }
 
   Future<int> getUnreadCount({bool force = false, String? expectedUid}) async {
     final uid = expectedUid ?? _uid;

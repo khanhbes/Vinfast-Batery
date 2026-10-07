@@ -1,0 +1,22 @@
+{
+  "package": "com.bes.vinbatery",
+  "versionName": "1.1.9",
+  "versionCode": 127,
+  "artifact": "app/build/app/outputs/flutter-apk/VinFastBattery_1.1.9+127_debug.apk",
+  "bytes": 197090012,
+  "sha256": "B10E7DA076F61AD02A1C48316F99B5A6589AD7466A8C303FD5FC11A4C9181132",
+  "certificateSha256": "914642716decb342ca80acece6284e69d66355bfa792f5c4779efecf16ecebeb",
+  "signing": "Android Debug, QA only",
+  "sourceHead": "a433b726ba5e839d35cb12b120b0bbe35b3beab1",
+  "branch": "deploy/azure-student",
+  "workingTree": "dirty, preserved; source hashes in batterybot-v1-source-manifest-final-20261007.log",
+  "minSdk": 26,
+  "targetSdk": 36,
+  "abis": ["arm64-v8a", "armeabi-v7a", "x86_64"],
+  "apiBaseUrl": "https://vinfast-api.nicestone-4d213368.eastasia.azurecontainerapps.io",
+  "hardwarePolicy": "Azure staging ON/rearm remains blocked; no relay commands executed",
+  "runtimeTest": "Blocked: only Samsung SM-G935F connected, not approved OnePlus 9 Pro",
+  "llm": "not integrated; no Qwen weights in APK",
+  "predictionModels": "no verified mobile charging/range artifact",
+  "releaseReady": false
+}

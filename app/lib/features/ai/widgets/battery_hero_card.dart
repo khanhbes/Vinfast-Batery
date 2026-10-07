@@ -461,6 +461,28 @@ class _HeroBatteryTrack extends StatelessWidget {
         final currentX = trackWidth * (currentClamped / 100.0);
         final targetX = trackWidth * (targetClamped / 100.0);
 
+        final rawCurrentLeft = (currentX - 44).clamp(0.0, trackWidth - 88);
+        final rawTargetLeft = (targetX - 44).clamp(0.0, trackWidth - 88);
+
+        double currentLeft = rawCurrentLeft;
+        double targetLeft = rawTargetLeft;
+
+        // Anti-collision: ensure floating badges never occlude each other
+        const minGap = 82.0;
+        if ((targetLeft - currentLeft).abs() < minGap) {
+          if (targetLeft >= currentLeft) {
+            targetLeft = (currentLeft + minGap).clamp(0.0, trackWidth - 88);
+            if (targetLeft - currentLeft < minGap) {
+              currentLeft = (targetLeft - minGap).clamp(0.0, trackWidth - 88);
+            }
+          } else {
+            currentLeft = (targetLeft + minGap).clamp(0.0, trackWidth - 88);
+            if (currentLeft - targetLeft < minGap) {
+              targetLeft = (currentLeft - minGap).clamp(0.0, trackWidth - 88);
+            }
+          }
+        }
+
         void handleDragOrTap(Offset localPosition) {
           final pct = (localPosition.dx / trackWidth).clamp(0.0, 1.0) * 100.0;
           onTargetChanged(pct);
@@ -475,7 +497,7 @@ class _HeroBatteryTrack extends StatelessWidget {
                 children: [
                   // "Hiện tại 35%" badge
                   Positioned(
-                    left: (currentX - 44).clamp(0.0, trackWidth - 88),
+                    left: currentLeft,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8,
@@ -499,7 +521,7 @@ class _HeroBatteryTrack extends StatelessWidget {
 
                   // "Sạc đến 80%" badge
                   Positioned(
-                    left: (targetX - 44).clamp(0.0, trackWidth - 88),
+                    left: targetLeft,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8,

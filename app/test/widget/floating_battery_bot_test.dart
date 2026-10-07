@@ -5,29 +5,27 @@ import 'package:vinfast_battery/core/services/assistant_context_coordinator.dart
 import 'package:vinfast_battery/core/widgets/floating_battery_bot.dart';
 
 void main() {
-  testWidgets('FloatingBatteryBot renders in tree and toggles bubble',
-      (tester) async {
+  testWidgets('FloatingBatteryBot renders in tree and toggles bubble', (
+    tester,
+  ) async {
     final coordinator = AssistantContextCoordinator();
 
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          assistantContextCoordinatorProvider.overrideWith((ref) => coordinator),
+          assistantContextCoordinatorProvider.overrideWith(
+            (ref) => coordinator,
+          ),
         ],
         child: const MaterialApp(
-          home: Scaffold(
-            body: Stack(
-              children: [
-                FloatingBatteryBot(),
-              ],
-            ),
-          ),
+          home: Scaffold(body: Stack(children: [FloatingBatteryBot()])),
         ),
       ),
     );
 
     // Ban đầu nút bot hiển thị nhưng không có bong bóng thoại
     expect(find.byType(FloatingBatteryBot), findsOneWidget);
+    expect(find.byTooltip('Mở BatteryBot'), findsOneWidget);
     expect(find.text('Bong bóng thoại test'), findsNothing);
 
     // Kích hoạt hiển thị bong bóng
@@ -40,6 +38,10 @@ void main() {
     // Chạm vào nút đóng icon để đóng bong bóng
     final closeIcon = find.byIcon(Icons.close);
     expect(closeIcon, findsOneWidget);
+    expect(
+      tester.getSize(find.byTooltip('Đóng gợi ý BatteryBot')).height,
+      greaterThanOrEqualTo(48),
+    );
     await tester.tap(closeIcon);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));

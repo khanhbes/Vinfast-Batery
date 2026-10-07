@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
@@ -20,6 +21,8 @@ class DeployedModelInfo {
   final bool mobileCompatible;
   final String? artifactExt;
   final String? downloadUrl;
+  final Map<String, dynamic>? mobileContract;
+  final String? artifactSha256;
 
   DeployedModelInfo({
     required this.key,
@@ -33,6 +36,8 @@ class DeployedModelInfo {
     this.mobileCompatible = false,
     this.artifactExt,
     this.downloadUrl,
+    this.mobileContract,
+    this.artifactSha256,
   });
 
   factory DeployedModelInfo.fromJson(Map<String, dynamic> json) {
@@ -48,6 +53,10 @@ class DeployedModelInfo {
       mobileCompatible: json['mobileCompatible'] ?? false,
       artifactExt: json['artifactExt'],
       downloadUrl: json['downloadUrl'],
+      mobileContract: json['mobileContract'] is Map
+          ? Map<String, dynamic>.from(json['mobileContract'] as Map)
+          : null,
+      artifactSha256: json['artifactSha256'] as String?,
     );
   }
 
@@ -62,6 +71,8 @@ class LocalModelManifest {
   final String artifactExt;
   final DateTime downloadedAt;
   final int fileSize;
+  final Map<String, dynamic>? mobileContract;
+  final String? artifactSha256;
 
   LocalModelManifest({
     required this.key,
@@ -70,6 +81,8 @@ class LocalModelManifest {
     required this.artifactExt,
     required this.downloadedAt,
     required this.fileSize,
+    this.mobileContract,
+    this.artifactSha256,
   });
 
   Map<String, dynamic> toJson() => {
@@ -79,6 +92,8 @@ class LocalModelManifest {
     'artifactExt': artifactExt,
     'downloadedAt': downloadedAt.toIso8601String(),
     'fileSize': fileSize,
+    'mobileContract': mobileContract,
+    'artifactSha256': artifactSha256,
   };
 
   factory LocalModelManifest.fromJson(Map<String, dynamic> json) {
@@ -90,6 +105,10 @@ class LocalModelManifest {
       downloadedAt:
           DateTime.tryParse(json['downloadedAt'] ?? '') ?? DateTime.now(),
       fileSize: json['fileSize'] ?? 0,
+      mobileContract: json['mobileContract'] is Map
+          ? Map<String, dynamic>.from(json['mobileContract'] as Map)
+          : null,
+      artifactSha256: json['artifactSha256'] as String?,
     );
   }
 }
@@ -260,6 +279,8 @@ class ModelSyncService {
         artifactExt: ext,
         downloadedAt: DateTime.now(),
         fileSize: response.bodyBytes.length,
+        mobileContract: model.mobileContract,
+        artifactSha256: model.artifactSha256,
       );
 
       _localManifest[model.key] = manifest;
@@ -291,6 +312,39 @@ class ModelSyncService {
 
   /// Lấy version của model local nếu có
   String? getLocalModelVersion(String key) => _localManifest[key]?.version;
+
+  // Legacy manifests have no validated feature contract or quality receipt.
+  // They must not silently become eligible just because a file exists.
+  bool hasVerifiedMobileContract(String key) {
+    final manifest = _localManifest[key];
+    final contract = manifest?.mobileContract;
+    if (manifest == null ||
+        contract == null ||
+        contract['task'] != key ||
+        contract['featureSchemaVersion'] != 'charging_time/v2' ||
+        contract['outputUnit'] != 'seconds' ||
+        contract['qualityVerified'] != true ||
+        jsonEncode(contract['inputFeatures']) !=
+            jsonEncode([
+              'start_soc',
+              'end_soc',
+              'delta_soc',
+              'ambient_temp_c',
+              'reference_charge_rate',
+              'temp_deviation',
+            ]) ||
+        !RegExp(r'^[a-fA-F0-9]{64}$').hasMatch(manifest.artifactSha256 ?? '')) {
+      return false;
+    }
+    try {
+      final file = File(manifest.localPath);
+      if (file.lengthSync() != manifest.fileSize) return false;
+      return sha256.convert(file.readAsBytesSync()).toString() ==
+          manifest.artifactSha256!.toLowerCase();
+    } on Object {
+      return false;
+    }
+  }
 
   /// Kiểm tra model có sẵn local không
   bool isModelAvailable(String key, {String? requiredVersion}) {

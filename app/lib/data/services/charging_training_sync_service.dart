@@ -5,10 +5,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'server_smart_charger_service.dart';
 
 class ChargingTrainingSyncService {
-  ChargingTrainingSyncService({ServerSmartChargerService? server})
-    : _server = server;
+  ChargingTrainingSyncService({
+    ServerSmartChargerService? server,
+    this.cloudTrainingEnabled = false,
+  }) : _server = server;
 
   static const _queueKey = 'smart_charge.training_queue.v3';
+  final bool cloudTrainingEnabled;
   static const _actualSocQueueKey = 'smart_charge.actual_soc_queue.v1';
   ServerSmartChargerService? _server;
 
@@ -16,6 +19,7 @@ class ChargingTrainingSyncService {
       _server ??= ServerSmartChargerService();
 
   Future<void> enqueue(String sessionId) async {
+    if (!cloudTrainingEnabled) return;
     final prefs = await SharedPreferences.getInstance();
     final pending = {...?prefs.getStringList(_queueKey), sessionId}.toList();
     await prefs.setStringList(_queueKey, pending);
@@ -33,6 +37,9 @@ class ChargingTrainingSyncService {
   Future<int> flush() async {
     final prefs = await SharedPreferences.getInstance();
     await _flushActualSoc(prefs);
+    // End-SOC confirmation belongs to shared history, not cloud AI training.
+    // Preserve the old queue until a reviewed migration exists.
+    if (!cloudTrainingEnabled) return 0;
     final pending = [...?prefs.getStringList(_queueKey)];
     if (pending.isEmpty) return 0;
     final remaining = <String>[];

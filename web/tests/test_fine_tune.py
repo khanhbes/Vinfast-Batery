@@ -1,6 +1,7 @@
 import os
 import shutil
 import tempfile
+import sys
 from ai_server.fine_tune import run_fine_tuning, extract_features_from_session
 
 
@@ -20,9 +21,14 @@ def test_extract_features():
     assert features[1] == 80
     assert features[2] == 60
     assert duration == 3600
+    assert features[4] == 22.5
+    other_features, other_duration = extract_features_from_session({**session, "actual_duration_seconds": 7200})
+    assert other_features == features  # No target-duration leakage.
+    assert other_duration != duration
 
 
-def test_fine_tune_pipeline():
+def test_fine_tune_pipeline(monkeypatch):
+    monkeypatch.setenv("ENABLE_TF_CONVERTER", "false")
     tmp_dir = tempfile.mkdtemp()
     try:
         sessions = [
@@ -45,8 +51,18 @@ def test_fine_tune_pipeline():
         assert result["success"] is True
         assert result["version"] == "test_v1"
         assert os.path.exists(result["joblibPath"])
-        assert os.path.exists(result["tflitePath"])
+        assert result["tflitePath"] is None
+        assert result["tfliteGenerated"] is False
+        assert result["mobileExportStatus"] == "unavailable"
+        assert not os.path.exists(os.path.join(tmp_dir, "test_v1.tflite"))
         assert "mape" in result["metrics"]
         assert "rmseSeconds" in result["metrics"]
+        monkeypatch.setenv("ENABLE_TF_CONVERTER", "true")
+        monkeypatch.setitem(sys.modules, "tensorflow", None)
+        failed_export = run_fine_tuning(sessions, tmp_dir, new_version="no_converter")
+        assert failed_export["success"] is True  # Server joblib remains valid.
+        assert failed_export["tfliteGenerated"] is False
+        assert failed_export["tflitePath"] is None
+        assert not os.path.exists(os.path.join(tmp_dir, "no_converter.tflite"))
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)

@@ -1,0 +1,16 @@
+{
+  "command": [
+    "C:\\Users\\khanh\\AppData\\Local\\Android\\Sdk\\build-tools\\36.0.0\\apksigner.bat",
+    "verify",
+    "--verbose",
+    "--print-certs",
+    "app/build/app/outputs/flutter-apk/VinFastBattery_1.1.9+127_debug.apk"
+  ],
+  "cwd": ".",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\batterybot-v1-apk-certificate-20261007.log",
+  "timeoutSeconds": 60,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 1.27
+}

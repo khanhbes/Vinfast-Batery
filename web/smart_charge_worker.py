@@ -9,7 +9,7 @@ import time
 import statistics
 import hashlib
 
-from shelly.models import utcnow
+from shelly.models import utcnow, NONTERMINAL_SESSION_STATES
 from shelly.providers import ProviderError
 from shelly.personal_model_registry import PersonalModelRegistry, validate_candidate
 
@@ -62,7 +62,7 @@ def _reconcile_session(service, uid: str, session, binding):
         session.version += 1
         service.repository.save_session(uid, session)
         service.repository.upsert_charge_log(uid, session)
-    if getattr(session, "state", "active") not in ("arming", "active"):
+    if getattr(session, "state", "active") not in NONTERMINAL_SESSION_STATES:
         try:
             service.ingest_personal_session(uid, session.session_id)
         except Exception:
@@ -89,7 +89,7 @@ def run_forever(service, user_ids=None, interval_seconds: int = 60):
                 db = service.repository.db
                 if db:
                     query = (db.collection_group("smartChargingSessions")
-                             .where("state", "in", ["arming", "active"])
+                             .where("state", "in", sorted(NONTERMINAL_SESSION_STATES))
                              .limit(100))
                     owners = set()
                     for snapshot in query.stream():

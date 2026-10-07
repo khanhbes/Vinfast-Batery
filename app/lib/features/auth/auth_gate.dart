@@ -18,6 +18,7 @@ import '../../data/services/maintenance_reminder_service.dart';
 import '../../data/services/vehicle_model_link_service.dart';
 import '../../data/services/smart_charger_credentials_service.dart';
 import '../../data/services/shelly_connection_coordinator.dart';
+import '../../data/services/account_reminder_service.dart';
 import '../../core/services/firebase_bootstrap_coordinator.dart';
 import '../../data/repositories/smart_charger_repository.dart';
 import '../../data/models/smart_charger_binding.dart';
@@ -130,6 +131,7 @@ class _AuthGateState extends ConsumerState<AuthGate> {
       }),
     );
 
+    await AccountReminderService.instance.initialize();
     final completer = Completer<User?>();
     try {
       // Keep one auth subscription for this gate. Recreating a StreamBuilder

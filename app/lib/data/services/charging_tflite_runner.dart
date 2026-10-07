@@ -1,78 +1,114 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart';
+import 'dart:isolate';
+import 'package:tflite_flutter/tflite_flutter.dart';
 import '../../core/services/model_sync_service.dart';
 
-/// Runner cho mô hình .tflite on-device để dự đoán thời gian sạc khi offline.
-/// Không làm thay đổi bất kỳ UI nào của App.
+typedef ChargingLocalInference =
+    Future<double> Function(String modelPath, List<double> features);
+
+/// Runs the legacy six-feature, float32 charging model. Missing or invalid
+/// models return null; a physics estimate must never be labelled as AI.
 class ChargingTfliteRunner {
-  ChargingTfliteRunner({ModelSyncService? modelSyncService})
-      : _syncService = modelSyncService ?? ModelSyncService();
+  ChargingTfliteRunner({
+    ModelSyncService? modelSyncService,
+    String? Function()? modelPathResolver,
+    ChargingLocalInference? inference,
+  }) : _syncService = modelSyncService ?? ModelSyncService(),
+       _modelPathResolver = modelPathResolver,
+       _inference = inference ?? _runOffMainThread;
 
   final ModelSyncService _syncService;
+  final String? Function()? _modelPathResolver;
+  final ChargingLocalInference _inference;
 
-  /// Kiểm tra xem file model local đã được ModelSyncService tải về chưa
+  String? get _path => _modelPathResolver != null
+      ? _modelPathResolver()
+      : _syncService.getLocalModelPath('charging_time');
+
   bool hasLocalModel() {
-    final path = _syncService.getLocalModelPath('charging_time');
+    if (_modelPathResolver == null &&
+        !_syncService.hasVerifiedMobileContract('charging_time')) {
+      return false;
+    }
+    final path = _path;
     if (path == null) return false;
-    return File(path).existsSync();
+    RandomAccessFile? handle;
+    try {
+      handle = File(path).openSync();
+      if (handle.lengthSync() < 16) return false;
+      final header = handle.readSync(8);
+      return header[4] == 84 &&
+          header[5] == 70 &&
+          header[6] == 76 &&
+          header[7] == 51;
+    } on Object {
+      return false;
+    } finally {
+      handle?.closeSync();
+    }
   }
 
-  /// Lấy version của model local hiện tại
-  String getLocalVersion() {
-    return _syncService.getLocalModelVersion('charging_time') ?? 'tflite_local_v1';
-  }
+  String getLocalVersion() =>
+      _syncService.getLocalModelVersion('charging_time') ?? 'local_unversioned';
 
-  /// Dự đoán số giây sạc on-device
   Future<int?> predictDurationSeconds({
     required double startSoc,
     required double targetSoc,
-    double ambientTempC = 30.0,
+    double ambientTempC = 30,
     double? nominalCapacityWh,
   }) async {
-    final path = _syncService.getLocalModelPath('charging_time');
-    if (path == null || !File(path).existsSync()) {
+    if (!startSoc.isFinite ||
+        !targetSoc.isFinite ||
+        !ambientTempC.isFinite ||
+        startSoc < 0 ||
+        startSoc > 100 ||
+        targetSoc < 0 ||
+        targetSoc > 100) {
       return null;
     }
-
-    final deltaSoc = (targetSoc - startSoc).clamp(0.0, 100.0);
-    if (deltaSoc <= 0) return 0;
-
-    final tempDev = (ambientTempC - 27.0).abs();
-    const avgChargeRate = 22.5;
-
-    // Bộ 6 features chuẩn hóa theo AI Center:
-    // [start_soc, end_soc, delta_soc, ambient_temp_c, avg_charge_rate, temp_deviation]
-    final features = [
-      startSoc,
-      targetSoc,
-      deltaSoc,
-      ambientTempC,
-      avgChargeRate,
-      tempDev,
-    ];
-
+    final delta = targetSoc - startSoc;
+    if (delta <= 0) return 0;
+    final path = _path;
+    if (path == null || !hasLocalModel()) return null;
     try {
-      return _runInferenceOrFallback(path, features, deltaSoc, ambientTempC);
-    } catch (e) {
-      debugPrint('[ChargingTfliteRunner] Error running TFLite: $e');
-      return _fallbackCalculation(deltaSoc, ambientTempC);
+      final seconds = await _inference(path, [
+        startSoc,
+        targetSoc,
+        delta,
+        ambientTempC,
+        22.5,
+        (ambientTempC - 27).abs(),
+      ]);
+      if (!seconds.isFinite || seconds < 1 || seconds > 36000) return null;
+      return seconds.round();
+    } on Object {
+      return null;
     }
   }
 
-  int _runInferenceOrFallback(
-    String modelPath,
-    List<double> features,
-    double deltaSoc,
-    double ambientTempC,
-  ) {
-    return _fallbackCalculation(deltaSoc, ambientTempC);
-  }
-
-  int _fallbackCalculation(double deltaSoc, double ambientTempC) {
-    final tempDev = (ambientTempC - 27.0).abs();
-    final tempPenalty = 1.0 + (tempDev * 0.015);
-    final rate = 22.5 / tempPenalty;
-    final hours = deltaSoc / rate;
-    return (hours * 3600).round();
-  }
+  static Future<double> _runOffMainThread(String path, List<double> features) =>
+      Isolate.run(() {
+        final interpreter = Interpreter.fromFile(File(path));
+        try {
+          final inputs = interpreter.getInputTensors();
+          final outputs = interpreter.getOutputTensors();
+          bool shapeIs(List<int> shape, int width) =>
+              shape.length == 2 && shape[0] == 1 && shape[1] == width;
+          if (inputs.length != 1 ||
+              outputs.length != 1 ||
+              inputs.single.type != TensorType.float32 ||
+              outputs.single.type != TensorType.float32 ||
+              !shapeIs(inputs.single.shape, 6) ||
+              !shapeIs(outputs.single.shape, 1)) {
+            throw StateError('Unsupported charging model contract');
+          }
+          final output = <List<double>>[
+            [0],
+          ];
+          interpreter.run(<List<double>>[features], output);
+          return output.single.single;
+        } finally {
+          interpreter.close();
+        }
+      });
 }

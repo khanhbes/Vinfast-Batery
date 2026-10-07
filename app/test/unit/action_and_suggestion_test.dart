@@ -163,7 +163,7 @@ void main() {
     });
 
     test('generateLocalFallback returns R001 when battery < 20%', () async {
-      final service = SuggestionService();
+      final service = SuggestionService(uidResolver: () => 'test_user');
       final suggestions = await service.fetchSuggestions(
         userId: 'test_user',
         currentSoc: 14.0,

@@ -103,6 +103,32 @@ service cloud.firestore {
         allow read, write: if false;
       }
 
+      match /reminders/{reminderId} {
+        function validReminder() {
+          let d = request.resource.data;
+          return d.keys().hasAll(['id','uid','vehicleId','title','kind','dueDate','timezone','reminderDays','revision','pendingSync','notificationsEnabled']) &&
+            d.keys().hasOnly(['id','uid','vehicleId','title','kind','dueDate','timezone','reminderDays','revision','pendingSync','notificationsEnabled','state','operationId']) &&
+            d.id == reminderId && d.uid == uid && d.vehicleId is string && ownsVehicleId(d.vehicleId) &&
+            d.title is string && d.title.size() >= 3 && d.title.size() <= 240 &&
+            d.kind in ['warranty','maintenance','appointment'] && d.dueDate is string &&
+            d.dueDate.size() <= 35 && d.timezone == 'Asia/Ho_Chi_Minh' &&
+            d.reminderDays == [7,1] && d.revision is int && d.revision > 0 &&
+            d.pendingSync is bool && d.notificationsEnabled is bool &&
+            (!('state' in d) || d.state in ['active','cancelled']) &&
+            (!('operationId' in d) || (d.operationId is string && d.operationId.size() > 0 && d.operationId.size() <= 128));
+        }
+        allow read: if isAuth() && request.auth.uid == uid;
+        // Cancel with a revisioned tombstone. Deleting a tombstone would let an
+        // old offline create recreate the same task and its notifications.
+        allow delete: if false;
+        allow create: if isAuth() && request.auth.uid == uid && validReminder() && request.resource.data.revision == 1 && request.resource.data.get('state', 'active') == 'active';
+        allow update: if isAuth() && request.auth.uid == uid && validReminder() &&
+          request.resource.data.uid == resource.data.uid &&
+          request.resource.data.vehicleId == resource.data.vehicleId &&
+          resource.data.get('state', 'active') == 'active' &&
+          request.resource.data.revision == resource.data.revision + 1;
+      }
+
       match /appPreferences/{prefDoc} {
         allow read: if isAuth() && request.auth.uid == uid;
         allow write: if isAuth() && request.auth.uid == uid && prefDoc == 'ui' &&

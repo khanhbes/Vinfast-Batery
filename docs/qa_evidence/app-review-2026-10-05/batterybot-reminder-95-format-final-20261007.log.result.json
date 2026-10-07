@@ -1,0 +1,16 @@
+{
+  "command": [
+    "C:\\flutter\\bin\\cache\\dart-sdk\\bin\\dart.exe",
+    "format",
+    "lib/data/services/account_reminder_service.dart",
+    "lib/features/ai/services/app_chat_tool_gateway.dart",
+    "test/unit/chat_reminder_integration_test.dart"
+  ],
+  "cwd": "app",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\batterybot-reminder-95-format-final-20261007.log",
+  "timeoutSeconds": 60,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 0.7
+}

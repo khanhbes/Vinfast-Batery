@@ -134,6 +134,7 @@ void main() {
 
   test('AI result preserves source and confidence', () async {
     final adapter = ChargingPredictionAdapter(
+      localOnly: false,
       predictionCall:
           ({
             required vehicleId,
@@ -158,6 +159,7 @@ void main() {
 
   test('server eligibility keeps personalized AI eligible', () async {
     final adapter = ChargingPredictionAdapter(
+      localOnly: false,
       predictionCall:
           ({
             required vehicleId,
@@ -187,6 +189,7 @@ void main() {
     'API failure in strict AI mode throws SmartChargePredictionException',
     () async {
       final adapter = ChargingPredictionAdapter(
+        localOnly: false,
         predictionCall:
             ({
               required vehicleId,
@@ -212,6 +215,7 @@ void main() {
     'API failure uses Wh-dimensional physics fallback when allowPhysicsFallback is true',
     () async {
       final adapter = ChargingPredictionAdapter(
+        localOnly: false,
         standardPowerW: 400,
         efficiency: 1,
         allowPhysicsFallback: true,
@@ -272,44 +276,58 @@ void main() {
     );
   });
 
-  test('session parses telemetry_samples, wh_per_soc_percent and hardware_timeout_seconds', () {
-    final raw = sessionJson();
-    raw['hardware_timeout_seconds'] = 7200;
-    raw['wh_per_soc_percent'] = 28.5;
-    raw['telemetry_samples'] = [
-      {'t': '2030-01-01T03:01:00Z', 'power_w': 1800.0, 'voltage_v': 225.0, 'temp_c': 34.0, 'energy_wh': 30.0},
-    ];
+  test(
+    'session parses telemetry_samples, wh_per_soc_percent and hardware_timeout_seconds',
+    () {
+      final raw = sessionJson();
+      raw['hardware_timeout_seconds'] = 7200;
+      raw['wh_per_soc_percent'] = 28.5;
+      raw['telemetry_samples'] = [
+        {
+          't': '2030-01-01T03:01:00Z',
+          'power_w': 1800.0,
+          'voltage_v': 225.0,
+          'temp_c': 34.0,
+          'energy_wh': 30.0,
+        },
+      ];
 
-    final session = SmartChargingSession.fromJson(raw);
-    expect(session.hardwareTimeoutSeconds, 7200);
-    expect(session.whPerSocPercent, 28.5);
-    expect(session.telemetrySamples.length, 1);
-    expect(session.telemetrySamples.first['power_w'], 1800.0);
+      final session = SmartChargingSession.fromJson(raw);
+      expect(session.hardwareTimeoutSeconds, 7200);
+      expect(session.whPerSocPercent, 28.5);
+      expect(session.telemetrySamples.length, 1);
+      expect(session.telemetrySamples.first['power_w'], 1800.0);
 
-    final serialized = session.toJson();
-    expect(serialized['hardware_timeout_seconds'], 7200);
-    expect(serialized['wh_per_soc_percent'], 28.5);
-    expect((serialized['telemetry_samples'] as List).length, 1);
-  });
+      final serialized = session.toJson();
+      expect(serialized['hardware_timeout_seconds'], 7200);
+      expect(serialized['wh_per_soc_percent'], 28.5);
+      expect((serialized['telemetry_samples'] as List).length, 1);
+    },
+  );
 
-  test('prediction falls back to tflite when online API fails and local runner is available', () async {
-    final adapter = ChargingPredictionAdapter(
-      predictionCall: ({
-        required vehicleId,
-        required currentBattery,
-        required targetBattery,
-        ambientTempC,
-        bool strictAi = false,
-      }) async => throw Exception('Network offline'),
-      tfliteRunner: _MockTfliteRunner(),
-    );
-    final preview = await adapter.predict(
-      draft(current: 20, target: 80),
-      now: now,
-    );
-    expect(preview.predictionSource, 'tflite');
-    expect(preview.predictedMinutes, 60);
-  });
+  test(
+    'prediction falls back to tflite when online API fails and local runner is available',
+    () async {
+      final adapter = ChargingPredictionAdapter(
+        localOnly: false,
+        predictionCall:
+            ({
+              required vehicleId,
+              required currentBattery,
+              required targetBattery,
+              ambientTempC,
+              bool strictAi = false,
+            }) async => throw Exception('Network offline'),
+        tfliteRunner: _MockTfliteRunner(),
+      );
+      final preview = await adapter.predict(
+        draft(current: 20, target: 80),
+        now: now,
+      );
+      expect(preview.predictionSource, 'tflite');
+      expect(preview.predictedMinutes, 60);
+    },
+  );
 
   test('malformed session is rejected', () {
     expect(

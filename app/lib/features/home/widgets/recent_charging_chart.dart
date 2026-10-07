@@ -315,7 +315,7 @@ class _MiniStat extends StatelessWidget {
   Widget build(BuildContext context) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         decoration: BoxDecoration(
           color: CockpitColors.surfaceSoft,
           borderRadius: BorderRadius.circular(CockpitRadius.medium),
@@ -324,24 +324,31 @@ class _MiniStat extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: CockpitTypography.label(
-                fontSize: 10,
-                color: CockpitColors.muted,
+            SizedBox(
+              height: 24,
+              child: Text(
+                label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: CockpitTypography.label(
+                  fontSize: 9.5,
+                  color: CockpitColors.muted,
+                  letterSpacing: -0.2,
+                ).copyWith(height: 1.15),
               ),
             ),
-            const SizedBox(height: 3),
-            Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: CockpitTypography.numbers(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: color,
+            const SizedBox(height: 4),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                value,
+                maxLines: 1,
+                style: CockpitTypography.numbers(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
               ),
             ),
           ],

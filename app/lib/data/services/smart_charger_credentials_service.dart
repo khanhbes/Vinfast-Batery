@@ -24,8 +24,15 @@ class SmartChargerCredentialsService {
   static const _bindingKey = 'smart_charger.server_binding.v1';
   final FlutterSecureStorage _storage;
 
-  Future<void> cacheServerBinding(SmartChargerBinding? binding) async {
-    final key = _scopedKey(_bindingKey);
+  Future<void> cacheServerBinding(
+    SmartChargerBinding? binding, {
+    String? vehicleId,
+  }) async {
+    final key = _scopedKey(
+      vehicleId == null
+          ? _bindingKey
+          : '$_bindingKey.vehicle.${Uri.encodeComponent(vehicleId)}',
+    );
     if (key == null) return;
     if (binding == null) {
       await _storage.delete(key: key);
@@ -34,8 +41,14 @@ class SmartChargerCredentialsService {
     }
   }
 
-  Future<SmartChargerBinding?> readCachedServerBinding() async {
-    final key = _scopedKey(_bindingKey);
+  Future<SmartChargerBinding?> readCachedServerBinding({
+    String? vehicleId,
+  }) async {
+    final key = _scopedKey(
+      vehicleId == null
+          ? _bindingKey
+          : '$_bindingKey.vehicle.${Uri.encodeComponent(vehicleId)}',
+    );
     if (key == null) return null;
     try {
       final raw = await _storage.read(key: key);

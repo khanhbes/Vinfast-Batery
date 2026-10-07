@@ -123,12 +123,14 @@ class ShellyConnectionCoordinator {
   String? _accountUid;
   int _accountGeneration = 0;
   Future<ShellyConnectionSnapshot>? _restoreInFlight;
+  String? _vehicleId;
 
   /// Clears UI context, not persisted bindings or hardware state.
   void activateAccount(String? uid) {
     if (_accountUid == uid) return;
     _accountUid = uid;
     _accountGeneration++;
+    _vehicleId = null;
     _restoreInFlight = null;
     _busy = false;
     _pendingProfile = null;
@@ -149,7 +151,19 @@ class ShellyConnectionCoordinator {
     if (!_states.isClosed) _states.add(value);
   }
 
-  Future<ShellyConnectionSnapshot> restore() {
+  Future<ShellyConnectionSnapshot> restore({String? vehicleId}) {
+    if (vehicleId != null && vehicleId != _vehicleId) {
+      // Invalidate in-flight reads for the previous vehicle, never actuate.
+      if (_busy) return Future.value(_current);
+      _vehicleId = vehicleId;
+      _accountGeneration++;
+      _restoreInFlight = null;
+      _emit(
+        const ShellyConnectionSnapshot(
+          state: ShellyConnectionFlowState.verifying,
+        ),
+      );
+    }
     if (_restoreInFlight != null) return _restoreInFlight!;
     late final Future<ShellyConnectionSnapshot> task;
     task = _restore().whenComplete(() {
@@ -163,22 +177,26 @@ class ShellyConnectionCoordinator {
     if (!_current.isLinked ||
         _current.devices.length != 1 ||
         status.deviceId == null ||
-        !_sameDevice(status.deviceId!, _current.devices.single.id) ||
-        status.codeRefreshRequired == null) {
+        !_sameDevice(status.deviceId!, _current.devices.single.id)) {
       return;
     }
     final old = _current;
     _emit(
       ShellyConnectionSnapshot(
-        state: old.state,
+        state: !status.online
+            ? ShellyConnectionFlowState.offline
+            : old.state == ShellyConnectionFlowState.offline
+            ? ShellyConnectionFlowState.verifying
+            : old.state,
         devices: old.devices,
         errorMessage: old.errorMessage,
-        status: old.status,
+        status: status,
         deviceName: old.deviceName,
         isLinked: old.isLinked,
         isPermissionDenied: old.isPermissionDenied,
         isWifiUnavailable: old.isWifiUnavailable,
-        codeRefreshRequired: status.codeRefreshRequired!,
+        codeRefreshRequired:
+            status.codeRefreshRequired ?? old.codeRefreshRequired,
       ),
     );
   }
@@ -327,17 +345,17 @@ class ShellyConnectionCoordinator {
   Future<ShellyConnectionSnapshot?> _restoreServerCloudBinding() async {
     final generation = _accountGeneration;
     SmartChargerBinding? restoredBinding = await _credentials
-        .readCachedServerBinding();
+        .readCachedServerBinding(vehicleId: _vehicleId);
     if (generation != _accountGeneration) return _current;
     if (restoredBinding != null) {
       _emit(ShellyConnectionSnapshot.fromServerBinding(restoredBinding));
     }
     try {
-      final binding = await serverCharger.getBinding();
+      final binding = await serverCharger.getBinding(vehicleId: _vehicleId);
       if (generation != _accountGeneration) return _current;
       if (binding == null ||
           binding.mode != SmartChargerConnectionMode.serverCloud) {
-        await _credentials.cacheServerBinding(null);
+        await _credentials.cacheServerBinding(null, vehicleId: _vehicleId);
         if (generation != _accountGeneration) return _current;
         _emit(
           const ShellyConnectionSnapshot(
@@ -347,10 +365,10 @@ class ShellyConnectionCoordinator {
         return null;
       }
       restoredBinding = binding;
-      await _credentials.cacheServerBinding(binding);
+      await _credentials.cacheServerBinding(binding, vehicleId: _vehicleId);
       if (generation != _accountGeneration) return _current;
       _emit(ShellyConnectionSnapshot.fromServerBinding(binding));
-      final status = await serverCharger.getStatus();
+      final status = await serverCharger.getStatus(vehicleId: _vehicleId);
       if (generation != _accountGeneration) return _current;
       final device = DiscoveredShellyDevice(
         id: binding.deviceId,

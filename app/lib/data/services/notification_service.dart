@@ -414,6 +414,44 @@ class NotificationService {
 
   static const int idChargeReminder = 210;
 
+  /// Date reminders are intentionally inexact; no permission prompt here.
+  Future<bool> scheduleAccountReminder(
+    int id,
+    DateTime date,
+    int daysBefore,
+    String taskId,
+  ) async {
+    await initialize();
+    if (!await _hasNotificationPermission()) return false;
+    final when = tz.TZDateTime(
+      tz.getLocation('Asia/Ho_Chi_Minh'),
+      date.year,
+      date.month,
+      date.day,
+      9,
+    ).subtract(Duration(days: daysBefore));
+    if (!when.isAfter(tz.TZDateTime.now(when.location))) return true;
+    await _plugin.zonedSchedule(
+      id,
+      'Lịch nhắc cho xe',
+      'Bạn có lịch bảo hành hoặc bảo dưỡng sắp đến hạn. Mở app để xem chi tiết.',
+      when,
+      NotificationDetails(
+        iOS: _iosDetails(),
+        android: AndroidNotificationDetails(
+          channelMaintenance,
+          'Bảo dưỡng',
+          icon: '@mipmap/ic_launcher',
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+      payload: 'maintenance_$taskId',
+    );
+    return true;
+  }
+
   /// Schedule charging completion reminder.
   ///
   /// Trả về `true` nếu schedule thành công với exact alarm,

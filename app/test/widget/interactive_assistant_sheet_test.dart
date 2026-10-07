@@ -23,7 +23,12 @@ void main() {
 
     // Kiểm tra header và thông điệp chào mừng
     expect(find.text('BatteryBot'), findsOneWidget);
-    expect(find.textContaining('Chào bạn! Mình là BatteryBot'), findsOneWidget);
+    expect(
+      find.text(
+        'Chào bạn, mình hỗ trợ về xe, pin, sạc và Shelly. Bạn muốn xem gì?',
+      ),
+      findsOneWidget,
+    );
 
     // Kiểm tra quick action chips
     expect(find.text('Xem pin ở đâu?'), findsOneWidget);

@@ -127,7 +127,7 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
 
   @override
   Future<SmartChargingPlanPreview> preview(SmartChargingPlanDraft draft) async {
-    if (_previewService != null) {
+    if (_previewService != null && !predictor.localOnly) {
       try {
         return await _previewService.createPreview(draft);
       } catch (_) {
@@ -141,43 +141,52 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
   Future<SmartChargingSession> start(
     SmartChargingPlanPreview preview,
     String key,
-  ) => service.startAutomaticSession(
-    SmartChargingSessionRequest(
-      vehicleId: preview.draft.vehicleId,
-      startSoc: preview.draft.currentSoc,
-      targetSoc: preview.draft.targetSoc,
-      predictedMinutes: preview.predictedMinutes,
-      startedAt: DateTime.now(),
-      predictedFullAt: preview.aiStopAt,
-      chargingMode: preview.draft.chargingMode,
-      predictionSource: preview.predictionSource,
-      predictionConfidence: preview.predictionConfidence,
-      strategy: preview.draft.strategy,
-      // targetSoc/aiTarget use a relative ten-hour safety window created by
-      // SmartChargerService at the moment the relay is armed. Forwarding the
-      // draft's initialization-time deadline could silently shorten a fresh
-      // a long ETA to only the time left since the screen was first opened.
-      hardDeadlineAt:
-          preview.draft.strategy == ChargingStrategy.deadline ||
-              preview.draft.strategy == ChargingStrategy.smartCombined
-          ? preview.draft.hardDeadlineAt
-          : null,
-      estimatedCapacityWh: preview.draft.estimatedCapacityWh,
-      acknowledgeEstimatedSoc: true,
-      predictedDurationSeconds: preview.predictedDurationSeconds,
-      modelKey: preview.modelKey,
-      modelVersion: preview.modelVersion,
-      runtimeHealth: preview.runtimeHealth,
-      predictionWarnings: preview.warnings,
-      fallbackReason: preview.fallbackReason,
-      predictionAnalyzedAt: preview.analyzedAt,
-      etaCandidates: preview.etaCandidates,
-      fusionReason: preview.fusionReason,
-      profileVersion: preview.profileVersion,
-      adapterVersion: preview.adapterVersion,
-    ),
-    idempotencyKey: key,
-  );
+  ) async {
+    if (preview.isDisplayOnly) {
+      throw const SmartChargerException(
+        'Dự đoán chỉ để tham khảo. Hãy dùng Sạc hẹn giờ để xác nhận thời gian.',
+        code: 'forecastDisplayOnly',
+      );
+    }
+    return service.startAutomaticSession(
+      SmartChargingSessionRequest(
+        vehicleId: preview.draft.vehicleId,
+        startSoc: preview.draft.currentSoc,
+        targetSoc: preview.draft.targetSoc,
+        predictedMinutes: preview.predictedMinutes,
+        startedAt: DateTime.now(),
+        predictedFullAt: preview.aiStopAt,
+        chargingMode: preview.draft.chargingMode,
+        predictionSource: preview.predictionSource,
+        predictionConfidence: preview.predictionConfidence,
+        strategy: preview.draft.strategy,
+        // targetSoc/aiTarget use a relative ten-hour safety window created by
+        // SmartChargerService at the moment the relay is armed. Forwarding the
+        // draft's initialization-time deadline could silently shorten a fresh
+        // a long ETA to only the time left since the screen was first opened.
+        hardDeadlineAt:
+            preview.draft.strategy == ChargingStrategy.deadline ||
+                preview.draft.strategy == ChargingStrategy.smartCombined
+            ? preview.draft.hardDeadlineAt
+            : null,
+        estimatedCapacityWh: preview.draft.estimatedCapacityWh,
+        acknowledgeEstimatedSoc: true,
+        predictedDurationSeconds: preview.predictedDurationSeconds,
+        modelKey: preview.modelKey,
+        modelVersion: preview.modelVersion,
+        runtimeHealth: preview.runtimeHealth,
+        predictionWarnings: preview.warnings,
+        fallbackReason: preview.fallbackReason,
+        predictionAnalyzedAt: preview.analyzedAt,
+        etaCandidates: preview.etaCandidates,
+        fusionReason: preview.fusionReason,
+        profileVersion: preview.profileVersion,
+        adapterVersion: preview.adapterVersion,
+      ),
+      idempotencyKey: key,
+    );
+  }
+
   @override
   Future<SmartChargingSession?> current({String? vehicleId}) async {
     // Check identity before reconciliation so merely browsing another
@@ -395,8 +404,11 @@ class ServerSmartChargerRepository implements SmartChargerRepository {
   ServerSmartChargerRepository(
     this.service, {
     ShellyChargeLogService? chargeLogs,
-  }) : _chargeLogs = chargeLogs;
+    ChargingPredictionAdapter? predictor,
+  }) : _chargeLogs = chargeLogs,
+       _predictor = predictor ?? ChargingPredictionAdapter();
   final ServerSmartChargerService service;
+  final ChargingPredictionAdapter _predictor;
   final ShellyChargeLogService? _chargeLogs;
   @override
   bool get calibrationIsServerOwned => true;
@@ -429,7 +441,7 @@ class ServerSmartChargerRepository implements SmartChargerRepository {
 
   @override
   Future<SmartChargingPlanPreview> preview(SmartChargingPlanDraft draft) =>
-      service.createPreview(draft);
+      _predictor.predict(draft);
   @override
   Future<SmartChargingSession> start(
     SmartChargingPlanPreview preview,
@@ -624,7 +636,6 @@ class SmartChargerRepositoryFactory {
     return DirectSmartChargerRepository(
       SmartChargerService(),
       ChargingPredictionAdapter(allowPhysicsFallback: true),
-      previewService: ServerSmartChargerService(),
       chargeLogs: chargeLogs,
     );
   }

@@ -1,0 +1,17 @@
+{
+  "command": [
+    "C:/flutter/bin/dart.bat",
+    "format",
+    "lib/data/services/charging_training_sync_service.dart",
+    "lib/data/repositories/smart_charger_repository.dart",
+    "test/unit/local_charging_forecast_test.dart",
+    "test/widget/smart_charging_control_screen_test.dart"
+  ],
+  "cwd": "app",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\local-forecast-format-final-20261007.log",
+  "timeoutSeconds": 60,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 2.09
+}
