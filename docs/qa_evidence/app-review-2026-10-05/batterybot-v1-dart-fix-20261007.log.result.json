@@ -1,0 +1,18 @@
+{
+  "command": [
+    "C:\\flutter\\bin\\cache\\dart-sdk\\bin\\dart.exe",
+    "fix",
+    "--apply",
+    "--code",
+    "curly_braces_in_flow_control_structures",
+    "--code",
+    "use_null_aware_elements"
+  ],
+  "cwd": "app",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\batterybot-v1-dart-fix-20261007.log",
+  "timeoutSeconds": 120,
+  "timedOut": true,
+  "exitCode": 1,
+  "cleanupError": null,
+  "elapsedSeconds": 1634.67
+}

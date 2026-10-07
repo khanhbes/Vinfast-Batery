@@ -12,6 +12,7 @@ class SmartChargerCapabilities {
     this.safeBootVerified = false,
     this.noLoadTestVerified = false,
     this.provider,
+    this.controlBlockedCode,
   });
 
   final bool canReadStatus;
@@ -26,6 +27,28 @@ class SmartChargerCapabilities {
   final bool noLoadTestVerified;
   final bool readyForControl;
   final String? provider;
+  final String? controlBlockedCode;
+
+  String? get controlBlockedMessage {
+    if (controlBlockedCode == 'STAGING_HARDWARE_DISABLED') {
+      return 'Máy chủ thử nghiệm chưa cho phép bật sạc. Bạn vẫn có thể xem trạng thái và dừng sạc.';
+    }
+    if (readyForControl) return null;
+    if (!canReadStatus) {
+      return 'Chưa đọc được trạng thái Shelly. Hãy kiểm tra kết nối và thử lại.';
+    }
+    if (!canReadPower) {
+      return 'Cần xác minh thiết bị và số đo điện trước khi bật sạc.';
+    }
+    if (!safeBootVerified) return 'Cần xác minh cấu hình an toàn của Shelly.';
+    if (!noLoadTestVerified) {
+      return 'Cần hoàn tất kiểm tra không tải trong thiết lập Shelly.';
+    }
+    if (!supportsDeviceTimer) {
+      return 'Chưa xác minh được bộ hẹn giờ an toàn của Shelly.';
+    }
+    return 'Chưa đủ điều kiện bật sạc. Hãy mở thiết lập Shelly để kiểm tra.';
+  }
 
   bool get limited => readyForControl && !(cloudAvailable && lanAvailable);
 
@@ -43,6 +66,7 @@ class SmartChargerCapabilities {
         noLoadTestVerified: json['noLoadTestVerified'] == true,
         readyForControl: json['readyForControl'] == true,
         provider: json['provider']?.toString(),
+        controlBlockedCode: json['controlBlockedCode']?.toString(),
       );
 
   static const unavailable = SmartChargerCapabilities(

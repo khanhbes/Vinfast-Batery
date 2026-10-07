@@ -1,0 +1,20 @@
+{
+  "command": [
+    "C:/flutter/bin/dart.bat",
+    "format",
+    "lib/data/services/charging_tflite_runner.dart",
+    "lib/core/utils/battery_bot_faq.dart",
+    "lib/features/ai/services/chat_api_service.dart",
+    "lib/features/ai/services/chat_history_storage.dart",
+    "lib/features/ai/services/behavior_sync_service.dart",
+    "lib/features/ai/controllers/chat_controller.dart",
+    "test/unit/local_ai_execution_test.dart"
+  ],
+  "cwd": "app",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\local-ai-format-20261007.log",
+  "timeoutSeconds": 60,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 2.44
+}

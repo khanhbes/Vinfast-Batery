@@ -1,0 +1,32 @@
+{
+  "recordedAt": "2026-10-07",
+  "source": "user-confirmation",
+  "tripDataset": {
+    "collection": "approximately 80 real-world trips",
+    "vehicleModel": "VinFast Feliz 2025",
+    "physicalVehicleCount": 1,
+    "socSource": "manual-entry",
+    "notBmsTelemetry": true,
+    "independentTripCountsFromPriorAudit": {
+      "trip3.csv": 77,
+      "trips_enriched.csv": 77,
+      "trips.csv": 109
+    },
+    "unresolved": [
+      "reconcile raw 109 trips with approximately 80 user-confirmed trips and 77 processed groups",
+      "verify SOC entry timing, preprocessing, route lineage and outlier handling",
+      "separate chronological trip groups for train, validation and untouched test",
+      "validate inference-time feature availability and model applicability for other vehicles"
+    ],
+    "qualityVerified": false
+  },
+  "chargingDataset": {
+    "originalSessions": 6,
+    "augmentedRows": 900,
+    "augmentedRowsAreIndependentMeasuredSessions": false,
+    "socSource": "manual-entry",
+    "qualityVerified": false
+  },
+  "sourceDataModified": false,
+  "modelTrainedOrExported": false
+}

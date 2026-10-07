@@ -17,9 +17,14 @@ class _Auth implements FirebaseAuth {
 class _Credentials extends SmartChargerCredentialsService {
   int writes = 0;
   @override
-  Future<SmartChargerBinding?> readCachedServerBinding() async => null;
+  Future<SmartChargerBinding?> readCachedServerBinding({
+    String? vehicleId,
+  }) async => null;
   @override
-  Future<void> cacheServerBinding(SmartChargerBinding? binding) async {
+  Future<void> cacheServerBinding(
+    SmartChargerBinding? binding, {
+    String? vehicleId,
+  }) async {
     writes++;
   }
 }

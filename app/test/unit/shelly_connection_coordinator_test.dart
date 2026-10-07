@@ -1,9 +1,63 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:vinfast_battery/data/models/shelly_connection.dart';
 import 'package:vinfast_battery/data/models/shelly_connection_state.dart';
 import 'package:vinfast_battery/data/services/shelly_connection_coordinator.dart';
 import 'package:vinfast_battery/data/services/shelly_discovery_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:vinfast_battery/data/models/smart_charger_binding.dart';
+import 'package:vinfast_battery/data/models/smart_charger_status.dart';
+import 'package:vinfast_battery/data/services/server_smart_charger_service.dart';
+import 'package:vinfast_battery/data/services/smart_charger_credentials_service.dart';
+
+class _Credentials extends SmartChargerCredentialsService {
+  @override
+  Future<SmartChargerBinding?> readCachedServerBinding({
+    String? vehicleId,
+  }) async => null;
+  @override
+  Future<void> cacheServerBinding(
+    SmartChargerBinding? binding, {
+    String? vehicleId,
+  }) async {}
+}
+
+class _Auth extends Fake implements FirebaseAuth {}
+
+class _Server extends ServerSmartChargerService {
+  _Server() : super(auth: _Auth());
+  final scopes = <String?>[];
+  @override
+  Future<SmartChargerBinding?> getBinding({String? vehicleId}) async {
+    scopes.add(vehicleId);
+    return const SmartChargerBinding(
+      deviceId: 'qa-device',
+      displayName: 'Shelly',
+      model: 'S3PL-00112EU',
+      provider: 'cloud',
+      mode: SmartChargerConnectionMode.serverCloud,
+      powerMeterVerified: true,
+      safeBootVerified: true,
+      noLoadTestVerified: true,
+    );
+  }
+
+  @override
+  Future<SmartChargerStatus> getStatus({String? vehicleId}) async {
+    scopes.add(vehicleId);
+    return const SmartChargerStatus(
+      online: true,
+      relay: false,
+      powerW: 0,
+      voltageV: 230,
+      currentA: 0,
+      frequencyHz: 50,
+      temperatureC: 30,
+      energyWh: 0,
+    );
+  }
+}
 
 class _Discovery extends ShellyDiscoveryService {
   const _Discovery(this.devices);
@@ -34,6 +88,32 @@ class _Discovery extends ShellyDiscoveryService {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'settings restore retains charge vehicle scope and account change clears it',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'smart_charger.connection_mode.v1': 'server_cloud',
+      });
+      final server = _Server();
+      final coordinator = ShellyConnectionCoordinator(
+        credentials: _Credentials(),
+        serverCharger: server,
+      );
+      coordinator.activateAccount('qa-account');
+      final first = await coordinator.restore(vehicleId: 'qa-vehicle');
+      expect(first.isLinked, true);
+      expect(first.state, ShellyConnectionFlowState.connected);
+      await coordinator.restore();
+      expect(server.scopes, everyElement('qa-vehicle'));
+      coordinator.activateAccount('qa-other');
+      expect(coordinator.current.isLinked, false);
+      server.scopes.clear();
+      await coordinator.restore();
+      expect(server.scopes, everyElement(isNull));
+      await coordinator.dispose();
+    },
+  );
   test(
     'reports a friendly failed state when LAN discovery finds nothing',
     () async {

@@ -21,6 +21,7 @@ void main() {
     estimatedCapacityWh: 3000,
     service: service,
     predictionAdapter: ChargingPredictionAdapter(
+      localOnly: false,
       predictionCall:
           ({
             required vehicleId,

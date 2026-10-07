@@ -1,0 +1,18 @@
+{
+  "command": [
+    "C:\\flutter\\bin\\cache\\dart-sdk\\bin\\dart.exe",
+    "analyze",
+    "lib/features/ai/assistant_sheet.dart",
+    "lib/features/ai/services/app_chat_tool_gateway.dart",
+    "lib/data/services/server_smart_charger_service.dart",
+    "test/widget/assistant_sheet_lifecycle_test.dart",
+    "test/unit/chat_server_client_lifecycle_test.dart"
+  ],
+  "cwd": "app",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\batterybot-phone-analyze-20261007.log",
+  "timeoutSeconds": 120,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 73.08
+}

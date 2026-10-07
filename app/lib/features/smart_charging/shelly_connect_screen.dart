@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/providers/app_providers.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -18,14 +20,15 @@ import 'smart_charger_setup_hub_screen.dart';
 /// Designed for everyday users: hides all technical secrets (Cloud keys,
 /// raw tokens, device IDs, RPC URLs), provides a guided single-tap connect,
 /// animated radar scan, safety test confirmation, and troubleshooting checklist.
-class ShellyConnectScreen extends StatefulWidget {
+class ShellyConnectScreen extends ConsumerStatefulWidget {
   const ShellyConnectScreen({super.key});
 
   @override
-  State<ShellyConnectScreen> createState() => _ShellyConnectScreenState();
+  ConsumerState<ShellyConnectScreen> createState() =>
+      _ShellyConnectScreenState();
 }
 
-class _ShellyConnectScreenState extends State<ShellyConnectScreen> {
+class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
   final _coordinator = ShellyConnectionCoordinator.shared;
   StreamSubscription<ShellyConnectionSnapshot>? _subscription;
   ShellyConnectionSnapshot _snapshot =
@@ -66,7 +69,11 @@ class _ShellyConnectScreenState extends State<ShellyConnectScreen> {
       _developerUnlocked = prefs.getBool('developerModeUnlocked') ?? false;
     } catch (_) {}
 
-    final result = await _coordinator.restore();
+    if (!mounted) return;
+    final vehicleId = ref.read(vehicleContextProvider).vehicleId;
+    final result = await _coordinator.restore(
+      vehicleId: vehicleId.isEmpty ? null : vehicleId,
+    );
     if (mounted) {
       setState(() {
         _snapshot = result;
@@ -529,8 +536,9 @@ class _ShellyConnectScreenState extends State<ShellyConnectScreen> {
                 Text(
                   _titleFor(state),
                   textAlign: TextAlign.center,
+                  softWrap: true,
                   style: CockpitTypography.heading(
-                    fontSize: 20,
+                    fontSize: 18.5,
                     fontWeight: FontWeight.w800,
                     color: ui.text,
                   ),
@@ -673,14 +681,16 @@ class _ShellyConnectScreenState extends State<ShellyConnectScreen> {
               Icon(icon, size: 14, color: isActive ? ui.primary : ui.muted),
               const SizedBox(width: 4),
               Flexible(
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: isActive ? ui.primary : ui.muted,
-                    fontSize: 11.5,
-                    fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    style: TextStyle(
+                      color: isActive ? ui.primary : ui.muted,
+                      fontSize: 11,
+                      fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                    ),
                   ),
                 ),
               ),
@@ -1893,7 +1903,7 @@ class _ShellyConnectScreenState extends State<ShellyConnectScreen> {
       ShellyConnectionFlowState.offline =>
         'Kiểm tra nguồn điện và đảm bảo thiết bị đang bật Wi-Fi.',
       ShellyConnectionFlowState.connectionFailed =>
-        'Hãy đảm bảo điện thoại và Shelly cùng mạng Wi-Fi và thử lại.',
+        'Hãy đảm bảo điện thoại và Shelly cùng mạng Wi\u2011Fi và thử lại.',
       ShellyConnectionFlowState.incompatible =>
         'Thiết bị cần có tính năng đo điện năng (apower/voltage/current).',
       ShellyConnectionFlowState.passwordRequired =>

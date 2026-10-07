@@ -12,11 +12,13 @@ class TimedChargingSectionV2 extends StatefulWidget {
     required this.onStart,
     required this.onOff,
     required this.readyForControl,
+    this.disabledReason,
   });
 
   final Future<void> Function(Duration duration) onStart;
   final VoidCallback onOff;
   final bool readyForControl;
+  final String? disabledReason;
 
   @override
   State<TimedChargingSectionV2> createState() => _TimedChargingSectionV2State();
@@ -154,6 +156,17 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
       key: const ValueKey('timed-mode-v2'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (!widget.readyForControl) ...[
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              widget.disabledReason ??
+                  'Chưa sẵn sàng bật sạc. Hãy kiểm tra thiết lập Shelly.',
+              style: TextStyle(color: CockpitColors.muted, fontSize: 13),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
         // ── Content card ──
         CockpitSurface(
           padding: const EdgeInsets.all(20),

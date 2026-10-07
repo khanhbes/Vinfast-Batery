@@ -8,10 +8,34 @@ import 'package:vinfast_battery/features/ai/assistant_sheet.dart';
 import 'package:vinfast_battery/features/ai/models/function_call_action.dart';
 import 'package:vinfast_battery/features/ai/services/chat_api_service.dart';
 import 'package:vinfast_battery/features/ai/services/suggestion_service.dart';
+import 'package:vinfast_battery/features/ai/models/proactive_suggestion.dart';
+import 'package:vinfast_battery/core/models/vehicle_context.dart';
+import 'package:vinfast_battery/core/providers/vehicle_context_provider.dart';
+import 'package:vinfast_battery/data/models/vehicle_model.dart';
 
 class _QuietSuggestions extends SuggestionService {
   @override
   Future<bool> canShowProactiveBubble() async => false;
+}
+
+class _DelayedSuggestions extends SuggestionService {
+  final pending = Completer<List<ProactiveSuggestion>>();
+  int shown = 0;
+  @override
+  Future<bool> canShowProactiveBubble() async => true;
+  @override
+  Future<List<ProactiveSuggestion>> fetchSuggestions({
+    required String userId,
+    String? vehicleId,
+    double? currentSoc,
+    double? currentSoh,
+    int? odoKm,
+    String? chargingStatus,
+  }) => pending.future;
+  @override
+  Future<void> recordSuggestionShown() async {
+    shown++;
+  }
 }
 
 class _FakeChat extends ChatApiService {
@@ -51,6 +75,8 @@ void main() {
     double width = 390,
     double scale = 1,
     double keyboard = 0,
+    VehicleModel? vehicle,
+    SuggestionService? suggestions,
   }) async {
     tester.view.physicalSize = Size(width, 844);
     tester.view.devicePixelRatio = 1;
@@ -60,7 +86,13 @@ void main() {
       ProviderScope(
         overrides: [
           chatApiServiceProvider.overrideWithValue(api),
-          suggestionServiceProvider.overrideWithValue(_QuietSuggestions()),
+          suggestionServiceProvider.overrideWithValue(
+            suggestions ?? _QuietSuggestions(),
+          ),
+          if (vehicle != null)
+            vehicleContextProvider.overrideWithValue(
+              VehicleContext(vehicleId: vehicle.vehicleId, vehicle: vehicle),
+            ),
         ],
         child: MaterialApp(
           home: MediaQuery(
@@ -122,6 +154,52 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('late suggestion cannot shift the form while user is typing', (
+    tester,
+  ) async {
+    final suggestions = _DelayedSuggestions();
+    await open(tester, _FakeChat(), suggestions: suggestions);
+    await tester.enterText(
+      find.byKey(const Key('assistant_input_field')),
+      'pin còn',
+    );
+    final before = tester.getRect(
+      find.byKey(const Key('assistant_input_field')),
+    );
+    suggestions.pending.complete([
+      ProactiveSuggestion(
+        ruleId: 'qa-late',
+        title: 'Late banner',
+        message: 'Must not interrupt',
+        priority: 'LOW',
+        suggestedAt: DateTime(2026, 10, 7),
+      ),
+    ]);
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.text('Late banner'), findsNothing);
+    expect(
+      tester.getRect(find.byKey(const Key('assistant_input_field'))),
+      before,
+    );
+    expect(suggestions.shown, 0);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('new chat uses a short greeting without claiming predictions', (
+    tester,
+  ) async {
+    await open(tester, _FakeChat());
+    expect(
+      find.text(
+        'Chào bạn, mình hỗ trợ về xe, pin, sạc và Shelly. Bạn muốn xem gì?',
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('với AI Streaming'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('broken history shows retry, not an empty success state', (
     tester,
   ) async {
@@ -156,6 +234,34 @@ void main() {
   });
 
   for (final width in [320.0, 390.0, 412.0]) {
+    testWidgets('long selected vehicle wraps at $width, no fabricated pin', (
+      tester,
+    ) async {
+      await open(
+        tester,
+        _FakeChat(),
+        width: width,
+        scale: 1.5,
+        keyboard: 300,
+        vehicle: VehicleModel(
+          vehicleId: 'qa',
+          currentOdo: 0,
+          nickname: 'Xe đi học VinFast Feliz của mình',
+          hasBatteryData: false,
+        ),
+      );
+      final label = tester.widget<Text>(
+        find.byKey(const Key('assistant_vehicle_label')),
+      );
+      expect(label.data, 'Xe đi học VinFast Feliz của mình');
+      expect(label.overflow, isNot(TextOverflow.ellipsis));
+      expect(label.maxLines, isNull);
+      expect(find.text('Chưa có dữ liệu pin'), findsOneWidget);
+      expect(find.textContaining('Pin 100%'), findsNothing);
+      expect(find.byTooltip('Đóng BatteryBot'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    });
     testWidgets('actual sheet fits $width dp, font 1.5 and keyboard', (
       tester,
     ) async {

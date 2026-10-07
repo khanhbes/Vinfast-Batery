@@ -19,6 +19,7 @@ import 'models/proactive_suggestion.dart';
 import 'services/behavior_sync_service.dart';
 import 'services/behavior_tracker.dart';
 import 'services/chat_api_service.dart';
+import 'services/local_chat_engine.dart';
 import 'services/chat_history_storage.dart';
 import 'services/suggestion_service.dart';
 import 'services/voice_input_service.dart';
@@ -159,23 +160,34 @@ class _InteractiveAssistantSheetState
 
   Future<void> _checkProactiveSuggestions() async {
     final generation = _generation;
+    bool idle() =>
+        _isCurrent(generation) &&
+        _messages.length == 1 &&
+        !_isTyping &&
+        _inputController.text.trim().isEmpty;
     try {
       final suggestionService = ref.read(suggestionServiceProvider);
       final canShow = await suggestionService.canShowProactiveBubble();
-      if (!canShow || !_isCurrent(generation)) return;
+      if (!canShow || !idle()) return;
 
       final vehicle = ref.read(vehicleContextProvider).vehicle;
-      final user = FirebaseAuth.instance.currentUser;
+      final user = Firebase.apps.isEmpty
+          ? null
+          : FirebaseAuth.instance.currentUser;
 
       final suggestions = await suggestionService.fetchSuggestions(
         userId: user?.uid ?? 'guest',
         vehicleId: vehicle?.vehicleId,
-        currentSoc: vehicle?.currentBattery.toDouble(),
-        currentSoh: vehicle?.stateOfHealth.toDouble(),
-        odoKm: vehicle?.currentOdo,
+        currentSoc: vehicle?.hasBatteryData == true
+            ? vehicle!.currentBattery.toDouble()
+            : null,
+        currentSoh: vehicle?.hasSohData == true
+            ? vehicle!.stateOfHealth.toDouble()
+            : null,
+        odoKm: vehicle?.hasOdoData == true ? vehicle!.currentOdo : null,
       );
 
-      if (suggestions.isNotEmpty && _isCurrent(generation)) {
+      if (suggestions.isNotEmpty && idle()) {
         setState(() {
           _activeSuggestion = suggestions.first;
         });
@@ -236,12 +248,15 @@ class _InteractiveAssistantSheetState
       final succeeded = res['success'] == true && data['success'] == true;
       final message = succeeded
           ? (data['message'] as String? ?? 'Đã xác nhận kết quả.')
-          : 'Chưa thực hiện được. Hãy kiểm tra tại màn hình Sạc pin.';
+          : (res['message'] as String? ??
+                'Chưa thực hiện được. Hãy kiểm tra tại màn hình tương ứng.');
 
       setState(() {
         _actionLoadingMap.remove(action.callId);
         final updatedAction = action.copyWith(
-          status: succeeded ? 'confirmed' : 'failed',
+          status: succeeded
+              ? 'confirmed'
+              : (res['status'] == 'unknown' ? 'unknown' : 'failed'),
           resultMessage: message,
         );
         _messages[msgIndex] = _messages[msgIndex].copyWith(
@@ -397,7 +412,7 @@ class _InteractiveAssistantSheetState
           id: 'msg-welcome',
           role: ChatRole.model,
           content:
-              'Chào bạn! Mình là BatteryBot. Bạn cần hỗ trợ kiểm tra pin, cài đặt sạc hay kết nối thiết bị Shelly?',
+              'Chào bạn, mình hỗ trợ về xe, pin, sạc và Shelly. Bạn muốn xem gì?',
           timestamp: DateTime.now(),
         ),
       );
@@ -668,6 +683,42 @@ class _InteractiveAssistantSheetState
     super.dispose();
   }
 
+  Future<void> _showPersonalization() async {
+    final generation = _generation;
+    final tracker = ref.read(behaviorTrackerProvider.notifier);
+    final profile = tracker.currentProfile;
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cá nhân hóa BatteryBot'),
+        content: Text(
+          '${tracker.personalizationEnabled ? 'Đang bật' : 'Đang tắt'} học thói quen trên điện thoại. Không upload dữ liệu học.\n\nChủ đề đã ghi nhớ: ${tracker.personalizationEnabled && profile.chatPreferences.topTopics.isNotEmpty ? profile.chatPreferences.topTopics.join(', ') : 'Chưa có'}.\nModel dự đoán cá nhân và LLM chưa được nghiệm thu trên thiết bị.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'reset'),
+            child: const Text('Xóa dữ liệu học'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'toggle'),
+            child: Text(
+              tracker.personalizationEnabled ? 'Tắt học' : 'Đồng ý bật học',
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Đóng'),
+          ),
+        ],
+      ),
+    );
+    if (!_isCurrent(generation)) return;
+    if (choice == 'reset') await tracker.resetPersonalization();
+    if (choice == 'toggle') {
+      await tracker.setPersonalizationEnabled(!tracker.personalizationEnabled);
+    }
+  }
+
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _scrollController.hasClients) {
@@ -680,12 +731,7 @@ class _InteractiveAssistantSheetState
     });
   }
 
-  bool _looksSensitive(String text) =>
-      RegExp(
-        r'(cloud\s*key|auth[_ -]?key|api[_ -]?key|password|mật khẩu|bearer\s+[a-z0-9._-]{16,})',
-        caseSensitive: false,
-      ).hasMatch(text) ||
-      RegExp(r'\b[A-Za-z0-9_-]{32,}\b').hasMatch(text);
+  bool _looksSensitive(String text) => BatteryBotLocalEngine.isSensitive(text);
 
   void _handleSend(String rawText) {
     final text = rawText.trim();
@@ -710,6 +756,7 @@ class _InteractiveAssistantSheetState
         .read(behaviorTrackerProvider.notifier)
         .trackChatInteraction(topic: _detectTopic(text));
     setState(() {
+      _activeSuggestion = null;
       _messages.add(
         ChatMessage(
           id: 'user-${DateTime.now().microsecondsSinceEpoch}',
@@ -723,7 +770,7 @@ class _InteractiveAssistantSheetState
     _scrollToBottom();
     final normalized = BatteryBotFaq.normalize(text);
     final wantsGuidance = RegExp(
-      r'\b(o dau|huong dan|lam sao|cach|mo|ket noi|dung sac|bat dau sac|bi khoa)\b',
+      r'\b(o dau|huong dan|lam sao|cach|mo|ket noi|bi khoa)\b',
     ).hasMatch(normalized);
     final faqAction = wantsGuidance ? BatteryBotFaq.actionFor(text) : null;
     if (faqAction != null) {
@@ -1074,81 +1121,107 @@ class _InteractiveAssistantSheetState
             // Header với Mascot và thông tin xe
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const BatteryBotMascot(
-                    size: BatteryBotSize.avatar,
-                    displayMode: BatteryBotDisplayMode.avatar,
-                    mood: BatteryBotMood.happy,
-                    enableFloating: false,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'BatteryBot',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: uiColors.text,
-                          ),
+                  Row(
+                    children: [
+                      const BatteryBotMascot(
+                        size: BatteryBotSize.avatar,
+                        displayMode: BatteryBotDisplayMode.avatar,
+                        mood: BatteryBotMood.happy,
+                        enableFloating: false,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'BatteryBot',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: uiColors.text,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          vehicle != null
-                              ? '${vehicle.vehicleName} • Pin ${vehicle.currentBattery}%'
-                              : 'Chưa chọn xe theo dõi',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            color: uiColors.muted,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
+                      ),
+                      IconButton(
+                        key: const Key('assistant_close_button'),
+                        tooltip: 'Đóng BatteryBot',
+                        icon: Icon(
+                          Icons.close,
+                          color: uiColors.muted,
+                          size: 20,
                         ),
-                      ],
-                    ),
+                        constraints: const BoxConstraints(
+                          minWidth: 48,
+                          minHeight: 48,
+                        ),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
                   ),
-                  IconButton(
-                    key: const Key('assistant_history_button'),
-                    icon: Icon(
-                      Icons.history_rounded,
-                      color: uiColors.muted,
-                      size: 20,
-                    ),
-                    tooltip: 'Lịch sử chat',
-                    padding: const EdgeInsets.all(6),
-                    constraints: const BoxConstraints(
-                      minWidth: 48,
-                      minHeight: 48,
-                    ),
-                    onPressed: _showHistoryModal,
+                  const SizedBox(height: 4),
+                  Text(
+                    vehicle?.displayName ?? 'Chưa chọn xe theo dõi',
+                    key: const Key('assistant_vehicle_label'),
+                    style: TextStyle(fontSize: 13, color: uiColors.text),
                   ),
-                  IconButton(
-                    key: const Key('assistant_new_chat_button'),
-                    icon: Icon(
-                      Icons.add_comment_outlined,
-                      color: uiColors.muted,
-                      size: 20,
-                    ),
-                    tooltip: 'Đoạn chat mới',
-                    padding: const EdgeInsets.all(6),
-                    constraints: const BoxConstraints(
-                      minWidth: 48,
-                      minHeight: 48,
-                    ),
-                    onPressed: () => _startNewChat(),
+                  Text(
+                    vehicle == null || !vehicle.hasBatteryData
+                        ? 'Chưa có dữ liệu pin'
+                        : 'Pin ${vehicle.currentBattery}% · Dữ liệu hồ sơ',
+                    key: const Key('assistant_battery_source'),
+                    style: TextStyle(fontSize: 11.5, color: uiColors.muted),
                   ),
-                  IconButton(
-                    icon: Icon(Icons.close, color: uiColors.muted, size: 20),
-                    padding: const EdgeInsets.all(6),
-                    constraints: const BoxConstraints(
-                      minWidth: 48,
-                      minHeight: 48,
-                    ),
-                    onPressed: () => Navigator.of(context).pop(),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      IconButton(
+                        key: const Key('assistant_history_button'),
+                        icon: Icon(
+                          Icons.history_rounded,
+                          color: uiColors.muted,
+                          size: 20,
+                        ),
+                        tooltip: 'Lịch sử chat',
+                        padding: const EdgeInsets.all(6),
+                        constraints: const BoxConstraints(
+                          minWidth: 48,
+                          minHeight: 48,
+                        ),
+                        onPressed: _showHistoryModal,
+                      ),
+                      IconButton(
+                        key: const Key('assistant_personalization_button'),
+                        tooltip: 'Cá nhân hóa và dữ liệu học',
+                        constraints: const BoxConstraints(
+                          minWidth: 48,
+                          minHeight: 48,
+                        ),
+                        icon: const Icon(Icons.tune_rounded, size: 20),
+                        onPressed: _showPersonalization,
+                      ),
+                      IconButton(
+                        key: const Key('assistant_new_chat_button'),
+                        icon: Icon(
+                          Icons.add_comment_outlined,
+                          color: uiColors.muted,
+                          size: 20,
+                        ),
+                        tooltip: 'Đoạn chat mới',
+                        padding: const EdgeInsets.all(6),
+                        constraints: const BoxConstraints(
+                          minWidth: 48,
+                          minHeight: 48,
+                        ),
+                        onPressed: () => _startNewChat(),
+                      ),
+                    ],
                   ),
                 ],
               ),

@@ -1,0 +1,20 @@
+{
+  "command": [
+    "C:\\Users\\khanh\\AppData\\Roaming\\npm\\firebase.cmd",
+    "emulators:exec",
+    "--only",
+    "firestore",
+    "--project",
+    "vinfast-rules-test",
+    "--config",
+    "firebase.rules-local.json",
+    "npm --prefix rules_tests test"
+  ],
+  "cwd": "web",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\batterybot-reminder-95-rules-20261007.log",
+  "timeoutSeconds": 180,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 101.78
+}

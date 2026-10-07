@@ -170,6 +170,9 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                                   ? _buildAiPlanV2(context, state, controller)
                                   : TimedChargingSectionV2(
                                       key: const ValueKey('timed-mode'),
+                                      disabledReason: state
+                                          .capabilities
+                                          .controlBlockedMessage,
                                       readyForControl:
                                           state.capabilities.readyForControl &&
                                           state.phase !=
@@ -336,6 +339,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
         state.phase == SmartChargingViewPhase.loading ||
         state.phase == SmartChargingViewPhase.starting;
     final canStart =
+        state.preview?.isDisplayOnly == false &&
         (state.preview?.aiChargeEligible == true ||
             state.preview?.isPhysicsFallback == true) &&
         state.capabilities.readyForControl &&
@@ -455,6 +459,8 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                 ? 'DỰ ĐOÁN VỚI AI'
                 : canStart
                 ? 'SẠC THEO AI'
+                : state.preview!.isDisplayOnly
+                ? 'Dự đoán tham khảo · Dùng Sạc hẹn giờ'
                 : (state.preview!.aiChargeEligible ||
                       state.preview!.isPhysicsFallback)
                 ? 'Hoàn tất cài đặt ổ sạc'
@@ -961,8 +967,12 @@ class _SmartChargeHeaderState extends State<_SmartChargeHeader>
         statusText = 'Đang sạc';
         break;
       case ChargerDisplayState.off:
-        dotColor = CockpitColors.emerald;
-        statusText = 'Bộ sạc đã kết nối';
+        dotColor = state.capabilities.readyForControl
+            ? CockpitColors.emerald
+            : CockpitColors.amber;
+        statusText = state.capabilities.readyForControl
+            ? 'Shelly sẵn sàng điều khiển'
+            : 'Shelly trực tuyến · Chưa sẵn sàng bật sạc';
         break;
       case ChargerDisplayState.connecting:
         dotColor = CockpitColors.amber;
@@ -1348,6 +1358,7 @@ class _PlanSection extends StatelessWidget {
         state.phase == SmartChargingViewPhase.loading ||
         state.phase == SmartChargingViewPhase.starting;
     final canStart =
+        state.preview?.isDisplayOnly == false &&
         state.preview?.aiChargeEligible == true &&
         state.capabilities.readyForControl &&
         state.connectionState.shellyReachable;
@@ -1590,7 +1601,9 @@ class _PlanSection extends StatelessWidget {
           if (state.preview != null && !canStart) ...[
             const SizedBox(height: 8),
             Text(
-              state.preview!.aiChargeEligible
+              state.preview!.isDisplayOnly
+                  ? 'Dự đoán chỉ để tham khảo. Dùng Sạc hẹn giờ để chọn thời gian.'
+                  : state.preview!.aiChargeEligible
                   ? 'Hãy hoàn tất cài đặt ổ sạc để bắt đầu sạc.'
                   : 'Dự đoán thời gian chưa khả dụng.',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(

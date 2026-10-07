@@ -26,7 +26,7 @@ FEATURE_NAMES = [
     "end_soc",
     "delta_soc",
     "ambient_temp_c",
-    "avg_charge_rate",
+    "reference_charge_rate",
     "temp_deviation",
 ]
 
@@ -63,17 +63,16 @@ def extract_features_from_session(session: dict[str, Any]) -> tuple[list[float],
     ambient_temp_c = float(session.get("ambient_temp_start_c") or session.get("ambient_temp_c") or 30.0)
     temp_deviation = abs(ambient_temp_c - 27.0)
 
-    # Average charge rate (% per hour)
-    hours = duration_s / 3600.0
-    avg_charge_rate = (delta_soc / hours) if hours > 0 else 22.5
-    avg_charge_rate = max(5.0, min(50.0, avg_charge_rate))
+    # Contract v2: available before a session. Never derive a feature from y.
+    # Kept as a constant to match the current mobile six-feature preprocessor.
+    reference_charge_rate = 22.5
 
     features = [
         start_soc,
         end_soc,
         delta_soc,
         ambient_temp_c,
-        avg_charge_rate,
+        reference_charge_rate,
         temp_deviation,
     ]
     return features, float(duration_s)
@@ -96,7 +95,7 @@ def generate_baseline_dataset(size: int = 50) -> tuple[list[list[float]], list[f
         base_rate = random.uniform(21.0, 24.5) / temp_penalty
         hours = delta / base_rate
         duration_s = round(hours * 3600.0, 1)
-        X.append([start, end, delta, ambient, round(base_rate, 2), round(dev, 2)])
+        X.append([start, end, delta, ambient, 22.5, round(dev, 2)])
         y.append(duration_s)
     return X, y
 
@@ -187,7 +186,7 @@ def run_fine_tuning(
     joblib_path = os.path.join(output_dir, f"{new_version}.joblib")
     joblib.dump(model, joblib_path)
 
-    # 6. Export .tflite model (Tiny MLP / Converter or flat weights for on-device inference)
+    # 6. Mobile export is available only after a real TFLite conversion loads.
     tflite_path = os.path.join(output_dir, f"{new_version}.tflite")
     tflite_generated = False
 
@@ -206,25 +205,29 @@ def run_fine_tuning(
             converter = tf.lite.TFLiteConverter.from_keras_model(nn)
             converter.optimizations = [tf.lite.Optimize.DEFAULT]
             tflite_model = converter.convert()
+            interpreter = tf.lite.Interpreter(model_content=tflite_model)
+            interpreter.allocate_tensors()
 
             with open(tflite_path, "wb") as f:
                 f.write(tflite_model)
             tflite_generated = True
         except Exception as exc:
-            logger.info("Tensorflow converter not available (%s); writing portable artifact.", exc)
-
-    if not tflite_generated:
-        with open(tflite_path, "wb") as f:
-            f.write(b"TFL3" + (f"version:{new_version}".encode()))
-        tflite_generated = True
+            logger.info("Mobile export unavailable: %s", type(exc).__name__)
 
 
     return {
         "success": True,
         "version": new_version,
         "joblibPath": joblib_path,
-        "tflitePath": tflite_path,
+        "tflitePath": tflite_path if tflite_generated else None,
         "tfliteGenerated": tflite_generated,
+        "mobileExportStatus": "available" if tflite_generated else "unavailable",
+        "mobileContract": {
+            "task": "charging_time", "featureSchemaVersion": "charging_time/v2",
+            "inputFeatures": FEATURE_NAMES, "outputUnit": "seconds",
+            # Conversion/fit alone does not prove deployment quality.
+            "qualityVerified": False,
+        },
         "metrics": {
             "mape": round(mape, 2),
             "maeSeconds": round(mae, 1),

@@ -25,11 +25,7 @@ Widget _wrapWithNarrowViewport({
     ),
     home: Scaffold(
       body: Center(
-        child: SizedBox(
-          width: width,
-          height: height,
-          child: child,
-        ),
+        child: SizedBox(width: width, height: height, child: child),
       ),
     ),
   );
@@ -37,23 +33,66 @@ Widget _wrapWithNarrowViewport({
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  for (final width in [320.0, 390.0, 412.0]) {
+    for (final brightness in Brightness.values) {
+      testWidgets(
+        'Local prediction keeps units/source at $width/$brightness/font1.5',
+        (tester) async {
+          final message = ChatMessage(
+            id: 'prediction',
+            role: ChatRole.model,
+            content: 'Ước tính thời gian sạc.',
+            timestamp: DateTime(2026, 10, 7),
+            richCards: [
+              {
+                'cardType': 'local_prediction',
+                'title': 'Thời gian sạc ước tính',
+                'data': {
+                  'durationSeconds': 1801.0,
+                  'source': 'model local',
+                  'modelVersion': 'qa-v2',
+                  'updatedAt': '2026-10-07T09:00:00',
+                },
+              },
+            ],
+          );
+          await tester.pumpWidget(
+            _wrapWithNarrowViewport(
+              width: width,
+              brightness: brightness,
+              child: MediaQuery(
+                data: MediaQueryData(textScaler: TextScaler.linear(1.5)),
+                child: ListView(
+                  children: [ChatMessageBubble(message: message)],
+                ),
+              ),
+            ),
+          );
+          await tester.pump();
+          expect(find.text('31 phút'), findsOneWidget);
+          expect(find.text('Model local · qa-v2'), findsOneWidget);
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox.shrink());
+        },
+      );
+    }
+  }
 
   group('Chatbot UI/UX 320px Responsive & Overflow Prevention Tests', () {
-    testWidgets('User message bubble renders without overflow on 320px', (tester) async {
+    testWidgets('User message bubble renders without overflow on 320px', (
+      tester,
+    ) async {
       final msg = ChatMessage(
         id: 'user_1',
         role: ChatRole.user,
-        content: 'Xin chào BatteryBot, tôi muốn kiểm tra tình trạng pin xe Feliz hôm nay.',
+        content:
+            'Xin chào BatteryBot, tôi muốn kiểm tra tình trạng pin xe Feliz hôm nay.',
         timestamp: DateTime(2026, 10, 2, 10, 0),
       );
 
       await tester.pumpWidget(
         _wrapWithNarrowViewport(
-          child: ListView(
-            children: [
-              ChatMessageBubble(message: msg),
-            ],
-          ),
+          child: ListView(children: [ChatMessageBubble(message: msg)]),
         ),
       );
       await tester.pump();
@@ -63,21 +102,20 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('Bot message bubble renders without overflow on 320px', (tester) async {
+    testWidgets('Bot message bubble renders without overflow on 320px', (
+      tester,
+    ) async {
       final msg = ChatMessage(
         id: 'bot_1',
         role: ChatRole.model,
-        content: 'Chào bạn! Mức pin hiện tại của bạn là 85%, quãng đường còn lại khoảng 95 km. Bạn có cần hỗ trợ bật sạc thông minh không?',
+        content:
+            'Chào bạn! Mức pin hiện tại của bạn là 85%, quãng đường còn lại khoảng 95 km. Bạn có cần hỗ trợ bật sạc thông minh không?',
         timestamp: DateTime(2026, 10, 2, 10, 1),
       );
 
       await tester.pumpWidget(
         _wrapWithNarrowViewport(
-          child: ListView(
-            children: [
-              ChatMessageBubble(message: msg),
-            ],
-          ),
+          child: ListView(children: [ChatMessageBubble(message: msg)]),
         ),
       );
       await tester.pump();
@@ -87,7 +125,9 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('BatteryStatusCard renders without overflow on 320px', (tester) async {
+    testWidgets('BatteryStatusCard renders without overflow on 320px', (
+      tester,
+    ) async {
       final data = {
         'soc': 82.0,
         'soh': 97.5,
@@ -100,9 +140,7 @@ void main() {
 
       await tester.pumpWidget(
         _wrapWithNarrowViewport(
-          child: SingleChildScrollView(
-            child: BatteryStatusCard(data: data),
-          ),
+          child: SingleChildScrollView(child: BatteryStatusCard(data: data)),
         ),
       );
       await tester.pump();
@@ -113,95 +151,106 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('ChargingProgressCard safety footer and metrics fit 320px without overflow', (tester) async {
-      final data = {
-        'currentSoc': 45.0,
-        'targetSoc': 80.0,
-        'chargingPowerW': 2100.0,
-        'currentAmps': 9.2,
-        'remainingMinutes': 48,
-        'status': 'charging',
-      };
+    testWidgets(
+      'ChargingProgressCard safety footer and metrics fit 320px without overflow',
+      (tester) async {
+        final data = {
+          'currentSoc': 45.0,
+          'targetSoc': 80.0,
+          'chargingPowerW': 2100.0,
+          'currentAmps': 9.2,
+          'remainingMinutes': 48,
+          'status': 'charging',
+        };
 
-      await tester.pumpWidget(
-        _wrapWithNarrowViewport(
-          child: SingleChildScrollView(
-            child: ChargingProgressCard(data: data),
-          ),
-        ),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-
-      expect(find.textContaining('An toàn phần cứng'), findsOneWidget);
-      expect(find.text('2100 W'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
-
-
-    testWidgets('TripSummaryCard metrics and eco tips fit 320px without overflow', (tester) async {
-      final data = {
-        'distanceKm': 28.6,
-        'energyUsedWh': 850.0,
-        'efficiencyWhKm': 29.7,
-        'co2SavedKg': 2.45,
-        'durationMinutes': 50,
-      };
-
-      await tester.pumpWidget(
-        _wrapWithNarrowViewport(
-          child: SingleChildScrollView(
-            child: TripSummaryCard(data: data),
-          ),
-        ),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-
-      expect(find.text('28.6 km'), findsOneWidget);
-      expect(find.textContaining('Phong cách lái xe rất mượt mà'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('ActionConfirmationCard buttons wrap and fit 320px without overflow', (tester) async {
-      final action = FunctionCallAction(
-        callId: 'call_test_01',
-        toolName: 'start_smart_charging',
-        args: const {'vehicle_id': 'VF-FELIZ', 'target_soc': 80},
-        cardData: const ActionConfirmationCardData(
-          title: 'Kích hoạt Sạc Thông Minh 80%',
-          description: 'Hệ thống sẽ bật relay Shelly và tự ngắt khi đạt mốc 80%.',
-          safetyNote: 'Định mức ≤12A / 2500W. Tự động ngắt khi quá nhiệt hoặc mất kết nối.',
-          estimatedTime: 'Khoảng 45 phút',
-        ),
-        status: 'pending',
-      );
-
-      await tester.pumpWidget(
-        _wrapWithNarrowViewport(
-          child: SingleChildScrollView(
-            child: ActionConfirmationCard(
-              action: action,
-              onConfirm: () {},
-              onCancel: () {},
+        await tester.pumpWidget(
+          _wrapWithNarrowViewport(
+            child: SingleChildScrollView(
+              child: ChargingProgressCard(data: data),
             ),
           ),
-        ),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
 
-      expect(find.text('XÁC NHẬN SẠC'), findsOneWidget);
-      expect(find.text('HỦY'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
+        expect(find.textContaining('An toàn phần cứng'), findsOneWidget);
+        expect(find.text('2100 W'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
 
-    testWidgets('TypingIndicatorDots animates smoothly without exception', (tester) async {
+    testWidgets(
+      'TripSummaryCard metrics and eco tips fit 320px without overflow',
+      (tester) async {
+        final data = {
+          'distanceKm': 28.6,
+          'energyUsedWh': 850.0,
+          'efficiencyWhKm': 29.7,
+          'co2SavedKg': 2.45,
+          'durationMinutes': 50,
+        };
+
+        await tester.pumpWidget(
+          _wrapWithNarrowViewport(
+            child: SingleChildScrollView(child: TripSummaryCard(data: data)),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(find.text('28.6 km'), findsOneWidget);
+        expect(
+          find.textContaining('Phong cách lái xe rất mượt mà'),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'ActionConfirmationCard buttons wrap and fit 320px without overflow',
+      (tester) async {
+        final action = FunctionCallAction(
+          callId: 'call_test_01',
+          toolName: 'start_smart_charging',
+          args: const {'vehicle_id': 'VF-FELIZ', 'target_soc': 80},
+          cardData: const ActionConfirmationCardData(
+            title: 'Kích hoạt Sạc Thông Minh 80%',
+            description:
+                'Hệ thống sẽ bật relay Shelly và tự ngắt khi đạt mốc 80%.',
+            safetyNote:
+                'Định mức ≤12A / 2500W. Tự động ngắt khi quá nhiệt hoặc mất kết nối.',
+            estimatedTime: 'Khoảng 45 phút',
+          ),
+          status: 'pending',
+        );
+
+        await tester.pumpWidget(
+          _wrapWithNarrowViewport(
+            child: SingleChildScrollView(
+              child: ActionConfirmationCard(
+                action: action,
+                onConfirm: () {},
+                onCancel: () {},
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(find.text('XÁC NHẬN'), findsOneWidget);
+        expect(find.text('HỦY'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets('TypingIndicatorDots animates smoothly without exception', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _wrapWithNarrowViewport(
-          child: const Center(
-            child: TypingIndicatorDots(),
-          ),
+          child: const Center(child: TypingIndicatorDots()),
         ),
       );
 
@@ -210,12 +259,12 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('BreathingBotAvatar mounts and breathes without exception', (tester) async {
+    testWidgets('BreathingBotAvatar mounts and breathes without exception', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _wrapWithNarrowViewport(
-          child: const Center(
-            child: BreathingBotAvatar(isStreaming: true),
-          ),
+          child: const Center(child: BreathingBotAvatar(isStreaming: true)),
         ),
       );
 
@@ -223,13 +272,11 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('ChatInputBar renders at 320px width without overflow', (tester) async {
+    testWidgets('ChatInputBar renders at 320px width without overflow', (
+      tester,
+    ) async {
       await tester.pumpWidget(
-        _wrapWithNarrowViewport(
-          child: ChatInputBar(
-            onSend: (_) {},
-          ),
-        ),
+        _wrapWithNarrowViewport(child: ChatInputBar(onSend: (_) {})),
       );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
@@ -238,54 +285,55 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('Complete Dark Mode rendering of all cards without overflow or crash', (tester) async {
-      final msgWithCard = ChatMessage(
-        id: 'bot_2',
-        role: ChatRole.model,
-        content: 'Dưới đây là thông số xe của bạn:',
-        timestamp: DateTime(2026, 10, 2, 10, 2),
-        richCards: const [
-          {
-            'cardType': 'battery_status',
-            'data': {
-              'soc': 70.0,
-              'soh': 98.0,
-              'voltage': 71.8,
-              'temperature': 30.0,
-              'estimatedRangeKm': 75.0,
-              'chargingStatus': 'idle',
-              'vehicleId': 'VF-EVO-200',
+    testWidgets(
+      'Complete Dark Mode rendering of all cards without overflow or crash',
+      (tester) async {
+        final msgWithCard = ChatMessage(
+          id: 'bot_2',
+          role: ChatRole.model,
+          content: 'Dưới đây là thông số xe của bạn:',
+          timestamp: DateTime(2026, 10, 2, 10, 2),
+          richCards: const [
+            {
+              'cardType': 'battery_status',
+              'data': {
+                'soc': 70.0,
+                'soh': 98.0,
+                'voltage': 71.8,
+                'temperature': 30.0,
+                'estimatedRangeKm': 75.0,
+                'chargingStatus': 'idle',
+                'vehicleId': 'VF-EVO-200',
+              },
             },
-          },
-          {
-            'cardType': 'charging_progress',
-            'data': {
-              'currentSoc': 70.0,
-              'targetSoc': 85.0,
-              'chargingPowerW': 1800.0,
-              'currentAmps': 8.0,
-              'remainingMinutes': 30,
-              'status': 'charging',
+            {
+              'cardType': 'charging_progress',
+              'data': {
+                'currentSoc': 70.0,
+                'targetSoc': 85.0,
+                'chargingPowerW': 1800.0,
+                'currentAmps': 8.0,
+                'remainingMinutes': 30,
+                'status': 'charging',
+              },
             },
-          },
-        ],
-      );
+          ],
+        );
 
-      await tester.pumpWidget(
-        _wrapWithNarrowViewport(
-          brightness: Brightness.dark,
-          child: ListView(
-            children: [
-              ChatMessageBubble(message: msgWithCard),
-            ],
+        await tester.pumpWidget(
+          _wrapWithNarrowViewport(
+            brightness: Brightness.dark,
+            child: ListView(
+              children: [ChatMessageBubble(message: msgWithCard)],
+            ),
           ),
-        ),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
 
-      expect(find.text('70%'), findsWidgets);
-      expect(tester.takeException(), isNull);
-    });
+        expect(find.text('70%'), findsWidgets);
+        expect(tester.takeException(), isNull);
+      },
+    );
   });
 }

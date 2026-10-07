@@ -4,10 +4,11 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../core/providers/app_providers.dart';
+import '../../data/services/shelly_connection_coordinator.dart';
+import '../../core/constants/app_constants.dart';
 import '../../core/constants/beta_capabilities.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/feature_availability_registry.dart';
-import '../../core/services/notification_center_service.dart';
 import '../../core/theme/app_motion.dart';
 import '../../core/theme/app_ui_colors.dart';
 import '../../core/theme/cockpit_design_system.dart';
@@ -153,6 +154,12 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
   @override
   Widget build(BuildContext context) {
     final vehicleContext = ref.watch(vehicleContextProvider);
+    final user = Firebase.apps.isEmpty
+        ? null
+        : FirebaseAuth.instance.currentUser;
+    final unreadCount = (user != null && user.uid.isNotEmpty)
+        ? ref.watch(unreadCountProvider(user.uid)).valueOrNull ?? 0
+        : 0;
     final vehicleId = vehicleContext.vehicleId;
     final vehicle = vehicleContext.vehicle;
 
@@ -160,7 +167,9 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
       hasVehicleData: vehicleId.isNotEmpty,
     ).smartCharge(ai: true);
 
-    if (BetaCapabilities.advancedAi && vehicleId.isNotEmpty && vehicle != null) {
+    if (BetaCapabilities.advancedAi &&
+        vehicleId.isNotEmpty &&
+        vehicle != null) {
       final args = SmartChargingControllerArgs(
         vehicleId: vehicleId,
         currentSoc: vehicle.currentBattery.toDouble(),
@@ -230,15 +239,20 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
               ),
             ),
             const _CardDivider(),
-            _ActionTile(
-              icon: Icons.power_rounded,
-              iconColor: CockpitColors.info,
-              title: 'Sạc thông minh Shelly',
-              subtitle: 'Kết nối và quản lý bộ sạc',
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const SmartChargerSetupHubScreen(),
+            StreamBuilder<ShellyConnectionSnapshot>(
+              stream: ShellyConnectionCoordinator.shared.states,
+              initialData: ShellyConnectionCoordinator.shared.current,
+              builder: (context, snapshot) => _ActionTile(
+                icon: Icons.power_rounded,
+                iconColor: CockpitColors.info,
+                title: 'Sạc thông minh Shelly',
+                subtitle:
+                    snapshot.data?.connectionLabel ?? 'Chưa kết nối Shelly',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const SmartChargerSetupHubScreen(),
+                  ),
                 ),
               ),
             ),
@@ -301,43 +315,46 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
           children: [
             if (BetaCapabilities.advancedAi) ...[
               _ActionTile(
-              icon: Icons.psychology_rounded,
-              iconColor: const Color(0xFFA855F7),
-              title: 'Trợ lý AI & Dự báo Pin',
-              subtitle: availability.enabled
-                  ? 'Thuật toán tối ưu sạc & bảo vệ cell pin'
-                  : availability.reason,
-              badge: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                  color: availability.enabled
-                      ? CockpitColors.emerald.withValues(alpha: 0.15)
-                      : CockpitColors.amber.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
+                icon: Icons.psychology_rounded,
+                iconColor: const Color(0xFFA855F7),
+                title: 'Trợ lý AI & Dự báo Pin',
+                subtitle: availability.enabled
+                    ? 'Thuật toán tối ưu sạc & bảo vệ cell pin'
+                    : availability.reason,
+                badge: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
                     color: availability.enabled
-                        ? CockpitColors.emerald.withValues(alpha: 0.4)
-                        : CockpitColors.amber.withValues(alpha: 0.4),
-                    width: 0.8,
+                        ? CockpitColors.emerald.withValues(alpha: 0.15)
+                        : CockpitColors.amber.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: availability.enabled
+                          ? CockpitColors.emerald.withValues(alpha: 0.4)
+                          : CockpitColors.amber.withValues(alpha: 0.4),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Text(
+                    availability.enabled ? 'Sẵn sàng' : 'Cần thiết lập',
+                    style: TextStyle(
+                      color: availability.enabled
+                          ? CockpitColors.emerald
+                          : CockpitColors.amber,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
-                child: Text(
-                  availability.enabled ? 'Sẵn sàng' : 'Cần thiết lập',
-                  style: TextStyle(
-                    color: availability.enabled
-                        ? CockpitColors.emerald
-                        : CockpitColors.amber,
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w700,
-                  ),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AiModelsScreen()),
                 ),
               ),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const AiModelsScreen()),
-              ),
-            ),
-            const _CardDivider(),
+              const _CardDivider(),
             ],
             _ActionTile(
               icon: Icons.build_circle_rounded,
@@ -388,14 +405,8 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
               iconColor: const Color(0xFFFBBF24),
               title: 'Trung tâm thông báo',
               subtitle: 'Lịch sử cảnh báo sạc & tin tức',
-              trailing: StreamBuilder<int>(
-                stream: Firebase.apps.isNotEmpty
-                    ? NotificationCenterService().watchUnreadCount()
-                    : const Stream<int>.empty(),
-                builder: (context, snapshot) {
-                  final count = snapshot.data ?? 0;
-                  if (count > 0) {
-                    return Container(
+              trailing: unreadCount > 0
+                  ? Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8,
                         vertical: 3,
@@ -405,22 +416,19 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
-                        '$count',
+                        '$unreadCount',
                         style: const TextStyle(
                           color: Colors.black,
                           fontSize: 11,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
-                    );
-                  }
-                  return const Icon(
-                    Icons.chevron_right_rounded,
-                    color: Color(0xFF64748B),
-                    size: 20,
-                  );
-                },
-              ),
+                    )
+                  : const Icon(
+                      Icons.chevron_right_rounded,
+                      color: Color(0xFF64748B),
+                      size: 20,
+                    ),
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -960,7 +968,7 @@ class _AppBrandingFooter extends StatelessWidget {
     return Column(
       children: [
         Text(
-          'VinFast Battery · Phiên bản 1.1.5 (Build 115)',
+          '${AppConstants.appName} · Phiên bản ${AppConstants.appVersion}',
           style: TextStyle(
             color: const Color(0xFF64748B).withValues(alpha: 0.8),
             fontSize: 11.5,

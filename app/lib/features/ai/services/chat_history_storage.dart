@@ -8,11 +8,12 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/services/account_secure_storage.dart';
 import '../models/chat_message.dart';
 import '../models/chat_session.dart';
 
 final chatHistoryStorageProvider = Provider<ChatHistoryStorage>((ref) {
-  final storage = ChatHistoryStorage();
+  final storage = ChatHistoryStorage(localOnly: true);
   ref.onDispose(storage.dispose);
   return storage;
 });
@@ -25,11 +26,15 @@ class ChatHistoryException implements Exception {
 }
 
 class ChatHistoryStorage {
-  ChatHistoryStorage({http.Client? client, String? Function()? uidResolver})
-    : _client = client ?? http.Client(),
-      _uidResolver = uidResolver ?? _firebaseUid;
+  ChatHistoryStorage({
+    http.Client? client,
+    String? Function()? uidResolver,
+    this.localOnly = false,
+  }) : _client = client ?? http.Client(),
+       _uidResolver = uidResolver ?? _firebaseUid;
 
   final String? Function() _uidResolver;
+  final bool localOnly;
   static String? _firebaseUid() =>
       Firebase.apps.isEmpty ? null : FirebaseAuth.instance.currentUser?.uid;
   String get _scope => Uri.encodeComponent(_uidResolver() ?? 'guest');
@@ -38,7 +43,7 @@ class ChatHistoryStorage {
 
   final http.Client _client;
   void dispose() => _client.close();
-  final FlutterSecureStorage _secure = const FlutterSecureStorage();
+  final FlutterSecureStorage _secure = accountSecureStorage;
   Future<void> _writeTail = Future<void>.value();
 
   Future<void> _serializeWrite(Future<void> Function() operation) {
@@ -58,7 +63,9 @@ class ChatHistoryStorage {
     List<ChatMessage> messages, {
     String? title,
   }) {
-    final snapshot = List<ChatMessage>.of(messages);
+    final snapshot = List<ChatMessage>.of(
+      messages.skip(messages.length > 50 ? messages.length - 50 : 0),
+    );
     return _serializeWrite(
       () => _saveSessionMessages(sessionId, snapshot, title: title),
     );
@@ -132,6 +139,7 @@ class ChatHistoryStorage {
       if (raw != null && raw.isNotEmpty) {
         final list = jsonDecode(raw) as List<dynamic>;
         return list
+            .skip(list.length > 50 ? list.length - 50 : 0)
             .map((item) => ChatMessage.fromJson(item as Map<String, dynamic>))
             .toList();
       }
@@ -216,6 +224,7 @@ class ChatHistoryStorage {
     List<ChatMessage> messages, {
     String? title,
   }) async {
+    if (localOnly) return false;
     final uri = AppConstants.tryBuildApiUri('/api/chat/backup');
     if (uri == null || !AppConstants.isApiConfigured) return false;
 

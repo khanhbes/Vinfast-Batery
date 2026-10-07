@@ -17,12 +17,26 @@ import 'smart_charger_service.dart';
 import 'shelly_api_transport.dart';
 
 class ServerSmartChargerService {
-  ServerSmartChargerService({http.Client? client, FirebaseAuth? auth})
-    : _client = client ?? http.Client(),
-      _auth = auth ?? FirebaseAuth.instance;
+  ServerSmartChargerService({
+    http.Client? client,
+    FirebaseAuth? auth,
+    bool Function()? requestValid,
+  }) : _client = client ?? http.Client(),
+       _requestValid = requestValid,
+       _auth = auth ?? FirebaseAuth.instance;
 
   final http.Client _client;
   final FirebaseAuth _auth;
+  final bool Function()? _requestValid;
+  bool _closed = false;
+
+  /// Release the client owned by this service, including pending requests.
+  /// Closing a request is not evidence that a relay command did not arrive.
+  void close() {
+    if (_closed) return;
+    _closed = true;
+    _client.close();
+  }
 
   /// Metadata returned by the server vault resolver. Secrets are populated
   /// only after [restoreDirectProfile] succeeds over authenticated HTTPS.
@@ -68,6 +82,13 @@ class ServerSmartChargerService {
     Map<String, dynamic>? body,
     Map<String, String>? headers,
   }) async {
+    if (_closed) {
+      throw const SmartChargerException(
+        'Yêu cầu đã hết hiệu lực. Hãy thử lại.',
+        code: 'account_changed',
+        statusCode: 401,
+      );
+    }
     final uri = AppConstants.tryBuildApiUri(path);
     if (uri == null) {
       throw const SmartChargerException(
@@ -78,6 +99,13 @@ class ServerSmartChargerService {
       );
     }
 
+    if (_closed || _requestValid?.call() == false) {
+      throw const SmartChargerException(
+        'Yêu cầu đã hết hiệu lực.',
+        code: 'account_changed',
+        statusCode: 401,
+      );
+    }
     final user = _auth.currentUser;
     if (user == null) {
       throw const SmartChargerException(
@@ -87,7 +115,10 @@ class ServerSmartChargerService {
       );
     }
     final token = await user.getIdToken().timeout(const Duration(seconds: 12));
-    if (_auth.currentUser?.uid != user.uid || token == null) {
+    if (_auth.currentUser?.uid != user.uid ||
+        _closed ||
+        token == null ||
+        _requestValid?.call() == false) {
       throw const SmartChargerException(
         'Phiên đăng nhập đã thay đổi.',
         code: 'account_changed',
@@ -104,7 +135,9 @@ class ServerSmartChargerService {
     if (body != null) request.body = jsonEncode(body);
 
     final response = await ShellyApiTransport.send(_client, request);
-    if (_auth.currentUser?.uid != user.uid) {
+    if (_closed ||
+        _auth.currentUser?.uid != user.uid ||
+        _requestValid?.call() == false) {
       throw const SmartChargerException(
         'Phiên đăng nhập đã thay đổi.',
         code: 'account_changed',
@@ -416,7 +449,7 @@ class ServerSmartChargerService {
     String key,
   ) async {
     final id = preview.previewId;
-    if (id == null) {
+    if (preview.isDisplayOnly || id == null) {
       throw const SmartChargerException(
         'Dự đoán server không hợp lệ.',
         code: 'previewMissing',
@@ -514,10 +547,12 @@ class ServerSmartChargerService {
     String sessionId, {
     required int expectedVersion,
     String userStopReason = 'none',
+    String? idempotencyKey,
   }) async {
     final data = await _request(
       'POST',
       '/api/smart-charging/session/$sessionId/stop',
+      headers: {'Idempotency-Key': ?idempotencyKey},
       body: {
         'expectedVersion': expectedVersion,
         'userStopReason': userStopReason,

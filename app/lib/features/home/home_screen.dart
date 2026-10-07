@@ -1327,7 +1327,7 @@ class _SyncDialog extends StatefulWidget {
 class _SyncDialogState extends State<_SyncDialog>
     with SingleTickerProviderStateMixin {
   bool _isSyncing = false;
-  String _status = 'Ready to sync';
+  String _status = 'Sẵn sàng đồng bộ';
   late AnimationController _animationController;
 
   @override
@@ -1348,7 +1348,7 @@ class _SyncDialogState extends State<_SyncDialog>
   Future<void> _performSync() async {
     setState(() {
       _isSyncing = true;
-      _status = 'Syncing data...';
+      _status = 'Đang đồng bộ dữ liệu...';
     });
 
     final syncService = SyncService();
@@ -1356,7 +1356,7 @@ class _SyncDialogState extends State<_SyncDialog>
 
     setState(() {
       _isSyncing = false;
-      _status = result['success'] ? 'Sync completed!' : 'Sync failed';
+      _status = result['success'] ? 'Đồng bộ thành công!' : 'Đồng bộ thất bại';
     });
 
     await Future.delayed(Duration(seconds: 1));
@@ -1390,7 +1390,7 @@ class _SyncDialogState extends State<_SyncDialog>
             ),
             SizedBox(height: 20),
             Text(
-              'Sync with Web',
+              'Đồng bộ dữ liệu Web',
               style: TextStyle(
                 color: AppUiColors.of(context).text,
                 fontSize: 20,
@@ -1419,7 +1419,7 @@ class _SyncDialogState extends State<_SyncDialog>
                 children: [
                   Expanded(
                     child: _AnimatedButton(
-                      label: 'Cancel',
+                      label: 'Hủy',
                       isSecondary: true,
                       onTap: () => Navigator.pop(context),
                     ),
@@ -1427,7 +1427,7 @@ class _SyncDialogState extends State<_SyncDialog>
                   SizedBox(width: 12),
                   Expanded(
                     child: _AnimatedButton(
-                      label: 'Sync Now',
+                      label: 'Đồng bộ ngay',
                       onTap: _performSync,
                     ),
                   ),

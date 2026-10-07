@@ -8,9 +8,22 @@ import 'package:http/http.dart' as http;
 import '../../../core/constants/app_constants.dart';
 import '../models/chat_session.dart';
 import '../models/function_call_action.dart';
+import '../../../core/providers/vehicle_context_provider.dart';
+import '../../../data/services/account_reminder_service.dart';
+import 'app_chat_tool_gateway.dart';
+import 'local_chat_engine.dart';
 
 final chatApiServiceProvider = Provider<ChatApiService>((ref) {
-  final service = ChatApiService();
+  final engine = BatteryBotLocalEngine(
+    tools: AppChatToolGateway(
+      selectedVehicle: () => ref.read(vehicleContextProvider).vehicle,
+      reminders: AccountReminderService.instance,
+    ),
+  );
+  ref.listen(vehicleContextProvider, (previous, next) {
+    if (previous?.vehicleId != next.vehicleId) engine.cancel();
+  });
+  final service = ChatApiService(localOnly: true, localEngine: engine);
   ref.onDispose(service.dispose);
   return service;
 });
@@ -40,18 +53,34 @@ class ChatStreamResponse {
 
 class ChatApiService {
   ChatApiService({
+    this.localOnly = false,
     http.Client? client,
     this.requestTimeout = const Duration(seconds: 20),
     this.streamIdleTimeout = const Duration(seconds: 30),
     String? Function()? uidResolver,
     Future<String?> Function()? tokenResolver,
+    LocalChatEngine? localEngine,
   }) : _client = client ?? http.Client(),
        _uidResolver = uidResolver ?? _firebaseUid,
-       _tokenResolver = tokenResolver ?? _firebaseToken;
+       _tokenResolver = tokenResolver ?? _firebaseToken,
+       _localEngine = localEngine ?? BatteryBotLocalEngine() {
+    if (localOnly && Firebase.apps.isNotEmpty) {
+      String? previous = _uidResolver();
+      _authSubscription = FirebaseAuth.instance.authStateChanges().listen((
+        user,
+      ) {
+        if (previous != user?.uid) _localEngine.cancel();
+        previous = user?.uid;
+      });
+    }
+  }
   final Duration requestTimeout;
+  final bool localOnly;
   final Duration streamIdleTimeout;
 
   final http.Client _client;
+  final LocalChatEngine _localEngine;
+  StreamSubscription<User?>? _authSubscription;
   final String? Function() _uidResolver;
   final Future<String?> Function() _tokenResolver;
   static String? _firebaseUid() =>
@@ -59,7 +88,12 @@ class ChatApiService {
   static Future<String?> _firebaseToken() async => Firebase.apps.isEmpty
       ? null
       : FirebaseAuth.instance.currentUser?.getIdToken();
-  void dispose() => _client.close();
+  void dispose() {
+    _localEngine.dispose();
+    unawaited(_authSubscription?.cancel());
+    _client.close();
+  }
+
   void _assertAccount(String? uid) {
     if (uid != _uidResolver()) {
       throw const ChatApiException(
@@ -116,7 +150,7 @@ class ChatApiService {
 
     final uri = AppConstants.tryBuildApiUri('/api/chat/send');
 
-    if (uri == null || !AppConstants.isApiConfigured) {
+    if (localOnly || uri == null || !AppConstants.isApiConfigured) {
       // Chế độ mô phỏng offline hoặc API chưa được cấu hình URL
       _simulateOfflineStream(
         controller,
@@ -300,6 +334,7 @@ class ChatApiService {
     void Function(Map<String, dynamic> cardData)? onRichCard,
     String? existingSessionId,
   ) {
+    final ownerUid = _uidResolver();
     final mid = 'msg-local-${DateTime.now().millisecondsSinceEpoch}';
     final sid =
         existingSessionId ??
@@ -318,10 +353,22 @@ class ChatApiService {
             soc <= 100
         ? 'Theo dữ liệu bạn đang xem, pin $model là $soc%. Chưa có kết nối để cập nhật dữ liệu mới.'
         : 'Mình đang ngoại tuyến. Bạn có thể xem pin, lịch sử hoặc kết nối Shelly trong app. Điều khiển cần kết nối máy chủ.';
-    if (!fnComp.isCompleted) fnComp.complete(null);
-    scheduleMicrotask(() {
+    scheduleMicrotask(() async {
+      LocalChatReply? local;
+      try {
+        if (localOnly) local = await _localEngine.reply(message);
+      } on Object {
+        local = const LocalChatReply(
+          'Chưa nhận được câu trả lời. Hãy thử lại.',
+        );
+      }
       if (!controller.isClosed) {
-        controller.add(reply);
+        if (ownerUid == _uidResolver()) {
+          if (local?.action != null) onFunctionCall?.call(local!.action!);
+          if (local?.card != null) onRichCard?.call(local!.card!);
+          controller.add(local?.text ?? reply);
+        }
+        if (!fnComp.isCompleted) fnComp.complete(local?.action);
         unawaited(controller.close());
       }
     });
@@ -335,6 +382,10 @@ class ChatApiService {
     required Map<String, dynamic> args,
     required bool confirmed,
   }) async {
+    if (localOnly) {
+      // Caller-supplied args/toolName are not executable authority.
+      return _localEngine.confirm(callId, confirmed);
+    }
     final ownerUid = _uidResolver();
     final uri = AppConstants.tryBuildApiUri('/api/chat/action/confirm');
     if (uri == null || !AppConstants.isApiConfigured) {
@@ -396,6 +447,7 @@ class ChatApiService {
 
   /// Lấy danh sách các session
   Future<List<ChatSession>> getSessions() async {
+    if (localOnly) return [];
     final ownerUid = _uidResolver();
     final uri = AppConstants.tryBuildApiUri('/api/chat/sessions');
     if (uri == null) return [];
@@ -439,6 +491,12 @@ class ChatApiService {
     required String messageId,
     required String rating,
   }) async {
+    if (localOnly) {
+      return rating == 'like' ||
+          rating == 'dislike' ||
+          rating == 'positive' ||
+          rating == 'negative';
+    }
     final ownerUid = _uidResolver();
     final uri = AppConstants.tryBuildApiUri('/api/chat/feedback');
     if (uri == null) return false;

@@ -10,14 +10,21 @@ import '../../../core/constants/app_constants.dart';
 import '../models/proactive_suggestion.dart';
 
 final suggestionServiceProvider = Provider<SuggestionService>((ref) {
-  return SuggestionService();
+  final service = SuggestionService();
+  ref.onDispose(service.dispose);
+  return service;
 });
 
 class SuggestionService {
-  SuggestionService({http.Client? client, String? Function()? uidResolver})
-    : _client = client ?? http.Client(),
-      _uidResolver = uidResolver ?? _firebaseUid;
+  SuggestionService({
+    http.Client? client,
+    String? Function()? uidResolver,
+    this.localOnly = true,
+  }) : _client = client ?? http.Client(),
+       _uidResolver = uidResolver ?? _firebaseUid;
   final String? Function() _uidResolver;
+  final bool localOnly;
+  void dispose() => _client.close();
   static String? _firebaseUid() =>
       Firebase.apps.isEmpty ? null : FirebaseAuth.instance.currentUser?.uid;
   String get _scope => Uri.encodeComponent(_uidResolver() ?? 'guest');
@@ -107,6 +114,14 @@ class SuggestionService {
     int? odoKm,
     String? chargingStatus,
   }) async {
+    if (localOnly) {
+      final owner = _uidResolver() ?? 'guest';
+      if (owner != userId) return [];
+      final suggestions = await _filterDismissed(
+        _generateLocalFallback(currentSoc, chargingStatus),
+      );
+      return owner == (_uidResolver() ?? 'guest') ? suggestions : [];
+    }
     final queryParams = {
       'userId': userId,
       'vehicleId': ?vehicleId,
@@ -167,8 +182,10 @@ class SuggestionService {
   Future<List<ProactiveSuggestion>> _filterDismissed(
     List<ProactiveSuggestion> list,
   ) async {
+    final scope = _scope;
     try {
       final prefs = await SharedPreferences.getInstance();
+      if (scope != _scope) return [];
       final raw = prefs.getString(_dismissedRulesKey) ?? '{}';
       final map = Map<String, dynamic>.from(jsonDecode(raw) as Map);
       final nowMillis = DateTime.now().millisecondsSinceEpoch;
@@ -199,9 +216,9 @@ class SuggestionService {
           ruleId: 'R001',
           title: 'Cảnh báo mức pin thấp',
           message:
-              'Pin xe hiện chỉ còn ${soc.toInt()}%. Bạn nên cắm sạc sớm để an tâm di chuyển!',
+              'Pin ${soc.toInt()}% theo dữ liệu đang xem. Kiểm tra lần cập nhật trước khi chọn thời lượng sạc.',
           priority: 'HIGH',
-          action: 'start_smart_charging',
+          action: 'open_smart_charging',
           suggestedAt: DateTime.now(),
         ),
       ];

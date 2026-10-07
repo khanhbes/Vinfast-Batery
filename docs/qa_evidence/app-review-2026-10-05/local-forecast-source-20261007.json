@@ -1,0 +1,72 @@
+{
+  "hardwareCommands": 0,
+  "files": [
+    {
+      "sha256": "2D22DD753B775492F256F12B82C132FFE859B02EB5F8B9B3A220FF68313A5647",
+      "path": "app/pubspec.yaml"
+    },
+    {
+      "sha256": "40252E7375C25AC0E2C0ACEBDACB7C4A0774F6BC7E8FEA0580A7ACC43B3055E6",
+      "path": "app/pubspec.lock"
+    },
+    {
+      "sha256": "30796C0C733C3D357613F2209B052F049B3A89850FC28F3ABD314332834E2234",
+      "path": "app/lib/data/services/charging_tflite_runner.dart"
+    },
+    {
+      "sha256": "51F2E9837699BB377D4706FCED81AAD79AB0254F5D5E2DE62A707273049573CA",
+      "path": "app/lib/data/services/charging_prediction_adapter.dart"
+    },
+    {
+      "sha256": "E632E909D9D30E2170C48DFE303B9B78B294843C30DE4D42C78CF1C45D0D3E04",
+      "path": "app/lib/data/services/charging_training_sync_service.dart"
+    },
+    {
+      "sha256": "80CA19ACF3EF5F2F0311F75BF7CCF6439A96282C0D5A0996F32DF79E1104B47A",
+      "path": "app/lib/data/services/server_smart_charger_service.dart"
+    },
+    {
+      "sha256": "2D0C1D0BC13C8DAA56BD8247E8B9B61B78E2736DFED8DC2C180428C3C67EE4DB",
+      "path": "app/lib/data/models/smart_charging_session.dart"
+    },
+    {
+      "sha256": "C4D2B4CDFB90F050F45CFC227AE20BEC8DC2F60511171AF3B06A8B5B747D613D",
+      "path": "app/lib/data/repositories/smart_charger_repository.dart"
+    },
+    {
+      "sha256": "F375E58DEE39269B435C23A1D5CD9716E06ED30F279D08A53B3740169D5B914B",
+      "path": "app/lib/features/ai/controllers/smart_charging_controller.dart"
+    },
+    {
+      "sha256": "61BEBA54B9E423BA20D23569184732507B463ADD2DB14810E942D988920C8EEE",
+      "path": "app/lib/features/ai/smart_charging_control_screen.dart"
+    },
+    {
+      "sha256": "F59560196EE094DE046B9D3B1143E2788CCDEA7A054FFF89D723D3C825ACC08E",
+      "path": "app/lib/features/more/more_screen.dart"
+    },
+    {
+      "sha256": "D0F32346FA8CD5AE337C4A3BD1AC55BDF964C0FB0641DEE8F1121E28C81160A9",
+      "path": "app/test/unit/local_charging_forecast_test.dart"
+    },
+    {
+      "sha256": "1D58089959D49E146C99CDCA315BB40125A3C909A6C04102DEBB016CCFC23161",
+      "path": "app/test/unit/smart_charging_plan_test.dart"
+    },
+    {
+      "sha256": "B31B9B194A3026800552CA07EF015B2F3CE4163171AB7F9204295AD94F0B0EE9",
+      "path": "app/test/unit/smart_charging_controller_test.dart"
+    },
+    {
+      "sha256": "A5B9985A0BC9E4EF6C949AA2132A9A07A8064A3FDCD48E215F5AEB1661FD4F58",
+      "path": "app/test/widget/smart_charging_control_screen_test.dart"
+    },
+    {
+      "sha256": "72A3F76F464F6A1E48DAE64CAFB2F4F082426CD003C61DF1080425D8E023AFAC",
+      "path": "app/test/widget/shelly_connect_screen_test.dart"
+    }
+  ],
+  "sourceSha": "a433b726ba5e839d35cb12b120b0bbe35b3beab1",
+  "runtimeVerified": false,
+  "worktree": "dirty; preserved prior edits"
+}

@@ -80,8 +80,14 @@ class _FloatingBatteryBotState extends ConsumerState<FloatingBatteryBot>
         onPanUpdate: (details) {
           setState(() {
             // Cập nhật vị trí kéo thả trong vùng an toàn của màn hình
-            _bottom = (_bottom - details.delta.dy).clamp(16.0, screenSize.height - 180.0);
-            _right = (_right - details.delta.dx).clamp(16.0, screenSize.width - 80.0);
+            _bottom = (_bottom - details.delta.dy).clamp(
+              16.0,
+              screenSize.height - 180.0,
+            );
+            _right = (_right - details.delta.dx).clamp(
+              16.0,
+              screenSize.width - 80.0,
+            );
           });
         },
         child: Column(
@@ -108,9 +114,9 @@ class _FloatingBatteryBotState extends ConsumerState<FloatingBatteryBot>
                         ),
                         decoration: BoxDecoration(
                           color: uiColors.surface,
-                          borderRadius: BorderRadius.circular(16).copyWith(
-                            bottomRight: const Radius.circular(4),
-                          ),
+                          borderRadius: BorderRadius.circular(
+                            16,
+                          ).copyWith(bottomRight: const Radius.circular(4)),
                           border: Border.all(
                             color: uiColors.primary.withValues(alpha: 0.5),
                             width: 1.5,
@@ -134,7 +140,8 @@ class _FloatingBatteryBotState extends ConsumerState<FloatingBatteryBot>
                           children: [
                             Expanded(
                               child: GestureDetector(
-                                onTap: () => _openSheet(initialQuery: bubbleText),
+                                onTap: () =>
+                                    _openSheet(initialQuery: bubbleText),
                                 child: Text(
                                   bubbleText,
                                   style: TextStyle(
@@ -147,19 +154,21 @@ class _FloatingBatteryBotState extends ConsumerState<FloatingBatteryBot>
                               ),
                             ),
                             const SizedBox(width: 6),
-                            GestureDetector(
-                              onTap: () {
+                            IconButton(
+                              tooltip: 'Đóng gợi ý BatteryBot',
+                              constraints: const BoxConstraints(
+                                minWidth: 48,
+                                minHeight: 48,
+                              ),
+                              onPressed: () {
                                 ref
                                     .read(assistantContextCoordinatorProvider)
                                     .dismissBubble();
                               },
-                              child: Padding(
-                                padding: const EdgeInsets.all(2.0),
-                                child: Icon(
-                                  Icons.close,
-                                  size: 14,
-                                  color: uiColors.muted,
-                                ),
+                              icon: Icon(
+                                Icons.close,
+                                size: 14,
+                                color: uiColors.muted,
                               ),
                             ),
                           ],
@@ -171,41 +180,47 @@ class _FloatingBatteryBotState extends ConsumerState<FloatingBatteryBot>
 
             // Nút tròn Mascot nổi (Floating Action Icon)
             ScaleTransition(
-              scale: isBubbleVisible ? _pulseAnimation : const AlwaysStoppedAnimation(1.0),
+              scale: isBubbleVisible
+                  ? _pulseAnimation
+                  : const AlwaysStoppedAnimation(1.0),
               child: Material(
                 color: Colors.transparent,
                 shape: const CircleBorder(),
                 elevation: 6,
                 shadowColor: uiColors.primary.withValues(alpha: 0.35),
-                child: InkWell(
-                  customBorder: const CircleBorder(),
-                  onTap: () => _openSheet(),
-                  child: Container(
-                    width: 56,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: LinearGradient(
-                        colors: [
-                          uiColors.surface,
-                          uiColors.background,
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      border: Border.all(
-                        color: isBubbleVisible
-                            ? uiColors.primary
-                            : uiColors.border,
-                        width: isBubbleVisible ? 2.0 : 1.2,
-                      ),
-                    ),
-                    child: Center(
-                      child: BatteryBotMascot(
-                        size: BatteryBotSize.avatar,
-                        displayMode: BatteryBotDisplayMode.avatar,
-                        mood: mood,
-                        enableFloating: false,
+                child: Tooltip(
+                  message: 'Mở BatteryBot',
+                  child: Semantics(
+                    label: 'Mở BatteryBot',
+                    button: true,
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: () => _openSheet(),
+                      child: Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(
+                            colors: [uiColors.surface, uiColors.background],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          border: Border.all(
+                            color: isBubbleVisible
+                                ? uiColors.primary
+                                : uiColors.border,
+                            width: isBubbleVisible ? 2.0 : 1.2,
+                          ),
+                        ),
+                        child: Center(
+                          child: BatteryBotMascot(
+                            size: BatteryBotSize.avatar,
+                            displayMode: BatteryBotDisplayMode.avatar,
+                            mood: mood,
+                            enableFloating: false,
+                          ),
+                        ),
                       ),
                     ),
                   ),

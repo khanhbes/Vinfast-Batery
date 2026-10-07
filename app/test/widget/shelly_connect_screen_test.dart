@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -17,7 +18,9 @@ void main() {
   testWidgets('renders safe connection recovery without exposing identifiers', (
     tester,
   ) async {
-    await tester.pumpWidget(const MaterialApp(home: ShellyConnectScreen()));
+    await tester.pumpWidget(
+      const ProviderScope(child: MaterialApp(home: ShellyConnectScreen())),
+    );
     // Allow async _restore() to complete
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pump(const Duration(milliseconds: 100));
@@ -43,7 +46,9 @@ void main() {
   ) async {
     SharedPreferences.setMockInitialValues({'developerModeUnlocked': false});
 
-    await tester.pumpWidget(const MaterialApp(home: ShellyConnectScreen()));
+    await tester.pumpWidget(
+      const ProviderScope(child: MaterialApp(home: ShellyConnectScreen())),
+    );
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pump(const Duration(milliseconds: 100));
 
@@ -59,7 +64,9 @@ void main() {
   ) async {
     SharedPreferences.setMockInitialValues({'developerModeUnlocked': true});
 
-    await tester.pumpWidget(const MaterialApp(home: ShellyConnectScreen()));
+    await tester.pumpWidget(
+      const ProviderScope(child: MaterialApp(home: ShellyConnectScreen())),
+    );
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pump(const Duration(milliseconds: 100));
 
@@ -75,7 +82,9 @@ void main() {
   testWidgets(
     'can switch between Flow 1, Flow 2 (Cloud) and Flow 3 (Admin Code)',
     (tester) async {
-      await tester.pumpWidget(const MaterialApp(home: ShellyConnectScreen()));
+      await tester.pumpWidget(
+        const ProviderScope(child: MaterialApp(home: ShellyConnectScreen())),
+      );
       await tester.pump(const Duration(milliseconds: 100));
 
       // Restore failure must leave Cloud and administrator setup recoverable.

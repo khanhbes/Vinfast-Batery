@@ -17,6 +17,39 @@ class BehaviorTracker extends StateNotifier<BehaviorProfile> {
 
   static const String _storageKey = 'vinfast_user_behavior_profile';
   int _identityGeneration = 0;
+  bool _personalizationEnabled = false;
+  bool get personalizationEnabled => _personalizationEnabled;
+
+  Future<void> setPersonalizationEnabled(bool enabled) async {
+    final uid = state.userId, generation = _identityGeneration;
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted || uid != state.userId || generation != _identityGeneration) {
+      return;
+    }
+    await prefs.setBool(
+      'batterybot_consent_v1.${Uri.encodeComponent(uid)}',
+      enabled,
+    );
+    if (!mounted || uid != state.userId || generation != _identityGeneration) {
+      return;
+    }
+    _personalizationEnabled = enabled;
+    if (enabled) await loadLocalProfile();
+  }
+
+  Future<void> resetPersonalization() async {
+    final uid = state.userId, generation = _identityGeneration;
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted || uid != state.userId || generation != _identityGeneration) {
+      return;
+    }
+    await prefs.remove('${_storageKey}_v2_${Uri.encodeComponent(uid)}');
+    if (!mounted || uid != state.userId || generation != _identityGeneration) {
+      return;
+    }
+    state = BehaviorProfile.defaultFor(uid, state.vehicleId);
+    await setPersonalizationEnabled(false);
+  }
 
   BehaviorProfile get currentProfile => state;
 
@@ -35,6 +68,10 @@ class BehaviorTracker extends StateNotifier<BehaviorProfile> {
       final raw = prefs.getString(
         '${_storageKey}_v2_${Uri.encodeComponent(uid)}',
       );
+      _personalizationEnabled =
+          prefs.getBool('batterybot_consent_v1.${Uri.encodeComponent(uid)}') ==
+          true;
+      if (!_personalizationEnabled) return;
       if (raw != null && raw.isNotEmpty) {
         final json = jsonDecode(raw) as Map<String, dynamic>;
         final profile = BehaviorProfile.fromJson(json);
@@ -47,6 +84,7 @@ class BehaviorTracker extends StateNotifier<BehaviorProfile> {
 
   /// Lưu profile vào SharedPreferences
   Future<void> saveLocalProfile() async {
+    if (!_personalizationEnabled) return;
     final profile = state;
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -64,6 +102,7 @@ class BehaviorTracker extends StateNotifier<BehaviorProfile> {
     if (userId == state.userId && vehicleId == state.vehicleId) return;
     if (userId != state.userId) {
       _identityGeneration++;
+      _personalizationEnabled = false;
       state = BehaviorProfile.defaultFor(userId, vehicleId);
       loadLocalProfile();
       return;
@@ -79,6 +118,7 @@ class BehaviorTracker extends StateNotifier<BehaviorProfile> {
     int durationMinutes = 180,
     bool nightCharging = true,
   }) {
+    if (!_personalizationEnabled) return;
     final cp = state.chargingPatterns;
     final newAvgTarget = ((cp.avgTargetSoc * 0.7) + (targetSoc * 0.3));
     final newStartHour = ((cp.preferredStartHour * 0.7) + (startHour * 0.3))
@@ -106,6 +146,7 @@ class BehaviorTracker extends StateNotifier<BehaviorProfile> {
     required double distanceKm,
     double energyWhPerKm = 32.0,
   }) {
+    if (!_personalizationEnabled) return;
     final tp = state.tripPatterns;
     final newAvgDistance = ((tp.avgDailyDistanceKm * 0.8) + (distanceKm * 0.2));
     final newAvgEnergy =
@@ -125,6 +166,7 @@ class BehaviorTracker extends StateNotifier<BehaviorProfile> {
 
   /// Ghi nhận truy cập màn hình/tab
   void trackAppUsage({required String tabName, double sessionMinutes = 2.0}) {
+    if (!_personalizationEnabled) return;
     final au = state.appUsage;
     final newTabs = List<String>.from(au.mostVisitedTabs);
     newTabs.remove(tabName);
@@ -142,6 +184,7 @@ class BehaviorTracker extends StateNotifier<BehaviorProfile> {
 
   /// Ghi nhận tương tác chatbot và feedback 👍/👎
   void trackChatInteraction({String? topic, String? feedbackRating}) {
+    if (!_personalizationEnabled) return;
     final cp = state.chatPreferences;
     final newTopics = List<String>.from(cp.topTopics);
     if (topic != null && topic.isNotEmpty) {
@@ -172,6 +215,7 @@ class BehaviorTracker extends StateNotifier<BehaviorProfile> {
 
   /// Thay thế profile từ server sync
   void replaceChatFeedback({String? previous, required String rating}) {
+    if (!_personalizationEnabled) return;
     String? normalize(String? vote) => switch (vote) {
       'up' => 'like',
       'down' => 'dislike',
@@ -198,6 +242,7 @@ class BehaviorTracker extends StateNotifier<BehaviorProfile> {
 
   /// Thay thế profile từ server sync
   void replaceProfile(BehaviorProfile newProfile) {
+    if (!_personalizationEnabled || newProfile.userId != state.userId) return;
     state = newProfile;
     saveLocalProfile();
   }

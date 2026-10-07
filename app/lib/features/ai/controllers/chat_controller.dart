@@ -202,16 +202,16 @@ class ChatController extends StateNotifier<ChatState> {
       role: ChatRole.user,
       content: trimmed,
       timestamp: DateTime.now(),
-      isQueued: !state.isOnline,
+      isQueued: !_apiService.localOnly && !state.isOnline,
     );
 
     state = state.copyWith(
       messages: [...state.messages, userMsg],
-      isStreaming: state.isOnline,
+      isStreaming: _apiService.localOnly || state.isOnline,
     );
 
     // Nếu đang ngoại tuyến, đẩy vào hàng đợi offline queue
-    if (!state.isOnline) {
+    if (!_apiService.localOnly && !state.isOnline) {
       final queue = [...state.offlineQueue, userMsg];
       final offlineBotReply = ChatMessage(
         id: 'msg-bot-offline-${DateTime.now().millisecondsSinceEpoch}',
@@ -460,7 +460,8 @@ class ChatController extends StateNotifier<ChatState> {
     final succeeded = res['success'] == true && data['success'] == true;
     final resultMsg = succeeded
         ? (data['message'] as String? ?? 'Đã xác nhận kết quả.')
-        : 'Chưa thực hiện được. Hãy mở Sạc pin để kiểm tra.';
+        : (res['message'] as String? ??
+              'Chưa thực hiện được. Hãy mở màn hình tương ứng để kiểm tra.');
 
     final updated = state.messages.map((m) {
       if (m.actionCard?.callId == callId) {
@@ -543,10 +544,16 @@ class ChatController extends StateNotifier<ChatState> {
           title: title,
         ),
       );
-      unawaited(
-        _storage.backupToCloud(state.sessionId!, state.messages, title: title),
-      );
-      _behaviorSync.scheduleSync();
+      if (!_apiService.localOnly) {
+        unawaited(
+          _storage.backupToCloud(
+            state.sessionId!,
+            state.messages,
+            title: title,
+          ),
+        );
+        _behaviorSync.scheduleSync();
+      }
     }
   }
 }

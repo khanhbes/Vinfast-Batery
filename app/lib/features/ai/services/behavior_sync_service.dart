@@ -11,16 +11,21 @@ import '../models/behavior_profile.dart';
 import 'behavior_tracker.dart';
 
 final behaviorSyncServiceProvider = Provider<BehaviorSyncService>((ref) {
-  final service = BehaviorSyncService(ref: ref);
+  final service = BehaviorSyncService(ref: ref, localOnly: true);
   ref.onDispose(service.dispose);
   return service;
 });
 
 class BehaviorSyncService {
-  BehaviorSyncService({this.ref, this.tracker, http.Client? client})
-    : _client = client ?? http.Client();
+  BehaviorSyncService({
+    this.ref,
+    this.tracker,
+    http.Client? client,
+    this.localOnly = false,
+  }) : _client = client ?? http.Client();
 
   final Ref? ref;
+  final bool localOnly;
   final BehaviorTracker? tracker;
   final http.Client _client;
   Timer? _debounceTimer;
@@ -47,6 +52,7 @@ class BehaviorSyncService {
 
   /// Khởi động tự động sync định kỳ hoặc khi có thay đổi (debounce 5 phút)
   void scheduleSync() {
+    if (localOnly) return;
     _debounceTimer?.cancel();
     _debounceTimer = Timer(const Duration(minutes: 5), () {
       syncNow();
@@ -55,6 +61,7 @@ class BehaviorSyncService {
 
   /// Đồng bộ ngay lập tức (gọi khi app chuyển sang paused hoặc user yêu cầu)
   Future<bool> syncNow() async {
+    if (localOnly) return false;
     final uri = AppConstants.tryBuildApiUri('/api/behavior/sync');
     if (uri == null || !AppConstants.isApiConfigured) return false;
 
@@ -99,6 +106,7 @@ class BehaviorSyncService {
     String userId, [
     String? vehicleId,
   ]) async {
+    if (localOnly) return null;
     final path = vehicleId != null
         ? '/api/behavior/profile?userId=$userId&vehicleId=$vehicleId'
         : '/api/behavior/profile?userId=$userId';

@@ -55,4 +55,18 @@ class BatteryBotFaq {
     }
     return null;
   }
+
+  /// Offline guidance, not a live device reading or a generative model.
+  static String answerFor(String question) => switch (actionFor(question)) {
+    BatteryBotAction.guideVehicle =>
+      'Mở Tổng quan, chọn xe rồi xem mức pin và thời điểm cập nhật. Mình không có số đo trực tiếp trong cuộc trò chuyện này.',
+    BatteryBotAction.guideCharging =>
+      'Mở Sạc pin để xem điều kiện bật sạc hoặc dùng Dừng sạc. Nếu nút bị khóa, kiểm tra thông báo kết nối và an toàn. Mình không tự bật hoặc tắt ổ cắm.',
+    BatteryBotAction.guideHistory =>
+      'Mở Lịch sử, chọn xe và khoảng thời gian. Chạm một phiên để xem điện năng và chi phí đã ghi nhận.',
+    BatteryBotAction.shellySetup =>
+      'Mở Cài đặt → Sạc thông minh Shelly để kết nối. Trước kiểm tra an toàn, rút mọi tải và chỉ tiếp tục khi bạn đang giám sát thiết bị.',
+    null =>
+      'Mình là trợ lý hướng dẫn chạy trên điện thoại. Bạn muốn xem pin, kết nối Shelly, tìm lịch sử hay tìm nút dừng sạc?',
+  };
 }

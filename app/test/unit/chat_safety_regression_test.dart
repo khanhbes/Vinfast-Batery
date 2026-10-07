@@ -147,6 +147,7 @@ void main() {
   test('behavior and proactive budgets reset for another account', () async {
     final tracker = BehaviorTracker();
     tracker.setIdentity(userId: 'account-a');
+    await tracker.setPersonalizationEnabled(true);
     tracker.trackChatInteraction(topic: 'private-topic');
     tracker.setIdentity(userId: 'account-b');
     expect(
@@ -322,9 +323,10 @@ void main() {
     },
   );
 
-  test('local vote replacement does not inflate feedback statistics', () {
+  test('local vote replacement does not inflate feedback statistics', () async {
     final tracker = BehaviorTracker();
     tracker.setIdentity(userId: 'qa');
+    await tracker.setPersonalizationEnabled(true);
     tracker.replaceChatFeedback(rating: 'up');
     tracker.replaceChatFeedback(previous: 'up', rating: 'like');
     tracker.replaceChatFeedback(previous: 'like', rating: 'down');

@@ -82,9 +82,10 @@ class SmartChargeService:
         power = bool(binding and binding.power_meter_verified)
         safe_boot = bool(binding and binding.safe_boot_verified)
         no_load = bool(binding and binding.no_load_test_verified)
+        staging_disabled = os.environ.get("AZURE_STAGING_HARDWARE_DISABLED", "0") == "1"
         return {
             "canReadStatus": status,
-            "canManualOn": manual_on and timer,
+            "canManualOn": manual_on and timer and not staging_disabled,
             "canManualOff": manual_off,
             "supportsDeviceTimer": timer,
             "canReadPower": power,
@@ -94,8 +95,9 @@ class SmartChargeService:
             "safeBootVerified": safe_boot,
             "noLoadTestVerified": no_load,
             "readyForControl": bool(
-                binding and status and manual_off and manual_on and timer and power and safe_boot and no_load
+                not staging_disabled and binding and status and manual_off and manual_on and timer and power and safe_boot and no_load
             ),
+            "controlBlockedCode": "STAGING_HARDWARE_DISABLED" if staging_disabled else None,
             "provider": self.provider.name,
         }
 

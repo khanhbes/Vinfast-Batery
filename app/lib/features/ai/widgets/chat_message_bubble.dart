@@ -339,9 +339,18 @@ class ChatMessageBubble extends StatelessWidget {
   }
 
   Widget _buildRichCard(BuildContext context, Map<String, dynamic> card) {
-    final cardType = card['cardType'] as String? ?? '';
-    final title = card['title'] as String? ?? '';
-    final data = (card['data'] as Map?)?.cast<String, dynamic>() ?? {};
+    final cardType = card['cardType'] is String
+        ? card['cardType'] as String
+        : '';
+    final title = card['title'] is String ? card['title'] as String : '';
+    final raw = card['data'];
+    final data = raw is Map
+        ? Map<String, dynamic>.fromEntries(
+            raw.entries
+                .where((e) => e.key is String)
+                .map((e) => MapEntry(e.key as String, e.value)),
+          )
+        : <String, dynamic>{};
     final requiredFields = switch (cardType) {
       'battery_status' => [
         'soc',
@@ -364,6 +373,7 @@ class ChatMessageBubble extends StatelessWidget {
         'co2SavedKg',
         'durationMinutes',
       ],
+      'local_prediction' => ['durationSeconds'],
       _ => <String>[],
     };
     if (requiredFields.any(
@@ -378,6 +388,44 @@ class ChatMessageBubble extends StatelessWidget {
     }
 
     switch (cardType) {
+      case 'local_prediction':
+        final seconds = data['durationSeconds'] as num;
+        if (seconds <= 0 ||
+            seconds > 36000 ||
+            data['source'] != 'model local' ||
+            data['modelVersion'] is! String ||
+            (data['modelVersion'] as String).isEmpty ||
+            data['updatedAt'] is! String ||
+            DateTime.tryParse(data['updatedAt'] as String) == null) {
+          return const Text(
+            'Chưa có dự đoán hợp lệ. Hãy kiểm tra model và dữ liệu.',
+          );
+        }
+        final time = DateTime.parse(data['updatedAt'] as String).toLocal();
+        return Semantics(
+          container: true,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 8),
+                Text(
+                  '${(seconds / 60).ceil()} phút',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                const SizedBox(height: 8),
+                Text('Model local · ${data['modelVersion']}'),
+                Text('Tính lúc ${DateFormat('HH:mm dd/MM/yyyy').format(time)}'),
+                const SizedBox(height: 8),
+                const Text(
+                  'Ước tính theo dữ liệu đầu vào, không phải số đo BMS hoặc quyền bật sạc.',
+                ),
+              ],
+            ),
+          ),
+        );
       case 'battery_status':
         return BatteryStatusCard(
           title: title.isNotEmpty ? title : 'Trạng thái Pin & Xe',

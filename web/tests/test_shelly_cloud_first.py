@@ -3,7 +3,7 @@ import base64
 import os
 import unittest
 from datetime import timedelta
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 from types import SimpleNamespace
 from flask import Flask
 
@@ -14,7 +14,7 @@ from shelly.rate_limiter import PerDeviceRateLimiter
 from shelly.repositories import SmartChargeRepository
 from shelly.service import SmartChargeError, SmartChargeService
 from shelly.routes import create_blueprint
-from smart_charge_worker import reconcile_once
+from smart_charge_worker import reconcile_once, run_forever
 
 
 def predictor(_payload):
@@ -44,6 +44,30 @@ class SmartChargeServiceTests(unittest.TestCase):
             "currentSoc": 25,
             "targetSoc": 80,
         })
+
+    def test_staging_capabilities_never_advertise_on_but_keep_off(self):
+        with patch.dict(os.environ, {"AZURE_STAGING_HARDWARE_DISABLED": "1"}):
+            capabilities = self.service.capabilities("user-a")
+        self.assertFalse(capabilities["canManualOn"])
+        self.assertFalse(capabilities["readyForControl"])
+        self.assertTrue(capabilities["canManualOff"])
+        self.assertTrue(capabilities["canReadStatus"])
+        self.assertEqual(capabilities["controlBlockedCode"], "STAGING_HARDWARE_DISABLED")
+        self.assertEqual(self.provider.command_count, 0)
+
+    def test_worker_query_includes_unknown_and_stopping_recovery(self):
+        query = Mock()
+        query.where.return_value = query
+        query.limit.return_value = query
+        query.stream.side_effect = KeyboardInterrupt
+        db = Mock()
+        db.collection_group.return_value = query
+        self.repo.db = db
+        with self.assertRaises(KeyboardInterrupt):
+            run_forever(self.service)
+        states = query.where.call_args.args[2]
+        self.assertEqual(set(states), {'arming', 'starting', 'active', 'stopping', 'unknown'})
+        self.assertEqual(self.provider.command_count, 0)
 
     def test_preview_is_scoped_to_owner_and_expires(self):
         preview = self.preview()
