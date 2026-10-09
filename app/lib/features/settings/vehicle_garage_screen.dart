@@ -135,6 +135,19 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
+      floatingActionButton: _showArchived
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: _showAddVehicleSheet,
+              backgroundColor: AppColors.primary,
+              foregroundColor: AppColors.background,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text(
+                'Thêm xe mới',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              elevation: 4,
+            ),
       appBar: AppBar(
         backgroundColor: AppColors.background,
         elevation: 0,
@@ -162,42 +175,16 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
             ),
             onPressed: () => setState(() => _showArchived = !_showArchived),
           ),
-          GestureDetector(
-            onTap: _showArchived ? null : _showAddVehicleSheet,
-            child: Container(
-              margin: const EdgeInsets.only(right: 16),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: _showArchived
-                    ? AppColors.surfaceVariant
-                    : AppColors.primary,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.add_rounded,
-                    color: _showArchived
-                        ? AppColors.textTertiary
-                        : AppColors.background,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Thêm xe',
-                    style: TextStyle(
-                      color: _showArchived
-                          ? AppColors.textTertiary
-                          : AppColors.background,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
+          IconButton(
+            tooltip: 'Thêm xe mới',
+            icon: const Icon(
+              Icons.add_circle_outline_rounded,
+              color: AppColors.primary,
+              size: 24,
             ),
+            onPressed: _showArchived ? null : _showAddVehicleSheet,
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: _isLoading

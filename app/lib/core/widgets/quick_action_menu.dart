@@ -12,6 +12,7 @@ import '../../core/theme/app_colors.dart';
 enum QuickAction {
   startTrip,
   startCharge,
+  batteryMonitor,
   manualTrip,
   addCharge,
   routePrediction,
@@ -135,6 +136,13 @@ class _QuickActionSheet extends StatelessWidget {
             subtitle: 'Smart charging + ETA',
             onTap: () => onAction(QuickAction.startCharge),
           ).animate().fadeIn(delay: 100.ms),
+          _MenuItem(
+            icon: Icons.battery_charging_full_rounded,
+            iconColor: AppColors.success,
+            label: 'Giám sát cell pin',
+            subtitle: 'Điện áp, suy hao và nhiệt độ pack pin',
+            onTap: () => onAction(QuickAction.batteryMonitor),
+          ).animate().fadeIn(delay: 120.ms),
           Divider(color: AppColors.glassBorder, height: 1, indent: 60),
 
           // Manual input

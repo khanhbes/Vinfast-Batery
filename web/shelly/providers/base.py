@@ -6,11 +6,14 @@ from ..models import DeviceBinding, DeviceStatus
 
 
 class ProviderError(RuntimeError):
-    def __init__(self, code: str, message: str, retryable: bool = False):
+    def __init__(self, code: str, message: str, retryable: bool = False, *,
+                 status_code: int | None = None, retry_after_seconds: float | None = None):
         super().__init__(message)
         self.code = code
         self.message = message
         self.retryable = retryable
+        self.status_code = status_code
+        self.retry_after_seconds = retry_after_seconds
 
 
 class ShellyControlProvider(Protocol):
@@ -22,6 +25,7 @@ class ShellyControlProvider(Protocol):
 
     def list_devices(self, uid: str) -> list[DeviceBinding]: ...
     def get_status(self, binding: DeviceBinding) -> DeviceStatus: ...
+    def verify_control_readiness(self, binding: DeviceBinding) -> None: ...
     def turn_on_with_timer(self, binding: DeviceBinding, duration_seconds: int) -> None: ...
     def turn_off(self, binding: DeviceBinding) -> None: ...
     def revoke(self, binding: DeviceBinding) -> None: ...

@@ -303,6 +303,30 @@ class ShellyConnectionCoordinator {
     );
   }
 
+  /// A failed read does not revoke enrollment or erase historical safety proof.
+  /// It must also not leave stale capabilities advertising control readiness.
+  void markServerUnavailable({required String uid, required String vehicleId}) {
+    final old = _current;
+    if (uid != _accountUid ||
+        vehicleId != _vehicleId ||
+        !old.isLinked ||
+        old.serverBinding == null) {
+      return;
+    }
+    _emit(
+      ShellyConnectionSnapshot(
+        state: ShellyConnectionFlowState.offline,
+        isLinked: true,
+        devices: old.devices,
+        deviceName: old.deviceName,
+        codeRefreshRequired: old.codeRefreshRequired,
+        serverBinding: old.serverBinding,
+        controlUncertain: old.controlUncertain,
+        errorMessage: 'Tạm mất kết nối máy chủ. Hãy thử lại.',
+      ),
+    );
+  }
+
   /// Publish read-only evidence from chat/control to the same account snapshot.
   /// Never accepts a different account or silently changes an existing vehicle.
   void updateServerSnapshot({

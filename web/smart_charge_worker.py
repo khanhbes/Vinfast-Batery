@@ -55,7 +55,8 @@ def _reconcile_session(service, uid: str, session, binding, *, lease_guard=None)
     return service._reconcile_with_status(uid, status, session.vehicle_id, session=session)
 
 
-def run_forever(service, user_ids=None, interval_seconds: int = 60, *, sleeper=time.sleep, health_monitor=None):
+def run_forever(service, user_ids=None, interval_seconds: int = 60, *, sleeper=time.sleep, health_monitor=None,
+                stop_event=None):
     """Reconcile only active sessions; never enumerate every account.
 
     Collection-group reads are bounded and run once per minute.  The legacy
@@ -67,8 +68,22 @@ def run_forever(service, user_ids=None, interval_seconds: int = 60, *, sleeper=t
     lease_deadline = None
     last_epoch = None
 
+    class WorkerStopping(Exception):
+        pass
+
+    def stopping():
+        return stop_event is not None and stop_event.is_set()
+
+    def wait(seconds):
+        if stop_event is not None:
+            stop_event.wait(seconds)
+        else:
+            sleeper(seconds)
+
     def lease_guard():
         nonlocal lease_deadline
+        if stopping():
+            raise WorkerStopping()
         now = service.clock()
         lease_deadline = service.repository.worker_lease_deadline(worker_id, now=now)
         if (lease_deadline - now).total_seconds() <= 60:
@@ -83,7 +98,7 @@ def run_forever(service, user_ids=None, interval_seconds: int = 60, *, sleeper=t
     if health_monitor:
         health_monitor.mark_unhealthy()
     try:
-        while True:
+        while not stopping():
             try:
                 epoch = service.repository.claim_worker_lease(worker_id, now=service.clock())
                 if epoch is None:
@@ -118,6 +133,8 @@ def run_forever(service, user_ids=None, interval_seconds: int = 60, *, sleeper=t
                 if health_monitor:
                     health_monitor.mark_healthy(lease_remaining_seconds=(lease_deadline - service.clock()).total_seconds())
                 backoff = interval_seconds
+            except WorkerStopping:
+                break
             except Exception as error:
                 if health_monitor:
                     health_monitor.mark_unhealthy()
@@ -126,10 +143,10 @@ def run_forever(service, user_ids=None, interval_seconds: int = 60, *, sleeper=t
                 except Exception:
                     pass  # Never overwrite another worker's heartbeat.
                 print(f"[smart-charge-worker] transient error: {type(error).__name__}")
-                sleeper(min(60, backoff))
+                wait(min(60, backoff))
                 backoff = min(60, backoff * 2)
                 continue
-            sleeper(interval_seconds)
+            wait(interval_seconds)
     finally:
         service._worker_lease_guard = previous_guard
         service.provider.worker_lease_guard = previous_provider_guard

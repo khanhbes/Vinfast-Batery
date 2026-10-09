@@ -18,6 +18,7 @@ class AssistantContextCoordinator extends ChangeNotifier {
   final Duration bubbleDisplayDuration;
 
   bool _isBubbleVisible = false;
+  bool _isDocked = false;
   String? _bubbleText;
   BatteryBotMood _bubbleMood = BatteryBotMood.idle;
   List<String> _quickActionChips = const [];
@@ -26,9 +27,18 @@ class AssistantContextCoordinator extends ChangeNotifier {
   final Map<String, DateTime> _triggerCooldowns = {};
 
   bool get isBubbleVisible => _isBubbleVisible;
+  bool get isDocked => _isDocked;
   String? get bubbleText => _bubbleText;
   BatteryBotMood get bubbleMood => _bubbleMood;
   List<String> get quickActionChips => _quickActionChips;
+
+  /// Cập nhật trạng thái neo thu nhỏ (Auto-docking) khi người dùng cuộn trang
+  void setDocked(bool docked) {
+    if (_isDocked != docked) {
+      _isDocked = docked;
+      notifyListeners();
+    }
+  }
 
   /// Hiển thị bóng bóng thoại có hẹn giờ tự đóng
   void showBubble(

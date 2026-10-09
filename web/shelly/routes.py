@@ -15,6 +15,7 @@ from flask import Blueprint, after_this_request, jsonify, request
 from .models import DeviceBinding, NONTERMINAL_SESSION_STATES, utcnow
 from .profile_vault import ProfileVaultError
 from .service import SmartChargeError
+from .safety_fingerprint import FINGERPRINT_VERSION
 
 
 def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
@@ -93,23 +94,22 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
             return "Shelly Cloud phải dùng HTTPS trên miền được hỗ trợ"
         try:
             fingerprint = hashlib.sha256(str(body.get("cloudAuthKey") or "").strip().encode("utf-8")).hexdigest()
-            wait = repository.reserve_cloud_request_slot(fingerprint, 1.1)
-            if wait > 0:
-                service.sleep(wait)
-        except Exception:
-            return "Chưa xác minh được giới hạn kết nối Shelly Cloud. Hãy thử lại."
-        try:
-            response = requests.post(
+            response = repository.run_cloud_request(fingerprint, lambda: requests.post(
                 f"{host}/v2/devices/api/get",
                 params={"auth_key": str(body.get("cloudAuthKey") or "")},
                 json={"ids": [str(body.get("deviceId") or "")], "select": ["status", "settings"]},
                 timeout=7,
-            )
-        except requests.RequestException:
-            return "Không thể xác minh Shelly Cloud từ web server"
+            ), sleeper=service.sleep)
+        except Exception:
+            return "Chưa xác minh được giới hạn kết nối Shelly Cloud. Hãy thử lại."
         if response.status_code in (401, 403):
             return "Authorization Cloud Key không hợp lệ hoặc đã bị thu hồi"
         if response.status_code == 429:
+            from .cloud_dispatch import retry_after_seconds
+            try:
+                repository.defer_cloud_requests(fingerprint, retry_after_seconds(response.headers.get("Retry-After")))
+            except Exception:
+                return "Chưa xác minh được giới hạn kết nối Shelly Cloud. Hãy thử lại."
             return "Shelly Cloud đang giới hạn tần suất; hãy thử lại sau"
         if not 200 <= response.status_code < 300:
             return "Shelly Cloud không xác minh được thiết bị này"
@@ -247,24 +247,36 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
             return jsonify({"success": False, "error": {"code": "deviceBusy", "message": "Le Shelly est déjà utilisé"}}), 409
         try:
             result = service.provider.run_no_load_test(binding)
-            if result.get("noLoadTestVerified") is not True or result.get("relayOffVerified") is not True:
+            if (not all(result.get(field) is True for field in (
+                    "identityVerified", "powerMeterVerified", "safeBootVerified", "noLoadTestVerified",
+                    "onObserved", "timerObserved", "timerAutoOffObserved", "relayOffVerified"))
+                    or type(result.get("verificationFingerprintVersion")) is not int
+                    or result["verificationFingerprintVersion"] != FINGERPRINT_VERSION
+                    or not result.get("verificationFingerprint")
+                    or type(result.get("profileRevision")) is not int):
                 raise RuntimeError("safetyVerificationFailed")
             evidence = {
                 "verifiedDeviceId": device_id,
                 "verifiedModel": binding.model,
-                "verificationFingerprint": hashlib.sha256(f"{device_id}|{binding.model}|off|false".encode()).hexdigest(),
+                "verificationFingerprint": result["verificationFingerprint"],
+                "verificationFingerprintVersion": FINGERPRINT_VERSION,
+                "onObserved": True, "timerObserved": True, "timerAutoOffObserved": True,
+                "relayOffVerified": True,
                 "cloudVerified": True,
                 "powerMeterVerified": True,
                 "safeBootVerified": True,
                 "noLoadTestVerified": True,
             }
+            verified = repository.verify_synced_profile(uid, device_id, evidence,
+                                                        expected_revision=result["profileRevision"])
+            if verified is None:
+                raise RuntimeError("profileRevisionConflict")
             binding.power_meter_verified = True
             binding.safe_boot_verified = True
             binding.no_load_test_verified = True
             binding.online = True
             binding.last_verified_at = utcnow()
             repository.save_binding(uid, binding)
-            repository.verify_synced_profile(uid, device_id, evidence)
             repository.append_audit(uid, "shelly_safety_test_passed", device_id=device_id, operation_id=operation_id)
             return ok({"verified": True, "result": result})
         except Exception as error:

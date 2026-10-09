@@ -115,17 +115,19 @@ class _StatBox extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Icon(icon, size: 14, color: accentColor),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     label,
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: CockpitColors.muted,
                       fontSize: 11,
+                      height: 1.2,
                     ),
                   ),
                 ),

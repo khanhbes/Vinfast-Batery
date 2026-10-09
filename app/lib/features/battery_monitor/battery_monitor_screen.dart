@@ -12,10 +12,12 @@ import '../../data/models/battery_state_model.dart';
 import '../../data/models/vehicle_model.dart';
 import '../../data/services/battery_state_service.dart';
 
-class BatteryMonitorScreen extends ConsumerStatefulWidget {
-  final VehicleModel vehicle;
+import '../../core/providers/app_providers.dart';
 
-  const BatteryMonitorScreen({super.key, required this.vehicle});
+class BatteryMonitorScreen extends ConsumerStatefulWidget {
+  final VehicleModel? vehicle;
+
+  const BatteryMonitorScreen({super.key, this.vehicle});
 
   @override
   ConsumerState<BatteryMonitorScreen> createState() =>
@@ -29,6 +31,18 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
   Map<String, dynamic>? _batteryStats;
   String? _error;
 
+  String _getVehicleId() {
+    if (widget.vehicle != null) return widget.vehicle!.vehicleId;
+    return ref.read(selectedVehicleIdProvider);
+  }
+
+  String _getVehicleName() {
+    if (widget.vehicle != null) return widget.vehicle!.vehicleName;
+    final vehicleId = ref.watch(selectedVehicleIdProvider);
+    final vehicle = ref.watch(vehicleProvider(vehicleId)).valueOrNull;
+    return vehicle?.vehicleName ?? 'Xe điện VinFast';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -36,6 +50,17 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
   }
 
   Future<void> _loadBatteryData() async {
+    final vehicleId = _getVehicleId();
+    if (vehicleId.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = 'Vui lòng chọn xe trong Garage để xem dữ liệu pin.';
+        });
+      }
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _error = null;
@@ -43,11 +68,11 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
 
     try {
       final currentState = await BatteryStateService.getCurrentBatteryState(
-        widget.vehicle.vehicleId,
+        vehicleId,
       );
 
       final history = await BatteryStateService.getBatteryHistory(
-        vehicleId: widget.vehicle.vehicleId,
+        vehicleId: vehicleId,
         limit: 24,
         timeRange: const Duration(hours: 24),
       );
@@ -96,7 +121,7 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
                 child: AppScreenHeader(
                   icon: Icons.battery_charging_full_rounded,
                   title: 'Giám sát pin',
-                  subtitle: widget.vehicle.vehicleName,
+                  subtitle: _getVehicleName(),
                   showBackButton: true,
                   actions: [
                     IconButton(

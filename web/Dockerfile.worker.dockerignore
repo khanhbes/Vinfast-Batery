@@ -1,0 +1,13 @@
+# Allowlist: never send real env, credentials, models or QA evidence to BuildKit.
+**
+!requirements-worker.txt
+!smart_charge_worker.py
+!smart_charge_worker_entry.py
+!shelly/
+!shelly/*.py
+!shelly/providers/
+!shelly/providers/*.py
+!scripts/
+!scripts/worker_fixture_smoke.py
+**/__pycache__/**
+**/*.pyc

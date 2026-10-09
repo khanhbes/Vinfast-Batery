@@ -1,0 +1,8 @@
+# Allowlist: QA fixtures only, no env/credential/model/production data.
+**
+!tests/
+!tests/test_cloud_dispatch.py
+!tests/test_shelly_live_safety.py
+!tests/test_shelly_vault_safety.py
+!tests/test_smart_charge_worker_lease.py
+!tests/test_worker_runtime.py

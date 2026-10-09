@@ -1269,12 +1269,12 @@ class _SmartChargeHeaderState extends State<_SmartChargeHeader>
         border: Border.all(color: CockpitColors.emerald.withValues(alpha: .30)),
       ),
       child: Text(
-        'AI POWERED',
+        'CÔNG NGHỆ AI',
         style: TextStyle(
           color: CockpitColors.emerald,
           fontSize: 9,
           fontWeight: FontWeight.w800,
-          letterSpacing: 1,
+          letterSpacing: 0.8,
         ),
       ),
     );
@@ -1309,12 +1309,12 @@ class _SmartChargeHeaderState extends State<_SmartChargeHeader>
           },
           blendMode: BlendMode.srcIn,
           child: Text(
-            'AI POWERED',
+            'CÔNG NGHỆ AI',
             style: TextStyle(
               color: CockpitColors.emerald,
               fontSize: 9,
               fontWeight: FontWeight.w800,
-              letterSpacing: 1,
+              letterSpacing: 0.8,
             ),
           ),
         ),

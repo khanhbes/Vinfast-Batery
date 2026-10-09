@@ -1,0 +1,16 @@
+{
+  "command": [
+    "python",
+    "tools/check_worker_container.py",
+    "--task",
+    "103"
+  ],
+  "cwd": ".",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\cloud-dispatch-103-container-smoke-20261010.log",
+  "processId": 9624,
+  "timeoutSeconds": 150,
+  "timedOut": false,
+  "exitCode": 1,
+  "cleanupError": null,
+  "elapsedSeconds": 62.06
+}

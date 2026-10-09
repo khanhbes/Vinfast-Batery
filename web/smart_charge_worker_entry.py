@@ -1,27 +1,52 @@
 """Production entry point for the Smart Charge reconciliation worker.
 
-The Flask API and this process intentionally construct the same Cloud-First
-service.  The worker only reconciles existing sessions; it never arms a relay.
+Standalone Cloud-First runtime. It never imports Flask/AI or arms a relay.
 """
 from __future__ import annotations
 
 import os
+import signal
+import threading
 
-from server import app
 from smart_charge_worker import run_forever
 from shelly.worker_health import WorkerHealthMonitor
+from shelly.worker_runtime import create_worker_service, validate_configuration, WorkerConfigurationError
+
+
+def run_worker(service, *, interval=60, port=8090, stop_event=None, user_ids=None, monitor=None):
+    stop_event = stop_event if stop_event is not None else threading.Event()
+    monitor = monitor or WorkerHealthMonitor()
+    probe = monitor.start_server(host="127.0.0.1", port=port)
+    try:
+        run_forever(service, user_ids, interval_seconds=interval, health_monitor=monitor,
+                    stop_event=stop_event)
+    finally:
+        monitor.mark_unhealthy()
+        probe.shutdown()
+        probe.server_close()
+
+
+def main():
+    try:
+        _, interval, port = validate_configuration(os.environ)
+        service, cleanup = create_worker_service()
+    except WorkerConfigurationError as error:
+        print(f"[smart-charge-worker] startup blocked: {error}")
+        return 1
+    monitor = WorkerHealthMonitor()
+    stop_event = threading.Event()
+    def stop(*_):
+        monitor.mark_unhealthy()
+        stop_event.set()
+    previous = {sig: signal.signal(sig, stop) for sig in (signal.SIGTERM, signal.SIGINT)}
+    try:
+        run_worker(service, interval=interval, port=port, stop_event=stop_event, monitor=monitor)
+    finally:
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
+        cleanup()
+    return 0
 
 
 if __name__ == "__main__":
-    service = app.extensions["smart_charge_service"]
-    interval = max(15, min(60, int(os.environ.get("SMART_CHARGE_WORKER_POLL_SECONDS", "60"))))
-    monitor = WorkerHealthMonitor()
-    probe = monitor.start_server(
-        host=os.environ.get("SMART_CHARGE_WORKER_HEALTH_HOST", "127.0.0.1"),
-        port=int(os.environ.get("SMART_CHARGE_WORKER_HEALTH_PORT", "8090")),
-    )
-    try:
-        run_forever(service, interval_seconds=interval, health_monitor=monitor)
-    finally:
-        probe.shutdown()
-        probe.server_close()
+    raise SystemExit(main())

@@ -27,7 +27,8 @@ RUN test -s /app/server.py \
     && test -s /app/telemetry_schema.py \
     && test -s /app/csv_security.py \
     && test -s /app/sync_writes.py \
-    && test -s /app/request_limits.py
+    && test -s /app/request_limits.py \
+    && test -s /app/shelly/push_notifications.py
 
 RUN mkdir -p /app/models
 

@@ -72,12 +72,22 @@ class _FloatingBatteryBotState extends ConsumerState<FloatingBatteryBot>
     }
 
     final screenSize = MediaQuery.of(context).size;
+    final isDocked = coordinator.isDocked;
+    final effectiveRight = isDocked ? -10.0 : _right;
+    final effectiveOpacity = isDocked ? 0.65 : 1.0;
+    final effectiveScale = isDocked ? 0.80 : 1.0;
+    final showBubble = isBubbleVisible && !isDocked && bubbleText != null;
 
-    return Positioned(
+    return AnimatedPositioned(
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOutCubic,
       bottom: _bottom,
-      right: _right,
+      right: effectiveRight,
       child: GestureDetector(
         onPanUpdate: (details) {
+          if (isDocked) {
+            ref.read(assistantContextCoordinatorProvider).setDocked(false);
+          }
           setState(() {
             // Cập nhật vị trí kéo thả trong vùng an toàn của màn hình
             _bottom = (_bottom - details.delta.dy).clamp(
@@ -96,13 +106,13 @@ class _FloatingBatteryBotState extends ConsumerState<FloatingBatteryBot>
           children: [
             // Bong bóng lời thoại ngữ cảnh (Proactive Speech Bubble)
             AnimatedOpacity(
-              opacity: isBubbleVisible && bubbleText != null ? 1.0 : 0.0,
+              opacity: showBubble ? 1.0 : 0.0,
               duration: const Duration(milliseconds: 300),
               child: AnimatedScale(
-                scale: isBubbleVisible && bubbleText != null ? 1.0 : 0.8,
+                scale: showBubble ? 1.0 : 0.8,
                 duration: const Duration(milliseconds: 300),
                 curve: Curves.easeOutBack,
-                child: isBubbleVisible && bubbleText != null
+                child: showBubble
                     ? Container(
                         margin: const EdgeInsets.only(bottom: 8),
                         constraints: BoxConstraints(
@@ -179,26 +189,40 @@ class _FloatingBatteryBotState extends ConsumerState<FloatingBatteryBot>
             ),
 
             // Nút tròn Mascot nổi (Floating Action Icon)
-            ScaleTransition(
-              scale: isBubbleVisible
-                  ? _pulseAnimation
-                  : const AlwaysStoppedAnimation(1.0),
-              child: Material(
-                color: Colors.transparent,
-                shape: const CircleBorder(),
-                elevation: 6,
-                shadowColor: uiColors.primary.withValues(alpha: 0.35),
-                child: Tooltip(
-                  message: 'Mở BatteryBot',
-                  child: Semantics(
-                    label: 'Mở BatteryBot',
-                    button: true,
-                    child: InkWell(
-                      customBorder: const CircleBorder(),
-                      onTap: () => _openSheet(),
-                      child: Container(
-                        width: 56,
-                        height: 56,
+            AnimatedScale(
+              scale: effectiveScale,
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOutCubic,
+              child: AnimatedOpacity(
+                opacity: effectiveOpacity,
+                duration: const Duration(milliseconds: 250),
+                child: ScaleTransition(
+                  scale: isBubbleVisible && !isDocked
+                      ? _pulseAnimation
+                      : const AlwaysStoppedAnimation(1.0),
+                  child: Material(
+                    color: Colors.transparent,
+                    shape: const CircleBorder(),
+                    elevation: isDocked ? 2 : 6,
+                    shadowColor: uiColors.primary.withValues(alpha: 0.35),
+                    child: Tooltip(
+                      message: 'Mở BatteryBot',
+                      child: Semantics(
+                        label: 'Mở BatteryBot',
+                        button: true,
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: () {
+                            if (isDocked) {
+                              ref
+                                  .read(assistantContextCoordinatorProvider)
+                                  .setDocked(false);
+                            }
+                            _openSheet();
+                          },
+                          child: Container(
+                            width: 56,
+                            height: 56,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           gradient: LinearGradient(
@@ -227,8 +251,10 @@ class _FloatingBatteryBotState extends ConsumerState<FloatingBatteryBot>
                 ),
               ),
             ),
-          ],
+          ),
         ),
+      ],
+    ),
       ),
     );
   }

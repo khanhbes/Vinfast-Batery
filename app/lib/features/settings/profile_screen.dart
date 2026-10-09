@@ -67,7 +67,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final ts = data?['createdAt'];
         if (ts is Timestamp) {
           final dt = ts.toDate();
-          _createdAt = '${dt.day}/${dt.month}/${dt.year}';
+          _createdAt =
+              '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
+        } else if (user?.metadata.creationTime != null) {
+          final dt = user!.metadata.creationTime!;
+          _createdAt =
+              '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
         } else {
           _createdAt = 'Không xác định';
         }

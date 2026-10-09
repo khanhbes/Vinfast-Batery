@@ -234,6 +234,30 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
     final center = _origin ?? const LatLng(10.8231, 106.6297);
     return Scaffold(
       backgroundColor: AppColors.background,
+      appBar: Navigator.canPop(context)
+          ? AppBar(
+              backgroundColor: AppColors.background,
+              elevation: 0,
+              leading: IconButton(
+                icon: const Icon(
+                  Icons.arrow_back_ios_new_rounded,
+                  color: AppColors.textPrimary,
+                  size: 20,
+                ),
+                onPressed: () => Navigator.of(context).pop(),
+                tooltip: 'Quay lại',
+              ),
+              title: const Text(
+                'Lập kế hoạch chuyến đi',
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              centerTitle: false,
+            )
+          : null,
       body: SafeArea(
         child: CustomScrollView(
           physics: const BouncingScrollPhysics(),
@@ -968,6 +992,7 @@ class _BatteryBadge extends StatelessWidget {
       borderRadius: BorderRadius.circular(99),
     ),
     child: Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         const Icon(
           Icons.battery_charging_full_rounded,

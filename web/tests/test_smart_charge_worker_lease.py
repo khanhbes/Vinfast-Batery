@@ -243,7 +243,10 @@ def test_vault_transport_checks_lease_after_rate_limiter_sleep():
     from shelly.providers.vault_cloud import VaultCloudControlProvider
     from shelly.models import DeviceBinding
     repo, http = Mock(), Mock()
-    repo.reserve_cloud_request_slot.return_value = 1.1
+    def admit(_, operation, **kwargs):
+        kwargs["sleeper"](1.1)
+        return operation()
+    repo.run_cloud_request.side_effect = admit
     valid = [True]
     provider = VaultCloudControlProvider(repo, session=http, sleeper=lambda _: valid.__setitem__(0, False))
     provider._profile = Mock(return_value=("https://qa.shelly.cloud", "qa-only"))
@@ -251,8 +254,9 @@ def test_vault_transport_checks_lease_after_rate_limiter_sleep():
         if not valid[0]:
             raise RuntimeError("workerLeaseLost")
     provider.worker_lease_guard = guard
-    with pytest.raises(RuntimeError, match="workerLeaseLost"):
+    with pytest.raises(RuntimeError) as caught:
         provider.turn_off(DeviceBinding("qa-plug", "QA", "S3PL-00112EU", 3, "vault_cloud"))
+    assert caught.value.code == "cloudRateLimiterUnavailable"
     http.post.assert_not_called()
 
 

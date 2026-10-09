@@ -31,6 +31,7 @@ import '../charge_log/add_charge_log_modal.dart';
 import '../ai/smart_charging_control_screen.dart';
 import '../ai/controllers/smart_charging_controller.dart';
 import '../ai/widgets/persistent_charging_pill.dart';
+import '../battery_monitor/battery_monitor_screen.dart';
 
 // =============================================================================
 // Stable Dashboard Providers (thay cho inline FutureProvider)
@@ -245,6 +246,30 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
     return Scaffold(
       backgroundColor: AppUiColors.of(context).background,
+      appBar: Navigator.canPop(context)
+          ? AppBar(
+              backgroundColor: AppUiColors.of(context).background,
+              elevation: 0,
+              leading: IconButton(
+                icon: const Icon(
+                  Icons.arrow_back_ios_new_rounded,
+                  color: AppColors.textPrimary,
+                  size: 20,
+                ),
+                onPressed: () => Navigator.of(context).pop(),
+                tooltip: 'Quay lại',
+              ),
+              title: const Text(
+                'Trung tâm điều khiển',
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              centerTitle: false,
+            )
+          : null,
       floatingActionButton: QuickActionFab(
         vehicleId: vehicleId.isEmpty ? null : vehicleId,
         heroTag: 'quick_action_fab_dashboard',
@@ -625,7 +650,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ),
         const SizedBox(height: 12),
 
-        // Payload selector
+        // Payload selector (Responsive, không overflow)
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -633,56 +658,75 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: AppColors.border),
           ),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(
-                Icons.people_alt_rounded,
-                color: AppColors.textSecondary,
-                size: 18,
+              const Row(
+                children: [
+                  Icon(
+                    Icons.people_alt_rounded,
+                    color: AppColors.textSecondary,
+                    size: 18,
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    'Tải trọng xe:',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 10),
-              const Text(
-                'Tải trọng:',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
-              ),
-              const Spacer(),
-              ...PayloadType.values.map((p) {
-                final isSelected = p == _selectedPayload;
-                return Padding(
-                  padding: const EdgeInsets.only(left: 8),
-                  child: GestureDetector(
-                    onTap: () => setState(() => _selectedPayload = p),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
+              const SizedBox(height: 10),
+              Row(
+                children: PayloadType.values.map((p) {
+                  final isSelected = p == _selectedPayload;
+                  return Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        right: p == PayloadType.values.last ? 0 : 8,
                       ),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? AppColors.primaryGreen.withValues(alpha: 0.15)
-                            : AppColors.surface,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: isSelected
-                              ? AppColors.primaryGreen
-                              : AppColors.border,
-                        ),
-                      ),
-                      child: Text(
-                        p.label,
-                        style: TextStyle(
-                          color: isSelected
-                              ? AppColors.primaryGreen
-                              : AppColors.textSecondary,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
+                      child: GestureDetector(
+                        onTap: () => setState(() => _selectedPayload = p),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 9,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? AppColors.primaryGreen.withValues(alpha: 0.15)
+                                : AppColors.surface,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isSelected
+                                  ? AppColors.primaryGreen
+                                  : AppColors.border,
+                            ),
+                          ),
+                          child: Center(
+                            child: Text(
+                              p.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: isSelected
+                                    ? AppColors.primaryGreen
+                                    : AppColors.textSecondary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                );
-              }),
+                  );
+                }).toList(),
+              ),
             ],
           ),
         ),
@@ -1237,6 +1281,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         _startTrip(vehicleAsync, vehicleId);
       case QuickAction.startCharge:
         _openSmartCharge(vehicleAsync, vehicleId);
+      case QuickAction.batteryMonitor:
+        if (_isNavigating || !mounted) return;
+        _isNavigating = true;
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => BatteryMonitorScreen(vehicle: vehicleAsync.value),
+          ),
+        ).then((_) {
+          if (mounted) _isNavigating = false;
+        });
       case QuickAction.manualTrip:
         final vehicle = vehicleAsync.value;
         if (vehicle == null) return;

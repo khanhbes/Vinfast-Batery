@@ -56,6 +56,7 @@ def main():
     with log.open("w", encoding="utf-8") as output:
         process = subprocess.Popen(command, cwd=args.cwd, stdout=subprocess.PIPE,
                                    stderr=subprocess.STDOUT, encoding="utf-8", errors="replace")
+        print(f"quality-gate: started child pid={process.pid}", flush=True)
         diagnostics = process.stdout
         assert diagnostics is not None, "PIPE must provide a diagnostic stream"
         def copy_diagnostics():
@@ -85,7 +86,7 @@ def main():
                 cleanup_error = "child_exit_unconfirmed"
         reader.join(timeout=5)
     result = {"command": [redact(argument) for argument in command], "cwd": args.cwd, "log": str(log),
-              "timeoutSeconds": args.timeout, "timedOut": timed_out,
+              "processId": process.pid, "timeoutSeconds": args.timeout, "timedOut": timed_out,
               "exitCode": process.returncode,
               "cleanupError": cleanup_error,
               "elapsedSeconds": round(time.monotonic() - started, 2)}

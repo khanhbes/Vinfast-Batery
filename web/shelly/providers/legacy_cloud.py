@@ -90,6 +90,9 @@ class LegacyCloudControlProvider(VaultCloudControlProvider):
     def turn_on_with_timer(self, binding: DeviceBinding, duration_seconds: int) -> None:
         raise ProviderError("legacyEnrollmentRequired", "Hãy kết nối Shelly qua mã quản trị trước khi bật sạc")
 
+    def verify_control_readiness(self, binding: DeviceBinding) -> None:
+        raise ProviderError("legacyEnrollmentRequired", "Hãy kết nối Shelly qua mã quản trị trước khi bật sạc")
+
     def turn_off(self, binding: DeviceBinding) -> None:
         self._post(binding, "/v2/devices/api/set/switch", {
             "id": binding.device_id,
