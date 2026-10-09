@@ -2401,44 +2401,11 @@ def revoke_mobile_push_token(device_id):
 
 def send_smart_charge_push(uid, *, session_id, vehicle_id=None, state, target_percent=None, route='smart_charge'):
     """Send one durable Smart Charge event, deduplicated by eventKey."""
-    event_key = f'smart_charge:{session_id}:{state}'
-    payload = {
-        'event': 'smart_charge', 'eventKey': event_key,
-        'sessionId': str(session_id), 'vehicleId': str(vehicle_id or ''),
-        'state': str(state), 'targetPercent': str(target_percent or ''),
-        'route': route,
-    }
-    if event_key in _local_push_deliveries:
-        return {'sent': 0, 'deduplicated': True}
-    tokens = []
-    refs = []
-    if _firebase_available and _firestore_db:
-        delivery_ref = _firestore_db.collection('PushDeliveries').document(event_key.replace('/', '_'))
-        if delivery_ref.get().exists:
-            return {'sent': 0, 'deduplicated': True}
-        query = _firestore_db.collection('users').document(uid).collection('pushTokens').stream()
-        for doc in query:
-            item = doc.to_dict() or {}
-            if item.get('token'):
-                tokens.append(item['token']); refs.append(doc.reference)
-        delivery_ref.set({'uid': uid, 'eventKey': event_key, 'createdAt': datetime.now(timezone.utc)})
-    else:
-        for (owner, _device), item in _local_push_tokens.items():
-            if owner == uid and item.get('token'):
-                tokens.append(item['token'])
-        _local_push_deliveries.add(event_key)
-    if not tokens or not _firebase_messaging:
-        return {'sent': 0, 'deduplicated': False}
-    result = _firebase_messaging.send_each_for_multicast(
-        _firebase_messaging.MulticastMessage(tokens=tokens, data=payload,
-                                             notification=_firebase_messaging.Notification(
-                                                 title='VinFast Battery', body=f'Smart Charge: {state}')))
-    for index, response in enumerate(result.responses):
-        if not response.success and getattr(response, 'exception', None) and refs:
-            code = str(getattr(response.exception, 'code', ''))
-            if code in {'messaging/registration-token-not-registered', 'messaging/invalid-registration-token'}:
-                refs[index].delete()
-    return {'sent': result.success_count, 'failed': result.failure_count, 'deduplicated': False}
+    from shelly.push_notifications import send_terminal_push
+    return send_terminal_push(uid, session_id=session_id, vehicle_id=vehicle_id,
+        state=state, target_percent=target_percent, route=route,
+        db=_firestore_db if _firebase_available else None, messaging=_firebase_messaging,
+        local_tokens=_local_push_tokens, local_deliveries=_local_push_deliveries)
 
 
 # ═══════════════════════════════════════════════════════════════

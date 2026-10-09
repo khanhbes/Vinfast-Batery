@@ -1,0 +1,21 @@
+{
+  "command": [
+    "docker",
+    "--context",
+    "desktop-linux",
+    "build",
+    "-f",
+    "web/Dockerfile.worker",
+    "-t",
+    "vinfast-worker-qa:task103",
+    "web"
+  ],
+  "cwd": ".",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\cloud-dispatch-103-image-build-20261010.log",
+  "processId": 25220,
+  "timeoutSeconds": 180,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 7.5
+}

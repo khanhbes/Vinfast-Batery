@@ -1018,7 +1018,7 @@ class _EmptyHistory extends StatelessWidget {
         child: Text(
           isFiltered
               ? 'Thử đổi khoảng ngày hoặc chuyển bộ lọc sang Tất cả.'
-              : 'Phiên sạc sẽ xuất hiện ở đây sau khi relay OFF được xác minh.',
+              : 'Lịch sử sạc sẽ hiển thị tại đây sau khi phiên sạc kết thúc và ngắt kết nối an toàn.',
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodySmall,
         ),

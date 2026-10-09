@@ -1,0 +1,4 @@
+# Standalone CPU worker; intentionally no Flask, AI or ML runtime.
+firebase-admin==7.1.0
+requests==2.32.5
+cryptography==46.0.5

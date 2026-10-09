@@ -18,11 +18,14 @@ def status(on=False, timer=0):
 
 def provider_with_readbacks(readbacks):
     provider = VaultCloudControlProvider(Mock(), sleeper=lambda _: None)
-    provider.get_status = Mock(side_effect=readbacks)
-    provider.get_snapshot = Mock(return_value={
-        "settings": {"switch:0": {"initial_state": "off", "auto_on": False}}
+    # Isolate the timer-observation state machine. The real live context,
+    # credential/fingerprint and transport guards are tested without this mock
+    # in test_shelly_live_safety.py.
+    provider.get_status = Mock(side_effect=readbacks[1:])
+    provider._live_safety_context = Mock(return_value={
+        "status": readbacks[0], "fingerprint": "qa-evidence", "revision": 1,
     })
-    provider.turn_on_with_timer = Mock()
+    provider._send_verified_on = Mock()
     provider.turn_off = Mock()
     return provider
 
@@ -34,7 +37,7 @@ def test_no_load_requires_timer_to_switch_off_before_cleanup():
     result = provider.run_no_load_test(binding())
     assert result["noLoadTestVerified"] is True
     assert result["relayOffVerified"] is True
-    provider.turn_on_with_timer.assert_called_once()
+    provider._send_verified_on.assert_called_once()
     provider.turn_off.assert_called_once()
 
 
@@ -45,7 +48,7 @@ def test_manual_cleanup_off_does_not_fake_timer_verification():
     with pytest.raises(ProviderError) as caught:
         provider.run_no_load_test(binding())
     assert caught.value.code == "timerAutoOffUnverified"
-    provider.turn_on_with_timer.assert_called_once()
+    provider._send_verified_on.assert_called_once()
     provider.turn_off.assert_called_once()
 
 
@@ -56,7 +59,7 @@ def test_missing_on_readback_never_passes_even_after_off_cleanup():
     with pytest.raises(ProviderError) as caught:
         provider.run_no_load_test(binding())
     assert caught.value.code == "timerNotArmed"
-    provider.turn_on_with_timer.assert_called_once()
+    provider._send_verified_on.assert_called_once()
     provider.turn_off.assert_called_once()
 
 
@@ -114,24 +117,24 @@ def test_nonzero_initial_load_never_sends_on():
     with pytest.raises(ProviderError) as caught:
         provider.run_no_load_test(binding())
     assert caught.value.code == "unexpectedLoad"
-    provider.turn_on_with_timer.assert_not_called()
+    provider._send_verified_on.assert_not_called()
     provider.turn_off.assert_not_called()
 
 
 def test_timeout_after_on_does_not_retry_on_and_still_cleans_up():
     provider = provider_with_readbacks([status(), status()])
-    provider.turn_on_with_timer.side_effect = ProviderError("deviceOffline", "timeout", True)
+    provider._send_verified_on.side_effect = ProviderError("deviceOffline", "timeout", True)
     target = binding()
     with pytest.raises(ProviderError):
         provider.run_no_load_test(target)
-    provider.turn_on_with_timer.assert_called_once_with(target, 5)
+    provider._send_verified_on.assert_called_once_with(target, 5, provider._live_safety_context.return_value)
     provider.turn_off.assert_called_once()
 
 
 @pytest.mark.parametrize("command", [True, False])
 def test_empty_200_is_command_acceptance_only_not_valid_status(command):
     repository = Mock()
-    repository.reserve_cloud_request_slot.return_value = 0
+    repository.run_cloud_request.side_effect = lambda _, operation, **kwargs: operation()
     http = Mock()
     http.post.return_value.status_code = 200
     http.post.return_value.json.side_effect = ValueError("empty")
@@ -149,11 +152,11 @@ def test_empty_200_is_command_acceptance_only_not_valid_status(command):
 @pytest.mark.parametrize("http_status", [201, 204, 400, 401, 403, 404, 429, 500])
 def test_non_200_command_never_counts_as_acceptance(http_status):
     repository = Mock()
-    repository.reserve_cloud_request_slot.return_value = 0
+    repository.run_cloud_request.side_effect = lambda _, operation, **kwargs: operation()
     http = Mock()
     http.post.return_value.status_code = http_status
     provider = VaultCloudControlProvider(repository, session=http)
     provider._profile = Mock(return_value=("https://test.shelly.cloud", "fixture-key"))
     with pytest.raises(ProviderError):
-        provider.turn_on_with_timer(binding(), 5)
+        provider.turn_off(binding())
     http.post.assert_called_once()

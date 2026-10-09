@@ -146,12 +146,16 @@ class _EnergyJourneyScreenState extends ConsumerState<EnergyJourneyScreen> {
                                   ),
                                 ),
                                 const SizedBox(width: 6),
-                                Text(
-                                  currentLevel.tierName,
-                                  style: TextStyle(
-                                    color: CockpitColors.muted,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
+                                Expanded(
+                                  child: Text(
+                                    currentLevel.tierName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: CockpitColors.muted,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -188,17 +192,22 @@ class _EnergyJourneyScreenState extends ConsumerState<EnergyJourneyScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            nextLevel != null
-                                ? 'Tiến độ lên Cấp ${nextLevel.level}: ${nextLevel.name}'
-                                : 'Đã đạt cấp tối đa!',
-                            style: TextStyle(
-                              color: CockpitColors.muted,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
+                          Expanded(
+                            child: Text(
+                              nextLevel != null
+                                  ? 'Tiến độ lên Cấp ${nextLevel.level}: ${nextLevel.name}'
+                                  : 'Đã đạt cấp tối đa!',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: CockpitColors.muted,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
-                          if (nextLevel != null)
+                          if (nextLevel != null) ...[
+                            const SizedBox(width: 8),
                             Text(
                               'Còn ${state.remainingKWhToNext.toStringAsFixed(1)} kWh',
                               style: TextStyle(
@@ -207,6 +216,7 @@ class _EnergyJourneyScreenState extends ConsumerState<EnergyJourneyScreen> {
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
+                          ],
                         ],
                       ),
                       const SizedBox(height: 8),

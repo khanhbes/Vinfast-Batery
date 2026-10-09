@@ -97,6 +97,15 @@ class SmartChargeService:
                 blocked_code = "deviceCoordinationUnavailable"
         if blocked_code is None and not worker_ready:
             blocked_code = "workerUnavailable"
+        if blocked_code is None and binding and power and safe_boot and no_load:
+            verifier = getattr(self.provider, "verify_control_readiness", None)
+            if verifier is None:
+                blocked_code = "safetyVerificationRequired"
+            else:
+                try:
+                    verifier(binding)
+                except ProviderError as error:
+                    blocked_code = error.code
         can_start = not staging_disabled and blocked_code is None
         return {
             "canReadStatus": status,
@@ -224,6 +233,13 @@ class SmartChargeService:
             raise SmartChargeError("relayAlreadyOn", "Bộ sạc đang bật; hãy kiểm tra phiên hiện tại", 409)
         if not 190 <= status.voltage_v <= 255:
             raise SmartChargeError("unsafeVoltage", "Điện áp bộ sạc ngoài ngưỡng an toàn", 409)
+        verifier = getattr(self.provider, "verify_control_readiness", None)
+        if verifier is None:
+            raise SmartChargeError("safetyVerificationRequired", "Cần kiểm tra lại an toàn bộ sạc", 409)
+        try:
+            verifier(binding)
+        except ProviderError as error:
+            raise self._provider_error(error) from error
 
     def require_worker_ready(self) -> None:
         if os.environ.get("AZURE_STAGING_HARDWARE_DISABLED", "0") == "1":

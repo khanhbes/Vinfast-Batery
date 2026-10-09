@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/providers/app_providers.dart';
+import '../core/services/assistant_context_coordinator.dart';
 import '../core/services/notification_center_service.dart';
 import '../core/theme/app_ui_colors.dart';
 import '../core/widgets/app_navigation_bar.dart';
@@ -246,7 +248,20 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
         appBar: _buildUnifiedAppBar(context, currentIndex),
         body: Stack(
           children: [
-            AppTabStack(index: currentIndex, children: _screens),
+            NotificationListener<ScrollNotification>(
+              onNotification: (scrollInfo) {
+                if (scrollInfo is UserScrollNotification) {
+                  if (scrollInfo.direction == ScrollDirection.reverse) {
+                    ref.read(assistantContextCoordinatorProvider).setDocked(true);
+                  } else if (scrollInfo.direction == ScrollDirection.forward ||
+                      scrollInfo.metrics.pixels <= 20) {
+                    ref.read(assistantContextCoordinatorProvider).setDocked(false);
+                  }
+                }
+                return false;
+              },
+              child: AppTabStack(index: currentIndex, children: _screens),
+            ),
             GlobalChargingPill(),
             const FloatingBatteryBot(),
           ],
@@ -254,6 +269,9 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
         bottomNavigationBar: AppNavigationBar(
           selectedIndex: currentIndex,
           onSelected: (index) {
+            if (currentIndex != index) {
+              HapticFeedback.selectionClick();
+            }
             AppPopup.clearShownErrors();
             ref.read(currentTabProvider.notifier).state = index;
           },

@@ -485,7 +485,7 @@ class RouteContractTests(unittest.TestCase):
                     "settings": {"switch:0": {"initial_state": "off", "auto_on": False}},
                 }],
             )
-            with patch("shelly.routes.requests.post", return_value=cloud_response), patch.object(repo, "reserve_cloud_request_slot", return_value=0):
+            with patch("shelly.routes.requests.post", return_value=cloud_response), patch.object(repo, "run_cloud_request", side_effect=lambda _, operation, **kwargs: operation()):
                 saved = client.put("/api/shelly/profiles/plug-1", json={
                     "vehicleId": "VF-001", "cloudHost": "https://shelly-eu.shelly.cloud",
                     "cloudAuthKey": "secret-key", "lanAddress": "192.168.1.4",

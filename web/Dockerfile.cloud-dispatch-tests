@@ -1,0 +1,8 @@
+# Offline-only targeted QA; never use this image as the production worker.
+FROM vinfast-worker-qa:task103
+USER root
+RUN pip install --no-cache-dir pytest==8.3.5 Flask==3.1.1 && pip check
+COPY tests/test_cloud_dispatch.py tests/test_shelly_live_safety.py tests/test_shelly_vault_safety.py tests/test_smart_charge_worker_lease.py tests/test_worker_runtime.py ./qa_tests/
+ENV PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
+USER 10001
+CMD ["python", "-m", "pytest", "qa_tests", "-q", "-p", "no:cacheprovider", "--basetemp=/tmp/qa103"]

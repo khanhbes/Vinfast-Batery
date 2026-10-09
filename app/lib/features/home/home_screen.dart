@@ -27,6 +27,7 @@ import '../maintenance/maintenance_screen.dart';
 import '../../core/widgets/responsive_text.dart';
 import '../../core/widgets/ev_energy_animations.dart';
 import '../../core/widgets/debug_error_sheet.dart';
+import '../battery_monitor/battery_monitor_screen.dart';
 
 // =============================================================================
 // Home Screen V4 — Modern Dashboard Design
@@ -666,11 +667,13 @@ class _VehicleBanner extends StatelessWidget {
                         ),
                         child: Text(
                           plate,
-                          style: CockpitTypography.numbers(
+                          style: TextStyle(
                             color: Colors.white,
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            letterSpacing: 1.0,
+                            letterSpacing: vehicle?.licensePlate?.trim().isNotEmpty == true
+                                ? 1.0
+                                : 0.2,
                           ),
                         ),
                       ),
@@ -1046,9 +1049,10 @@ class _BatteryHealthCardState extends State<_BatteryHealthCard>
       onTapDown: (_) => _controller.forward(),
       onTapUp: (_) {
         _controller.reverse();
+        HapticFeedback.lightImpact();
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => DashboardScreen()),
+          MaterialPageRoute(builder: (_) => const BatteryMonitorScreen()),
         );
       },
       onTapCancel: () => _controller.reverse(),
@@ -1081,7 +1085,7 @@ class _BatteryHealthCardState extends State<_BatteryHealthCard>
                   SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Battery Health Score',
+                      'Điểm sức khỏe pin',
                       style: TextStyle(
                         color: AppUiColors.of(context).text,
                         fontSize: 16,
@@ -1096,6 +1100,12 @@ class _BatteryHealthCardState extends State<_BatteryHealthCard>
                       fontSize: 20,
                       fontWeight: FontWeight.w800,
                     ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: AppUiColors.of(context).muted,
+                    size: 20,
                   ),
                 ],
               ),
@@ -1114,21 +1124,34 @@ class _BatteryHealthCardState extends State<_BatteryHealthCard>
                 ),
               ),
               SizedBox(height: 12),
-              Text(
-                !hasData
-                    ? 'Cần thêm dữ liệu xe'
-                    : isHealthy
-                    ? 'Excellent condition'
-                    : 'Consider maintenance check',
-                style: TextStyle(
-                  color: !hasData
-                      ? AppUiColors.of(context).muted
-                      : isHealthy
-                      ? AppUiColors.of(context).primary
-                      : AppUiColors.of(context).warning,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    !hasData
+                        ? 'Cần thêm dữ liệu xe'
+                        : isHealthy
+                        ? 'Tình trạng xuất sắc (SOH tối ưu)'
+                        : 'Cần kiểm tra bảo dưỡng pin',
+                    style: TextStyle(
+                      color: !hasData
+                          ? AppUiColors.of(context).muted
+                          : isHealthy
+                          ? AppUiColors.of(context).primary
+                          : AppUiColors.of(context).warning,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    'Chi tiết cell pin >',
+                    style: TextStyle(
+                      color: AppUiColors.of(context).primary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

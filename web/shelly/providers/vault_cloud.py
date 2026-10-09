@@ -2,13 +2,17 @@ from __future__ import annotations
 
 import hashlib
 import math
+import os
 import time
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 import requests
 
 from ..models import DeviceBinding, DeviceStatus
 from .base import ProviderError
+from ..safety_fingerprint import FINGERPRINT_VERSION, cloud_safety_fingerprint
+from ..cloud_dispatch import CloudAdmissionError, retry_after_seconds
 
 
 class VaultCloudControlProvider:
@@ -30,7 +34,7 @@ class VaultCloudControlProvider:
         uid = binding.owner_uid
         if not uid:
             raise ProviderError("ownershipUnavailable", "Không xác minh được chủ sở hữu Shelly")
-        profile = self.repository.restore_synced_profile(uid, binding.device_id)
+        profile = self._restore_profile(binding)
         if not profile or profile.get("revokedAt"):
             raise ProviderError("profileUnavailable", "Cấu hình Shelly chưa được lưu trên máy chủ")
         if str(profile.get("model") or "").upper() != "S3PL-00112EU":
@@ -40,44 +44,72 @@ class VaultCloudControlProvider:
         parsed = urlparse(host)
         if parsed.scheme != "https" or not parsed.hostname or not (
             parsed.hostname == "shelly.cloud" or parsed.hostname.endswith(".shelly.cloud")
-        ) or parsed.path not in ("", "/") or parsed.query or parsed.fragment or not key:
+        ) or parsed.username or parsed.password or parsed.netloc != parsed.hostname or parsed.path not in ("", "/") or parsed.query or parsed.fragment or not key:
             raise ProviderError("invalidProviderConfig", "Cấu hình Shelly Cloud không hợp lệ")
         return host, key
 
-    def _post(self, binding: DeviceBinding, path: str, payload: dict, *, command=False) -> object:
+    def _restore_profile(self, binding):
+        try:
+            profile = self.repository.restore_synced_profile(binding.owner_uid, binding.device_id)
+        except Exception as error:
+            raise ProviderError("profileUnavailable", "Chưa đọc được cấu hình Shelly. Hãy thử lại.", True) from error
+        if not isinstance(profile, dict):
+            raise ProviderError("profileUnavailable", "Chưa đọc được cấu hình Shelly. Hãy thử lại.", True)
+        return profile
+
+    def _post(self, binding: DeviceBinding, path: str, payload: dict, *, command=False,
+              safety_context=None, expected_credentials=None) -> object:
         host, key = self._profile(binding)
+        is_on = path == "/v2/devices/api/set/switch" and payload.get("on") is True
+        if is_on and safety_context is None:
+            raise ProviderError("safetyVerificationRequired", "Cần kiểm tra an toàn bộ sạc trước khi bật")
         fingerprint = hashlib.sha256(key.encode("utf-8")).hexdigest()
-        try:
-            wait = self.repository.reserve_cloud_request_slot(fingerprint, 1.1)
-        except Exception as exc:
-            raise ProviderError("cloudRateLimiterUnavailable", "Không xác minh được giới hạn request Shelly Cloud") from exc
-        if wait > 0:
-            self.sleep(wait)
         guard = getattr(self, "worker_lease_guard", None)
-        if guard is not None:
-            guard()  # After limiter wait, immediately before transport dispatch.
+        def send():
+            if guard:
+                guard()
+            # These checks remain inside the admitted operation, after queueing.
+            if expected_credentials is not None or is_on:
+                current = self._profile(binding)
+                if current != (host, key) or (expected_credentials is not None and current != expected_credentials):
+                    raise ProviderError("verificationChanged", "Cấu hình đã thay đổi; hãy kiểm tra lại")
+            if is_on:
+                self._assert_safety_context(binding, safety_context)
+            try:
+                response = self.http.post(f"{host}{path}", params={"auth_key": key}, json=payload, timeout=7)
+            except requests.RequestException as exc:
+                raise ProviderError("deviceOffline", "Shelly Cloud không phản hồi", True) from exc
+            if response.status_code in (401, 403):
+                raise ProviderError("needsReauthentication", "Quyền truy cập Shelly Cloud không hợp lệ", status_code=response.status_code)
+            if response.status_code == 429:
+                delay = retry_after_seconds(getattr(response, "headers", {}).get("Retry-After"))
+                self.repository.defer_cloud_requests(fingerprint, delay)
+                raise ProviderError("cloudRateLimited", "Shelly Cloud đang giới hạn tần suất", True,
+                                    status_code=429, retry_after_seconds=delay)
+            if response.status_code != 200:
+                raise ProviderError("providerRejected", "Shelly Cloud chưa thực hiện được yêu cầu", response.status_code >= 500,
+                                    status_code=response.status_code)
+            try:
+                value = response.json()
+            except ValueError as exc:
+                if command:
+                    return None  # Acceptance only, never verified relay success.
+                raise ProviderError("malformedProviderResponse", "Shelly Cloud trả dữ liệu không hợp lệ") from exc
+            if isinstance(value, dict) and (value.get("isok") is False or value.get("error")):
+                raise ProviderError("providerRejected", "Shelly Cloud từ chối yêu cầu")
+            return value
         try:
-            response = self.http.post(f"{host}{path}", params={"auth_key": key}, json=payload, timeout=7)
-        except requests.RequestException as exc:
-            raise ProviderError("deviceOffline", "Shelly Cloud không phản hồi", True) from exc
-        if response.status_code in (401, 403):
-            raise ProviderError("needsReauthentication", "Quyền truy cập Shelly Cloud không hợp lệ")
-        if response.status_code == 429:
-            raise ProviderError("cloudRateLimited", "Shelly Cloud đang giới hạn tần suất", True)
-        if response.status_code != 200:
-            raise ProviderError("providerRejected", f"Shelly Cloud từ chối yêu cầu ({response.status_code})", response.status_code >= 500)
-        try:
-            value = response.json()
-        except ValueError as exc:
-            # Cloud v2 acknowledges switch commands with HTTP 200; a JSON
-            # body is not part of that acknowledgement contract. This is only
-            # acceptance, never relay/timer verification. Reads remain strict.
-            if command:
-                return None
-            raise ProviderError("malformedProviderResponse", "Shelly Cloud trả dữ liệu không hợp lệ") from exc
-        if isinstance(value, dict) and (value.get("isok") is False or value.get("error")):
-            raise ProviderError("providerRejected", "Shelly Cloud từ chối yêu cầu")
-        return value
+            return self.repository.run_cloud_request(fingerprint, send,
+                priority_off=path == "/v2/devices/api/set/switch" and payload.get("on") is False,
+                sleeper=self.sleep, guard=guard)
+        except ProviderError:
+            raise
+        except CloudAdmissionError as error:
+            code = "cloudQueueBusy" if str(error) == "cloudQueueBusy" else "cloudRateLimiterUnavailable"
+            raise ProviderError(code, "Kết nối bộ sạc đang bận. Hãy thử lại.", True) from error
+        except Exception as error:
+            # Includes datastore/worker fencing failures; never fallback to HTTP.
+            raise ProviderError("cloudRateLimiterUnavailable", "Chưa thể xác minh kết nối bộ sạc. Hãy thử lại.", True) from error
 
     @staticmethod
     def _device(value, device_id: str):
@@ -89,8 +121,10 @@ class VaultCloudControlProvider:
             return value
         return None
 
-    def get_snapshot(self, binding: DeviceBinding) -> dict:
-        raw = self._post(binding, "/v2/devices/api/get", {"ids": [binding.device_id], "select": ["status", "settings"]})
+    def get_snapshot(self, binding: DeviceBinding, *, expected_credentials=None) -> dict:
+        # Keep legacy read/OFF compatible; G2 is mandatory for new ON evidence.
+        kwargs = {"expected_credentials": expected_credentials} if expected_credentials is not None else {}
+        raw = self._post(binding, "/v2/devices/api/get", {"ids": [binding.device_id], "select": ["status", "settings"]}, **kwargs)
         device = self._device(raw, binding.device_id)
         if not isinstance(device, dict) or str(device.get("id") or "").lower() != binding.device_id.lower():
             raise ProviderError("deviceNotFound", "Không xác minh được thiết bị Shelly đã liên kết")
@@ -111,6 +145,9 @@ class VaultCloudControlProvider:
 
     def get_status(self, binding: DeviceBinding) -> DeviceStatus:
         snapshot = self.get_snapshot(binding)
+        return self._status_from_snapshot(binding, snapshot)
+
+    def _status_from_snapshot(self, binding: DeviceBinding, snapshot: dict) -> DeviceStatus:
         switch = self._switch(snapshot)
         if not all(field in switch for field in ("apower", "voltage", "current", "aenergy")):
             raise ProviderError("unsupportedDevice", "Thiếu trường đo điện năng của Shelly")
@@ -125,7 +162,6 @@ class VaultCloudControlProvider:
             return float(value)
         timer = self._timer_remaining(snapshot, switch)
         temperature = switch.get("temperature") or {}
-        settings = snapshot.get("settings") or {}
         return DeviceStatus(
             online=True,
             relay=switch["output"],
@@ -133,7 +169,7 @@ class VaultCloudControlProvider:
             power_w=meter(switch["apower"], "W"),
             voltage_v=meter(switch["voltage"], "V"),
             current_a=meter(switch["current"], "A"),
-            temperature_c=float(temperature["tC"]) if isinstance(temperature, dict) and temperature.get("tC") is not None else None,
+            temperature_c=meter(temperature["tC"], "°C") if isinstance(temperature, dict) and temperature.get("tC") is not None else None,
             energy_wh=meter(energy["total"], "Wh"),
             device_id=binding.device_id,
         )
@@ -166,8 +202,68 @@ class VaultCloudControlProvider:
         # the countdown. Expired timestamps resolve to zero, not full duration.
         return max(0, math.floor(min(duration, started + duration - max(now, device_now))))
 
+    def _assert_safety_context(self, binding, context):
+        age = self.clock() - context["observedAt"]
+        if not math.isfinite(age) or not 0 <= age <= 10:
+            raise ProviderError("safetySnapshotStale", "Kiểm tra kết nối đã hết hạn; hãy thử lại", True)
+        host, key = self._profile(binding)
+        if (host, key) != context["credentials"]:
+            raise ProviderError("verificationChanged", "Cấu hình đã thay đổi; hãy kiểm tra lại")
+        if (os.environ.get("AZURE_STAGING_HARDWARE_DISABLED", "0") == "1"
+                or not self.repository.worker_health_ready(datetime.now(timezone.utc))):
+            raise ProviderError("workerUnavailable", "Giám sát sạc chưa sẵn sàng", True)
+        try:
+            owned = self.repository.device_owned_by(binding.owner_uid, binding.device_id)
+        except Exception as error:
+            raise ProviderError("ownershipUnavailable", "Chưa xác minh được quyền điều khiển Shelly", True) from error
+        if owned is not True:
+            raise ProviderError("ownershipUnavailable", "Chưa xác minh được quyền điều khiển Shelly")
+        profile = self._restore_profile(binding)
+        if not profile or profile.get("revokedAt") or profile.get("revision") != context["revision"]:
+            raise ProviderError("verificationChanged", "Liên kết đã thay đổi; hãy kiểm tra lại")
+        if context["requireHistory"]:
+            if (type(profile.get("verificationFingerprintVersion")) is not int
+                    or profile["verificationFingerprintVersion"] != FINGERPRINT_VERSION
+                    or profile.get("verificationFingerprint") != context["fingerprint"]
+                    or not all(profile.get(field) is True for field in (
+                        "cloudVerified", "powerMeterVerified", "safeBootVerified", "noLoadTestVerified",
+                        "onObserved", "timerObserved", "timerAutoOffObserved", "relayOffVerified"))
+                    or str(profile.get("verifiedDeviceId") or "").lower() != binding.device_id.lower()
+                    or profile.get("verifiedModel") != "S3PL-00112EU"):
+                raise ProviderError("safetyVerificationRequired", "Cần kiểm tra lại an toàn bộ sạc")
+
+    def _live_safety_context(self, binding, *, require_history=True):
+        credentials = self._profile(binding)
+        profile = self._restore_profile(binding)
+        snapshot = self.get_snapshot(binding, expected_credentials=credentials)
+        status = self._status_from_snapshot(binding, snapshot)
+        fingerprint = cloud_safety_fingerprint(binding.device_id, *credentials, snapshot)
+        if status.relay is not False:
+            raise ProviderError("relayAlreadyOn", "Bộ sạc đang bật; hãy kiểm tra phiên hiện tại")
+        if (not 190 <= status.voltage_v <= 255 or not 0 <= status.current_a <= 12
+                or not 0 <= status.power_w <= 2500 or status.energy_wh < 0
+                or (status.temperature_c is not None and status.temperature_c > 75)):
+            raise ProviderError("unsafeMeasurements", "Số đo bộ sạc ngoài ngưỡng an toàn")
+        revision = profile.get("revision") if isinstance(profile, dict) else None
+        if type(revision) is not int or revision < 1:
+            raise ProviderError("verificationChanged", "Chưa xác minh được phiên bản liên kết")
+        context = {"credentials": credentials, "revision": revision, "fingerprint": fingerprint,
+                   "observedAt": self.clock(), "requireHistory": require_history, "status": status}
+        self._assert_safety_context(binding, context)
+        return context
+
+    def verify_control_readiness(self, binding: DeviceBinding) -> None:
+        self._live_safety_context(binding)
+
+    def _send_verified_on(self, binding, duration_seconds, context):
+        if type(duration_seconds) is not int or not 5 <= duration_seconds <= 36000:
+            raise ProviderError("unsafeDuration", "Thời gian sạc phải từ 5 giây đến 10 giờ")
+        self._post(binding, "/v2/devices/api/set/switch", {"id": binding.device_id, "channel": 0, "on": True, "toggle_after": duration_seconds}, command=True, safety_context=context)
+
     def turn_on_with_timer(self, binding: DeviceBinding, duration_seconds: int) -> None:
-        self._post(binding, "/v2/devices/api/set/switch", {"id": binding.device_id, "channel": 0, "on": True, "toggle_after": int(duration_seconds)}, command=True)
+        # A second live check under the device lock protects every caller,
+        # including chat/API. No cached readiness boolean grants this command.
+        self._send_verified_on(binding, duration_seconds, self._live_safety_context(binding))
 
     def turn_off(self, binding: DeviceBinding) -> None:
         self._post(binding, "/v2/devices/api/set/switch", {"id": binding.device_id, "channel": 0, "on": False}, command=True)
@@ -176,16 +272,9 @@ class VaultCloudControlProvider:
         return None
 
     def run_no_load_test(self, binding: DeviceBinding) -> dict:
-        initial = self.get_status(binding)
-        snapshot = self.get_snapshot(binding)
-        settings = snapshot.get("settings") or {}
-        switch_settings = settings.get("switch:0") if isinstance(settings, dict) else None
-        if not isinstance(switch_settings, dict):
-            raise ProviderError("safeBootUnverified", "Shelly Cloud không trả cấu hình Safe Boot")
-        initial_state = str(switch_settings.get("initial_state") or "").lower()
-        auto_on = switch_settings.get("auto_on")
-        if initial.relay or initial_state != "off" or auto_on is not False:
-            raise ProviderError("safeBootUnverified", "Relay phải OFF, Power-on default OFF và Auto ON tắt")
+        # Only this explicit, backend-confirmed test can start without history.
+        context = self._live_safety_context(binding, require_history=False)
+        initial = context["status"]
         if not 190 <= initial.voltage_v <= 255:
             raise ProviderError("unsafeVoltage", "Điện áp ngoài ngưỡng an toàn")
         if not 0 <= initial.power_w <= 5 or not 0 <= initial.current_a <= .1:
@@ -196,7 +285,7 @@ class VaultCloudControlProvider:
         off_verified = False
         on_status = None
         try:
-            self.turn_on_with_timer(binding, 5)
+            self._send_verified_on(binding, 5, context)
             for _ in range(5):
                 self.sleep(1.1)
                 status = self.get_status(binding)
@@ -221,7 +310,15 @@ class VaultCloudControlProvider:
             try:
                 self.turn_off(binding)
             finally:
-                off_verified = not self.get_status(binding).relay
+                off_verified = self.get_status(binding).relay is False
         if not off_verified:
             raise ProviderError("relayUnverified", "Không xác minh được relay OFF sau kiểm tra")
-        return {"identityVerified": True, "powerMeterVerified": True, "safeBootVerified": True, "noLoadTestVerified": on_observed and timer_observed and timer_auto_off_observed and off_verified, "initialState": initial_state, "autoOn": auto_on, "relayOffVerified": off_verified}
+        # Config/credential changes during the test invalidate its result.
+        final_context = self._live_safety_context(binding, require_history=False)
+        if (final_context["fingerprint"] != context["fingerprint"]
+                or final_context["revision"] != context["revision"]):
+            raise ProviderError("verificationChanged", "Cấu hình đã thay đổi trong lúc kiểm tra")
+        return {"identityVerified": True, "powerMeterVerified": True, "safeBootVerified": True, "noLoadTestVerified": on_observed and timer_observed and timer_auto_off_observed and off_verified, "initialState": "off", "autoOn": False, "relayOffVerified": off_verified,
+                "verificationFingerprint": context["fingerprint"], "verificationFingerprintVersion": FINGERPRINT_VERSION,
+                "profileRevision": context["revision"], "onObserved": on_observed, "timerObserved": timer_observed,
+                "timerAutoOffObserved": timer_auto_off_observed}

@@ -495,58 +495,104 @@ class _HeroBatteryTrack extends StatelessWidget {
               height: 28,
               child: Stack(
                 children: [
-                  // "Hiện tại 35%" badge
-                  Positioned(
-                    left: currentLeft,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: CockpitColors.elevated,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: CockpitColors.border),
-                      ),
-                      child: Text(
-                        'Hiện tại ${currentClamped.round()}%',
-                        style: TextStyle(
-                          color: CockpitColors.muted,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
+                  if (currentClamped >= 99.5)
+                    Align(
+                      alignment: Alignment.center,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: CockpitColors.emerald,
+                          borderRadius: BorderRadius.circular(10),
+                          boxShadow: [
+                            BoxShadow(
+                              color: CockpitColors.emerald.withValues(
+                                alpha: .4,
+                              ),
+                              blurRadius: 10,
+                            ),
+                          ],
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.bolt_rounded,
+                              size: 14,
+                              color: Color(0xFF042F2E),
+                            ),
+                            SizedBox(width: 4),
+                            Text(
+                              'PIN ĐÃ ĐẦY 100%',
+                              style: TextStyle(
+                                color: Color(0xFF042F2E),
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ),
-                  ),
-
-                  // "Sạc đến 80%" badge
-                  Positioned(
-                    left: targetLeft,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: CockpitColors.emerald,
-                        borderRadius: BorderRadius.circular(10),
-                        boxShadow: [
-                          BoxShadow(
-                            color: CockpitColors.emerald.withValues(alpha: .3),
-                            blurRadius: 8,
+                    )
+                  else ...[
+                    // "Hiện tại 35%" badge
+                    Positioned(
+                      left: currentLeft,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: CockpitColors.elevated,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: CockpitColors.border),
+                        ),
+                        child: Text(
+                          'Hiện tại ${currentClamped.round()}%',
+                          style: TextStyle(
+                            color: CockpitColors.muted,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
                           ),
-                        ],
-                      ),
-                      child: Text(
-                        'Sạc đến ${targetClamped.round()}%',
-                        style: const TextStyle(
-                          color: Color(0xFF042F2E),
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
                         ),
                       ),
                     ),
-                  ),
+
+                    // "Sạc đến 80%" badge
+                    Positioned(
+                      left: targetLeft,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: CockpitColors.emerald,
+                          borderRadius: BorderRadius.circular(10),
+                          boxShadow: [
+                            BoxShadow(
+                              color: CockpitColors.emerald.withValues(
+                                alpha: .3,
+                              ),
+                              blurRadius: 8,
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          'Sạc đến ${targetClamped.round()}%',
+                          style: const TextStyle(
+                            color: Color(0xFF042F2E),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -589,9 +635,9 @@ class _HeroBatteryTrack extends StatelessWidget {
                       ),
                     ),
 
-                    // Draggable Floating Thumb at target percent
+                    // Draggable Floating Thumb at target percent (Clamped to avoid overflow)
                     Positioned(
-                      left: targetX - thumbRadius,
+                      left: (targetX).clamp(thumbRadius, trackWidth - thumbRadius) - thumbRadius,
                       top: (trackHeight / 2) - thumbRadius,
                       child: Container(
                         width: thumbRadius * 2,
@@ -663,18 +709,57 @@ class _BatteryBarPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // 0. Full Charge Glow State khi pin đạt 100%
+    if (currentPercent >= 99.5) {
+      final fullRect = Rect.fromLTWH(0, 0, size.width, size.height);
+      final fullPaint = Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [
+            Color(0xFF047857),
+            Color(0xFF10B981),
+            Color(0xFF6EE7B7),
+          ],
+        ).createShader(fullRect);
+      canvas.drawRect(fullRect, fullPaint);
+
+      if (isCharging) {
+        final shimmerPaint = Paint()
+          ..shader = LinearGradient(
+            begin: Alignment(-1 + shimmerValue * 2, 0),
+            end: Alignment(shimmerValue * 2, 0),
+            colors: [
+              Colors.transparent,
+              Colors.white.withValues(alpha: .30),
+              Colors.transparent,
+            ],
+          ).createShader(fullRect);
+        canvas.drawRect(fullRect, shimmerPaint);
+      }
+      return;
+    }
+
     final currentW = size.width * (currentPercent / 100.0);
     final targetW = size.width * (targetPercent / 100.0);
 
     // 1. Current SOC region (0 to currentPercent)
     if (currentPercent > 0) {
       final currentRect = Rect.fromLTWH(0, 0, currentW, size.height);
-      final currentPaint = Paint()..color = const Color(0xFF132822);
+      final currentPaint = Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [
+            Color(0xFF064E3B),
+            Color(0xFF047857),
+          ],
+        ).createShader(currentRect);
       canvas.drawRect(currentRect, currentPaint);
 
       // Dividing vertical marker at current SOC
       final linePaint = Paint()
-        ..color = CockpitColors.emerald.withValues(alpha: .4)
+        ..color = CockpitColors.emerald.withValues(alpha: .5)
         ..strokeWidth = 2.0;
       canvas.drawLine(
         Offset(currentW, 4),

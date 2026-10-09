@@ -50,6 +50,30 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
+      appBar: Navigator.canPop(context)
+          ? AppBar(
+              backgroundColor: AppColors.background,
+              elevation: 0,
+              leading: IconButton(
+                icon: const Icon(
+                  Icons.arrow_back_ios_new_rounded,
+                  color: AppColors.textPrimary,
+                  size: 20,
+                ),
+                onPressed: () => Navigator.of(context).pop(),
+                tooltip: 'Quay lại',
+              ),
+              title: const Text(
+                'Lịch bảo dưỡng',
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              centerTitle: false,
+            )
+          : null,
       floatingActionButton: vehicleId.isEmpty
           ? null
           : FloatingActionButton.extended(
@@ -661,6 +685,7 @@ class _FilterChip extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
         ),
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               label,

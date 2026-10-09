@@ -1,0 +1,14 @@
+FROM python:3.11-slim
+WORKDIR /app
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+COPY requirements-worker.txt ./
+RUN pip install --no-cache-dir -r requirements-worker.txt && pip check
+COPY smart_charge_worker.py smart_charge_worker_entry.py ./
+COPY shelly/ ./shelly/
+COPY scripts/worker_fixture_smoke.py ./scripts/worker_fixture_smoke.py
+RUN test -s smart_charge_worker_entry.py && test -s shelly/worker_runtime.py \
+    && useradd --system --uid 10001 --no-create-home worker
+USER 10001
+HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
+    CMD ["python", "-m", "shelly.worker_health"]
+CMD ["python", "smart_charge_worker_entry.py"]

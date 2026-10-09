@@ -1,0 +1,21 @@
+{
+  "command": [
+    "C:\\Users\\khanh\\AppData\\Roaming\\npm\\firebase.cmd",
+    "emulators:exec",
+    "--only",
+    "firestore",
+    "--project",
+    "vinfast-rules-test",
+    "--config",
+    "firebase.rules-local.json",
+    "node rules_tests/rules.test.js && python ../tools/backend_diagnostics.py tests/test_shelly_membership_emulator.py -q -p no:cacheprovider --basetemp=.pytest_dispatch_103_emulator_20261010"
+  ],
+  "cwd": "web",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\cloud-dispatch-103-emulator-20261010.log",
+  "processId": 36248,
+  "timeoutSeconds": 240,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 80.44
+}

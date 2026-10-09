@@ -1,0 +1,18 @@
+{
+  "command": [
+    "python",
+    "../tools/backend_diagnostics.py",
+    "-q",
+    "tests",
+    "--basetemp",
+    ".pytest_dispatch_103_backend_committed_20261010"
+  ],
+  "cwd": "web",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\cloud-dispatch-103-backend-committed-gate-20261010.log",
+  "processId": 31712,
+  "timeoutSeconds": 300,
+  "timedOut": false,
+  "exitCode": 1,
+  "cleanupError": null,
+  "elapsedSeconds": 75.25
+}

@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import '../../../data/models/vehicle_model.dart';
 import '../../../data/models/smart_charger_binding.dart';
+import '../../../data/models/smart_charging_session.dart';
 import '../../../data/repositories/smart_charger_repository.dart';
 import '../../../data/services/server_smart_charger_service.dart';
 import '../../../data/services/charging_tflite_runner.dart';
@@ -59,6 +60,13 @@ class AppChatToolGateway implements ChatToolGateway {
   }
 
   int _generation = 0;
+  static const _mutationTools = {
+    'create_reminder',
+    'edit_reminder',
+    'cancel_reminder',
+    'start_timed_charging',
+    'stop_charging',
+  };
   @override
   void invalidate() {
     _generation++;
@@ -72,6 +80,25 @@ class AppChatToolGateway implements ChatToolGateway {
   void _guard(String owner, String vehicle, int generation) {
     if (uid != owner || vehicleId != vehicle || generation != _generation) {
       throw StateError('accountChanged');
+    }
+  }
+
+  Future<T> _backendRead<T>(
+    String owner,
+    String vehicle,
+    int generation,
+    Future<T> Function() read,
+  ) async {
+    _guard(owner, vehicle, generation);
+    try {
+      final result = await read();
+      _guard(owner, vehicle, generation);
+      return result;
+    } catch (_) {
+      if (uid == owner && vehicleId == vehicle && generation == _generation) {
+        _connections.markServerUnavailable(uid: owner, vehicleId: vehicle);
+      }
+      rethrow;
     }
   }
 
@@ -156,14 +183,20 @@ class AppChatToolGateway implements ChatToolGateway {
         );
       case 'charger_status':
         final repo = _server;
-        final binding = await repo.binding(vehicleId: vehicle.vehicleId);
+    final binding = await _backendRead(
+      owner, vehicle.vehicleId, generation,
+      () => repo.binding(vehicleId: vehicle.vehicleId),
+    );
         _guard(owner, vehicle.vehicleId, generation);
         if (binding == null) {
           return const LocalChatReply(
             'Xe này chưa có bộ sạc Shelly đã liên kết. Mở thiết lập để nhập mã kết nối.',
           );
         }
-        final live = await repo.live(vehicleId: vehicle.vehicleId);
+    final live = await _backendRead(
+      owner, vehicle.vehicleId, generation,
+      () => repo.live(vehicleId: vehicle.vehicleId),
+    );
         _guard(owner, vehicle.vehicleId, generation);
         _connections.updateServerSnapshot(
           uid: owner,
@@ -226,6 +259,9 @@ class AppChatToolGateway implements ChatToolGateway {
 
   @override
   Future<Map<String, dynamic>> prepare(String tool, String question) async {
+    if (!_mutationTools.contains(tool)) {
+      return {'allowed': false, 'userMessage': 'Hành động không được hỗ trợ.'};
+    }
     final generation = _generation;
     final owner = uid!;
     final vehicle = _vehicle!;
@@ -287,7 +323,10 @@ class AppChatToolGateway implements ChatToolGateway {
       };
     }
     final repo = _server;
-    final binding = await repo.binding(vehicleId: vehicle.vehicleId);
+    final binding = await _backendRead(
+      owner, vehicle.vehicleId, generation,
+      () => repo.binding(vehicleId: vehicle.vehicleId),
+    );
     _guard(owner, vehicle.vehicleId, generation);
     if (binding == null ||
         binding.mode != SmartChargerConnectionMode.serverCloud) {
@@ -297,7 +336,10 @@ class AppChatToolGateway implements ChatToolGateway {
             'Hãy kết nối Shelly qua máy chủ trước khi điều khiển trong chat.',
       };
     }
-    final live = await repo.live(vehicleId: vehicle.vehicleId);
+    final live = await _backendRead(
+      owner, vehicle.vehicleId, generation,
+      () => repo.live(vehicleId: vehicle.vehicleId),
+    );
     _guard(owner, vehicle.vehicleId, generation);
     _connections.updateServerSnapshot(
       uid: owner,
@@ -316,7 +358,10 @@ class AppChatToolGateway implements ChatToolGateway {
     if (tool == 'stop_charging') {
       final session = live.session;
       if (session == null) {
-        final caps = await repo.capabilities(vehicleId: vehicle.vehicleId);
+    final caps = await _backendRead(
+      owner, vehicle.vehicleId, generation,
+      () => repo.capabilities(vehicleId: vehicle.vehicleId),
+    );
         _guard(owner, vehicle.vehicleId, generation);
         _connections.updateServerSnapshot(
           uid: owner,
@@ -376,7 +421,10 @@ class AppChatToolGateway implements ChatToolGateway {
             'Chọn thời lượng từ 1 phút đến 10 giờ và cập nhật mức pin trước khi bật sạc.',
       };
     }
-    final caps = await repo.capabilities(vehicleId: vehicle.vehicleId);
+    final caps = await _backendRead(
+      owner, vehicle.vehicleId, generation,
+      () => repo.capabilities(vehicleId: vehicle.vehicleId),
+    );
     _guard(owner, vehicle.vehicleId, generation);
     _connections.updateServerSnapshot(
       uid: owner,
@@ -416,6 +464,9 @@ class AppChatToolGateway implements ChatToolGateway {
     Map<String, dynamic> evidence,
     String operationId,
   ) async {
+    if (!_mutationTools.contains(tool)) {
+      return _result(false, 'Hành động không được hỗ trợ.', 'unsupported');
+    }
     final generation = _generation;
     final owner = uid!;
     final vehicle = _vehicle!;
@@ -473,7 +524,10 @@ class AppChatToolGateway implements ChatToolGateway {
       );
     }
     final repo = _server;
-    final binding = await repo.binding(vehicleId: vehicle.vehicleId);
+    final binding = await _backendRead(
+      owner, vehicle.vehicleId, generation,
+      () => repo.binding(vehicleId: vehicle.vehicleId),
+    );
     _guard(owner, vehicle.vehicleId, generation);
     if (binding?.deviceId != evidence['deviceId'] ||
         binding?.mode != SmartChargerConnectionMode.serverCloud) {
@@ -483,7 +537,10 @@ class AppChatToolGateway implements ChatToolGateway {
         'expired',
       );
     }
-    final live = await repo.live(vehicleId: vehicle.vehicleId);
+    final live = await _backendRead(
+      owner, vehicle.vehicleId, generation,
+      () => repo.live(vehicleId: vehicle.vehicleId),
+    );
     _guard(owner, vehicle.vehicleId, generation);
     _connections.updateServerSnapshot(
       uid: owner,
@@ -503,7 +560,10 @@ class AppChatToolGateway implements ChatToolGateway {
       );
     }
     if (tool == 'start_timed_charging') {
-      final caps = await repo.capabilities(vehicleId: vehicle.vehicleId);
+    final caps = await _backendRead(
+      owner, vehicle.vehicleId, generation,
+      () => repo.capabilities(vehicleId: vehicle.vehicleId),
+    );
       _guard(owner, vehicle.vehicleId, generation);
       _connections.updateServerSnapshot(
         uid: owner,
@@ -536,7 +596,10 @@ class AppChatToolGateway implements ChatToolGateway {
         expectedDeviceId: binding.deviceId,
       );
       _guard(owner, vehicle.vehicleId, generation);
-      final readback = await repo.live(vehicleId: vehicle.vehicleId);
+    final readback = await _backendRead(
+      owner, vehicle.vehicleId, generation,
+      () => repo.live(vehicleId: vehicle.vehicleId),
+    );
       _guard(owner, vehicle.vehicleId, generation);
       _connections.updateServerSnapshot(
         uid: owner,
@@ -546,12 +609,24 @@ class AppChatToolGateway implements ChatToolGateway {
         capabilities: caps,
       );
       final ok =
-          readback.status.deviceId == evidence['deviceId'] &&
+          sameShellyDevice(readback.status.deviceId, binding.deviceId) &&
           readback.status.online &&
           readback.status.relay &&
           (readback.status.timerRemaining?.inSeconds ?? 0) > 0 &&
           readback.session?.sessionId == session.sessionId &&
-          session.relayVerified;
+          readback.session?.vehicleId == vehicle.vehicleId &&
+          sameShellyDevice(readback.session?.deviceId, binding.deviceId) &&
+          readback.session?.state == ChargingSessionState.active &&
+          readback.session?.relayVerified == true &&
+          readback.session?.timerVerified == true &&
+          readback.session!.version >= session.version;
+      if (!ok) {
+        _connections.markControlUnknown(
+          uid: owner,
+          vehicleId: vehicle.vehicleId,
+          deviceId: binding.deviceId,
+        );
+      }
       return _result(
         ok,
         ok
@@ -562,7 +637,10 @@ class AppChatToolGateway implements ChatToolGateway {
     }
     if (tool == 'stop_charging') {
       if (evidence['bindingOnlyStop'] == true) {
-        final caps = await repo.capabilities(vehicleId: vehicle.vehicleId);
+    final caps = await _backendRead(
+      owner, vehicle.vehicleId, generation,
+      () => repo.capabilities(vehicleId: vehicle.vehicleId),
+    );
         _guard(owner, vehicle.vehicleId, generation);
         if (!caps.canManualOff) {
           return _result(
@@ -582,7 +660,10 @@ class AppChatToolGateway implements ChatToolGateway {
           operationId: operationId,
         );
         _guard(owner, vehicle.vehicleId, generation);
-        final readback = await repo.live(vehicleId: vehicle.vehicleId);
+    final readback = await _backendRead(
+      owner, vehicle.vehicleId, generation,
+      () => repo.live(vehicleId: vehicle.vehicleId),
+    );
         _guard(owner, vehicle.vehicleId, generation);
         _connections.updateServerSnapshot(
           uid: owner,
@@ -596,6 +677,13 @@ class AppChatToolGateway implements ChatToolGateway {
             readback.status.online &&
             !readback.status.relay &&
             sameShellyDevice(readback.status.deviceId, binding.deviceId);
+        if (!ok) {
+          _connections.markControlUnknown(
+            uid: owner,
+            vehicleId: vehicle.vehicleId,
+            deviceId: binding.deviceId,
+          );
+        }
         return _result(
           ok,
           ok
@@ -624,7 +712,10 @@ class AppChatToolGateway implements ChatToolGateway {
         idempotencyKey: operationId,
       );
       _guard(owner, vehicle.vehicleId, generation);
-      final readback = await repo.live(vehicleId: vehicle.vehicleId);
+    final readback = await _backendRead(
+      owner, vehicle.vehicleId, generation,
+      () => repo.live(vehicleId: vehicle.vehicleId),
+    );
       _guard(owner, vehicle.vehicleId, generation);
       _connections.updateServerSnapshot(
         uid: owner,
@@ -636,7 +727,14 @@ class AppChatToolGateway implements ChatToolGateway {
           (stopped == null || stopped.relayVerified) &&
           readback.status.online &&
           !readback.status.relay &&
-          readback.status.deviceId == evidence['deviceId'];
+          sameShellyDevice(readback.status.deviceId, binding.deviceId);
+      if (!ok) {
+        _connections.markControlUnknown(
+          uid: owner,
+          vehicleId: vehicle.vehicleId,
+          deviceId: binding.deviceId,
+        );
+      }
       return _result(
         ok,
         ok

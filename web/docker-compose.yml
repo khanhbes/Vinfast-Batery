@@ -1,6 +1,7 @@
 services:
   # ── FastAPI AI Server (internal only, port 8001) ──────────────
   ai:
+    profiles: ["cloud-ai"]
     build:
       context: .
       dockerfile: Dockerfile.ai
@@ -32,13 +33,10 @@ services:
       dockerfile: Dockerfile.api
     container_name: vinfast_api
     restart: unless-stopped
-    depends_on:
-      ai:
-        condition: service_healthy
     environment:
       APP_ENV: ${APP_ENV:-production}
       AI_SERVER_URL: http://ai:8001
-      AI_SERVER_INTERNAL_TOKEN: ${AI_SERVER_INTERNAL_TOKEN:?Set AI_SERVER_INTERNAL_TOKEN in the environment}
+      AI_SERVER_INTERNAL_TOKEN: ${AI_SERVER_INTERNAL_TOKEN:-}
       ADMIN_EMAILS: ${ADMIN_EMAILS:?Set ADMIN_EMAILS in the environment}
       DEV_ADMIN_KEY: ${DEV_ADMIN_KEY:?Set DEV_ADMIN_KEY in the environment}
       FIREBASE_CREDENTIALS_JSON: ${FIREBASE_CREDENTIALS_JSON:?Set FIREBASE_CREDENTIALS_JSON in the environment}
@@ -72,6 +70,7 @@ services:
       start_period: 60s
 
   catalog-worker:
+    profiles: ["catalog"]
     build:
       context: .
       dockerfile: Dockerfile.api
@@ -98,7 +97,7 @@ services:
   smart-charge-worker:
     build:
       context: .
-      dockerfile: Dockerfile.api
+      dockerfile: Dockerfile.worker
     command: ["python", "smart_charge_worker_entry.py"]
     container_name: vinfast_smart_charge_worker
     restart: unless-stopped
@@ -108,24 +107,20 @@ services:
       timeout: 5s
       retries: 3
       start_period: 90s
-    depends_on:
-      api:
-        condition: service_healthy
     environment:
       APP_ENV: ${APP_ENV:-production}
       FIREBASE_CREDENTIALS_JSON: ${FIREBASE_CREDENTIALS_JSON:?Set FIREBASE_CREDENTIALS_JSON in the environment}
-      AI_SERVER_URL: http://ai:8001
-      AI_SERVER_INTERNAL_TOKEN: ${AI_SERVER_INTERNAL_TOKEN:?Set AI_SERVER_INTERNAL_TOKEN in the environment}
-      SHELLY_PROVIDER: ${SHELLY_PROVIDER:-integrator}
-      SHELLY_LEGACY_HOST: ${SHELLY_LEGACY_HOST:-}
-      SHELLY_LEGACY_AUTH_KEY: ${SHELLY_LEGACY_AUTH_KEY:-}
-      SHELLY_LEGACY_DEVICE_ID: ${SHELLY_LEGACY_DEVICE_ID:-}
-      SHELLY_INTEGRATOR_TAG: ${SHELLY_INTEGRATOR_TAG:-}
+      SHELLY_PROVIDER: vault_cloud
       SHELLY_PROFILE_MASTER_KEY: ${SHELLY_PROFILE_MASTER_KEY:-}
+      AZURE_STAGING_HARDWARE_DISABLED: ${AZURE_STAGING_HARDWARE_DISABLED:-1}
       SMART_CHARGE_MAX_MINUTES: ${SMART_CHARGE_MAX_MINUTES:-600}
       SMART_CHARGE_WORKER_POLL_SECONDS: ${SMART_CHARGE_WORKER_POLL_SECONDS:-60}
       SMART_CHARGE_WORKER_SCOPE: ${SMART_CHARGE_WORKER_SCOPE:-}
       SMART_CHARGE_WORKER_HEALTH_PORT: "8090"
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    stop_grace_period: 30s
     networks:
       - vinfast_net
 

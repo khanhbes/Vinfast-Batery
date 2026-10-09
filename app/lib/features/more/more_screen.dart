@@ -757,12 +757,12 @@ class _DriverProfileHeroCard extends StatelessWidget {
                                   ),
                                 ),
                                 child: const Text(
-                                  'PIONEER',
+                                  'TIÊN PHONG',
                                   style: TextStyle(
                                     color: CockpitColors.emerald,
                                     fontSize: 8.5,
                                     fontWeight: FontWeight.w900,
-                                    letterSpacing: 1.1,
+                                    letterSpacing: 0.8,
                                   ),
                                 ),
                               ),

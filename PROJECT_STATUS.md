@@ -1,6 +1,230 @@
 # VinFast Battery — Project Status & Task Tracker
 
-> **Trạng thái hiện hành 09/10/2026 — Task99:** đã bổ sung worker lease theo môi trường, fencing epoch, probe riêng và kiểm quyền trước Cloud dispatch. Backend source cuối **435 Pass/10 skipped/exit0**; gateway59Pass. Rules45 assertions và transaction10Pass đã chạy local, recheck source cuối ghi dưới99.3. Chưa deploy backend/rules, chưa chạy image/pilot hoặc phát lệnh Shelly thật. APK/OnePlus vẫn QA **1.1.9+137** của96.9; không dùng gates app cũ chứng nhận backend mới. Giữ UI Task97, working tree và mọi bằng chứng. Ngân sách worker~20USD/tháng không phải quyền deploy/ON; hardware/enrollment vẫn **Blocked**.
+> **Trạng thái hiện hành Shelly/backend — Task103 (10/10/2026):** thêm Cloud admission transaction version2, ưu tiên OFF, bounded queue và shared Retry-After. Source cuối:149 targeted Pass trên Linux,45 Rules assertions +13 transaction Pass, image Task103 offline boot/probe/SIGTERM/fail-closed đạt; scoped hygiene321files/0findings. **Full backend Windows chưa đạt**:531Pass/1Fail/13skip ở atomic manifest replace; lượt ngoài OneDrive access violation, không tính Pass. Không deploy, sửa env thật, restart hệ thống hiện có, ADB/APK hay relay thật; Azure enrollment/safety/ON/rearm vẫn khóa. Task102 và mọi báo cáo cũ bên dưới là lịch sử được giữ nguyên.
+
+## 103. Task Completion Log — Cloud queue/OFF priority và điều tra timeout (10/10/2026)
+
+### 103.1. Baseline và phạm vi
+
+- HEAD `c287a55bfd2b5a492c521344cb1c5d820f244fe4`, branch `deploy/azure-student`; sửa tiếp worktree dirty, không reset/stash/commit/new Markdown. Không đọc `.env.laptop`/credential thật hoặc thay backend production. User xác nhận không có agent khác sửa cùng file; đã tự tắt bớt ứng dụng, agent không đóng ứng dụng khác.
+- Một lượt metadata sau đó đo RAM khả dụng1.135.288KiB (~1,08GiB) / tổng16.151.900KiB; không dùng để kết luận RAM luôn thiếu. Docker bị sandbox từ chối truy cập ban đầu; kiểm tra phù hợp quyền cho thấy engine29.7.2. Chỉ kiểm PID/basetemp của pytest do agent tạo; không thấy tiến trình của lượt unit09/10 còn lại, không kill tiến trình khác.
+- Chưa triển khai polling coalescing, chưa deploy worker/Azure hoặc mở policy phần cứng. Budget20USD là giới hạn đã thảo luận, không phải duyệt tạo resource. Source không chứng minh app/chatbot điều khiển Shelly thật được.
+
+### 103.2. ID → vấn đề/evidence → file → trạng thái → bước tiếp
+
+| ID | Thay đổi / lý do | Trạng thái và giới hạn |
+|---|---|---|
+| SC103a | `web/shelly/cloud_dispatch.py`, `repositories.py`: bỏ future-slot reservations cho Vault path; admission lease12s, OFF waiter ưu tiên ở slot trống, completion gap1,1s; wait budget OFF8s/khác4s, bounded16waiters. Ghi/cleanup qua SDK transaction thực sự commit, không in-memory production fallback | Automated verified scheduler + Firestore Emulator. Lease không preempt HTTP đã dispatch; wait budget không giới hạn toàn bộ Firestore RPC. Cần load/cost và pause/crash pilot trước mở ON |
+| SC103b | Provider Vault và admin profile validation `routes.py` dùng cùng limiter. Credential/worker/live safety kiểm sau queue; operation gửi đúng1lần. HTTP429 lưu Retry-After số/date bằng shared cooldown, không rút ngắn khi release | Automated verified HTTP fixture và shared cooldown Emulator. Không retry ON; OFF cũng không bỏ qua cooldown. Không gộp polling/cache nhiều điện thoại ở đợt này |
+| SC103c | `providers/base.py`, Vault: lỗi typed thêm HTTP status/retryAfter; datastore/queue lỗi không fallback HTTP, không đưa raw exception lên message UI. Cleanup không xóa lease của holder khác | Automated verified. Metadata lỗi không thay readback: HTTP200 vẫn chỉ là acceptance, không chứng nhận relay |
+| SC103d | `test_cloud_dispatch.py`, `test_shelly_membership_emulator.py`, fixtures live/vault/worker/cloud-first: bổ sung priority, spacing, malformed state, delayed lease check, cooldown, failure/no-HTTP/no-ON-retry; giữ timer/ownership/rotation assertions cũ | Automated verified149 targeted Linux +13Emulator. Không tính13skip thành Pass trong runner thường; full Windows chưa đạt |
+| SC103e | `tools/backend_diagnostics.py`: phase timing + stack không locals/env; `run_quality_gate.py` lưu child PID; `check_worker_container.py --task` chọn image QA tương ứng và cleanup exactID+label. Dùng importlib.metadata name/version thay pip CLI nặng cho dependency snapshot. `Dockerfile.cloud-dispatch-tests`/ignore riêng chỉ5fixtures và pytest/Flask, không production worker | Automated verified Linux + image fixture cuối. Giữ Fail pip-freeze30s, timeout/access violation/import timeout; không bỏ assertions hoặc sửa AI legacy để xanh. Không thay signing/APK |
+| SC103f | Spec AI cập nhật contract; manifest mở rộng QA allowlist/helper/6testfiles,321files/0findings, giữ riêng cổng LLM/prediction/chat/hardware | Automated verified scoped source +critical QA, không phải secret scan Git history/APK |
+
+### 103.3. Gates và evidence
+
+Evidence tại `docs/qa_evidence/app-review-2026-10-05/`, prefix `cloud-dispatch-103-*`; giữ mọi lượt Fail/Timeout và resultJSON. Ngày file09/10 của lượt đầu là lịch sử trước nửa đêm, không ghi đè bằng log10/10.
+
+| Gate | Kết quả | Giới hạn |
+|---|---|---|
+| Unit đầu09/10 | Timeout120s; result exit1/cleanupError process_tree_cleanup_failed | pytest import70,45s, stack ở plugin/import metadata; không tới kết quả test. Không chứng minh nguyên nhân của timeout Task102 |
+| Unit sandbox isolated10/10 | Fail native Windows exit3221225477 (`0xC0000005`),62,28s | pytest import23,24s; access violation khi importlib/unittest.mock collection. Không gọi là test assertion Fail hoặc quy lỗi relay |
+| Unit host isolated |125Pass/1Fail/exit1,88,06s; pytest48,87s | Fail là subprocess import health probe vượt10s. Không tăng timeout hoặc bỏ test để xanh; full suite sau đó đã chạy ca này Pass |
+| Backend trước SDK commit decorator |532Pass/13skip/2warnings/exit0,138,28s; pytest114,18s | Không dùng để chứng nhận thay đổi decorator sau lượt chạy. `committed-gate` trong log kế tiếp chỉ nói transaction commit, không Git commit |
+| Rules + transaction source cuối |45allow/deny assertions +13Pass/1warning/exit0,80,44s; pytest47,11s | Emulator loopback/project test/anonymous, Java heap512MiB; có contention warning và retry. Không production Rules deployment |
+| Backend source cuối Windows | **531Pass/1Fail/13skip/2warnings/exit1**,75,25s; pytest65,55s | Fail `test_concurrent_deploys_publish_same_manifest_and_runtime`: WinError5 khi os.replace manifest trong QA OneDrive. Chưa chứng minh nguyên nhân OneDrive/AV/OS; không sửa model_store hoặc dữ liệu thật |
+| Backend source cuối ngoài OneDrive | **Fail native access violation exit3221225477**,45,55s | pytest import0,55s, crash khi collection/importlib.metadata/pathlib, không kết quả test. Không chạy full lặp vô hạn; cần môi trường ổn định/CI Linux cho full gate |
+| Linux related source cuối | **149Pass/exit0**,16,64s; pytest11,90s | Python3.11, đúng5files live/vault/dispatch/worker-lease/runtime;512MiB/1CPU/network-none/read-only/tmpfs. Không phải full backend hoặc benchmark worker0,25CPU |
+| Image build | Worker exit0/7,50s; QA-tests exit0/33,33s | Image QA riêng, không push registry/cloud. Worker không có pytest/Flask/QA dependencies; test image không phải production artifact |
+| Container smoke đầu | **Fail exit1**,62,06s | Boot/probe có kết quả, nhưng pip freeze quá30s; không coi shutdown/fail-closed đã Pass trong lượt này |
+| Container smoke cuối | **Exit0**,51,56s; SIGTERM exit0/OOM=false, missing-config exit1,0relay | Offline worker0,25CPU/512MiB/read-only/non-root; dependency names/versions snapshot bằng importlib, lease/readiness cleared. Empty fixture, không Firebase client/ADC hoặc hardware/network thật |
+| Source manifest / diff | Ban đầu310files/0findings/exit0,1,94s; cuối321files/0findings/exit0,1,48s; scoped diff exit0 | Manifest sau decorator; thêm critical QA/harness cuối, excludes real env/Git history/APK. CRLF warnings không phải lỗi whitespace |
+| Mobile/dashboard/hardware | Không chạy lại | Backend-only, không sửa app/dashboard, không APK/ADB/readback thật hoặc xác nhận khả năng điều khiển thật |
+
+- Image worker `vinfast-worker-qa:task103`, imageID `sha256:49d88689be33327eea80973acd4145c2e170b85fa62752e6082e54b94f2a0c0f`, Docker reportedSize66.191.299bytes (không uncompressed disk size). Final VmRSS69.924KiB, VmHWM70.988KiB (~69,3MiB); Docker sample45,66MiB tại thời điểm khác. Không so sánh trực tiếp hai phép đo hoặc suy ra CPU/RAM/chi phí tải thật. Container QA Task103 đã dọn; đọc label filter không còn container; image/log/bằng chứng cũ giữ nguyên.
+- Source/gate summary ở `cloud-dispatch-103-summary-20261010.json`; source hash manifest gồm production scoped +QA critical, không thay chứng nhận APK. Test fixtures Linux/Emulator không nhận Cloud credential thật. Gateway/Flutter/dashboard không sửa trong Task103 nên không rerun;59gateway Pass củaTask102 chỉ là lịch sử, không cộng vào Task103.
+
+### 103.4. Blocker và bước kế tiếp
+
+1. Đồng bộ protocol2 trên toàn API/worker trước pilot. Legacy provider process-local/binary cũ và request đã dispatch không được fence; không truncate reservation cũ hoặc coi migration đã xong.
+2. Polling coalescing chưa triển khai; đo contention/read-write cost, queue latency/Firestore RPC và priority khi nhiều điện thoại. Không khẳng định timeout end-to-end hoặc atomic DB-to-HTTP guarantee; pause quá lease vẫn cần fault/pilot gate.
+3. Image Task103 đã có offline smoke riêng; vẫn chưa có bootstrap IAM/vault/Firestore hoặc active-load RAM/CPU/pilot. Image Task102 giữ làm lịch sử, không chứng minh code mới. Cần khóa digest/dependency transitive trước artifact production.
+4. Trước deploy phải trình resource/cost cap/secret mapping/rollback và xin duyệt; giữ Azure khóa ON/rearm/enrollment/safety. Không sửa env thật để né policy.
+5. Sau pilot đạt mới nghiệm thu điện thoại/Shelly/chat có xác nhận giám sát hiện tại; no-load timer tự OFF/readback OFF cuối, hai runtime/membership/session và UI đồng bộ là cổng riêng. Chưa gọi Shelly-ready/production-ready.
+6. Full backend source cuối vẫn Fail trên Windows; cần xử lý native Python access violation/file sharing hoặc chạy CI Linux full dependencies ổn định.149targeted Linux không thay532full trước decorator hoặc531Pass/1Fail source cuối. Không hạ assertion, tăng timeout test health hoặc xóa fixture/evidence để đạt gate.
+
+---
+
+**Task102 và các mục bên dưới là báo cáo lịch sử được giữ nguyên; trạng thái hiện hành ở Task103 phía trên.**
+
+> **Trạng thái hiện hành Shelly/backend — Task102 (09/10/2026):** đã tách worker khỏi Flask/AI, build image riêng và chạy container QA offline giới hạn0,25CPU/512MiB; boot/probe/SIGTERM/fail-closed đạt. RSS đỉnh fixture~69,3MiB; không phải benchmark Firestore/Shelly thật. Runtime tests19Pass, Rules45assertions +11transactions, gateway59Pass, hygiene309files/0findings. Backend lượt đầu505Pass/11skipped/exit0; **lượt final Timeout300s, không tính Pass**, chưa đạt gate tổng cuối. Không deploy/restart hệ thống hiện có/đổi env thật/ADB/redeem hoặc relay thật. Azure ON/enrollment/safety vẫn khóa; budget20USD không phải permission deploy. Task101 và toàn bộ báo cáo UI Task100 phía dưới giữ nguyên như lịch sử.
+
+## 102. Task Completion Log — worker độc lập, image nhẹ và container smoke (09/10/2026)
+
+### 102.1. Baseline và phạm vi
+
+- HEAD `c287a55bfd2b5a492c521344cb1c5d820f244fe4`, branch `deploy/azure-student`, tiếp tục worktree dirty. Giữ source/UI, báo cáo và bằng chứng trước; không reset/stash/commit, không tạo Markdown mới. Không đọc credential thật hoặc sửa `.env.laptop`.
+- Docker Desktop ban đầu chưa có Linux engine; người dùng tự mở và xác nhận Engine running. Chỉ build image QA/chạy container có tên riêng, không stop/restart container người dùng. Docker29.7.2; container Python3.11; local tests Python3.12.
+- Task102 supersedes blocker **image/import/boot smoke fixture** ởTask99–101, không supersede pilot/network/active-load RAM, shared polling/OFF priority, Azure/hardware hoặc hai runtime. Không triển khai tài nguyên có phí, không đổi hardware policy.
+
+### 102.2. ID → vấn đề/evidence → file → trạng thái → bước tiếp
+
+| ID | Thay đổi | Trạng thái / giới hạn |
+|---|---|---|
+| SC102a | `web/shelly/worker_runtime.py`, `smart_charge_worker_entry.py`: bỏ import `server.py`, không Flask/AI/dotenv/model/predictor; named Firebase app từ explicit JSON/base64 hoặc ADC, không dò key local/ghi tempfile. Scope/vault/provider/probe/timing không hợp lệ chặn startup; không fake/in-memory fallback production. Worker dùng Vault Cloud và predictor fail-closed | Automated verified. Không gọi Firebase/Shelly thật; credential/DB/IAM/FCM trên Azure chưa nghiệm thu. Không coi HTTP timeout SDK là giới hạn timeout toàn bộ Firestore gRPC |
+| SC102b | `smart_charge_worker.py`, entry: SIGTERM/SIGINT set stop Event và readiness unavailable, ngắt chờ/backoff, guard tại boundary; cleanup chỉ lease/heartbeat của holder epoch đúng. Dừng giữa readback giữ session/device lock; không ON/OFF tự động khi shutdown, không ghi terminal từ trạng thái cũ | Automated verified + container fixture SIGTERM. Không hủy được request đã dispatch; shutdown có thể chờ RPC đang chạy. Không chứng nhận OFF phần cứng từ việc worker dừng |
+| SC102c | `shelly/push_notifications.py`, wrapper `server.py`: giữ terminal push khi bỏ Flask bootstrap, truyền named app ởworker, lọc UID/dedupe và chia multicast tối đa500token. API giữ signature hiện có | Automated verified. Giữ chính sách legacy mark-before-send, **chưa có transactional outbox/exactly-once hoặc retry delivery**; push failure không rollback durable charging state |
+| SC102d | `requirements-worker.txt`, `Dockerfile.worker`, ignore riêng: chỉ FirebaseAdmin7.1.0/requests2.32.5/cryptography46.0.5 và dependency cần thiết, không ML/Flask/AI. Build context chỉ Python module/entry/smoke và requirements, không env/key/model/evidence. Non-root10001, private health8090 | Automated verified build/pip check/import; top-level pins + full resolved `pip freeze` trong evidence. Base image tag/transitive dependencies chưa khóa toàn bộ bằng digest/hash lockfile; chưa so sánh RAM/image với API cũ |
+| SC102e | `docker-compose.yml`, `.env.docker.example`, `Dockerfile.api`: image riêng cho worker, không phụ thuộc API/AI startup; AI/catalog tùy chọn profile. Core API không `depends_on` AI. Worker read-only/cap-drop/no-new-privileges, không public ports; staging lock mặc định1. API image kiểm shared push module tồn tại | Automated verified **template** với env.example và giá trị QA, không load env thật, không `compose up`. API phải dùng Vault Cloud/scope/vault key tương ứng khi chuẩn bị pilot; không tự đổi deployment Azure hoặc Docker đang chạy |
+| SC102f | `web/scripts/worker_fixture_smoke.py`, `tools/check_worker_container.py`, `tools/check_worker_compose.py`, `tests/test_worker_runtime.py`: empty-session fixture, loopback health, zero real credential/ADC, network none,512MiB/0,25CPU, SIGTERM/exit/lease/readiness và startup missing-config; helper chỉ dọn container QA exactID+label | Automated verified. Không phải production bootstrap, Firestore load, real meter/readback hoặc test phần cứng. Container QA đã dọn, log/image giữ lại |
+| SC102g | `tools/check_batterybot_source.py`: manifest thêm server/worker image/requirements/allowlist/smoke và module mới, không quét env thật/Git history/APK | Automated verified309files/0findings. Đây là scoped source hygiene, không thay secret scan toàn Git/artifact |
+
+### 102.3. Gates và artifact
+
+Evidence tại `docs/qa_evidence/app-review-2026-10-05/`; prefix `worker-runtime-102-*`, mỗi quality log có `.log.result.json`. Giữ cả lần Fail và các lần build trước, không ghi đè.
+
+| Gate | Kết quả | Runner / giới hạn |
+|---|---|---|
+| Related initial |103Pass/1warning/exit0 |49,80s, timeout120s; trước bổ sung shutdown giữa readback |
+| Standalone runtime final |19Pass/1warning/exit0 |19,02s; gồm shutdown giữa readback giữ device lock và SDK-import fixture cuối |
+| Backend lượt đầu |505Pass/11skipped/2warnings/exit0 |132,88s; pytest123,28s;11Emulator cases chạy riêng dưới đây |
+| Backend final | **Timeout300s, không Pass**, exitCode null/child_exit_unconfirmed trong result gốc |Runner317,80s; log `worker-runtime-102-backend-final-20261009.log` không kết quả pytest. Kiểm tra process sau đó chỉ lọc exact basetemp của lượt này: không còn Python pytest tương ứng; không kill tiến trình khác. Giữ lượt505Pass trước và19Pass targeted riêng, không thay Timeout bằng kết quả cũ. Chưa xác định nguyên nhân môi trường/collection; không tự đóng app khác hoặc chạy full suite lặp vô hạn |
+| Gateway |59Pass/1warning/exit0 |23,55s; pytest18,49s |
+| Rules/transactions lần đầu | **Fail exit1**, không spawn được Java |121,61s; giữ log, không coi lỗi môi trường là Pass |
+| Rules/transactions final |45allow/deny assertions +11Pass/1warning/exit0 |72,31s; Java AndroidStudio chỉ thêm PATH cho lệnh, project `vinfast-rules-test`, loopback; không deploy Rules |
+| Image build SDK-final |exit0, pip check đạt |5,61s từ cache; build đầu279,59s. Không runtime import server/Flask/numpy/pandas/sklearn/TensorFlow |
+| Container smoke final |exit0, probe đạt, SIGTERM exit0/OOM=false, lease/readiness cleared,0relay commands |80,50s toàn harness; network none/read-only/cap-drop/512MiB/0,25CPU; missing-config production entry exit1 đúng fail-closed |
+| Compose template |exit0 |2,03s; không env thật/khởi chạy service |
+| Scoped source hygiene final |309files/0findings/exit0 |1,20s; source SHA manifest, không artifact/Git history |
+| Scoped diff check |exit0 |CRLF warnings giữ nguyên; không hoàn tác UI/worktree khác |
+
+- Image QA cuối `vinfast-worker-qa:task102`, Docker imageID `sha256:b707f4c8abef7bcb9f8874026534103972d0169218a8d7d3b2f0c56d5402ac5a`; Docker báoSize66.189.258bytes, **không dùng số này làm uncompressed disk size hoặc so sánh API chưa đo**. Dependency manifest đầy đủ trong container-smoke-final log.
+- Fixture cuối import FirebaseAdmin/Firestore/FCM nhưng không initialize Firebase/ADC/client, không phiên sạc. `/proc` VmRSS69.928kB, VmHWM70.908kB (~69,3MiB); Docker stats mẫu tại thời điểm khác45,74MiB/512MiB, CPU0,02%,3PIDs. Hai thước đo/thời điểm không đồng nhất; không suy ra p95 CPU/RAM/chi phí hoặc đảm bảo memory512MiB khi có traffic thật.
+- Không sửa app, Flutter analyzer/tests/dashboard không chạy lại lượt backend-only này; không build/cài APK hoặc dùng hình cũ nghiệm thu code mới.
+
+### 102.4. Blocker và bước tiếp
+
+0. Gate backend cuối timeout; đã kiểm tra không còn Python pytest có exact basetemp của lượt đó. Cần điều tra môi trường/collection rồi chạy lại bounded trên source manifest tương ứng. Không gọi toàn bộ gates xanh chỉ vì lượt505Pass trước; các source/container gates đã đạt vẫn giữ riêng.
+1. Giữ Azure staging ON/rearm/enrollment/safety disabled. Trước pilot cần đề xuất resource cụ thể/cost cap/secret mapping/rollback và xin duyệt riêng; budget20USD chỉ là ngân sách compute được chốt.
+2. Shared Cloud limiter đã có nhưng polling coalescing/OFF priority và bounded queue chưa nghiệm thu. Kiểm nhiều worker/máy, Retry-After, worker crash và OFF starvation trước mở hardware policy.
+3. Chạy bootstrap thật trên staging có IAM/vault/Firestore, test lỗi/phục hồi và tải phiên hoạt động; đo RAM/CPU/latency/lease trên revision đúng. Fixture nhẹ không thay thế gate này.
+4. Khóa base/dependency artifact để tái tạo, kiểm migration credential/revision/membership và đối chiếu cấu hình API-worker; không tự xoay key/ghi dữ liệu thật.
+5. Sau pilot được duyệt và gates đạt mới xin xác nhận giám sát hiện tại để test no-load/small-load/2runtime/chat confirmation. Không tuyên bố app/chat điều khiển Shelly thật được ởTask102.
+
+---
+
+**Các mục từ Task101 bên dưới là báo cáo lịch sử được giữ nguyên; trạng thái hiện hành ởTask102 phía trên.**
+
+> **Trạng thái hiện hành phần Shelly/backend 09/10/2026 — Task101:** đã siết live Safe Boot/config fingerprint trước ON và ngay trước Cloud dispatch, bổ sung evidence version1/CAS và sửa khôi phục Firestore profile `server_cloud`. Backend **486 Pass/11 skipped/exit0**, Emulator **45 assertions +11 transaction Pass**, gateway59Pass, scoped hygiene302files/0findings. Không deploy, restart, sửa env thật, tạo resource, cài APK, redeem hoặc phát ON/OFF thật. APK+137 và runtime cũ không chứng nhận backend mới; Azure hardware policy vẫn khóa. Báo cáo UI/UX Task100 phía dưới được giữ nguyên; lượt này không nghiệm thu lại UI đó.
+
+## 101. Task Completion Log — live safety fingerprint và khôi phục profile mã web (09/10/2026)
+
+### 101.1. Phạm vi và baseline
+
+- HEAD `c287a55bfd2b5a492c521344cb1c5d820f244fe4`, branch `deploy/azure-student`; tiếp tục trên worktree dirty, giữ Task98–100 và UI đang có. Không reset/stash/commit/xóa dữ liệu hoặc tạo Markdown mới. Không đọc env/key thật, chỉ dùng fixture local.
+- Task101 supersedes điểm “chưa có fresh Safe Boot/fingerprint trước ON” ở99.4 về **source kiểm tự động**, không supersede blocker image/RAM/deploy/runtime/hardware. Budget20USD không phải quyền ON/deploy. Không tác động ADB hoặc điện thoại.
+- Log dùng prefix `shelly-live-safety-100-*` vì đã chạy trước khi phát hiện Task100 được dùng cho UI/UX; đây là evidence của **Task101**, không bằng chứng UI Task100.
+
+### 101.2. ID → vấn đề/bằng chứng → file → trạng thái → bước tiếp
+
+| ID | Thay đổi và lý do | Trạng thái / giới hạn |
+|---|---|---|
+| SC101a | `web/shelly/safety_fingerprint.py`: contract version1, JSON sorted/compact/ASCII/finite, Device ID/model/G2/Gen3, host, digest credential nội bộ và switch config. Safe Boot phải đúng `off`/boolean false; đổi config/key/host làm fingerprint khác, đảo thứ tự key không đổi. Không lưu key/raw response trong evidence | Automated verified Python; backend tính fingerprint. Chưa có fixture parity Dart, không tuyên bố canonical xuyên ngôn ngữ đã nghiệm thu |
+| SC101b | `providers/vault_cloud.py`: fresh snapshot/settings, strict relay/meter/timer; W/V/A/Wh finite/ngưỡng và nhiệt độ nếu có finite/≤75°C. ON cần history version1 đủ ON/timer/auto-OFF/OFF và identity đúng. Kiểm credential/profile revision/membership/worker và tuổi snapshot≤10s sau limiter trước dispatch; không tự sửa fingerprint để hợp thức hóa | Automated verified. Không thể khóa thay đổi từ Shelly Smart Control bên ngoài hoặc thu hồi request đã gửi; chưa chứng minh firmware/network thật |
+| SC101c | `service.py` áp live verifier cho cả Start AI/timed ON và capabilities/controlBlockedCode; thiếu verifier thì fail-closed. Provider lặp kiểm dưới device lock trước ON. `providers/base.py` thêm interface, Fake có mock contract; Legacy ON/readiness tiếp tục chặn, read/OFF giữ lại | Automated verified entrypoint/fault; OFF không cần history version1/worker khỏe. Cache/model dự đoán không cấp quyền ON |
+| SC101d | `run_no_load_test()` chỉ private test context được bỏ history, vẫn kiểm live identity/config/meter/member/worker. Một ON5s, quan sát ON/timer/timer tự OFF, cleanup OFF/readback; final fingerprint/revision phải khớp. `routes.py` không dựng hash `off|false` hoặc tin hai boolean; set binding sau khi persist proof | Automated verified HTTP fixture/state-machine, không phần cứng. Endpoint vẫn đòi xác nhận rút tải, device lease và worker gate |
+| SC101e | `repositories.verify_synced_profile()` revision CAS transaction; cùng revision chỉ một completion thắng, rotation/revoke từ chối proof cũ. Lưu version/ON/timer/auto-OFF/OFF server-only. Legacy history không xóa, nhưng thiếu version/evidence không cấp ON | Automated verified trên Firestore Emulator ngoài in-memory; chưa full CAS mọi enrollment/rebind/credential write. Không tự migrate legacy thành proof mới |
+| SC101f | Firestore `list_synced_profiles()` chỉ lọc `advanced_direct` nhưng enrollment ghi `server_cloud`; in-memory không lọc nên test cũ bỏ sót. Chấp nhận cả hai mode, giữ UID/revoke filters; test restore vault thật từ enrollment code | Automated verified Emulator. Không đổi max2members/mã6ký tự, không gửi key qua restore API công khai |
+| SC101g | `test_shelly_live_safety.py`: HTTP fixtures, settings/host/key/revision/member/worker đổi khi queued, stale/NaN/missing/legacy evidence, API entrypoint, no-load timer, timeout và OFF. `test_shelly_vault_safety.py` tách timer mock khỏi live guard, thêm ON HTTP fault matrix | Automated verified; không credential thật/Cloud network/relay; giữ assertions privacy/timer/no-retry |
+
+### 101.3. Gates và evidence
+
+Evidence mới tại `docs/qa_evidence/app-review-2026-10-05/`, log/result JSON không ghi đè các lượt cũ. Backend skips là11 Emulator cases; không tính Pass trước runner riêng.
+
+| Gate | Kết quả | Evidence |
+|---|---|---|
+| Related initial | **199Pass/exit0**, runner18,19s; trước bổ sung cuối | `shelly-live-safety-100-related-initial-20261009.log` |
+| Backend final | **486Pass/11skip/2 dependency warnings**, exit0, không timeout300s; runner109,09s/pytest89,42s | `shelly-live-safety-100-backend-final-20261009.log` |
+| Rules + transaction | **45 assertions +11 transaction Pass/1 dependency warning/exit0**, runner233,58s/pytest43,68s; không timeout300s, local Emulator, không production | `shelly-live-safety-100-rules-transactions-20261009.log` |
+| Scoped hygiene/manifest | **302files/0findings/exit0**, final runner1,55s; hash các302files khớp manifest đầu, không real env/Git history/APK | `shelly-live-safety-101-source-manifest-final-20261009.log`, giữ manifest đầu prefix100 |
+| Gateway / diff-check | **59Pass/1 warning/exit0**, runner22,33s/pytest18,98s; scoped diff-check exit0, chỉ CRLF warnings | `shelly-live-safety-101-gateway-20261009.log` |
+| Flutter/dashboard/APK/device | Lượt này không sửa mobile/dashboard, không rerun/build/cài; không ADB/Android emulator/OnePlus | +137 là artifact cũ, không runtime verification backend Task101 hoặc xác nhận độc lập UI Task100 |
+
+- Giữ hai **Timeout/exit1**: full backend limit180s (log có483Pass/11skip nhưng process gate chưa kết thúc); collect-only limit120s (497collected nhưng chưa exit đúng hạn). Không tính hai lượt đó Pass. Recheck final300s exit0 thật, có faulthandler; nguyên nhân chậm toàn môi trường chưa kết luận. Không tự đóng app/kill process ngoài runner con.
+- Kiểm RAM bằng CIM bị access denied; không nâng quyền để dọn RAM. Warnings giữ trong log; source gates không thay APK/Cloud/physical evidence.
+- Summary máy đọc: `shelly-live-safety-101-summary-20261009.json`. Không có gate bị tính Pass từ timeout/text tổng kết hoặc test physical bị mô phỏng rồi gắn nhãn Runtime verified.
+
+### 101.4. Còn lại / bước tiếp
+
+1. Full enrollment/rebind/unlink CAS, coalesced polling/Retry-After/OFF priority, query pagination và durable recovery vẫn Planned. Worker TTL không giải phóng khóa thiết bị unknown.
+2. Boot worker image thật không AI, đo RSS/cold boot/failure recovery ở0,5GiB; entry còn import server factory, Compose core API còn AI dependency. Probe test không chứng nhận worker deployment.
+3. Trình Azure manifest/tổng chi phí Firestore/log/scope/probes/min1/max1/alerts/pilot48–72h rồi xin duyệt deploy riêng. Chưa tạo resource/apply Rules/Compose/cloud.
+4. Khi backend đạt gate và được deploy, test đúng APK trên OnePlus + runtime thứ hai: mã web, hai member/code rotation, trạng thái Settings/Sạc pin/Setup, chat confirmation và readback. Chưa chứng nhận chatbot/app điều khiển Shelly thật.
+5. Legacy evidence giữ lại nhưng ON chặn khi thiếu version1/quan sát; cần một lần safety test có giám sát để tạo proof hợp lệ. Mở lại app/cấp mã enrollment mới không tự ON/OFF hoặc xóa proof. Đổi fingerprint mới cần kiểm lại; không cam kết “không còn lỗi” trước phần cứng.
+
+---
+
+> **Trạng thái hiện hành 09/10/2026 — Task 100 HOÀN TẤT:** Hoàn thành toàn bộ thẩm định + khắc phục UI/UX (14 issues P0–P3) trên thiết bị thật OnePlus 9 Pro. Đặc tả tại `docs/specs/UIUX_AUDIT_PLAN.md`. Tất cả test suite pass, 0 regression.
+
+## 100. Task Completion Log — Thẩm định & Khắc phục toàn diện UI/UX (09/10/2026) ✅
+
+### 100.1. Phạm vi & Kết quả thẩm định
+- Kiểm thử và chụp ảnh màn hình trực tiếp qua ADB trên OnePlus 9 Pro (`8bdf16d1`) trên toàn bộ 4 tabs chính và 10 màn hình/modal con.
+- Phát hiện 5 lỗi nghiêm trọng P0 (RenderFlex overflow 26px tại `DashboardScreen`, Trap Screens thiếu nút Back, màn hình orphaned `BatteryMonitorScreen`, thanh pin 100% rỗng đen tại Tab Sạc, Robot Mascot che nút tương tác).
+- Phát hiện 5 lỗi khả dụng P1 (cắt chữ tại Garage/Energy Journey/Trip Planner, firmware jargon tại History, ngày tạo không xác định tại Profile).
+- Phát hiện 3 lỗi nhất quán P2 (trộn Anh-Việt, giãn cách BSX bất thường, Hero Card thiếu tương tác) và đề xuất lộ trình 3 pha chi tiết.
+- Đặc tả lưu trữ tại `docs/specs/UIUX_AUDIT_PLAN.md` tuân thủ nghiêm ngặt quy tắc kiến trúc và không tạo file rải rác.
+
+### 100.2. Danh sách fixes đã triển khai
+
+| ID | File | Fix | Kết quả |
+|---|---|---|---|
+| P0-1 | `dashboard_screen.dart` | Thay Row cố định bằng 2-row responsive layout với `Expanded` chips | ✅ 0px overflow trên 360dp |
+| P0-2 | `dashboard_screen.dart`, `maintenance_screen.dart`, `trip_planner_screen.dart` | Thêm sticky `AppBar` với `arrow_back_ios_new_rounded` khi `canPop` | ✅ Không còn Trap Screens |
+| P0-3 | `home_screen.dart`, `battery_monitor_screen.dart`, `quick_action_menu.dart` | Kết nối `BatteryHealthCard.onTap → BatteryMonitorScreen()`, thêm `QuickAction.batteryMonitor` vào FAB | ✅ Screen không còn orphaned |
+| P0-4 | `battery_hero_card.dart` | Full Charge Glow State khi SoC ≥ 99.5%, emerald gradient toàn dải, badge `"PIN ĐÃ ĐẦY 100%"`, clamped thumb bounds | ✅ |
+| P0-5 | `floating_battery_bot.dart`, `app_navigation.dart`, `assistant_context_coordinator.dart` | Auto-docking khi scroll down (`AnimatedPositioned` + `AnimatedScale` + `AnimatedOpacity`) | ✅ |
+| P1-1 | `vehicle_garage_screen.dart` | Đổi AppBar text truncated → `IconButton(Icons.add_circle_outline_rounded)` + `FloatingActionButton.extended` | ✅ |
+| P1-2 | `energy_stats_overview.dart`, `energy_journey_screen.dart` | `maxLines: 2, height: 1.2` cho label StatBox; `Expanded` cho tierName và progress text | ✅ |
+| P1-3 | `smart_charge_history_screen.dart` | Empty state: `"relay OFF được xác minh"` → `"Lịch sử sạc sẽ hiển thị tại đây sau khi phiên sạc kết thúc và ngắt kết nối an toàn."` | ✅ |
+| P1-4 | `profile_screen.dart` | Fallback `_createdAt` từ `FirebaseAuth.instance.currentUser?.metadata.creationTime` | ✅ |
+| P1-5 | `trip_planner_screen.dart` | `mainAxisSize: MainAxisSize.min` cho `_BatteryBadge` Row, fix cắt chữ `"10..."` → `"100%"` | ✅ |
+| P2-1 | `home_screen.dart`, `battery_monitor_screen.dart` | Việt hóa: `"Battery Health Score"` → `"Điểm sức khỏe pin"`, `"Excellent condition"` → `"Tình trạng xuất sắc (SOH tối ưu)"` | ✅ |
+| P2-1b | `smart_charging_control_screen.dart` | `"AI POWERED"` → `"CÔNG NGHỆ AI"` (cả static & shimmer badge) | ✅ |
+| P2-1c | `more_screen.dart` | `"PIONEER"` → `"TIÊN PHONG"` | ✅ |
+| P2-2 | `home_screen.dart` | `letterSpacing: 0.2` khi plate = `"Chưa có BSX"`, fix khoảng cách bất thường | ✅ |
+| P2-3 | `home_screen.dart`, `battery_monitor_screen.dart` | `InkWell` ripple + `chevron_right_rounded` icon trên BatteryHealthCard | ✅ |
+| P3-1 | `app_navigation.dart` | `HapticFeedback.selectionClick()` khi đổi tab navbar | ✅ |
+
+### 100.3. Kết quả kiểm thử
+
+| Test suite | Kết quả |
+|---|---|
+| `floating_battery_bot_test.dart` | **1/1 Pass** ✅ |
+| `smart_charging_control_screen_test.dart` | **18/18 Pass** ✅ |
+| `smart_charge_history_test.dart` | **Pass** ✅ |
+
+### 100.4. Files đã sửa đổi
+
+- `app/lib/features/dashboard/dashboard_screen.dart`
+- `app/lib/features/maintenance/maintenance_screen.dart`
+- `app/lib/features/trip_planner/trip_planner_screen.dart`
+- `app/lib/features/ai/widgets/battery_hero_card.dart`
+- `app/lib/core/widgets/floating_battery_bot.dart`
+- `app/lib/core/services/assistant_context_coordinator.dart`
+- `app/lib/navigation/app_navigation.dart`
+- `app/lib/features/home/home_screen.dart`
+- `app/lib/features/battery_monitor/battery_monitor_screen.dart`
+- `app/lib/core/widgets/quick_action_menu.dart`
+- `app/lib/features/settings/vehicle_garage_screen.dart`
+- `app/lib/features/energy_journey/widgets/energy_stats_overview.dart`
+- `app/lib/features/energy_journey/energy_journey_screen.dart`
+- `app/lib/features/ai/smart_charge_history_screen.dart`
+- `app/lib/features/settings/profile_screen.dart`
+- `app/lib/features/ai/smart_charging_control_screen.dart`
+- `app/lib/features/more/more_screen.dart`
+
+---
 
 ## 99. Task Completion Log — exclusive worker lease và private readiness probe (09/10/2026)
 

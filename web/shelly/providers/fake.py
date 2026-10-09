@@ -50,6 +50,11 @@ class FakeShellyProvider:
         self.status.relay = True
         self.status.timer_remaining = duration_seconds
 
+    def verify_control_readiness(self, binding: DeviceBinding) -> None:
+        """Explicit mock contract; never used as Cloud hardware evidence."""
+        if not self.status.online or not binding.safe_boot_verified or not binding.no_load_test_verified:
+            raise ProviderError("safetyVerificationRequired", "Cần kiểm tra an toàn bộ sạc")
+
     def turn_off(self, binding: DeviceBinding) -> None:
         self.command_count += 1
         if self.off_rejected:

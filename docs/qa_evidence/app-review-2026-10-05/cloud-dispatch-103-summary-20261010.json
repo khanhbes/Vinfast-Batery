@@ -1,0 +1,22 @@
+{
+  "task": 103,
+  "date": "2026-10-10",
+  "sourceHead": "c287a55bfd2b5a492c521344cb1c5d820f244fe4",
+  "branch": "deploy/azure-student",
+  "workingTreeDirty": true,
+  "sourceManifest": "cloud-dispatch-103-source-manifest-final-20261010.log",
+  "filesScanned": 321,
+  "scopedFindings": 0,
+  "linuxRelated": {"passed": 149, "exitCode": 0, "elapsedSeconds": 16.64, "log": "cloud-dispatch-103-linux-related-20261010.log"},
+  "emulator": {"rulesAssertions": 45, "transactionTestsPassed": 13, "exitCode": 0, "elapsedSeconds": 80.44, "log": "cloud-dispatch-103-emulator-20261010.log"},
+  "fullBackendWindowsFinal": {"passed": 531, "failed": 1, "skipped": 13, "exitCode": 1, "log": "cloud-dispatch-103-backend-committed-gate-20261010.log"},
+  "fullBackendTempComparison": {"exitCode": 3221225477, "reason": "Windows native access violation during collection", "log": "cloud-dispatch-103-backend-temp-final-20261010.log"},
+  "workerImage": {"tag": "vinfast-worker-qa:task103", "imageId": "sha256:49d88689be33327eea80973acd4145c2e170b85fa62752e6082e54b94f2a0c0f", "dockerReportedSizeBytes": 66191299},
+  "containerSmoke": {"exitCode": 0, "oomKilled": false, "peakFixtureKiB": 70988, "cpuLimit": 0.25, "memoryLimitMiB": 512, "log": "cloud-dispatch-103-container-smoke-final-20261010.log"},
+  "realRelayCommands": 0,
+  "realCloudControlRequests": 0,
+  "cloudDeploymentPerformed": false,
+  "azureHardwarePolicyChanged": false,
+  "apkBuilt": false,
+  "remainingGates": ["stable full backend gate", "poll coalescing/load/cost", "mixed-version migration", "approved Azure pilot", "physical device and supervised Shelly readback"]
+}

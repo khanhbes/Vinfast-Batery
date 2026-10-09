@@ -5,6 +5,7 @@ import hashlib
 import random
 import re
 import os
+import math
 from copy import deepcopy
 import time
 from urllib.parse import urlparse
@@ -527,28 +528,36 @@ class SmartChargeRepository:
             return False
 
     def reserve_cloud_request_slot(self, credential_fingerprint: str, interval_seconds: float = 1.1) -> float:
-        """Reserve a process-independent Shelly Cloud request slot."""
+        """Deprecated: future reservations cannot provide OFF priority."""
+        raise RuntimeError("legacyCloudSlotUnsupported")
+
+    def _cloud_dispatch_change(self, credential_fingerprint, action):
         if not self.db:
             raise RuntimeError("cloudRateLimiterUnavailable")
+        if not re.fullmatch(r"[a-f0-9]{64}", credential_fingerprint):
+            raise RuntimeError("cloudLimiterMalformed")
         from google.cloud import firestore
         ref = self.db.collection("shellyCloudRateLimits").document(credential_fingerprint)
-        transaction = self.db.transaction()
-        now = datetime.now(timezone.utc)
-
         @firestore.transactional
-        def reserve(txn):
+        def change(txn):
             snapshot = ref.get(transaction=txn)
             data = snapshot.to_dict() or {} if snapshot.exists else {}
-            next_at = data.get("nextAt")
-            if hasattr(next_at, "to_datetime"):
-                next_at = next_at.to_datetime()
-            if isinstance(next_at, datetime) and next_at.tzinfo is None:
-                next_at = next_at.replace(tzinfo=timezone.utc)
-            slot = max(now, next_at or now)
-            txn.set(ref, {"nextAt": slot + timedelta(seconds=interval_seconds), "updatedAt": now}, merge=True)
-            return max(0.0, (slot - now).total_seconds())
+            updated, result = action(data, datetime.now(timezone.utc))
+            if updated != data:
+                txn.set(ref, updated)
+            return result
+        return self._run_metadata_transaction(change)
 
-        return float(reserve(transaction))
+    def run_cloud_request(self, fingerprint, operation, *, priority_off=False, sleeper=time.sleep, guard=None):
+        from .cloud_dispatch import CloudDispatchGate
+        return CloudDispatchGate(lambda action: self._cloud_dispatch_change(fingerprint, action),
+                                 sleeper=sleeper).run(operation, priority_off=priority_off, guard=guard)
+
+    def defer_cloud_requests(self, fingerprint, seconds):
+        from .cloud_dispatch import set_cooldown
+        if isinstance(seconds, bool) or not isinstance(seconds, (float, int)) or not math.isfinite(seconds) or seconds < 1.1:
+            raise RuntimeError("cloudLimiterMalformed")
+        self._cloud_dispatch_change(fingerprint, lambda data, now: set_cooldown(data, now, seconds))
 
     def list_bindings(self, uid: str) -> list[DeviceBinding]:
         with self._lock:
@@ -871,6 +880,8 @@ class SmartChargeRepository:
         return bool(
             parsed.scheme == "https"
             and parsed.hostname
+            and not parsed.username and not parsed.password
+            and parsed.netloc == parsed.hostname
             and (parsed.hostname == "shelly.cloud" or parsed.hostname.endswith(".shelly.cloud"))
             and parsed.path in ("", "/")
             and not parsed.params
@@ -899,7 +910,7 @@ class SmartChargeRepository:
         if self.db:
             for snapshot in self.db.collection("users").document(uid).collection("shellyDevices").stream():
                 data = snapshot.to_dict() or {}
-                if data.get("connectionMode") != "advanced_direct":
+                if data.get("connectionMode") not in {"advanced_direct", "server_cloud"}:
                     continue
                 if data.get("revokedAt") is not None:
                     continue
@@ -1043,7 +1054,8 @@ class SmartChargeRepository:
         profiles = self.list_synced_profiles(uid, vehicle_id)
         return profiles[0] if profiles else None
 
-    def verify_synced_profile(self, uid: str, device_id: str, verification: dict) -> dict | None:
+    def verify_synced_profile(self, uid: str, device_id: str, verification: dict,
+                              *, expected_revision: int | None = None) -> dict | None:
         profiles = [item for item in self.list_synced_profiles(uid) if item.get("deviceId") == device_id]
         if not profiles:
             return None
@@ -1068,14 +1080,45 @@ class SmartChargeRepository:
             "verifiedDeviceId": verified_device_id,
             "verifiedModel": verified_model,
             "verificationFingerprint": fingerprint,
+            "verificationFingerprintVersion": verification.get("verificationFingerprintVersion"),
+            "onObserved": verification.get("onObserved") is True,
+            "timerObserved": verification.get("timerObserved") is True,
+            "timerAutoOffObserved": verification.get("timerAutoOffObserved") is True,
+            "relayOffVerified": verification.get("relayOffVerified") is True,
             "verifiedAt": now,
             "updatedAt": now,
         }
+        def checked_update(actual):
+            actual_revision = actual.get("revision")
+            if (expected_revision is not None and (
+                    type(expected_revision) is not int or actual_revision != expected_revision)) or actual.get("revokedAt"):
+                raise RuntimeError("profileRevisionConflict")
+            return {**update, "revision": int(actual_revision or 0) + 1}
+
         if self.db:
-            self._profile_doc(uid, device_id).set(update, merge=True)
+            from google.cloud import firestore
+            ref = self._profile_doc(uid, device_id)
+
+            @firestore.transactional
+            def persist(txn):
+                actual = ref.get(transaction=txn)
+                if not actual.exists:
+                    raise RuntimeError("profileRevisionConflict")
+                actual = actual.to_dict() or {}
+                changes = checked_update(actual)
+                txn.set(ref, changes, merge=True)
+                return {**actual, **changes}
+
+            result = self._run_metadata_transaction(persist)
+        else:
+            with self._lock:
+                actual = self._synced_profiles.get((uid, device_id))
+                if actual is None:
+                    raise RuntimeError("profileRevisionConflict")
+                result = {**actual, **checked_update(actual)}
         with self._lock:
-            self._synced_profiles[(uid, device_id)] = {**current, **update}
-        return {**current, **update}
+            self._synced_profiles[(uid, device_id)] = result
+        return result
 
     def revoke_synced_profile(self, uid: str, device_id: str) -> bool:
         profiles = [item for item in self.list_synced_profiles(uid) if item.get("deviceId") == device_id]

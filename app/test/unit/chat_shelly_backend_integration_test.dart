@@ -34,6 +34,9 @@ void main() {
   late String? uid;
   late String device;
   late bool relay, allowOn, timeoutOn, wrongReadback;
+  late bool failLive, omitTimer, omitSession, offStillOn;
+  late Map<String, dynamic> readbackOverrides;
+  void Function()? beforeLiveFailure;
   late int onRequests, offRequests;
   late Map<String, dynamic>? session;
   late ServerSmartChargerService service;
@@ -52,7 +55,7 @@ void main() {
     'temperature_c': 30,
     'shelly_temperature_c': 31,
     'battery_temperature_c': 25,
-    'timer_remaining': relay ? 300 : 0,
+    if (!omitTimer) 'timer_remaining': relay ? 300 : 0,
     'codeRefreshRequired': true,
   };
   Map<String, dynamic> binding() => {
@@ -92,6 +95,12 @@ void main() {
     allowOn = true;
     timeoutOn = false;
     wrongReadback = false;
+    failLive = false;
+    omitTimer = false;
+    omitSession = false;
+    offStillOn = false;
+    readbackOverrides = {};
+    beforeLiveFailure = null;
     onRequests = 0;
     offRequests = 0;
     session = null;
@@ -120,7 +129,16 @@ void main() {
           case '/api/smart-charging/status':
             data = status();
           case '/api/smart-charging/live':
-            data = {'status': status(), 'session': session};
+            if (failLive) {
+              beforeLiveFailure?.call();
+              throw TimeoutException('QA readback unavailable');
+            }
+            data = {
+              'status': status(),
+              'session': omitSession || session == null
+                  ? null
+                  : {...session!, ...readbackOverrides},
+            };
           case '/api/shelly/redeem-code':
             data = {'profile': binding()};
           case '/api/smart-charging/on':
@@ -135,12 +153,12 @@ void main() {
             offRequests++;
             expect(jsonDecode(request.body)['expectedDeviceId'], device);
             expect(request.headers['Idempotency-Key'], isNotEmpty);
-            relay = false;
+            relay = offStillOn;
             session = null;
             data = null;
           case '/api/smart-charging/session/qa-session/stop':
             offRequests++;
-            relay = false;
+            relay = offStillOn;
             data = {...session!, 'state': 'cancelled', 'relay_verified': true};
             session = null;
           default:
@@ -250,6 +268,95 @@ void main() {
     expect(onRequests, 0);
     expect(connections.current.readyForControl, false);
   });
+  for (final invalid in <String, Map<String, dynamic>>{
+    'starting session': {'state': 'starting'},
+    'stopping session': {'state': 'stopping'},
+    'terminal session': {'state': 'cancelled'},
+    'unverified relay': {'relay_verified': false},
+    'unverified timer': {'timer_verified': false},
+    'wrong session': {'session_id': 'other-session'},
+    'wrong device': {'device_id': 'other-device'},
+    'wrong vehicle': {'vehicle_id': 'other-vehicle'},
+    'older revision': {'version': 0},
+  }.entries) {
+    test('fresh ${invalid.key} cannot reuse verified ON receipt', () async {
+      final proposal = await engine.reply('bật sạc 5 phút');
+      readbackOverrides = invalid.value;
+      final result = await engine.confirm(proposal.action!.callId, true);
+      expect(result['success'], false);
+      expect(result['status'], 'unknown');
+      expect(connections.current.controlUncertain, true);
+      expect(connections.current.readyForControl, false);
+      expect(connections.current.status, isNull);
+      await engine.confirm(proposal.action!.callId, true);
+      expect(onRequests, 1);
+      expect(offRequests, 0);
+    });
+  }
+  for (final missing in ['timer', 'session']) {
+    test('missing fresh $missing keeps ON unknown without retry', () async {
+      final proposal = await engine.reply('bật sạc 5 phút');
+      omitTimer = missing == 'timer';
+      omitSession = missing == 'session';
+      final result = await engine.confirm(proposal.action!.callId, true);
+      expect(result['success'], false);
+      expect(result['status'], 'unknown');
+      expect(connections.current.controlUncertain, true);
+      expect(connections.current.readyForControl, false);
+      expect(onRequests, 1);
+    });
+  }
+  test('failed passive read keeps enrollment but removes stale readiness', () async {
+    final proposal = await engine.reply('bật sạc 5 phút');
+    expect(proposal.action, isNotNull);
+    expect(connections.current.readyForControl, true);
+    failLive = true;
+    await engine.reply('trạng thái Shelly');
+    expect(connections.current.state, ShellyConnectionFlowState.offline);
+    expect(connections.current.isLinked, true);
+    expect(connections.current.serverBinding!.noLoadTestVerified, true);
+    expect(connections.current.codeRefreshRequired, true);
+    expect(connections.current.status, isNull);
+    expect(connections.current.capabilities, isNull);
+    expect(connections.current.controlUncertain, false);
+    expect(connections.current.readyForControl, false);
+    expect(onRequests, 0);
+    expect(offRequests, 0);
+    failLive = false;
+    await engine.reply('trạng thái Shelly');
+    expect(connections.current.state, ShellyConnectionFlowState.connected);
+    // A passive recovery does not itself fetch fresh control authorization.
+    expect(connections.current.readyForControl, false);
+  });
+  test('failed old account read cannot replace new account snapshot', () async {
+    await engine.reply('trạng thái Shelly');
+    failLive = true;
+    beforeLiveFailure = () {
+      uid = 'qa-b';
+      connections.activateAccount(uid);
+    };
+    await engine.reply('trạng thái Shelly');
+    expect(connections.current.isLinked, false);
+    expect(connections.current.serverBinding, isNull);
+    expect(connections.current.state, ShellyConnectionFlowState.disconnected);
+    expect(onRequests, 0);
+  });
+  for (final privateSession in [false, true]) {
+    test('OFF acceptance without OFF readback stays unknown ($privateSession)', () async {
+      relay = true;
+      session = privateSession ? activeSession() : null;
+      final proposal = await engine.reply('dừng sạc');
+      expect(proposal.action, isNotNull);
+      offStillOn = true;
+      final result = await engine.confirm(proposal.action!.callId, true);
+      expect(result['success'], false);
+      expect(result['status'], 'unknown');
+      expect(connections.current.controlUncertain, true);
+      expect(connections.current.readyForControl, false);
+      expect(offRequests, 1);
+      expect(onRequests, 0);
+    });
+  }
   test(
     'lost ON response keeps unknown and confirming again never retries ON',
     () async {

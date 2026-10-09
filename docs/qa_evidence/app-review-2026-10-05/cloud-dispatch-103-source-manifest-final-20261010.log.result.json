@@ -1,0 +1,14 @@
+{
+  "command": [
+    "python",
+    "tools/check_batterybot_source.py"
+  ],
+  "cwd": ".",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\cloud-dispatch-103-source-manifest-final-20261010.log",
+  "processId": 36380,
+  "timeoutSeconds": 60,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 1.48
+}

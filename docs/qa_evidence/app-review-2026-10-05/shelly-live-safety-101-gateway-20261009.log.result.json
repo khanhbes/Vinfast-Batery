@@ -1,0 +1,20 @@
+{
+  "command": [
+    "python",
+    "-u",
+    "-m",
+    "pytest",
+    "tests",
+    "-q",
+    "-p",
+    "no:cacheprovider",
+    "--basetemp=.pytest_safety_101_gateway_20261009"
+  ],
+  "cwd": "smart_charger_gateway",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\shelly-live-safety-101-gateway-20261009.log",
+  "timeoutSeconds": 180,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 22.33
+}

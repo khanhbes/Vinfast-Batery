@@ -1,6 +1,9 @@
 """Real Firestore transaction tests. Never connect to production/ADC."""
 import base64
+import hashlib
 import os
+import threading
+import time
 import uuid
 from copy import deepcopy
 from datetime import timedelta
@@ -232,3 +235,104 @@ def test_concurrent_worker_lease_has_one_holder_and_fenced_takeover(fixture):
     assert not repos[winner].release_worker_lease('qa-' + str(winner), now=later)
     repos[loser].publish_worker_heartbeat('qa-' + str(loser), healthy=True, now=later)
     assert repos[winner].worker_health_ready(later)
+
+
+def test_server_cloud_enrollment_restores_vault_and_safety_revision_is_transactional(fixture):
+    db, device, _, code = fixture
+    repo = SmartChargeRepository(db)
+    enrolled = repo.enroll_connection_code('account-a', code, 'qa-enroll-safety')
+    assert enrolled['connectionMode'] == 'server_cloud'
+    # Regression: Firestore restore used to filter server_cloud out, whereas
+    # its in-memory equivalent kept it. Never print decrypted QA credentials.
+    restored = SmartChargeRepository(db).restore_synced_profile('account-a', device)
+    assert restored is not None and restored['deviceId'] == device
+    evidence = {'verifiedDeviceId': device, 'verifiedModel': code.model,
+                'verificationFingerprint': 'qa-versioned-evidence', 'verificationFingerprintVersion': 1,
+                **{key: True for key in ('cloudVerified', 'powerMeterVerified', 'safeBootVerified', 'noLoadTestVerified',
+                                       'onObserved', 'timerObserved', 'timerAutoOffObserved', 'relayOffVerified')}}
+
+    def verify(_):
+        try:
+            result = SmartChargeRepository(db).verify_synced_profile('account-a', device, evidence,
+                                                                     expected_revision=enrolled['revision'])
+            assert result is not None
+            return True
+        except RuntimeError as error:
+            assert str(error) == 'profileRevisionConflict'
+            return False
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(verify, range(2)))
+    assert sum(results) == 1
+    saved = repo._profile_doc('account-a', device).get().to_dict()
+    assert saved['revision'] == enrolled['revision'] + 1
+    assert saved['verificationFingerprintVersion'] == 1 and saved['timerAutoOffObserved'] is True
+
+    # Rotation advances metadata revision; a delayed safety-test completion
+    # must not restore historical no-load evidence over the new credential.
+    rotated = repo.save_synced_profile('account-a', {
+        'deviceId': device, 'model': code.model, 'cloudHost': code.cloud_host,
+        'cloudAuthKey': 'rotated-test-only',
+    }, expected_revision=saved['revision'])
+    with pytest.raises(RuntimeError, match='profileRevisionConflict'):
+        repo.verify_synced_profile('account-a', device, evidence, expected_revision=saved['revision'])
+    final = repo._profile_doc('account-a', device).get().to_dict()
+    assert final['revision'] == rotated['revision'] and final['noLoadTestVerified'] is False
+
+
+def test_shared_cloud_dispatch_off_priority_and_spacing(fixture):
+    """Separate repositories/threads, real transactions, fake HTTP only."""
+    db, device, _, _ = fixture
+    fingerprint = hashlib.sha256(('qa-dispatch-' + device).encode()).hexdigest()
+    ref = db.collection('shellyCloudRateLimits').document(fingerprint)
+    repos = [SmartChargeRepository(db) for _ in range(3)]
+    entered, release = threading.Event(), threading.Event()
+    calls = []
+    lock = threading.Lock()
+
+    def http_fixture(name, hold=False):
+        with lock:
+            calls.append((name, time.monotonic()))
+        if hold:
+            entered.set()
+            assert release.wait(5), 'Fixture release was not signalled'
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        first = pool.submit(repos[0].run_cloud_request, fingerprint,
+                            lambda: http_fixture('inflight', True))
+        try:
+            assert entered.wait(5)
+            off = pool.submit(repos[1].run_cloud_request, fingerprint,
+                              lambda: http_fixture('off'), priority_off=True)
+            deadline = time.monotonic() + 3
+            while time.monotonic() < deadline:
+                if (ref.get().to_dict() or {}).get('offWaiters'):
+                    break
+                time.sleep(.05)
+            else:
+                pytest.fail('OFF was not registered within the fixture budget')
+            read = pool.submit(repos[2].run_cloud_request, fingerprint,
+                               lambda: http_fixture('read'))
+            release.set()
+            for future in (first, off, read):
+                future.result(timeout=10)
+        finally:
+            release.set()
+    assert [name for name, _ in calls] == ['inflight', 'off', 'read']
+    assert all(b[1] - a[1] >= 1.1 for a, b in zip(calls, calls[1:]))
+    state = ref.get().to_dict()
+    assert not state.get('leaseId') and state['offWaiters'] == {}
+
+
+def test_shared_cloud_cooldown_survives_independent_repository(fixture):
+    db, device, _, _ = fixture
+    fingerprint = hashlib.sha256(('qa-cooldown-' + device).encode()).hexdigest()
+    first, second = SmartChargeRepository(db), SmartChargeRepository(db)
+    first.defer_cloud_requests(fingerprint, 60)
+    from shelly.cloud_dispatch import CloudAdmissionError
+    with pytest.raises(CloudAdmissionError, match='cloudQueueBusy'):
+        second.run_cloud_request(fingerprint, lambda: pytest.fail('HTTP must not run'),
+                                 priority_off=True)
+    state = db.collection('shellyCloudRateLimits').document(fingerprint).get().to_dict()
+    assert state['cooldownUntil'] > utcnow() + timedelta(seconds=30)
+    assert state['offWaiters'] == {} and not state.get('leaseId')
