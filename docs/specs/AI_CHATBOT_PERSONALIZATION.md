@@ -3,6 +3,24 @@
 > **Phiên bản**: v1.1.0 — 07/10/2026
 > **Mục tiêu hiện hành**: BatteryBot local, kiến thức app và công cụ có xác nhận; dự đoán từ model mobile hợp lệ, lịch nhắc local-first và học adapter nhỏ opt-in. Gemini/SSE bên dưới là thiết kế lịch sử, không phải cấu hình production hiện hành.
 
+## Worker fencing/readiness — Task99 (09/10/2026)
+
+- Tiếp nối98: `smartChargeWorkerLeases/{scope}` là transaction server-only, một worker holder/epoch, TTL180s; epoch tombstone không xóa sau release. Heartbeat≤90s chỉ hợp lệ khi worker/epoch khớp lease live đọc từ Firestore. Client không đọc/ghi lease/heartbeat; UUID/epoch không được coi là quyền điều khiển phần cứng của người dùng.
+- Worker kiểm lease trước/sau readback, trước backup OFF và sau thời gian chờ limiter ngay trước HTTP dispatch. Holder cũ không poll hoặc invalidate heartbeat holder mới; không tự giải phóng device/session unknown. Request đã gửi không thể thu hồi, nên fencing chưa thay thế device lock, timer và readback.
+- Probe private `/health` là liveness, `/ready` chỉ successful scan + lease/freshness; lỗi/stale/startup trả503. Probe CLI nhẹ không import API/AI. Worker entry vẫn import server factory, chưa có boot/RAM/image benchmark. Không diễn giải probe200 là “đã kết nối Shelly”.
+- Guard dùng read-only fence mới, không renew/ghi Firestore cho mỗi request khi lease còn>60s. Scan bình thường không làm readiness flapping; lỗi scan thực vẫn báo unavailable. Firestore reads/writes và AI dependency hiện tại phải được tính riêng trước pilot, không chỉ compute20USD.
+- Backend435Pass/10skips đã kiểm; Rules45 assertions/transaction10Pass local, kết quả source-final tại PROJECT_STATUS99.3. Không deploy Azure/Rules, không APK mới, không ON/OFF thật. Bộ gate cũ của mobile137 không chứng minh backend mới.
+- Fresh Safe Boot/config fingerprint mỗi ON, shared polling/OFF priority, image0,5GiB/pilot/two-runtime và supervised hardware vẫn **Blocked/Planned**. Chat chỉ qua adapter backend-authorized có xác nhận; worker khỏe không cho LLM bỏ qua safety hoặc tự tạo lệnh.
+
+## Cổng điều khiển Shelly — Task98 (09/10/2026)
+
+- Backend bổ sung heartbeat reconciliation server-only theo môi trường (`SMART_CHARGE_WORKER_SCOPE`, freshness≤90s). Thiếu/lỗi/stale khóa ON, safety-test và LAN authorization; OFF/recovery vẫn giữ đường an toàn. `workerUnavailable` là lý do khóa điều khiển, không làm mất membership hoặc bằng chứng verification lịch sử. Azure staging policy vẫn khóa phần cứng kể cả heartbeat khỏe.
+- Worker dùng Device ID bất biến của phiên, không binding xe vừa đổi. Readback thiếu/wrong-device/offline/relay không boolean không phải bằng chứng OFF. Unknown/stopping giữ lease; transaction không cho stale active ghi đè terminal/unknown. Lease LAN có kind riêng, chỉ release sau readback server OFF và transaction kiểm exact UID/operation/membership; boolean client không phải evidence.
+- Legacy env-backed Cloud không cấp ON; giữ đọc/OFF phục hồi với parser strict dùng chung vault. Enrollment/vault đã kiểm mới là hướng bật sạc. Không lấy settings/evidence cache hoặc nhãn “đã liên kết” làm quyền ON.
+- Hardware worker không tự chạy ingestion/train AI; các hàm legacy còn giữ riêng. AI/chat vẫn local theo quyết định trước; guard worker không cấp cho LLM quyền tạo lệnh hoặc bỏ qua thẻ xác nhận.
+- **Automated verified hẹp:** backend411Pass/9skip (9 Emulator chạy riêng), Rules43 assertions và transaction9Pass; source297files0findings. **Chưa deploy** backend/rules hoặc build APK mới. OnePlus137 là artifact cũ củaTask96.9. Chi tiết log/exit, Fail trung gian và blocker ở `PROJECT_STATUS.md` Task98.
+- **Blocked:** exclusive worker lease/health/image/RAM, fresh config/fingerprint mỗi ON, shared OFF priority/polling, pilot cloud và hardware supervised readback. Ngân sách worker~20USD không phải permission deploy/ON; chatbot điều khiển thật chưa được chứng nhận.
+
 ## Tiếp nối — Task 95 (07/10/2026)
 
 - **Automated verified; Runtime verified hẹp trên QA +131/OnePlus:** chatbot có đề xuất đổi ngày/hủy lịch qua allowlist `edit_reminder/cancel_reminder`. Chỉ chọn khi người dùng nêu loại lịch, ngày cũ (và ngày mới khi sửa), khớp đúng một lịch của xe hiện tại; không tự chọn lịch đầu tiên. Mọi thay đổi cần thẻ xác nhận và context UID/xe còn hợp lệ. Đã tạo lịch QA riêng → đổi ngày → restart giữ ngày mới → hủy → restart/readback không còn active. Chưa có màn chỉnh sửa riêng, chưa hỗ trợ sửa tiêu đề hoặc mốc nhắc tùy chỉnh; notification delivery/deep-link, offline/two-runtime/reboot chưa nghiệm thu.
@@ -843,3 +861,11 @@ flutter_markdown: ^0.7.0          # Render markdown in bubbles
 - Bật theo thời gian có thẻ xác nhận, guard UID/xe/device/revision, một operation và một ON; timeout giữ unknown, bỏ readback OFF cũ trong UI, không retry ON. Stop thành viên thứ hai có thể xử lý relay ON không có phiên riêng bằng backend OFF + readback, không nhận lịch sử/xe riêng của thành viên kia.
 - Online/evidence không tự cấp quyền ON. Caps backend chặn phiên active/unknown theo thiết bị; đổi mã/lỗi nhập mã không xóa binding/evidence đã có. Restore thiếu evidence giữ context cho safety test có xác nhận, không tự phát ON/OFF.
 - 909 Flutter tests/352 backend Pass trong Task96, Firestore concurrency5cases; đây là tự động/mock/emulator, chưa phải phần cứng. Azure vẫn khóa enrollment/safety/ON vì worker chưa nghiệm thu; người dùng yêu cầu trình chi phí trước deploy. Phương án0,25vCPU/0,5GiB always-on khoảng5,83–19,44USD/tháng compute tùy idle/active khi không còn grant, chưa gồm dịch vụ phụ, không cam kết tổng10USD. Chi tiết gates/nguồn/bằng chứng tại PROJECT_STATUS Task96.
+
+### Tiếp tục Task96 — 09/10/2026, QA 1.1.9+137
+
+- Giữ binding/evidence legacy `advancedDirect` dưới trạng thái **“Đã liên kết · Cần kết nối qua máy chủ”**, không tự chuyển sang server enrollment hoặc cấp quyền ON. Settings/Setup/Sạc pin/BatteryBot đọc cùng coordinator; link, online và control readiness là các khái niệm riêng. Offline không tự yêu cầu chạy lại no-load test.
+- Sạc hẹn giờ/kế hoạch subscribe cùng snapshot với header; lý do khóa ưu tiên snapshot. Unlinked, legacy hoặc unknown không mở Start dù capabilities riêng nói ready. Sau consent phải kiểm lại kết nối; tool/repository/backend vẫn kiểm UID/xe/device/revision và readback, không Direct fallback. Hướng dẫn mã quản trị không yêu cầu điện thoại cùng LAN.
+- Full Flutter source137 **912Pass/exit0**, direct Dart toàn `lib/test` **No issues/exit0**; kết quả909tests07/10 bên trên là lịch sử. Flutter CLI root còn Timeout riêng. Artifact/runtime được ghi ở `PROJECT_STATUS.md`96.9; automated Pass không chứng nhận enrollment/relay thật.
+- APK137 build/cài đúng hash trên OnePlusLE2125/API34; sau restart Sạc pin/Cài đặt giữ cùng nhãn legacy, Setup không tự test. Chat đọc trạng thái từ máy chủ; yêu cầu bật5phút bị chặn trước thẻ ON; snapshot vẫn đúng sau chat. **0relay commands**, chỉ runtime read-only/khóa, chưa điều khiển Shelly thật. Metadata/hash/scope tại `shelly-sync-apk-137-20261009.json` và Status96.9.
+- Người dùng chấp nhận khoảng **20USD/tháng cho worker compute**. Giá EastAsia kiểm lại09/10 không đổi; tổng còn API/registry/lưu trữ/log/Firebase. Đây **không phải quyền deploy hay mở ON**. Worker cần immutable session identity, heartbeat/lease và fail-closed, OFF recovery, shared limiter, bỏ AI training server, rồi fault/concurrency/smoke tests và duyệt pilot riêng. Azure staging policy vẫn khóa phần cứng.

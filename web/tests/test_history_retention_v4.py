@@ -46,6 +46,8 @@ class HistoryRetentionV4Tests(unittest.TestCase):
         repo.register_vehicle_owner("owner", "vehicle-a")
         repo.save_binding("owner", binding)
         service = SmartChargeService(repo, provider, _predict, sleeper=lambda _: None)
+        repo.claim_worker_lease("qa-worker")
+        repo.publish_worker_heartbeat("qa-worker", healthy=True)
         preview = service.create_preview("owner", {"vehicleId": "vehicle-a", "currentSoc": 20, "targetSoc": 80})
         session = service.start("owner", preview.preview_id, "history-key")
         provider.status.relay = False

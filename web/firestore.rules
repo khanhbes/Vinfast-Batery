@@ -466,5 +466,12 @@ service cloud.firestore {
     match /ShellyCredentialVault/{credentialId} {
       allow read, write: if false;
     }
+    // Worker/API Admin SDK only. Client flags cannot authorize energizing.
+    match /smartChargeWorkerHealth/{scope} {
+      allow read, write: if false;
+    }
+    match /smartChargeWorkerLeases/{scope} {
+      allow read, write: if false;
+    }
   }
 }

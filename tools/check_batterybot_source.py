@@ -8,7 +8,9 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[1]
 AREAS = [ROOT / "app/lib", ROOT / "app/pubspec.yaml", ROOT / "app/pubspec.lock",
          ROOT / "web/ai_server/fine_tune.py", ROOT / "web/firestore.rules",
-         ROOT / "web/shelly"]
+         ROOT / "web/shelly", ROOT / "web/smart_charge_worker.py",
+         ROOT / "web/smart_charge_worker_entry.py", ROOT / "web/docker-compose.yml",
+         ROOT / "web/Dockerfile.api", ROOT / "web/.env.docker.example"]
 PATTERNS = {
     "private-key": re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
     "literal-secret": re.compile(r'''(?i)(?:cloudAuthKey|auth_key|GEMINI_API_KEY)\s*[:=]\s*["'][a-zA-Z0-9_./+\-=]{24,}["']'''),
@@ -31,7 +33,7 @@ def main():
                     findings.append({"path": relative, "line": number, "kind": kind})
     sha = subprocess.check_output(["git", "-c", f"safe.directory={ROOT.as_posix()}", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     print(json.dumps({"sourceHead": sha, "filesScanned": len(files), "findings": findings,
-        "files": manifest, "scope": "app/lib + dependency manifest + training pipeline + Firestore Rules + web/shelly; excludes env, Git history and APK"}, ensure_ascii=False))
+        "files": manifest, "scope": "app/lib + dependency manifest + training pipeline + Firestore Rules + web/shelly + worker/entry + deployment templates; excludes real env, Git history and APK"}, ensure_ascii=False))
     return 1 if findings else 0
 
 if __name__ == "__main__":

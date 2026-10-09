@@ -1,6 +1,10 @@
 {
   "task": "96",
   "checkedAt": "2026-10-07",
+  "recheckedAt": "2026-10-09",
+  "ratesUnchangedOnRecheck": true,
+  "userWorkerComputeBudgetUSD": 20,
+  "budgetDecisionIsDeploymentApproval": false,
   "status": "proposal-only-not-deployed",
   "region": "eastasia",
   "currency": "USD",

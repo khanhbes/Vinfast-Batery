@@ -1093,12 +1093,20 @@ class _InteractiveAssistantSheetState
       child: Container(
         height: sheetHeight,
         decoration: BoxDecoration(
-          color: uiColors.surface,
+          color: uiColors.dark ? const Color(0xFF0C1322) : uiColors.surface,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border(
+            top: BorderSide(
+              color: uiColors.dark
+                  ? const Color(0xFF10B981).withValues(alpha: 0.25)
+                  : Colors.transparent,
+              width: 1.2,
+            ),
+          ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.25),
-              blurRadius: 20,
+              color: Colors.black.withValues(alpha: 0.35),
+              blurRadius: 24,
               offset: const Offset(0, -4),
             ),
           ],
@@ -1109,18 +1117,18 @@ class _InteractiveAssistantSheetState
             Center(
               child: Container(
                 margin: const EdgeInsets.only(top: 10, bottom: 6),
-                width: 40,
+                width: 44,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: uiColors.border,
+                  color: uiColors.border.withValues(alpha: 0.8),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
             ),
 
-            // Header với Mascot và thông tin xe
+            // Header Cockpit với Mascot và thông tin xe
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1134,26 +1142,21 @@ class _InteractiveAssistantSheetState
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'BatteryBot',
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                                color: uiColors.text,
-                              ),
-                            ),
-                          ],
+                        child: Text(
+                          'BatteryBot',
+                          style: TextStyle(
+                            fontSize: 15.5,
+                            fontWeight: FontWeight.w700,
+                            color: uiColors.text,
+                            letterSpacing: -0.2,
+                          ),
                         ),
                       ),
                       IconButton(
                         key: const Key('assistant_close_button'),
                         tooltip: 'Đóng BatteryBot',
                         icon: Icon(
-                          Icons.close,
+                          Icons.close_rounded,
                           color: uiColors.muted,
                           size: 20,
                         ),
@@ -1169,14 +1172,25 @@ class _InteractiveAssistantSheetState
                   Text(
                     vehicle?.displayName ?? 'Chưa chọn xe theo dõi',
                     key: const Key('assistant_vehicle_label'),
-                    style: TextStyle(fontSize: 13, color: uiColors.text),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: uiColors.text,
+                    ),
                   ),
+                  const SizedBox(height: 2),
                   Text(
                     vehicle == null || !vehicle.hasBatteryData
                         ? 'Chưa có dữ liệu pin'
                         : 'Pin ${vehicle.currentBattery}% · Dữ liệu hồ sơ',
                     key: const Key('assistant_battery_source'),
-                    style: TextStyle(fontSize: 11.5, color: uiColors.muted),
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w500,
+                      color: uiColors.dark
+                          ? const Color(0xFF10B981)
+                          : uiColors.muted,
+                    ),
                   ),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
@@ -1227,7 +1241,12 @@ class _InteractiveAssistantSheetState
               ),
             ),
 
-            const Divider(height: 1),
+            Divider(
+              height: 1,
+              color: uiColors.dark
+                  ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                  : uiColors.border.withValues(alpha: 0.5),
+            ),
 
             // Quick Action Chips
             if (keyboard == 0)
@@ -1241,7 +1260,12 @@ class _InteractiveAssistantSheetState
                 ),
               ),
 
-            const Divider(height: 1),
+            Divider(
+              height: 1,
+              color: uiColors.dark
+                  ? const Color(0xFF10B981).withValues(alpha: 0.12)
+                  : uiColors.border.withValues(alpha: 0.5),
+            ),
 
             // Banner gợi ý chủ động (Proactive Suggestion) nếu có
             if (_activeSuggestion != null) _buildProactiveBanner(uiColors),
@@ -1287,30 +1311,39 @@ class _InteractiveAssistantSheetState
                 ),
               ),
 
-            // Thanh nhập tin nhắn & Voice Input
+            // Thanh nhập tin nhắn & Voice Input (Cockpit Command Dock)
             Container(
               padding: EdgeInsets.only(
-                left: 16,
-                right: 16,
+                left: 14,
+                right: 14,
                 top: 8,
                 bottom: 12 + media.padding.bottom,
               ),
               decoration: BoxDecoration(
-                color: uiColors.surface,
-                border: Border(top: BorderSide(color: uiColors.border)),
+                color: uiColors.dark
+                    ? const Color(0xFF0F1728)
+                    : uiColors.surface,
+                border: Border(
+                  top: BorderSide(
+                    color: uiColors.dark
+                        ? const Color(0xFF10B981).withValues(alpha: 0.18)
+                        : uiColors.border,
+                    width: 1,
+                  ),
+                ),
               ),
               child: Row(
                 children: [
                   Expanded(
                     child: _isListeningVoice
                         ? Container(
-                            height: 44,
+                            height: 46,
                             padding: const EdgeInsets.symmetric(horizontal: 14),
                             decoration: BoxDecoration(
-                              color: uiColors.primary.withValues(alpha: 0.1),
+                              color: const Color(0xFF10B981).withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(24),
                               border: Border.all(
-                                color: uiColors.primary,
+                                color: const Color(0xFF10B981),
                                 width: 1.5,
                               ),
                             ),
@@ -1342,12 +1375,12 @@ class _InteractiveAssistantSheetState
                                   ),
                                 ),
                                 const SizedBox(width: 8),
-                                Text(
+                                const Text(
                                   'Đang nghe...',
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
-                                    color: uiColors.primary,
+                                    color: Color(0xFF10B981),
                                   ),
                                 ),
                               ],
@@ -1357,29 +1390,44 @@ class _InteractiveAssistantSheetState
                             key: const Key('assistant_input_field'),
                             controller: _inputController,
                             textInputAction: TextInputAction.send,
-                            style: TextStyle(color: uiColors.text),
+                            style: TextStyle(color: uiColors.text, fontSize: 13.5),
                             decoration: InputDecoration(
                               hintText: 'Hỏi BatteryBot về pin, sạc, xe...',
                               hintStyle: TextStyle(
                                 fontSize: 13,
                                 color: uiColors.muted,
                               ),
+                              filled: true,
+                              fillColor: uiColors.dark
+                                  ? const Color(0xFF162338).withValues(alpha: 0.8)
+                                  : const Color(0xFFF1F5F9),
                               isDense: true,
                               contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 14,
+                                horizontal: 16,
                                 vertical: 10,
                               ),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(24),
-                                borderSide: BorderSide(color: uiColors.border),
+                                borderSide: BorderSide(
+                                  color: uiColors.dark
+                                      ? const Color(0xFF1E2D45)
+                                      : uiColors.border,
+                                ),
                               ),
                               enabledBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(24),
-                                borderSide: BorderSide(color: uiColors.border),
+                                borderSide: BorderSide(
+                                  color: uiColors.dark
+                                      ? const Color(0xFF1E2D45)
+                                      : uiColors.border,
+                                ),
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(24),
-                                borderSide: BorderSide(color: uiColors.primary),
+                                borderSide: const BorderSide(
+                                  color: Color(0xFF10B981),
+                                  width: 1.5,
+                                ),
                               ),
                             ),
                             onSubmitted: _handleSend,
@@ -1397,7 +1445,7 @@ class _InteractiveAssistantSheetState
                           : Icons.mic_rounded,
                       color: _isListeningVoice
                           ? Colors.redAccent
-                          : uiColors.primary,
+                          : (uiColors.dark ? const Color(0xFF10B981) : uiColors.primary),
                     ),
                     onPressed: VoiceInputService.isSupported
                         ? _toggleVoiceInput
@@ -1406,7 +1454,10 @@ class _InteractiveAssistantSheetState
                   IconButton(
                     key: const Key('assistant_send_button'),
                     tooltip: 'Gửi tin nhắn',
-                    icon: Icon(Icons.send_rounded, color: uiColors.primary),
+                    icon: Icon(
+                      Icons.send_rounded,
+                      color: uiColors.dark ? const Color(0xFF10B981) : uiColors.primary,
+                    ),
                     onPressed: () => _handleSend(_inputController.text),
                   ),
                 ],

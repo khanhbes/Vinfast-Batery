@@ -599,6 +599,8 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
         return _buildConnectedView(ui);
       case ShellyConnectionFlowState.verificationRequired:
         return _buildVerificationRequiredView(ui);
+      case ShellyConnectionFlowState.serverConnectionRequired:
+        return _buildAdminCodeView(ui);
       case ShellyConnectionFlowState.deviceFound:
         return _buildDeviceFoundView(ui);
       case ShellyConnectionFlowState.multipleDevices:
@@ -1094,12 +1096,14 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
               children: [
                 Icon(Icons.checklist_rounded, color: ui.primary, size: 20),
                 const SizedBox(width: 8),
-                Text(
-                  'Kiểm tra lại thiết bị phần cứng',
-                  style: TextStyle(
-                    color: ui.text,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
+                Expanded(
+                  child: Text(
+                    'Trước khi nhập mã',
+                    style: TextStyle(
+                      color: ui.text,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ],
@@ -1110,11 +1114,11 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
               ui,
             ),
             _checkItem(
-              'Điện thoại và Shelly đang ở cùng mạng Wi-Fi (2.4GHz)',
+              'Điện thoại có Internet và Shelly đang trực tuyến trên Cloud; không cần cùng Wi-Fi.',
               ui,
             ),
             _checkItem(
-              'Quyền Mạng cục bộ (Local Network) đã được cấp cho ứng dụng',
+              'Dùng mã 6 ký tự còn hiệu lực do quản trị viên cấp. Liên kết và kiểm tra an toàn là hai bước riêng.',
               ui,
             ),
           ],
@@ -1883,6 +1887,8 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
     return switch (state) {
       ShellyConnectionFlowState.connected => 'Shelly đã được kết nối',
       ShellyConnectionFlowState.verificationRequired => 'Xác nhận an toàn',
+      ShellyConnectionFlowState.serverConnectionRequired =>
+        'Chuyển kết nối qua máy chủ',
       ShellyConnectionFlowState.deviceFound => 'Đã tìm thấy Shelly',
       ShellyConnectionFlowState.multipleDevices => 'Chọn thiết bị Shelly',
       ShellyConnectionFlowState.discovering => 'Đang tìm kiếm Shelly…',
@@ -1897,6 +1903,9 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
   }
 
   String _subtitleFor(ShellyConnectionFlowState state) {
+    if (state == ShellyConnectionFlowState.serverConnectionRequired) {
+      return 'Liên kết cũ vẫn được giữ. Nhập mã quản trị để kết nối qua máy chủ; app không tự chạy lại test bật/tắt.';
+    }
     if (state == ShellyConnectionFlowState.disconnected) {
       if (_activeFlow == 2) {
         return 'Kết nối thiết bị từ xa bằng tài khoản Shelly Cloud của bạn.';

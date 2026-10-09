@@ -1,5 +1,146 @@
 # VinFast Battery — Project Status & Task Tracker
 
+> **Trạng thái hiện hành 09/10/2026 — Task99:** đã bổ sung worker lease theo môi trường, fencing epoch, probe riêng và kiểm quyền trước Cloud dispatch. Backend source cuối **435 Pass/10 skipped/exit0**; gateway59Pass. Rules45 assertions và transaction10Pass đã chạy local, recheck source cuối ghi dưới99.3. Chưa deploy backend/rules, chưa chạy image/pilot hoặc phát lệnh Shelly thật. APK/OnePlus vẫn QA **1.1.9+137** của96.9; không dùng gates app cũ chứng nhận backend mới. Giữ UI Task97, working tree và mọi bằng chứng. Ngân sách worker~20USD/tháng không phải quyền deploy/ON; hardware/enrollment vẫn **Blocked**.
+
+## 99. Task Completion Log — exclusive worker lease và private readiness probe (09/10/2026)
+
+### 99.1. Phạm vi và kết luận
+
+- HEAD `8be6fa07055c18e39d57b28c677035c4fa30e6ff`, branch `deploy/azure-student`; triển khai tiếp trên dirty worktree Task96–98, không reset/stash/commit hoặc xóa dữ liệu. Không tạo Markdown mới. Chỉ đọc template `.env.docker.example`, không `.env.laptop` hoặc Firebase credential thật.
+- **Automated verified** cho các guard/probe local trong99.2; không phải cloud/hardware-ready. Không deploy/tạo resource/restart service, sửa env thật/Firestore production, redeem, cài APK, tác động ADB/emulator hoặc gửi ON/OFF/safety-test thật. Azure staging ON/enrollment policy giữ nguyên.
+- Worker/health code supersedes phần “chưa có lease/probe” ở98.4 về **source**, nhưng image boot/RAM, Azure probe wiring và pilot vẫn **Blocked**. Liveness không có nghĩa Shelly đã kết nối; readiness không tự cấp quyền ON hoặc thay thế Safe Boot/config/no-load/readback.
+
+### 99.2. Task → bằng chứng → file → trạng thái → bước tiếp
+
+| ID | Nguyên nhân và sửa đổi cụ thể | Trạng thái / còn lại |
+|---|---|---|
+| SC99a | Heartbeat98 chưa loại trừ hai worker cùng môi trường. `web/shelly/repositories.py`: transaction `smartChargeWorkerLeases/{scope}`, UUID worker, epoch tăng sau expiry/release, TTL180s; một holder. Heartbeat chỉ publisher đang giữ đúng epoch/unexpired; API kiểm cả health≤90s và lease mới, không tin cache API | Automated verified bằng in-memory và hai repository đồng thời trên Firestore Emulator. Lease worker không làm hết hạn hoặc xóa device/session lock |
+| SC99b | Worker mất lease có thể còn tiếp tục xử lý. `web/smart_charge_worker.py`, `service.py`, `providers/vault_cloud.py`, `legacy_cloud.py`: guard trước/sau readback, trước backup OFF và ngay trước transport sau limiter wait. Loser không poll/ghi heartbeat của winner. Exception/stop cleanup không invalidate holder mới; expired epoch không renew/publish/release | Automated verified; request đã dispatch không thể thu hồi, không cam kết fencing tuyệt đối tại phần cứng Cloud. API OFF/recovery riêng không bị lease worker khóa |
+| SC99c | Mỗi lần đọc không cần ghi gia hạn lease. `worker_lease_deadline()` đọc server mới, guard chỉ renew khi còn≤60s; claim đầu vòng và heartbeat sau scan. Không dùng process cache cho fencing. Không đổi healthy→false mỗi vòng scan bình thường, tránh UI readiness flapping | Automated verified: zero renew trong vòng scan mới/fresh; lần sau vẫn ready trước khi kết thúc scan. Read/write Firebase vẫn có chi phí/quota riêng, chưa đo trên cloud |
+| SC99d | Worker container từng `healthcheck.disable=true`. `web/shelly/worker_health.py`, `smart_charge_worker_entry.py`: private HTTP liveness `/health` và readiness `/ready`; startup/error/stale>90s/expired lease→503. Monotonic clock, không UID/device/credential trong response/log. CLI probe fail-closed/timeout2s, không import API/AI; worker process entry vẫn dùng service factory server cũ | Automated verified HTTP loopback + subprocess import; chưa container boot hoặc RSS0,5GiB. Private probe không được mở Internet |
+| SC99e | `web/docker-compose.yml`: API/worker nhận cùng scope; worker dùng `python -m shelly.worker_health` thay inherited API HTTP check, timeout5s/start-period90s. `.env.docker.example` thêm port8090 placeholder. Rules deny read/write lease từ client; `tools/check_batterybot_source.py` manifest thêm deployment templates | Automated verified phần Rules/source; Compose chỉ source chưa apply/config-run bằng env thật. Azure probes/min1/max1 và deployment chưa cấu hình |
+| SC99f | `test_smart_charge_worker_lease.py`: concurrency, expiry/takeover/tombstone, malformed/future/naive lease, stale holder, limiter delay, mất lease giữa status/OFF, graceful exit, no-readiness-flap, HTTP503/200, invalid config và no-AI import. Cập nhật fixtures **claim thật trước heartbeat QA**, giữ toàn bộ assertions ON/OFF/privacy cũ | Automated verified; query-only test mock lease layer riêng, không dùng nó làm bằng chứng fencing; fencing đã kiểm bằng transaction thật |
+
+### 99.3. Gates và bằng chứng
+
+Bằng chứng không ghi đè lượt98 tại `docs/qa_evidence/app-review-2026-10-05/`; mỗi log có `.log.result.json` với command/timeout/exit. Các test skips backend là Emulator cases, không tự tính Pass trước runner riêng. Dùng project local `vinfast-rules-test`, AnonymousCredentials; không Firebase production hoặc Android emulator.
+
+| Gate | Kết quả | Log |
+|---|---|---|
+| Backend source cuối | **435 Pass/10 skipped/2 dependency warnings, exit0**, runner31,80s, pytest27,18s | `shelly-worker-99-backend-fenced-final-20261009.log` |
+| Rules + concurrency | Source cuối **45 assertions +10 transaction Pass**, exit0/75,91s, pytest60,96s/1 dependency warning. Lượt đầu exit0/62,09s được giữ riêng | `shelly-worker-99-rules-transactions-20261009.log`, `shelly-worker-99-rules-transactions-final-20261009.log` |
+| Gateway regression | **59 Pass/1 warning, exit0**, runner10,38s, pytest8,86s; gateway source không đổi | `shelly-worker-99-gateway-20261009.log` |
+| Scoped hygiene/manifest | **301 files/0 findings, exit0**, 0,70s; gồm worker/probe/entry + Compose/Dockerfile/template, không env thật/history/APK | `shelly-worker-99-source-manifest-final-20261009.log` |
+| Diff / Flutter / Dashboard / APK | Scoped diff-check exit0 (CRLF warnings). Mobile/dashboard không đổi nên không rerun/build/cài; +137 vẫn artifact cũ | Không tính Flutter912Pass lịch sử thành gate backend mới |
+
+- Giữ các lượt liên quan76Pass, backend430/432/433Pass như lịch sử, không cộng vào435. Warnings dependency và Emulator transaction contention giữ trong log; retry chỉ metadata, không relay ON. Không có test nào bị bỏ để lấy xanh.
+- Bàn giao máy đọc: `shelly-worker-99-summary-20261009.json`; các trường chưa runtime/deploy vẫn ghi rõ chưa kiểm, không lấy kết quả local thay nghiệm thu Cloud hoặc Shelly thật.
+
+### 99.4. Bước tiếp theo — còn chặn ON
+
+1. **Planned, cao:** backend `_require_ready_to_energize` hiện còn dựa vào binding safety flags/history + status; cần fresh settings/Safe Boot/config fingerprint thống nhất trước **mỗi** ON. `routes.py`/provider fingerprint lịch sử vẫn chưa là contract versioned bao gồm credential/config change. Không mở Azure ON vì lease/probe Pass.
+2. **Planned:** shared polling/OFF priority/Retry-After, full revision CAS và durable device lease recovery/pagination. Worker lease TTL chỉ dành cho worker, không cho phép takeover thiết bị `unknown`.
+3. **Blocked:** boot image worker thật không AI, đo RAM/RSS0,5GiB và readiness khi Firebase/vault/network lỗi; entry vẫn import `server.py`, Compose API còn phụ thuộc AI service. Probe nhẹ không chứng minh toàn worker nhẹ.
+4. **Blocked:** trình manifest/chi phí tổng/pilot48–72h trước xin deploy; cấu hình scope duy nhất theo môi trường, private probes/no ingress, budget/alerts và rollback. Chưa apply Compose/production Rules hoặc tạo Azure resource; ngân sách compute20USD không bảo đảm tổng bill.
+5. **Blocked:** runtime đúng APK và backend revision trên OnePlus + runtime thứ hai; redeem hai membership/code rotation, chatbot confirm/readback và Shelly có giám sát hiện tại. Không có bằng chứng hardware mới; chưa chứng nhận app/chatbot điều khiển Shelly thật hoặc release-ready.
+
+---
+
+## 98. Task Completion Log — worker an toàn và readback Shelly (09/10/2026)
+
+### 98.1. Phạm vi và baseline
+
+- Branch `deploy/azure-student`, HEAD `8be6fa07055c18e39d57b28c677035c4fa30e6ff`; source có thay đổi chưa commit. Không reset/stash/commit, không xóa dữ liệu/profile hoặc tạo Markdown mới. Không đọc `.env.laptop` hay service-account key để chạy các test này.
+- Chỉ sửa code local và kiểm thử. Không deploy/tạo resource/restart Azure/API, không sửa env thật hoặc Firebase production, không redeem mã thật, không cài APK hoặc gửi ON/OFF/safety-test thật. `AZURE_STAGING_HARDWARE_DISABLED=1` vẫn là policy staging; không có quyền mở khóa dựa vào ngân sách20USD.
+- **Automated verified** chỉ cho guard/test dưới đây; worker image/rollout/hardware **Blocked**. App +137 không được dùng chứng minh source backend Task98 đã chạy trên Azure.
+
+### 98.2. ID → vấn đề → file → trạng thái → bước tiếp
+
+| ID | Nguyên nhân và thay đổi | Trạng thái / bước tiếp |
+|---|---|---|
+| SC98a | Worker từng tìm binding theo xe hiện tại, có thể khác thiết bị của phiên. `web/smart_charge_worker.py`, `web/shelly/service.py`: resolve immutable session Device ID, owner và binding chưa revoked; thiếu/mơ hồ/readback lỗi giữ `unknown`. OFF backup phải có readback mới, online, đúng device, relay boolean OFF; không terminal từ snapshot trước lệnh | Automated verified; chưa hardware/worker runtime |
+| SC98b | Thiếu bằng chứng worker đang reconciliation. `repositories.py`, `service.py`, `routes.py`: heartbeat server-only schema1, scope riêng theo môi trường, freshness≤90s; Firestore read lỗi/missing/malformed/future/stale khóa ON/safety-test/LAN authorize trước lease và command. OFF recovery không cần heartbeat khỏe; staging policy vẫn ưu tiên | Automated verified; heartbeat chưa phải exclusive worker lease hoặc container health probe |
+| SC98c | Stale worker có thể ghi terminal→active. `repositories.py`: transaction save_session giữ owner/vehicle/device, không terminal→nonterminal hoặc unknown/stopping→active, từ chối revision thấp. Firestore là authority cho claim, không để cache khóa A tiếp tục báo busy sau khi B release | Automated verified bằng hai process/repository và transaction contention; chưa CAS toàn bộ same-revision updates |
+| SC98d | Client `relayOffVerified=true` từng tự giải phóng quyền. `routes.py`, `service.py`, `repositories.py`: đọc OFF từ provider trước release; lease `lan_control` tách `charging`; transaction kiểm UID/op/kind/membership và không có charging document. Sai op, lease charging hoặc legacy chưa có kind vẫn giữ khóa | Automated verified; LAN không có server-readable vault sẽ bị chặn release an toàn, cần recovery/migration rõ trước rollout |
+| SC98e | Legacy Cloud ép missing output→false và missing meter→0, tự gắn Device ID. `providers/legacy_cloud.py`, `vault_cloud.py`: dùng chung parser strict identity/model/online/relay/meter/timer; finite numbers, 0 thật hợp lệ, thiếu dữ liệu không phải OFF. Legacy env path không ON; giữ read/OFF phục hồi, limiter local cùng credential1,1s | Automated verified; legacy limiter chưa cross-worker, chuyển vault trước cho ON |
+| SC98f | Worker tự chạy ingestion/train AI legacy. `smart_charge_worker.py`: bỏ automatic ingestion/training khỏi reconcile/loop, giữ hàm legacy riêng không xóa source. Query lỗi không dùng cache empty để publish healthy; scan giới hạn100global/20account fail-closed, backoff≤60s | Automated verified; pagination, latency/tải và health container còn kiểm |
+| SC98g | `web/firestore.rules`, `rules_tests/rules.test.js`: client không đọc/ghi heartbeat. `.env.docker.example` thêm placeholder scope/poll (không env thật). `tools/check_batterybot_source.py` thêm worker/entry vào manifest. Tests mới `test_smart_charge_worker_safety.py`, mở rộng transaction emulator và fixtures heartbeat QA | Automated verified; rules mới chỉ local, chưa production deploy |
+
+### 98.3. Gates và bằng chứng
+
+Tất cả log tại `docs/qa_evidence/app-review-2026-10-05/`, sidecar `.log.result.json` ghi command, exit, timeout và elapsed. Không cộng Pass các lượt lại thành tổng. Runner chạy backend/gateway đúng working directory; Emulator local project `vinfast-rules-test`, AnonymousCredentials, không Firebase production.
+
+| Gate | Kết quả | Bằng chứng |
+|---|---|---|
+| Backend source cuối | **411 Pass/9 skipped/2 dependency warnings, exit0**, runner29,91s; pytest25,48s | `shelly-worker-98-backend-verified-20261009.log` |
+| Rules + transaction source cuối | **43 allow/deny assertions +9 transaction tests Pass**, runner exit0/48,25s, pytest34,12s | `shelly-worker-98-rules-transactions-cachefix-20261009.log` |
+| Source hygiene/manifest | **297 production files, 0 findings, exit0**, 0,59s; SHA bằng baseline trên | `shelly-worker-98-source-hygiene-final-20261009.log` |
+| Gateway regression | **59 Pass/1 dependency warning, exit0**, runner11,03s; pytest9,55s; gateway source không đổi | `shelly-worker-98-gateway-20261009.log` |
+| Flutter/Dashboard/APK/runtime | Không chạy/build lại: source mobile/dashboard không đổi trong Task98; gates và OnePlus+137 ở96.9 là lịch sử gần nhất | Không gọi đó là nghiệm thu backend/cloud/hardware mới |
+
+- Giữ nguyên các Fail trung gian: backend-final **382Pass/5Fail/8skip** do release-control coi lease LAN không có session là lỗi500; sửa typed lease và server readback. Recheck **409Pass/9skip** rồi thêm fault/cleanup và cache guard→411Pass cuối.
+- Emulator-final lần sandbox exit1 vì CLI không đọc được config ngoài workspace (EPERM), không phải rules Pass. Recheck có **8Pass/1Fail** bắt cache lease cũ sau process khác release; sửa Firestore authority rồi9Pass. Log vẫn có transaction lock-timeout/ABORTED dưới contention và SDK metadata retry; không retry relay ON, không bỏ assertion hoặc xóa log để lấy xanh.
+- Hygiene chỉ scope production đã liệt kê, không thay secret audit Git history/APK. Dependency warnings Keras/google-auth được giữ; CRLF diff warnings không phải test Pass/Fail.
+- Scoped `git diff --check` exit0; manifest/tổng hợp máy đọc tại `shelly-worker-98-summary-20261009.json`. Không chạy lại Flutter analyzer/tests hoặc dashboard vì không sửa source tương ứng trong Task98; không dùng kết quả cũ để chứng nhận deploy mới.
+
+### 98.4. Blocker và thứ tự tiếp tục — chưa xin mở ON
+
+1. **In progress:** hoàn thiện worker exclusive lease/health probe, image boot không AI và đo RAM0,5GiB; heartbeat một mình không chứng minh khả năng giám sát liên tục. API và worker phải có cùng scope riêng môi trường; thiếu scope thực tế khóa ON. Không reuse scope local để mở Azure.
+2. **Planned:** fresh Safe Boot/config fingerprint trước từng ON tại backend, chuẩn CAS revision/terminal + durable lease recovery; shared polling/limiter và OFF priority/Retry-After. Các guard98 không thay thế toàn bộ safety contract.
+3. **Planned:** pagination thay giới hạn scan fail-closed20/100, offline/recovery hai worker, cảnh báo/ready UI cho `workerUnavailable`, migration typed LAN lease/profile legacy và graceful rollback. Client flag không được dùng để bypass server readback.
+4. **Blocked:** trình manifest và chi phí worker pilot48–72h trước deploy; chỉ tạo dịch vụ/mở enrollment/ON khi có duyệt riêng và các gate đạt. Azure worker compute dự toán~20USD chưa bao gồm API/registry/storage/log/Firebase; không cam kết total bill.
+5. **Blocked:** deploy có kiểm rollback, runtime đúng artifact trên OnePlus + runtime thứ hai, hai membership/code rotation, chatbot confirmation và hardware giám sát hiện tại. Chưa có ON→timer→OFF/telemetry thật cho source98; không tuyên bố Shelly-ready, chatbot relay-ready hoặc release-ready.
+
+---
+
+## 97. Task Completion Log — Thiết kế UI/UX & Nâng cấp Giao diện Chatbot AI BatteryBot (07/10/2026)
+
+### 97.1. Tổng quan & Kết quả nghiệm thu
+- **Mục tiêu**: Tập trung toàn diện vào UI/UX và Design cho giao diện Chatbot AI (`BatteryBot`) trong ứng dụng Flutter, tuân thủ ngôn ngữ thiết kế Electric EV Cockpit hiện đại (Electric Cyan/Emerald neon, Frosted Glass, micro-interactions, responsive 320/390/412dp với text scale 1.5x) và tự kiểm thử trực tiếp trên điện thoại OnePlus 9 Pro (LE2125, Android 14 API 34, adb `8bdf16d1`).
+- **Kết quả Automated Tests**: **13/13 widget tests PASS (exit 0)** trong cả 2 test suites `interactive_assistant_sheet_test.dart` và `assistant_sheet_lifecycle_test.dart`.
+- **Kết quả Runtime ADB trên OnePlus 9 Pro**: Rebuild APK debug, cài đặt qua ADB stream thành công, kiểm thử live toàn bộ luồng: mở sheet, hiển thị pin xe, gửi chip gợi ý, tương tác feedback Thumbs Up (active emerald), sao chép nội dung, gõ phím với focus ring neon, gửi tin nhắn mới và nút New Chat reset hội thoại. 0 crash, 0 ANR, 0 lỗi overflow.
+
+### 97.2. Chi tiết các thành phần UI/UX đã nâng cấp
+1. **`ChatbotGlassTheme` (`theme/chatbot_glass_theme.dart`)**:
+   - `userBubbleDecoration`: Chuyển từ màu xanh iMessage truyền thống sang gradient Electric EV Teal-Emerald (`0xFF0D9488` → `0xFF059669`), bo góc bất đối xứng (`topLeft: 20`, `topRight: 6`, `bottom: 20`), đổ bóng neon emerald mềm mại (`blur: 12`, `alpha: 0.35`).
+   - `botBubbleDecoration`: Nâng cấp mặt kính mờ Cockpit Frosted Glass (`0xFF131D2E`, `alpha: 0.88`), viền phát quang cyan/emerald tinh tế (`0xFF10B981`, `alpha: 0.22`), bóng đổ sâu tăng độ tương phản.
+2. **`QuickReplyChips` (`widgets/quick_reply_chips.dart`)**:
+   - Thiết kế dạng capsule kính mờ cao cấp với viền bo tròn (`Radius.circular(20)`), viền emerald neon nổi bật (`0xFF10B981`, `alpha: 0.35`), typography `12.5px`, `FontWeight.w600`, khoảng cách chữ sắc nét.
+3. **`ChatMessageBubble` (`widgets/chat_message_bubble.dart`)**:
+   - Thay thế các icon xám mờ nhạt cũ bằng thanh công cụ nút mini-pill kính mờ sang trọng (`_BubbleActionButton`, `_FeedbackButton`).
+   - Nút Like/Dislike phản hồi tương tác tức thì: khi được chọn (`isSelected`), chuyển sang trạng thái phát quang xanh emerald neon (`0xFF10B981`) với nền pill xanh trong suốt và icon active.
+   - Bảo toàn semantics và vùng chạm accessibility chuẩn 48x48dp.
+4. **`InteractiveAssistantSheet` (`assistant_sheet.dart`)**:
+   - Khung viền BottomSheet phủ kính obsidian tối màu (`0xFF0C1322`) với viền đỉnh phát quang emerald (`0xFF10B981`, `alpha: 0.25`).
+   - Nhãn nguồn pin (`assistant_battery_source`) hiển thị màu xanh ngọc emerald nổi bật (`0xFF10B981`).
+   - Thanh nhập liệu Command Dock đáy màn hình: khung nhập dạng capsule kính sẫm màu với viền sáng rực rỡ khi focus (`focusedBorder: 0xFF10B981, width: 1.5`), nút Send mũi tên xanh ngọc neon và nút micro ghi âm hỗ trợ trạng thái voice.
+   - Bảo toàn 100% các Test Key: `assistant_input_field`, `assistant_send_button`, `assistant_new_chat_button`, `assistant_history_button`, `assistant_personalization_button`, `assistant_vehicle_label`, `assistant_battery_source`, `assistant_close_button`.
+   - Giữ nguyên thông điệp chào mừng chuẩn: `'Chào bạn, mình hỗ trợ về xe, pin, sạc và Shelly. Bạn muốn xem gì?'`.
+
+### 97.3. Bằng chứng kiểm thử tự động (Automated Verification)
+- `test/widget/interactive_assistant_sheet_test.dart`: 1/1 Pass
+- `test/widget/assistant_sheet_lifecycle_test.dart`: 12/12 Pass
+  - Stream error visibility & lifecycle isolation: Pass
+  - Credential masking: Pass
+  - Late suggestion layout stability: Pass
+  - Short greeting test: Pass
+  - Broken history retry: Pass
+  - Double tap history debouncing: Pass
+  - Multi-screen wrap tests (320dp, 390dp, 412dp) với font scale 1.5 và keyboard 300dp: Pass, 0 RenderFlex overflow.
+
+### 97.4. Bằng chứng kiểm thử phần cứng thật qua ADB (OnePlus 9 Pro)
+- Thiết bị: OnePlus 9 Pro LE2125, Android 14 (API 34), serial `8bdf16d1`.
+- Thao tác thực hiện và hình ảnh lưu trữ tại `scratch/`:
+  - `screen_new_chatbot_opened.png`: Mở BatteryBot, hiển thị Mascot happy, pin xe VinFast Feliz 100% màu xanh ngọc, danh sách chip gợi ý mới và bong bóng tin nhắn chào mừng.
+  - `screen_thumb_up.png`: Chạm nút Thumbs Up dưới câu trả lời của Bot, nút chuyển thành công sang trạng thái xanh emerald neon rực rỡ (`isSelected`).
+  - `screen_copied.png`: Chạm nút Copy, clipboard hệ thống sao chép chính xác nội dung tin nhắn.
+  - `screen_chip_sent.png`: Chạm chip `Xem pin ở đâu?`, bong bóng tin nhắn người dùng xuất hiện với gradient xanh ngọc bích, Bot trả lời kèm nút hành động `→ Xem màn hình Tổng quan`.
+  - `screen_typing.png`: Chạm ô nhập văn bản, bàn phím Gboard đẩy Command Dock lên mượt mà, viền focus màu xanh neon kích hoạt, nhập câu hỏi `Pin dang sac ra sao`.
+  - `screen_sent_enter.png`: Gửi tin nhắn, hiển thị bong bóng người dùng và câu trả lời tương ứng từ FAQ engine.
+  - `screen_new_chat.png`: Chạm nút New Chat trên header, hội thoại được làm mới gọn gàng về tin nhắn ban đầu.
+
+---
+
 ## 96. Task Completion Log — mã Shelly, trạng thái chung và adapter BatteryBot (07/10/2026)
 
 ### 96.1. Kết luận và giới hạn hiện hành
@@ -52,6 +193,56 @@ Bằng chứng tại `docs/qa_evidence/app-review-2026-10-05/`; mỗi runner log
 - **Implemented — unverified, source kế tiếp+133:** `smart_charging_control_screen.dart` bỏ fallback label; mọi trạng thái liên kết lấy cùng `connectionLabel` như Settings/Setup, telemetry/session riêng không tự chứng nhận enrollment. `more_screen.dart` restore read-only theo xe khi mở/đổi xe; `settings_screen.dart` restore scoped xe đã chọn. Test widget mới kiểm transport online riêng vẫn unlinked và shared connected→unknown cập nhật header. Safety/relay policy không đổi; đang chạy gates và build/hash riêng+133, không dùng ảnh+132 để nghiệm thu sửa này.
 - Lệnh test targeted đầu29Pass/1file-loadFail do tên file `more_screen_layout_test.dart` không tồn tại; không bug app/không bỏ test thật. Full suite tiếp theo bao gồm `more_screen_test.dart`. Helper UI lần đầu lỗi UnicodeEncodeError ở terminal cp1252; chạy Python UTF8 đọc được. Thêm phone masking vào helper; chỉ ghi nhãn Shelly đã chọn trong evidence, không lưu full hierarchy/PII/credential. Không quy lỗi công cụ thành crash app.
 - **Flutter CLI analyzer root lượt này Timeout120s/exit1** (`shelly-sync-96-analyze-flutter-root-20261007.log`,120,59s). Direct `lib test` Pass không xóa blocker CLI này. Giữ Azure worker/hardware blockers96.4.
+
+### 96.6. QA +133 — sửa nhãn đạt, phát hiện legacy enrollment riêng
+
+- Source SHA hiện hành tại manifest/build+133 **`8be6fa07055c18e39d57b28c677035c4fa30e6ff`**; mọi production file trong manifest kiểm sau build khớp, không gắn bản+133 với SHA+132. Giữ commit/worktree hiện có, không tạo commit/reset. Full Flutter **910Pass/exit0/206,84s**; scoped UI analyzer4files **no issues/exit0/55,59s**. Toàn `lib test` sau UI sửa **Timeout120s/exit1/120,36s**, không ghi Pass theo lượt trước; log `shelly-sync-96-flutter-runtime-final-20261007.log`, `shelly-sync-96-analyze-runtime-scoped-20261007.log`, `shelly-sync-96-analyze-runtime-final-20261007.log`.
+- Build QA+133 exit0/80,16s;197.103.164bytes; SHA-256 **`3E24CF55612A9D9F3DE1C5FB77C912FA5CDE1D18995BE26A72F10D3DBA4DFFCE`**, package/version/min/target và cert như+132, code133. `install -r` đúng OnePlusLE2125 giữ data, installed hash khớp. Evidence `shelly-sync-apk-133-20261007.json`; +132 vẫn giữ như bản tái hiện bug, không ghi đè.
+- **Runtime verified hẹp:** trước khi mở chat, Sạc pin/Cài đặt cùng nhãn “Chưa kết nối Shelly”, không còn nhánh header tự nói trực tuyến. BatteryBot gửi câu QA trạng thái → API trả trạng tháiOFF/0W, app nêu nguồn máy chủ; gửi yêu cầu bật5phút → “Hãy kết nối Shelly qua máy chủ trước khi điều khiển trong chat.”, **không có thẻ ON và không xác nhận relay**. Chỉ chứng minh đọc/khóa, không chứng nhận physical OFF hoặc metering độc lập từ Shelly thật. Mẫu logcat đúng PID94dòng:0FATAL/ANR/overflow/HandshakeException/PERMISSION_DENIED/OOM; không suy thành toàn app không lỗi.
+- Read-only HTTPS desktop `/api/health=200`, `/api/ready=200`, requestId có, TLS chuẩn không bypass. Không chứng nhận TLS hai mạng/hai runtime hoặc backend Task96 đã deploy từ health200. Helper hierarchy khi chatbot mở tiếp tục CalledProcessError/không dump được; kiểm ảnh chỉ trong RAM, không lưu PII/Messenger/credential/ảnh/XML/raw log. Không coi công cụ lỗi là app Pass hoặc app crash.
+- **Source+134 — Implemented, đang kiểm:** xác định thêm đường loại `advancedDirect` binding khỏi shared restore dù server metadata vẫn có và chatbot đọc được. Thêm `serverConnectionRequired` trong enum/coordinator; cache/binding/evidence cũ được giữ, không chuyển mode tự động, không cấp ON hoặc rerun no-load. Setup hiện form mã quản trị với lời giải thích chuyển kết nối qua máy chủ thay vì bắt lại safety test. Snapshot từ chat và restore cùng phân loại legacy, tránh vừa connected vừa unlinked. Test mới giữ legacy/evidence,0safety commands và không ready; **related37Pass/exit0/29,05s**. Bản+133 không dùng để chứng nhận sửa+134; đang chạy full/analyzer và tạo artifact riêng.
+- Blocker thật của đường điều khiển: cần enrollment server hợp lệ theo xe/UID và Azure worker đã đạt gate; chưa có quyền deploy/mở policy theo96.4. Không sửa data để biến legacy thành ready, không tự xoay/đọc Cloud Key, không gọi thông tin đọc được là điều khiển được.
+
+### 96.7. Tiếp tục sau gián đoạn — QA +135 (09/10/2026)
+
+- **In progress**: tiếp tục đồng bộ Shelly/adapter chatbot, giữ nguyên toàn bộ thay đổi UI BatteryBot của Task97 và evidence trước. HEAD đọc lại `8be6fa07055c18e39d57b28c677035c4fa30e6ff`; source dirty. Bản +134 đang có trên OnePlus do lượt build khác, không dùng kết quả tests cũ để chứng nhận source UI mới. Tăng QA build lên `1.1.9+135` để truy vết riêng, không ghi đè artifact.
+- Đính chính build Task96 +134: runner **timedOut=true, exit1, elapsed775,17s** dù deadline360s; không có artifact thành công từ runner đó. APK `app-debug.apk` của lượt khác đã được lưu riêng `VinFastBattery_1.1.9+134_debug.apk`, SHA256 `C092E9EAC827CBC281A8D5807FE147A28E4DA5C092CD0DE448C79BF2A2859920`; chỉ là bảo toàn artifact, chưa chứng nhận provenance source/build của nó. Không xóa log timeout để thay bằng lời “build Pass”.
+- Source Shelly trước thay đổi UI Task97 đã đạt **911 Flutter Pass/exit0/233,16s**, scoped analyzer4files **exit0/25,95s**; analyzer toàn `lib test` vẫn **Timeout120s/exit1/120,59s**. Logs `shelly-sync-96-flutter-134-final-20261007.log`, `shelly-sync-96-analyze-134-scoped-20261007.log`, `shelly-sync-96-analyze-134-final-20261007.log`. Đang chạy lại toàn suite trên source +135 mới, không tái sử dụng 911Pass như kết quả mới.
+- OnePlus LE2125/API34 đã nhận ADB; RAM Windows còn khoảng1,8GiB. Gates chạy tuần tự, Flutter concurrency1; không đóng ứng dụng khác, không emulator/clear data. Không đọc credential/env, không redeem mã thật, không ON/OFF, không restart/deploy backend hoặc tạo resource Azure. Azure staging hardware policy giữ nguyên; worker/chi phí cần duyệt riêng theo96.4.
+- Ngày09/10 đọc lại Retail Prices API Microsoft: các mức Consumption EastAsia và điều kiện idle/free grant không đổi. Người dùng chọn **có thể dành khoảng20USD/tháng cho worker**, không phải trần chi phí toàn hệ thống hoặc quyền deploy/mở ON. Cần hoàn thiện gates worker rồi trình duyệt pilot riêng; chưa tạo resource. JSON dự toán cũ giữ ngày gốc, bổ sung ngày recheck/quyết định ngân sách.
+- **+135 intermediate:** giữ UI Task97; sửa hướng dẫn mã quản trị không đòi điện thoại cùng LAN/quyền Local Network, thêm assertions widget; tiêu đề checklist wrap. Full Flutter cuối **911Pass/exit0/294,78s**; root Flutter analyzer **Timeout120s/exit1/120,34s**. Scoped analyzer9files **exit0 nhưng có4info** (thiếu braces), không ghi No issues. Build **exit0/130,69s**; SHA256 `4CCA518B3122349EE8EBD2B7904CE4AE5201D8DD241D096A544C4163E1EBE852`,197.105.092bytes; package/min/target/cert khớp, code135. OnePlus install-r Success/installed hash khớp/giữ data. Metadata `shelly-sync-apk-135-20261009.json`; chưa dùng lượt này để chứng nhận runtime toàn bộ.
+- Source tiếp theo **+136 — In progress**: thêm braces tại3guard coordinator và1fake test, không thay behavior/không bỏ lint. Artifact135 giữ nguyên, không ghi đè. Chạy lại gates/build/hash/runtime +136; không dùng analyzer exit0 có info hoặc APK135 để tuyên bố source mới sạch.
+- Toàn Dart `analyze --fatal-infos lib test` đầu+136 **exit1/66,30s**, phát hiện thêm3info: hai nullable map elements ở `server_smart_charger_service.dart`, một braces ở `app_chat_tool_gateway.dart`. Sửa bằng null-aware elements giữ nguyên việc omit field null và braces, không bỏ lint. Chạy lại toàn `lib test` **No issues found/exit0/12,77s**, log `shelly-sync-96-analyze-136-lib-test-final-20261009.log`. Giữ log Fail đầu và Flutter CLI Timeout như vấn đề riêng; không thay lịch sử bằng Pass mới. Full Flutter/build/runtime+136 đang chạy trên manifest cuối mới.
+
+- **+136 intermediate:** fullFlutter **911Pass/exit0/300,20s**, build **exit0/64,33s**, SHA256 `E6979F13D34764E1553FF33883684A5D73121CF323F9435D422E74E1B3029964`,197.104.664bytes; package/version/cert/installed hash đúng OnePlus, giữ login/data. Production manifest295files khớp sau build, APK6textassets0findings (không toàn-binary/history audit). Metadata `shelly-sync-apk-136-20261009.json` giữ artifact riêng.
+- **Fail runtime+136:** header đúng trạng thái legacy nhưng Sạc hẹn giờ vẫn nói cần xác minh thiết bị/số đo, do lấy capability riêng thay snapshot chung. **Source+137 — In progress:** vùng kế hoạch/hẹn giờ subscribe coordinator như header; lý do khóa ưu tiên snapshot, Start chỉ mở khi shared link connected/liveOFF/không unknown cùng capabilities backend, khóa cả loading/starting/stopping. Kiểm lại link sau thẻ xác nhận trước gọi controller. Không tự ON/OFF hoặc chuyển mode. Test hồi quy unlinked→legacy(capsready vẫn khóa)→connected→unknown không phát command.
+- Targeted+137 đầu **28Pass/2Fail, exit1/30,20s**: fixture preview chưa publish liên kết hợp lệ; outgoing AnimatedSwitcher còn subscription và đọc mode mutable nên tạo hai Timed widgets khi đang transition. Sửa fixture có binding/evidence/readback thật trong mock và capture mode theo mỗi build; giữ assertions readiness/consent, không bỏ tests. Log gốc giữ `shelly-sync-96-tests-137-related-20261009.log`; đang chạy retest và gates cuối.
+- Retest targeted+137 **30Pass/exit0/20,44s**, log `shelly-sync-96-tests-137-related-recheck-20261009.log`; toàn `dart analyze --fatal-infos lib test` **No issues/exit0/104,08s**, `shelly-sync-96-analyze-137-lib-test-20261009.log`. Lần khởi chạy full Flutter đầu bị automatic approval review timeout trước CreateProcess, không có test exit code và không tính app Fail. Retry đúng một lần theo công cụ đã khởi chạy thành công; full/build/runtime137 còn đang kiểm, không dùng911Pass/136 thay137.
+
+### 96.8. Worker trước deploy — Planned, ngân sách khoảng20USD compute
+
+| Task / file kế tiếp | Gate bắt buộc, không tự bật Azure |
+|---|---|
+| `web/smart_charge_worker.py` | Reconcile đúng Device ID bất biến của từng session; không dùng binding xe đã đổi để OFF nhầm; thiếu/sai identity hoặc readback thì giữ unknown/lease. Tắt training/ingest server tự động theo kiến trúc AI local; xử lý đủ tập nonterminal và recovery sau restart. |
+| `web/shelly/repositories.py`, `service.py` | Heartbeat/lease worker có revision/freshness; ON/rearm fail-closed khi worker stale, OFF/recovery vẫn truy cập được. Registry/quyền server-only; không client boolean hoặc cached success. Health API lõi không bị một Shelly offline làm chết onboarding. |
+| Shared provider/coordination | Limiter tối thiểu1,1s dùng chung API/worker; gộp đọc, tôn trọng429/Retry-After, OFF không bị polling chờ vô hạn; tuyệt đối không retry ON. |
+| `deploy/azure/container-app.bicep` và image worker | Worker Consumption0,25vCPU/0,5GiB min1/max1, không public ingress; health/heartbeat thật, không phụ thuộc AI. Chỉ chuẩn bị source; triển khai là bước duyệt riêng sau smoke/memory/fault tests. |
+| Backend/Firestore concurrency tests | Binding đổi sau Start; sai Device ID/relay unknown; OFF mất response; worker restart/stale; hai UID/worker tranh lease; không terminal trước fresh OFF và không giải phóng khóa khi unknown. Không thay fake/in-memory tuần tự cho Emulator concurrence. |
+| Pilot và phần cứng | Trình image hash/config/chi phí rồi xin duyệt pilot48–72h, monitoring/rollback; xác nhận giám sát mới trước test không tải. Mã web→enroll→readback→mộtON/timer→OFF cần chứng minh trên artifact mới; ngân sách đã chọn không là sign-off hoặc permission mở ON. |
+
+**Blocker không được che bằng UI:** chưa có worker nghiệm thu, backend Task96 chưa deploy, legacy binding hiện chưa là server enrollment hợp lệ. Chưa chứng nhận chatbot/điện thoại điều khiển Shelly thật.
+
+### 96.9. QA +137 — snapshot dùng chung và lý do khóa hẹn giờ (09/10/2026)
+
+- **Automated verified:** `smart_charging_control_screen.dart` dùng snapshot coordinator chung cho header, kế hoạch và sạc hẹn giờ. Liên kết legacy có capabilities riêng ready vẫn không mở Start; unknown khóa lại ngay. Kiểm lại kết nối sau consent; repository/backend vẫn là nơi cấp quyền, không fallback Direct Cloud. Capture mode theo mỗi build để outgoing stream child của AnimatedSwitcher không tạo hai màn hẹn giờ khi chuyển tab.
+- Files liên quan giữ trên worktree hiện tại: `shelly_connection_state.dart`, `shelly_connection_coordinator.dart`, `shelly_connect_screen.dart`, `server_smart_charger_service.dart`, `app_chat_tool_gateway.dart`, `smart_charging_control_screen.dart`, các unit/widget tests tương ứng, `pubspec.yaml`. Hướng dẫn mã quản trị nói rõ Internet/Cloud, không bắt điện thoại cùng LAN. Không xóa profile hoặc evidence, không tự chuyển mode hay chạy safety test.
+- Related tests **30Pass/exit0/20,44s**; full Flutter **912Pass/exit0/283,84s**, `shelly-sync-96-flutter-137-final-20261009.log`. Direct Dart `analyze --fatal-infos lib test` **No issues/exit0/104,08s**. Manifest production **295files/0findings**, log `shelly-sync-96-source-manifest-137-final-20261009.log`; scan scope không thay full Git-history/APK binary audit. Giữ failures/timeout trung gian ở96.7, không thay kết quả cũ bằng Pass mới.
+- Build **exit0/65,84s**, package `com.bes.vinbatery`, version `1.1.9+137`, min26/target36,197.107.704bytes. Artifact riêng `app/build/app/outputs/flutter-apk/VinFastBattery_1.1.9+137_debug.apk`; SHA256 **`5CF78FA5B510049BE742FDEF55638374EBCA206E16B36ABCBC8431E9374184E7`**; apksigner exit0, Android Debug certSHA256 `914642716decb342ca80acece6284e69d66355bfa792f5c4779efecf16ecebeb` (QA, không phải ký beta). Manifest295files khớp sau build. APK member-name/6textassets scan **0findings/exit0**, không thay binary/history audit. Không ghi đè artifact134–136.
+- **Runtime verified hẹp:** `install -r` đúng OnePlusLE2125/API34, Success/installed baseAPKhash khớp137, giữ data/login. Sạc pin và Cài đặt cùng “Đã liên kết · Cần kết nối qua máy chủ”; hẹn giờ hiển thị “Liên kết cũ chưa cho phép điều khiển qua máy chủ. Hãy nhập mã kết nối do quản trị viên cấp.” và CTA tối/khóa. Setup “Chuyển kết nối qua máy chủ”, giữ evidence, không tự safety test; checklist Internet/Cloud, không bắt cùng Wi-Fi. Đóng/mở riêng app, cả hai màn giữ nhãn; không clear data hoặc đóng ứng dụng khác.
+- BatteryBot QA đọc trạng thái trả “Shelly đã tắt theo readback máy chủ vừa đọc. Công suất0.0W.”; yêu cầu bật5phút trả “Hãy kết nối Shelly qua máy chủ trước khi điều khiển trong chat.”, không có thẻ ON/không xác nhận. Sau chat Sạc pin vẫn giữ nhãn legacy. Đây chỉ chứng minh đường đọc/khóa UI, không phải bằng chứng physicalOFF/metrology hoặc control-ready. **0relay commands**, không redeem/enrollment/cloud mutation. Kết thúc ở Dashboard.
+- Mẫu logcat theo PID110dòng:0FATAL/ANR/overflow/HandshakeException/PERMISSION_DENIED/OOM; không suy rộng toàn app không lỗi. Chat hierarchy vẫn CalledProcessError; kiểm ảnh trong RAM, không lưu avatar Messenger/Zalo, PII, ảnh/XML/raw log. Parser regex installed-version lần đầu lỗi trước launch; sửa parser xác minh code137/hash khớp, không tính app Fail. Metadata `shelly-sync-apk-137-20261009.json` ghi scope/kết quả/blocker. `git diff --check` scoped exit0, giữ cảnh báo CRLF, không reset.
+- Backend/gateway/Rules/dashboard không đổi source trong continuation09/10; kết quả07/10 ở96.3 là lịch sử chứ không phải chạy lại mới. Không dùng APK136 hoặc911tests cũ chứng nhận137. Ma trận offline/2runtime/2membership/code rotation/TalkBack chưa nghiệm thu lượt này.
+- **Blocked:** legacy binding cần enrollment máy chủ hợp lệ; Task96 backend chưa deploy, worker chưa có heartbeat/fail-closed/recovery nghiệm thu. Không redeem mã thật, không ON/OFF, không cloud restart/deploy/resource creation trong lượt này. Chưa chứng nhận chatbot hoặc app điều khiển Shelly thật.
 
 ## 95. Task Completion Log — BatteryBot sửa/hủy lịch và provenance Feliz 2025 (07/10/2026)
 

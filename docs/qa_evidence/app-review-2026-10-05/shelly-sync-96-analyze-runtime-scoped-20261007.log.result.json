@@ -1,0 +1,17 @@
+{
+  "command": [
+    "C:\\flutter\\bin\\cache\\dart-sdk\\bin\\dart.exe",
+    "analyze",
+    "lib/features/ai/smart_charging_control_screen.dart",
+    "lib/features/settings/settings_screen.dart",
+    "lib/features/more/more_screen.dart",
+    "test/widget/smart_charging_control_screen_test.dart"
+  ],
+  "cwd": "app",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\shelly-sync-96-analyze-runtime-scoped-20261007.log",
+  "timeoutSeconds": 120,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 55.59
+}

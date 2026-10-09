@@ -348,8 +348,8 @@ class ServerSmartChargerService {
       '/api/shelly/redeem-code',
       body: {
         'code': code.trim().toUpperCase(),
-        if (vehicleId != null) 'vehicleId': vehicleId,
-        if (operationId != null) 'operationId': operationId,
+        'vehicleId': ?vehicleId,
+        'operationId': ?operationId,
       },
       headers: {'Idempotency-Key': ?operationId},
     );

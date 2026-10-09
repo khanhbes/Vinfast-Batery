@@ -1,0 +1,15 @@
+{
+  "command": [
+    "C:\\flutter\\bin\\flutter.bat",
+    "test",
+    "--no-pub",
+    "--concurrency=1"
+  ],
+  "cwd": "app",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\shelly-sync-96-flutter-136-final-20261009.log",
+  "timeoutSeconds": 480,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 300.2
+}

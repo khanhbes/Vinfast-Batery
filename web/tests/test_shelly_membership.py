@@ -103,6 +103,8 @@ def test_metadata_contention_retry_is_bounded_and_does_not_retry_other_errors(mo
 
 def test_second_member_stops_shared_device_without_receiving_private_history():
     repo = SmartChargeRepository()
+    repo.claim_worker_lease("qa-worker")
+    repo.publish_worker_heartbeat("qa-worker", healthy=True)
     provider = FakeShellyProvider()
     service = SmartChargeService(repo, provider, lambda _: {'predictedDurationSeconds': 300}, sleeper=lambda _: None)
     for uid in ['a', 'b']:
@@ -186,6 +188,8 @@ def test_changed_confirmation_device_is_rejected_before_any_hardware_command():
 def test_shared_capabilities_block_new_on_and_hide_other_members_session(monkeypatch):
     monkeypatch.delenv('AZURE_STAGING_HARDWARE_DISABLED', raising=False)
     repo = SmartChargeRepository()
+    repo.claim_worker_lease("qa-worker")
+    repo.publish_worker_heartbeat("qa-worker", healthy=True)
     provider = FakeShellyProvider()
     service = SmartChargeService(repo, provider, lambda _: {}, sleeper=lambda _: None)
     for uid in ['a', 'b']:
@@ -209,6 +213,8 @@ def test_shared_capabilities_block_new_on_and_hide_other_members_session(monkeyp
 @pytest.mark.parametrize('online,device_id', [(False, 'test-plug'), (True, 'other-plug')])
 def test_offline_or_wrong_device_off_readback_never_finalizes_session(online, device_id):
     repo = SmartChargeRepository()
+    repo.claim_worker_lease("qa-worker")
+    repo.publish_worker_heartbeat("qa-worker", healthy=True)
     provider = FakeShellyProvider()
     service = SmartChargeService(repo, provider, lambda _: {}, sleeper=lambda _: None)
     repo.save_binding('a', provider.list_devices('a')[0])

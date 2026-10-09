@@ -1,0 +1,21 @@
+{
+  "command": [
+    "python",
+    "-m",
+    "pytest",
+    "tests/test_shelly_cloud_first.py",
+    "tests/test_shelly_membership.py",
+    "tests/test_multivehicle_smart_charge_v4.py",
+    "tests/test_history_retention_v4.py",
+    "tests/test_shadow_and_recovery.py",
+    "-q",
+    "--basetemp=.pytest_worker_98_related_20261009"
+  ],
+  "cwd": "web",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\shelly-worker-98-related-initial-20261009.log",
+  "timeoutSeconds": 180,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 16.45
+}

@@ -564,12 +564,13 @@ class AppChatToolGateway implements ChatToolGateway {
       if (evidence['bindingOnlyStop'] == true) {
         final caps = await repo.capabilities(vehicleId: vehicle.vehicleId);
         _guard(owner, vehicle.vehicleId, generation);
-        if (!caps.canManualOff)
+        if (!caps.canManualOff) {
           return _result(
             false,
             'Máy chủ chưa cho phép dừng bộ sạc này.',
             'blocked',
           );
+        }
         _connections.markControlUnknown(
           uid: owner,
           vehicleId: vehicle.vehicleId,

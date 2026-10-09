@@ -461,19 +461,40 @@ class _BubbleActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     return Tooltip(
       message: tooltip,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         child: SizedBox(
           width: 48,
           height: 48,
           child: Center(
-            child: Icon(
-              icon,
-              size: 13,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.42),
+            child: Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.06)
+                    : Colors.black.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : Colors.black.withValues(alpha: 0.06),
+                  width: 1,
+                ),
+              ),
+              child: Center(
+                child: Icon(
+                  icon,
+                  size: 14,
+                  color: isDark
+                      ? const Color(0xFF94A3B8)
+                      : theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+              ),
             ),
           ),
         ),
@@ -498,6 +519,7 @@ class _FeedbackButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -509,12 +531,36 @@ class _FeedbackButton extends StatelessWidget {
           width: 48,
           height: 48,
           child: Center(
-            child: Icon(
-              isSelected ? activeIcon : icon,
-              size: 13,
-              color: isSelected
-                  ? theme.colorScheme.primary
-                  : theme.colorScheme.onSurface.withValues(alpha: 0.4),
+            child: Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? const Color(0xFF10B981).withValues(alpha: 0.20)
+                    : (isDark
+                        ? Colors.white.withValues(alpha: 0.06)
+                        : Colors.black.withValues(alpha: 0.05)),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isSelected
+                      ? const Color(0xFF10B981).withValues(alpha: 0.45)
+                      : (isDark
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : Colors.black.withValues(alpha: 0.06)),
+                  width: 1,
+                ),
+              ),
+              child: Center(
+                child: Icon(
+                  isSelected ? activeIcon : icon,
+                  size: 14,
+                  color: isSelected
+                      ? const Color(0xFF10B981)
+                      : (isDark
+                          ? const Color(0xFF94A3B8)
+                          : theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+                ),
+              ),
             ),
           ),
         ),

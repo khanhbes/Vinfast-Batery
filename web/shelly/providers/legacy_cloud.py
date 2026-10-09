@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import time
+import hashlib
 from urllib.parse import urlparse
 
 import requests
@@ -9,6 +10,7 @@ import requests
 from ..models import DeviceBinding, DeviceStatus
 from ..rate_limiter import PerDeviceRateLimiter
 from .base import ProviderError
+from .vault_cloud import VaultCloudControlProvider
 
 
 def _allowed_host(raw: str) -> str:
@@ -23,32 +25,15 @@ def _allowed_host(raw: str) -> str:
     return value
 
 
-def _find_switch(value):
-    if isinstance(value, dict):
-        direct = value.get("switch:0")
-        if isinstance(direct, dict):
-            return direct
-        if isinstance(value.get("output"), bool):
-            return value
-        for child in value.values():
-            found = _find_switch(child)
-            if found is not None:
-                return found
-    if isinstance(value, list):
-        for child in value:
-            found = _find_switch(child)
-            if found is not None:
-                return found
-    return None
-
-
-class LegacyCloudControlProvider:
+class LegacyCloudControlProvider(VaultCloudControlProvider):
     """Single-account pilot provider; secrets remain server-side in env vars."""
 
     name = "legacy"
     supports_status = True
     supports_manual_off = True
-    supports_manual_on = True
+    # Env-backed legacy credentials have no cross-worker authorization/limiter
+    # contract. Retain read/OFF recovery, never energize through this adapter.
+    supports_manual_on = False
     supports_device_timer = True
 
     def __init__(self, host: str | None = None, auth_key: str | None = None, session=None, limiter=None):
@@ -57,10 +42,15 @@ class LegacyCloudControlProvider:
         if not self._auth_key:
             raise ProviderError("invalidProviderConfig", "Thiếu SHELLY_LEGACY_AUTH_KEY")
         self._http = session or requests.Session()
-        self._limiter = limiter or PerDeviceRateLimiter()
+        self._limiter = limiter or PerDeviceRateLimiter(interval_seconds=1.1)
+        self.clock = time.time
+        self._rate_key = hashlib.sha256(f"{self.host}|{self._auth_key}".encode()).hexdigest()
 
     def _post(self, binding: DeviceBinding, path: str, payload: dict) -> dict:
         def send():
+            guard = getattr(self, "worker_lease_guard", None)
+            if guard is not None:
+                guard()
             try:
                 response = self._http.post(
                     f"{self.host}{path}",
@@ -74,7 +64,7 @@ class LegacyCloudControlProvider:
                 raise ProviderError("needsReauthentication", "Shelly Cloud key đã hết hiệu lực")
             if response.status_code == 429:
                 raise ProviderError("cloudRateLimited", "Shelly Cloud đang giới hạn request", True)
-            if not 200 <= response.status_code < 300:
+            if response.status_code != 200:
                 raise ProviderError("deviceOffline", "Shelly Cloud không điều khiển được thiết bị", True)
             try:
                 data = response.json()
@@ -87,46 +77,18 @@ class LegacyCloudControlProvider:
             # switch parser; control commands commonly return an object.
             return {"devices": data} if isinstance(data, list) else data
 
-        return self._limiter.run(binding.device_id, send)
+        return self._limiter.run(self._rate_key, send)
 
     def list_devices(self, uid: str) -> list[DeviceBinding]:
         return []
 
     def get_status(self, binding: DeviceBinding) -> DeviceStatus:
-        data = self._post(binding, "/v2/devices/api/get", {
-            "ids": [binding.device_id],
-            "select": ["status", "settings"],
-        })
-        switch = _find_switch(data)
-        if not switch:
-            devices = data.get("devices") if isinstance(data, dict) else None
-            if isinstance(devices, list) and any(item.get("online") in (0, False) for item in devices if isinstance(item, dict)):
-                raise ProviderError("deviceOffline", "Shelly đang offline trên Cloud", True)
-            raise ProviderError("malformedProviderResponse", "Không có switch:0 trong status")
-        energy = switch.get("aenergy") or {}
-        temperature = switch.get("temperature")
-        timer_remaining = switch.get("timer_remaining")
-        if timer_remaining is None and switch.get("timer_started_at") is not None and switch.get("timer_duration") is not None:
-            timer_remaining = max(0, float(switch["timer_duration"]) - (time.time() - float(switch["timer_started_at"])))
-        return DeviceStatus(
-            online=True,
-            relay=bool(switch.get("output")),
-            timer_remaining=max(0, int(float(timer_remaining or 0))),
-            power_w=float(switch.get("apower") or 0),
-            voltage_v=float(switch.get("voltage") or 0),
-            current_a=float(switch.get("current") or 0),
-            temperature_c=float(temperature.get("tC")) if isinstance(temperature, dict) and temperature.get("tC") is not None else None,
-            energy_wh=float(energy.get("total") or 0),
-            device_id=binding.device_id,
-        )
+        # Exactly the same identity/relay/meter/timer checks as the vault path;
+        # never synthesize OFF or zero readings from an incomplete payload.
+        return super().get_status(binding)
 
     def turn_on_with_timer(self, binding: DeviceBinding, duration_seconds: int) -> None:
-        self._post(binding, "/v2/devices/api/set/switch", {
-            "id": binding.device_id,
-            "channel": 0,
-            "on": True,
-            "toggle_after": duration_seconds,
-        })
+        raise ProviderError("legacyEnrollmentRequired", "Hãy kết nối Shelly qua mã quản trị trước khi bật sạc")
 
     def turn_off(self, binding: DeviceBinding) -> None:
         self._post(binding, "/v2/devices/api/set/switch", {

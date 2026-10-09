@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from flask import Flask
 
 from shelly.crypto import redact_secret
-from shelly.models import DeviceBinding, utcnow
+from shelly.models import DeviceBinding, DeviceStatus, utcnow
 from shelly.providers import FakeShellyProvider
 from shelly.rate_limiter import PerDeviceRateLimiter
 from shelly.repositories import SmartChargeRepository
@@ -32,6 +32,8 @@ def predictor(_payload):
 class SmartChargeServiceTests(unittest.TestCase):
     def setUp(self):
         self.repo = SmartChargeRepository()
+        self.repo.claim_worker_lease("qa-worker")
+        self.repo.publish_worker_heartbeat("qa-worker", healthy=True)
         self.provider = FakeShellyProvider()
         self.service = SmartChargeService(self.repo, self.provider, predictor, sleeper=lambda _: None)
         self.binding = self.provider.list_devices("user-a")[0]
@@ -63,7 +65,13 @@ class SmartChargeServiceTests(unittest.TestCase):
         db = Mock()
         db.collection_group.return_value = query
         self.repo.db = db
-        with self.assertRaises(KeyboardInterrupt):
+        # This test isolates query construction; lease contention is tested
+        # with real transactions in the dedicated worker/Emulator suites.
+        with patch.object(self.repo, "claim_worker_lease", return_value=1), \
+                patch.object(self.repo, "worker_lease_deadline", return_value=utcnow() + timedelta(seconds=180)), \
+                patch.object(self.repo, "renew_worker_lease", return_value=utcnow() + timedelta(seconds=180)), \
+                patch.object(self.repo, "publish_worker_heartbeat"), \
+                patch.object(self.repo, "release_worker_lease"), self.assertRaises(KeyboardInterrupt):
             run_forever(self.service)
         states = query.where.call_args.args[2]
         self.assertEqual(set(states), {'arming', 'starting', 'active', 'stopping', 'unknown'})
@@ -328,8 +336,8 @@ class LegacyCloudResponseTests(unittest.TestCase):
             status_code = 200
             def json(self):
                 return [{
-                    "id": "plug-id", "online": 1,
-                    "status": {"switch:0": {"output": False, "voltage": 231.2, "aenergy": {"total": 9.5}}},
+                    "id": "plug-id", "online": 1, "code": "S3PL-00112EU", "type": "relay",
+                    "status": {"switch:0": {"output": False, "apower": 0, "current": 0, "voltage": 231.2, "aenergy": {"total": 9.5}}},
                 }]
 
         class Session:
@@ -355,8 +363,10 @@ class LegacyCloudResponseTests(unittest.TestCase):
             status_code = 200
             def json(self):
                 import time
-                return [{"id": "plug-id", "online": 1, "status": {"switch:0": {
+                return [{"id": "plug-id", "online": 1, "code": "S3PL-00112EU", "type": "relay",
+                         "status": {"sys": {"unixtime": time.time()}, "switch:0": {
                     "output": True, "timer_started_at": time.time() - 30, "timer_duration": 120,
+                    "apower": 0, "current": 0, "voltage": 230, "aenergy": {"total": 0},
                 }}}]
 
         class Session:
@@ -371,7 +381,7 @@ class LegacyCloudResponseTests(unittest.TestCase):
         self.assertGreaterEqual(status.timer_remaining, 89)
         self.assertLessEqual(status.timer_remaining, 90)
 
-    def test_nested_switch_component_is_parsed(self):
+    def test_unidentified_nested_switch_cannot_prove_readback(self):
         from shelly.providers.legacy_cloud import LegacyCloudControlProvider
 
         class Response:
@@ -391,10 +401,10 @@ class LegacyCloudResponseTests(unittest.TestCase):
             host="https://shelly-test-eu.shelly.cloud", auth_key="test-only",
             session=Session(), limiter=PerDeviceRateLimiter(interval_seconds=0),
         )
-        status = provider.get_status(DeviceBinding("plug-id", "Plug", "S3PL-00112EU", 3, "legacy"))
-        self.assertTrue(status.relay)
-        self.assertEqual(status.timer_remaining, 42)
-        self.assertEqual(status.power_w, 812.5)
+        from shelly.providers import ProviderError
+        with self.assertRaises(ProviderError) as caught:
+            provider.get_status(DeviceBinding("plug-id", "Plug", "S3PL-00112EU", 3, "legacy"))
+        self.assertEqual(caught.exception.code, "deviceNotFound")
 
 
 class RateLimiterTests(unittest.TestCase):
@@ -415,6 +425,8 @@ class RateLimiterTests(unittest.TestCase):
 class RouteContractTests(unittest.TestCase):
     def setUp(self):
         self.repo = SmartChargeRepository()
+        self.repo.claim_worker_lease("qa-worker")
+        self.repo.publish_worker_heartbeat("qa-worker", healthy=True)
         self.provider = FakeShellyProvider()
         self.service = SmartChargeService(self.repo, self.provider, predictor, sleeper=lambda _: None)
         self.repo.register_vehicle_owner("owner", "VF-001")
@@ -442,6 +454,7 @@ class RouteContractTests(unittest.TestCase):
         self.assertEqual(competing.status_code, 409)
         missing_readback = self.client.post("/api/shelly/devices/plug-1/release-control", json={"operationId": "op-1"})
         self.assertEqual(missing_readback.status_code, 400)
+        self.provider.get_status = lambda _: DeviceStatus(online=True, relay=False, device_id="plug-1")
         released = self.client.post("/api/shelly/devices/plug-1/release-control", json={
             "operationId": "op-1", "relayOffVerified": True,
         })
@@ -672,21 +685,24 @@ class SecurityTests(unittest.TestCase):
 
 class WorkerMultiVehicleTests(unittest.TestCase):
     def test_reconcile_checks_every_active_vehicle_session_binding(self):
-        first = SimpleNamespace(vehicle_id="VF-A", session_id="s-a")
-        second = SimpleNamespace(vehicle_id="VF-B", session_id="s-b")
-        repository = SimpleNamespace(active_sessions=lambda uid: [first, second])
+        first = SimpleNamespace(vehicle_id="VF-A", device_id="plug-a", session_id="s-a")
+        second = SimpleNamespace(vehicle_id="VF-B", device_id="plug-b", session_id="s-b")
+        repository = SimpleNamespace(active_sessions=lambda uid, strict: [first, second])
         provider = SimpleNamespace(
-            get_status=lambda binding: SimpleNamespace(relay=True, timer_remaining=120),
+            get_status=lambda binding: SimpleNamespace(device_id=binding.device_id, online=True, relay=True, timer_remaining=120),
         )
         requested = []
         service = SimpleNamespace(
             repository=repository,
             provider=provider,
-            binding=lambda uid, vehicle_id: requested.append(vehicle_id) or object(),
+            session_binding=lambda uid, session: requested.append(session.device_id) or SimpleNamespace(device_id=session.device_id),
+            _status_matches_device=lambda status, device_id: status.device_id == device_id,
+            _apply_safety=lambda *args: None,
+            _reconcile_with_status=lambda uid, status, vehicle_id, session: session,
         )
         result = reconcile_once(service, "owner")
         self.assertIs(result, first)
-        self.assertEqual(requested, ["VF-A", "VF-B"])
+        self.assertEqual(requested, ["plug-a", "plug-b"])
 
 
 if __name__ == "__main__":
