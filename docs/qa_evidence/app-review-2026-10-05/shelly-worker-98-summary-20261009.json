@@ -1,0 +1,62 @@
+{
+  "task": 98,
+  "date": "2026-10-09",
+  "sourceHead": "8be6fa07055c18e39d57b28c677035c4fa30e6ff",
+  "branch": "deploy/azure-student",
+  "sourceState": "dirty working tree, previous changes preserved",
+  "status": "Automated verified for local guards only",
+  "sourceManifestLog": "shelly-worker-98-source-hygiene-final-20261009.log",
+  "changedAreas": [
+    "web/smart_charge_worker.py",
+    "web/shelly/service.py",
+    "web/shelly/repositories.py",
+    "web/shelly/routes.py",
+    "web/shelly/providers/legacy_cloud.py",
+    "web/shelly/providers/vault_cloud.py",
+    "web/firestore.rules",
+    "web/rules_tests/rules.test.js",
+    "web/.env.docker.example",
+    "web/tests/test_smart_charge_worker_safety.py",
+    "web/tests/test_shelly_membership_emulator.py",
+    "web/tests/test_shelly_cloud_first.py",
+    "web/tests/test_shelly_membership.py",
+    "web/tests/test_multivehicle_smart_charge_v4.py",
+    "web/tests/test_history_retention_v4.py",
+    "tools/check_batterybot_source.py",
+    "PROJECT_STATUS.md",
+    "docs/specs/AI_CHATBOT_PERSONALIZATION.md"
+  ],
+  "gates": {
+    "backend": {"passed": 411, "skipped": 9, "warnings": 2, "exitCode": 0, "timedOut": false, "elapsedSeconds": 29.91, "log": "shelly-worker-98-backend-verified-20261009.log"},
+    "rulesAndTransactions": {"rulesAssertions": 43, "transactionPassed": 9, "exitCode": 0, "timedOut": false, "elapsedSeconds": 48.25, "log": "shelly-worker-98-rules-transactions-cachefix-20261009.log"},
+    "gateway": {"passed": 59, "warnings": 1, "exitCode": 0, "timedOut": false, "elapsedSeconds": 11.03, "log": "shelly-worker-98-gateway-20261009.log"},
+    "scopedSourceHygiene": {"filesScanned": 297, "findings": 0, "exitCode": 0, "elapsedSeconds": 0.59},
+    "scopedDiffCheck": {"exitCode": 0},
+    "flutterAndDashboard": {"status": "not rerun; no source changes in those areas this task"}
+  },
+  "intermediateFailuresPreserved": [
+    {"log": "shelly-worker-98-backend-final-20261009.log", "passed": 382, "failed": 5, "skipped": 8, "exitCode": 1, "cause": "LAN operation lease incorrectly treated as a charging session"},
+    {"log": "shelly-worker-98-rules-transactions-final-20261009.log", "exitCode": 1, "cause": "sandbox EPERM reading Firebase CLI config"},
+    {"log": "shelly-worker-98-rules-transactions-recheck-20261009.log", "transactionPassed": 8, "transactionFailed": 1, "exitCode": 1, "cause": "process-local stale lease blocked claim after another process released it"}
+  ],
+  "safetyScope": {
+    "physicalCommandsSent": 0,
+    "productionDatabaseWrites": 0,
+    "cloudDeployments": 0,
+    "resourceCreations": 0,
+    "deviceOrEmulatorChanges": 0,
+    "realEnvChanges": 0,
+    "azureHardwarePolicy": "remain disabled",
+    "firestoreEmulatorProject": "vinfast-rules-test",
+    "costApproval": "approximately 20 USD/month worker budget only; not deployment or ON approval"
+  },
+  "apk": {"builtThisTask": false, "previousInstalledVersion": "1.1.9+137", "evidenceAppliesToNewBackend": false},
+  "blockers": [
+    "Exclusive worker lease, container health probe, image boot and RAM measurement",
+    "Fresh Safe Boot/config fingerprint gate for every backend ON",
+    "Shared OFF priority, polling coalescing and Retry-After handling",
+    "Complete revision CAS, durable lease recovery and scan pagination",
+    "Explicit approval and verified gates before Azure pilot deployment",
+    "Two runtime enrollment/code rotation tests and current supervised hardware sign-off"
+  ]
+}

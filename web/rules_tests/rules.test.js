@@ -243,6 +243,15 @@ async function run() {
       doc(aliceDb, 'users/alice/shellyDevices/forged-device'),
       { noLoadTestVerified: true, acknowledgedCodeVersion: 999 },
     ));
+    await assertFails(setDoc(
+      doc(aliceDb, 'smartChargeWorkerHealth/qa-staging'),
+      { schemaVersion: 1, healthy: true, workerId: 'forged-worker', updatedAt: new Date() },
+    ));
+    await assertFails(getDoc(doc(aliceDb, 'smartChargeWorkerHealth/qa-staging')));
+    await assertFails(setDoc(doc(aliceDb, 'smartChargeWorkerLeases/qa-staging'), {
+      scope: 'qa-staging', workerId: 'forged-worker', epoch: 1, expiresAt: new Date(),
+    }));
+    await assertFails(getDoc(doc(aliceDb, 'smartChargeWorkerLeases/qa-staging')));
     console.log(`Firestore Rules: ${assertionCount} allow/deny assertions passed.`);
   } finally {
     await teardown();

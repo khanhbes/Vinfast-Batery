@@ -8,104 +8,138 @@ from __future__ import annotations
 import time
 import statistics
 import hashlib
+import uuid
 
 from shelly.models import utcnow, NONTERMINAL_SESSION_STATES
 from shelly.providers import ProviderError
 from shelly.personal_model_registry import PersonalModelRegistry, validate_candidate
 
 
-def reconcile_once(service, uid: str):
+def reconcile_once(service, uid: str, *, lease_guard=None):
     # V4 accounts may have independent sessions for multiple vehicles. Never
     # reconcile an arbitrary account-level "first" session or use another
     # vehicle's binding as a fallback.
-    sessions = service.repository.active_sessions(uid)
+    sessions = service.repository.active_sessions(uid, strict=True)
     if not sessions:
         return None
     reconciled = []
     for session in sessions:
-        binding = service.binding(uid, session.vehicle_id)
+        if lease_guard is not None:
+            lease_guard()
+        binding = service.session_binding(uid, session)
         if not binding:
-            reconciled.append(session)
+            reconciled.append(service.mark_session_unknown(uid, session, "bindingChanged"))
             continue
-        reconciled.append(_reconcile_session(service, uid, session, binding))
+        reconciled.append(_reconcile_session(service, uid, session, binding, lease_guard=lease_guard))
     # Legacy callers expect one session; all sessions were still processed.
     return reconciled[0] if reconciled else None
 
 
-def _reconcile_session(service, uid: str, session, binding):
+def _reconcile_session(service, uid: str, session, binding, *, lease_guard=None):
     try:
         status = service.provider.get_status(binding)
-    except ProviderError:
-        return session
-    if status.relay and status.timer_remaining <= 0:
-        try:
-            service.provider.turn_off(binding)
-        except ProviderError:
-            session.last_error = "relayUnverified"
-            service.repository.save_session(uid, session)
-            return session
+    except ProviderError as error:
+        if lease_guard is not None:
+            lease_guard()
+        return service.mark_session_unknown(uid, session, error.code)
+    if lease_guard is not None:
+        lease_guard()
+    if not service._status_matches_device(status, session.device_id):
+        return service.mark_session_unknown(uid, session, "deviceUnverified")
+    service._apply_safety(uid, binding, status)
     # Reuse the service terminal path so the last meter reading, lease release,
     # vehicle SOC projection and post-commit notification stay identical for
     # manual stop, app polling, restart recovery and this worker.
-    reconcile = getattr(service, "_reconcile_with_status", None)
-    if callable(reconcile):
-        session = reconcile(uid, status, session.vehicle_id) or session
-    elif not status.relay:
-        # Lightweight test/local service compatibility. Production always
-        # supplies the canonical service method above.
-        now = utcnow()
-        session.state = "completed" if now >= session.effective_stop_at else "interrupted"
-        session.stop_reason = "planned_timer" if session.state == "completed" else "relay_off"
-        session.stopped_at = now
-        session.updated_at = now
-        session.relay_verified = True
-        session.version += 1
-        service.repository.save_session(uid, session)
-        service.repository.upsert_charge_log(uid, session)
-    if getattr(session, "state", "active") not in NONTERMINAL_SESSION_STATES:
-        try:
-            service.ingest_personal_session(uid, session.session_id)
-        except Exception:
-            # Terminal state and OFF verification are never rolled back by a
-            # training pipeline failure. The job can be retried independently.
-            pass
-    return session
+    # There is deliberately no compatibility terminal path without readback,
+    # and no automatic cloud AI ingestion/training in the hardware watchdog.
+    return service._reconcile_with_status(uid, status, session.vehicle_id, session=session)
 
 
-def run_forever(service, user_ids=None, interval_seconds: int = 60):
+def run_forever(service, user_ids=None, interval_seconds: int = 60, *, sleeper=time.sleep, health_monitor=None):
     """Reconcile only active sessions; never enumerate every account.
 
     Collection-group reads are bounded and run once per minute.  The legacy
     ``user_ids`` callback remains supported for tests and local deployments.
     """
-    interval_seconds = max(60, int(interval_seconds))
+    interval_seconds = max(15, min(60, int(interval_seconds)))
     backoff = interval_seconds
-    while True:
+    worker_id = str(uuid.uuid4())
+    lease_deadline = None
+    last_epoch = None
+
+    def lease_guard():
+        nonlocal lease_deadline
+        now = service.clock()
+        lease_deadline = service.repository.worker_lease_deadline(worker_id, now=now)
+        if (lease_deadline - now).total_seconds() <= 60:
+            lease_deadline = service.repository.renew_worker_lease(worker_id, now=now)
+
+    # Only this worker instance receives this guard. API OFF/recovery remains
+    # available even when the worker cannot acquire/renew its own lease.
+    previous_guard = getattr(service, "_worker_lease_guard", None)
+    previous_provider_guard = getattr(service.provider, "worker_lease_guard", None)
+    service._worker_lease_guard = lease_guard
+    service.provider.worker_lease_guard = lease_guard
+    if health_monitor:
+        health_monitor.mark_unhealthy()
+    try:
+        while True:
+            try:
+                epoch = service.repository.claim_worker_lease(worker_id, now=service.clock())
+                if epoch is None:
+                    raise RuntimeError("workerLeaseBusy")
+                if epoch != last_epoch:
+                    service.repository.publish_worker_heartbeat(worker_id, healthy=False, now=service.clock())
+                    last_epoch = epoch
+                lease_guard()
+                if user_ids is not None:
+                    for uid in set(user_ids()):
+                        reconcile_once(service, uid, lease_guard=lease_guard)
+                else:
+                    db = service.repository.db
+                    if db:
+                        query = (db.collection_group("smartChargingSessions")
+                                 .where("state", "in", sorted(NONTERMINAL_SESSION_STATES))
+                                 .limit(100))
+                        owners = set()
+                        snapshots = list(query.stream())
+                        if len(snapshots) >= 100:
+                            raise RuntimeError("workerScanCapacityReached")
+                        for snapshot in snapshots:
+                            parts = snapshot.reference.path.split('/')
+                            if len(parts) >= 4 and parts[0] == 'users':
+                                owners.add(parts[1])
+                        for uid in owners:
+                            reconcile_once(service, uid, lease_guard=lease_guard)
+                    else:
+                        raise RuntimeError("workerDatabaseUnavailable")
+                lease_guard()
+                service.repository.publish_worker_heartbeat(worker_id, healthy=True, now=service.clock())
+                if health_monitor:
+                    health_monitor.mark_healthy(lease_remaining_seconds=(lease_deadline - service.clock()).total_seconds())
+                backoff = interval_seconds
+            except Exception as error:
+                if health_monitor:
+                    health_monitor.mark_unhealthy()
+                try:
+                    service.repository.publish_worker_heartbeat(worker_id, healthy=False, now=service.clock())
+                except Exception:
+                    pass  # Never overwrite another worker's heartbeat.
+                print(f"[smart-charge-worker] transient error: {type(error).__name__}")
+                sleeper(min(60, backoff))
+                backoff = min(60, backoff * 2)
+                continue
+            sleeper(interval_seconds)
+    finally:
+        service._worker_lease_guard = previous_guard
+        service.provider.worker_lease_guard = previous_provider_guard
+        if health_monitor:
+            health_monitor.mark_unhealthy()
         try:
-            if user_ids is not None:
-                for uid in set(user_ids()):
-                    reconcile_once(service, uid)
-            else:
-                db = service.repository.db
-                if db:
-                    query = (db.collection_group("smartChargingSessions")
-                             .where("state", "in", sorted(NONTERMINAL_SESSION_STATES))
-                             .limit(100))
-                    owners = set()
-                    for snapshot in query.stream():
-                        parts = snapshot.reference.path.split('/')
-                        if len(parts) >= 4 and parts[0] == 'users':
-                            owners.add(parts[1])
-                    for uid in owners:
-                        reconcile_once(service, uid)
-            process_personal_training_jobs_once(service)
-            backoff = interval_seconds
-        except Exception as error:
-            print(f"[smart-charge-worker] transient error: {type(error).__name__}")
-            time.sleep(min(900, backoff))
-            backoff = min(900, backoff * 2)
-            continue
-        time.sleep(interval_seconds)
+            service.repository.publish_worker_heartbeat(worker_id, healthy=False, now=service.clock())
+            service.repository.release_worker_lease(worker_id, now=service.clock())
+        except Exception:
+            pass  # A lost/stale worker cannot invalidate the new holder.
 
 
 def train_personal_adapter_once(service, uid: str, vehicle_id: str):

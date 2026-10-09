@@ -122,49 +122,50 @@ class GlassContainer extends StatelessWidget {
 
 /// Helper styles and decorations for the AI Chatbot UI/UX
 class ChatbotGlassTheme {
-  /// User chat bubble decoration (iMessage-inspired blue gradient)
+  /// User chat bubble decoration (Electric EV Cyan/Teal to Emerald gradient)
   static BoxDecoration userBubbleDecoration(
     BuildContext context, {
     bool isQueued = false,
   }) {
-    final theme = Theme.of(context);
-    final primary = theme.colorScheme.primary;
-
     if (isQueued) {
       return BoxDecoration(
-        color: primary.withValues(alpha: 0.70),
+        color: const Color(0xFF0D9488).withValues(alpha: 0.60),
         borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(18),
+          topLeft: Radius.circular(20),
           topRight: Radius.circular(6),
-          bottomLeft: Radius.circular(18),
-          bottomRight: Radius.circular(18),
+          bottomLeft: Radius.circular(20),
+          bottomRight: Radius.circular(20),
+        ),
+        border: Border.all(
+          color: const Color(0xFF10B981).withValues(alpha: 0.3),
+          width: 1.0,
         ),
       );
     }
 
     return BoxDecoration(
       gradient: const LinearGradient(
-        colors: [Color(0xFF0072BC), Color(0xFF005B94)],
-        begin: Alignment.topRight,
-        end: Alignment.bottomLeft,
+        colors: [Color(0xFF0D9488), Color(0xFF059669)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
       ),
       borderRadius: const BorderRadius.only(
-        topLeft: Radius.circular(18),
+        topLeft: Radius.circular(20),
         topRight: Radius.circular(6),
-        bottomLeft: Radius.circular(18),
-        bottomRight: Radius.circular(18),
+        bottomLeft: Radius.circular(20),
+        bottomRight: Radius.circular(20),
       ),
       boxShadow: [
         BoxShadow(
-          color: const Color(0xFF0072BC).withValues(alpha: 0.28),
-          blurRadius: 10,
-          offset: const Offset(0, 3),
+          color: const Color(0xFF059669).withValues(alpha: 0.35),
+          blurRadius: 12,
+          offset: const Offset(0, 4),
         ),
       ],
     );
   }
 
-  /// Bot chat bubble decoration (frosted translucent surface)
+  /// Bot chat bubble decoration (Cockpit Frosted Glass with delicate emerald neon border)
   static BoxDecoration botBubbleDecoration(
     BuildContext context, {
     bool hasError = false,
@@ -173,36 +174,43 @@ class ChatbotGlassTheme {
 
     if (hasError) {
       return BoxDecoration(
-        color: uiColors.dangerSurface.withValues(alpha: 0.3),
+        color: uiColors.dangerSurface.withValues(alpha: 0.4),
         border: Border.all(
           color: Colors.redAccent.withValues(alpha: 0.7),
           width: 1.2,
         ),
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(6),
-          topRight: Radius.circular(18),
-          bottomLeft: Radius.circular(18),
-          bottomRight: Radius.circular(18),
+          topRight: Radius.circular(20),
+          bottomLeft: Radius.circular(20),
+          bottomRight: Radius.circular(20),
         ),
       );
     }
 
     return BoxDecoration(
       color: uiColors.dark
-          ? const Color(0xFF1E293B).withValues(alpha: 0.75)
-          : Colors.white.withValues(alpha: 0.92),
-      border: Border.all(color: uiColors.glassBorder, width: 1.0),
+          ? const Color(0xFF131D2E).withValues(alpha: 0.88)
+          : Colors.white.withValues(alpha: 0.95),
+      border: Border.all(
+        color: uiColors.dark
+            ? const Color(0xFF10B981).withValues(alpha: 0.22)
+            : uiColors.glassBorder,
+        width: 1.0,
+      ),
       borderRadius: const BorderRadius.only(
         topLeft: Radius.circular(6),
-        topRight: Radius.circular(18),
-        bottomLeft: Radius.circular(18),
-        bottomRight: Radius.circular(18),
+        topRight: Radius.circular(20),
+        bottomLeft: Radius.circular(20),
+        bottomRight: Radius.circular(20),
       ),
       boxShadow: [
         BoxShadow(
-          color: uiColors.glassShadow,
-          blurRadius: 12,
-          offset: const Offset(0, 3),
+          color: uiColors.dark
+              ? Colors.black.withValues(alpha: 0.30)
+              : uiColors.glassShadow,
+          blurRadius: 14,
+          offset: const Offset(0, 4),
         ),
       ],
     );

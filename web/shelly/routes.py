@@ -240,6 +240,9 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
         operation_id = str(body.get("operationId") or "").strip()
         if not operation_id or len(operation_id) > 160:
             return jsonify({"success": False, "error": {"code": "invalidOperationId", "message": "Identifiant de contrôle invalide"}}), 400
+        guard = execute(service.require_worker_ready)
+        if guard is not None:
+            return guard
         if not repository.claim_device_session(uid, device_id, operation_id):
             return jsonify({"success": False, "error": {"code": "deviceBusy", "message": "Le Shelly est déjà utilisé"}}), 409
         try:
@@ -432,7 +435,10 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
         binding = next((item for item in repository.list_bindings(uid) if item.device_id == device_id and item.revoked_at is None), None)
         if binding is None:
             return jsonify({"success": False, "error": {"code": "deviceNotFound", "message": "Shelly chưa được liên kết"}}), 404
-        if not repository.claim_device_session(uid, device_id, operation_id):
+        guard = execute(service.require_worker_ready)
+        if guard is not None:
+            return guard
+        if not repository.claim_device_session(uid, device_id, operation_id, lease_kind="lan_control"):
             return jsonify({"success": False, "error": {
                 "code": "deviceBusy",
                 "message": "Thiết bị đang được một thao tác khác giữ quyền điều khiển.",
@@ -452,11 +458,12 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
             }}), 400
         if not repository.device_owned_by(uid, device_id):
             return jsonify({"success": False, "error": {"code": "deviceNotFound", "message": "Shelly không thuộc tài khoản này."}}), 404
-        if repository.current_session(uid, device_id=device_id):
-            return jsonify({"success": False, "error": {"code": "activeSessionConflict", "message": "Phiên sạc vẫn đang hoạt động."}}), 409
-        repository.release_device_session(uid, device_id, operation_id)
-        repository.append_audit(uid, "shelly_control_released", device_id=device_id, operation_id=operation_id)
-        return ok({"released": True})
+        # The legacy client flag remains a request precondition, never proof
+        # of hardware OFF. The server performs a fresh readback before release.
+        def release():
+            service.release_control(uid, device_id, operation_id)
+            return ok({"released": True})
+        return execute(release)
 
     @bp.delete("/api/shelly/device")
     @authenticated

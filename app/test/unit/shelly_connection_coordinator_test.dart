@@ -31,6 +31,7 @@ class _Server extends ServerSmartChargerService {
   _Server() : super(auth: _Auth());
   final scopes = <String?>[];
   bool verified = true;
+  SmartChargerConnectionMode mode = SmartChargerConnectionMode.serverCloud;
   bool online = true;
   int safetyCommands = 0;
   String? redeemedVehicle;
@@ -43,7 +44,7 @@ class _Server extends ServerSmartChargerService {
       displayName: 'Shelly',
       model: 'S3PL-00112EU',
       provider: 'cloud',
-      mode: SmartChargerConnectionMode.serverCloud,
+      mode: mode,
       powerMeterVerified: true,
       safeBootVerified: true,
       noLoadTestVerified: verified,
@@ -83,11 +84,12 @@ class _Server extends ServerSmartChargerService {
     String? operationId,
   }) async {
     redeemedVehicle = vehicleId;
-    if (failRedeem)
+    if (failRedeem) {
       throw const SmartChargerException(
         'Mã hết hiệu lực.',
         code: 'connectionCodeUnavailable',
       );
+    }
     return const ShellyConnectionProfile(deviceId: 'qa-device');
   }
 
@@ -132,6 +134,31 @@ class _Discovery extends ShellyDiscoveryService {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'legacy server metadata stays linked without rerunning safety or granting ON',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'smart_charger.connection_mode.v1': 'server_cloud',
+      });
+      final server = _Server()
+        ..mode = SmartChargerConnectionMode.advancedDirect;
+      final coordinator = ShellyConnectionCoordinator(
+        credentials: _Credentials(),
+        serverCharger: server,
+      )..activateAccount('qa-legacy');
+      final restored = await coordinator.restore(vehicleId: 'qa-vehicle');
+      expect(restored.isLinked, true);
+      expect(
+        restored.state,
+        ShellyConnectionFlowState.serverConnectionRequired,
+      );
+      expect(restored.serverBinding!.noLoadTestVerified, true);
+      expect(restored.readyForControl, false);
+      expect(restored.connectionLabel, contains('Cần kết nối qua máy chủ'));
+      expect(server.safetyCommands, 0);
+      await coordinator.dispose();
+    },
+  );
   test(
     'settings restore retains charge vehicle scope and account change clears it',
     () async {

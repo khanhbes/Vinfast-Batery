@@ -115,6 +115,15 @@ void main() {
 
       expect(find.text('Nhập mã kết nối từ Admin'), findsOneWidget);
       expect(find.text('Xác nhận mã kết nối'), findsOneWidget);
+      expect(find.textContaining('không cần cùng Wi-Fi'), findsOneWidget);
+      expect(
+        find.text('Điện thoại và Shelly đang ở cùng mạng Wi-Fi (2.4GHz)'),
+        findsNothing,
+      );
+      expect(
+        find.text('Quyền Mạng cục bộ (Local Network) đã được cấp cho ứng dụng'),
+        findsNothing,
+      );
 
       // Enter short code and verify validation message
       await tester.enterText(find.byType(TextField), 'AB');

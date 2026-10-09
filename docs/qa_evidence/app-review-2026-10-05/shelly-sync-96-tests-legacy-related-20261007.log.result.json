@@ -1,0 +1,19 @@
+{
+  "command": [
+    "C:\\flutter\\bin\\flutter.bat",
+    "test",
+    "--no-pub",
+    "--concurrency=2",
+    "test/unit/shelly_connection_coordinator_test.dart",
+    "test/unit/shelly_connection_snapshot_test.dart",
+    "test/unit/chat_shelly_backend_integration_test.dart",
+    "test/widget/smart_charging_control_screen_test.dart"
+  ],
+  "cwd": "app",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\shelly-sync-96-tests-legacy-related-20261007.log",
+  "timeoutSeconds": 180,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 29.05
+}

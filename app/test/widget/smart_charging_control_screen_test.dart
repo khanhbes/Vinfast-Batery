@@ -12,6 +12,7 @@ import 'package:vinfast_battery/data/services/smart_charger_service.dart';
 import 'package:vinfast_battery/core/widgets/app_popup.dart';
 import 'package:vinfast_battery/features/ai/controllers/smart_charging_controller.dart';
 import 'package:vinfast_battery/features/ai/smart_charging_control_screen.dart';
+import 'package:vinfast_battery/features/ai/widgets/timed_charging_section_v2.dart';
 
 void main() {
   setUp(() => ShellyConnectionCoordinator.shared.activateAccount(null));
@@ -84,6 +85,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final controller = harness();
+    publishControlConnection(controller);
     await tester.pumpWidget(app(controller));
 
     await tester.tap(find.text('Sạc hẹn giờ'));
@@ -136,6 +138,7 @@ void main() {
     tester,
   ) async {
     final controller = harness();
+    publishControlConnection(controller);
     await tester.pumpWidget(app(controller));
 
     final createButton = find.byKey(const ValueKey('create-plan-button'));
@@ -160,6 +163,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final controller = harness();
+    publishControlConnection(controller);
     await tester.pumpWidget(app(controller));
 
     final createButton = find.byKey(const ValueKey('create-plan-button'));
@@ -334,6 +338,45 @@ void main() {
     },
   );
 
+  testWidgets(
+    'timed readiness and reason follow shared link and unknown state',
+    (tester) async {
+      final controller = harness();
+      await tester.pumpWidget(app(controller));
+      await tester.tap(find.text('Sạc hẹn giờ'));
+      await tester.pump(const Duration(milliseconds: 300));
+      TimedChargingSectionV2 section() =>
+          tester.widget(find.byType(TimedChargingSectionV2));
+      expect(section().readyForControl, isFalse);
+      publishControlConnection(
+        controller,
+        mode: SmartChargerConnectionMode.advancedDirect,
+      );
+      await tester.pump();
+      expect(section().readyForControl, isFalse);
+      expect(
+        section().disabledReason,
+        contains('Liên kết cũ chưa cho phép điều khiển qua máy chủ'),
+      );
+      publishControlConnection(controller);
+      await tester.pump();
+      expect(section().readyForControl, isTrue);
+      ShellyConnectionCoordinator.shared.markControlUnknown(
+        uid: 'qa-controls',
+        vehicleId: 'VF-001',
+        deviceId: 'qa-device',
+      );
+      await tester.pump();
+      expect(section().readyForControl, isFalse);
+      expect(
+        section().disabledReason,
+        contains('Chưa xác minh được trạng thái ổ cắm'),
+      );
+      expect(controller.lastManualDuration, isNull);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('history is visible and cleanly formatted', (tester) async {
     final controller = harness();
     controller.seed(
@@ -357,6 +400,34 @@ Widget app(HarnessController controller) => ProviderScope(
     home: const SmartChargingControlScreen(vehicleId: 'VF-001', currentSoc: 20),
   ),
 );
+
+void publishControlConnection(
+  HarnessController controller, {
+  SmartChargerConnectionMode mode = SmartChargerConnectionMode.serverCloud,
+}) {
+  final coordinator = ShellyConnectionCoordinator.shared;
+  coordinator.activateAccount('qa-controls');
+  coordinator.updateServerSnapshot(
+    uid: 'qa-controls',
+    vehicleId: 'VF-001',
+    binding: SmartChargerBinding(
+      deviceId: 'qa-device',
+      displayName: 'Shelly QA',
+      model: 'S3PL-00112EU',
+      provider: 'vault_cloud',
+      mode: mode,
+      powerMeterVerified: true,
+      safeBootVerified: true,
+      noLoadTestVerified: true,
+    ),
+    status: SmartChargerStatus.fromJson({
+      'online': true,
+      'relay': false,
+      'device_id': 'qa-device',
+    }),
+    capabilities: controller.state.capabilities,
+  );
+}
 
 HarnessController harness() {
   final value = HarnessController();

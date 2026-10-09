@@ -3,6 +3,9 @@ from __future__ import annotations
 import threading
 import hashlib
 import random
+import re
+import os
+from copy import deepcopy
 import time
 from urllib.parse import urlparse
 from datetime import datetime, timezone, timedelta
@@ -22,8 +25,12 @@ from .profile_vault import ProfileVaultError, ShellyProfileVault
 class SmartChargeRepository:
     """Firestore-backed repository with deterministic in-memory fallback."""
 
-    def __init__(self, firestore_db=None):
+    def __init__(self, firestore_db=None, *, worker_scope: str | None = None):
         self.db = firestore_db
+        scope = worker_scope if worker_scope is not None else os.environ.get("SMART_CHARGE_WORKER_SCOPE", "")
+        self.worker_scope = scope if re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", scope) else None
+        if self.db is None and self.worker_scope is None:
+            self.worker_scope = "local-test"
         self._lock = threading.RLock()
         self._bindings: dict[str, dict[str, DeviceBinding]] = {}
         self._previews: dict[str, dict[str, ChargePreview]] = {}
@@ -44,12 +51,179 @@ class SmartChargeRepository:
         # Process-local guard for a physical Shelly shared by multiple
         # accounts. Firestore leases below cover multi-process deployments.
         self._device_leases: dict[str, tuple[str, str]] = {}
+        self._device_lease_kinds: dict[str, str] = {}
         self._device_owners: dict[str, str] = {}
         self._device_members: dict[str, list[str]] = {}
         self._last_history_skipped = 0
         self._profile_vault = ShellyProfileVault()
         self._synced_profiles: dict[tuple[str, str], dict] = {}
         self._profile_vault_records: dict[tuple[str, str], dict] = {}
+        self._worker_heartbeat: dict = {}
+        self._worker_lease: dict = {}
+        self._worker_lease_epochs: dict[str, int] = {}
+        self._session_write_snapshots: dict[tuple[str, str], dict] = {}
+
+    @staticmethod
+    def _valid_worker_lease(data: dict, now: datetime) -> bool:
+        expires = data.get("expiresAt")
+        return bool(type(data.get("schemaVersion")) is int and data["schemaVersion"] == 1
+                    and type(data.get("epoch")) is int and data["epoch"] > 0
+                    and isinstance(data.get("workerId"), str) and data["workerId"]
+                    and isinstance(expires, datetime) and expires.tzinfo is not None
+                    and 0 < (expires - now).total_seconds() <= 180)
+
+    def _change_worker_lease(self, action):
+        if self.worker_scope is None:
+            raise RuntimeError("workerScopeNotConfigured")
+        if self.db:
+            from google.cloud import firestore
+            ref = self.db.collection("smartChargeWorkerLeases").document(self.worker_scope)
+
+            @firestore.transactional
+            def change(txn):
+                snapshot = ref.get(transaction=txn)
+                update = action(snapshot.to_dict() or {})
+                if update is not None:
+                    txn.set(ref, update)
+                return update
+
+            return self._run_metadata_transaction(change)
+        with self._lock:
+            update = action(dict(self._worker_lease))
+            if update is not None:
+                self._worker_lease = update
+            return update
+
+    def claim_worker_lease(self, worker_id: str, *, now: datetime | None = None) -> int | None:
+        now = now or datetime.now(timezone.utc)
+        if not isinstance(worker_id, str) or not worker_id or len(worker_id) > 128 or now.tzinfo is None:
+            raise ValueError("invalidWorkerLease")
+
+        def claim(previous):
+            if previous and previous.get("scope") != self.worker_scope:
+                raise RuntimeError("workerLeaseMalformed")
+            expires = previous.get("expiresAt")
+            if previous and (not isinstance(expires, datetime) or expires.tzinfo is None
+                             or type(previous.get("epoch")) is not int or previous["epoch"] < 1
+                             or type(previous.get("schemaVersion")) is not int or previous["schemaVersion"] != 1):
+                raise RuntimeError("workerLeaseMalformed")
+            live = previous and expires > now
+            if live and not self._valid_worker_lease(previous, now):
+                raise RuntimeError("workerLeaseMalformed")
+            if live and previous.get("workerId") != worker_id:
+                return None
+            epoch = previous["epoch"] if live else int(previous.get("epoch", 0)) + 1
+            return {"schemaVersion": 1, "scope": self.worker_scope, "workerId": worker_id,
+                    "epoch": epoch, "expiresAt": now + timedelta(seconds=180)}
+
+        lease = self._change_worker_lease(claim)
+        if lease is None:
+            return None
+        self._worker_lease_epochs[worker_id] = lease["epoch"]
+        return lease["epoch"]
+
+    def renew_worker_lease(self, worker_id: str, *, now: datetime | None = None) -> datetime:
+        now = now or datetime.now(timezone.utc)
+        epoch = self._worker_lease_epochs.get(worker_id)
+
+        def renew(previous):
+            if (previous.get("scope") != self.worker_scope or previous.get("workerId") != worker_id
+                    or previous.get("epoch") != epoch or not self._valid_worker_lease(previous, now)):
+                raise RuntimeError("workerLeaseLost")
+            return {**previous, "expiresAt": now + timedelta(seconds=180)}
+
+        return self._change_worker_lease(renew)["expiresAt"]
+
+    def worker_lease_deadline(self, worker_id: str, *, now: datetime | None = None) -> datetime:
+        """Fresh read-only fencing check; avoid a write for every Cloud read."""
+        now = now or datetime.now(timezone.utc)
+        if self.worker_scope is None:
+            raise RuntimeError("workerScopeNotConfigured")
+        if self.db:
+            lease = self.db.collection("smartChargeWorkerLeases").document(self.worker_scope).get().to_dict() or {}
+        else:
+            with self._lock:
+                lease = dict(self._worker_lease)
+        if (lease.get("scope") != self.worker_scope or lease.get("workerId") != worker_id
+                or lease.get("epoch") != self._worker_lease_epochs.get(worker_id)
+                or not self._valid_worker_lease(lease, now)):
+            raise RuntimeError("workerLeaseLost")
+        return lease["expiresAt"]
+
+    def release_worker_lease(self, worker_id: str, *, now: datetime | None = None) -> bool:
+        now = now or datetime.now(timezone.utc)
+        epoch = self._worker_lease_epochs.get(worker_id)
+
+        def release(previous):
+            if (previous.get("workerId") != worker_id or previous.get("epoch") != epoch
+                    or previous.get("scope") != self.worker_scope):
+                return None
+            # Keep the epoch tombstone; deleting it would allow ABA/reuse.
+            return {**previous, "expiresAt": now}
+
+        return self._change_worker_lease(release) is not None
+
+    def publish_worker_heartbeat(self, worker_id: str, *, healthy: bool,
+                                 now: datetime | None = None) -> None:
+        """Server-only evidence of a completed reconciliation scan.
+
+        API processes must read Firestore, not their own process-local cache.
+        This is health evidence, not a replacement for the physical-device lock.
+        """
+        now = now or datetime.now(timezone.utc)
+        if self.worker_scope is None:
+            raise RuntimeError("workerScopeNotConfigured")
+        epoch = self._worker_lease_epochs.get(worker_id)
+        payload = {"schemaVersion": 1, "workerId": worker_id, "leaseEpoch": epoch,
+                   "healthy": healthy, "updatedAt": now, "scope": self.worker_scope}
+        if self.db:
+            from google.cloud import firestore
+            lease_ref = self.db.collection("smartChargeWorkerLeases").document(self.worker_scope)
+            health_ref = self.db.collection("smartChargeWorkerHealth").document(self.worker_scope)
+
+            @firestore.transactional
+            def publish(txn):
+                lease = lease_ref.get(transaction=txn).to_dict() or {}
+                if (lease.get("workerId") != worker_id or lease.get("epoch") != epoch
+                        or lease.get("scope") != self.worker_scope or not self._valid_worker_lease(lease, now)):
+                    raise RuntimeError("workerLeaseLost")
+                txn.set(health_ref, payload)
+
+            self._run_metadata_transaction(publish)
+        with self._lock:
+            if not self.db and (
+                    self._worker_lease.get("workerId") != worker_id or self._worker_lease.get("epoch") != epoch
+                    or not self._valid_worker_lease(self._worker_lease, now)):
+                raise RuntimeError("workerLeaseLost")
+            self._worker_heartbeat = payload
+
+    def worker_health_ready(self, now: datetime, max_age_seconds: int = 90) -> bool:
+        """Fail closed on missing, stale, future or malformed health evidence."""
+        try:
+            if self.worker_scope is None:
+                return False
+            if self.db:
+                snapshot = self.db.collection("smartChargeWorkerHealth").document(self.worker_scope).get()
+                data = snapshot.to_dict() or {} if snapshot.exists else {}
+                lease = self.db.collection("smartChargeWorkerLeases").document(self.worker_scope).get().to_dict() or {}
+            else:
+                with self._lock:
+                    data = dict(self._worker_heartbeat)
+                    lease = dict(self._worker_lease)
+            updated = data.get("updatedAt")
+            if (type(data.get("schemaVersion")) is not int or data.get("schemaVersion") != 1
+                    or data.get("scope") != self.worker_scope or data.get("healthy") is not True
+                    or not isinstance(data.get("workerId"), str) or not data["workerId"]
+                    or type(data.get("leaseEpoch")) is not int
+                    or not isinstance(updated, datetime) or updated.tzinfo is None):
+                return False
+            if (lease.get("scope") != self.worker_scope or not self._valid_worker_lease(lease, now)
+                    or lease.get("workerId") != data["workerId"] or lease.get("epoch") != data.get("leaseEpoch")):
+                return False
+            age = (now - updated).total_seconds()
+            return 0 <= age <= max_age_seconds
+        except Exception:
+            return False
 
     @property
     def profile_vault_configured(self) -> bool:
@@ -951,20 +1125,61 @@ class SmartChargeRepository:
         return preview
 
     def save_session(self, uid: str, session: ChargingSession) -> None:
+        if session.owner_uid not in (None, uid):
+            raise PermissionError("sessionOwnerMismatch")
+        payload = session.to_dict()
+        payload["owner_uid"] = uid
+        payload["idempotency_key"] = session.idempotency_key
+
+        def validate(previous):
+            if not previous:
+                return
+            if (previous.get("owner_uid") not in (None, uid)
+                    or previous.get("session_id") != session.session_id
+                    or previous.get("vehicle_id") != session.vehicle_id
+                    or self._device_owner_doc_id(previous.get("device_id", "")) != self._device_owner_doc_id(session.device_id)):
+                raise PermissionError("sessionIdentityMismatch")
+            if previous.get("state") not in NONTERMINAL_SESSION_STATES and session.state != previous.get("state"):
+                raise RuntimeError("sessionAlreadyTerminal")
+            if previous.get("state") in {"stopping", "unknown"} and session.state in {"arming", "starting", "active"}:
+                raise RuntimeError("sessionRecoveryRequired")
+            if int(previous.get("version") or 1) > session.version:
+                raise RuntimeError("sessionRevisionConflict")
+
+        if self.db:
+            from google.cloud import firestore
+            ref = self.db.collection("users").document(uid).collection("smartChargingSessions").document(session.session_id)
+
+            @firestore.transactional
+            def persist(txn):
+                previous = ref.get(transaction=txn)
+                validate(previous.to_dict() if previous.exists else None)
+                txn.set(ref, payload, merge=True)
+
+            self._run_metadata_transaction(persist)
         with self._lock:
+            key = (uid, session.session_id)
+            if not self.db:
+                previous = self._session_write_snapshots.get(key)
+                try:
+                    validate(previous)
+                except Exception:
+                    # Test/local callers often hold the same mutable object.
+                    # Rehydrate the last accepted state instead of caching a
+                    # mutation rejected by the persistence contract.
+                    if previous:
+                        self._sessions.setdefault(uid, {})[session.session_id] = _session(previous)
+                    raise
+            self._session_write_snapshots[key] = deepcopy(payload)
             self._sessions.setdefault(uid, {})[session.session_id] = session
             self._idempotency[(uid, session.idempotency_key)] = session.session_id
-        if self.db:
-            payload = session.to_dict()
-            payload["idempotency_key"] = session.idempotency_key
-            self.db.collection("users").document(uid).collection("smartChargingSessions").document(session.session_id).set(payload, merge=True)
         # A terminal session must release both lock layers.  Leaving the
         # Firestore lease until its 12-hour expiry prevented a legitimate next
         # charging session after a successful OFF verification.
         if session.state not in NONTERMINAL_SESSION_STATES:
             self.release_device_session(uid, session.device_id, session.session_id)
 
-    def claim_device_session(self, uid: str, device_id: str, session_id: str) -> bool:
+    def claim_device_session(self, uid: str, device_id: str, session_id: str, *, lease_kind: str = "charging") -> bool:
         """Atomically reserve a physical Shelly for one active session.
 
         The in-memory lock protects one process; Firestore prevents two workers
@@ -972,13 +1187,18 @@ class SmartChargeRepository:
         unknown relay must be resolved by readback before explicit release.
         """
         now = datetime.now(timezone.utc)
+        if lease_kind not in {"charging", "lan_control"}:
+            return False
         lease_key = self._device_owner_doc_id(device_id)
-        with self._lock:
-            existing = self._device_leases.get(lease_key)
-            if existing and existing != (uid, session_id):
-                return False
-            self._device_leases[lease_key] = (uid, session_id)
         if not self.db:
+            with self._lock:
+                existing = self._device_leases.get(lease_key)
+                if existing and existing != (uid, session_id):
+                    return False
+                if existing and self._device_lease_kinds.get(lease_key, "charging") != lease_kind:
+                    return False
+                self._device_leases[lease_key] = (uid, session_id)
+                self._device_lease_kinds[lease_key] = lease_kind
             return True
         try:
             from google.cloud import firestore
@@ -998,19 +1218,28 @@ class SmartChargeRepository:
                 # expired unknown ON would permit a second energizing command.
                 if snapshot.exists and not same_operation:
                     return False
-                txn.set(ref, {"ownerUid": uid, "sessionId": session_id, "deviceIdHash": self._device_owner_doc_id(device_id), "updatedAt": now})
+                if snapshot.exists and data.get("leaseKind", "charging") != lease_kind:
+                    return False
+                txn.set(ref, {"ownerUid": uid, "sessionId": session_id, "leaseKind": lease_kind, "deviceIdHash": self._device_owner_doc_id(device_id), "updatedAt": now})
                 return True
 
             claimed = bool(self._run_metadata_transaction(claim))
-            if not claimed:
-                with self._lock:
+            # A lease released by another process must not remain busy because
+            # this process remembers the old operation. Firestore is authority.
+            with self._lock:
+                if claimed:
+                    self._device_leases[lease_key] = (uid, session_id)
+                    self._device_lease_kinds[lease_key] = lease_kind
+                else:
                     self._device_leases.pop(lease_key, None)
+                    self._device_lease_kinds.pop(lease_key, None)
             return claimed
         except Exception:
             # Do not weaken the safety gate when the central lock cannot be
             # read or written. The caller must fail closed.
             with self._lock:
                 self._device_leases.pop(lease_key, None)
+                self._device_lease_kinds.pop(lease_key, None)
             return False
 
     def release_device_session(self, uid: str, device_id: str, session_id: str) -> None:
@@ -1019,6 +1248,7 @@ class SmartChargeRepository:
             lease = self._device_leases.get(lease_key)
             if lease and lease[:2] == (uid, session_id):
                 self._device_leases.pop(lease_key, None)
+                self._device_lease_kinds.pop(lease_key, None)
         if self.db:
             try:
                 from google.cloud import firestore
@@ -1035,6 +1265,47 @@ class SmartChargeRepository:
                 release(transaction)
             except Exception:
                 pass
+
+    def release_lan_operation_after_off(self, uid: str, device_id: str, operation_id: str) -> bool:
+        """Called only after fresh server OFF; never release a charging lease.
+
+        Recheck the exact lease in a transaction so readback cannot release
+        another operation acquired while the network request was running.
+        Untyped legacy leases remain locked for explicit recovery.
+        """
+        key = self._device_owner_doc_id(device_id)
+        if self.db:
+            from google.cloud import firestore
+            ref = self.db.collection("shellyDeviceLocks").document(key)
+            member_ref = self.db.collection("shellyDeviceOwners").document(key)
+            session_ref = self.db.collection("users").document(uid).collection("smartChargingSessions").document(operation_id)
+
+            @firestore.transactional
+            def release(txn):
+                lock = ref.get(transaction=txn)
+                member = member_ref.get(transaction=txn)
+                session = session_ref.get(transaction=txn)
+                data = lock.to_dict() or {}
+                if (uid not in self._membership_uids(member.to_dict() or {})
+                        or data.get("ownerUid") != uid or data.get("sessionId") != operation_id
+                        or data.get("leaseKind") != "lan_control" or session.exists):
+                    return False
+                txn.delete(ref)
+                return True
+
+            released = bool(self._run_metadata_transaction(release))
+            if not released:
+                return False
+        with self._lock:
+            if not self.db and (
+                    self._device_leases.get(key) != (uid, operation_id)
+                    or self._device_lease_kinds.get(key) != "lan_control"
+                    or self.get_session(uid, operation_id) is not None):
+                return False
+            if self._device_leases.get(key) == (uid, operation_id):
+                self._device_leases.pop(key, None)
+                self._device_lease_kinds.pop(key, None)
+        return True
 
     def upsert_charge_log(self, uid: str, session: ChargingSession) -> None:
         """Upsert the same ChargeLogs document while active and when terminal."""
@@ -1160,7 +1431,7 @@ class SmartChargeRepository:
             active = [s for s in active if s.device_id == device_id]
         return active[0] if active else None
 
-    def active_sessions(self, uid: str) -> list[ChargingSession]:
+    def active_sessions(self, uid: str, *, strict: bool = False) -> list[ChargingSession]:
         """Return every active vehicle session, not only the legacy first one."""
         if self.db:
             try:
@@ -1173,11 +1444,15 @@ class SmartChargeRepository:
                     session = _session(snapshot.to_dict() or {})
                     if session.owner_uid in (None, uid):
                         values.append(session)
+                if strict and len(values) >= 20:
+                    raise RuntimeError("workerAccountScanCapacityReached")
                 with self._lock:
                     for session in values:
                         self._sessions.setdefault(uid, {})[session.session_id] = session
                 return values
             except Exception:
+                if strict:
+                    raise
                 # A missing index must not make the safety path unsafe; the
                 # bounded in-memory fallback is still preferable to a broad
                 # history scan in a request path.

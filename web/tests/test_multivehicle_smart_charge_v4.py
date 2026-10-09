@@ -19,6 +19,8 @@ def _predict(_payload):
 class MultiVehicleSmartChargeV4Tests(unittest.TestCase):
     def test_two_vehicles_use_separate_devices_concurrently(self):
         repo = SmartChargeRepository()
+        repo.claim_worker_lease("qa-worker")
+        repo.publish_worker_heartbeat("qa-worker", healthy=True)
         first_provider = FakeShellyProvider()
         second_provider = FakeShellyProvider()
         first = first_provider.list_devices("owner")[0]
@@ -44,6 +46,8 @@ class MultiVehicleSmartChargeV4Tests(unittest.TestCase):
 
     def test_same_physical_device_cannot_charge_two_vehicles(self):
         repo = SmartChargeRepository()
+        repo.claim_worker_lease("qa-worker")
+        repo.publish_worker_heartbeat("qa-worker", healthy=True)
         provider = FakeShellyProvider()
         binding = provider.list_devices("owner")[0]
         binding.vehicle_id = "vehicle-a"
@@ -67,6 +71,8 @@ class MultiVehicleSmartChargeV4Tests(unittest.TestCase):
 
     def test_telemetry_targets_requested_session_when_two_devices_are_active(self):
         repo = SmartChargeRepository()
+        repo.claim_worker_lease("qa-worker")
+        repo.publish_worker_heartbeat("qa-worker", healthy=True)
         provider_a = FakeShellyProvider()
         provider_b = FakeShellyProvider()
         binding_a = provider_a.list_devices("owner")[0]

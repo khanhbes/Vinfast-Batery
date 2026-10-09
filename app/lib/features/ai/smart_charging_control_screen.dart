@@ -83,6 +83,8 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
   Widget build(BuildContext context) {
     final state = ref.watch(smartChargingControllerProvider(args));
     final controller = ref.read(smartChargingControllerProvider(args).notifier);
+    // Outgoing animated children retain their own mode while subscribed.
+    final aiMode = _aiMode;
 
     ref.listen<SmartChargingUiState>(
       smartChargingControllerProvider(args),
@@ -167,24 +169,68 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                                       child: child,
                                     ),
                                   ),
-                              child: _aiMode
-                                  ? _buildAiPlanV2(context, state, controller)
-                                  : TimedChargingSectionV2(
-                                      key: const ValueKey('timed-mode'),
-                                      disabledReason: state
-                                          .capabilities
-                                          .controlBlockedMessage,
-                                      readyForControl:
-                                          state.capabilities.readyForControl &&
-                                          state.phase !=
-                                              SmartChargingViewPhase.starting,
-                                      onStart: (duration) => _startTimedCharge(
-                                        state,
-                                        controller,
-                                        duration,
-                                      ),
-                                      onOff: () => _emergencyOff(controller),
-                                    ),
+                              child: StreamBuilder<ShellyConnectionSnapshot>(
+                                key: ValueKey(
+                                  aiMode ? 'ai-mode' : 'timed-mode',
+                                ),
+                                stream:
+                                    ShellyConnectionCoordinator.shared.states,
+                                initialData:
+                                    ShellyConnectionCoordinator.shared.current,
+                                builder: (context, snapshot) {
+                                  final connection =
+                                      snapshot.data ??
+                                      ShellyConnectionCoordinator
+                                          .shared
+                                          .current;
+                                  return aiMode
+                                      ? _buildAiPlanV2(
+                                          context,
+                                          state,
+                                          controller,
+                                          connection,
+                                        )
+                                      : TimedChargingSectionV2(
+                                          key: const ValueKey('timed-mode'),
+                                          disabledReason:
+                                              connection
+                                                  .controlBlockedMessage ??
+                                              state
+                                                  .capabilities
+                                                  .controlBlockedMessage ??
+                                              (!_sharedConnectionReady(
+                                                    connection,
+                                                  )
+                                                  ? 'Hãy kết nối Shelly qua Thiết lập trước khi bật sạc.'
+                                                  : null),
+                                          readyForControl:
+                                              _sharedConnectionReady(
+                                                connection,
+                                              ) &&
+                                              state
+                                                  .capabilities
+                                                  .readyForControl &&
+                                              state.capabilities.canManualOn &&
+                                              state.phase !=
+                                                  SmartChargingViewPhase
+                                                      .starting &&
+                                              state.phase !=
+                                                  SmartChargingViewPhase
+                                                      .stopping &&
+                                              state.phase !=
+                                                  SmartChargingViewPhase
+                                                      .loading,
+                                          onStart: (duration) =>
+                                              _startTimedCharge(
+                                                state,
+                                                controller,
+                                                duration,
+                                              ),
+                                          onOff: () =>
+                                              _emergencyOff(controller),
+                                        );
+                                },
+                              ),
                             ),
                           ],
                         ),
@@ -318,6 +364,14 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
       isAiMode: false,
     );
     if (confirmed != true || !mounted) return;
+    // The link may change while the confirmation sheet is open. Presentation
+    // never grants authority; the repository still performs fresh backend checks.
+    if (!_sharedConnectionReady(ShellyConnectionCoordinator.shared.current)) {
+      AppPopup.showWarning(
+        'Kết nối đã thay đổi. Hãy kiểm tra Shelly trước khi bật sạc.',
+      );
+      return;
+    }
 
     final ok = await controller.manualOn(duration);
     if (!mounted) return;
@@ -329,11 +383,19 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     }
   }
 
+  bool _sharedConnectionReady(ShellyConnectionSnapshot connection) =>
+      connection.isLinked &&
+      connection.state == ShellyConnectionFlowState.connected &&
+      !connection.controlUncertain &&
+      connection.status?.online == true &&
+      connection.status?.relay == false;
+
   // ── V2 AI Plan Section ──
   Widget _buildAiPlanV2(
     BuildContext context,
     SmartChargingUiState state,
     SmartChargingController controller,
+    ShellyConnectionSnapshot connection,
   ) {
     final draft = state.draft;
     final busy =
@@ -344,6 +406,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
         (state.preview?.aiChargeEligible == true ||
             state.preview?.isPhysicsFallback == true) &&
         state.capabilities.readyForControl &&
+        _sharedConnectionReady(connection) &&
         state.connectionState.shellyReachable;
     final currentTarget = draft.targetSoc.clamp(
       (draft.currentSoc.ceil() + 1).clamp(1, 99).toDouble(),

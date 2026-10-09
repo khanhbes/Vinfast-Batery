@@ -53,6 +53,9 @@ class VaultCloudControlProvider:
             raise ProviderError("cloudRateLimiterUnavailable", "Không xác minh được giới hạn request Shelly Cloud") from exc
         if wait > 0:
             self.sleep(wait)
+        guard = getattr(self, "worker_lease_guard", None)
+        if guard is not None:
+            guard()  # After limiter wait, immediately before transport dispatch.
         try:
             response = self.http.post(f"{host}{path}", params={"auth_key": key}, json=payload, timeout=7)
         except requests.RequestException as exc:
@@ -91,7 +94,8 @@ class VaultCloudControlProvider:
         device = self._device(raw, binding.device_id)
         if not isinstance(device, dict) or str(device.get("id") or "").lower() != binding.device_id.lower():
             raise ProviderError("deviceNotFound", "Không xác minh được thiết bị Shelly đã liên kết")
-        if device.get("online") in (False, 0):
+        online = device.get("online")
+        if online is not True and not (type(online) is int and online == 1):
             raise ProviderError("deviceOffline", "Shelly đang ngoại tuyến", True)
         if str(device.get("code") or "").upper() != "S3PL-00112EU" or str(device.get("type") or "").lower() != "relay":
             raise ProviderError("unsupportedDevice", "Thiết bị không phải Shelly Plug S Gen3")

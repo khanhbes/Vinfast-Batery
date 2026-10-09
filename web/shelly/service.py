@@ -84,6 +84,7 @@ class SmartChargeService:
         no_load = bool(binding and binding.no_load_test_verified)
         staging_disabled = os.environ.get("AZURE_STAGING_HARDWARE_DISABLED", "0") == "1"
         blocked_code = "STAGING_HARDWARE_DISABLED" if staging_disabled else None
+        worker_ready = self.repository.worker_health_ready(self.clock())
         if binding and not staging_disabled:
             try:
                 shared_session = self.repository.shared_device_session(uid, binding.device_id)
@@ -94,6 +95,8 @@ class SmartChargeService:
                     )
             except (PermissionError, RuntimeError):
                 blocked_code = "deviceCoordinationUnavailable"
+        if blocked_code is None and not worker_ready:
+            blocked_code = "workerUnavailable"
         can_start = not staging_disabled and blocked_code is None
         return {
             "canReadStatus": status,
@@ -110,6 +113,7 @@ class SmartChargeService:
                 can_start and binding and status and manual_off and manual_on and timer and power and safe_boot and no_load
             ),
             "controlBlockedCode": blocked_code,
+            "workerReady": worker_ready,
             "provider": self.provider.name,
         }
 
@@ -209,16 +213,94 @@ class SmartChargeService:
 
     def _require_ready_to_energize(self, binding: DeviceBinding, status) -> None:
         """Server-side gate: a client readiness flag cannot authorize ON."""
+        self.require_worker_ready()
         if binding.model != "S3PL-00112EU" or binding.generation != 3:
             raise SmartChargeError("unsupportedDevice", "Bộ sạc chưa được hỗ trợ", 409)
         if not (binding.power_meter_verified and binding.safe_boot_verified and binding.no_load_test_verified):
             raise SmartChargeError("safetyVerificationRequired", "Cần kiểm tra an toàn bộ sạc trước khi bật", 409)
-        if status.device_id != binding.device_id or not status.online:
+        if not self._status_matches_device(status, binding.device_id):
             raise SmartChargeError("deviceUnverified", "Chưa xác minh được đúng bộ sạc", 409)
-        if status.relay:
+        if status.relay is not False:
             raise SmartChargeError("relayAlreadyOn", "Bộ sạc đang bật; hãy kiểm tra phiên hiện tại", 409)
         if not 190 <= status.voltage_v <= 255:
             raise SmartChargeError("unsafeVoltage", "Điện áp bộ sạc ngoài ngưỡng an toàn", 409)
+
+    def require_worker_ready(self) -> None:
+        if os.environ.get("AZURE_STAGING_HARDWARE_DISABLED", "0") == "1":
+            raise SmartChargeError("STAGING_HARDWARE_DISABLED", "Điều khiển đang bị khóa trong môi trường kiểm thử", 503)
+        if not self.repository.worker_health_ready(self.clock()):
+            raise SmartChargeError("workerUnavailable", "Giám sát sạc chưa sẵn sàng. Hãy thử lại sau.", 503, True)
+
+    def _status_matches_device(self, status, device_id: str) -> bool:
+        observed = getattr(status, "device_id", None)
+        return bool(
+            isinstance(observed, str) and observed.strip() and device_id
+            and self.repository._device_owner_doc_id(observed) == self.repository._device_owner_doc_id(device_id)
+            and getattr(status, "online", None) is True
+            and type(getattr(status, "relay", None)) is bool
+        )
+
+    def session_binding(self, uid: str, session: ChargingSession) -> DeviceBinding | None:
+        """Resolve the immutable session device, never a vehicle's new binding."""
+        if not session.device_id or session.owner_uid not in (None, uid):
+            return None
+        key = self.repository._device_owner_doc_id(session.device_id)
+        matches = [b for b in self.repository.list_bindings(uid)
+                   if b.revoked_at is None and self.repository._device_owner_doc_id(b.device_id) == key]
+        exact = [b for b in matches if b.vehicle_id == session.vehicle_id]
+        candidates = exact or matches
+        return candidates[0] if len(candidates) == 1 else None
+
+    def mark_session_unknown(self, uid: str, session: ChargingSession, code: str) -> ChargingSession:
+        if session.state not in NONTERMINAL_SESSION_STATES:
+            return session
+        session.state = "unknown"
+        session.relay_verified = False
+        session.last_error = code
+        session.updated_at = self.clock()
+        session.version += 1
+        self.repository.save_session(uid, session)
+        return session
+
+    def _backup_stop_session(self, uid: str, session: ChargingSession, *,
+                             state: str, stop_reason: str) -> ChargingSession:
+        binding = self.session_binding(uid, session)
+        if binding is None:
+            return self.mark_session_unknown(uid, session, "bindingChanged")
+        session.state = "stopping"
+        session.relay_verified = False
+        session.updated_at = self.clock()
+        session.version += 1
+        self.repository.save_session(uid, session)
+        try:
+            lease_guard = getattr(self, "_worker_lease_guard", None)
+            if lease_guard is not None:
+                lease_guard()
+            self.provider.turn_off(binding)
+            readback = self.provider.get_status(binding)
+        except ProviderError as error:
+            return self.mark_session_unknown(uid, session, error.code)
+        return self._finalize_session(uid, session, state=state,
+                                      stop_reason=stop_reason, status=readback)
+
+    def release_control(self, uid: str, device_id: str, operation_id: str) -> None:
+        bindings = [b for b in self.repository.list_bindings(uid)
+                    if b.revoked_at is None and self.repository._device_owner_doc_id(b.device_id) == self.repository._device_owner_doc_id(device_id)]
+        if len(bindings) != 1:
+            raise SmartChargeError("deviceNotFound", "Chưa xác minh được đúng liên kết Shelly", 404)
+        try:
+            status = self.provider.get_status(bindings[0])
+        except ProviderError as error:
+            raise self._provider_error(error) from error
+        if not self._status_matches_device(status, device_id) or status.relay is not False:
+            raise SmartChargeError("offReadbackRequired", "Chưa đọc lại được Shelly đã tắt. Quyền điều khiển vẫn được giữ.", 503, True)
+        try:
+            released = self.repository.release_lan_operation_after_off(uid, device_id, operation_id)
+        except Exception as error:
+            raise SmartChargeError("controlReleaseUnavailable", "Chưa xác minh được quyền điều khiển. Hãy thử lại.", 503, True) from error
+        if not released:
+            raise SmartChargeError("activeSessionConflict", "Quyền điều khiển vẫn được giữ cho thao tác đang hoạt động.", 409)
+        self.repository.append_audit(uid, "shelly_control_released", operation_id=operation_id)
 
     def start(self, uid: str, preview_id: str, idempotency_key: str) -> ChargingSession:
         if not idempotency_key or len(idempotency_key) > 160:
@@ -326,7 +408,7 @@ class SmartChargeService:
             verified = None
             for _ in range(10):
                 current = self.provider.get_status(binding)
-                if current.device_id == binding.device_id and current.relay and current.timer_remaining > 0:
+                if self._status_matches_device(current, binding.device_id) and current.relay is True and current.timer_remaining > 0:
                     if current.temperature_c is not None and current.temperature_c >= self.safety_policy.cutoff_temperature_c:
                         raise ProviderError("overtemperature", f"Shelly quá nhiệt ({current.temperature_c}°C >= {self.safety_policy.cutoff_temperature_c}°C)")
                     if current.power_w > self.safety_policy.cutoff_power_w:
@@ -352,10 +434,11 @@ class SmartChargeService:
             try:
                 self.provider.turn_off(binding)
                 off_status = self.provider.get_status(binding)
-                off_verified = off_status.device_id == binding.device_id and not off_status.relay
+                off_verified = self._status_matches_device(off_status, binding.device_id) and off_status.relay is False
             except ProviderError:
                 pass
             session.state = "failed" if off_verified else "unknown"
+            session.relay_verified = off_verified
             session.stop_reason = "command_failed"
             session.last_error = exc.code
             session.stopped_at = self.clock() if off_verified else None
@@ -427,24 +510,15 @@ class SmartChargeService:
         # session terminal (which releases the device lease) without a fresh
         # readback of the immutable device attached to this session.
         if status is None:
-            binding = self.binding(uid, session.vehicle_id)
-            if binding is None or binding.device_id != session.device_id:
-                session.state = "unknown"
-                session.updated_at = self.clock()
-                self.repository.save_session(uid, session)
-                return session
+            binding = self.session_binding(uid, session)
+            if binding is None:
+                return self.mark_session_unknown(uid, session, "bindingChanged")
             try:
                 status = self.provider.get_status(binding)
             except ProviderError:
-                session.state = "unknown"
-                session.updated_at = self.clock()
-                self.repository.save_session(uid, session)
-                return session
-        if status.device_id != session.device_id or status.relay:
-            session.state = "unknown"
-            session.updated_at = self.clock()
-            self.repository.save_session(uid, session)
-            return session
+                return self.mark_session_unknown(uid, session, "relayUnverified")
+        if not self._status_matches_device(status, session.device_id) or status.relay is not False:
+            return self.mark_session_unknown(uid, session, "relayUnverified")
         now = self.clock()
         # Zero is a valid meter reading, so never use a truthy fallback here.
         final_energy = meter_energy_wh
@@ -486,8 +560,7 @@ class SmartChargeService:
         )
         if session_id and (session is None or session.state not in NONTERMINAL_SESSION_STATES):
             raise SmartChargeError("sessionNotFound", "Không tìm thấy phiên sạc", 404)
-        binding = (next((b for b in self.repository.list_bindings(uid)
-                         if b.device_id == session.device_id and b.revoked_at is None), None)
+        binding = (self.session_binding(uid, session)
                    if session else self.binding(uid, vehicle_id))
         if not binding:
             raise SmartChargeError("notConfigured", "Shelly chưa được kết nối", 404)
@@ -513,8 +586,7 @@ class SmartChargeService:
             verified = None
             for _ in range(3):
                 status = self.provider.get_status(binding)
-                if (status.online and not status.relay and
-                        self.repository._device_owner_doc_id(status.device_id) == self.repository._device_owner_doc_id(binding.device_id)):
+                if self._status_matches_device(status, binding.device_id) and status.relay is False:
                     verified = status
                     break
                 self.sleep(1)
@@ -889,7 +961,9 @@ class SmartChargeService:
         session.soc_estimation_version = 2
 
     def _apply_safety(self, uid: str, binding: DeviceBinding, status) -> None:
-        if not status.relay:
+        if not self._status_matches_device(status, binding.device_id):
+            return
+        if status.relay is False:
             self._unsafe_samples.pop((uid, binding.device_id), None)
             return
         p = self.safety_policy
@@ -915,14 +989,9 @@ class SmartChargeService:
             session.safety_events.append(SmartChargeSafetyEvent(kind, "critical", message, value))
             self.repository.save_session(uid, session)
         if count >= p.consecutive_samples:
-            self.provider.turn_off(binding)
-            readback = self.provider.get_status(binding)
-            if readback.relay:
+            self._backup_stop_session(uid, session, state="interrupted", stop_reason="safety_cutoff")
+            if session.state in NONTERMINAL_SESSION_STATES:
                 raise SmartChargeError("relayUnverified", "Không xác minh được OFF an toàn", 503)
-            self._finalize_session(
-                uid, session, state="interrupted", stop_reason="safety_cutoff",
-                status=readback,
-            )
 
     def manual_on(
         self,
@@ -1002,7 +1071,7 @@ class SmartChargeService:
             self.provider.turn_on_with_timer(binding, duration_seconds)
             self.sleep(1)
             status = self.provider.get_status(binding)
-            if not status.relay or status.timer_remaining <= 0:
+            if not self._status_matches_device(status, binding.device_id) or status.relay is not True or status.timer_remaining <= 0:
                 raise ProviderError("timerNotArmed", "Không xác minh được safety timer")
             session.state = "active"
             session.relay_verified = True
@@ -1017,10 +1086,11 @@ class SmartChargeService:
             try:
                 self.provider.turn_off(binding)
                 off_status = self.provider.get_status(binding)
-                off_verified = off_status.device_id == binding.device_id and not off_status.relay
+                off_verified = self._status_matches_device(off_status, binding.device_id) and off_status.relay is False
             except ProviderError:
                 pass
             session.state = "failed" if off_verified else "unknown"
+            session.relay_verified = off_verified
             session.stop_reason = "command_failed"
             session.last_error = exc.code
             session.stopped_at = self.clock() if off_verified else None
@@ -1035,69 +1105,51 @@ class SmartChargeService:
         session = self.repository.current_session(uid, vehicle_id=vehicle_id)
         if not session:
             return None
-        binding = self.binding(uid, session.vehicle_id)
+        binding = self.session_binding(uid, session)
         if not binding:
-            return session
+            return self.mark_session_unknown(uid, session, "bindingChanged")
         try:
             status = self.provider.get_status(binding)
-        except ProviderError:
-            return session
-        return self._reconcile_with_status(uid, status, vehicle_id) or self.repository.current_session(uid, vehicle_id=vehicle_id)
+        except ProviderError as error:
+            return self.mark_session_unknown(uid, session, error.code)
+        return self._reconcile_with_status(uid, status, vehicle_id, session=session)
 
     def recover(self, uid: str, vehicle_id: str | None = None) -> ChargingSession | None:
         """Called on server startup/restart. Reads real relay state from Shelly and synchronizes database."""
         session = self.repository.current_session(uid, vehicle_id=vehicle_id)
         if not session:
             return None
-        binding = self.binding(uid, session.vehicle_id)
+        binding = self.session_binding(uid, session)
         if not binding:
-            return session
+            return self.mark_session_unknown(uid, session, "bindingChanged")
         try:
             status = self.provider.get_status(binding)
-        except ProviderError:
-            return session
-        now = self.clock()
-        if not status.relay:
-            near_planned = abs((now - session.effective_stop_at).total_seconds()) <= 120
-            return self._finalize_session(
-                uid, session,
-                state="completed" if near_planned else "interrupted",
-                stop_reason="planned_timer" if near_planned else "relay_off",
-                status=status,
-            )
-        if status.timer_remaining <= 0 and session.state in NONTERMINAL_SESSION_STATES:
-            try:
-                self.provider.turn_off(binding)
-            except ProviderError:
-                pass
-        if now >= session.absolute_safety_stop_at:
-            try:
-                self.provider.turn_off(binding)
-            except ProviderError:
-                pass
-        return session
+        except ProviderError as error:
+            return self.mark_session_unknown(uid, session, error.code)
+        self._apply_safety(uid, binding, status)
+        return self._reconcile_with_status(uid, status, vehicle_id, session=session)
 
 
-    def _reconcile_with_status(self, uid: str, status, vehicle_id: str | None = None) -> ChargingSession | None:
-        session = self.repository.current_session(uid, vehicle_id=vehicle_id)
+    def _reconcile_with_status(self, uid: str, status, vehicle_id: str | None = None,
+                               *, session: ChargingSession | None = None) -> ChargingSession | None:
+        session = session or self.repository.current_session(uid, vehicle_id=vehicle_id)
         if not session:
             return None
+        if session.state not in NONTERMINAL_SESSION_STATES:
+            return session
+        if not self._status_matches_device(status, session.device_id):
+            return self.mark_session_unknown(uid, session, "deviceUnverified")
         now = self.clock()
-        if status.relay:
+        if status.relay is True:
             self._ingest_energy(session, status.energy_wh)
             session.updated_at = now
+            if now >= session.absolute_safety_stop_at or now >= session.effective_stop_at:
+                return self._backup_stop_session(uid, session, state="interrupted", stop_reason="deadline_cutoff")
+            if session.state in {"stopping", "unknown"}:
+                return self._backup_stop_session(uid, session, state="interrupted", stop_reason="recovery_off")
             if status.timer_remaining <= 0:
-                binding = self.binding(uid, session.vehicle_id)
-                try:
-                    if binding:
-                        self.provider.turn_off(binding)
-                except ProviderError:
-                    pass
                 session.last_error = "timerNotArmed"
-                self._finalize_session(
-                    uid, session, state="failed", stop_reason="command_failed",
-                    status=status,
-                )
+                return self._backup_stop_session(uid, session, state="failed", stop_reason="command_failed")
             else:
                 self._checkpoint_session(uid, session)
             return session

@@ -52,6 +52,7 @@ services:
       SHELLY_CONSENT_CALLBACK_URL: ${SHELLY_CONSENT_CALLBACK_URL:-}
       SHELLY_PROFILE_MASTER_KEY: ${SHELLY_PROFILE_MASTER_KEY:-}
       SMART_CHARGE_MAX_MINUTES: ${SMART_CHARGE_MAX_MINUTES:-600}
+      SMART_CHARGE_WORKER_SCOPE: ${SMART_CHARGE_WORKER_SCOPE:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_CATALOG_MODEL: ${GEMINI_CATALOG_MODEL:-gemini-2.5-flash}
       CATALOG_RESEARCH_DAILY_LIMIT: ${CATALOG_RESEARCH_DAILY_LIMIT:-50}
@@ -102,7 +103,11 @@ services:
     container_name: vinfast_smart_charge_worker
     restart: unless-stopped
     healthcheck:
-      disable: true
+      test: ["CMD", "python", "-m", "shelly.worker_health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
     depends_on:
       api:
         condition: service_healthy
@@ -119,6 +124,8 @@ services:
       SHELLY_PROFILE_MASTER_KEY: ${SHELLY_PROFILE_MASTER_KEY:-}
       SMART_CHARGE_MAX_MINUTES: ${SMART_CHARGE_MAX_MINUTES:-600}
       SMART_CHARGE_WORKER_POLL_SECONDS: ${SMART_CHARGE_WORKER_POLL_SECONDS:-60}
+      SMART_CHARGE_WORKER_SCOPE: ${SMART_CHARGE_WORKER_SCOPE:-}
+      SMART_CHARGE_WORKER_HEALTH_PORT: "8090"
     networks:
       - vinfast_net
 

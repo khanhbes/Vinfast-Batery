@@ -7,6 +7,7 @@ enum ShellyConnectionFlowState {
   connecting,
   verifying,
   verificationRequired,
+  serverConnectionRequired,
   connected,
   connectionFailed,
   incompatible,

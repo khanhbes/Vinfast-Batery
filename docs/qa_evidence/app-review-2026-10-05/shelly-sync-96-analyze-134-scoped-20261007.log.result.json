@@ -1,0 +1,17 @@
+{
+  "command": [
+    "C:\\flutter\\bin\\cache\\dart-sdk\\bin\\dart.exe",
+    "analyze",
+    "lib/data/models/shelly_connection_state.dart",
+    "lib/data/services/shelly_connection_coordinator.dart",
+    "lib/features/smart_charging/shelly_connect_screen.dart",
+    "test/unit/shelly_connection_coordinator_test.dart"
+  ],
+  "cwd": "app",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\shelly-sync-96-analyze-134-scoped-20261007.log",
+  "timeoutSeconds": 120,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 25.95
+}

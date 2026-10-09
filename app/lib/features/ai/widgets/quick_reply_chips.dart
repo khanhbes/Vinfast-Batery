@@ -64,28 +64,34 @@ class QuickReplyChips extends StatelessWidget {
         separatorBuilder: (_, _) => const SizedBox(width: 8),
         itemBuilder: (context, index) {
           final text = suggestions[index];
+          final isDark = uiColors.dark;
           return ActionChip(
             materialTapTargetSize: MaterialTapTargetSize.padded,
             visualDensity: VisualDensity.standard,
             label: Text(
               text,
               style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.1,
                 color: uiColors.text,
               ),
             ),
-            backgroundColor: uiColors.surface,
+            backgroundColor: isDark
+                ? const Color(0xFF131F33).withValues(alpha: 0.85)
+                : Colors.white.withValues(alpha: 0.95),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(19),
+              borderRadius: BorderRadius.circular(20),
               side: BorderSide(
-                color: uiColors.border.withValues(alpha: 0.6),
-                width: 1,
+                color: isDark
+                    ? const Color(0xFF10B981).withValues(alpha: 0.35)
+                    : uiColors.primary.withValues(alpha: 0.35),
+                width: 1.1,
               ),
             ),
             elevation: 0,
             pressElevation: 1,
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             onPressed: () => onSelect(text),
           );
         },

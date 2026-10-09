@@ -2,6 +2,8 @@
 import base64
 import os
 import uuid
+from copy import deepcopy
+from datetime import timedelta
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
@@ -11,6 +13,7 @@ from google.cloud import firestore
 
 from shelly.connection_codes import ConnectionCodeStore
 from shelly.repositories import SmartChargeRepository
+from shelly.models import ChargingSession, utcnow
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get('FIRESTORE_EMULATOR_HOST'), reason='Requires isolated Firestore Emulator',
@@ -113,3 +116,119 @@ def test_scoped_enrollment_and_binding_changes_are_visible_to_other_workers(fixt
     with pytest.raises(PermissionError, match='vehicleForbidden'):
         repo_a.enroll_connection_code('account-a', code, 'op-after-archive', vehicle_id=vehicle_id)
     assert db.collection('shellyConnectionCodes').document(code.code).get().to_dict()['redemptionCount'] == 1
+
+
+def test_heartbeat_visible_across_api_worker_and_isolated_by_environment(fixture):
+    db, _, _, _ = fixture
+    scope = 'qa-' + uuid.uuid4().hex
+    worker = SmartChargeRepository(db, worker_scope=scope)
+    api = SmartChargeRepository(db, worker_scope=scope)
+    other_environment = SmartChargeRepository(db, worker_scope='other-' + scope)
+    now = utcnow()
+    assert api.worker_health_ready(now) is False
+    assert worker.claim_worker_lease('qa-worker', now=now) == 1
+    worker.publish_worker_heartbeat('qa-worker', healthy=True, now=now)
+    assert api.worker_health_ready(now) is True
+    assert other_environment.worker_health_ready(now) is False
+    assert api.worker_health_ready(now + timedelta(seconds=91)) is False
+    worker.publish_worker_heartbeat('qa-worker', healthy=False, now=now)
+    assert api.worker_health_ready(now) is False
+
+
+def test_independent_worker_cannot_resurrect_terminal_session_or_change_device(fixture):
+    db, device, _, _ = fixture
+    repo_a, repo_b = SmartChargeRepository(db), SmartChargeRepository(db)
+    now = utcnow()
+    session = ChargingSession(
+        session_id='qa-' + uuid.uuid4().hex, device_id=device, vehicle_id='qa-vehicle',
+        state='active', start_soc=20, target_soc=20, predicted_minutes=5,
+        predicted_duration_seconds=300, prediction_source='manual_timer',
+        prediction_confidence=None, created_at=now, updated_at=now,
+        ai_stop_at=now + timedelta(seconds=300), effective_stop_at=now + timedelta(seconds=300),
+        absolute_safety_stop_at=now + timedelta(seconds=600), idempotency_key='qa-op',
+        owner_uid='account-a', relay_verified=True,
+    )
+    repo_a.save_session('account-a', session)
+    stale = deepcopy(repo_b.get_session('account-a', session.session_id))
+    session.state, session.version = 'cancelled', 2
+    repo_a.save_session('account-a', session)
+    stale.version = 3
+    with pytest.raises(RuntimeError, match='sessionAlreadyTerminal'):
+        repo_b.save_session('account-a', stale)
+    doc = db.collection('users').document('account-a').collection('smartChargingSessions').document(session.session_id)
+    assert doc.get().to_dict()['state'] == 'cancelled'
+    changed = deepcopy(session)
+    changed.device_id = 'qa-wrong-device'
+    with pytest.raises(PermissionError, match='sessionIdentityMismatch'):
+        repo_b.save_session('account-a', changed)
+
+
+def test_terminal_and_active_writes_race_without_terminal_regression(fixture):
+    db, device, _, _ = fixture
+    now = utcnow()
+    session = ChargingSession(
+        session_id='qa-' + uuid.uuid4().hex, device_id=device, vehicle_id='qa-vehicle',
+        state='active', start_soc=20, target_soc=20, predicted_minutes=5,
+        predicted_duration_seconds=300, prediction_source='manual_timer',
+        prediction_confidence=None, created_at=now, updated_at=now,
+        ai_stop_at=now, effective_stop_at=now, absolute_safety_stop_at=now,
+        idempotency_key='qa-op', owner_uid='account-a', relay_verified=True,
+    )
+    SmartChargeRepository(db).save_session('account-a', session)
+    terminal = deepcopy(session)
+    terminal.state, terminal.version = 'cancelled', 2
+    stale = deepcopy(session)
+    stale.version = 2
+    def write(candidate):
+        try:
+            SmartChargeRepository(db).save_session('account-a', candidate)
+            return True
+        except RuntimeError as error:
+            assert str(error) == 'sessionAlreadyTerminal'
+            return False
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(write, [terminal, stale]))
+    assert results[0] is True
+    saved = db.collection('users').document('account-a').collection('smartChargingSessions').document(session.session_id).get().to_dict()
+    assert saved['state'] == 'cancelled'
+
+
+def test_lan_release_is_exact_typed_operation_and_never_releases_charging(fixture):
+    db, device, _, _ = fixture
+    repo = SmartChargeRepository(db)
+    assert repo.claim_device_owner('account-a', device)
+    assert repo.claim_device_session('account-a', device, 'qa-lan', lease_kind='lan_control')
+    other_process = SmartChargeRepository(db)
+    assert other_process.release_lan_operation_after_off('account-a', device, 'qa-other') is False
+    assert other_process.release_lan_operation_after_off('account-b', device, 'qa-lan') is False
+    assert other_process.release_lan_operation_after_off('account-a', device, 'qa-lan') is True
+    assert repo.claim_device_session('account-a', device, 'qa-charging')
+    assert other_process.release_lan_operation_after_off('account-a', device, 'qa-charging') is False
+    assert not other_process.claim_device_session('account-a', device, 'qa-second')
+
+
+def test_concurrent_worker_lease_has_one_holder_and_fenced_takeover(fixture):
+    db, _, _, _ = fixture
+    scope = 'qa-lease-' + uuid.uuid4().hex
+    repos = [SmartChargeRepository(db, worker_scope=scope) for _ in range(2)]
+    now = utcnow()
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        claims = list(pool.map(lambda index: repos[index].claim_worker_lease('qa-' + str(index), now=now), range(2)))
+    assert sum(epoch is not None for epoch in claims) == 1
+    winner = 0 if claims[0] else 1
+    loser = 1 - winner
+    repos[winner].publish_worker_heartbeat('qa-' + str(winner), healthy=True, now=now)
+    assert repos[winner].worker_lease_deadline('qa-' + str(winner), now=now) == now + timedelta(seconds=180)
+    assert repos[loser].worker_health_ready(now)
+    later = now + timedelta(seconds=181)
+    assert repos[loser].claim_worker_lease('qa-' + str(loser), now=later) == 2
+    assert not repos[winner].worker_health_ready(later)
+    with pytest.raises(RuntimeError, match='workerLeaseLost'):
+        repos[winner].publish_worker_heartbeat('qa-' + str(winner), healthy=True, now=later)
+    with pytest.raises(RuntimeError, match='workerLeaseLost'):
+        repos[winner].renew_worker_lease('qa-' + str(winner), now=later)
+    with pytest.raises(RuntimeError, match='workerLeaseLost'):
+        repos[winner].worker_lease_deadline('qa-' + str(winner), now=later)
+    assert not repos[winner].release_worker_lease('qa-' + str(winner), now=later)
+    repos[loser].publish_worker_heartbeat('qa-' + str(loser), healthy=True, now=later)
+    assert repos[winner].worker_health_ready(later)

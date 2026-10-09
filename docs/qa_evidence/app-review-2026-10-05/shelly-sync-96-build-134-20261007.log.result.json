@@ -1,0 +1,17 @@
+{
+  "command": [
+    "C:\\flutter\\bin\\flutter.bat",
+    "build",
+    "apk",
+    "--debug",
+    "--no-pub",
+    "--dart-define=APP_API_BASE_URL=https://vinfast-api.nicestone-4d213368.eastasia.azurecontainerapps.io"
+  ],
+  "cwd": "app",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\shelly-sync-96-build-134-20261007.log",
+  "timeoutSeconds": 360,
+  "timedOut": true,
+  "exitCode": 1,
+  "cleanupError": null,
+  "elapsedSeconds": 775.17
+}
