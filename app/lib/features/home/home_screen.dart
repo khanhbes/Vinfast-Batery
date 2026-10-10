@@ -20,7 +20,6 @@ import '../../data/models/vehicle_model.dart';
 import '../../data/services/battery_state_service.dart';
 import 'widgets/range_prediction_card.dart';
 import 'widgets/recent_charging_chart.dart';
-import '../dashboard/dashboard_screen.dart';
 import '../smart_charging/smart_charger_setup_hub_screen.dart';
 import '../trip_planner/trip_planner_wrapper.dart';
 import '../maintenance/maintenance_screen.dart';
@@ -671,7 +670,8 @@ class _VehicleBanner extends StatelessWidget {
                             color: Colors.white,
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            letterSpacing: vehicle?.licensePlate?.trim().isNotEmpty == true
+                            letterSpacing:
+                                vehicle?.licensePlate?.trim().isNotEmpty == true
                                 ? 1.0
                                 : 0.2,
                           ),
@@ -1124,8 +1124,9 @@ class _BatteryHealthCardState extends State<_BatteryHealthCard>
                 ),
               ),
               SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Wrap(
+                spacing: 12,
+                runSpacing: 8,
                 children: [
                   Text(
                     !hasData

@@ -13,12 +13,17 @@ class TimedChargingSectionV2 extends StatefulWidget {
     required this.onOff,
     required this.readyForControl,
     this.disabledReason,
+    this.onOpenSetup,
   });
 
   final Future<void> Function(Duration duration) onStart;
   final VoidCallback onOff;
   final bool readyForControl;
   final String? disabledReason;
+
+  /// Opens Shelly setup; shown next to the locked CTA so the reason stays
+  /// visible after the header text has scrolled away (UX107-01).
+  final VoidCallback? onOpenSetup;
 
   @override
   State<TimedChargingSectionV2> createState() => _TimedChargingSectionV2State();
@@ -477,6 +482,30 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
             ),
           ],
         ),
+        if (!widget.readyForControl) ...[
+          const SizedBox(height: 8),
+          Text(
+            widget.disabledReason ??
+                'Chưa sẵn sàng bật sạc. Hãy kiểm tra thiết lập Shelly.',
+            key: const ValueKey('timed-charge-locked-reason'),
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: CockpitColors.muted, fontSize: 12),
+          ),
+          if (widget.onOpenSetup != null)
+            Center(
+              child: TextButton.icon(
+                key: const ValueKey('timed-charge-open-setup'),
+                onPressed: widget.onOpenSetup,
+                icon: const Icon(
+                  Icons.settings_input_component_rounded,
+                  size: 16,
+                ),
+                label: const Text('Thiết lập Shelly'),
+              ),
+            ),
+        ],
       ],
     );
   }

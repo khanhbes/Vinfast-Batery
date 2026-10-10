@@ -1,0 +1,7 @@
+{
+  "passed": false,
+  "mode": "offline_fixture",
+  "hardwareCommands": 0,
+  "imageId": "sha256:a6ab4986c109234a450f3c1799e1d52bd92a8cc24db390dde337495b1c7764ce",
+  "failureType": "RuntimeError"
+}

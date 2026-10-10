@@ -1,0 +1,28 @@
+{
+  "command": [
+    "C:\\Users\\khanh\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin\\docker.exe",
+    "run",
+    "--rm",
+    "--label",
+    "vinfast.azure.qa=api106-deps",
+    "--network",
+    "none",
+    "--memory",
+    "256m",
+    "--cpus",
+    "0.25",
+    "--entrypoint",
+    "python",
+    "vinfast-api-qa:task106",
+    "-c",
+    "import json,sys,importlib.metadata as m,subprocess; print(json.dumps({'python':sys.version,'packages':{d.metadata['Name']:d.version for d in m.distributions()}},sort_keys=True),flush=True); subprocess.run([sys.executable,'-m','pip','check'],check=True)"
+  ],
+  "cwd": ".",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\api-upgrade-106-runtime-deps-20261010.log",
+  "processId": 3304,
+  "timeoutSeconds": 120,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 8.27
+}

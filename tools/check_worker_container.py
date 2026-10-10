@@ -18,10 +18,12 @@ def docker(*args, timeout=30, check=True):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--task", default="102")
+    parser.add_argument("--image", help="Override image (default vinfast-worker-qa:task<ID>)")
+    parser.add_argument("--result", help="Write a receipt JSON consumed by deploy-worker-control.ps1")
     args = parser.parse_args()
     if not re.fullmatch(r"[1-9][0-9]{1,4}", args.task):
         parser.error("Expected numeric QA task ID")
-    image = "vinfast-worker-qa:task" + args.task
+    image = args.image or "vinfast-worker-qa:task" + args.task
     name = "vinfast-worker-qa-" + args.task + "-" + uuid.uuid4().hex[:12]
     label = "vinfast.qa.task=" + args.task
     container = docker("create", "--name", name, "--label", label,
@@ -68,6 +70,13 @@ def main():
         if invalid.returncode != 1 or "workerScopeNotConfigured" not in invalid.stdout:
             raise RuntimeError("unconfigured production entry did not fail closed")
         print(json.dumps({"unconfiguredEntryExitCode": invalid.returncode, "startupBlocked": True}), flush=True)
+        if args.result:
+            # Receipt carries only image identity and pass/fail facts, never env/logs.
+            with open(args.result, "w", encoding="utf-8") as handle:
+                json.dump({"passed": True, "task": args.task, "imageId": image_record["Id"],
+                           "repoDigests": image_record.get("RepoDigests") or [],
+                           "relayCommands": first["relayCommands"], "hardwareCommands": 0,
+                           "startupBlockedWithoutScope": True}, handle, indent=2)
     finally:
         # Only the exact ID created above, with our QA label, may be removed.
         owned = docker("inspect", "--format", '{{index .Config.Labels "vinfast.qa.task"}}',

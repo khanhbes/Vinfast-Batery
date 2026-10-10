@@ -358,9 +358,23 @@ void main() {
         section().disabledReason,
         contains('Liên kết cũ chưa cho phép điều khiển qua máy chủ'),
       );
+      // UX107-01: the reason and a setup action sit next to the locked CTA.
+      expect(section().onOpenSetup, isNotNull);
+      expect(
+        find.byKey(const ValueKey('timed-charge-locked-reason')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('timed-charge-open-setup')),
+        findsOneWidget,
+      );
       publishControlConnection(controller);
       await tester.pump();
       expect(section().readyForControl, isTrue);
+      expect(
+        find.byKey(const ValueKey('timed-charge-open-setup')),
+        findsNothing,
+      );
       ShellyConnectionCoordinator.shared.markControlUnknown(
         uid: 'qa-controls',
         vehicleId: 'VF-001',

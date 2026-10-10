@@ -1,0 +1,14 @@
+{
+  "command": [
+    "python",
+    "tools/check_batterybot_source.py"
+  ],
+  "cwd": ".",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\api-upgrade-106-source-verified-20261010.log",
+  "processId": 21336,
+  "timeoutSeconds": 120,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 0.73
+}

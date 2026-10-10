@@ -8,11 +8,10 @@ pandas>=2.2.0
 # ev_soc_pipeline.pkl was trained with scikit-learn 1.8.0.
 # Keep the runtime deterministic instead of loading it with a newer version.
 scikit-learn==1.8.0
-firebase-admin>=6.4.0
-requests>=2.32.0
+firebase-admin==7.1.0
+requests==2.32.5
 PyJWT[crypto]>=2.9.0
-cryptography>=42.0.0
+cryptography==46.0.5
 beautifulsoup4>=4.12.3
 pypdf>=5.0.0
 Pillow>=11.0.0
-cryptography>=42.0.0

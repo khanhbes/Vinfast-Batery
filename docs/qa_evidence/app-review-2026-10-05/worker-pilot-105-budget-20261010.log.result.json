@@ -1,0 +1,18 @@
+{
+  "command": [
+    "pwsh",
+    "-NoProfile",
+    "-File",
+    "deploy/azure/deploy-worker-pilot-budget.ps1",
+    "-ParameterPath",
+    "C:\\Users\\khanh\\AppData\\Local\\Temp\\vinfast-budget-a828afa052d04148ace0a9856748c5e5.json"
+  ],
+  "cwd": ".",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\worker-pilot-105-budget-20261010.log",
+  "processId": 32520,
+  "timeoutSeconds": 240,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 81.81
+}

@@ -60,6 +60,38 @@ class ShellyConnectionSnapshot {
       ? 'Shelly đang bật. Hãy dừng và xác minh đã tắt trước khi bật phiên mới.'
       : capabilities?.controlBlockedMessage;
 
+  /// Whether the fix for a locked Start button lives in Shelly setup
+  /// (admin code, safety test) rather than on the charging screen.
+  bool get lockFixedInSetup =>
+      state == ShellyConnectionFlowState.serverConnectionRequired ||
+      state == ShellyConnectionFlowState.verificationRequired ||
+      (!isLinked && serverBinding == null);
+
+  /// BatteryBot answer for "Vì sao nút sạc bị khóa?" built from the same
+  /// shared state as the charging screen. A readback OFF is never treated as
+  /// permission to turn ON (UX107-02).
+  String get chatLockExplanation {
+    if (readyForControl) {
+      return 'Nút sạc đang mở: Shelly đã kết nối qua máy chủ, đang tắt và đủ điều kiện an toàn. Bạn vẫn phải xác nhận trước khi bật.';
+    }
+    final reason = controlBlockedMessage;
+    if (reason != null && reason.isNotEmpty)
+      return 'Nút sạc bị khóa vì: $reason';
+    if (!isLinked && serverBinding == null) {
+      return 'Xe này chưa liên kết Shelly. Hãy nhập mã kết nối 6 ký tự do quản trị viên cấp trong thiết lập Shelly.';
+    }
+    return switch (state) {
+      ShellyConnectionFlowState.offline =>
+        'Nút sạc bị khóa vì Shelly đang mất kết nối. Kiểm tra nguồn điện và Wi-Fi của ổ cắm.',
+      ShellyConnectionFlowState.verificationRequired =>
+        'Nút sạc bị khóa vì Shelly cần kiểm tra an toàn không tải. Mở thiết lập Shelly và làm theo hướng dẫn.',
+      ShellyConnectionFlowState.verifying =>
+        'Đang kiểm tra kết nối Shelly. Mở Sạc pin để làm mới trạng thái.',
+      _ =>
+        'Chưa đọc được trạng thái Shelly từ máy chủ. Mở Sạc pin để làm mới; mình không tự bật ổ cắm.',
+    };
+  }
+
   String get connectionLabel => controlUncertain
       ? 'Đã liên kết · Chưa xác minh trạng thái'
       : switch (state) {
@@ -199,6 +231,8 @@ class ShellyConnectionCoordinator {
   }
 
   ShellyConnectionSnapshot get current => _current;
+  String? get accountUid => _accountUid;
+  int get accountGeneration => _accountGeneration;
   Stream<ShellyConnectionSnapshot> get states => _states.stream;
 
   void _emit(ShellyConnectionSnapshot value) {
@@ -246,11 +280,15 @@ class ShellyConnectionCoordinator {
     }
     final old = _current;
     if (old.serverBinding != null) {
+      // Relay ON alone cannot resolve an ambiguous command/session.
+      if (old.controlUncertain && (status.relay || !status.online)) return;
       _emit(
         ShellyConnectionSnapshot.fromServerBinding(
           old.serverBinding!,
           status: status,
-          capabilities: capabilities ?? old.capabilities,
+          capabilities: old.controlUncertain
+              ? capabilities
+              : capabilities ?? old.capabilities,
         ),
       );
       return;
@@ -335,11 +373,19 @@ class ShellyConnectionCoordinator {
     required SmartChargerBinding binding,
     required SmartChargerStatus status,
     SmartChargerCapabilities? capabilities,
+    bool controlResolved = false,
   }) {
     if (uid != _accountUid || (_vehicleId != null && _vehicleId != vehicleId)) {
       return;
     }
     _vehicleId = vehicleId;
+    if (_current.controlUncertain &&
+        !controlResolved &&
+        (!status.online ||
+            status.relay ||
+            !sameShellyDevice(status.deviceId, binding.deviceId))) {
+      return;
+    }
     _emit(
       ShellyConnectionSnapshot.fromServerBinding(
         binding,

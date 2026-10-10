@@ -1,0 +1,22 @@
+{
+  "command": [
+    "pwsh",
+    "-NoProfile",
+    "-File",
+    "deploy/azure/deploy-worker-pilot.ps1",
+    "-ImageDigest",
+    "sha256:a6ab4986c109234a450f3c1799e1d52bd92a8cc24db390dde337495b1c7764ce",
+    "-UnitResultPath",
+    "docs/qa_evidence/app-review-2026-10-05/worker-pilot-105-unit-final-20261010.log.result.json",
+    "-SmokeResultPath",
+    "docs/qa_evidence/app-review-2026-10-05/worker-pilot-105-container-final-20261010.json"
+  ],
+  "cwd": ".",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\worker-pilot-105-validate-20261010.log",
+  "processId": 33848,
+  "timeoutSeconds": 300,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 116.05
+}

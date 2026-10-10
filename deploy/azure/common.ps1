@@ -53,9 +53,19 @@ function Write-RestrictedJson {
     # Use the Windows .NET ACL API directly: module autoload/type-data conflicts
     # must not prevent secure deployment or lead to a permissions bypass.
     $fileInfo = [IO.FileInfo]::new($Path)
-    $acl = $fileInfo.GetAccessControl()
+    # FileInfo ACL instance methods exist in Windows PowerShell/.NET Framework;
+    # PowerShell 7 uses the FileSystemAclExtensions static API instead.
+    $acl = if ($fileInfo.PSObject.Methods['GetAccessControl']) {
+        $fileInfo.GetAccessControl()
+    } else {
+        [IO.FileSystemAclExtensions]::GetAccessControl($fileInfo)
+    }
     $acl.SetAccessRuleProtection($true, $false)
     $acl.SetAccessRule([Security.AccessControl.FileSystemAccessRule]::new($current, 'FullControl', 'Allow'))
-    $fileInfo.SetAccessControl($acl)
+    if ($fileInfo.PSObject.Methods['SetAccessControl']) {
+        $fileInfo.SetAccessControl($acl)
+    } else {
+        [IO.FileSystemAclExtensions]::SetAccessControl($fileInfo, $acl)
+    }
     [IO.File]::WriteAllText($Path, ($Data | ConvertTo-Json -Depth 30), [Text.UTF8Encoding]::new($false))
 }

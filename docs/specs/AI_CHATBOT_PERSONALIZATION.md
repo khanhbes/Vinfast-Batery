@@ -3,6 +3,22 @@
 > **Phiên bản**: v1.1.0 — 07/10/2026
 > **Mục tiêu hiện hành**: BatteryBot local, kiến thức app và công cụ có xác nhận; dự đoán từ model mobile hợp lệ, lịch nhắc local-first và học adapter nhỏ opt-in. Gemini/SSE bên dưới là thiết kế lịch sử, không phải cấu hình production hiện hành.
 
+## Azure read-only pilot — Task105 (10/10/2026)
+
+- User duyệt một pilot0,25vCPU/0,5GiB/một replica/noingress,workerbudget khoảng20USD/tháng;ON/rearm/enrollment/safety vẫn khóa. Đây không phải duyệt controlworker hoặc supervisedrelay.
+- Imagepilot chỉ có bootstrapFirebase và syntheticvaultselftest,read-onlyGet dedicatedprobe mỗi60s,health/ready riêng. Không actuator/controlrepository/reconciliation,không viết device/session/ownership/controllease/heartbeat. `controlReady=false` cố định;pilotReady không được dùng làm điều kiện mở ON.
+-14unitPass và offlinecontainer boot/health/SIGTERM/failclosedPass,0commands. Image push ACR/digestpin,Azurevalidate/deployexit0,pilotRunning/privateplatformReady/restart0;API/AI không đổirevision. Runtime/read/budgetresults ởPROJECT_STATUS105. Không dùng mockGet/vaultselftest/pilotReady chứng minh IAMwrite,realprofiledecrypt,Cloudreadback hoặc active-load.
+- APIAzure hiện vẫn imageTask78,không đồng bộ admissionprotocol2. Trước controlpilot cần nângAPI/worker đồng bộ,lease/heartbeat/fault/migration gates và duyệt riêng;không thaypolicy/DNS/endpoint hoặcAPI/AI trong105. Chi phí thực,LLM/prediction/phone/hardware là cổng độc lập.
+- Pilot cuối:revisionHealthy/oneReplica/Ready/restart0;monthlybudget20filterworker và3notification rules đã deploy/verify,không lưu địa chỉ nhận trongsource/report. Alert không hardcap hoặc quyền tựstop. Summary/evidence ởPROJECT_STATUS105;không dùng pilot đọcFirebase thay controlworker hoặc chứng nhận chatbot đã điều khiển Shelly thật.
+
+## App/chat readback consistency — Task104 (10/10/2026)
+
+- Adapter chat chỉ cho phép tool ghi đã định nghĩa; không diễn dịch một tool lạ thành yêu cầu ON. Human confirmation, UID/xe/generation guard và operation consume-before-await vẫn bắt buộc; không dùng LLM/corpus hoặc Direct Cloud để vượt backend authorization.
+- ON chỉ thành công khi readback mới đúng session/vehicle/device, revision không lùi, sessionactive và relayVerified/timerVerifiedtrue, relayON với timer dương. Response lệnh cũ không thay fresh evidence. Thiếu/sai/mất readback giữ unknown, không gửiONlần hai.
+- Stop qua session hoặc shared binding chỉ báo thành công sau fresh đúng-device OFF. Không publish connected trước khi kiểm evidence; HTTPacceptance vẫn chưa phải readback. OFF thành công không khôi phục quyền ON từ capability cũ.
+- Shared coordinator giữ linking/evidence khi backend read lỗi, loại bỏ stale telemetry/capability khỏi readiness. Passive ON/offline không xóa ambiguous command; đúng OFF giải quyết presentation mà không cấp Start từ cache. Polling app và gateway giữ UID/generation/vehicle qua await, không publish kết quả tài khoản cũ.
+-78related Flutter tests/exit0;fullsaufixHome932Pass/exit0 (lượttrước928Pass/4Fail giữbằngchứng). SourcecuốinativeDartanalyzer toànlib/test0issues/exit0/--fatal-infos;Flutterwrapper2lượtTimeout120s vẫnkhông tínhPass. Source scope323files/0findings của104;pilot mởrộngscope ở105. Không deploy/Azure unlock/APK/relay thật trong104;pilot chỉđọc đã được duyệt riêng. Admissionprotocol2 đồng bộ và IAM/vault/heartbeat/active-load gates vẫn cần trướccontrol. LLM local,prediction và hardware readback là cổng độc lập.
+
 ## Shared Cloud admission — Task103 (10/10/2026)
 
 - API profile validation và Vault Cloud worker/control dùng cùng `shellyCloudRateLimits/{credentialDigest}`. Không lưu key, UID, Device ID hoặc response thô trong hàng đợi. Client không được cấp quyền từ cache/queue; ownership, revision, worker và live Safe Boot vẫn được kiểm lại trước ON.

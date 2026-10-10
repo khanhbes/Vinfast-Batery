@@ -1,0 +1,18 @@
+{
+  "command": [
+    "C:\\flutter\\bin\\flutter.bat",
+    "build",
+    "apk",
+    "--debug",
+    "--no-pub",
+    "--dart-define=APP_API_BASE_URL=https://vinfast-api.nicestone-4d213368.eastasia.azurecontainerapps.io"
+  ],
+  "cwd": "app",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\oneplus-107-build-138-20261010.log",
+  "processId": 24776,
+  "timeoutSeconds": 600,
+  "timedOut": true,
+  "exitCode": 1,
+  "cleanupError": "process_tree_cleanup_failed",
+  "elapsedSeconds": 610.83
+}

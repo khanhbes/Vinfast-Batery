@@ -228,6 +228,13 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                                               ),
                                           onOff: () =>
                                               _emergencyOff(controller),
+                                          onOpenSetup: () =>
+                                              Navigator.of(context).push(
+                                                MaterialPageRoute<void>(
+                                                  builder: (_) =>
+                                                      const SmartChargerSetupHubScreen(),
+                                                ),
+                                              ),
                                         );
                                 },
                               ),

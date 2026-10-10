@@ -1,0 +1,1 @@
+{"exitCode": 1, "note": "Invalid run: host port 8080 belonged to vinfast_laptop_gateway, not the emulator; 13 errors HTTP 405. Original receipt recorded exit 0 because tail masked pytest exit.", "image": "vinfast-api-tests:task106", "timedOut": false}

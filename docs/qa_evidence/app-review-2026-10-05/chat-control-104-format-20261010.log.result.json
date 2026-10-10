@@ -1,0 +1,17 @@
+{
+  "command": [
+    "C:\\flutter\\bin\\dart.bat",
+    "format",
+    "lib/features/ai/services/app_chat_tool_gateway.dart",
+    "lib/data/services/shelly_connection_coordinator.dart",
+    "test/unit/chat_shelly_backend_integration_test.dart"
+  ],
+  "cwd": "app",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\chat-control-104-format-20261010.log",
+  "processId": 22144,
+  "timeoutSeconds": 120,
+  "timedOut": true,
+  "exitCode": 1,
+  "cleanupError": null,
+  "elapsedSeconds": 120.22
+}

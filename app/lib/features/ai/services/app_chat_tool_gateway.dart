@@ -183,20 +183,24 @@ class AppChatToolGateway implements ChatToolGateway {
         );
       case 'charger_status':
         final repo = _server;
-    final binding = await _backendRead(
-      owner, vehicle.vehicleId, generation,
-      () => repo.binding(vehicleId: vehicle.vehicleId),
-    );
+        final binding = await _backendRead(
+          owner,
+          vehicle.vehicleId,
+          generation,
+          () => repo.binding(vehicleId: vehicle.vehicleId),
+        );
         _guard(owner, vehicle.vehicleId, generation);
         if (binding == null) {
           return const LocalChatReply(
             'Xe này chưa có bộ sạc Shelly đã liên kết. Mở thiết lập để nhập mã kết nối.',
           );
         }
-    final live = await _backendRead(
-      owner, vehicle.vehicleId, generation,
-      () => repo.live(vehicleId: vehicle.vehicleId),
-    );
+        final live = await _backendRead(
+          owner,
+          vehicle.vehicleId,
+          generation,
+          () => repo.live(vehicleId: vehicle.vehicleId),
+        );
         _guard(owner, vehicle.vehicleId, generation);
         _connections.updateServerSnapshot(
           uid: owner,
@@ -324,7 +328,9 @@ class AppChatToolGateway implements ChatToolGateway {
     }
     final repo = _server;
     final binding = await _backendRead(
-      owner, vehicle.vehicleId, generation,
+      owner,
+      vehicle.vehicleId,
+      generation,
       () => repo.binding(vehicleId: vehicle.vehicleId),
     );
     _guard(owner, vehicle.vehicleId, generation);
@@ -333,11 +339,13 @@ class AppChatToolGateway implements ChatToolGateway {
       return {
         'allowed': false,
         'userMessage':
-            'Hãy kết nối Shelly qua máy chủ trước khi điều khiển trong chat.',
+            'Hãy kết nối Shelly qua máy chủ trước khi điều khiển trong chat. Mở Cài đặt → Sạc thông minh Shelly và nhập mã kết nối 6 ký tự do quản trị viên cấp.',
       };
     }
     final live = await _backendRead(
-      owner, vehicle.vehicleId, generation,
+      owner,
+      vehicle.vehicleId,
+      generation,
       () => repo.live(vehicleId: vehicle.vehicleId),
     );
     _guard(owner, vehicle.vehicleId, generation);
@@ -358,10 +366,12 @@ class AppChatToolGateway implements ChatToolGateway {
     if (tool == 'stop_charging') {
       final session = live.session;
       if (session == null) {
-    final caps = await _backendRead(
-      owner, vehicle.vehicleId, generation,
-      () => repo.capabilities(vehicleId: vehicle.vehicleId),
-    );
+        final caps = await _backendRead(
+          owner,
+          vehicle.vehicleId,
+          generation,
+          () => repo.capabilities(vehicleId: vehicle.vehicleId),
+        );
         _guard(owner, vehicle.vehicleId, generation);
         _connections.updateServerSnapshot(
           uid: owner,
@@ -422,7 +432,9 @@ class AppChatToolGateway implements ChatToolGateway {
       };
     }
     final caps = await _backendRead(
-      owner, vehicle.vehicleId, generation,
+      owner,
+      vehicle.vehicleId,
+      generation,
       () => repo.capabilities(vehicleId: vehicle.vehicleId),
     );
     _guard(owner, vehicle.vehicleId, generation);
@@ -525,7 +537,9 @@ class AppChatToolGateway implements ChatToolGateway {
     }
     final repo = _server;
     final binding = await _backendRead(
-      owner, vehicle.vehicleId, generation,
+      owner,
+      vehicle.vehicleId,
+      generation,
       () => repo.binding(vehicleId: vehicle.vehicleId),
     );
     _guard(owner, vehicle.vehicleId, generation);
@@ -538,7 +552,9 @@ class AppChatToolGateway implements ChatToolGateway {
       );
     }
     final live = await _backendRead(
-      owner, vehicle.vehicleId, generation,
+      owner,
+      vehicle.vehicleId,
+      generation,
       () => repo.live(vehicleId: vehicle.vehicleId),
     );
     _guard(owner, vehicle.vehicleId, generation);
@@ -560,10 +576,12 @@ class AppChatToolGateway implements ChatToolGateway {
       );
     }
     if (tool == 'start_timed_charging') {
-    final caps = await _backendRead(
-      owner, vehicle.vehicleId, generation,
-      () => repo.capabilities(vehicleId: vehicle.vehicleId),
-    );
+      final caps = await _backendRead(
+        owner,
+        vehicle.vehicleId,
+        generation,
+        () => repo.capabilities(vehicleId: vehicle.vehicleId),
+      );
       _guard(owner, vehicle.vehicleId, generation);
       _connections.updateServerSnapshot(
         uid: owner,
@@ -596,18 +614,13 @@ class AppChatToolGateway implements ChatToolGateway {
         expectedDeviceId: binding.deviceId,
       );
       _guard(owner, vehicle.vehicleId, generation);
-    final readback = await _backendRead(
-      owner, vehicle.vehicleId, generation,
-      () => repo.live(vehicleId: vehicle.vehicleId),
-    );
-      _guard(owner, vehicle.vehicleId, generation);
-      _connections.updateServerSnapshot(
-        uid: owner,
-        vehicleId: vehicle.vehicleId,
-        binding: binding,
-        status: readback.status,
-        capabilities: caps,
+      final readback = await _backendRead(
+        owner,
+        vehicle.vehicleId,
+        generation,
+        () => repo.live(vehicleId: vehicle.vehicleId),
       );
+      _guard(owner, vehicle.vehicleId, generation);
       final ok =
           sameShellyDevice(readback.status.deviceId, binding.deviceId) &&
           readback.status.online &&
@@ -620,7 +633,16 @@ class AppChatToolGateway implements ChatToolGateway {
           readback.session?.relayVerified == true &&
           readback.session?.timerVerified == true &&
           readback.session!.version >= session.version;
-      if (!ok) {
+      if (ok) {
+        _connections.updateServerSnapshot(
+          uid: owner,
+          vehicleId: vehicle.vehicleId,
+          binding: binding,
+          status: readback.status,
+          capabilities: caps,
+          controlResolved: true,
+        );
+      } else {
         _connections.markControlUnknown(
           uid: owner,
           vehicleId: vehicle.vehicleId,
@@ -637,10 +659,12 @@ class AppChatToolGateway implements ChatToolGateway {
     }
     if (tool == 'stop_charging') {
       if (evidence['bindingOnlyStop'] == true) {
-    final caps = await _backendRead(
-      owner, vehicle.vehicleId, generation,
-      () => repo.capabilities(vehicleId: vehicle.vehicleId),
-    );
+        final caps = await _backendRead(
+          owner,
+          vehicle.vehicleId,
+          generation,
+          () => repo.capabilities(vehicleId: vehicle.vehicleId),
+        );
         _guard(owner, vehicle.vehicleId, generation);
         if (!caps.canManualOff) {
           return _result(
@@ -660,24 +684,27 @@ class AppChatToolGateway implements ChatToolGateway {
           operationId: operationId,
         );
         _guard(owner, vehicle.vehicleId, generation);
-    final readback = await _backendRead(
-      owner, vehicle.vehicleId, generation,
-      () => repo.live(vehicleId: vehicle.vehicleId),
-    );
-        _guard(owner, vehicle.vehicleId, generation);
-        _connections.updateServerSnapshot(
-          uid: owner,
-          vehicleId: vehicle.vehicleId,
-          binding: binding,
-          status: readback.status,
-          capabilities: caps,
+        final readback = await _backendRead(
+          owner,
+          vehicle.vehicleId,
+          generation,
+          () => repo.live(vehicleId: vehicle.vehicleId),
         );
+        _guard(owner, vehicle.vehicleId, generation);
         final ok =
             (stopped == null || stopped.relayVerified) &&
             readback.status.online &&
             !readback.status.relay &&
             sameShellyDevice(readback.status.deviceId, binding.deviceId);
-        if (!ok) {
+        if (ok) {
+          _connections.updateServerSnapshot(
+            uid: owner,
+            vehicleId: vehicle.vehicleId,
+            binding: binding,
+            status: readback.status,
+            controlResolved: true,
+          );
+        } else {
           _connections.markControlUnknown(
             uid: owner,
             vehicleId: vehicle.vehicleId,
@@ -712,23 +739,27 @@ class AppChatToolGateway implements ChatToolGateway {
         idempotencyKey: operationId,
       );
       _guard(owner, vehicle.vehicleId, generation);
-    final readback = await _backendRead(
-      owner, vehicle.vehicleId, generation,
-      () => repo.live(vehicleId: vehicle.vehicleId),
-    );
-      _guard(owner, vehicle.vehicleId, generation);
-      _connections.updateServerSnapshot(
-        uid: owner,
-        vehicleId: vehicle.vehicleId,
-        binding: binding,
-        status: readback.status,
+      final readback = await _backendRead(
+        owner,
+        vehicle.vehicleId,
+        generation,
+        () => repo.live(vehicleId: vehicle.vehicleId),
       );
+      _guard(owner, vehicle.vehicleId, generation);
       final ok =
           (stopped == null || stopped.relayVerified) &&
           readback.status.online &&
           !readback.status.relay &&
           sameShellyDevice(readback.status.deviceId, binding.deviceId);
-      if (!ok) {
+      if (ok) {
+        _connections.updateServerSnapshot(
+          uid: owner,
+          vehicleId: vehicle.vehicleId,
+          binding: binding,
+          status: readback.status,
+          controlResolved: true,
+        );
+      } else {
         _connections.markControlUnknown(
           uid: owner,
           vehicleId: vehicle.vehicleId,

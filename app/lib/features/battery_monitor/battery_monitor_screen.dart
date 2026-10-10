@@ -77,9 +77,7 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
         timeRange: const Duration(hours: 24),
       );
 
-      final stats = await BatteryStateService.getBatteryStats(
-        widget.vehicle.vehicleId,
-      );
+      final stats = await BatteryStateService.getBatteryStats(vehicleId);
 
       if (!mounted) return;
       setState(() {
@@ -690,16 +688,25 @@ class _BatteryMonitorScreenState extends ConsumerState<BatteryMonitorScreen> {
   }
 
   Future<void> _predictSOC() async {
+    final vehicle =
+        widget.vehicle ??
+        ref.read(vehicleProvider(_getVehicleId())).valueOrNull;
+    if (vehicle == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Hãy chọn xe trước khi xem dự đoán pin.')),
+      );
+      return;
+    }
     try {
       final result = await BatteryStateService.predictSOC(
-        vehicleId: widget.vehicle.vehicleId,
+        vehicleId: vehicle.vehicleId,
         currentBattery:
             _currentBatteryState?.percentage ??
-            widget.vehicle.currentBattery.toDouble(),
+            vehicle.currentBattery.toDouble(),
         temperature: _currentBatteryState?.temp ?? 25.0,
         voltage: 48.0,
         current: 15.0,
-        odometer: widget.vehicle.currentOdo.toDouble(),
+        odometer: vehicle.currentOdo.toDouble(),
         timeOfDay: DateTime.now().hour,
         dayOfWeek: DateTime.now().weekday,
         avgSpeed: 30.0,
