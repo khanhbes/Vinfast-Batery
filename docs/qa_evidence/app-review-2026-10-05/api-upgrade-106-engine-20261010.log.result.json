@@ -1,0 +1,16 @@
+{
+  "command": [
+    "C:\\Users\\khanh\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin\\docker.exe",
+    "version",
+    "--format",
+    "{{.Server.Version}}"
+  ],
+  "cwd": ".",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\api-upgrade-106-engine-20261010.log",
+  "processId": 22264,
+  "timeoutSeconds": 60,
+  "timedOut": true,
+  "exitCode": 0,
+  "cleanupError": "process_tree_cleanup_failed",
+  "elapsedSeconds": 73.83
+}

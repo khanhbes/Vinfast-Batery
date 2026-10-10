@@ -1,0 +1,14 @@
+FROM vinfast-api-qa:task106
+COPY web/requirements-api-tests.txt /qa-requirements.txt
+RUN pip install --no-cache-dir -r /qa-requirements.txt && pip check
+# Preserve repository-relative paths used by static/CLI contract tests.
+RUN mkdir -p /workspace/web && cp -a /app/. /workspace/web/
+COPY web/tests/ /workspace/web/tests/
+COPY web/scripts/worker_fixture_smoke.py /workspace/web/scripts/worker_fixture_smoke.py
+COPY web/requirements-chat.txt web/Dockerfile.ai web/Dockerfile.worker-pilot /workspace/web/
+COPY web/docker-compose.yml web/.env.docker.example web/.env.laptop.example /workspace/web/
+COPY deploy/azure/worker-pilot.bicep /workspace/deploy/azure/worker-pilot.bicep
+COPY tools/run_quality_gate.py /workspace/tools/run_quality_gate.py
+WORKDIR /workspace/web
+ENV APP_ENV=testing PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 AI_SERVER_MODELS_DIR=/tmp/qa-models
+CMD ["python", "-m", "pytest", "tests", "-q", "-p", "no:cacheprovider", "--basetemp=/tmp/api106"]

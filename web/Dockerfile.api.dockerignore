@@ -1,0 +1,24 @@
+# API build context allowlist: never traverse private pytest folders or secrets.
+**
+!requirements-api.txt
+!server.py
+!auth_context.py
+!deployment_policy.py
+!telemetry_schema.py
+!csv_security.py
+!sync_writes.py
+!request_limits.py
+!vehicle_catalog.py
+!catalog_research_worker.py
+!smart_charge_worker.py
+!smart_charge_worker_entry.py
+!scripts/
+!scripts/migrate_vehicle_catalog.py
+!assets/
+!assets/vinfast_specs_fallback.json
+!ai_server/
+!ai_server/**/
+!ai_server/**/*.py
+!shelly/
+!shelly/**/
+!shelly/**/*.py

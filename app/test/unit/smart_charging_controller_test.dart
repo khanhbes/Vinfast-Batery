@@ -64,6 +64,25 @@ void main() {
     controller.dispose();
   });
 
+  test(
+    'failed status refresh removes stale telemetry but preserves session',
+    () async {
+      final service = FakeSmartChargerService()..current = session();
+      final controller = build(service);
+      await controller.initialize();
+      expect(controller.state.chargerStatus?.online, true);
+      expect(controller.state.session?.sessionId, 'session-1');
+      service.offline = true;
+      await controller.refresh();
+      expect(controller.state.chargerStatus, isNull);
+      expect(controller.state.capabilities.canManualOn, false);
+      expect(controller.state.session?.sessionId, 'session-1');
+      expect(controller.state.gatewayError, isNotNull);
+      expect(controller.state.displayState, ChargerDisplayState.error);
+      controller.dispose();
+    },
+  );
+
   test('unexpected polling error stays inside Smart Charge UI', () async {
     final service = FakeSmartChargerService()..unexpectedFailure = true;
     final controller = build(service);

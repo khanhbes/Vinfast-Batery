@@ -1,0 +1,19 @@
+{
+  "command": [
+    "C:\\flutter\\bin\\cache\\dart-sdk\\bin\\dart.exe",
+    "C:\\flutter\\bin\\cache\\flutter_tools.snapshot",
+    "build",
+    "apk",
+    "--debug",
+    "--no-pub",
+    "--dart-define=APP_API_BASE_URL=https://vinfast-api.nicestone-4d213368.eastasia.azurecontainerapps.io"
+  ],
+  "cwd": "app",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\oneplus-107-build-lowmem-138-20261010.log",
+  "processId": 20216,
+  "timeoutSeconds": 600,
+  "timedOut": true,
+  "exitCode": 1,
+  "cleanupError": null,
+  "elapsedSeconds": 601.64
+}

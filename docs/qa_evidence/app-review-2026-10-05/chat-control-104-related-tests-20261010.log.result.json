@@ -1,0 +1,23 @@
+{
+  "command": [
+    "C:\\flutter\\bin\\flutter.bat",
+    "test",
+    "--no-pub",
+    "--concurrency=1",
+    "test/unit/chat_shelly_backend_integration_test.dart",
+    "test/unit/shelly_connection_snapshot_test.dart",
+    "test/unit/shelly_connection_coordinator_test.dart",
+    "test/unit/smart_charging_controller_test.dart",
+    "test/unit/chat_server_client_lifecycle_test.dart",
+    "test/unit/chat_safety_regression_test.dart",
+    "test/unit/chat_reminder_integration_test.dart"
+  ],
+  "cwd": "app",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\chat-control-104-related-tests-20261010.log",
+  "processId": 17040,
+  "timeoutSeconds": 180,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 74.62
+}

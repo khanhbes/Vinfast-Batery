@@ -1,0 +1,6 @@
+**
+!requirements-worker.txt
+!shelly/
+!shelly/__init__.py
+!shelly/profile_vault.py
+!shelly/worker_pilot.py

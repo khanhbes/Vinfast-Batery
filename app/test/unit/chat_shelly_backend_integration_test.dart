@@ -35,6 +35,7 @@ void main() {
   late String device;
   late bool relay, allowOn, timeoutOn, wrongReadback;
   late bool failLive, omitTimer, omitSession, offStillOn;
+  late bool failLiveAfterOn;
   late Map<String, dynamic> readbackOverrides;
   void Function()? beforeLiveFailure;
   late int onRequests, offRequests;
@@ -42,6 +43,7 @@ void main() {
   late ServerSmartChargerService service;
   late ShellyConnectionCoordinator connections;
   late BatteryBotLocalEngine engine;
+  late AppChatToolGateway gateway;
   late AccountReminderService reminders;
   late List<http.Request> requests;
   Map<String, dynamic> status() => {
@@ -96,6 +98,7 @@ void main() {
     timeoutOn = false;
     wrongReadback = false;
     failLive = false;
+    failLiveAfterOn = false;
     omitTimer = false;
     omitSession = false;
     offStillOn = false;
@@ -129,7 +132,7 @@ void main() {
           case '/api/smart-charging/status':
             data = status();
           case '/api/smart-charging/live':
-            if (failLive) {
+            if (failLive || (failLiveAfterOn && onRequests > 0)) {
               beforeLiveFailure?.call();
               throw TimeoutException('QA readback unavailable');
             }
@@ -184,7 +187,7 @@ void main() {
       ..activateAccount(uid);
     reminders = AccountReminderService(uidResolver: () => uid);
     engine = BatteryBotLocalEngine(
-      tools: AppChatToolGateway(
+      tools: gateway = AppChatToolGateway(
         uidResolver: () => uid,
         selectedVehicle: () => VehicleModel(
           vehicleId: 'qa-vehicle',
@@ -268,6 +271,39 @@ void main() {
     expect(onRequests, 0);
     expect(connections.current.readyForControl, false);
   });
+  test(
+    'gateway rejects tools outside mutation allowlist before HTTP',
+    () async {
+      expect(
+        (await gateway.prepare('injected_tool', 'bật sạc 5 phút'))['allowed'],
+        false,
+      );
+      expect(
+        (await gateway.execute('injected_tool', {}, 'qa-op'))['status'],
+        'unsupported',
+      );
+      expect(requests, isEmpty);
+      expect(onRequests, 0);
+      expect(offRequests, 0);
+    },
+  );
+  test(
+    'failed read after ON preserves uncertainty and never retries ON',
+    () async {
+      final proposal = await engine.reply('bật sạc 5 phút');
+      failLiveAfterOn = true;
+      final result = await engine.confirm(proposal.action!.callId, true);
+      expect(result['status'], 'unknown');
+      expect(connections.current.state, ShellyConnectionFlowState.offline);
+      expect(connections.current.controlUncertain, true);
+      expect(connections.current.isLinked, true);
+      expect(connections.current.capabilities, isNull);
+      expect(connections.current.readyForControl, false);
+      await engine.confirm(proposal.action!.callId, true);
+      expect(onRequests, 1);
+      expect(offRequests, 0);
+    },
+  );
   for (final invalid in <String, Map<String, dynamic>>{
     'starting session': {'state': 'starting'},
     'stopping session': {'state': 'stopping'},
@@ -288,6 +324,10 @@ void main() {
       expect(connections.current.controlUncertain, true);
       expect(connections.current.readyForControl, false);
       expect(connections.current.status, isNull);
+      // Passive ON cannot overwrite the unresolved current-session evidence.
+      await engine.reply('trạng thái Shelly');
+      expect(connections.current.controlUncertain, true);
+      expect(connections.current.readyForControl, false);
       await engine.confirm(proposal.action!.callId, true);
       expect(onRequests, 1);
       expect(offRequests, 0);
@@ -306,28 +346,31 @@ void main() {
       expect(onRequests, 1);
     });
   }
-  test('failed passive read keeps enrollment but removes stale readiness', () async {
-    final proposal = await engine.reply('bật sạc 5 phút');
-    expect(proposal.action, isNotNull);
-    expect(connections.current.readyForControl, true);
-    failLive = true;
-    await engine.reply('trạng thái Shelly');
-    expect(connections.current.state, ShellyConnectionFlowState.offline);
-    expect(connections.current.isLinked, true);
-    expect(connections.current.serverBinding!.noLoadTestVerified, true);
-    expect(connections.current.codeRefreshRequired, true);
-    expect(connections.current.status, isNull);
-    expect(connections.current.capabilities, isNull);
-    expect(connections.current.controlUncertain, false);
-    expect(connections.current.readyForControl, false);
-    expect(onRequests, 0);
-    expect(offRequests, 0);
-    failLive = false;
-    await engine.reply('trạng thái Shelly');
-    expect(connections.current.state, ShellyConnectionFlowState.connected);
-    // A passive recovery does not itself fetch fresh control authorization.
-    expect(connections.current.readyForControl, false);
-  });
+  test(
+    'failed passive read keeps enrollment but removes stale readiness',
+    () async {
+      final proposal = await engine.reply('bật sạc 5 phút');
+      expect(proposal.action, isNotNull);
+      expect(connections.current.readyForControl, true);
+      failLive = true;
+      await engine.reply('trạng thái Shelly');
+      expect(connections.current.state, ShellyConnectionFlowState.offline);
+      expect(connections.current.isLinked, true);
+      expect(connections.current.serverBinding!.noLoadTestVerified, true);
+      expect(connections.current.codeRefreshRequired, true);
+      expect(connections.current.status, isNull);
+      expect(connections.current.capabilities, isNull);
+      expect(connections.current.controlUncertain, false);
+      expect(connections.current.readyForControl, false);
+      expect(onRequests, 0);
+      expect(offRequests, 0);
+      failLive = false;
+      await engine.reply('trạng thái Shelly');
+      expect(connections.current.state, ShellyConnectionFlowState.connected);
+      // A passive recovery does not itself fetch fresh control authorization.
+      expect(connections.current.readyForControl, false);
+    },
+  );
   test('failed old account read cannot replace new account snapshot', () async {
     await engine.reply('trạng thái Shelly');
     failLive = true;
@@ -341,21 +384,71 @@ void main() {
     expect(connections.current.state, ShellyConnectionFlowState.disconnected);
     expect(onRequests, 0);
   });
-  for (final privateSession in [false, true]) {
-    test('OFF acceptance without OFF readback stays unknown ($privateSession)', () async {
+  test(
+    'polling cannot clear unknown ON or reuse old capabilities after OFF',
+    () async {
+      await engine.reply('bật sạc 5 phút');
+      connections.markControlUnknown(
+        uid: 'qa-a',
+        vehicleId: 'qa-vehicle',
+        deviceId: device,
+      );
       relay = true;
-      session = privateSession ? activeSession() : null;
-      final proposal = await engine.reply('dừng sạc');
-      expect(proposal.action, isNotNull);
-      offStillOn = true;
-      final result = await engine.confirm(proposal.action!.callId, true);
-      expect(result['success'], false);
-      expect(result['status'], 'unknown');
+      connections.updateCodeNotice(
+        await service.getStatus(vehicleId: 'qa-vehicle'),
+        uid: 'qa-a',
+        vehicleId: 'qa-vehicle',
+      );
       expect(connections.current.controlUncertain, true);
+      expect(connections.current.status, isNull);
+      relay = false;
+      connections.updateCodeNotice(
+        await service.getStatus(vehicleId: 'qa-vehicle'),
+        uid: 'qa-a',
+        vehicleId: 'qa-vehicle',
+      );
+      expect(connections.current.controlUncertain, false);
+      expect(connections.current.status!.relay, false);
+      expect(connections.current.capabilities, isNull);
       expect(connections.current.readyForControl, false);
-      expect(offRequests, 1);
       expect(onRequests, 0);
-    });
+      expect(offRequests, 0);
+    },
+  );
+  test(
+    'unrelated UID or vehicle failure cannot erase current connection',
+    () async {
+      await engine.reply('trạng thái Shelly');
+      final original = connections.current;
+      connections.markServerUnavailable(
+        uid: 'qa-other',
+        vehicleId: 'qa-vehicle',
+      );
+      connections.markServerUnavailable(
+        uid: 'qa-a',
+        vehicleId: 'other-vehicle',
+      );
+      expect(identical(connections.current, original), true);
+    },
+  );
+  for (final privateSession in [false, true]) {
+    test(
+      'OFF acceptance without OFF readback stays unknown ($privateSession)',
+      () async {
+        relay = true;
+        session = privateSession ? activeSession() : null;
+        final proposal = await engine.reply('dừng sạc');
+        expect(proposal.action, isNotNull);
+        offStillOn = true;
+        final result = await engine.confirm(proposal.action!.callId, true);
+        expect(result['success'], false);
+        expect(result['status'], 'unknown');
+        expect(connections.current.controlUncertain, true);
+        expect(connections.current.readyForControl, false);
+        expect(offRequests, 1);
+        expect(onRequests, 0);
+      },
+    );
   }
   test(
     'lost ON response keeps unknown and confirming again never retries ON',

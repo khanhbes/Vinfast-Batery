@@ -113,4 +113,43 @@ void main() {
       expect(sameShellyDevice('', ''), false);
     },
   );
+  group('chat lock explanation (UX107-02)', () {
+    test('legacy link points to admin code in setup', () {
+      final legacy = ShellyConnectionSnapshot.fromServerBinding(
+        const SmartChargerBinding(
+          deviceId: 'test-device',
+          displayName: 'Shelly',
+          model: 'S3PL-00112EU',
+          provider: 'legacy_cloud',
+          mode: SmartChargerConnectionMode.advancedDirect,
+        ),
+        status: status(true),
+      );
+      expect(legacy.chatLockExplanation, contains('mã kết nối'));
+      expect(legacy.lockFixedInSetup, true);
+    });
+    test('unlinked vehicle is sent to setup', () {
+      const none = ShellyConnectionSnapshot(
+        state: ShellyConnectionFlowState.disconnected,
+      );
+      expect(none.chatLockExplanation, contains('chưa liên kết'));
+      expect(none.lockFixedInSetup, true);
+    });
+    test('offline linked device explains connectivity, not setup', () {
+      final offline = ShellyConnectionSnapshot.fromServerBinding(
+        binding,
+        status: status(false),
+      );
+      expect(offline.chatLockExplanation, contains('mất kết nối'));
+      expect(offline.lockFixedInSetup, false);
+    });
+    test('connected without capabilities is still locked', () {
+      final connected = ShellyConnectionSnapshot.fromServerBinding(
+        binding,
+        status: status(true),
+      );
+      expect(connected.readyForControl, false);
+      expect(connected.chatLockExplanation, isNot(contains('đang mở')));
+    });
+  });
 }

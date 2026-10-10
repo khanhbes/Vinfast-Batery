@@ -11,6 +11,7 @@ import '../../core/services/assistant_context_coordinator.dart';
 import '../../core/theme/app_ui_colors.dart';
 import '../../core/utils/battery_bot_faq.dart';
 import '../../core/widgets/battery_bot_mascot.dart';
+import '../../data/services/shelly_connection_coordinator.dart';
 import '../smart_charging/shelly_connect_screen.dart';
 import 'models/chat_message.dart';
 import 'models/chat_session.dart';
@@ -772,20 +773,32 @@ class _InteractiveAssistantSheetState
     final wantsGuidance = RegExp(
       r'\b(o dau|huong dan|lam sao|cach|mo|ket noi|bi khoa)\b',
     ).hasMatch(normalized);
-    final faqAction = wantsGuidance ? BatteryBotFaq.actionFor(text) : null;
+    var faqAction = wantsGuidance ? BatteryBotFaq.actionFor(text) : null;
+    String? lockReply;
+    if (faqAction == BatteryBotAction.guideCharging &&
+        RegExp(r'khoa').hasMatch(normalized)) {
+      final connection = ShellyConnectionCoordinator.shared.current;
+      lockReply = connection.chatLockExplanation;
+      if (connection.lockFixedInSetup) {
+        faqAction = BatteryBotAction.shellySetup;
+      }
+    }
     if (faqAction != null) {
+      final action = faqAction;
       _replyTimer = Timer(const Duration(milliseconds: 180), () {
         if (!_isCurrent(generation)) return;
-        final reply = switch (faqAction) {
-          BatteryBotAction.shellySetup =>
-            'Mở thiết lập Shelly để kết nối qua Wi-Fi hoặc mã quản trị 6 ký tự.',
-          BatteryBotAction.guideCharging =>
-            'Mở Sạc pin để kiểm tra bộ sạc và chọn thời gian sạc. Chỉ bật sạc sau khi kiểm tra an toàn.',
-          BatteryBotAction.guideHistory =>
-            'Mở Lịch sử để xem thời gian, điện năng và chi phí từng phiên.',
-          BatteryBotAction.guideVehicle =>
-            'Mở Tổng quan để chọn xe và xem mức pin. Kiểm tra nguồn và thời điểm cập nhật.',
-        };
+        final reply =
+            lockReply ??
+            switch (action) {
+              BatteryBotAction.shellySetup =>
+                'Mở thiết lập Shelly để kết nối qua Wi-Fi hoặc mã quản trị 6 ký tự.',
+              BatteryBotAction.guideCharging =>
+                'Mở Sạc pin để kiểm tra bộ sạc và chọn thời gian sạc. Chỉ bật sạc sau khi kiểm tra an toàn.',
+              BatteryBotAction.guideHistory =>
+                'Mở Lịch sử để xem thời gian, điện năng và chi phí từng phiên.',
+              BatteryBotAction.guideVehicle =>
+                'Mở Tổng quan để chọn xe và xem mức pin. Kiểm tra nguồn và thời điểm cập nhật.',
+            };
         setState(() {
           _isTyping = false;
           _messages.add(
@@ -794,7 +807,7 @@ class _InteractiveAssistantSheetState
               role: ChatRole.model,
               content: reply,
               timestamp: DateTime.now(),
-              action: faqAction.name,
+              action: action.name,
             ),
           );
         });
@@ -1340,7 +1353,9 @@ class _InteractiveAssistantSheetState
                             height: 46,
                             padding: const EdgeInsets.symmetric(horizontal: 14),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                              color: const Color(
+                                0xFF10B981,
+                              ).withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(24),
                               border: Border.all(
                                 color: const Color(0xFF10B981),
@@ -1390,7 +1405,10 @@ class _InteractiveAssistantSheetState
                             key: const Key('assistant_input_field'),
                             controller: _inputController,
                             textInputAction: TextInputAction.send,
-                            style: TextStyle(color: uiColors.text, fontSize: 13.5),
+                            style: TextStyle(
+                              color: uiColors.text,
+                              fontSize: 13.5,
+                            ),
                             decoration: InputDecoration(
                               hintText: 'Hỏi BatteryBot về pin, sạc, xe...',
                               hintStyle: TextStyle(
@@ -1399,7 +1417,9 @@ class _InteractiveAssistantSheetState
                               ),
                               filled: true,
                               fillColor: uiColors.dark
-                                  ? const Color(0xFF162338).withValues(alpha: 0.8)
+                                  ? const Color(
+                                      0xFF162338,
+                                    ).withValues(alpha: 0.8)
                                   : const Color(0xFFF1F5F9),
                               isDense: true,
                               contentPadding: const EdgeInsets.symmetric(
@@ -1445,7 +1465,9 @@ class _InteractiveAssistantSheetState
                           : Icons.mic_rounded,
                       color: _isListeningVoice
                           ? Colors.redAccent
-                          : (uiColors.dark ? const Color(0xFF10B981) : uiColors.primary),
+                          : (uiColors.dark
+                                ? const Color(0xFF10B981)
+                                : uiColors.primary),
                     ),
                     onPressed: VoiceInputService.isSupported
                         ? _toggleVoiceInput
@@ -1456,7 +1478,9 @@ class _InteractiveAssistantSheetState
                     tooltip: 'Gửi tin nhắn',
                     icon: Icon(
                       Icons.send_rounded,
-                      color: uiColors.dark ? const Color(0xFF10B981) : uiColors.primary,
+                      color: uiColors.dark
+                          ? const Color(0xFF10B981)
+                          : uiColors.primary,
                     ),
                     onPressed: () => _handleSend(_inputController.text),
                   ),

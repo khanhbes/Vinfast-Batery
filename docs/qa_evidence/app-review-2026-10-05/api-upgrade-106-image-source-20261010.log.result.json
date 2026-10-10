@@ -1,0 +1,20 @@
+{
+  "command": [
+    "python",
+    "tools/check_api_image_source.py",
+    "--docker",
+    "C:\\Users\\khanh\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin\\docker.exe",
+    "--image",
+    "vinfast-api-qa:task106",
+    "--qa-image",
+    "vinfast-api-tests:task106"
+  ],
+  "cwd": ".",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\api-upgrade-106-image-source-20261010.log",
+  "processId": 5496,
+  "timeoutSeconds": 180,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 2.08
+}

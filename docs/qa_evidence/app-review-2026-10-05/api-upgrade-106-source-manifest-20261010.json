@@ -1,0 +1,988 @@
+{
+    "branch":  "deploy/azure-student",
+    "scope":  "Staging source hashes; excludes secrets, models, artifacts and evidence",
+    "sourceSha":  "5f1470c336b5ffaefc3b0653dd7d6dc7b67abe33",
+    "files":  [
+                  {
+                      "sha256":  "A97F6724B5FD345FA8883594CDC038984A7F9F4FC8BBB19C9FA3BB546156327C",
+                      "path":  "deploy/azure/01-prerequisites.ps1"
+                  },
+                  {
+                      "sha256":  "40CC1405C15EFB180297F002001BA46F512E4249736AD396071684B3374B6CA5",
+                      "path":  "deploy/azure/02-infrastructure.ps1"
+                  },
+                  {
+                      "sha256":  "B8648F2176B74CCF7FF34F5B2535ACE62D58E81AE75F7E7559B9B3E5D8248DEC",
+                      "path":  "deploy/azure/03-build-push.ps1"
+                  },
+                  {
+                      "sha256":  "916B716A87469B7DAA9802B635958938DBB3D6D8F2DED0A59E1B6D75E002289E",
+                      "path":  "deploy/azure/04-deploy-ai.ps1"
+                  },
+                  {
+                      "sha256":  "AB46C000A4ABD4EA9CDA389E5843AF90871729F89C68A85D331F6BBA2CEFF65C",
+                      "path":  "deploy/azure/05-deploy-api.ps1"
+                  },
+                  {
+                      "sha256":  "318C34904F4ACFF44A7B4CD05CB7EC263BA32A129476D431A8700EB4482F51E2",
+                      "path":  "deploy/azure/06-smoke-test.ps1"
+                  },
+                  {
+                      "sha256":  "278B8A5A77544A13B0F399877B0295DB2DC6457FA502B789688EA7674D1FBF82",
+                      "path":  "deploy/azure/07-build-admin.ps1"
+                  },
+                  {
+                      "sha256":  "6AF80E44D0C2EA306E2FCB123D1C0078BFB9A3A7F18A10E33B8A1E5840111DB8",
+                      "path":  "deploy/azure/08-local-boot-smoke.ps1"
+                  },
+                  {
+                      "sha256":  "C902309F010CFCD267A28FCB4DABD80EBF6FB9141DE673FA8364C72DBD346398",
+                      "path":  "deploy/azure/09-source-manifest.ps1"
+                  },
+                  {
+                      "sha256":  "EE9F2403AD30A5780E07EA12FEE77FE774C0C8E99AB367DC36CA6E7CED9273E8",
+                      "path":  "deploy/azure/11-publish-admin-artifact.ps1"
+                  },
+                  {
+                      "sha256":  "FD895649C30C4EDA1CF51C34481778BA336E673FECD5EBAB0C063936E6892443",
+                      "path":  "deploy/azure/12-cache-swa-client.ps1"
+                  },
+                  {
+                      "sha256":  "EA99141B87438C96904894991449F29895F4E5977A1C4E22784A79F4271E4688",
+                      "path":  "deploy/azure/13-chat-smoke.ps1"
+                  },
+                  {
+                      "sha256":  "965DBCEF5A261914A9CD328D3713EB380D598D34777AA4D27907CADC73F1C52F",
+                      "path":  "deploy/azure/14-update-api-image.ps1"
+                  },
+                  {
+                      "sha256":  "E6B7EEC3618C3394724200432780A07054F5CF3EADB2D9F60D8B99CAE2DB4051",
+                      "path":  "deploy/azure/ai.parameters.example.json"
+                  },
+                  {
+                      "sha256":  "B148109FA0F042DDDA3824D5820DA5DF175B6F2ECF88234AD1F37893ABC1DA46",
+                      "path":  "deploy/azure/api.parameters.example.json"
+                  },
+                  {
+                      "sha256":  "2B371A70005167A0553CFD520A5A15BFD16B2B9625C9507E4656C07830EA6376",
+                      "path":  "deploy/azure/common.ps1"
+                  },
+                  {
+                      "sha256":  "23FD6EAC0BBA01F56FB6F5F80C870B0D4D8ECD4B65C1FBAAA6FEB6AAAFACCC1B",
+                      "path":  "deploy/azure/container-app.bicep"
+                  },
+                  {
+                      "sha256":  "2A3EAEE442756EA5102E6560D3CDD227C48BCDDDEDDBC61C97F543CAD288D14C",
+                      "path":  "deploy/azure/deploy-container.ps1"
+                  },
+                  {
+                      "sha256":  "5F33D880F15E4E8388B26BC25AE04169FAC230599B05B97A3AA976EF7A9BFD8F",
+                      "path":  "deploy/azure/deploy-worker-pilot.ps1"
+                  },
+                  {
+                      "sha256":  "C216C117D839CF8B5F3CE3F85D41A0A6F7CFEBCA0D331ABBB4E24557439B6CC7",
+                      "path":  "deploy/azure/deploy-worker-pilot-budget.ps1"
+                  },
+                  {
+                      "sha256":  "C9D87069FE5AB50168D1FAC914426EA05EA44A856687B9380F6351626849FCB7",
+                      "path":  "deploy/azure/infrastructure.bicep"
+                  },
+                  {
+                      "sha256":  "4C4398F5078B0B0E9377D0234F16DDDFCDA271C56528C441810F45D33BF70D4E",
+                      "path":  "deploy/azure/staging.example.json"
+                  },
+                  {
+                      "sha256":  "C2DBB6048FA5FF73AB914EABB3CCC2B6640B98BC431F2E3EE2621E276643D7AE",
+                      "path":  "deploy/azure/staging.json"
+                  },
+                  {
+                      "sha256":  "6737BEE773F1C4180D5C92824DF08D2C0C2B84344E96F3984076510FB8D3E5E6",
+                      "path":  "deploy/azure/worker-pilot.bicep"
+                  },
+                  {
+                      "sha256":  "26C8B61BFCEECFEDC5C8A2877050B1179BFA07CFCF10DBF20FAD939F7EDEDF9E",
+                      "path":  "deploy/azure/worker-pilot-budget.bicep"
+                  },
+                  {
+                      "sha256":  "053344DE5C0B432EBC6602590CAB7DE6E0FAC23D9E34DF6EF377A020C97A0BC8",
+                      "path":  "web/.dockerignore"
+                  },
+                  {
+                      "sha256":  "414B35DD71EE31AC490F64214C18CAC5585294664F720FA7F64A504253A8169F",
+                      "path":  "web/ai_server/__init__.py"
+                  },
+                  {
+                      "sha256":  "5DEFC4B865B0A1776CCFD9C68E25345D005279A66DA6DEADEBD869AE35DA30AA",
+                      "path":  "web/ai_server/behavior_analyzer.py"
+                  },
+                  {
+                      "sha256":  "D9DA91AD4582F9C17A38649528DD36FD302BAA6D3A046485118F2BC38E29AE1C",
+                      "path":  "web/ai_server/chat_engine.py"
+                  },
+                  {
+                      "sha256":  "82D295EA935B41A0DAFF196F988F69F881A2C2E1CE82C3E09A4CA9DC96A34C04",
+                      "path":  "web/ai_server/chat_guardrails.py"
+                  },
+                  {
+                      "sha256":  "00ADFC5FB1F720361B269E56C76D530D0C4164D2B731AED30DB444547792E36F",
+                      "path":  "web/ai_server/chat_memory.py"
+                  },
+                  {
+                      "sha256":  "AF5333FAA3159AF955B6BEA4B0A5172601E8AA77E82B1C0E718D88DEC2880299",
+                      "path":  "web/ai_server/chat_schemas.py"
+                  },
+                  {
+                      "sha256":  "67FA5590565B1F61465FC6EB6F429C2257564B31C2A621770D6FD7D0FD91A2E7",
+                      "path":  "web/ai_server/chat_tools.py"
+                  },
+                  {
+                      "sha256":  "2FC31EA759B9A66EDCB94C6F61D6D1734F411C08CFAA5B666CEE37F60BA20B1B",
+                      "path":  "web/ai_server/dataset_manager.py"
+                  },
+                  {
+                      "sha256":  "9BEEC93788B784B53F8531106480E2813F64701E78AB8B859ABF5E880B3F45B8",
+                      "path":  "web/ai_server/fine_tune.py"
+                  },
+                  {
+                      "sha256":  "CF58499628593AB7616E58E2F31248021F66F206BFBC067685C7ED7C2AD51AB4",
+                      "path":  "web/ai_server/lifecycle.py"
+                  },
+                  {
+                      "sha256":  "F8CFB5E675870F002B0BA274531726DEF278603AD919A0DD4B26A24EB130824C",
+                      "path":  "web/ai_server/main.py"
+                  },
+                  {
+                      "sha256":  "F9AC8C599A652CF2730403D8366A01284CDB13A066585BAF5B4B5AF1B576EF7F",
+                      "path":  "web/ai_server/model_runtime.py"
+                  },
+                  {
+                      "sha256":  "2887B962B5F03AA5C2F0052411249A0DFFAE258A2E284315B284A91619F5BF85",
+                      "path":  "web/ai_server/model_store.py"
+                  },
+                  {
+                      "sha256":  "0019E5682F6CE5ED6782CC1420FAA913DFF240311AE27CD4C79A1ED8D73094BC",
+                      "path":  "web/ai_server/personality_adapter.py"
+                  },
+                  {
+                      "sha256":  "3CFBC4F57182808587E816F7FDDF759CAB1F22DFFD25D98990D4C47BC087B874",
+                      "path":  "web/ai_server/prediction_service.py"
+                  },
+                  {
+                      "sha256":  "89A7904FFD699A3193F4A6667B5038D141F637A16DD69D7F0F50C1866569373F",
+                      "path":  "web/ai_server/registry.py"
+                  },
+                  {
+                      "sha256":  "D4E786BA2419F751660116C52228CAEAB4399AA417696899731BFA7EF10B72EF",
+                      "path":  "web/ai_server/schemas.py"
+                  },
+                  {
+                      "sha256":  "32707B861FF0EFCBEEB25C5F7B2E1B61B7F384F158E5BF7A3096CF48A8591663",
+                      "path":  "web/ai_server/suggestion_engine.py"
+                  },
+                  {
+                      "sha256":  "45DECF9E89126BAE0F6B0FE9D1BD9B6AE8E5CA23653C3CEC1D7D3F3A08AA02D9",
+                      "path":  "web/ai_server/training_snapshot_service.py"
+                  },
+                  {
+                      "sha256":  "90C2C07E113B27525BB3BC78CFB20C073DA415D4DAF96B80BB096D61D2E1E90A",
+                      "path":  "web/ai_server/upload_policy.py"
+                  },
+                  {
+                      "sha256":  "1DD189701A0935F46CC27566809776F9595D77C13CD164D1BC01E6C481DD4B15",
+                      "path":  "web/ai_server/vehicle_adapter.py"
+                  },
+                  {
+                      "sha256":  "E41AFE932D612246A2DF8ECD3FFAFCD3C6470D4881C56EC22529F24A5C398B4C",
+                      "path":  "web/app_config.json"
+                  },
+                  {
+                      "sha256":  "90995EACDB434BFC589A17B762441158C012E0DFC75A997E5B53E60E80C43BB4",
+                      "path":  "web/assets/vinfast_specs_fallback.json"
+                  },
+                  {
+                      "sha256":  "A2DE83954BA79F0E07C5E62C54E842EAECB4DA091CE5DA33A15DBB045727F8E2",
+                      "path":  "web/auth_context.py"
+                  },
+                  {
+                      "sha256":  "7DB2FF2CB0DCEE4D350A3D98792BA04C0E8360B0A78C640816BB77E7804BAB25",
+                      "path":  "web/catalog_research_worker.py"
+                  },
+                  {
+                      "sha256":  "60F399AF5E62AE2DC339C2AFDF671B625489C5000A05EE218CB279BC0BE8C210",
+                      "path":  "web/cloudrun/api-service.yaml"
+                  },
+                  {
+                      "sha256":  "4F10B92D3146375458B394BF3FE712310F3393C52172C11C76F07EF6624C202C",
+                      "path":  "web/csv_security.py"
+                  },
+                  {
+                      "sha256":  "69DB72B8D0AC3B6BF681FD707805FA6DF3F3888B97E1767C575CD8F7BFB8B3CF",
+                      "path":  "web/dashboard/.dockerignore"
+                  },
+                  {
+                      "sha256":  "39872C9C12543D2FA49210FE00AB19958BEEB7ECA3B6936EC03CC95779E1014F",
+                      "path":  "web/dashboard/.vslintrc.json"
+                  },
+                  {
+                      "sha256":  "978CA121AE3B23781A593D8621ACCD4E4FFD6C46670EED5248813455A5ADD04D",
+                      "path":  "web/dashboard/Dockerfile.production"
+                  },
+                  {
+                      "sha256":  "D680FE02F448D78F2493F1BBFDC9C2F50D0A0C4E859D1CDEFD2A106ADD218CE8",
+                      "path":  "web/dashboard/index.html"
+                  },
+                  {
+                      "sha256":  "BCD7E0631A553AEA6CDB52706A0BF999D67BA3AFB956EF3F54BDA8C1A33AA696",
+                      "path":  "web/dashboard/output/playwright/preview.html"
+                  },
+                  {
+                      "sha256":  "C1669E3971F63182EDD01B9DDB4075C5313B4DFC5F4777AE92E56A0AB332FFF8",
+                      "path":  "web/dashboard/output/playwright/preview.tsx"
+                  },
+                  {
+                      "sha256":  "B94C3479639B2CCCE1C3E0ED78C3FD8F5F6208226F10A741CF7B16B5D9A139DE",
+                      "path":  "web/dashboard/output/playwright/setup-browser.js"
+                  },
+                  {
+                      "sha256":  "EE4E2CA0E3ED5397D9D45B53CA30BCB41EDFFD1404E698C53F53FB88FEC40DA5",
+                      "path":  "web/dashboard/package.json"
+                  },
+                  {
+                      "sha256":  "E29A5695070D8271DDDF3C0984074CA9BE5AF5668BEF15B064EAB8225EF9042A",
+                      "path":  "web/dashboard/package-lock.json"
+                  },
+                  {
+                      "sha256":  "3FC8D1C13AD963BBF7DA04D59024D38CC2AD14563B36AFD71BC8B43C7148DD25",
+                      "path":  "web/dashboard/postcss.config.js"
+                  },
+                  {
+                      "sha256":  "28AC0702D5FA4B6299AF5645865E8DBE7B0C1E7C7F5B49EEC952D736D40C5B1C",
+                      "path":  "web/dashboard/public/staticwebapp.config.json"
+                  },
+                  {
+                      "sha256":  "7CBBFD288839F667378754C8BD9B1D35A9C1E9960DB07987A5498EDC49C40280",
+                      "path":  "web/dashboard/src/api.js"
+                  },
+                  {
+                      "sha256":  "ADF1692154C4B65E9044C16CB0FAAF60AF803DC426ADADC78F22A5B781F2849D",
+                      "path":  "web/dashboard/src/App.tsx"
+                  },
+                  {
+                      "sha256":  "7F401882A1BFAAAAC00716B662B51518C295A804E90587CAC87DFA77517DDF64",
+                      "path":  "web/dashboard/src/components/AdminAccessGate.tsx"
+                  },
+                  {
+                      "sha256":  "0ADAC7C0218102C2F408E90E2676BE16AC47AE9B843C993C140194DA5178A95F",
+                      "path":  "web/dashboard/src/components/ai-center/ChargingTimeEstimator.tsx"
+                  },
+                  {
+                      "sha256":  "C756DD3DCDA9398BFE32CA82678D261D09FFEEBB58C0789E9A1652B7B253B445",
+                      "path":  "web/dashboard/src/components/ai-center/lab/ClassResult.tsx"
+                  },
+                  {
+                      "sha256":  "6A6A4A42CB39D98CC67E86D31205D0C6CFAC70B0728D6A8C99174E25598E2EB7",
+                      "path":  "web/dashboard/src/components/ai-center/lab/DynamicInput.tsx"
+                  },
+                  {
+                      "sha256":  "99EE39F934C4D69D4911D68289B48C4CD54CF404505EF89DAEE14CB72DC34E30",
+                      "path":  "web/dashboard/src/components/ai-center/lab/ModelAvailabilityBanner.tsx"
+                  },
+                  {
+                      "sha256":  "BC5FF0011257005071237B42F0DCED1947F223AFF70402AC2DE73142214CC49D",
+                      "path":  "web/dashboard/src/components/ai-center/lab/ModelInputPanel.tsx"
+                  },
+                  {
+                      "sha256":  "91714B9BF5118C083BBEED97E30BF14E5987872746262479EE6C3733DF8F1429",
+                      "path":  "web/dashboard/src/components/ai-center/lab/ModelLabHeader.tsx"
+                  },
+                  {
+                      "sha256":  "D433B6440308EA07004A14172D26D2283C4CC3CD10BE7D6ECAD9F453A40681E4",
+                      "path":  "web/dashboard/src/components/ai-center/lab/modelLabUtils.ts"
+                  },
+                  {
+                      "sha256":  "F7EAC81540009A67FB5118D88175B160EE16287E3A922214FA5181A3F7EDB6F4",
+                      "path":  "web/dashboard/src/components/ai-center/lab/ModelResultPanel.tsx"
+                  },
+                  {
+                      "sha256":  "81C7F7D4C43D4045BB7F8BCCA41D716E1042F7BAACA71A7C680D5B78C3B590D7",
+                      "path":  "web/dashboard/src/components/ai-center/lab/ScalarResult.tsx"
+                  },
+                  {
+                      "sha256":  "2A21BA70C8AEAE3ED2BBE2F64C1FCA38981694A52377DA84F5CEE11F470636D2",
+                      "path":  "web/dashboard/src/components/ai-center/lab/UniversalModelLab.tsx"
+                  },
+                  {
+                      "sha256":  "B5596FE417A91180491C75738B778ACD6092694030D762B4295EBF5D4BE376CE",
+                      "path":  "web/dashboard/src/components/ai-center/lab/VectorResult.tsx"
+                  },
+                  {
+                      "sha256":  "BF8184593CC0C9C8D13A53B6244A8B7C66B1596BCF5781485CC3441798234533",
+                      "path":  "web/dashboard/src/components/ai-center/management/ModelManagerDrawer.tsx"
+                  },
+                  {
+                      "sha256":  "56EEC9831A6617F81CCFC08ECC1A579333B8BD7A09E92E21F73F0E218472F7FF",
+                      "path":  "web/dashboard/src/components/ai-center/management/ModelVersionActions.tsx"
+                  },
+                  {
+                      "sha256":  "64199B3838DAE4489F21405CF17F5C6B86B1ED0DB043E3DC6A6C3A1319DE1267",
+                      "path":  "web/dashboard/src/components/ai-center/management/ModelVersionsList.tsx"
+                  },
+                  {
+                      "sha256":  "6762E96EA3DA4A51E5DFEE067B984A8021AACBA093CE7361052805A2EA209799",
+                      "path":  "web/dashboard/src/components/ai-center/modelAvailability.ts"
+                  },
+                  {
+                      "sha256":  "63642A23702FD9F3AB456EABB80BF534D0EA32323088103FD76A5271DFE01D95",
+                      "path":  "web/dashboard/src/components/ai-center/ModelCatalog.tsx"
+                  },
+                  {
+                      "sha256":  "C849CA940695E8B5240D56BE3B6F4E206749A68434463A8501C1170DE404A44F",
+                      "path":  "web/dashboard/src/components/ai-center/ModelDetailPanel.tsx"
+                  },
+                  {
+                      "sha256":  "3F8278DF03C86ED807F33CB3F9D2CB3FAA676CB946E7E54FE1EF107A855CF5C1",
+                      "path":  "web/dashboard/src/components/ai-center/modelIcons.ts"
+                  },
+                  {
+                      "sha256":  "62BE923989B57482CA81F6D7170AB8D1AB8A8D8B03FCA0AB8B5D09BB252533C3",
+                      "path":  "web/dashboard/src/components/ai-center/ModelTypeCard.tsx"
+                  },
+                  {
+                      "sha256":  "CD9ABB4ED41E1653BB8091A6ACDFD13B7929B5F316578692C8267877C901DB33",
+                      "path":  "web/dashboard/src/components/ai-center/PredictionResultChart.tsx"
+                  },
+                  {
+                      "sha256":  "74860A3E218422BE46A246613DE35F2628D3AE855311BE52D8F79B7D214172C5",
+                      "path":  "web/dashboard/src/components/ai-center/RangePredictionLab.tsx"
+                  },
+                  {
+                      "sha256":  "69D3F8BC36CCDA4FF9185DF6089391740D18BD895FF558D63DE39DA9040856DF",
+                      "path":  "web/dashboard/src/components/ai-center/types.ts"
+                  },
+                  {
+                      "sha256":  "1BC67F6992836410E59AC7DA9BF455023C7314E444FD5FEF03DF824F4F08119E",
+                      "path":  "web/dashboard/src/components/ai-center/UploadDialog.tsx"
+                  },
+                  {
+                      "sha256":  "DA6F4BE02FBC42DCA991274D5430C41BABC42AD5CDE5F80453448FFE8A32BB3A",
+                      "path":  "web/dashboard/src/components/ai-center/uploadPolicy.ts"
+                  },
+                  {
+                      "sha256":  "35CED95F64A37766015B86DE4209D962B88C59A6D9F4C9E7640D43E1D8777F0E",
+                      "path":  "web/dashboard/src/components/DevelopModeGate.tsx"
+                  },
+                  {
+                      "sha256":  "9D30CAE0F277A5FE31B4F507A60E5614F8DD4C51919477AEAD6C4E6C937395A9",
+                      "path":  "web/dashboard/src/components/layout/DashboardShell.tsx"
+                  },
+                  {
+                      "sha256":  "52A96EA41191EBF6185FCDDF2E04787DBCB5CFCA3CF3806079C53DAB10273F26",
+                      "path":  "web/dashboard/src/components/layout/Sidebar.tsx"
+                  },
+                  {
+                      "sha256":  "2F446BFCBE2B4063799B0FBC69D3C4B2F8FEFFF544E4227FB7C08226753160B8",
+                      "path":  "web/dashboard/src/components/layout/Topbar.tsx"
+                  },
+                  {
+                      "sha256":  "4EA44BFC3313AEA22CC4985BF9B772453FFEA26BA04281DF5C039CCC0C56CB97",
+                      "path":  "web/dashboard/src/components/PageLoadBoundary.tsx"
+                  },
+                  {
+                      "sha256":  "FB33BC4865B74D1F0239B1782DBDC4CC2D38690BA6E245E9E3B024C256B14C2B",
+                      "path":  "web/dashboard/src/components/ui/avatar.tsx"
+                  },
+                  {
+                      "sha256":  "DB977D821AF56AE3FB7952182D9C0A076A10C75C38BC2D2B000827E720423D32",
+                      "path":  "web/dashboard/src/components/ui/badge.tsx"
+                  },
+                  {
+                      "sha256":  "ED90574C4CB6836D12A2AEE4AC44EB09AA3ED35F21D766848C387E11D53E997B",
+                      "path":  "web/dashboard/src/components/ui/button.tsx"
+                  },
+                  {
+                      "sha256":  "E5D5F8FC04E931875A0DFF8EBB6F42DE1197D547BA7E5E10A8FD62FA8D98E8A0",
+                      "path":  "web/dashboard/src/components/ui/card.tsx"
+                  },
+                  {
+                      "sha256":  "042132F5EE2E5297488441FC7BD0E343393E3150BE516110A8E3337196515B61",
+                      "path":  "web/dashboard/src/components/ui/dropdown-menu.tsx"
+                  },
+                  {
+                      "sha256":  "F4DCACAF3A55A424210AA94B3CFA28F4412E5A7861B419D02A3A7487B66616D4",
+                      "path":  "web/dashboard/src/components/ui/input.tsx"
+                  },
+                  {
+                      "sha256":  "EAC5D931890DE0763F7669BD1C7C93E8ACE4C6C4BBB66D1F5F8AD6F91D280C88",
+                      "path":  "web/dashboard/src/components/ui/modal-surface.tsx"
+                  },
+                  {
+                      "sha256":  "FD25BCBA572B7C28AF99C6A61AF8A92D74BEC9811872883C7FB0F67884182B71",
+                      "path":  "web/dashboard/src/components/ui/progress.tsx"
+                  },
+                  {
+                      "sha256":  "151DE1D7E576CA152DE664CFD8F6EED49E95F394F4EC4E9B7CC9A92C4B6B1C93",
+                      "path":  "web/dashboard/src/components/ui/ResponsiveText.tsx"
+                  },
+                  {
+                      "sha256":  "1757CB12444B65150BA9198C9A2F6355CEA81F30CC4779B9AAD1C7ADD0080EBE",
+                      "path":  "web/dashboard/src/components/ui/sonner.tsx"
+                  },
+                  {
+                      "sha256":  "1DA243956282C040DB49D5718D2F0093A705FBBDFA3A25F51C1A31A069C45093",
+                      "path":  "web/dashboard/src/components/ui/table.tsx"
+                  },
+                  {
+                      "sha256":  "B7EBE193BB87C53A41A7C7FED8DB17D0ADA057AC1EB6162E33EE9DB758DB29E5",
+                      "path":  "web/dashboard/src/firebase.js"
+                  },
+                  {
+                      "sha256":  "79A9396C2D0AA73BD76A3888C0BA7D3217815A0BA39D70B015552BCABB517361",
+                      "path":  "web/dashboard/src/firebase.ts"
+                  },
+                  {
+                      "sha256":  "A2DF0B0B1D4D104773B4FE93F534AA99DCB71F4E65A6263C8BF67817FFB5C2A2",
+                      "path":  "web/dashboard/src/index.css"
+                  },
+                  {
+                      "sha256":  "348EB62D790C412F3D6DEBB87396D87DF60F6FED8C3B633FCB3DB3832F2B398E",
+                      "path":  "web/dashboard/src/lib/dataNormalization.ts"
+                  },
+                  {
+                      "sha256":  "1F696C747B5C92E597C71F9C04EB61C158641F7CECA99A8DA6ED8577F7F92D73",
+                      "path":  "web/dashboard/src/lib/httpClient.ts"
+                  },
+                  {
+                      "sha256":  "94EAD92C3572F84DF74899089F2712A58BCD06A38E507B390E01DE404D63B6D4",
+                      "path":  "web/dashboard/src/lib/portalAccess.ts"
+                  },
+                  {
+                      "sha256":  "51BBF14CD1F84F49AAB2E0DBEE420137015D56B6677BB439E83A908CD292CCE1",
+                      "path":  "web/dashboard/src/lib/utils.ts"
+                  },
+                  {
+                      "sha256":  "C5D9ABF140F0605D674AD39F9F63A0FFA8B397ACA418867674FDF01C9CAE61AA",
+                      "path":  "web/dashboard/src/pages/AiCenter.tsx"
+                  },
+                  {
+                      "sha256":  "55086F2AC7283878B340F5C09FAB82C150B26EEEFECBDF1A7FE65B78D1C988A1",
+                      "path":  "web/dashboard/src/pages/AuditSystem.tsx"
+                  },
+                  {
+                      "sha256":  "643E91F1C350E4FE966689E0539B395573CC242112161708C549AD5CE40EEDFE",
+                      "path":  "web/dashboard/src/pages/Dashboard.tsx"
+                  },
+                  {
+                      "sha256":  "018135AFAC7050E9721D8205959DF0C6E248528D4F9899A60A1137170D83D727",
+                      "path":  "web/dashboard/src/pages/DataExplorer.tsx"
+                  },
+                  {
+                      "sha256":  "5093C5B2C99C4DA410C518CBC36E1F1B3CBEFA1D87058C6E7565282B087A7F4D",
+                      "path":  "web/dashboard/src/pages/DeveloperHub.tsx"
+                  },
+                  {
+                      "sha256":  "FA24FE70F6B400F1D5A887ED8CA38E72FD591A470E75742CDA75035924B49DD0",
+                      "path":  "web/dashboard/src/pages/Login.tsx"
+                  },
+                  {
+                      "sha256":  "F7644C92B6883DC6E41463C75F0AEF2BCCB90E1136DA01175AF79802698C8987",
+                      "path":  "web/dashboard/src/pages/Settings.tsx"
+                  },
+                  {
+                      "sha256":  "88318281483C882B792CADFF259EE50871FA8051BA3A4973EDFA23CC9D39DB69",
+                      "path":  "web/dashboard/src/pages/ShellyGateway.tsx"
+                  },
+                  {
+                      "sha256":  "3C72E4A0F071210469E26A8BB5D3AA853C3939E64FBAFAC6FABCEDFCA948CCC5",
+                      "path":  "web/dashboard/src/pages/UserManagement.tsx"
+                  },
+                  {
+                      "sha256":  "C36D3DFCAFE724FE46FE2D0183A96339D8A60A0CBEA3AA640D1C0E33480DE028",
+                      "path":  "web/dashboard/src/pages/VehicleCatalog.tsx"
+                  },
+                  {
+                      "sha256":  "5EC45168127A4B9229C69B55D25B3C5C6D3FCF284E0CF2BF24533285F7F89208",
+                      "path":  "web/dashboard/src/style.css"
+                  },
+                  {
+                      "sha256":  "B9BD649A1BC7E6C6F50D07439989F9033A7BAE7558B24E35C3141E76F6FEE833",
+                      "path":  "web/dashboard/src/types.ts"
+                  },
+                  {
+                      "sha256":  "265F97FFD1D473F2E52821FE1FADF6D366D7713372845D09310FBDB551819094",
+                      "path":  "web/dashboard/tailwind.config.js"
+                  },
+                  {
+                      "sha256":  "0206FCD2D14E6DC67F3C3BA31BE752614FE4747A155290EB39C1E05ED4D77F39",
+                      "path":  "web/dashboard/tests/model-lab.test.ts"
+                  },
+                  {
+                      "sha256":  "A6B29B55526E6FE63B82AF5BD94941E273759D494C309EF3BDBFE9D1E1D2C79C",
+                      "path":  "web/dashboard/tests/portal-safety.test.ts"
+                  },
+                  {
+                      "sha256":  "A63847CDDDFE3FCF7857AD3A58A81E9565DBF35ECCD89204D5EC8F9AB70A258B",
+                      "path":  "web/dashboard/tsconfig.json"
+                  },
+                  {
+                      "sha256":  "D2A04EA0893988F8F1879EC01EC88B4542F1E9E3B320FE6F9B4666AC4AEA22A1",
+                      "path":  "web/dashboard/tsconfig.node.json"
+                  },
+                  {
+                      "sha256":  "6F5592A3778AC1EB76021BD16E92B69C1638A12C1EA4EEAE234F529E3D781D93",
+                      "path":  "web/dashboard/vite.config.js"
+                  },
+                  {
+                      "sha256":  "7BAE0BF132CD2E48254414562C9A67D01168F8E7F536968EDA2E1E9ED37EC9FB",
+                      "path":  "web/deployment_policy.py"
+                  },
+                  {
+                      "sha256":  "D6A626647374D206053908F339F491DEA5C07B71FF69512C2268983772C9011C",
+                      "path":  "web/docker-compose.laptop.yml"
+                  },
+                  {
+                      "sha256":  "2557DCE28028937F6AEFBBBD8DE367C75BDF547F22A9BFD950BB00679A22A78A",
+                      "path":  "web/docker-compose.yml"
+                  },
+                  {
+                      "sha256":  "EC3664E7DCD5A76C6A45EF334B0ACD02432B566642378D696CAD250EE6615E8B",
+                      "path":  "web/Dockerfile.ai"
+                  },
+                  {
+                      "sha256":  "DEA6D00B325CA8679EEC51859A82F9FB45C3579C42D915F32BBA7564BE75EEBE",
+                      "path":  "web/Dockerfile.api"
+                  },
+                  {
+                      "sha256":  "F65E545AB1A8E4E88675403A688F5B93FC98EB3632F75EFCA1D3D32A82D21EC8",
+                      "path":  "web/Dockerfile.api.dockerignore"
+                  },
+                  {
+                      "sha256":  "A94EA2DDE19D135F0A1E29D9335B277720881D8BE85B1F71F79BC07A3632F4C2",
+                      "path":  "web/Dockerfile.api-tests"
+                  },
+                  {
+                      "sha256":  "779AC55D822A80687666CDDB4815F0573B6A2CEEE6F34D1FFD3810A9DF86CA68",
+                      "path":  "web/Dockerfile.api-tests.dockerignore"
+                  },
+                  {
+                      "sha256":  "EE1AA771257358349841A2FCC009FC46207957C1FC923CEF6E69E6D20C3AB853",
+                      "path":  "web/Dockerfile.cloud-dispatch-tests"
+                  },
+                  {
+                      "sha256":  "805CB534D2F2728C8996EA6A62C81D57F0D8ABB8C4DEE22EC4CEA6C4A66F564E",
+                      "path":  "web/Dockerfile.cloud-dispatch-tests.dockerignore"
+                  },
+                  {
+                      "sha256":  "745EA59CAC62399C5357EEB6B8F49903DC66CE16B05553C7CB4F4E051F2F774A",
+                      "path":  "web/Dockerfile.dashboard"
+                  },
+                  {
+                      "sha256":  "0AB9155021C55C35C2357B4E465DFA4C8A72B5A26C2C501A3FB01058250A96A7",
+                      "path":  "web/Dockerfile.worker"
+                  },
+                  {
+                      "sha256":  "0DBEB4C2918E961F3DB6E54A159B372A9996999B925E4D25182EEA78F6005031",
+                      "path":  "web/Dockerfile.worker.dockerignore"
+                  },
+                  {
+                      "sha256":  "654C5A35B7C64798CB59E3441ED587618C455453465FB769C3053C312100821A",
+                      "path":  "web/Dockerfile.worker-pilot"
+                  },
+                  {
+                      "sha256":  "8EE6FFDBD748C1F9B32C4EC8C044D0A741F9F58965CEC709C6D9987CF3040006",
+                      "path":  "web/Dockerfile.worker-pilot.dockerignore"
+                  },
+                  {
+                      "sha256":  "C7D274FAA0FDF759856D4492AB4B30844A2C02DD281989550D55CFF1E40DCEBC",
+                      "path":  "web/firebase.json"
+                  },
+                  {
+                      "sha256":  "FE314981FACA11819CFD2F7D73557BECDE60657538311C0AC85403064F2AA7ED",
+                      "path":  "web/firebase.qa.json"
+                  },
+                  {
+                      "sha256":  "FBE6955133805302B53972D5E984C2850C29FFB0A9B7E54247F3844E6EBEC8CD",
+                      "path":  "web/firebase.rules-local.json"
+                  },
+                  {
+                      "sha256":  "D46B378851B22BFB63FA4F15A4E893C1A89B579DAEFC2216A59F4C76BEE8F681",
+                      "path":  "web/firestore.indexes.json"
+                  },
+                  {
+                      "sha256":  "F27A0425B4CD9CE59CD5F2A659940F998C1E8FE37B51B511715F111BC5D17EBE",
+                      "path":  "web/qa-evidence/api/routes_inventory.json"
+                  },
+                  {
+                      "sha256":  "55EA7C8D3DEDE7FA06277D16C80E339F27CB4B4B1D02FA00CDC7C8C0DEC531E7",
+                      "path":  "web/qa-evidence/inspect_routes.py"
+                  },
+                  {
+                      "sha256":  "72AE1F5B208B7F66BECBCD0E020AA9CED4616DE1F23B95437E4FF2D533AA96D6",
+                      "path":  "web/request_limits.py"
+                  },
+                  {
+                      "sha256":  "1DD628347C259594E72B45BD5D2EE813D51D3CAA059BE3238536F8B80F36F0B9",
+                      "path":  "web/requirements.txt"
+                  },
+                  {
+                      "sha256":  "95A9976FDB9ABFF078FC1494CC0BFAF37F1063BD2597732544B8A9F481B0CB72",
+                      "path":  "web/requirements-ai.azure.txt"
+                  },
+                  {
+                      "sha256":  "F481EC798F56B7AD60F45BE5922DC5DC0C9385A4AC4F22736BE5BF153CCF3A50",
+                      "path":  "web/requirements-ai.txt"
+                  },
+                  {
+                      "sha256":  "98EF7FE2382C2E18138F5D995A0D26F0F858080EB82F31AFC5C592B7B4B3D89A",
+                      "path":  "web/requirements-api.txt"
+                  },
+                  {
+                      "sha256":  "A6465DC6099C4D701F9B777AD88923012F624BC6656A42E625805910FF3B22EE",
+                      "path":  "web/requirements-api-tests.txt"
+                  },
+                  {
+                      "sha256":  "C9E9E4371672139ACB0C69CACCD0A3EAC9AF6FB187D57B8BBA60068630344AD7",
+                      "path":  "web/requirements-chat.txt"
+                  },
+                  {
+                      "sha256":  "E60D26675045E332116E2AEBBC8B6C9ACBC4749BF03CC85B84FE873A487D831A",
+                      "path":  "web/requirements-worker.txt"
+                  },
+                  {
+                      "sha256":  "F1EB6B09FFD0D9E4556A1159E21429DA58D1D0F318E14C772832D92CDCEBF241",
+                      "path":  "web/rules_tests/package.json"
+                  },
+                  {
+                      "sha256":  "62A1A8EFFE104E85F13735EC73FF96AE38DDE724973FBC21B4B6DBF81F541662",
+                      "path":  "web/rules_tests/package-lock.json"
+                  },
+                  {
+                      "sha256":  "DCB59DB1F13CBF8654FDE2242888DBB150781F91C9252B82CC576597F2DA3880",
+                      "path":  "web/rules_tests/rules.test.js"
+                  },
+                  {
+                      "sha256":  "7D8E7B733738ABBA1DB2FDBCD927A0ED7BF9E13764E03C5570CB7DA166D559D3",
+                      "path":  "web/run_ai_server.py"
+                  },
+                  {
+                      "sha256":  "21B19678A64A3764CA9F43A36D1FB5192107F8CC47907FA1D2EE2C5412124FF8",
+                      "path":  "web/scripts/backfill_smart_charge_soc.py"
+                  },
+                  {
+                      "sha256":  "543AB8AE61EE322FD75A318A93D5C1D0A6E75661C89B4DE750ADAF6BF8F012F8",
+                      "path":  "web/scripts/migrate_vehicle_catalog.py"
+                  },
+                  {
+                      "sha256":  "9B72755F9A19007B3772C5CC51F8455175B131E62175C6661A085402B470E79E",
+                      "path":  "web/scripts/seed_vinfast_specs.py"
+                  },
+                  {
+                      "sha256":  "CF01936E2E9CBE8AA5589581B63C45A86D2B6DA77C6D10420935634EC822C6F5",
+                      "path":  "web/scripts/worker_fixture_smoke.py"
+                  },
+                  {
+                      "sha256":  "157294D3DF2A3BB15E22FF58239082C7453CB82D8ECBBA51140A1C682A92B384",
+                      "path":  "web/scripts/worker_pilot_fixture.py"
+                  },
+                  {
+                      "sha256":  "887989A96AE10E804B01AC55D7334B9B758F62FCF974ACEF4761E92C39469713",
+                      "path":  "web/server.py"
+                  },
+                  {
+                      "sha256":  "30A25D1FD4AED3701EE27FEA2AA65E531C73C810961CA1D07BE6D72C1D795FC8",
+                      "path":  "web/shelly/__init__.py"
+                  },
+                  {
+                      "sha256":  "2012B984488203BA0C36E65706EAEB61CC5187FB058FBB0815FB4E9D7572F658",
+                      "path":  "web/shelly/charging_fusion.py"
+                  },
+                  {
+                      "sha256":  "AE6A74AC1BC2A84295B373B2320B01099D4343E9083B0C76C5ED7C1C82E5A101",
+                      "path":  "web/shelly/cloud_dispatch.py"
+                  },
+                  {
+                      "sha256":  "F3FFDBA0930BF34932D8E5EEC38DF1AD3011FD42ABED3DE2D020A77396477F96",
+                      "path":  "web/shelly/connection_codes.py"
+                  },
+                  {
+                      "sha256":  "2DEF833769D6A950398BE3E17A0A10F06C88247184291BFB715C0990B1C138B7",
+                      "path":  "web/shelly/crypto.py"
+                  },
+                  {
+                      "sha256":  "23CE2F15193D92F775890E3B6F9CC99C5442D4D22F248ACB9A95573B4997D0DE",
+                      "path":  "web/shelly/models.py"
+                  },
+                  {
+                      "sha256":  "3CF5E898449291C34C805D57F1BA1E384512B816E57573F0C9A6E3A76BB6E0CD",
+                      "path":  "web/shelly/personal_model_registry.py"
+                  },
+                  {
+                      "sha256":  "279F8AE455FEF7C0F05B6EBF0D3F97D7B06FE26BDA1A5E41D610DA5F077DFDC5",
+                      "path":  "web/shelly/personalization.py"
+                  },
+                  {
+                      "sha256":  "5653302CD4434CC3662E66E2BC9A6501775A917102682A832415AD6BD7C18A81",
+                      "path":  "web/shelly/profile_vault.py"
+                  },
+                  {
+                      "sha256":  "D50EDD19E0974F09C3D335F2A5CD7C9EE56D83582DF09D4B7189EFE517BD7880",
+                      "path":  "web/shelly/providers/__init__.py"
+                  },
+                  {
+                      "sha256":  "04B9A14EF6B916314C8874B22B884678FD0C5695BE05FCF7C8E642592297E35E",
+                      "path":  "web/shelly/providers/base.py"
+                  },
+                  {
+                      "sha256":  "507A7D31FF14968447D92B968E75F0E2474E33220F344249FBE6A23EB6BDF7C9",
+                      "path":  "web/shelly/providers/fake.py"
+                  },
+                  {
+                      "sha256":  "BC5705BA92E886E8A2EA2677E849E1D7BBA00DBB1D909C5132DE5F253BA16DA6",
+                      "path":  "web/shelly/providers/integrator.py"
+                  },
+                  {
+                      "sha256":  "11A78C2AE6250C68BEE387044560D7588C62EFAFAD785EFF463532A89FB8A1F6",
+                      "path":  "web/shelly/providers/legacy_cloud.py"
+                  },
+                  {
+                      "sha256":  "D05361DFEE5B5602434ACFAC50D98E8ED0BDB4353915616DB8A0BADD8347CCD2",
+                      "path":  "web/shelly/providers/vault_cloud.py"
+                  },
+                  {
+                      "sha256":  "E0D359EACE89BCC6E0A971886733108B8E85A9B4C1352AE9EE68F69AA644CE7E",
+                      "path":  "web/shelly/push_notifications.py"
+                  },
+                  {
+                      "sha256":  "96B27484805B60BF16E98FC0B461ECA442737280E27FB3FCE3F11111441F8EA6",
+                      "path":  "web/shelly/rate_limiter.py"
+                  },
+                  {
+                      "sha256":  "8AC76206647533C93F96455678FA81A458487352BB04521B4334A75A622D090D",
+                      "path":  "web/shelly/recovery_worker.py"
+                  },
+                  {
+                      "sha256":  "E16C36983CC4F0C56F655CC99EE2466917B2F8CC4E7EFC9B55D504894A1CD0AA",
+                      "path":  "web/shelly/repositories.py"
+                  },
+                  {
+                      "sha256":  "062E3ED6CC0F83654226DE1F31AED781CC4928580EC5D92DDC565DF52239EF7B",
+                      "path":  "web/shelly/routes.py"
+                  },
+                  {
+                      "sha256":  "B818D0EB78C6A39CF374A71EC203FA4354F333482A7CFB8E1B024093D046F615",
+                      "path":  "web/shelly/safety_fingerprint.py"
+                  },
+                  {
+                      "sha256":  "C02D71EAC8E58BCD486AA7BD4A58664EACCD63E9151D116FA33001C8E8955C24",
+                      "path":  "web/shelly/service.py"
+                  },
+                  {
+                      "sha256":  "2B87F57A219689F597E0E5036EBF5843A9945EE7218BCD65400751B4E035A278",
+                      "path":  "web/shelly/shadow_promotion.py"
+                  },
+                  {
+                      "sha256":  "98AB4212705DBC75BC0D96C29DEE6BF3619A27FFE1A0FD073AB4E0BA005F58A6",
+                      "path":  "web/shelly/worker_health.py"
+                  },
+                  {
+                      "sha256":  "A22EFF3F67CEBBB78BEE46F8EB76D2A7156477A09D46E555AB80656A8AFC17D5",
+                      "path":  "web/shelly/worker_pilot.py"
+                  },
+                  {
+                      "sha256":  "16FB04D605238919A005E868DD5E4E5F0FF7CD35936C8D62C6A1FCE9C8BD2F5E",
+                      "path":  "web/shelly/worker_runtime.py"
+                  },
+                  {
+                      "sha256":  "01A9A9EA16C25A9A0AD2A48DF7DB7978B0F2FFF1CD47D1276003F703F6F14A34",
+                      "path":  "web/smart_charge_worker.py"
+                  },
+                  {
+                      "sha256":  "D92DF39106FB0022E4434E0093821E2B278CD0EAEC6C59A57F8D27E72574BF2F",
+                      "path":  "web/smart_charge_worker_entry.py"
+                  },
+                  {
+                      "sha256":  "6905C8477FFB4482236BC62B9A1C51D97E1776CEA8B03CADB621119CE685385D",
+                      "path":  "web/sync_writes.py"
+                  },
+                  {
+                      "sha256":  "D5B2FBA0934F87F77397088CF98624A41F6509A00E8CA0901D1FC8416BBA26B5",
+                      "path":  "web/telemetry_schema.py"
+                  },
+                  {
+                      "sha256":  "01BA4719C80B6FE911B091A7C05124B64EEECE964E09C058EF8F9805DACA546B",
+                      "path":  "web/tests/__init__.py"
+                  },
+                  {
+                      "sha256":  "74C15E66BBB48350E53F990C59E664C816E535EB4951C3785262B972B3B7C42E",
+                      "path":  "web/tests/qa_audit/conftest.py"
+                  },
+                  {
+                      "sha256":  "B232D5641493A3931992A61FF7C2712F9B627F7C6F975BE924A3A84FD0A6FF22",
+                      "path":  "web/tests/qa_audit/test_qa_ai_upload_lifecycle.py"
+                  },
+                  {
+                      "sha256":  "FB2A82D357E0E05BDAD98DAF975D020502CEC7D7B6EC89A546188FC3710B368F",
+                      "path":  "web/tests/qa_audit/test_qa_auth_matrix.py"
+                  },
+                  {
+                      "sha256":  "A3A6A2A1397EA6C5A321BF399EDF06E8CE153464DF94D1BFF7063A5921E043D6",
+                      "path":  "web/tests/qa_audit/test_qa_idor_data_integrity.py"
+                  },
+                  {
+                      "sha256":  "31BA69AB9B74836A5CE757DC4C16BB8BD95E801AF17EA2A3D0C90F52E3268744",
+                      "path":  "web/tests/qa_audit/test_qa_validation_contracts.py"
+                  },
+                  {
+                      "sha256":  "16FEBEEAAA3DAF68E514A13A060D10B793753A64309CADE662770A3632E01836",
+                      "path":  "web/tests/qa_audit/test_remediation.py"
+                  },
+                  {
+                      "sha256":  "041D6E355182F0724B84829481C74C8294A08372F8DF184E6DE7A1A2FB01C308",
+                      "path":  "web/tests/test_admin_snapshot.py"
+                  },
+                  {
+                      "sha256":  "2BD761D1FE3040CC46E26F55060990BB578F68E928CB9BE0B989DF5C7E5429E7",
+                      "path":  "web/tests/test_ai_chatbot.py"
+                  },
+                  {
+                      "sha256":  "62C46850C3A41F7BA4A8A3A68D2D785CD5086CAAA300855F4E02083812295F82",
+                      "path":  "web/tests/test_ai_lifecycle.py"
+                  },
+                  {
+                      "sha256":  "A63C87A9B604DBDB0452FF448D5C978C135E760266612211F74540F04A7F2958",
+                      "path":  "web/tests/test_azure_staging_policy.py"
+                  },
+                  {
+                      "sha256":  "2D75E03E0A9E79CF58C92A4813F4982A616615D786C07B6C8C9E3C49F1B00751",
+                      "path":  "web/tests/test_behavior_and_history.py"
+                  },
+                  {
+                      "sha256":  "AA9C689DA118BD9F69318B7877606DDCAE3794656295BF770FD6639BE60B7131",
+                      "path":  "web/tests/test_charging_prediction.py"
+                  },
+                  {
+                      "sha256":  "CF5AE0EF8FBEFA78B850033A4AAB41A416800757608C5FF564ED96579A1ABFE7",
+                      "path":  "web/tests/test_chat_security_contract.py"
+                  },
+                  {
+                      "sha256":  "2C826E34A1352C08EB1B278845D867B13D27991F6A7734D105DB47D3426EE6DC",
+                      "path":  "web/tests/test_cloud_dispatch.py"
+                  },
+                  {
+                      "sha256":  "FB5FF786DF97625A60A92BCF7A9A463303B071B9EBD7401E58E561BCBAD8EB0D",
+                      "path":  "web/tests/test_connection_codes.py"
+                  },
+                  {
+                      "sha256":  "69626B4E344D3F1C884BA43938EB3646A379D73140E417CD13FB803BEF2521F6",
+                      "path":  "web/tests/test_fine_tune.py"
+                  },
+                  {
+                      "sha256":  "FE6F9B469D1D7743E857FF46DA6214D70752DA5C2E2B153731AFB3FA9A8884AC",
+                      "path":  "web/tests/test_function_calling_and_proactive.py"
+                  },
+                  {
+                      "sha256":  "A915FEF65A46DCE31E03FD3BE09507B5AB18142B11467FA6BF209ECF0AB18C50",
+                      "path":  "web/tests/test_guardrails_and_personality.py"
+                  },
+                  {
+                      "sha256":  "0D9DEA3299EB921984210868523E951C282AA9DAEFC62462D90E76F087CEAD3D",
+                      "path":  "web/tests/test_history_retention_v4.py"
+                  },
+                  {
+                      "sha256":  "B400E270276BC5B0C0EF33F9B89B478CC0B19AFF2E658EC55E78BCAECB33ACBF",
+                      "path":  "web/tests/test_multivehicle_smart_charge_v4.py"
+                  },
+                  {
+                      "sha256":  "16E1E3CA6201069EA9153E5E71A5E137A8C0C3136FAA5C23057658009CA82264",
+                      "path":  "web/tests/test_notification_and_history_sync.py"
+                  },
+                  {
+                      "sha256":  "871D86C72C1FA12B8B679FB7FD0048D47083F9C3B54066B2CF67D0FD89216395",
+                      "path":  "web/tests/test_onboarding_and_preferences.py"
+                  },
+                  {
+                      "sha256":  "E46CAE3125CE846F47D6D533BC2FAF68694847BD9DEE0FBCE10D62C397DFB5DF",
+                      "path":  "web/tests/test_personal_candidate_promotion_v4.py"
+                  },
+                  {
+                      "sha256":  "10BC0849FE528261E2AC4B5BCF65744E62DDE1693ADFE6BD750711295499C770",
+                      "path":  "web/tests/test_personal_smart_charge_v3.py"
+                  },
+                  {
+                      "sha256":  "25BA5E643D9FAB9965ACF41C85A2BE0185FAAA8C71EB83F370CB1A357B105EF9",
+                      "path":  "web/tests/test_push_tokens.py"
+                  },
+                  {
+                      "sha256":  "C0A26521E2EACEFD8E9D1C27FE3C251C12370B76A74CA82CA978C595DAC1306A",
+                      "path":  "web/tests/test_python_contract_regressions.py"
+                  },
+                  {
+                      "sha256":  "0C099DF12CBC7A25EF714E46D2F315232FE8CD222501C1B5B883420FB0E1528F",
+                      "path":  "web/tests/test_quality_gate_deadline.py"
+                  },
+                  {
+                      "sha256":  "7CAD6672FE96FDB4B3268223EBCA3B3AA81EA8D84A25D3DFB3DC049CCE03B11E",
+                      "path":  "web/tests/test_registry.py"
+                  },
+                  {
+                      "sha256":  "82022BE2A811D2D9886DF1C960DAA4E435E62CD970ECAB62FD61B52A36A4DFD3",
+                      "path":  "web/tests/test_rich_cards_and_phase5c.py"
+                  },
+                  {
+                      "sha256":  "3E5A8BCE74AAA3097FD23BA152531CD0E6ECA763923A0A66895CE7794FBB0974",
+                      "path":  "web/tests/test_shadow_and_recovery.py"
+                  },
+                  {
+                      "sha256":  "DA984FB876A958DE633D56BF49FB4B913EC7DF5047B88A941B69958B588552E8",
+                      "path":  "web/tests/test_shelly_cloud_first.py"
+                  },
+                  {
+                      "sha256":  "735F596EAF4D362994577A6182CFEED82C779B431D534A1FC72DCA07A5FDD325",
+                      "path":  "web/tests/test_shelly_live_safety.py"
+                  },
+                  {
+                      "sha256":  "1618848BA8CAF4B1C9A3505CA4FF60F60EFC7BDD8C019602F8BF76D744B67036",
+                      "path":  "web/tests/test_shelly_membership.py"
+                  },
+                  {
+                      "sha256":  "715E94A8B42CDDE4447B4F36C45EA51CC848E5FCA134D17A035C84A0EE95BDDC",
+                      "path":  "web/tests/test_shelly_membership_emulator.py"
+                  },
+                  {
+                      "sha256":  "457E094CE8E3296B8E2C9691C2E61EEFDC659483AF87DFA58DFCAEFB219F4FEA",
+                      "path":  "web/tests/test_shelly_vault_safety.py"
+                  },
+                  {
+                      "sha256":  "3A5F08F5ACCD6920BD4C1327D2EE1B2F780C25594C5D3CCE23D8B2EAAF8E4157",
+                      "path":  "web/tests/test_smart_charge_worker_lease.py"
+                  },
+                  {
+                      "sha256":  "FF08285045145E0F8A986C1B3FDE64D00EECBFCD7197172A14AEF4F0EE680268",
+                      "path":  "web/tests/test_smart_charge_worker_safety.py"
+                  },
+                  {
+                      "sha256":  "1207FA163CF206634BB287570184AFFB72D3A3C989545D7A275F0AAD3C8BD045",
+                      "path":  "web/tests/test_telemetry_schema.py"
+                  },
+                  {
+                      "sha256":  "7AA9CD4E6D22CC7D8433579AE5A26E763B4D2F46BB45A9B81FE26775A513DFB5",
+                      "path":  "web/tests/test_vehicle_adapter.py"
+                  },
+                  {
+                      "sha256":  "C46911D7F2BEB822902B81EA27792F28614D83E287AE23F01184A553665AE51F",
+                      "path":  "web/tests/test_vehicle_catalog.py"
+                  },
+                  {
+                      "sha256":  "754EB8C76C724DFD3D3BFFCC2C0DEE544D9445A30C3809319E4618BF3B3F3B05",
+                      "path":  "web/tests/test_worker_pilot.py"
+                  },
+                  {
+                      "sha256":  "88AE73BBA7850BF6DB8A3BDA264C8F4780279B165E75A84293604F68BC9A3A1D",
+                      "path":  "web/tests/test_worker_runtime.py"
+                  },
+                  {
+                      "sha256":  "582D00644E87AC196126873C90402175229A111EC940C4BCBDD29BF765BAE4AA",
+                      "path":  "web/vehicle_catalog.py"
+                  }
+              ],
+    "capturedAt":  "2026-10-09T20:29:03.7679413Z"
+}

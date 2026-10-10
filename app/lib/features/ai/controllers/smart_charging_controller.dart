@@ -345,7 +345,13 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         },
       );
     } on SmartChargerException catch (error) {
-      if (!_disposed) state = state.copyWith(gatewayError: error.message);
+      if (!_disposed) {
+        state = state.copyWith(
+          gatewayError: error.message,
+          chargerStatus: null,
+          capabilities: SmartChargerCapabilities.unavailable,
+        );
+      }
     } catch (error, stack) {
       AppErrorReporter.report(
         error,
@@ -593,15 +599,22 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     }
     if (_statusRequestRunning || _disposed) return;
     _statusRequestRunning = true;
+    final shelly = ShellyConnectionCoordinator.shared;
+    final owner = shelly.accountUid;
+    final generation = shelly.accountGeneration;
+    final vehicleId = state.draft.vehicleId;
+    bool currentContext() =>
+        !_disposed &&
+        shelly.accountUid == owner &&
+        shelly.accountGeneration == generation &&
+        state.draft.vehicleId == vehicleId;
     try {
-      final live = await _repository!.live(vehicleId: state.draft.vehicleId);
+      final live = await _repository!.live(vehicleId: vehicleId);
+      if (!currentContext()) return;
       final status = live.status;
       _connectionCoordinator.markStatusSuccess(shellyReachable: status.online);
       if (!_disposed) {
-        ShellyConnectionCoordinator.shared.updateCodeNotice(
-          status,
-          vehicleId: state.draft.vehicleId,
-        );
+        shelly.updateCodeNotice(status, uid: owner, vehicleId: vehicleId);
         state = state.copyWith(
           chargerStatus: status,
           // The notice comes from the existing server poll, never an extra
@@ -619,14 +632,28 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         unawaited(_maybeCalibrate(status));
       }
     } on SmartChargerException catch (error) {
+      if (!currentContext()) return;
+      if (owner != null) {
+        shelly.markServerUnavailable(uid: owner, vehicleId: vehicleId);
+      }
       _connectionCoordinator.markFailure(
         api: true,
         gateway: true,
         shelly: error.code == 'deviceOffline',
         retry: _refreshStatus,
       );
-      if (!_disposed) state = state.copyWith(gatewayError: error.message);
+      if (!_disposed) {
+        state = state.copyWith(
+          gatewayError: error.message,
+          chargerStatus: null,
+          capabilities: SmartChargerCapabilities.unavailable,
+        );
+      }
     } catch (error, stack) {
+      if (!currentContext()) return;
+      if (owner != null) {
+        shelly.markServerUnavailable(uid: owner, vehicleId: vehicleId);
+      }
       _connectionCoordinator.markFailure(
         api: true,
         gateway: true,
@@ -640,6 +667,8 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       if (!_disposed) {
         state = state.copyWith(
           gatewayError: 'Không thể đọc trạng thái Shelly. Hãy thử lại.',
+          chargerStatus: null,
+          capabilities: SmartChargerCapabilities.unavailable,
         );
       }
     } finally {

@@ -1,5 +1,225 @@
 # VinFast Battery — Project Status & Task Tracker
 
+## Git sync — 10/10/2026
+
+- User yêu cầu commit và sync GitHub; nhánh `deploy/azure-student`, remote `khanhbes/Vinfast-Batery`, baseline HEAD `5f1470c336b5ffaefc3b0653dd7d6dc7b67abe33`, có 4 commit local chưa push. Giữ nguyên code/dữ liệu/bằng chứng và thay đổi chưa commit.
+- Kiểm tra Git objects phát hiện APK lịch sử chưa push `docs/qa_evidence/app-review-2026-10-05/batterybot-before-upgrade-20261007.apk`, 233.160.631 bytes, vượt giới hạn GitHub 100 MiB; không coi commit local là sync thành công. Một số cache pytest đã được track trong commit cũ.
+- `.gitignore`: bỏ qua cache `.pytest_*` và APK trong QA evidence cho lần add sau; không xóa file trên đĩa. Commit source/tooling/spec và metadata QA sau quét bí mật; không add `.env`, Firebase/Shelly credentials, signing keys hoặc artifact APK mới. Không chạy/redeploy worker, mở khóa phần cứng hoặc gửi relay trong task Git.
+- Gate Git: 118 file staged; quét 875 unique blobs trong staged/outgoing history, 0 findings theo mẫu private-key/token/literal-secret/sensitive-path; không chứng nhận mọi bí mật mã hóa/binary. `git diff --cached --check` exit0. Không rerun quality suites trong task Git hoặc coi commit là release gate.
+- Trạng thái sync: **Blocked** bởi APK lớn trong lịch sử chưa push. Chuẩn bị commit local sau gate; làm sạch lịch sử cần duyệt riêng và nhánh backup. Không tự rewrite commit đã push, reset/stash, force-push hoặc xóa bằng chứng. Hardware/worker gates Task107 vẫn Blocked, không biến thành Pass do commit/push.
+
+> **Task107 (10/10/2026) — Runtime verified trong phạm vi UI/readback trên APK QA 1.1.9+138; điều khiển thật vẫn Blocked.** Build và cài cập nhật exit0 trên OnePlus 9 Pro, hash APK thực cài khớp artifact. BatteryBot trả OFF/0 W từ readback máy chủ; Sạc/Cài đặt thống nhất liên kết legacy cần máy chủ, yêu cầu ON bị chặn. Restart138 trở lại Dashboard, giữ đăng nhập/xe và nhãn liên kết ở Sạc pin. Không gửi ON/OFF/safety/rearm, không mở khóa Azure hoặc đổi AI/worker; chưa chứng nhận Shelly-ready.
+
+## 107. Task Completion Log — APK và OnePlus read-only (10/10/2026)
+
+- `app/pubspec.yaml`: tăng QA build137→138; chưa thấy artifact138 hiện có. Không đổi businesslogic hoặc endpoint; build dùng HTTPS Azure hiện tại.
+- Baseline điện thoại: package `com.bes.vinbatery`,versionName1.1.9/versionCode137,lastUpdate09/10. Không thao tác Samsung/AVD, không đổi font/theme/mạng hệ thống.
+- Helper `batterybot_device_inspect.py` đọc hierarchy vàoRAM, bỏ input và cheidentifier/email, dọn đúngXMLtmp do helper tạo. Probe ban đầuexit0/nodesempty, chưa xác định mànapp; không tính runtimePass.
+- Bước tiếp: build có deadline/log/exit→hash/package/certificate/hygiene→install-r giữdata→Sạc/Settings/Setup/BatteryBot/restart. Không chạm xác nhận điều khiển hoặc enrollment có tác động; thiếu login/fixture ghiBlocked và hỏiuser.
+
+### 107.1. Baseline runtime137 và các lượt build
+
+- Đã đối chiếu SHA256 APK **thực đang cài** với artifact137: `5cf78fa5b510049be742fdef55638374ebca206e16b36abcbc8431e9374184e7`, khớp. Đây là artifact nguồn09/10, không chứng minh các sửa Task104 hiện tại. Evidence `oneplus-107-baseline-137-20261010.json`, không có serial/email/token/mật khẩu/hierarchy thô.
+- Dashboard giữ đăng nhập/xe; Sạc và Cài đặt cùng nhãn **“Đã liên kết · Cần kết nối qua máy chủ”**. Tabhẹn giờ nêu rõ liên kết cũ chưa cho phép điều khiển và cần mãadmin. Setuphiện **“Chuyển kết nối qua máy chủ”**, giữ liên kết cũ, không tự test relay. Cuộn xem lịch sử gần đây có dữ liệu; Backsetup→Settings và mở BatteryBot dùng được.
+- BatteryBotFAQwhylocked trả lời chung và có nút dẫn đến Sạc; chưa giải thích cụ thể legacy/code/worker. Câu `Trang thai shelly` trả **“Chưa đọc được dữ liệu. Hãy thử lại hoặc mở màn hình tương ứng.”**: readback **Fail**, chưa có HTTPcode/requestId/runtimecause, không quy chắc TLS hoặc backend. Câu `Bat sac 5 phut` bị chặn với **“Hãy kết nối Shelly qua máy chủ trước khi điều khiển trong chat.”**, không có thẻ xác nhận điều khiển; không thực thi lệnh. Đây là kiểm gate legacy, không phải nghiệm thu ON/OFF.
+- Restart **riêng app**→Dashboard→Sạc vẫn giữ đúng nhãnlegacy, không mất phiênđăng nhập. Mẫu103loglines của PIDapp: fatal/overflow/HandshakeException/PERMISSION_DENIED/OOM đều0; không chứng nhận toàn phiên khôngcrash/ANR hoặc TLS trênmọimạng. Không thay font/theme/mạng hệ thống, không xóa cache/data/profile, khôngsửa dữ liệu thật; chỉ thêm3câu QA vào hội thoại local.
+- HierarchychattrảCalledProcessError; chuyển xem screenshot **trongRAM**, không lưu ảnh vào evidence. Toolencodingcp1252 lỗi rồi chạy `-X utf8`; tênactivityshort sai được resolve launcher thực `com.vinfast.vinfast_battery.MainActivity`. Các lỗi tool này không chấm lỗi app.
+- RAM đo223MiB→870MiB→1.374MiB; sau user giải phóng thêm đo4.230MiB. Không tự đóng Chrome/IDE/Docker hoặc tiến trình người dùng. Source scan/manifest trướcbuild344files/0findings/exit0,71,49s; scopekhôngGit history/binaryAPK/envthật.
+- Build đầu600s **Timeout**, elapsed610,83s/childexit1/cleanupError`process_tree_cleanup_failed`; khôngPass. Lượt2 dùng nativeFluttertoolssnapshot, Gradleheap1536m/metaspace512m/codecache128m/1worker/noParallel/noDaemon **chỉ envtask**, không sửa `gradle.properties`: **Timeout600s**,601,64s/childexit1/cleanupErrornull. Không có artifact138 đã được xác minh hoặc cài; không lấy `app-debug.apk` cũ làm bản138.
+- KhiRAM đạt4,1GiB và câybuildlượt2 đãhết, chạy lượt3 códeadline600s, cùng envlowmemory. Checkpoint: đang chạy, chưaPass. JVM thuộc đúng câytask đang chờ `DefaultBuildControllers.awaitCompletion`; không đủ để kết luận deadlock/cache/network hoặc lỗi mãapp. Chỉ đọc frameclasses trongRAM, khôngrawenv/threaddump/logsecret. Giữ toàn bộ logtimeout; không tựkillJava/Gradle ngoài cây task.
+- Logs prefix `oneplus-107-build-138`, `build-lowmem-138`, `build-recovered-138`, `source-before-138` dưới `docs/qa_evidence/app-review-2026-10-05/`; mỗi runner có resultJSON sau kết thúc. Chưa analyzer/fullFlutter/backend/gateway/Rules/dashboard rerun trong107; Task104/106 là bằng chứng lịch sử, không tính lạiPass.
+
+### 107.2. Kết quả cuối — APK138 và OnePlus
+
+Các câu “chưa có artifact138/đang chạy” phía trên là checkpoint lịch sử trước lượt build cuối. Không xóa log Fail/Timeout hoặc dùng kết quả137 thay nghiệm thu138.
+
+- **Artifact:** `app/build/app/outputs/flutter-apk/VinFastBattery_1.1.9+138_debug.apk`; package `com.bes.vinbatery`, version `1.1.9+138`, minSdk26/target36, 231.532.152 bytes. SHA-256 **`E202CE81BB76B462A60A67C940CAED6A9DD54003929B19DF9C72CFB5AC62CE9E`**. Certificate SHA-256 `914642716decb342ca80acece6284e69d66355bfa792f5c4779efecf16ecebeb`, cùng khóa debug137; chỉ QA, không phải ký beta ổn định.
+- **Source:** HEAD `5f1470c336b5ffaefc3b0653dd7d6dc7b67abe33`, branch `deploy/azure-student`, worktree dirty giữ nguyên. Scoped manifest trước/sau build 344 files, 0 findings, 0 hash khác nhau; HEAD không đại diện mọi thay đổi chưa commit. Task này chỉ tăng version trong `app/pubspec.yaml`, bổ sung báo cáo/evidence; không sửa business logic. Build define dùng HTTPS Azure hiện tại; chưa kiểm runtime override lưu trên máy hoặc TLS hai loại mạng.
+- **Gates:** lượt build3 **exit0 / 560,06s / không timeout**, giữ cả hai lượt timeout trước. Apksigner **exit0 / 4,20s**, V2 verified; artifact hygiene **exit0 / 0,86s**, 6 text assets/0 findings (không chứng nhận mọi binary hoặc Git history). Install `-r` **exit0 / 13,50s**, không uninstall/clear data. SHA-256 **base.apk thực cài** khớp138; login/xe/profile giữ nguyên. Source scan cuối exit0/11,08s. Không rerun toàn bộ suites/analyzer trong107; không cộng Task104/106 thành kết quả mới.
+
+| ID | Thao tác thực tế trên APK138 | Kết quả / giới hạn |
+|---|---|---|
+| R138-01 | Mở Dashboard sau cập nhật | Pass: giữ phiên Firebase và xe đã chọn; không chứng nhận số pin/quãng đường là đo thật |
+| R138-02 | Sạc pin → hẹn giờ → cuộn đến nút Start | Pass cho presentation/gate: nhãn “Đã liên kết · Cần kết nối qua máy chủ”, lý do cần mã quản trị; Start nhìn thấy tối/khóa. Không bấm Start |
+| R138-03 | Cài đặt → Sạc thông minh Shelly → Setup → Back | Pass: cùng nhãn; loading chuyển sang “Chuyển kết nối qua máy chủ”, form mã giữ liên kết cũ và không tự test relay. Không nhập/redeem mã, chưa nghiệm thu enrollment |
+| R138-04 | FAQ tại BatteryBot → bấm “Đến trang Sạc pin” | Pass: đóng sheet và mở đúng tab Sạc pin; không relay action |
+| R138-05 | Hỏi `Trang thai shelly` | Pass cho một lần đọc: “Shelly đã tắt theo readback máy chủ vừa đọc. Công suất 0.0 W.” Đây là kết quả client/backend đọc, không độc lập kiểm Cloud/model/config/timer hoặc chứng minh lệnh OFF của app |
+| R138-06 | Hỏi `Bat sac 5 phut` sau readback, không xác nhận | Pass cho chặn legacy: “Hãy kết nối Shelly qua máy chủ trước khi điều khiển trong chat.” Không có thẻ xác nhận/không ON. Readback OFF không tự cấp quyền điều khiển |
+| R138-07 | System Back từ BatteryBot; mở Settings sau readback | Pass: sheet đóng, nhãn legacy còn đúng; nút Start vẫn tối khi quan sát lại. Tap X trước đó bị bong bóng ngoài app gây nhiễu, không kết luận bug nút đóng |
+| R138-08 | Restart riêng app138 → Dashboard → Sạc pin → Cài đặt | Pass: đăng nhập/xe giữ nguyên, hai màn vẫn nhãn legacy giống nhau. ADB chậm; không đo thời gian cold-start hoặc kết luận lỗi splash. Tạm dừng khi user chuyển ứng dụng, tiếp tục sau user xác nhận mở lại app |
+
+- Mẫu log PID138 trước restart: **74 lines**, fatal/RenderFlex overflow/HandshakeException/PERMISSION_DENIED/OOM đều0. Chỉ mẫu giới hạn, không chứng nhận cả phiên không ANR/crash/TLS lỗi. Screenshot xem trong RAM, không lưu ảnh/XML/raw logs; không ghi account name/email/UID/Device ID/Cloud Key vào báo cáo. Không thay font/theme/mạng, không xóa cache/data/profile, không thao tác Samsung/emulator hay đổi Azure/API/AI/pilot. Chỉ thêm câu QA vào chat local.
+- **UX107-01 — Planned:** lý do khóa ở đầu trang biến mất khi cuộn tới nút Start. Thêm lý do ngắn và action thiết lập cạnh CTA; không mở safety gate để giải quyết UX. **UX107-02 — Planned:** FAQ “Vì sao nút sạc bị khóa?” vẫn trả lời chung; dùng cùng lý do từ shared coordinator (legacy/backend/worker/safety), không suy luận readiness từ OFF. **UX107-03 — Implemented — unverified/điều tra:** mở lại Bot thấy greeting mới; cần phân biệt new thread chủ ý với mất lịch sử, chưa chứng minh mất dữ liệu. Không xóa hội thoại.
+- Readback137 thất bại một lần,138 thành công một lần: **chưa xác định root cause** hoặc chứng minh đã sửa TLS. Không kết luận thay APK là nguyên nhân duy nhất.
+- **Blocked:** mã web → enrollment/membership mới, hai tài khoản/hai runtime, verification, ON có timer, OFF readback, W/V/A/Wh với tải nhỏ. Azure vẫn khóa phần cứng và pilot chỉ đọc; cần 13 Firestore Emulator tests với SDK mới, control worker/IAM/vault/lease/heartbeat/reconciliation đạt và duyệt riêng deployment/unlock trước nghiệm thu có giám sát tại thời điểm chạy. Không dùng OFF readback để tuyên bố app/chatbot đã bật/tắt thật hoặc production-ready.
+- Evidence: `oneplus-107-apk-138-20261010.json`, baseline137 riêng và các `.log.result.json` prefix `oneplus-107-build-*`, `source-before/final-138`, `apk-cert/hygiene-138`, `install-138`. Không ghi đè artifact/bằng chứng137. Bước tiếp: sửa hai UX theo shared-state contract, build hash mới/retest nếu source đổi; hoàn thiện backend/control gates riêng.
+
+---
+
+> **Task106 (10/10/2026) — API Azure mới đã Runtime verified trong phạm vi health/readiness; điều khiển Shelly vẫn Blocked.** Revision `vinfast-api--api106-1009210215`, `/api/health` và `/api/ready` HTTPS đều200, Firebase ready và requestId có mặt. Full Linux backend546Pass/13Skip/exit0;13ca cần Firestore Emulator chưa chạy với SDK mới. AI/pilot không đổi, hardware policy vẫn1,0lệnh relay. Chưa APK/OnePlus hoặc worker điều khiển được nghiệm thu; không gọi app/BatteryBot Shelly-ready.
+
+## 106. Task Completion Log — API Azure image upgrade, hardware vẫn khóa (10/10/2026)
+
+### 106.1. Baseline / quyền / thay đổi
+
+- HEAD `5f1470c336b5ffaefc3b0653dd7d6dc7b67abe33`, branch `deploy/azure-student`; giữ dirty worktree và bằng chứng cũ. Không APK/ADB, credential rotation, migration dữ liệu, unlock policy hoặc relay command. Không tăng tài nguyên hay tạo dịch vụ Azure mới.
+- Đối chiếu Azure chỉ đọc: API `vinfast-api`, ready revision `vinfast-api--3f2kpvk`, image `vinfastbatteryf1c11a09.azurecr.io/vinfast-api:b7a04fdbca-qa-20261006-task78`; `AZURE_STAGING_HARDWARE_DISABLED=1`, minReplicas=0/maxReplicas=1. Chưa thay revision. Pilot chỉ đọc Task105 không cấp control readiness.
+- `web/Dockerfile.api.dockerignore`: allowlist runtime Python + catalog fallback JSON, không gửi env/credential/cache/model binaries vào API context. `web/requirements-api.txt`: pin Firebase Admin 7.1.0, requests 2.32.5, cryptography 46.0.5 theo core đã kiểm; bỏ duplicate cryptography. Không sửa business logic/provider hoặc thêm worker vào API startup.
+- `web/Dockerfile.api-tests`, `.dockerignore`, `requirements-api-tests.txt`: QA image riêng dùng cùng API base, bổ sung pytest/FastAPI/Google SDK cho tests legacy; giữ repository-relative fixtures và chỉ đưa env **example** vào QA image. Không đưa test dependencies vào API production, không gọi Gemini hay train trên dữ liệu thật. Audit imports cho thấy suite không cần XGBoost; không cài gói đó vào QA image (không thay assertions hoặc runtime AI hiện có).
+
+### 106.2. Checkpoint trước rollout — lịch sử được giữ nguyên
+
+- Docker engine probe có deadline 60 giây: **Timeout**, elapsed 73,83s, cleanupError `process_tree_cleanup_failed`; child exit 0 không làm timeout thành Pass. Evidence `docs/qa_evidence/app-review-2026-10-05/api-upgrade-106-engine-20261010.log` và `.result.json`.
+- Local API build đã nhận context 1,84 MB, đang cài dependencies; từng gặp temporary DNS resolution error rồi tải tiếp. Chưa có build exit code/image digest, chưa tính Pass. Không push/deploy khi gate còn pending.
+- Read-only RAM snapshot: available khoảng 709 MiB/15.773 MiB. Không tự đóng ứng dụng/restart Docker hoặc container khác; đã đề nghị user tự giải phóng RAM. Chưa khẳng định nguyên nhân duy nhất của độ chậm.
+- Full Linux backend, API-only offline boot, hygiene/source manifest và cloud rollout chưa chạy xong; trạng thái **In progress / unverified**, không cộng kết quả lịch sử thành gate mới. Full Windows backend Task103 Fail vẫn giữ nguyên.
+
+### 106.3. Kế hoạch và checkpoint ban đầu — lịch sử được giữ nguyên
+
+- Checkpoint bổ sung: user đã giải phóng RAM; snapshot kế tiếp khoảng 4.125 MiB khả dụng. Source scan đầu 339files/0findings/exit0. `14-update-api-image.ps1` đã chuẩn bị rollout image-only bằng immutable digest, gate receipts, giữ policy/config và kiểm AI/pilot; `tools/check_api_upgrade_script.ps1` pure-validator gate đầu13assertions/exit0. Chưa chạy entrypoint deploy/preflight thật của script. Source scan/script gate cần chạy lại sau các bổ sung cuối.
+
+1. Hoàn tất build có log/exit, kiểm dependency và full backend trong container không mạng/không secret; record skips riêng. Boot API cô lập ở 0,25 CPU/512 MiB phải health 200, ready 503 khi không Firebase và staging deny trước hardware handler.
+2. Chỉ sau gate đạt mới push immutable digest, lưu source manifest và baseline revision; cập nhật **image API duy nhất**, giữ env/secret refs/identity/ingress/scale/volumes. Đối chiếu AI/pilot không đổi revision, policy vẫn 1. Rollback API nếu health/readiness hoặc cấu hình không đúng.
+3. Nghiệm thu chỉ GET health/ready qua HTTPS; không gọi relay hoặc lấy profile credential. API mới không làm app/chatbot được quyền ON khi control worker/migration/hardware chưa đạt.
+
+### 106.4. Kết quả cuối / file / artifact / exit code
+
+Các câu “chưa build/push/deploy” ở106.1–106.3 là checkpoint trước triển khai, không phải trạng thái hiện hành. Giữ chúng cùng log Fail/Timeout để đối soát; kết quả hiện hành là bảng dưới. Không sửa hoặc cộng lại kết quả lịch sử Task103–105 thành gate mới.
+
+| ID | Vấn đề → file / thay đổi | Test / evidence / trạng thái |
+|---|---|---|
+| SC106a | API Azure còn imageTask78. `web/Dockerfile.api.dockerignore`, `requirements-api.txt`: contextallowlist1,84MB, pin3dependencies lõi, bỏ duplicate; không đưa env/key/cache/model vào context | Build production exit0; cached logged build2,17s. RAM snapshot sau user tự đóng bớt tăng lên4.125MiB; không tự đóng app. DNS tải dependency chậm được lưu, không khẳng định RAM là nguyên nhân duy nhất |
+| SC106b | `Dockerfile.api-tests`, `.dockerignore`, `requirements-api-tests.txt`: QA image kế thừa đúng API layers, dependencies chỉ cho tests; giữ fixtures repo-relative | Full lượt đầu545Pass/1Fail/13Skip/exit1 do thiếu `worker_fixture_smoke.py` trong QA context. Bổ sung fixture, không sửa/bỏ assertions. Full cuối **546Pass/13Skip/exit0**,18,84s runner;13Skip cần Firestore Emulator, không tính Pass. QA pipcheckexit0 |
+| SC106c | API-only boot không AI/Firebase, networknone/0,25CPU/512MiB, không secrets | Bootexit0,15,75s; health200/ready503 khi thiếuFirebase, staging hardware deny503; RAM111,1MiB. Đây là offline smoke, không phải tải điều khiển thật. Chỉ dọn container do task tạo |
+| SC106d | `tools/check_api_image_source.py`: đối chiếu source allowlist với bytes image, không chỉ dùng HEAD/tag | Cuối **61files khớp,0mismatch/0unexpected; QA kế thừa15APIlayers; exit0,1,86s**. Manifest344files ởsource scan cuối ghi hash dirty source; HEAD không đại diện đầy đủ worktree |
+| SC106e | `deploy/azure/14-update-api-image.ps1`: chỉ cập nhật image immutable digest, kiểm production/guard1/gate receipts/config/peers; thêm verification-only và no-clobber evidence | Preflightexit0,19,52s; image pushACRexit0,24,78s. Không đổienv/secret refs/identity/ingress/scale/volumes, không tạo/tăngresource, không restartAI/pilot |
+| SC106f | Wrapper rollout đầuexit1 do Azure CLI thêm `value=""` ở4env dùngsecretRef; không phải bằng chứng policy/secret đã đổi. `tools/diagnose_api_upgrade_shape.ps1` xác minh chỉ đọc | Trong18variants, chỉ bỏ **value rỗng cạnh secretRef không rỗng** tái tạo đúng toàn bộ hash baseline; giữ mọi field khác. Helper canonicalize đúng trường hợp đó, không bỏ nonemptyvalue/plainenv/secretRefname. Không rollback khi chưa chứng minh config an toàn, không rollout/restart lần hai |
+| SC106g | `tools/check_api_upgrade_script.ps1`: purefunction/AST tests, không gọi deployment entrypoint | **25assertions/exit0,1,70s**, gồm đổi guard/secret/scale/identity/ingress/resources, peers, gateRole/timeout/nonzero và empty/nullsecretvalue normalization |
+| SC106h | Verification-only đọc cloud config và GETHTTPS health/ready; không thực thi update/rollback/relay | **Exit0,76,72s**; health200/ready200/success/FirebaseReady/requestIdsPresent; latestReady==latest, revisionHealthy. Protectedshapehash trước/sau cùng `97cc9a831d36d064d2de19b43ea39e60911e70c19f5398205ba990b1509c22f9` |
+| SC106i | `tools/check_batterybot_source.py`: scope API/QA/deploy/checkers và sourcecritical; không đọc envthật | Source cuối **344files/0findings/exit0,0,73s**; hash manifest cùng log. Không chứng nhận Git history/binaryartifact không có secret; không fullgateway/Rules/dashboard/Flutterrerun trong106 |
+
+- API image đã chạy: `vinfastbatteryf1c11a09.azurecr.io/vinfast-api@sha256:b7dc2a82ad2612799756feecbd3d69ff1ba82e16d380a9ee070e9d089287d49d`; tag lưu `5f1470c-api106-20261010`. Readyrevision mới `vinfast-api--api106-1009210215`, thay `vinfast-api--3f2kpvk`; HTTPS endpoint giữ nguyên. CPU0,25/RAM0,5GiB/min0/max1 và productionauth giữ nguyên.
+- AI vẫn `vinfast-ai--c701x0v`; pilot vẫn `vinfast-worker-pilot--0b2rxwy`, cùng image/config hashes baseline. `AZURE_STAGING_HARDWARE_DISABLED=1`; pilotReady không phải controlReady. Không Cloudstatus/settings, redeem, migration, khóa mới, Gemini hoặc ON/OFF thật trong106.
+- Evidence tại `docs/qa_evidence/app-review-2026-10-05/api-upgrade-106-*`: `build-logged`, `qa-build-final`, `backend-linux-final`, `boot`, `runtime-deps`, `image-source-final`, `normalization-tests`, `source-final`, `preflight`, `rollout`, `shape-diagnosis-final`, `verified`; mọi runner có `.log.result.json`. `verified-20261010.json` chứa before/after/peers/HTTPS/guard/noRelayCalls; đây là verification-only sau rollout, không phải deploy thứ hai. Hai manifest checkpoint trước được giữ nguyên; `source-final` là scoped manifest cuối cho source critical.
+- Full Windows backend Task103 vẫn **chưa đạt**, analyzer Flutter wrapper Task104 vẫn **Timeout**. Linux546Pass không làm WindowsPass hoặc13Skip thànhPass. Không APKhash/certificate mới vì chưa build/cài Android trong106.
+
+### 106.5. Blocker và bước tiếp — app/chatbot chưa điều khiển Shelly thật
+
+1. Chạy13Firestore transaction/concurrency tests với **SDK mới của đúng image**, môi trường Emulator cách ly; kiểm admissionprotocol2/lease/retry/ownership. Không dùng kết quả Emulator SDK cũ thay gate này.
+2. Chuẩn bị và kiểm worker điều khiển thật cùng protocol: IAMwrite/vault, lease/heartbeat expiry, reconciliation, OFFpriority, mấtreadback/restart, RAM/active-load/chi phí. Pilot hiện chỉ đọc; triển khai controlworker/unlock cần duyệt riêng. Không tự tạo tài nguyên có phí hoặc mở policy.
+3. Sau backend gates, mới buildAPK source/hash/certificate mới và kiểm OnePlus Settings–Setup–Sạc–BatteryBot: mãadmin, restore/restart, hai thành viên, trạng thái/CTA thống nhất. Tests mock Task104 không chứng minh runtime thật.
+4. Test relay cần xác nhận giám sát **tại thời điểm chạy**, không tải, mộtON5s cótimer, quan sát timer tựOFF, cleanup/readbackOFF cuối. Chưa thực hiện; thiếu bất kỳ gate nào giữ **Blocked**, không tuyên bố đã điều khiển được hoặc production-ready.
+
+---
+
+> **Task105 (10/10/2026) — Pilot Azure đã đạt kiểm tra chỉ đọc; điều khiển thật vẫn Blocked.** Một replica 0,25 vCPU/0,5 GiB, không ingress, revision Healthy/Ready, restart 0. 14 unit tests và container offline đạt; validate/deploy exit 0. Cảnh báo ngân sách 20/tháng đã tạo và xác minh người nhận/bộ lọc worker; không phải hard cap. API/AI không đổi revision, ON/rearm vẫn khóa, 0 lệnh relay. App/chat: 932 Flutter tests đạt, native analyzer lib/test exit 0; Flutter analyze wrapper vẫn timeout. Chưa APK/OnePlus/relay thật, không chứng nhận Shelly-ready.
+
+## 105. Task Completion Log — Azure worker pilot chỉ đọc (10/10/2026)
+
+### 105.1. Phạm vi và quyền
+
+- User duyệt pilot worker liên tục0,25vCPU/0,5GiB,đúng một replica,không public cổng; ngân sách worker khoảng20USD/tháng,API/log/Firebase tính riêng. Đây không phải hard spending cap hoặc duyệt tăng tài nguyên. Không tạo VM/GPU/database/storage/environment mới.
+- Dùng subscription `Azure for Students — Enabled`,RG `rg-vinfast-battery`,existingConsumption environment `cae-vinfast-battery-standard`/`eastasia`;không thayDNS/endpoint,production/local API/AI/worker. Runtime không có provider/Shellycontrol,không nhận controllease/heartbeat và không làm backend cho phépON.
+- Hai runtime secretFirebase/vault hiện có được capture riêng để tạo tham số ARM tạm ngoàiGit/OneDrive,ACL currentuser-only rồi xóa đúngfile. Không tạo SA key mới,không lấyCloudKey từprofile,không đọc/in `.env.laptop` hoặc secretvalues vào bằng chứng.
+- Pilot chỉ thực hiện boundedFirestoreGet trên dedicatedprobe doc,không đọc nội dung snapshot,không list/update sessions/ownership/vault. Vault test encrypt/decrypt dữ liệu giả trongRAM. Readinesspilot không chứng minh IAMwrite,profile thật,Cloudreadback,workerlease/control readiness.
+
+### 105.2. Task → file → trạng thái
+
+| ID | File / thay đổi | Trạng thái |
+|---|---|---|
+| SC105a | `web/shelly/worker_pilot.py`:validatehardwaredisabled/project/scope/noemulator/vault;Gettimeout10s/retryNone,mỗi60s;readinessfresh≤90s;privatehealth8090;logstatechange không rawerror | Automated verified14cases;Azureplatformreadytrue. Không chứngminh controllease/Cloud/hardware |
+| SC105b | `web/Dockerfile.worker-pilot`/ignore:allowlist chỉpilot/vault/init,nonroot10001,noactuator/repository/reconciliation/lease | Container offline verified0,25CPU/512MiB,network-none/read-only;không phải active-load |
+| SC105c | `deploy/azure/worker-pilot.bicep`, `deploy-worker-pilot.ps1`:oneReplica,noingress,noVolumes,existingUAMI/ACR,secureARMparams;gates/sourcehash/digest,không updateAPI/AI | Runtime verified hẹp resource/privateplatformReady;validate/deployexit0. Không fakeReady làm quyềncontrol |
+| SC105d | `deploy/azure/common.ps1`:PowerShell7 không có FileInfo.GetAccessControl/SetAccessControl instance;fallback FileSystemAclExtensions,giữ protectedACL | SyntheticACL currentSID-only/protected/noinherited kiểmexit0;không nới ACL hoặc đưa secret vàoCLI |
+| SC105e | `web/tests/test_worker_pilot.py`, `web/scripts/worker_pilot_fixture.py`, `tools/check_worker_pilot_container.py`, hygieneallowlist | Unit/HTTP/expiry/noWrite/noActuator/noIngress+offlinecontainer probes;fixture không nằm trongproductionimage |
+
+### 105.3. Evidence và kết quả
+
+Evidence `docs/qa_evidence/app-review-2026-10-05/worker-pilot-105-*`;giữ lượtFail trước,không ghi đè ảnhAPK hoặc bằng chứngTask103.
+
+- Unitđầu13Pass/1Fail/exit1:staticassert đánhnhầm chữ `ingress:` trong comment. Sửa kiểmcode khôngcomment,không bỏ điều kiệnnoingress. Unitcuối14Pass/exit0,runner4,53s/pytest1,22s.
+- Dockerbuild exit0;privateimage `vinfast-worker-pilot:task105`;push ACR `vinfastbatteryf1c11a09.azurecr.io/vinfast-worker-pilot:5f1470c-task105-20261010` exit0. Digest `sha256:a6ab4986c109234a450f3c1799e1d52bd92a8cc24db390dde337495b1c7764ce`,đốichiếu localimage/gate.
+- SmokeđầuFail,fixturemount `/fixture.py` không có `/app` trên importpath. Sửa mount/entry `/app/fixture.py`;không đổi productionCMD. SmokecuốiPass:healthchecktrue,SIGTERMexit0,OOMfalse,missingconfigexit1;0commands;VmRSS/VmHWM33.752KiB. Syntheticvault/mockGetkhông chứngminh RAMFirebase/network thật. Chỉdọn task-created container IDs/labels;không dọn image/log hoặc container người dùng.
+- Bicepcompile exit0,registrylogin exit0. ARMvalidateđầuFail generic,không inprivate diagnostics. PS7.6.6 đã xác minh thiếu instanceACLmethods;syntheticACLpatch kiểmPass. Lượtvalidate kếtiếp/pilotAzure chưa kết luận.
+- Đính chính trạng thái dòng trước: đó là checkpoint trước lượt validate cuối; kết quả hiện hành ở các dòng dưới. Giữ evidence hai lượt lỗi ACL, không dùng lỗi công cụ làm lỗi phần cứng.
+- ARMvalidate sauACLfix **exit0,116,05s** (`validate-20261010.log/result.json`);deploy đúngpilot **exit0,156,09s** (`deploy-20261010.log/result.json`). Privateparams finallyxóa;không insecretvalues,không keyrotation.
+- Azureobserved:app `vinfast-worker-pilot`,revision `vinfast-worker-pilot--0b2rxwy`,provisioningSucceeded/runningRunning,noingress,min=max1,đúngdigest trên. Mộtreplica/containerreadytrue/startedtrue/restartCount0;API/AI latestrevision so trước/sau không đổi. Không gọi execShellCloud hoặc gateway/Shelly;readiness làprobe củapilot khôngcontrolheartbeat.
+- Console allowlist cuối quan sát `pilot_started` và `pilot_read_result success=true`,cả hai `controlReady=false`. CLI log có timestamp/stream prefix nên lượt parse trực tiếp không lấy event;đã parse phần JSON rồi chỉ xuất event/boolean,không rawlogs. Runtime đã có một boundedFirestoreGet thật thành công;không chứngnhận IAMwrite/vaultprofile thật/Cloud hoặc relay.
+- User đãcungcấp emailcảnhbáo riêng;không lưuđịa chỉ trongsource/report. `worker-pilot-budget.bicep`/`deploy-worker-pilot-budget.ps1` chuẩn bịmonthly20,filterđúngResourceIdpilot,actual80/100%+forecast100%;budgetBicepcompileexit0,đangdeploy/verify. Đây không phảihardcap hoặc chứngnhận emailđã gửi/nhận.
+- Budget cuối **exit0,81,81s** (`budget-20261010.log/result.json`): `vinfast-worker-pilot-monthly`,Monthly20,đúng workerResourceId,3rules enabled/recipientVerifiedtrue,hardSpendCapfalse. Đã kiểm cấu hình nhận,không test emaildelivery/thời gian gửi hoặc tạo tải để chạm ngưỡng;không lưu địa chỉ thật trongreport/source. API/log/Firebase/ACR chi phí riêng không nằm trongfilter này.
+- Metadata budget xác minh `amount=20.0`,`currentSpend.unit=USD`. Đây là **20USD/monthly alert**,không cam kết bill≤20 hoặc chia miễn phí grant cho riêng worker. Ngưỡngactual80%=16USD/100%=20USD vàforecast100%;không tựtắt dịch vụ.
+- Scopedsource lượt đầu331files/0findings/exit0,1,77s;chưa bao gồm commonACLpatch sau lượt này. Cầnscanfinal;không chứngnhận Git history/artifact secrets.
+- Scopedsource cuối **334files/0findings/exit0,1,25s** (`source-final-20261010.log`),bao gồm commonACL/budgettemplates/scripts. Scopedgitdiffcheckexit0. Summary `worker-pilot-105-summary-20261010.json` giữ riêng app/pilot/control gates và không chứa subscriptionID/credential/email.
+- Không backend/gateway/Rules/dashboard full rerun trong105;backendpilot mới chỉ14tests,không cộng tests lịch sử thành fullgate. Không APK/ADB/redeem/no-load/Shellycommand thật.
+
+### 105.4. Blocker / bước kế tiếp
+
+1. Pilot revisionHealthy/Ready,oneReplica,restart0;budget đã kiểm. Tiếp tục quan sát RSS/CPU/restarts/chi phí thực theo thời gian;chưa dài hạn/active-load. Không tăngresource/tier hoặc bỏTLS/IAM nếuFail. Rollback chỉ apppilotmới,không API/AI/data;không xóaimage/bằngchứng.
+2. API đang chạy image lịch sử `b7a04fdbca-qa-20261006-task78`,chưa chứa Cloudadmissionprotocol2. Read-onlypilot không được dùng thay productioncontrolworker; cần kế hoạch nângAPI/worker đồng bộ,cùng digest/protocol và controllease/heartbeat/migration/active-load gates trước mọi unlock.
+3. Giữ Azureenrollment/safety/ON/rearm locked. Mở policy/triểnkhai controlworker và supervisedhardware là duyệt/gate riêng;không có xác nhận giám sát hiện tại và không thực thiOFF/ON trong105.
+4. Saubackendđạt mới buildAPK mới/hash/certificate,test OnePlus Settings–Setup–Sạc–BatteryBot/admincode,restore/restart/twoMembers;relaythật timer tựOFF+readback cuối là cổng độc lập.
+
+---
+
+> **Trạng thái hiện hành app/chat — Task104 (10/10/2026):** siết freshreadback ON/OFF,đồngbộ offline/unknown,không success giả. Related78Pass;fullFlutter932Pass/exit0;nativeDartanalyzer toànlib+test đều0issues/exit0 sourcecuối. Flutteranalyzewrapper sauWrap vẫnTimeout120s,không tínhPass. Scopedsource104323files/0findings;105 mởscope. ChưaAPK/ADB/relaythật;Azurepilotriêng ở105. Không chứng nhận app/BatteryBot điều khiển phần cứng được;ON/rearm vẫn khóa.
+
+## 104. Task Completion Log — app/BatteryBot dùng chung readback và trạng thái Shelly (10/10/2026)
+
+### 104.1. Baseline và phạm vi
+
+- Source HEAD đọc trong lượt `5f1470c336b5ffaefc3b0653dd7d6dc7b67abe33`, branch `deploy/azure-student`, worktree có thay đổi; SHA này không thay thế baseline lịch sử Task103. Không reset/stash/commit, xóa dữ liệu hay tạo Markdown mới.
+- Không đọc `.env.laptop`/credential thật, đổi endpoint, deploy/restart API/worker, ADB hoặc gọi Cloud/relay thật trong Task104. User đã duyệt riêng pilot một replica0,25CPU/0,5GiB, không public cổng, vẫn khóa ON/rearm; chuẩn bị tiếp theo là Task105, không coi pilot là quyền mở ON/test relay.
+- Không thêm LLM/Gemini hoặc đổi logic dự đoán. Chat điều khiển dùng tool router/confirmation hiện có và backend-authorized repository; không Direct Cloud fallback.
+
+### 104.2. ID → vấn đề → file → trạng thái → bước tiếp
+
+| ID | Evidence và thay đổi | Trạng thái / giới hạn |
+|---|---|---|
+| SC104a | `app_chat_tool_gateway.dart`: ON trước đây dựa một phần vào `relayVerified` của response lệnh cũ. Nay yêu cầu readback mới đúng session/vehicle/device, stateactive, relayVerified/timerVerifiedtrue, revision không lùi, relayON và timer dương. Chỉ publish connected sau khi toàn bộ evidence đạt | Automated verified HTTP mock/engine thật; chưa Cloud/relay thật. Một proposal vẫn consume trước await, không retry ON |
+| SC104b | Hai đường Stop (session riêng/shared binding) giữ unknown nếu HTTP acceptance không đi kèm đúng readback OFF; không phát connected thoáng qua rồi mới ghi unknown. OFF đã xác minh không tái dùng capability cũ để cấp ON | Automated verified. Giữ operationID/backend policy; không thay quyền safety phía server |
+| SC104c | `shelly_connection_coordinator.dart`: lỗi đọc giữ membership/binding/evidence/code notice nhưng loại status/capability cũ khỏi readiness. Passive ON/offline không xóa cảnh báo ambiguous; fresh đúng OFF giải quyết presentation nhưng không phục hồi quyền ON từ cache | Automated verified qua integration/polling fixtures; Settings/Setup/Sạc dùng chung snapshot nhưng chưa kiểm layout/runtime APK mới |
+| SC104d | `smart_charging_controller.dart`: polling giữ UID/generation/vehicle qua await; lỗi giữ session phục hồi, xóa telemetry/capability cũ khỏi trạng thái trực tuyến. Gateway read errors cũng cập nhật snapshot chung với guard tài khoản/xe. Gateway prepare/execute từ chối tool ngoài allowlist trước HTTP | Automated verified78related. Lịch sử/nhắc lịch không được gộp thành lỗi phần cứng; chưa chứng nhận mọi provider/subscription toàn app |
+| SC104e | `chat_shelly_backend_integration_test.dart`, `smart_charging_controller_test.dart`: receipt cũ/fresh starting-stopping-terminal, evidence thiếu, sai binding/session/xe/revision, mất readback sauON, failedOFF, double confirmation, account switch, outage/recovery và polling unknown | Automated verified bằng mock HTTP, không sử dụng key/token/DeviceID thật hoặc phát lệnh phần cứng |
+| SC104f | Analyzer phát hiện4nullable errors trong `battery_monitor_screen.dart` và1unused import ở `home_screen.dart`. Dùng vehicleID đã resolve để tải stats; resolve nullable vehicle và báo chọn xe trước predict; bỏ import thừa | Analyzer cuốiexit0. Không chứng nhận đường dự đoán SOC legacy là AI local thật hoặc dữ liệu BMS |
+| SC104g | `tools/check_batterybot_source.py` bổ sung2Flutter fixtures vào manifest/hygiene; spec AI ghi contract readback và cổng riêng worker/LLM/hardware | Scoped323files/0findings/exit0; không phải secret scan Git history/APK hoặc nghiệm thu production |
+| SC104h | Full suite phát hiện4Homeempty layout Fail ở320dp/font1.0–2.0/Light–Dark. Diagnostic xác định Rowfooter sức khỏe pin1127 tràn209/646px; đổi Wrapspacing12/runSpacing8,giữ assertions rồi bỏ handler chẩn đoán tạm |7Homecases Pass/exit0,33,28s;không sửa businesslogic hoặc giấu overflow |
+
+### 104.3. Test/lệnh/exit code và evidence
+
+Evidence mới dưới `docs/qa_evidence/app-review-2026-10-05/`, prefix `chat-control-104-*`; không ghi đè Task103 hoặc ảnh APK cũ.
+
+| Gate | Kết quả | Evidence / cách hiểu |
+|---|---|---|
+| Dart wrapper format | Timeout120s, childexit1, runner124, cleanupErrornull | `format-20261010.log.result.json`; không tính Pass, chỉ kết thúc process tree do runner tạo |
+| Dart SDK native format | Exit0; lượt cuối1,77s | `format-native`, `format-final`, `format-complete`; không dừng IDE/Dart không thuộc task |
+| Related Flutter lần đầu |77Pass/exit0,74,62s |7files unit/integration; source trước test giữ session khi outage |
+| Related Flutter source cuối control |78Pass/exit0,54,66s | `related-final-20261010.log`; gồm ca mới giữ session và xóa stale telemetry. Compile fixes pin/home kiểm ở analyzer/full sau đó |
+| Analyzer đầu |4error+1warning/exit1,60,52s | `analyze-20261010.log`; ghi Fail thực tế, không quy lỗi Shelly từ lỗi compile |
+| Analyzer cuối |0issues/exit0,34,67s | `analyze-final-20261010.log`; Flutter runner24,6s, không timeout |
+| Full Flutter lần đầu | Timeout300s, childexit1/runner124,720ca đã Pass trước khi cắt; chưa Pass toàn suite | `full-flutter-20261010.log`; cleanupErrornull. Không hạ assertion/timeout test |
+| Full Flutter kết thúc trước sửa Home |928Pass/4Fail/exit1,596,89s | `full-complete-20261010.log`;4FailHomeoverflow đã chẩn đoán/sửa SC104h. Serialfull saufix `full-fixed-20261010.log` đang chạy900sbudget,không coi lượt đang chạy làPass |
+| Full Flutter sau Home source cuối |**932Pass/exit0**,639,31s,khôngtimeout | `full-fixed-20261010.log/result.json`;runnerbudget900s,concurrency1,giữ mọi assertions/testcases. Automated gate không thayAPK/OnePlus/hardware |
+| Home sau sửa |7Pass/exit0,33,28s | `home-fixed-20261010.log`;giữ refresh/provider/scroll/permission assertions |
+| Analyzer sau Home chạy cùng full suite |Timeout120s/childexit1/runner124,120,91s | `analyze-complete-20261010.log`;không tínhPass hoặc giả nguyên nhân. Analyzer0issues trướcWrap là lịch sử;phải kiểm source cuối riêng |
+| Analyzer sau Home lượt riêng |Timeout120s/childexit1/runner124,120,81s | `analyze-isolated-20261010.log`;không quy chắc do song song/RAM hoặc tínhPass |
+| Native Dart analyzer sourcecuối |**lib0issues/exit0,80,47s;test0issues/exit0,36,86s** | `dart-lib`, `dart-test` log/resultJSON;`--fatal-infos`,toànlib/test,không suppresslint/source. Flutterwrapper timeout là môi trườngCLI chưa giải quyết,không giả commandFlutterPass |
+| Scoped hygiene / SHA manifest |323files/0findings/exit0,4,47s | `source-manifest-20261010.log`; includes production scope +critical fixtures, excludes real env/Git history/APK |
+| Scoped git diff check |Exit0 | Chỉ8files code/fixture/harness; warningsLF→CRLF không phải failure. Giữ mọi diff trước đó |
+| Backend/gateway/Rules/dashboard | Không chạy lại trong Task104 | Backend/Rules/dashboard/gateway không sửa; mọi kết quả Task103 là lịch sử, không cộng vào Flutter gate |
+| APK/điện thoại/Azure/relay | Blocked / chưa thực hiện | Chưa artifact mới, worker pilot/IAM/vault/heartbeat hoặc giám sát phần cứng hiện tại |
+
+### 104.4. Blocker và bước tiếp
+
+1. FullFlutter932Pass/exit0 vànativeanalyzerlib/testexit0. Flutterwrapper vẫntimeout120s;giữ lỗi fullbackendWindowsTask103,không chứngnhậnrelease từmobiletests.
+2. Pilotread-only đãduyệt riêng ở105;không dùng pilotReady làm controllease/heartbeat. API+controlworker cần cùngprotocol2;IAM/vault/lease/heartbeat/active-load trướcmọiunlock. Không dùng fixture làm bằng chứng Firebase/Shelly thật.
+3. Sau backend đạt gate mới build APK/hash/certificate mới và test Settings–Setup–Sạc–BatteryBot trên đúng OnePlus; nhập mã admin, restore/restart, hai membership và một hardware operation. Không dùng APK/ảnh cũ chứng nhận source mới.
+4. Test relay cần xác nhận giám sát tại thời điểm chạy: không tải, đúng mộtON5s, quan sát timer tựOFF, cleanup/readbackOFF cuối. Chưa thực hiện trong lượt này; không gọi Shelly-ready.
+5. LLM native, model mobile thật và học cá nhân là cổng độc lập. Những guard điều khiển đạt mock test không chứng minh AI dự đoán/LLM đã hoạt động.
+
+---
+
+**Task103 và các mục bên dưới là lịch sử được giữ nguyên; trạng thái mới ở Task104 phía trên.**
+
 > **Trạng thái hiện hành Shelly/backend — Task103 (10/10/2026):** thêm Cloud admission transaction version2, ưu tiên OFF, bounded queue và shared Retry-After. Source cuối:149 targeted Pass trên Linux,45 Rules assertions +13 transaction Pass, image Task103 offline boot/probe/SIGTERM/fail-closed đạt; scoped hygiene321files/0findings. **Full backend Windows chưa đạt**:531Pass/1Fail/13skip ở atomic manifest replace; lượt ngoài OneDrive access violation, không tính Pass. Không deploy, sửa env thật, restart hệ thống hiện có, ADB/APK hay relay thật; Azure enrollment/safety/ON/rearm vẫn khóa. Task102 và mọi báo cáo cũ bên dưới là lịch sử được giữ nguyên.
 
 ## 103. Task Completion Log — Cloud queue/OFF priority và điều tra timeout (10/10/2026)

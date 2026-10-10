@@ -1,0 +1,24 @@
+{
+  "command": [
+    "powershell",
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    "deploy/azure/08-local-boot-smoke.ps1",
+    "-ApiImage",
+    "vinfast-api-qa:task106",
+    "-Services",
+    "api",
+    "-TimeoutSeconds",
+    "180"
+  ],
+  "cwd": ".",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\api-upgrade-106-boot-20261010.log",
+  "processId": 20644,
+  "timeoutSeconds": 360,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 15.75
+}

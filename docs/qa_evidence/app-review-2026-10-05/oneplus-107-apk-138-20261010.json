@@ -1,0 +1,76 @@
+{
+  "task": 107,
+  "date": "2026-10-10",
+  "timezone": "Asia/Saigon",
+  "scope": "Installed APK138 UI and backend status read; not enrollment or hardware actuation",
+  "source": {
+    "head": "5f1470c336b5ffaefc3b0653dd7d6dc7b67abe33",
+    "branch": "deploy/azure-student",
+    "dirty": true,
+    "scopedManifestFiles": 344,
+    "manifestHashDifferencesBeforeAfterBuild": 0,
+    "manifestFindings": 0,
+    "beforeManifest": "oneplus-107-source-before-138-20261010.log",
+    "afterManifest": "oneplus-107-source-final-138-20261010.log",
+    "headAloneRepresentsWorkingTree": false
+  },
+  "artifact": {
+    "path": "app/build/app/outputs/flutter-apk/VinFastBattery_1.1.9+138_debug.apk",
+    "package": "com.bes.vinbatery",
+    "versionName": "1.1.9",
+    "versionCode": 138,
+    "minSdk": 26,
+    "targetSdk": 36,
+    "bytes": 231532152,
+    "sha256": "E202CE81BB76B462A60A67C940CAED6A9DD54003929B19DF9C72CFB5AC62CE9E",
+    "certificateSha256": "914642716decb342ca80acece6284e69d66355bfa792f5c4779efecf16ecebeb",
+    "signatureVerified": true,
+    "v2Verified": true,
+    "debugSignedQAOnly": true,
+    "matchesInstalledBaseApk": true,
+    "buildApiBaseUrl": "https://vinfast-api.nicestone-4d213368.eastasia.azurecontainerapps.io",
+    "storedRuntimeOverrideInspected": false
+  },
+  "device": {"model": "LE2125", "product": "OnePlus9Pro", "android": "14", "api": 34, "resolution": "1080x2412"},
+  "builds": [
+    {"receipt": "oneplus-107-build-138-20261010.log.result.json", "timedOut": true, "elapsedSeconds": 610.83, "exitCode": 1, "cleanupError": "process_tree_cleanup_failed", "result": "Timeout, not Pass"},
+    {"receipt": "oneplus-107-build-lowmem-138-20261010.log.result.json", "timedOut": true, "elapsedSeconds": 601.64, "exitCode": 1, "cleanupError": null, "result": "Timeout, not Pass"},
+    {"receipt": "oneplus-107-build-recovered-138-20261010.log.result.json", "timedOut": false, "elapsedSeconds": 560.06, "exitCode": 0, "cleanupError": null, "result": "Pass"}
+  ],
+  "gates": {
+    "signature": {"exitCode": 0, "elapsedSeconds": 4.2},
+    "artifactHygiene": {"exitCode": 0, "elapsedSeconds": 0.86, "textAssetsScanned": 6, "findings": 0, "binaryAndGitHistoryCertified": false},
+    "installUpdate": {"exitCode": 0, "elapsedSeconds": 13.5, "uninstalled": false, "dataCleared": false},
+    "freshFullSuitesRun": false,
+    "historicalSuitesNotCountedAsNewPass": true
+  },
+  "runtime": [
+    {"id": "R138-01", "action": "Dashboard after update", "result": "Pass", "observed": "Firebase login and selected vehicle retained"},
+    {"id": "R138-02", "action": "Charge, timed mode, scroll to Start", "result": "Pass for honest state and blocking only", "observed": "Đã liên kết · Cần kết nối qua máy chủ; admin-code reason present; Start visibly dark; not pressed"},
+    {"id": "R138-03", "action": "Settings, Shelly setup, system Back", "result": "Pass for presentation/navigation only", "observed": "Same legacy label; loading settles to Chuyển kết nối qua máy chủ; old binding retained; code not submitted"},
+    {"id": "R138-04", "action": "FAQ navigation button", "result": "Pass", "observed": "Đến trang Sạc pin closes sheet and opens Charge tab without relay action"},
+    {"id": "R138-05", "action": "Ask Trang thai shelly", "result": "Pass for one backend/client read", "observed": "Shelly đã tắt theo readback máy chủ vừa đọc. Công suất 0.0 W.", "independentCloudAudit": false},
+    {"id": "R138-06", "action": "Ask Bat sac 5 phut, no confirmation", "result": "Pass for legacy blocking", "observed": "Hãy kết nối Shelly qua máy chủ trước khi điều khiển trong chat.; no confirmation card"},
+    {"id": "R138-07", "action": "System Back, Settings after readback", "result": "Pass", "observed": "Chat closes; legacy label preserved; Start still visibly dark before restart"},
+    {"id": "R138-08", "action": "Restart only app; Dashboard, Charge, Settings", "result": "Pass", "observed": "Login/vehicle retained; Charge and Settings retain matching legacy label; cold-start timing not measured"}
+  ],
+  "findings": [
+    {"id": "UX107-01", "type": "UX", "status": "Planned", "observed": "Lock reason scrolls out of view before Start", "recommendation": "Place shared concise reason and setup action adjacent to Start without bypassing gate"},
+    {"id": "UX107-02", "type": "UX", "status": "Planned", "observed": "Why-locked FAQ is generic rather than actual legacy/backend/worker state", "recommendation": "Use current shared coordinator reason"},
+    {"id": "UX107-03", "type": "Unconfirmed", "observed": "Reopened chat shows new greeting", "recommendation": "Check intended new-thread behavior and history restore before calling this data loss"}
+  ],
+  "logSample": {"scope": "Current APK138 app PID before restart, bounded sample only", "lines": 74, "fatalException": 0, "renderFlexOverflow": 0, "tlsHandshake": 0, "permissionDenied": 0, "outOfMemory": 0, "wholeSessionANRCertified": false},
+  "privacy": {"credentialsEnteredByAgent": false, "rawHierarchyPersisted": false, "screenshotsPersisted": false, "rawLogsPersisted": false, "screenshotsViewedInMemoryOnly": true},
+  "hardware": {"relayCommandsExplicitlyExecuted": 0, "controlConfirmationPressed": false, "adminCodeSubmitted": false, "safetyTestExecuted": false, "controlVerified": false},
+  "cloud": {"deploymentChangedThisTask": false, "hardwareDisabledPolicyKept": true, "pilotIsReadOnly": true},
+  "interruption": "Phone foreground changed to another app; automation stopped and resumed only after user confirmed VinFast Battery reopened",
+  "limitations": [
+    "APK137 read failure versus APK138 read success does not establish root cause or prove TLS fix",
+    "No fresh full analyzer/Flutter/backend/gateway/Rules/dashboard suite this task",
+    "No full font/theme/network or performance matrix",
+    "No code redeem, new membership, safety evidence, two-runtime or hardware control test",
+    "OFF status is a read result, not proof that the app issued and verified an OFF command",
+    "Azure control worker and hardware unlocking require separate gates and approval"
+  ],
+  "overall": "Narrow UI/backend-read Runtime verified; Shelly actuation and release readiness Blocked"
+}

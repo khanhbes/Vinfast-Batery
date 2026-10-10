@@ -1,0 +1,21 @@
+{
+  "command": [
+    "C:\\flutter\\bin\\cache\\dart-sdk\\bin\\dart.exe",
+    "format",
+    "lib/features/ai/services/app_chat_tool_gateway.dart",
+    "lib/features/ai/controllers/smart_charging_controller.dart",
+    "lib/data/services/shelly_connection_coordinator.dart",
+    "lib/features/battery_monitor/battery_monitor_screen.dart",
+    "lib/features/home/home_screen.dart",
+    "test/unit/chat_shelly_backend_integration_test.dart",
+    "test/unit/smart_charging_controller_test.dart"
+  ],
+  "cwd": "app",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\chat-control-104-format-complete-20261010.log",
+  "processId": 15132,
+  "timeoutSeconds": 120,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 1.77
+}
