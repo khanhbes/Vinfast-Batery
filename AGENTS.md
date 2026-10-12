@@ -176,6 +176,7 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Admin tạo thiết bị và sinh mã tại trang `/shelly` trên Web Dashboard (`POST /api/admin/shelly-devices`).
   - Server tạo mã 6 ký tự ngẫu nhiên (uppercase alphanumeric), lưu trữ trong Firestore `shellyConnectionCodes` (hạn dùng 24h, vô hiệu hóa ngay sau khi đổi).
   - Mobile App gửi mã qua `POST /api/shelly/redeem-code` để nhận cấu hình Shelly mã hóa và tự động liên kết xe an toàn.
+- **Task 108 (11/10/2026) — luồng hiện hành `server_cloud`/`vault_cloud` qua Azure:** redeem nâng cả liên kết legacy; ON chỉ sau safety test không tải (timer 20s). Mọi lệnh Cloud qua `CloudDispatchGate` (1 in-flight, giãn 1,1s). Lỗi đọc tạm thời (`TRANSIENT_READ_CODES`) **không** được đánh dấu phiên `unknown`. Đọc trạng thái dùng cache ngắn (profile 60s, status idle 10s khi relay OFF, capabilities 30s); lệnh/ON/kiểm tra an toàn luôn đọc tươi. App: `ShellyConnectionCoordinator` là nguồn trạng thái chung (snapshot lưu, grace 3 phút); poll `/live` 60s khi rảnh, 5s khi sạc, chỉ khi foreground. Timeout lệnh điều khiển 45s, tool chat 120s. Gói Firebase Spark: luôn `limit()` khi đọc chẩn đoán. Chi tiết và việc còn mở: `PROJECT_STATUS.md` mục 108.
 
 ### 3.7. AI Chatbot Cá Nhân Hóa & Behavior Learning
 

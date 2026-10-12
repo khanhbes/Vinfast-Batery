@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import math
 import os
+import threading
 import time
 from datetime import datetime, timezone
 from urllib.parse import urlparse
@@ -13,6 +14,13 @@ from ..models import DeviceBinding, DeviceStatus
 from .base import ProviderError
 from ..safety_fingerprint import FINGERPRINT_VERSION, cloud_safety_fingerprint
 from ..cloud_dispatch import CloudAdmissionError, retry_after_seconds
+
+
+NO_LOAD_TIMER_SECONDS = 20
+PROFILE_READ_CACHE_SECONDS = 60
+IDLE_STATUS_CACHE_SECONDS = 10
+NO_LOAD_ON_OBSERVE_SECONDS = 12
+NO_LOAD_OFF_GRACE_SECONDS = 10
 
 
 class VaultCloudControlProvider:
@@ -30,11 +38,11 @@ class VaultCloudControlProvider:
         self.sleep = sleeper
         self.clock = clock
 
-    def _profile(self, binding: DeviceBinding) -> tuple[str, str]:
+    def _profile(self, binding: DeviceBinding, *, fresh: bool = True) -> tuple[str, str]:
         uid = binding.owner_uid
         if not uid:
             raise ProviderError("ownershipUnavailable", "Không xác minh được chủ sở hữu Shelly")
-        profile = self._restore_profile(binding)
+        profile = self._restore_profile(binding, fresh=fresh)
         if not profile or profile.get("revokedAt"):
             raise ProviderError("profileUnavailable", "Cấu hình Shelly chưa được lưu trên máy chủ")
         if str(profile.get("model") or "").upper() != "S3PL-00112EU":
@@ -48,9 +56,16 @@ class VaultCloudControlProvider:
             raise ProviderError("invalidProviderConfig", "Cấu hình Shelly Cloud không hợp lệ")
         return host, key
 
-    def _restore_profile(self, binding):
+    def _restore_profile(self, binding, *, fresh: bool = True):
+        # Status reads may reuse a profile decrypted within the last minute;
+        # commands, ON and live safety checks always read fresh (Task108).
         try:
-            profile = self.repository.restore_synced_profile(binding.owner_uid, binding.device_id)
+            restore = self.repository.restore_synced_profile
+            try:
+                profile = restore(binding.owner_uid, binding.device_id, audit=False,
+                                  max_age_seconds=0 if fresh else PROFILE_READ_CACHE_SECONDS)
+            except TypeError:
+                profile = restore(binding.owner_uid, binding.device_id)  # legacy test doubles
         except Exception as error:
             raise ProviderError("profileUnavailable", "Chưa đọc được cấu hình Shelly. Hãy thử lại.", True) from error
         if not isinstance(profile, dict):
@@ -59,8 +74,10 @@ class VaultCloudControlProvider:
 
     def _post(self, binding: DeviceBinding, path: str, payload: dict, *, command=False,
               safety_context=None, expected_credentials=None) -> object:
-        host, key = self._profile(binding)
         is_on = path == "/v2/devices/api/set/switch" and payload.get("on") is True
+        if command:
+            self._forget_status(binding)
+        host, key = self._profile(binding, fresh=command or is_on or expected_credentials is not None)
         if is_on and safety_context is None:
             raise ProviderError("safetyVerificationRequired", "Cần kiểm tra an toàn bộ sạc trước khi bật")
         fingerprint = hashlib.sha256(key.encode("utf-8")).hexdigest()
@@ -79,6 +96,15 @@ class VaultCloudControlProvider:
                 response = self.http.post(f"{host}{path}", params={"auth_key": key}, json=payload, timeout=7)
             except requests.RequestException as exc:
                 raise ProviderError("deviceOffline", "Shelly Cloud không phản hồi", True) from exc
+            if command:
+                # Sanitized diagnostics only: no key, host or device identifiers.
+                try:
+                    body = response.json()
+                    summary = {"isok": body.get("isok"), "hasError": bool(body.get("error"))} if isinstance(body, dict) else {"type": type(body).__name__}
+                except ValueError:
+                    summary = {"nonJson": True}
+                print(f"[shelly-cloud] command on={payload.get('on')} toggle_after={payload.get('toggle_after')} "
+                      f"http={response.status_code} {summary}", flush=True)
             if response.status_code in (401, 403):
                 raise ProviderError("needsReauthentication", "Quyền truy cập Shelly Cloud không hợp lệ", status_code=response.status_code)
             if response.status_code == 429:
@@ -99,9 +125,11 @@ class VaultCloudControlProvider:
                 raise ProviderError("providerRejected", "Shelly Cloud từ chối yêu cầu")
             return value
         try:
+            budget = getattr(self, "_admission_budget", None)
+            kwargs = {"admission_budget": budget} if budget is not None else {}
             return self.repository.run_cloud_request(fingerprint, send,
                 priority_off=path == "/v2/devices/api/set/switch" and payload.get("on") is False,
-                sleeper=self.sleep, guard=guard)
+                sleeper=self.sleep, guard=guard, **kwargs)
         except ProviderError:
             raise
         except CloudAdmissionError as error:
@@ -143,9 +171,37 @@ class VaultCloudControlProvider:
             raise ProviderError("malformedProviderResponse", "Thiếu dữ liệu switch:0 từ Shelly")
         return switch
 
-    def get_status(self, binding: DeviceBinding) -> DeviceStatus:
+    def _status_cache_state(self):
+        # Idle (relay OFF) status shared by live/status reads for a few seconds;
+        # ON states and every command bypass/clear it (Task108). Lazy so
+        # subclasses that skip __init__ still work.
+        state = self.__dict__.get("_status_cache_state_value")
+        if state is None:
+            state = self.__dict__["_status_cache_state_value"] = ({}, threading.Lock())
+        return state
+
+    def get_status(self, binding: DeviceBinding, *, max_age_seconds: float = 0) -> DeviceStatus:
+        key = str(binding.device_id).lower()
+        if max_age_seconds > 0:
+            cache, lock = self._status_cache_state()
+            with lock:
+                cached = cache.get(key)
+            if cached and time.monotonic() - cached[0] <= max_age_seconds and cached[1].relay is False:
+                return cached[1]
         snapshot = self.get_snapshot(binding)
-        return self._status_from_snapshot(binding, snapshot)
+        status = self._status_from_snapshot(binding, snapshot)
+        cache, lock = self._status_cache_state()
+        with lock:
+            if status.relay is False:
+                cache[key] = (time.monotonic(), status)
+            else:
+                cache.pop(key, None)
+        return status
+
+    def _forget_status(self, binding: DeviceBinding) -> None:
+        cache, lock = self._status_cache_state()
+        with lock:
+            cache.pop(str(binding.device_id).lower(), None)
 
     def _status_from_snapshot(self, binding: DeviceBinding, snapshot: dict) -> DeviceStatus:
         switch = self._switch(snapshot)
@@ -184,6 +240,13 @@ class VaultCloudControlProvider:
 
         if switch.get("output") is not True:
             return 0
+        sys_diag = (snapshot.get("status") or {}).get("sys") or {}
+        device_diag = sys_diag.get("unixtime") if isinstance(sys_diag, dict) else None
+        skew = (round(device_diag - self.clock(), 1) if finite_number(device_diag) and finite_number(self.clock()) else None)
+        # Sanitized diagnostics (Task108): field presence and clock skew only.
+        print(f"[shelly-cloud] timer-fields remaining={'timer_remaining' in switch} "
+              f"started={'timer_started_at' in switch} duration={switch.get('timer_duration')} "
+              f"deviceClockSkew={skew}", flush=True)
         remaining = switch.get("timer_remaining")
         if remaining is not None:
             if not finite_number(remaining) or not 0 <= remaining <= 36000:
@@ -193,14 +256,24 @@ class VaultCloudControlProvider:
         sys_status = (snapshot.get("status") or {}).get("sys") or {}
         device_now = sys_status.get("unixtime") if isinstance(sys_status, dict) else None
         now = self.clock()
-        if not all(finite_number(value) for value in (started, duration, device_now, now)):
+        if not all(finite_number(value) for value in (started, duration, now)):
             return 0
-        if (started < 1577836800 or not 0 < duration <= 36000 or
-                abs(device_now - now) > 30 or started > device_now + 2):
+        if started < 1577836800 or not 0 < duration <= 36000:
             return 0
+        if finite_number(device_now) and abs(device_now - now) <= 30:
+            if started > device_now + 2:
+                return 0
+            reference = max(now, device_now)
+        else:
+            # Shelly Cloud may serve a cached sys.unixtime minutes old (Task108:
+            # ~1500s). Fall back to the server clock, accepting only a timer
+            # that started recently and not in the future.
+            if started > now + 30 or started < now - duration - 30:
+                return 0
+            reference = now
         # Use the later clock: skew or cached clock data must never prolong
         # the countdown. Expired timestamps resolve to zero, not full duration.
-        return max(0, math.floor(min(duration, started + duration - max(now, device_now))))
+        return max(0, math.floor(min(duration, started + duration - reference)))
 
     def _assert_safety_context(self, binding, context):
         age = self.clock() - context["observedAt"]
@@ -253,7 +326,15 @@ class VaultCloudControlProvider:
         return context
 
     def verify_control_readiness(self, binding: DeviceBinding) -> None:
-        self._live_safety_context(binding)
+        # Display readiness right after a status read in the same request: wait
+        # longer for the shared Cloud slot instead of reporting cloudQueueBusy
+        # (Task108). ON still re-runs the full live check itself.
+        previous_budget = getattr(self, "_admission_budget", None)
+        self._admission_budget = 12.0
+        try:
+            self._live_safety_context(binding)
+        finally:
+            self._admission_budget = previous_budget
 
     def _send_verified_on(self, binding, duration_seconds, context):
         if type(duration_seconds) is not int or not 5 <= duration_seconds <= 36000:
@@ -265,6 +346,17 @@ class VaultCloudControlProvider:
         # including chat/API. No cached readiness boolean grants this command.
         self._send_verified_on(binding, duration_seconds, self._live_safety_context(binding))
 
+    def confirm_relay_off(self, binding: DeviceBinding) -> bool:
+        """Fresh readback for lock recovery; waits longer to be admitted."""
+        previous_budget = getattr(self, "_admission_budget", None)
+        self._admission_budget = 12.0
+        try:
+            return self.get_status(binding).relay is False
+        except Exception:
+            return False
+        finally:
+            self._admission_budget = previous_budget
+
     def turn_off(self, binding: DeviceBinding) -> None:
         self._post(binding, "/v2/devices/api/set/switch", {"id": binding.device_id, "channel": 0, "on": False}, command=True)
 
@@ -272,6 +364,18 @@ class VaultCloudControlProvider:
         return None
 
     def run_no_load_test(self, binding: DeviceBinding) -> dict:
+        # The user-confirmed test issues ~10 sequential Cloud calls; let each
+        # wait longer for admission behind concurrent status reads (Task108).
+        # Admission failures happen before a request is sent, so no command
+        # is ever duplicated; spacing/one-in-flight/OFF priority are unchanged.
+        previous_budget = getattr(self, "_admission_budget", None)
+        self._admission_budget = 12.0
+        try:
+            return self._run_no_load_test(binding)
+        finally:
+            self._admission_budget = previous_budget
+
+    def _run_no_load_test(self, binding: DeviceBinding) -> dict:
         # Only this explicit, backend-confirmed test can start without history.
         context = self._live_safety_context(binding, require_history=False)
         initial = context["status"]
@@ -285,8 +389,14 @@ class VaultCloudControlProvider:
         off_verified = False
         on_status = None
         try:
-            self._send_verified_on(binding, 5, context)
-            for _ in range(5):
+            # 20s device timer: Cloud status from Azure East Asia to the EU
+            # Shelly cloud can lag several seconds, so a 5s timer could expire
+            # before ON+timer is ever observable (Task108). Still no load.
+            on_sent_at = self.clock()
+            self._send_verified_on(binding, NO_LOAD_TIMER_SECONDS, context)
+            for _ in range(12):
+                if self.clock() - on_sent_at > NO_LOAD_ON_OBSERVE_SECONDS:
+                    break
                 self.sleep(1.1)
                 status = self.get_status(binding)
                 if status.relay and status.timer_remaining > 0:
@@ -299,7 +409,9 @@ class VaultCloudControlProvider:
                 raise ProviderError("unexpectedLoad", "Có tải điện trong lúc kiểm tra không tải")
             # A manual cleanup OFF is not evidence that the device timer works.
             # Observe the device turn itself OFF before sending cleanup OFF.
-            for _ in range(8):
+            for _ in range(30):
+                if self.clock() - on_sent_at > NO_LOAD_TIMER_SECONDS + NO_LOAD_OFF_GRACE_SECONDS:
+                    break
                 self.sleep(1.1)
                 if not self.get_status(binding).relay:
                     timer_auto_off_observed = True

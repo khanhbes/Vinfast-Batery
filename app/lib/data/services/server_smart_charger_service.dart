@@ -81,7 +81,9 @@ class ServerSmartChargerService {
     String path, {
     Map<String, dynamic>? body,
     Map<String, String>? headers,
+    Duration timeout = const Duration(seconds: 12),
   }) async {
+    if (method != 'GET') forgetLive();
     if (_closed) {
       throw const SmartChargerException(
         'Yêu cầu đã hết hiệu lực. Hãy thử lại.',
@@ -134,7 +136,11 @@ class ServerSmartChargerService {
       });
     if (body != null) request.body = jsonEncode(body);
 
-    final response = await ShellyApiTransport.send(_client, request);
+    final response = await ShellyApiTransport.send(
+      _client,
+      request,
+      timeout: timeout,
+    );
     if (_closed ||
         _auth.currentUser?.uid != user.uid ||
         _requestValid?.call() == false) {
@@ -233,7 +239,13 @@ class ServerSmartChargerService {
         ? ''
         : '?vehicleId=${Uri.encodeQueryComponent(vehicleId)}';
     return SmartChargerCapabilities.fromJson(
-      await _request('GET', '/api/shelly/capabilities$suffix'),
+      // Full readiness includes a live Cloud safety check that may wait for
+      // the shared Cloud slot (up to ~12s server-side) (Task108).
+      await _request(
+        'GET',
+        '/api/shelly/capabilities$suffix',
+        timeout: const Duration(seconds: 30),
+      ),
     );
   }
 
@@ -332,7 +344,17 @@ class ServerSmartChargerService {
     'POST',
     '/api/shelly/devices/${Uri.encodeComponent(deviceId)}/safety-test',
     body: {'operationId': operationId, 'confirmedUnplugged': true},
+    // The server-side no-load test spaces Cloud calls (>=1.1s), waits for the
+    // 5s device timer to self-OFF and reads back; 12s always timed out (Task108).
+    timeout: safetyTestTimeout,
   );
+
+  static const safetyTestTimeout = Duration(seconds: 75);
+
+  /// ON/OFF waits for the shared Cloud slot, sends the command and reads the
+  /// relay/timer back server-side; 12s timed out while the relay did switch
+  /// (Task108 E3). Retries reuse the same Idempotency-Key.
+  static const controlTimeout = Duration(seconds: 45);
 
   Future<void> revokeBinding() async =>
       _request('DELETE', '/api/shelly/device');
@@ -392,10 +414,54 @@ class ServerSmartChargerService {
     );
   }
 
-  Future<Map<String, dynamic>> getLive({String? vehicleId}) => _request(
-    'GET',
-    '/api/smart-charging/live${vehicleId == null || vehicleId.isEmpty ? '' : '?vehicleId=${Uri.encodeQueryComponent(vehicleId)}'}',
-  );
+  // One /live read shared by every screen, controller instance and the chat
+  // within a few seconds (Task108: duplicate polling exhausted Firestore).
+  static final Map<String, Future<Map<String, dynamic>>> _liveInFlight = {};
+  static final Map<String, (DateTime, Map<String, dynamic>)> _liveRecent = {};
+  static const liveShareWindow = Duration(seconds: 4);
+
+  /// Drop the shared result after a command so the next read is fresh.
+  static void forgetLive() {
+    _liveRecent.clear();
+  }
+
+  /// [shared] lets periodic display polls reuse a result from the last few
+  /// seconds. Control paths (chat prepare/execute, post-command readback) keep
+  /// the default fresh read.
+  Future<Map<String, dynamic>> getLive({
+    String? vehicleId,
+    bool shared = false,
+  }) {
+    String? uid;
+    try {
+      uid = _auth.currentUser?.uid;
+    } on Object {
+      uid = null;
+    }
+    final key = '${uid ?? '-'}|${vehicleId ?? ''}';
+    if (shared) {
+      final recent = _liveRecent[key];
+      if (recent != null &&
+          DateTime.now().difference(recent.$1) <= liveShareWindow) {
+        return Future.value(Map<String, dynamic>.from(recent.$2));
+      }
+      final pending = _liveInFlight[key];
+      if (pending != null) return pending;
+    }
+    final request =
+        _request(
+          'GET',
+          '/api/smart-charging/live${vehicleId == null || vehicleId.isEmpty ? '' : '?vehicleId=${Uri.encodeQueryComponent(vehicleId)}'}',
+        ).then((data) {
+          _liveRecent[key] = (DateTime.now(), Map<String, dynamic>.from(data));
+          return data;
+        });
+    _liveInFlight[key] = request;
+    request.whenComplete(() {
+      if (identical(_liveInFlight[key], request)) _liveInFlight.remove(key);
+    }).ignore();
+    return request;
+  }
 
   Future<SmartChargingPlanPreview> createPreview(
     SmartChargingPlanDraft draft,
@@ -482,6 +548,7 @@ class ServerSmartChargerService {
         '/api/smart-charging/sessions',
         body: {'previewId': id},
         headers: {'Idempotency-Key': key},
+        timeout: controlTimeout,
       ),
     );
   }
@@ -564,6 +631,7 @@ class ServerSmartChargerService {
           : '/api/smart-charging/session/$sessionId/stop',
       body: {'expectedDeviceId': ?expectedDeviceId},
       headers: {'Idempotency-Key': ?operationId},
+      timeout: controlTimeout,
     );
     return data['_null'] == true ? null : SmartChargingSession.fromJson(data);
   }
@@ -582,6 +650,7 @@ class ServerSmartChargerService {
         'expectedVersion': expectedVersion,
         'userStopReason': userStopReason,
       },
+      timeout: controlTimeout,
     );
     return data['_null'] == true ? null : SmartChargingSession.fromJson(data);
   }
@@ -603,6 +672,7 @@ class ServerSmartChargerService {
         'expectedDeviceId': ?expectedDeviceId,
       },
       headers: {'Idempotency-Key': idempotencyKey},
+      timeout: controlTimeout,
     ),
   );
 

@@ -18,7 +18,10 @@ abstract interface class SmartChargerRepository {
   Future<SmartChargerBinding?> binding({String? vehicleId});
   Future<SmartChargerCapabilities> capabilities({String? vehicleId});
   Future<SmartChargerStatus> status({String? vehicleId});
-  Future<SmartChargerLiveSnapshot> live({String? vehicleId});
+  Future<SmartChargerLiveSnapshot> live({
+    String? vehicleId,
+    bool shared = false,
+  });
   Future<SmartChargingPlanPreview> preview(SmartChargingPlanDraft draft);
   Future<SmartChargingSession> start(
     SmartChargingPlanPreview preview,
@@ -64,9 +67,16 @@ abstract interface class SmartChargerRepository {
 }
 
 class SmartChargerLiveSnapshot {
-  const SmartChargerLiveSnapshot({required this.status, this.session});
+  const SmartChargerLiveSnapshot({
+    required this.status,
+    this.session,
+    this.capabilities,
+  });
   final SmartChargerStatus status;
   final SmartChargingSession? session;
+
+  /// Readiness returned with /live (server-cached); null on older servers.
+  final SmartChargerCapabilities? capabilities;
 }
 
 enum SmartChargeTelemetryOwner { clientDirect, server }
@@ -120,7 +130,10 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
   @override
   Future<SmartChargerStatus> status({String? vehicleId}) => service.getStatus();
   @override
-  Future<SmartChargerLiveSnapshot> live({String? vehicleId}) async {
+  Future<SmartChargerLiveSnapshot> live({
+    String? vehicleId,
+    bool shared = false,
+  }) async {
     final status = await service.getStatus();
     return SmartChargerLiveSnapshot(status: status);
   }
@@ -425,16 +438,25 @@ class ServerSmartChargerRepository implements SmartChargerRepository {
   Future<SmartChargerStatus> status({String? vehicleId}) =>
       service.getStatus(vehicleId: vehicleId);
   @override
-  Future<SmartChargerLiveSnapshot> live({String? vehicleId}) async {
-    final data = await service.getLive(vehicleId: vehicleId);
+  Future<SmartChargerLiveSnapshot> live({
+    String? vehicleId,
+    bool shared = false,
+  }) async {
+    final data = await service.getLive(vehicleId: vehicleId, shared: shared);
     final status = SmartChargerStatus.fromJson(
       Map<String, dynamic>.from(data['status'] as Map? ?? const {}),
     );
     final rawSession = data['session'];
+    final rawCapabilities = data['capabilities'];
     return SmartChargerLiveSnapshot(
       status: status,
       session: rawSession is Map
           ? SmartChargingSession.fromJson(Map<String, dynamic>.from(rawSession))
+          : null,
+      capabilities: rawCapabilities is Map
+          ? SmartChargerCapabilities.fromJson(
+              Map<String, dynamic>.from(rawCapabilities),
+            )
           : null,
     );
   }

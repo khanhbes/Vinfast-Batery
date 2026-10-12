@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -542,16 +543,19 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
           state.session != null &&
           !state.session!.state.isTerminal &&
           state.chargerStatus?.relay == true;
+      // Idle reads are relaxed to 60s: each server read costs several
+      // Firestore reads and idle polling exhausted the daily quota (Task108).
+      // Active charging keeps the 5s safety cadence. Never poll while the app
+      // is in the background; /live already carries capabilities.
+      final lifecycle = WidgetsBinding.instance.lifecycleState;
+      if (lifecycle != null && lifecycle != AppLifecycleState.resumed) return;
       final cadence = charging
           ? const Duration(seconds: 5)
-          : const Duration(seconds: 15);
+          : const Duration(seconds: 60);
       final last = _lastScheduledStatusPollAt;
       if (last != null && now.difference(last) < cadence) return;
       _lastScheduledStatusPollAt = now;
       unawaited(_refreshStatus());
-      if (!state.capabilities.readyForControl) {
-        unawaited(_refreshCapabilities());
-      }
     });
     _sessionTimer ??= Timer.periodic(
       // The live endpoint already returns status + active session together.
@@ -609,14 +613,21 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         shelly.accountGeneration == generation &&
         state.draft.vehicleId == vehicleId;
     try {
-      final live = await _repository!.live(vehicleId: vehicleId);
+      // Display poll: may share a /live result read seconds ago elsewhere.
+      final live = await _repository!.live(vehicleId: vehicleId, shared: true);
       if (!currentContext()) return;
       final status = live.status;
       _connectionCoordinator.markStatusSuccess(shellyReachable: status.online);
       if (!_disposed) {
-        shelly.updateCodeNotice(status, uid: owner, vehicleId: vehicleId);
+        shelly.updateCodeNotice(
+          status,
+          uid: owner,
+          vehicleId: vehicleId,
+          capabilities: live.capabilities,
+        );
         state = state.copyWith(
           chargerStatus: status,
+          capabilities: live.capabilities ?? state.capabilities,
           // The notice comes from the existing server poll, never an extra
           // Cloud request and never an authorization to energize the relay.
           session: _sessionWithStatus(live.session ?? state.session, status),
@@ -636,16 +647,17 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       if (owner != null) {
         shelly.markServerUnavailable(uid: owner, vehicleId: vehicleId);
       }
+      // The periodic poll is the retry; extra 1/2/4s retries made 429 worse.
       _connectionCoordinator.markFailure(
         api: true,
         gateway: true,
         shelly: error.code == 'deviceOffline',
-        retry: _refreshStatus,
       );
       if (!_disposed) {
+        // Keep the last metrics on screen; control stays blocked until fresh.
         state = state.copyWith(
           gatewayError: error.message,
-          chargerStatus: null,
+          chargerStatus: _keepIdleStatus(),
           capabilities: SmartChargerCapabilities.unavailable,
         );
       }
@@ -654,11 +666,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       if (owner != null) {
         shelly.markServerUnavailable(uid: owner, vehicleId: vehicleId);
       }
-      _connectionCoordinator.markFailure(
-        api: true,
-        gateway: true,
-        retry: _refreshStatus,
-      );
+      _connectionCoordinator.markFailure(api: true, gateway: true);
       AppErrorReporter.report(
         error,
         stack,
@@ -667,13 +675,20 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       if (!_disposed) {
         state = state.copyWith(
           gatewayError: 'Không thể đọc trạng thái Shelly. Hãy thử lại.',
-          chargerStatus: null,
+          chargerStatus: _keepIdleStatus(),
           capabilities: SmartChargerCapabilities.unavailable,
         );
       }
     } finally {
       _statusRequestRunning = false;
     }
+  }
+
+  /// Last readback stays visible after a failed poll only while idle.
+  SmartChargerStatus? _keepIdleStatus() {
+    final session = state.session;
+    final charging = session != null && !session.state.isTerminal;
+    return charging ? null : state.chargerStatus;
   }
 
   String? _safetyWarning(SmartChargerStatus status) {

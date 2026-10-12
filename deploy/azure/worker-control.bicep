@@ -39,7 +39,7 @@ resource worker 'Microsoft.App/containerApps@2024-03-01' = {
         env: [
           { name: 'SHELLY_PROVIDER', value: 'vault_cloud' }
           { name: 'SMART_CHARGE_WORKER_SCOPE', value: workerScope }
-          { name: 'SMART_CHARGE_WORKER_POLL_SECONDS', value: '30' }
+          { name: 'SMART_CHARGE_WORKER_POLL_SECONDS', value: '60' }
           { name: 'FIREBASE_CREDENTIALS_JSON', secretRef: 'firebase' }
           { name: 'SHELLY_PROFILE_MASTER_KEY', secretRef: 'vault-key' }
         ]

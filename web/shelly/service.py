@@ -34,6 +34,14 @@ class SmartChargeError(RuntimeError):
         self.retryable = retryable
 
 
+IDLE_STATUS_CACHE_SECONDS = 10
+# A failed *read* with these codes says nothing about the relay: the shared
+# Cloud slot was busy or rate limited. Marking the session unknown made the
+# next reconcile run recovery_off and cut a healthy charge (Task108).
+TRANSIENT_READ_CODES = frozenset({"cloudQueueBusy", "cloudRateLimited", "cloudRateLimiterUnavailable"})
+CAPABILITIES_CACHE_SECONDS = 30
+
+
 class SmartChargeService:
     def __init__(self, repository, provider, predictor, sleeper=time.sleep, clock=utcnow,
                  model_registry=None, push_notifier=None):
@@ -73,7 +81,25 @@ class SmartChargeService:
                 # Notification delivery must never roll back durable charging state.
                 pass
 
-    def capabilities(self, uid: str, vehicle_id: str | None = None) -> dict:
+    def invalidate_capabilities(self) -> None:
+        self.__dict__["_capabilities_cache"] = {}
+
+    def capabilities(self, uid: str, vehicle_id: str | None = None, *, max_age_seconds: float = 0,
+                     verify_live: bool = True) -> dict:
+        """Display readiness. Polling may reuse a result for ``max_age_seconds``;
+        every mutating request clears the cache and ON re-verifies live anyway."""
+        cache = self.__dict__.setdefault("_capabilities_cache", {})
+        key = (uid, vehicle_id, verify_live)
+        if max_age_seconds > 0:
+            cached = cache.get(key)
+            if cached and time.monotonic() - cached[0] <= max_age_seconds:
+                return dict(cached[1])
+        value = self._capabilities_uncached(uid, vehicle_id, verify_live=verify_live)
+        cache[key] = (time.monotonic(), dict(value))
+        return value
+
+    def _capabilities_uncached(self, uid: str, vehicle_id: str | None = None, *,
+                               verify_live: bool = True) -> dict:
         binding = self.binding(uid, vehicle_id)
         status = bool(getattr(self.provider, "supports_status", False))
         manual_off = bool(getattr(self.provider, "supports_manual_off", False))
@@ -84,7 +110,9 @@ class SmartChargeService:
         no_load = bool(binding and binding.no_load_test_verified)
         staging_disabled = os.environ.get("AZURE_STAGING_HARDWARE_DISABLED", "0") == "1"
         blocked_code = "STAGING_HARDWARE_DISABLED" if staging_disabled else None
-        worker_ready = self.repository.worker_health_ready(self.clock())
+        cached_ready = getattr(self.repository, "worker_health_ready_cached", None)
+        worker_ready = (cached_ready(self.clock()) if cached_ready else
+                        self.repository.worker_health_ready(self.clock()))
         if binding and not staging_disabled:
             try:
                 shared_session = self.repository.shared_device_session(uid, binding.device_id)
@@ -97,7 +125,7 @@ class SmartChargeService:
                 blocked_code = "deviceCoordinationUnavailable"
         if blocked_code is None and not worker_ready:
             blocked_code = "workerUnavailable"
-        if blocked_code is None and binding and power and safe_boot and no_load:
+        if blocked_code is None and binding and power and safe_boot and no_load and verify_live:
             verifier = getattr(self.provider, "verify_control_readiness", None)
             if verifier is None:
                 blocked_code = "safetyVerificationRequired"
@@ -107,6 +135,10 @@ class SmartChargeService:
                 except ProviderError as error:
                     blocked_code = error.code
         can_start = not staging_disabled and blocked_code is None
+        if blocked_code and binding:
+            # Sanitized diagnostics (Task108): code only, no ids or credentials.
+            print(f"[smart-charge] capabilities blocked code={blocked_code} "
+                  f"power={power} safeBoot={safe_boot} noLoad={no_load} worker={worker_ready}", flush=True)
         return {
             "canReadStatus": status,
             "canManualOn": manual_on and timer and can_start,
@@ -468,12 +500,19 @@ class SmartChargeService:
                 self._emit_push(uid, session)
             raise self._provider_error(exc) from exc
 
+    def _read_status(self, binding):
+        """Polling read: may reuse a seconds-old idle (relay OFF) status."""
+        try:
+            return self.provider.get_status(binding, max_age_seconds=IDLE_STATUS_CACHE_SECONDS)
+        except TypeError:
+            return self.provider.get_status(binding)  # providers without a cache
+
     def status(self, uid: str, vehicle_id: str | None = None):
         binding = self.binding(uid, vehicle_id)
         if not binding:
             raise SmartChargeError("notConfigured", "Shelly chưa được kết nối", 404)
         try:
-            status = self.provider.get_status(binding)
+            status = self._read_status(binding)
             self._apply_safety(uid, binding, status)
             self._reconcile_with_status(uid, status, vehicle_id)
             return status
@@ -489,16 +528,26 @@ class SmartChargeService:
         if not binding:
             raise SmartChargeError("notConfigured", "Shelly chưa được kết nối", 404)
         try:
-            status = self.provider.get_status(binding)
+            status = self._read_status(binding)
             self._apply_safety(uid, binding, status)
             session = self._reconcile_with_status(uid, status, vehicle_id)
         except ProviderError as exc:
             raise self._provider_error(exc) from exc
+        try:
+            # Light readiness only: no extra live Cloud check inside a poll that
+            # must answer within the app timeout. ON re-verifies live anyway.
+            capabilities = self.capabilities(uid, vehicle_id, max_age_seconds=CAPABILITIES_CACHE_SECONDS,
+                                             verify_live=False)
+        except Exception:
+            capabilities = None  # live status stays usable; app keeps its last capabilities
         return {
             "status": {**(status.to_dict() if hasattr(status, "to_dict") else status),
                        "codeRefreshRequired": self.repository.device_membership(uid, binding.device_id)["codeRefreshRequired"]},
             "session": session.to_dict() if session else None,
             "active": bool(session and session.state in NONTERMINAL_SESSION_STATES),
+            "capabilities": capabilities,
+            "binding": {"deviceId": binding.device_id, "connectionMode": binding.connection_mode,
+                        "provider": binding.provider},
         }
 
     def _finalize_session(
@@ -1127,6 +1176,8 @@ class SmartChargeService:
         try:
             status = self.provider.get_status(binding)
         except ProviderError as error:
+            if error.code in TRANSIENT_READ_CODES:
+                return session
             return self.mark_session_unknown(uid, session, error.code)
         return self._reconcile_with_status(uid, status, vehicle_id, session=session)
 
@@ -1141,6 +1192,8 @@ class SmartChargeService:
         try:
             status = self.provider.get_status(binding)
         except ProviderError as error:
+            if error.code in TRANSIENT_READ_CODES:
+                return session
             return self.mark_session_unknown(uid, session, error.code)
         self._apply_safety(uid, binding, status)
         return self._reconcile_with_status(uid, status, vehicle_id, session=session)

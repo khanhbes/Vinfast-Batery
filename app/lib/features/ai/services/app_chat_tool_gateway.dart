@@ -207,6 +207,7 @@ class AppChatToolGateway implements ChatToolGateway {
           vehicleId: vehicle.vehicleId,
           binding: binding,
           status: live.status,
+          capabilities: live.capabilities,
         );
         if (!live.status.online) {
           return const LocalChatReply(
@@ -218,8 +219,14 @@ class AppChatToolGateway implements ChatToolGateway {
             'Chưa xác minh được đúng Shelly đã liên kết. Hãy đọc lại trong Sạc pin.',
           );
         }
+        final st = live.status;
+        final timer = st.relay && (st.timerRemaining?.inSeconds ?? 0) > 0
+            ? ' Hẹn giờ còn ${(st.timerRemaining!.inSeconds / 60).ceil()} phút.'
+            : '';
         return LocalChatReply(
-          'Shelly ${live.status.relay ? 'đang bật' : 'đã tắt'} theo readback máy chủ vừa đọc. Công suất ${live.status.powerW.toStringAsFixed(1)} W.',
+          'Shelly ${st.relay ? 'đang bật' : 'đã tắt'} theo readback máy chủ vừa đọc. '
+          'Công suất ${st.powerW.toStringAsFixed(1)} W · Điện áp ${st.voltageV.toStringAsFixed(1)} V · '
+          'Dòng ${st.currentA.toStringAsFixed(2)} A.$timer',
         );
       case 'charging_history':
         final page = await _server.getHistoryPage(

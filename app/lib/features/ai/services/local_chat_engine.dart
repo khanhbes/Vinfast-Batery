@@ -270,7 +270,9 @@ class BatteryBotLocalEngine implements LocalChatEngine {
     try {
       final receipt = await tools!
           .execute(proposal.tool, proposal.evidence, callId)
-          .timeout(const Duration(seconds: 30));
+          // Relay tools chain binding/live/capabilities/ON/readback; each
+          // Cloud call may queue behind the shared limiter (Task108 E3).
+          .timeout(const Duration(seconds: 120));
       if (proposal.generation != _generation ||
           proposal.uid != tools?.uid ||
           proposal.vehicleId != tools?.vehicleId) {

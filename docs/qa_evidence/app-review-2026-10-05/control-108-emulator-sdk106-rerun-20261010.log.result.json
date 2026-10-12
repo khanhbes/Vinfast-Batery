@@ -1,0 +1,1 @@
+{"exitCode": 0, "dockerExit": 0, "elapsedSeconds": 89, "image": "vinfast-api-tests:task106", "emulator": "127.0.0.1:8085 via in-container forwarder", "timedOut": false}

@@ -39,6 +39,20 @@ class SmartChargerCapabilities {
     if (controlBlockedCode == 'deviceCoordinationUnavailable') {
       return 'Chưa kiểm tra được quyền điều khiển. Hãy thử lại; chưa thể bật sạc.';
     }
+    if (controlBlockedCode == 'workerUnavailable') {
+      return 'Máy chủ giám sát sạc chưa sẵn sàng. Hãy thử lại sau ít phút.';
+    }
+    if (controlBlockedCode == 'safetyVerificationRequired' ||
+        controlBlockedCode == 'verificationChanged' ||
+        controlBlockedCode == 'safeBootUnverified') {
+      return 'Cấu hình Shelly đã thay đổi so với lần kiểm tra an toàn. Hãy chạy lại kiểm tra an toàn trong thiết lập Shelly.';
+    }
+    if (controlBlockedCode == 'deviceOffline' ||
+        controlBlockedCode == 'cloudQueueBusy' ||
+        controlBlockedCode == 'cloudRateLimited' ||
+        controlBlockedCode == 'safetySnapshotStale') {
+      return 'Chưa đọc được Shelly lúc này. Hãy thử lại sau ít giây.';
+    }
     if (controlBlockedCode == 'STAGING_HARDWARE_DISABLED') {
       return 'Máy chủ thử nghiệm chưa cho phép bật sạc. Bạn vẫn có thể xem trạng thái và dừng sạc.';
     }
@@ -56,10 +70,29 @@ class SmartChargerCapabilities {
     if (!supportsDeviceTimer) {
       return 'Chưa xác minh được bộ hẹn giờ an toàn của Shelly.';
     }
-    return 'Chưa đủ điều kiện bật sạc. Hãy mở thiết lập Shelly để kiểm tra.';
+    final code = controlBlockedCode;
+    return code == null || code.isEmpty
+        ? 'Chưa đủ điều kiện bật sạc. Hãy mở thiết lập Shelly để kiểm tra.'
+        : 'Chưa đủ điều kiện bật sạc (mã: $code). Hãy mở thiết lập Shelly để kiểm tra.';
   }
 
   bool get limited => readyForControl && !(cloudAvailable && lanAvailable);
+
+  Map<String, dynamic> toJson() => {
+    'canReadStatus': canReadStatus,
+    'canManualOn': canManualOn,
+    'canManualOff': canManualOff,
+    'supportsDeviceTimer': supportsDeviceTimer,
+    'canReadPower': canReadPower,
+    'canConfigureSafeBoot': canConfigureSafeBoot,
+    'cloudAvailable': cloudAvailable,
+    'lanAvailable': lanAvailable,
+    'safeBootVerified': safeBootVerified,
+    'noLoadTestVerified': noLoadTestVerified,
+    'readyForControl': readyForControl,
+    if (provider != null) 'provider': provider,
+    if (controlBlockedCode != null) 'controlBlockedCode': controlBlockedCode,
+  };
 
   factory SmartChargerCapabilities.fromJson(Map<String, dynamic> json) =>
       SmartChargerCapabilities(

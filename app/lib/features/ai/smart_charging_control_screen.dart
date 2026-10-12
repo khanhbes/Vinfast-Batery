@@ -394,6 +394,9 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
       connection.isLinked &&
       connection.state == ShellyConnectionFlowState.connected &&
       !connection.controlUncertain &&
+      // Cached or grace-period readbacks are display-only, never control.
+      !connection.syncDelayed &&
+      !connection.fromCache &&
       connection.status?.online == true &&
       connection.status?.relay == false;
 
@@ -1172,9 +1175,31 @@ class _SmartChargeHeaderState extends State<_SmartChargeHeader>
                     ),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(
-                  statusText,
-                  style: TextStyle(color: CockpitColors.muted, fontSize: 13),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      statusText,
+                      style: TextStyle(
+                        color: CockpitColors.muted,
+                        fontSize: 13,
+                      ),
+                    ),
+                    // Same realtime readout as Settings/BatteryBot (Task108).
+                    if (connection?.metricsLine != null)
+                      Text(
+                        connection!.metricsLine!,
+                        key: const ValueKey('shelly-metrics-line'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: CockpitColors.text,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                  ],
                 ),
               ),
               if (!state.capabilities.readyForControl)

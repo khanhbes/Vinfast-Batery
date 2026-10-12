@@ -1,0 +1,16 @@
+{
+    "peers":  {
+
+              },
+    "execute":  true,
+    "noRelayCalls":  true,
+    "rolledBack":  true,
+    "beforeImage":  "vinfastbatteryf1c11a09.azurecr.io/vinfast-api@sha256:df94e83ad477c2c538bd17187a3533ce04cdf3750576445a0bd04be7c74423ab",
+    "succeeded":  false,
+    "beforeRevision":  "vinfast-api--api106-1011124348",
+    "beforeShapeHash":  "81e91a3451888c15b371decc253d68ff46a218aff2f5774c4fa7d1b3cca7e668",
+    "proposedImage":  "vinfastbatteryf1c11a09.azurecr.io/vinfast-api@sha256:0ec9cf8c53c976d2be3f388e7a3a6dcd63902c7b5ac74b4e8ac11625218568f8",
+    "hardwareDisabled":  false,
+    "sourceSha":  "a7480b7efa8ac1fe99a6ed2fc27c10c65dc721b5",
+    "stage":  "checkConfiguration"
+}

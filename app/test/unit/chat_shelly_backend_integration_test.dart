@@ -354,11 +354,13 @@ void main() {
       expect(connections.current.readyForControl, true);
       failLive = true;
       await engine.reply('trạng thái Shelly');
-      expect(connections.current.state, ShellyConnectionFlowState.offline);
+      // Grace: keep the linked view and last readback, flag it as syncing,
+      // drop capabilities so control stays blocked (Task108).
+      expect(connections.current.syncDelayed, true);
       expect(connections.current.isLinked, true);
       expect(connections.current.serverBinding!.noLoadTestVerified, true);
       expect(connections.current.codeRefreshRequired, true);
-      expect(connections.current.status, isNull);
+      expect(connections.current.status, isNotNull);
       expect(connections.current.capabilities, isNull);
       expect(connections.current.controlUncertain, false);
       expect(connections.current.readyForControl, false);

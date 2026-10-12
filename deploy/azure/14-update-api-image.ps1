@@ -140,7 +140,8 @@ try {
     Assert-PeersUnchanged $peers (Get-PeerSnapshot)
     $hostName = $after.properties.configuration.ingress.fqdn
     if ($hostName -notmatch '^[a-z0-9.-]+\.azurecontainerapps\.io$') { throw 'Unexpected HTTPS API hostname.' }
-    $deadline = [DateTime]::UtcNow.AddSeconds(300)
+    # New image digests can take several minutes to pull and activate.
+    $deadline = [DateTime]::UtcNow.AddSeconds(600)
     $record.stage = 'httpsHealthReadiness'
     $ready = $false
     do {
@@ -150,15 +151,28 @@ try {
             $healthBody = $health.Content | ConvertFrom-Json
             $readyBody = $readiness.Content | ConvertFrom-Json
             $ready = $health.StatusCode -eq 200 -and $readiness.StatusCode -eq 200 -and $healthBody.success -eq $true -and $readyBody.success -eq $true -and $readyBody.data.firebase -eq 'ready' -and [bool]$healthBody.requestId -and [bool]$readyBody.requestId
-        } catch { $ready = $false } # Never persist raw error/response bodies.
+            $record.lastProbe = "health=$($health.StatusCode) ready=$($readiness.StatusCode) fb=$($readyBody.data.firebase)"
+        } catch {
+            $ready = $false # Never persist raw error/response bodies.
+            $record.lastProbe = "error=$($_.Exception.GetType().Name)"
+        }
         if (-not $ready) { Start-Sleep -Seconds 3 }
     } while (-not $ready -and [DateTime]::UtcNow -lt $deadline)
     if (-not $ready) { throw 'API health/readiness deadline exceeded.' }
-    $final = Get-App 'vinfast-api'
+    # HTTPS can answer from the new revision before ARM marks it latestReady.
+    $record.stage = 'revisionReady'
+    do {
+        $final = Get-App 'vinfast-api'
+        $revisionReady = $final.properties.latestReadyRevisionName -eq $final.properties.latestRevisionName
+        if (-not $revisionReady) { Start-Sleep -Seconds 5 }
+    } while (-not $revisionReady -and [DateTime]::UtcNow -lt $deadline)
+    if (-not $revisionReady) { throw 'New API revision did not become latestReady.' }
+    $record.stage = 'finalConfiguration'
     Assert-ApiGuard $final $HardwarePolicy
-    if ((Get-ShapeHash $final) -ne $beforeHash -or $final.properties.latestReadyRevisionName -ne $final.properties.latestRevisionName) {
-        throw 'Ready revision or preserved API configuration not verified.'
+    if ((Get-ShapeHash $final) -ne $beforeHash) {
+        throw 'Preserved API configuration not verified.'
     }
+    $record.stage = 'finalPeers'
     Assert-PeersUnchanged $peers (Get-PeerSnapshot)
     $record.afterRevision = $final.properties.latestReadyRevisionName
     $record.afterShapeHash = Get-ShapeHash $final

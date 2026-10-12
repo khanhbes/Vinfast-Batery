@@ -308,3 +308,62 @@ def test_revoked_membership_blocks_on_but_does_not_erase_historical_proof(setup)
         provider.turn_on_with_timer(binding, 60)
     assert on_count(calls) == 0
     assert repo.list_synced_profiles("qa-owner")[0]["verificationFingerprint"] == evidence["verificationFingerprint"]
+
+
+def _safety_app(repo, provider):
+    service = SmartChargeService(repo, provider, lambda _: {}, sleeper=lambda _: None)
+    app = Flask(__name__)
+    app.register_blueprint(create_blueprint(service, repo, lambda: ("qa-owner", None, "user")))
+    return app.test_client()
+
+
+def test_failed_safety_test_releases_lock_only_after_fresh_off_readback(setup):
+    """Task108: a test failing before ON must not leave the device locked forever."""
+    repo, provider, _, _, _, _, calls, _ = setup
+    original_run = provider.run_no_load_test
+    provider.run_no_load_test = Mock(side_effect=ProviderError("safetySnapshotStale", "stale"))
+    client = _safety_app(repo, provider)
+    first = client.post("/api/shelly/devices/qa-plug/safety-test", json={
+        "confirmedUnplugged": True, "operationId": "safety-1"})
+    assert first.status_code == 503
+    assert first.get_json()["error"]["code"] == "safetySnapshotStale"
+    assert repo.device_lock("qa-plug") == {}
+    provider.run_no_load_test = original_run
+    second = client.post("/api/shelly/devices/qa-plug/safety-test", json={
+        "confirmedUnplugged": True, "operationId": "safety-2"})
+    assert second.status_code == 200
+    assert on_count(calls) == 1
+
+
+def test_failed_safety_test_with_relay_on_keeps_lock(setup):
+    repo, provider, binding, _, _, _, _, _ = setup
+    provider.run_no_load_test = Mock(side_effect=ProviderError("relayUnverified", "unknown"))
+    on_status = provider.get_status(binding)
+    on_status.relay = True
+    provider.get_status = Mock(return_value=on_status)
+    client = _safety_app(repo, provider)
+    response = client.post("/api/shelly/devices/qa-plug/safety-test", json={
+        "confirmedUnplugged": True, "operationId": "safety-on"})
+    assert response.status_code == 503
+    assert repo.device_lock("qa-plug")["sessionId"] == "safety-on"
+
+
+@pytest.mark.parametrize("stale_id, relay_on, expected", [
+    ("safety-old", False, 200),          # own abandoned safety lock, verified OFF
+    ("safety-old", True, 409),           # relay ON: never take over
+    ("charging-session-1", False, 409),  # not a safety-test lock
+])
+def test_stale_safety_lock_recovery_requires_own_safety_lock_and_off(setup, stale_id, relay_on, expected):
+    repo, provider, binding, _, _, _, calls, _ = setup
+    assert repo.claim_device_session("qa-owner", "qa-plug", stale_id)
+    if relay_on:
+        on_status = provider.get_status(binding)
+        on_status.relay = True
+        provider.get_status = Mock(return_value=on_status)
+    client = _safety_app(repo, provider)
+    response = client.post("/api/shelly/devices/qa-plug/safety-test", json={
+        "confirmedUnplugged": True, "operationId": "safety-new"})
+    assert response.status_code == expected
+    if expected == 409:
+        assert repo.device_lock("qa-plug")["sessionId"] == stale_id
+        assert on_count(calls) == 0

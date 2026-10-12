@@ -23,6 +23,8 @@ from .models import (
 from .profile_vault import ProfileVaultError, ShellyProfileVault
 
 
+
+
 class SmartChargeRepository:
     """Firestore-backed repository with deterministic in-memory fallback."""
 
@@ -59,6 +61,9 @@ class SmartChargeRepository:
         self._profile_vault = ShellyProfileVault()
         self._synced_profiles: dict[tuple[str, str], dict] = {}
         self._profile_vault_records: dict[tuple[str, str], dict] = {}
+        # Short-lived decrypted-profile cache for status reads only (Task108:
+        # every Cloud call re-read the vault and wrote an audit). Writers clear it.
+        self._profile_read_cache: dict[tuple[str, str], tuple[float, dict]] = {}
         self._worker_heartbeat: dict = {}
         self._worker_lease: dict = {}
         self._worker_lease_epochs: dict[str, int] = {}
@@ -197,6 +202,16 @@ class SmartChargeRepository:
                     or not self._valid_worker_lease(self._worker_lease, now)):
                 raise RuntimeError("workerLeaseLost")
             self._worker_heartbeat = payload
+
+    def worker_health_ready_cached(self, now: datetime, ttl_seconds: float = 15) -> bool:
+        """Display-only readiness (capabilities). Control paths call
+        ``worker_health_ready`` directly for a fresh read."""
+        cached = getattr(self, "_worker_ready_cache", None)
+        if cached and time.monotonic() - cached[0] <= ttl_seconds:
+            return cached[1]
+        value = self.worker_health_ready(now)
+        self._worker_ready_cache = (time.monotonic(), value)
+        return value
 
     def worker_health_ready(self, now: datetime, max_age_seconds: int = 90) -> bool:
         """Fail closed on missing, stale, future or malformed health evidence."""
@@ -445,15 +460,24 @@ class SmartChargeRepository:
             return False
 
     def device_membership(self, uid: str, device_id: str) -> dict:
-        if not self.device_owned_by(uid, device_id):
-            raise PermissionError("deviceForbidden")
         if self.db:
-            registry = self.db.collection("shellyDeviceOwners").document(self._device_owner_doc_id(device_id)).get().to_dict() or {}
+            # One owners read (it also proves membership) and the cached
+            # shellyDevices snapshot instead of a second profile read (Task108).
+            snapshot = self.db.collection("shellyDeviceOwners").document(self._device_owner_doc_id(device_id)).get()
+            registry = snapshot.to_dict() or {} if snapshot.exists else {}
+            try:
+                members = self._membership_uids(registry)
+            except Exception:
+                members = []
+            if not snapshot.exists or len(members) > 2 or uid not in members:
+                raise PermissionError("deviceForbidden")
             inventory = self.db.collection("shellyInventory").document(device_id).get().to_dict() or {}
-            profile = self._profile_doc(uid, device_id).get().to_dict() or {}
-            members = self._membership_uids(registry)
+            profile = next((data for doc_id, data in self._shelly_device_docs(uid)
+                            if str(data.get("deviceId") or doc_id) == device_id), {})
             version = int(inventory.get("codeVersion") or 0)
         else:
+            if not self.device_owned_by(uid, device_id):
+                raise PermissionError("deviceForbidden")
             key = self._device_owner_doc_id(device_id)
             members = self._device_members.get(key, [self._device_owners.get(key)])
             profile = self._synced_profiles.get((uid, device_id), {})
@@ -548,16 +572,50 @@ class SmartChargeRepository:
             return result
         return self._run_metadata_transaction(change)
 
-    def run_cloud_request(self, fingerprint, operation, *, priority_off=False, sleeper=time.sleep, guard=None):
+    def run_cloud_request(self, fingerprint, operation, *, priority_off=False, sleeper=time.sleep, guard=None,
+                          admission_budget=None):
         from .cloud_dispatch import CloudDispatchGate
         return CloudDispatchGate(lambda action: self._cloud_dispatch_change(fingerprint, action),
-                                 sleeper=sleeper).run(operation, priority_off=priority_off, guard=guard)
+                                 sleeper=sleeper).run(operation, priority_off=priority_off, guard=guard,
+                                                      admission_budget=admission_budget)
 
     def defer_cloud_requests(self, fingerprint, seconds):
         from .cloud_dispatch import set_cooldown
         if isinstance(seconds, bool) or not isinstance(seconds, (float, int)) or not math.isfinite(seconds) or seconds < 1.1:
             raise RuntimeError("cloudLimiterMalformed")
         self._cloud_dispatch_change(fingerprint, lambda data, now: set_cooldown(data, now, seconds))
+
+    def _shelly_device_docs(self, uid: str) -> list[tuple[str, dict]]:
+        """users/{uid}/shellyDevices, read at most once per HTTP request.
+
+        Request-scoped only: another process (worker, second API) must see an
+        enrollment/unlink immediately, so nothing is cached across requests.
+        """
+        memo = self._request_memo()
+        if memo is not None and uid in memo:
+            return [(doc_id, deepcopy(data)) for doc_id, data in memo[uid]]
+        docs = [(snapshot.id, snapshot.to_dict() or {})
+                for snapshot in self.db.collection("users").document(uid).collection("shellyDevices").stream()]
+        if memo is not None:
+            memo[uid] = docs
+        return [(doc_id, deepcopy(data)) for doc_id, data in docs]
+
+    @staticmethod
+    def _request_memo() -> dict | None:
+        try:
+            from flask import g, has_request_context
+        except Exception:
+            return None
+        if not has_request_context():
+            return None
+        if not hasattr(g, "_shelly_docs_memo"):
+            g._shelly_docs_memo = {}
+        return g._shelly_docs_memo
+
+    def _invalidate_shelly_docs(self, uid: str) -> None:
+        memo = self._request_memo()
+        if memo is not None:
+            memo.pop(uid, None)
 
     def list_bindings(self, uid: str) -> list[DeviceBinding]:
         with self._lock:
@@ -567,10 +625,9 @@ class SmartChargeRepository:
         # Other workers may change enrollment/evidence/binding. An unbounded
         # process cache must never override the authoritative metadata.
         bindings = []
-        for snapshot in self.db.collection("users").document(uid).collection("shellyDevices").stream():
-            data = snapshot.to_dict() or {}
+        for snapshot_id, data in self._shelly_device_docs(uid):
             binding = DeviceBinding(
-                device_id=str(data.get("deviceId") or snapshot.id),
+                device_id=str(data.get("deviceId") or snapshot_id),
                 display_name=str(data.get("displayName") or "Shelly sạc xe"),
                 model=str(data.get("model") or "unknown"), generation=int(data.get("generation") or 3),
                 provider=str(data.get("provider") or "integrator"),
@@ -726,11 +783,16 @@ class SmartChargeRepository:
                 receipts = getattr(self, "_enrollment_receipts", {})
                 validate(entry.to_dict(), members, receipt_id in receipts, {})
                 existing = self._synced_profiles.get((uid, device_id), {})
-                keep_existing = uid in members and existing and existing.get("revokedAt") is None
+                # A legacy direct profile (advanced_direct) is upgraded, never kept:
+                # keeping it would make the redeem a silent no-op for control.
+                keep_existing = (uid in members and existing and existing.get("revokedAt") is None
+                                 and existing.get("connectionMode") != "advanced_direct")
                 if (keep_existing and vehicle_id and existing.get("vehicleId")
                         not in (None, "", vehicle_id) and not existing.get("shared")):
                     raise ValueError("bindingVehicleConflict")
                 metadata = dict(existing if keep_existing else new_metadata)
+                if not keep_existing and not vehicle_id and existing.get("vehicleId"):
+                    metadata["vehicleId"] = existing["vehicleId"]
                 # Upgrade an unscoped legacy enrollment only when explicitly
                 # selected by this member; retain evidence and never auto-share.
                 if keep_existing and vehicle_id and not metadata.get("vehicleId"):
@@ -742,6 +804,7 @@ class SmartChargeRepository:
                 self._device_members[key] = members
                 self._device_owners[key] = members[0]
                 self._synced_profiles[(uid, device_id)] = metadata
+                self._profile_read_cache.pop((uid, device_id), None)
                 if not keep_existing:
                     self._profile_vault_records[(uid, device_id)] = {"ownerUid": uid, **encrypted}
                     self._bindings.setdefault(uid, {})[device_id] = new_binding
@@ -786,11 +849,17 @@ class SmartChargeRepository:
             inventory = inventory_snapshot.to_dict() or {}
             validate(code_data, members, receipt.exists, inventory)
             previous = old_profile.to_dict() or {} if old_profile.exists else {}
-            keep_existing = uid in members and previous and previous.get("revokedAt") is None
+            # A legacy direct profile (advanced_direct) is upgraded to server_cloud
+            # with the admin-issued vault credentials and fresh (unverified) safety
+            # evidence; only an existing server enrollment survives code rotation.
+            keep_existing = (uid in members and previous and previous.get("revokedAt") is None
+                             and previous.get("connectionMode") != "advanced_direct")
             if (keep_existing and vehicle_id and previous.get("vehicleId")
                     not in (None, "", vehicle_id) and not previous.get("shared")):
                 raise ValueError("bindingVehicleConflict")
             metadata = dict(previous if keep_existing else new_metadata)
+            if not keep_existing and not vehicle_id and previous.get("vehicleId"):
+                metadata["vehicleId"] = previous["vehicleId"]
             if keep_existing and vehicle_id and not metadata.get("vehicleId"):
                 metadata["vehicleId"] = vehicle_id
                 metadata["shared"] = False
@@ -812,6 +881,7 @@ class SmartChargeRepository:
         metadata = self._run_metadata_transaction(enroll)
         with self._lock:
             self._synced_profiles[(uid, device_id)] = dict(metadata)
+            self._profile_read_cache.pop((uid, device_id), None)
         return metadata
 
     # ── Direct profile sync vault ─────────────────────────────────────
@@ -908,8 +978,7 @@ class SmartChargeRepository:
     def list_synced_profiles(self, uid: str, vehicle_id: str | None = None) -> list[dict]:
         values: list[dict] = []
         if self.db:
-            for snapshot in self.db.collection("users").document(uid).collection("shellyDevices").stream():
-                data = snapshot.to_dict() or {}
+            for snapshot_id, data in self._shelly_device_docs(uid):
                 if data.get("connectionMode") not in {"advanced_direct", "server_cloud"}:
                     continue
                 if data.get("revokedAt") is not None:
@@ -917,7 +986,7 @@ class SmartChargeRepository:
                 if vehicle_id and data.get("vehicleId") not in (vehicle_id, None, ""):
                     continue
                 value = dict(data)
-                value.setdefault("deviceId", snapshot.id)
+                value.setdefault("deviceId", snapshot_id)
                 values.append(value)
         else:
             with self._lock:
@@ -943,7 +1012,8 @@ class SmartChargeRepository:
             key = str(data.get("cloudAuthKey") or data.get("authKey") or data.get("apiKey") or "").strip()
             host = str(data.get("cloudHost") or data.get("host") or data.get("server") or "").strip()
             if not key or not host:
-                if data.get("connectionMode") == "advanced_direct" and not data.get("hasCredentialVault"):
+                if (data.get("connectionMode") == "advanced_direct" and not data.get("hasCredentialVault")
+                        and data.get("metadataOnly") is not True):
                     snapshot.reference.set({"metadataOnly": True}, merge=True)
                 continue
             profile = {
@@ -1023,11 +1093,36 @@ class SmartChargeRepository:
             self._profile_doc(uid, device_id).set(metadata, merge=True)
         with self._lock:
             self._synced_profiles[(uid, device_id)] = dict(metadata)
+            self._profile_read_cache.pop((uid, device_id), None)
             self._profile_vault_records[(uid, device_id)] = dict(vault_data)
         self.append_audit(uid, "shelly_profile_saved", device_id=device_id, vehicle_id=vehicle_id, revision=metadata["revision"])
         return metadata
 
-    def restore_synced_profile(self, uid: str, device_id: str) -> dict | None:
+    def _invalidate_profile_cache(self, uid: str, device_id: str | None = None) -> None:
+        with self._lock:
+            for key in [k for k in self._profile_read_cache if k[0] == uid and (device_id is None or k[1] == device_id)]:
+                self._profile_read_cache.pop(key, None)
+
+    def restore_synced_profile(self, uid: str, device_id: str, *, audit: bool = True,
+                               max_age_seconds: float = 0) -> dict | None:
+        """Decrypt one profile. ``max_age_seconds`` > 0 allows a recent in-process
+        copy (status reads only); commands and safety checks pass 0 for a fresh
+        read. Only the explicit restore endpoint records an audit event."""
+        key = (uid, device_id)
+        if max_age_seconds > 0:
+            with self._lock:
+                cached = self._profile_read_cache.get(key)
+            if cached and time.monotonic() - cached[0] <= max_age_seconds:
+                return dict(cached[1])
+        profile = self._restore_synced_profile_uncached(uid, device_id, audit=audit)
+        with self._lock:
+            if profile is None:
+                self._profile_read_cache.pop(key, None)
+            else:
+                self._profile_read_cache[key] = (time.monotonic(), dict(profile))
+        return profile
+
+    def _restore_synced_profile_uncached(self, uid: str, device_id: str, *, audit: bool) -> dict | None:
         profiles = [item for item in self.list_synced_profiles(uid) if item.get("deviceId") == device_id]
         if not profiles:
             return None
@@ -1047,7 +1142,8 @@ class SmartChargeRepository:
         if vault.get("ownerUid") != uid:
             return None
         secrets = self._profile_vault.decrypt(uid, device_id, vault)
-        self.append_audit(uid, "shelly_profile_restored", device_id=device_id, revision=metadata.get("revision"))
+        if audit:
+            self.append_audit(uid, "shelly_profile_restored", device_id=device_id, revision=metadata.get("revision"))
         return {**metadata, **secrets}
 
     def resolve_synced_profile(self, uid: str, vehicle_id: str | None = None) -> dict | None:
@@ -1118,6 +1214,7 @@ class SmartChargeRepository:
                 result = {**actual, **checked_update(actual)}
         with self._lock:
             self._synced_profiles[(uid, device_id)] = result
+            self._profile_read_cache.pop((uid, device_id), None)
         return result
 
     def revoke_synced_profile(self, uid: str, device_id: str) -> bool:
@@ -1132,6 +1229,7 @@ class SmartChargeRepository:
             ).delete()
         with self._lock:
             self._synced_profiles.pop((uid, device_id), None)
+            self._profile_read_cache.pop((uid, device_id), None)
             self._profile_vault_records.pop((uid, device_id), None)
         self.append_audit(uid, "shelly_profile_revoked", device_id=device_id)
         return True
@@ -1284,6 +1382,19 @@ class SmartChargeRepository:
                 self._device_leases.pop(lease_key, None)
                 self._device_lease_kinds.pop(lease_key, None)
             return False
+
+    def device_lock(self, device_id: str) -> dict:
+        """Read-only view of the physical device lock (owner, session, kind)."""
+        lease_key = self._device_owner_doc_id(device_id)
+        if not self.db:
+            with self._lock:
+                owner, session_id = self._device_leases.get(lease_key, (None, None))
+                kind = self._device_lease_kinds.get(lease_key, "charging")
+            return {"ownerUid": owner, "sessionId": session_id, "leaseKind": kind} if owner else {}
+        snapshot = self.db.collection("shellyDeviceLocks").document(lease_key).get()
+        data = snapshot.to_dict() or {} if snapshot.exists else {}
+        return {"ownerUid": data.get("ownerUid"), "sessionId": data.get("sessionId"),
+                "leaseKind": data.get("leaseKind", "charging")} if data.get("ownerUid") else {}
 
     def release_device_session(self, uid: str, device_id: str, session_id: str) -> None:
         lease_key = self._device_owner_doc_id(device_id)
@@ -2358,3 +2469,21 @@ def _profile(uid: str, vehicle_id: str, data: dict) -> PersonalChargingProfile:
 
 def _profile_id(uid: str, vehicle_id: str) -> str:
     return hashlib.sha256(f"{uid}:{vehicle_id}".encode("utf-8")).hexdigest()
+
+
+def _invalidates_shelly_docs(method):
+    def wrapper(self, uid, *args, **kwargs):
+        try:
+            return method(self, uid, *args, **kwargs)
+        finally:
+            self._invalidate_shelly_docs(uid)
+    wrapper.__name__ = method.__name__
+    wrapper.__doc__ = method.__doc__
+    return wrapper
+
+
+# Every method that writes users/{uid}/shellyDevices drops the cached snapshot.
+for _name in ("save_binding", "revoke_binding",
+              "enroll_connection_code", "migrate_legacy_profile_secrets", "save_synced_profile",
+              "verify_synced_profile", "revoke_synced_profile"):
+    setattr(SmartChargeRepository, _name, _invalidates_shelly_docs(getattr(SmartChargeRepository, _name)))

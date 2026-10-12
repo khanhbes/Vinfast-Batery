@@ -1,4 +1,5 @@
-FROM vinfast-api-qa:task106
+ARG API_IMAGE=vinfast-api-qa:task106
+FROM ${API_IMAGE}
 COPY web/requirements-api-tests.txt /qa-requirements.txt
 RUN pip install --no-cache-dir -r /qa-requirements.txt && pip check
 # Preserve repository-relative paths used by static/CLI contract tests.

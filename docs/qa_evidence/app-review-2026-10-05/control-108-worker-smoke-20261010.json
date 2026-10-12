@@ -1,0 +1,12 @@
+{
+  "passed": true,
+  "task": "108",
+  "imageId": "sha256:ca5bbf702a95359ea01ff739b201e92073ec309f37503bf6d2e42d3607780690",
+  "repoDigests": [
+    "vinfast-worker-qa@sha256:ca5bbf702a95359ea01ff739b201e92073ec309f37503bf6d2e42d3607780690",
+    "vinfastbatteryf1c11a09.azurecr.io/vinfast-worker@sha256:ca5bbf702a95359ea01ff739b201e92073ec309f37503bf6d2e42d3607780690"
+  ],
+  "relayCommands": 0,
+  "hardwareCommands": 0,
+  "startupBlockedWithoutScope": true
+}

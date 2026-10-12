@@ -1,0 +1,20 @@
+{
+ "exitCode": 0,
+ "elapsedSeconds": 16,
+ "timedOut": false,
+ "cleanupError": null,
+ "command": [
+  "powershell",
+  "-NoProfile",
+  "-ExecutionPolicy",
+  "Bypass",
+  "-File",
+  "deploy/azure/08-local-boot-smoke.ps1",
+  "-ApiImage",
+  "vinfast-api-qa:task108f",
+  "-Services",
+  "api",
+  "-TimeoutSeconds",
+  "180"
+ ]
+}
