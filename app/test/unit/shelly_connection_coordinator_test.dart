@@ -68,6 +68,16 @@ class _Server extends ServerSmartChargerService {
   }
 
   @override
+  Future<Map<String, dynamic>> getLive({
+    String? vehicleId,
+    bool shared = false,
+  }) async {
+    final status = await getStatus(vehicleId: vehicleId);
+    final capabilities = await getCapabilities(vehicleId: vehicleId);
+    return {'status': status.toJson(), 'capabilities': capabilities.toJson()};
+  }
+
+  @override
   Future<SmartChargerCapabilities> getCapabilities({String? vehicleId}) async {
     scopes.add(vehicleId);
     return SmartChargerCapabilities.fromJson({
@@ -277,6 +287,30 @@ void main() {
       expect(result.isLinked, true);
       expect(result.serverBinding!.noLoadTestVerified, true);
       expect(result.errorMessage, contains('Mã hết'));
+      expect(server.safetyCommands, 0);
+      await coordinator.dispose();
+    },
+  );
+
+  test(
+    'accepted code that leaves the legacy link reports an error, not silence',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final server = _Server()
+        ..mode = SmartChargerConnectionMode.advancedDirect;
+      final coordinator = ShellyConnectionCoordinator(
+        credentials: _Credentials(),
+        serverCharger: server,
+      );
+      coordinator.activateAccount('qa-account');
+      await coordinator.restore(vehicleId: 'qa-vehicle');
+      final result = await coordinator.redeemCode(
+        'ABC123',
+        vehicleId: 'qa-vehicle',
+      );
+      expect(server.redeemedVehicle, 'qa-vehicle');
+      expect(result.state, ShellyConnectionFlowState.serverConnectionRequired);
+      expect(result.errorMessage, contains('vẫn giữ liên kết cũ'));
       expect(server.safetyCommands, 0);
       await coordinator.dispose();
     },

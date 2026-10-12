@@ -63,9 +63,12 @@ class CloudDispatchGate:
                  wall_clock=lambda: datetime.now(timezone.utc)):
         self.change, self.sleep, self.clock, self.now = change, sleeper, clock, wall_clock
 
-    def run(self, operation, *, priority_off=False, guard=None):
+    def run(self, operation, *, priority_off=False, guard=None, admission_budget=None):
         request = uuid.uuid4().hex
         budget = 8.0 if priority_off else 4.0
+        # Admission waiting only; the operation itself still runs exactly once.
+        if admission_budget is not None:
+            budget = max(budget, min(15.0, float(admission_budget)))
         deadline = self.clock() + budget
         acquired = False
 

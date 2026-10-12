@@ -40,6 +40,26 @@ class SmartChargerStatus {
   final String? deviceId;
   final bool? codeRefreshRequired;
 
+  /// Same wire shape as the server `/live` status (round-trips via fromJson).
+  Map<String, dynamic> toJson() => {
+    'online': online,
+    'relay': relay,
+    'power_w': powerW,
+    'voltage_v': voltageV,
+    'current_a': currentA,
+    'frequency_hz': frequencyHz,
+    if (temperatureC != null) 'temperature_c': temperatureC,
+    if (shellyTemperatureC != null) 'shelly_temperature_c': shellyTemperatureC,
+    if (batteryTemperatureC != null)
+      'battery_temperature_c': batteryTemperatureC,
+    'energy_wh': energyWh,
+    if (timerRemaining != null) 'timer_remaining': timerRemaining!.inSeconds,
+    if (transport != null) 'transport': transport!.name,
+    if (deviceName != null) 'device_name': deviceName,
+    if (deviceId != null) 'device_id': deviceId,
+    if (codeRefreshRequired != null) 'codeRefreshRequired': codeRefreshRequired,
+  };
+
   factory SmartChargerStatus.fromJson(Map<String, dynamic> json) {
     final online = json['online'];
     final relay = json['relay'];

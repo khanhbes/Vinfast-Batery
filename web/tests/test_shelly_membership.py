@@ -143,6 +143,36 @@ def test_code_enrolls_only_selected_owned_vehicle_and_retry_keeps_evidence(monke
     assert repo.get_binding('a', 'vehicle-other') is None
 
 
+def test_member_redeem_upgrades_legacy_direct_profile_to_server_cloud(monkeypatch):
+    """Task108: an existing member with a legacy advanced_direct profile must not
+    have the redeem silently keep legacy mode; it upgrades with fresh evidence."""
+    repo, _, entry = enrollment(monkeypatch)
+    repo.register_vehicle_owner('a', 'vehicle-a')
+    first = repo.enroll_connection_code('a', entry, 'op-a', vehicle_id='vehicle-a')
+    legacy = dict(first, connectionMode='advanced_direct', provider='direct_cloud_lan',
+                  noLoadTestVerified=True)
+    repo._synced_profiles[('a', entry.device_id)] = legacy
+    repo._bindings['a'][entry.device_id] = DeviceBinding(
+        device_id=entry.device_id, display_name='Plug', model=entry.model, generation=3,
+        provider='direct_cloud_lan', connection_mode='advanced_direct', vehicle_id='vehicle-a',
+        no_load_test_verified=True, owner_uid='a')
+    upgraded = repo.enroll_connection_code('a', entry, 'op-upgrade', vehicle_id='vehicle-a')
+    assert upgraded['connectionMode'] == 'server_cloud'
+    assert upgraded['provider'] == 'vault_cloud'
+    assert upgraded['vehicleId'] == 'vehicle-a'
+    assert upgraded['noLoadTestVerified'] is False
+    binding = repo.get_binding('a', 'vehicle-a')
+    assert binding.connection_mode == 'server_cloud'
+    assert binding.no_load_test_verified is False
+    assert entry.redemption_count == 1
+    assert len(repo._device_members[repo._device_owner_doc_id(entry.device_id)]) == 1
+    # Server enrollments still keep their evidence on a later rotation/replay.
+    upgraded['noLoadTestVerified'] = True
+    repo._synced_profiles[('a', entry.device_id)] = upgraded
+    again = repo.enroll_connection_code('a', entry, 'op-again', vehicle_id='vehicle-a')
+    assert again['noLoadTestVerified'] is True
+
+
 def test_invalid_or_archived_vehicle_consumes_no_member_slot(monkeypatch):
     repo, _, entry = enrollment(monkeypatch)
     repo.register_vehicle_owner('b', 'vehicle-b')

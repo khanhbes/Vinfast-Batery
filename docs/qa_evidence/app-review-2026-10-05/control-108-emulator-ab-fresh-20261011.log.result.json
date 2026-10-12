@@ -1,0 +1,1 @@
+{"exitCode": 0, "image": "vinfast-api-tests:task108", "passed": 13, "failed": 0, "emulator": "fresh 127.0.0.1:8085", "abDispatch": {"task106": ["fail","pass","pass"], "task108": ["pass","pass","pass"]}, "note": "Earlier 12/13 run used a stale emulator from the first session (second emulator never started: port taken); dispatch test is timing-flaky on both images."}

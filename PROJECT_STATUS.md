@@ -1,5 +1,63 @@
 # VinFast Battery — Project Status & Task Tracker
 
+> **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
+
+## 108. Task Completion Log — mở điều khiển Shelly qua Azure (10/10/2026) — In progress
+
+| ID | File / thay đổi | Kết quả |
+|---|---|---|
+| C108-01 | `deploy/azure/worker-control.bicep`, `deploy-worker-control.ps1` (mới): worker `web/Dockerfile.worker`, vault_cloud, scope `azure-staging-1`, poll30s, 0,25vCPU/0,5GiB, 1 replica, không ingress/probe HTTP (probe worker chỉ 127.0.0.1); yêu cầu `-ControlApproved` + receipt smoke có registry digest | Validate exit0; create: `vinfast-worker-control--cdr5hmz` Healthy/Running, image `vinfast-worker@sha256:ca5bbf70…0690`; API/AI revision không đổi trong lúc tạo |
+| C108-02 | `deploy/azure/15-set-hardware-policy.ps1` (mới): chỉ đổi `AZURE_STAGING_HARDWARE_DISABLED` + `SMART_CHARGE_WORKER_SCOPE`, hash phần còn lại trước/sau, health/ready; rollback `-Policy Locked -Execute` | Unlock exit0: revision `vinfast-api--hw0-1010101715`, flag0/scope azure-staging-1, health/ready200. Sửa sau chạy: hash dùng `[ordered]` (hash preflight/execute khác nhau do thứ tự key Hashtable khác tiến trình; so sánh trong cùng lần chạy vẫn hợp lệ) |
+| C108-03 | `14-update-api-image.ps1`: tham số `-HardwarePolicy Locked|Unlocked` (mặc định Locked), peers động (ai/pilot/control nếu tồn tại); `tools/check_api_upgrade_script.ps1` thêm assertions Unlocked | 29 assertions/exit0 |
+| C108-04 | `web/firestore.indexes.json`: fieldOverride `smartChargingSessions.state` COLLECTION_GROUP (worker query collection-group; Emulator không bắt lỗi index) | `firebase deploy --only firestore:indexes` thành công (không --force; 1 index ngoài file giữ nguyên). Worker báo `FailedPrecondition` lúc 10:12:34 khi index đang build, sau đó >4 phút không lỗi |
+| C108-05 | `tools/check_worker_container.py`: `--image`, `--result` receipt | Smoke worker exit0: ready, RSS~69MB, 0 relay, entry thiếu scope fail-closed |
+| C108-06 | App UX107-01: `timed_charging_section_v2.dart` lý do khóa + nút “Thiết lập Shelly” cạnh CTA; `smart_charging_control_screen.dart` nối tới SetupHub. UX107-02: `ShellyConnectionSnapshot.chatLockExplanation/lockFixedInSetup`, `assistant_sheet.dart` FAQ “bị khóa” theo trạng thái chung; chat legacy gợi ý nhập mã quản trị | 79 tests (snapshot/screen/FAQ/chat-backend) Pass. Không nới gate an toàn |
+| C108-07 | Xóa `vinfast-worker-pilot` (user duyệt) sau khi worker control healthy | Còn `vinfast-ai`, `vinfast-api`, `vinfast-worker-control`. **Việc tiếp:** budget alert 20USD đang lọc theo pilot, cần trỏ sang worker control |
+| C108-08 | `app/pubspec.yaml` 1.1.9+139; build debug HTTPS Azure | Build exit0/140s; SHA-256 `2d2b007b2bdf16a1666cf6d88f873c2a899d76988b7d35cca99432c60a653dee`, cert debug như138; hygiene 0 findings; `install -r` Success, base.apk thực cài khớp hash, versionCode139 |
+
+- Gates: Emulator 13/13 Pass (`control-108-emulator-sdk106-rerun`), firestore 2.34.1/firebase_admin 7.1.0. Lượt emulator đầu **không hợp lệ**: cổng 8080 thuộc `vinfast_laptop_gateway`, 13 lỗi HTTP405; receipt ban đầu ghi exit0 sai do `tail` che mã thoát — đã sửa receipt thành exit1 + ghi chú. Backend liên quan 292 Pass (network none). Worker thật không chạy được với Emulator (fail-closed `workerEmulatorForbidden`); heartbeat API↔worker được phủ bởi test emulator.
+- Môi trường: Claude bật Docker Desktop (user duyệt); Docker tự khởi động stack local cũ → user duyệt `docker stop` 6 container (không xóa). Stack local hiện đang dừng.
+### 108.2. Cập nhật 11/10/2026 — redeem, safety test thật, quota Firestore
+
+| ID | Vấn đề → sửa | Kết quả |
+|---|---|---|
+| C108-09 | Redeem mã web không nâng liên kết: tài khoản đã là member + profile `advanced_direct` → `keep_existing` giữ legacy (redeem “thành công” nhưng vô hiệu). `web/shelly/repositories.py`: chỉ giữ profile khi đã `server_cloud`; legacy được nâng `server_cloud`/`vault_cloud`, vault từ mã admin, `noLoadTestVerified=false`. App: redeem xong mà vẫn legacy → báo lỗi thay vì im lặng | Test hồi quy backend + Flutter Pass. Deploy API `task108`; redeem `4AZMV9` trên OnePlus → “Xác nhận an toàn”, Firestore: member duy nhất, binding `server_cloud`. Nhận định “_busy kẹt” trước đó là **sai**, đã rút lại |
+| C108-10 | Safety-test app timeout 12s trong khi server cần ~30–50s | `server_smart_charger_service.dart`: timeout riêng 75s (APK140/141) |
+| C108-11 | Lock safety-test không bao giờ nhả khi test lỗi trước OFF verified | `routes.py`: nhả sau readback OFF mới (budget 12s); tự gỡ lock `safety-` của chính tài khoản khi relay OFF + không có session; lỗi trả mã cụ thể. 5 test mới |
+| C108-12 | `cloudQueueBusy`: chuỗi ~10 lệnh Cloud của safety test bị status polling chen, budget admission 4s | `cloud_dispatch.py`/`vault_cloud.py`: riêng safety test admission tối đa 12s (cap 15s); vẫn 1 in-flight, giãn 1,1s, OFF ưu tiên; admission fail luôn trước khi gửi → không gửi trùng |
+| C108-13 | `timerNotArmed` dù relay đã bật (user quan sát ON thật 02:30 VN): Shelly Cloud trả `sys.unixtime` cũ ~1500–1970s → quy tắc skew≤30s đặt timer=0 | Timer test 20s (theo dõi ON ≤12s, tự tắt ≤30s); khi giờ thiết bị cũ dùng giờ server, chỉ nhận timer bắt đầu gần đây/không ở tương lai, cap duration. Log đã che: mã HTTP lệnh Cloud + presence trường timer/skew. Test cũ “stale clock → 0” được thay bằng ca fallback + ca hết hạn/tương lai |
+| C108-14 | **Safety test ĐẠT trên thiết bị thật**: audit `shelly_safety_test_passed` 2026-10-10T19:50:49Z; log ON 20s 19:50:07 → ON+timer 19:50:11–27 → tự OFF → cleanup OFF 19:50:36 | API `task108f` (`vinfast-api--api106-1010194754`); gate 558 Pass/13 Skip, emulator 13/13 các bản 108b–d; boot Pass. Rollout 108e lần đầu Fail (checkConfiguration/health deadline) và tự rollback; lần 3 Pass |
+| C108-15 | **Blocked:** Firestore `429 Quota exceeded` sau safety test → `/live`, `/capabilities` lỗi, app “Tạm mất kết nối”. Nguyên nhân: app gọi restore/live/capabilities dày (audit >4.200 `shelly_profile_restored`), worker poll 30s, **và script chẩn đoán của Claude đọc toàn bộ audit (~4k docs) nhiều lần** | App: throttle restore cho mọi lần thử (trước chỉ khi thành công); polling idle 15s→30s, capabilities khi chưa sẵn sàng ≤60s (sạc vẫn 5s). Worker poll 30s→60s (Azure env + bicep). Chờ quota reset 0h Pacific (~14:00 VN) |
+
+- APK `1.1.9+141` (throttle restore + polling giãn + timeout safety 75s): build exit0/145s, SHA-256 `3d14c1cc5440423135611624815dc567708729df7e4f605ae906736106f4a4c9`, hygiene 0 findings, `install -r` Success, base.apk thực cài khớp hash.
+### 108.3. Đồng bộ trạng thái Shelly + giảm lượt đọc Firestore (11/10/2026)
+
+| ID | Thay đổi | Kiểm chứng |
+|---|---|---|
+| S108-01 | Backend: cache profile vault 60s chỉ cho đọc trạng thái (lệnh/ON/kiểm tra an toàn luôn tươi), **bỏ audit `shelly_profile_restored` cho đọc nội bộ** (chỉ endpoint restore ghi); cache trạng thái idle 10s chỉ khi relay OFF, mọi lệnh Cloud xóa cache; `shellyDevices` đọc 1 lần/HTTP request (memo `flask.g`, không cache liên tiến trình — test membership liên worker giữ nguyên); `device_membership` 4→2 đọc; `worker_health_ready` cache 15s chỉ cho capabilities; capabilities cache 30s, xóa trước/sau mọi request không-GET; `/live` trả kèm `capabilities` + `binding`; sửa vòng ghi lặp `metadataOnly` | Emulator `test_shelly_read_budget_emulator.py`: `/live` idle ấm **5 đọc, 0 ghi audit, 0 Cloud call thêm** (trước ~12 đọc + 3 ghi). Backend Linux 558 Pass/15 Skip; emulator 15/15; boot Pass. API `task108h` rollout verified (`vinfast-api--api106-1010213730`). Lượt đầu 108g: emulator 1 Fail (cache shellyDevices TTL 15s làm worker khác thấy binding cũ) → đổi sang memo theo request |
+| S108-02 | App: snapshot thêm `syncDelayed`/`fromCache`/`updatedAt`, `metricsLine`; grace 3 phút (lỗi đọc không chuyển offline, giữ số liệu, bỏ capabilities, khóa Start); lưu snapshot tốt gần nhất (secure storage, không secret) → mở lại app hiện “Đã kết nối” + số liệu (display-only); restore TTL 60s; cold start không phát `verifying` rỗng; `auth_gate` **không hạ `server_cloud` về Direct** khi còn verification cũ (nguyên nhân “Shelly đang ngoại tuyến”); `getLive` dùng chung 4s chỉ cho poll hiển thị (chat/điều khiển luôn tươi); controller idle 60s, không poll khi nền, bỏ retry 1/2/4s, giữ số liệu khi idle; `/live` capabilities thay poll riêng; số liệu W/V/A + giờ ở Cài đặt, header Sạc pin, BatteryBot | Flutter full **940/940 Pass**; test mới `shelly_state_sync_test.dart` (grace, relaunch cache, TTL). Lối tắt chat dùng binding của coordinator bị test “wrong device” bắt → đã bỏ. `dart format lib` lỡ định dạng 58 file ngoài phạm vi → đã khôi phục về HEAD (`a7480b7e`) |
+| S108-03 | APK `1.1.9+142` | build exit0/158s; SHA-256 `21d66e08b76d62240d67ff08ab4f43216c590869641eb1e6532240f87e5d0005`; hygiene 0 findings; **chưa cài** (OnePlus mất kết nối ADB) |
+
+- Đọc Firestore production (chỉ đọc, user cho phép) bằng script RAM-only, UID hash, không in key. Bài học: luôn `limit()` khi đọc collection lớn trên gói Spark.
+
+### 108.4. Nghiệm thu relay thật E1–E7 (11/10/2026, user giám sát, không tải)
+
+| ID | Kết quả / thay đổi | Bằng chứng |
+|---|---|---|
+| R108-01 | Relay tự OFF sau ~47–72s khi đang sạc. (1) worker còn image cũ → build lại; (2) gốc: lỗi đọc tạm thời `cloudQueueBusy` khi READ đánh dấu phiên `unknown` → `recovery_off` cắt sạc. `TRANSIENT_READ_CODES` (`cloudQueueBusy/cloudRateLimited/cloudRateLimiterUnavailable`) ở `service.current/recover` + `smart_charge_worker._reconcile_session`: giữ phiên, `deviceOffline` vẫn → `unknown` | API `task108k` (`vinfast-api--api106-1011132134`), worker `control108l` (`vinfast-worker-control--0000003`); test worker/live mới Pass. Lần đầu Claude kết luận E1 Pass khi UI còn hiển thị dữ liệu `syncDelayed` — **đã rút lại** |
+| R108-02 | **E1** Start 30 phút trong Sạc pin | ON 13:26:15Z `toggle_after=1800`, >4 phút không auto-OFF |
+| R108-03 | **E2** Stop trong app | OFF 13:34:14Z đạt; nhưng readback Cloud trễ → OFF thứ hai 13:34:20, phiên ghi `interrupted`/`recovery_off` (mở) |
+| R108-04 | **E5** Bot “bật sạc” → Hủy | Không gửi ON |
+| R108-05 | **E3 lần 1 / E6** Bot “bat sac 1 phut” → Xác nhận (APK143): ON 13:39:26Z `toggle_after=60`, timer tự OFF, phiên `completed/planned_timer`, server không gửi OFF. Nhưng thẻ chat báo “Chưa xác minh”: chuỗi binding→live→capabilities→`/on`→readback ~30s vượt timeout HTTP 12s / chat 30s | Sửa `server_smart_charger_service.dart` `controlTimeout`=45s cho `start/manualOn/off/stop` (giữ Idempotency-Key); `local_chat_engine.dart` timeout tool 120s. Flutter 940/940 Pass; APK `1.1.9+144` SHA-256 `ea95fe8da466fd5f2b831458b6c7a9ce8b619581d1891a6247a46e9b55909c87`, `install -r` Success |
+| R108-06 | **E3** Bot “bat sac 5 phut” → Xác nhận (APK144) | Thẻ “ĐÃ XÁC MINH Shelly bật và timer”; ON 13:49:51Z `toggle_after=300` (≈26s sau khi bấm) |
+| R108-07 | **E4** Bot “tat sac” → Xác nhận | Thẻ “Đã đọc lại và xác minh Shelly OFF”; OFF 13:51:09Z, chỉ 1 lệnh; phiên `cancelled/manual`; worker không can thiệp |
+| R108-08 | **E7** mở lại app | Hiện “Đã kết nối” từ cache rồi làm mới; Cài đặt/Sạc pin/Bot cùng trạng thái và số liệu |
+
+- Còn mở: (1) Stop trong app khi readback trễ gửi OFF lần 2 và ghi `recovery_off` thay vì dừng thủ công; (2) đường ON qua chat chậm ~26s (đọc capabilities đầy đủ + Cloud limiter) — có thể bỏ bớt bước đọc trước; (3) bottom sheet Stop tràn 163px khi chia đôi màn hình; (4) lịch sử gần đây ghi phiên đang chạy là “Đã dừng”; (5) `sessionRevisionConflict` khi nhiều nơi cập nhật; (6) cold start khi API scale 0 hiện “Tạm mất kết nối” ~20s; (7) budget alert vẫn lọc theo worker pilot đã xóa; (8) còn log chẩn đoán đã che (`[shelly-cloud] command/timer-fields`, blocked code) trong backend.
+- Rollback khóa phần cứng: `deploy/azure/15-set-hardware-policy.ps1 -Policy Locked -Execute`.
+
+---
+
 ## Git sync — 10/10/2026
 
 - User yêu cầu commit và sync GitHub; nhánh `deploy/azure-student`, remote `khanhbes/Vinfast-Batery`, baseline HEAD `5f1470c336b5ffaefc3b0653dd7d6dc7b67abe33`, có 4 commit local chưa push. Giữ nguyên code/dữ liệu/bằng chứng và thay đổi chưa commit.

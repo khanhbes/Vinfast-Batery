@@ -1,0 +1,17 @@
+{
+ "exitCode": 0,
+ "elapsedSeconds": 48,
+ "timedOut": false,
+ "cleanupError": null,
+ "command": [
+  "C:\\Users\\khanh\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin\\docker.exe",
+  "build",
+  "-f",
+  "web/Dockerfile.api-tests",
+  "--build-arg",
+  "API_IMAGE=vinfast-api-qa:task108k",
+  "-t",
+  "vinfast-api-tests:task108k",
+  "."
+ ]
+}

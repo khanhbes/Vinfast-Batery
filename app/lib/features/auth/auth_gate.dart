@@ -482,13 +482,18 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
       final vehicleId = ref.read(selectedVehicleIdProvider);
       final credentials = SmartChargerCredentialsService();
       final restored = await credentials.restoreFromCloud(vehicleId: vehicleId);
+      // Never downgrade a server_cloud account to Direct mode because an old
+      // local verification survives on the phone (Task108 "offline" bug).
       if (restored != null &&
+          await SmartChargerRepositoryFactory.currentMode() !=
+              SmartChargerConnectionMode.serverCloud &&
           (await credentials.readVerification()).readyForControl) {
         await SmartChargerRepositoryFactory.setMode(
           SmartChargerConnectionMode.advancedDirect,
         );
       }
-      await ShellyConnectionCoordinator.shared.restore();
+      // Resume reuses the shared snapshot within its TTL (no extra reads).
+      await ShellyConnectionCoordinator.shared.restore(vehicleId: vehicleId);
     } catch (_) {
       // Offline foreground resume keeps the previously safe local profile.
     }
@@ -515,12 +520,17 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
         vehicleId: selectedVehicleId,
       );
       if (restored != null &&
+          await SmartChargerRepositoryFactory.currentMode() !=
+              SmartChargerConnectionMode.serverCloud &&
           (await credentials.readVerification()).readyForControl) {
         await SmartChargerRepositoryFactory.setMode(
           SmartChargerConnectionMode.advancedDirect,
         );
       }
-      await ShellyConnectionCoordinator.shared.restore();
+      // Restore with the selected vehicle so the vehicle-scoped cache is used.
+      await ShellyConnectionCoordinator.shared.restore(
+        vehicleId: selectedVehicleId,
+      );
     } catch (e) {
       debugPrint(
         '[AuthBootstrap] Smart Charger profile sync error (${e.runtimeType}).',

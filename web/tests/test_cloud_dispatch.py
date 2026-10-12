@@ -188,3 +188,24 @@ def test_datastore_failure_is_typed_without_http_fallback():
     assert caught.value.code == "cloudRateLimiterUnavailable"
     assert "Injected" not in caught.value.message
     http.post.assert_not_called()
+
+
+def test_admission_budget_extends_wait_only_and_is_capped():
+    """Task108: the confirmed safety test may wait longer to be admitted, never bypass."""
+    store = Store()
+    store.data = {"dispatchVersion": 2, "nextAt": store.now() + timedelta(seconds=9)}
+    operation = Mock(return_value="ok")
+    with pytest.raises(CloudAdmissionError, match="cloudQueueBusy"):
+        store.gate().run(operation)  # default 4s budget cannot reach the 9s slot
+    operation.assert_not_called()
+    store.seconds = 0
+    assert store.gate().run(operation, admission_budget=12.0) == "ok"
+    assert store.seconds >= 9
+    operation.assert_called_once()
+    store.seconds = 0
+    store.data = {"dispatchVersion": 2, "nextAt": store.now() + timedelta(seconds=60)}
+    late = Mock()
+    with pytest.raises(CloudAdmissionError, match="cloudQueueBusy"):
+        store.gate().run(late, admission_budget=999)
+    assert store.seconds <= 15.25
+    late.assert_not_called()

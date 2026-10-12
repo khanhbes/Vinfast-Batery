@@ -1,0 +1,18 @@
+{
+  "policy": "Unlocked",
+  "scope": "azure-staging-1",
+  "execute": true,
+  "beforeRevision": "vinfast-api--api106-1009210215",
+  "beforeImage": "vinfastbatteryf1c11a09.azurecr.io/vinfast-api@sha256:b7dc2a82ad2612799756feecbd3d69ff1ba82e16d380a9ee070e9d089287d49d",
+  "beforeFlag": "1",
+  "beforeScope": null,
+  "protectedHash": "8cf18c952f377f6c69fa138fb2226a55e4839e5ef372688db846d5f3594a7c1f",
+  "succeeded": true,
+  "noRelayCalls": true,
+  "stage": "verified",
+  "afterRevision": "vinfast-api--hw0-1010101715",
+  "afterFlag": "0",
+  "afterScope": "azure-staging-1",
+  "healthStatus": 200,
+  "readinessStatus": 200
+}

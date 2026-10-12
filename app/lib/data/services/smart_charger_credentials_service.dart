@@ -7,6 +7,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../models/shelly_connection.dart';
 import '../models/smart_charger_binding.dart';
+import '../models/smart_charger_capabilities.dart';
+import '../models/smart_charger_status.dart';
 import 'server_smart_charger_service.dart';
 
 class SmartChargerCredentialsService {
@@ -57,6 +59,61 @@ class SmartChargerCredentialsService {
           : SmartChargerBinding.fromJson(
               Map<String, dynamic>.from(jsonDecode(raw) as Map),
             );
+    } on Object {
+      return null;
+    }
+  }
+
+  static const _snapshotKey = 'smart_charger.server_snapshot.v1';
+
+  /// Last good server readback (no secrets) so a relaunch can show the linked
+  /// charger and its last metrics immediately; display-only until refreshed.
+  Future<void> cacheServerSnapshot({
+    required String vehicleId,
+    required SmartChargerStatus status,
+    SmartChargerCapabilities? capabilities,
+    DateTime? updatedAt,
+  }) async {
+    final key = _scopedKey(
+      '$_snapshotKey.vehicle.${Uri.encodeComponent(vehicleId)}',
+    );
+    if (key == null) return;
+    try {
+      await _storage.write(
+        key: key,
+        value: jsonEncode({
+          'status': status.toJson(),
+          if (capabilities != null) 'capabilities': capabilities.toJson(),
+          'updatedAt': (updatedAt ?? DateTime.now()).toUtc().toIso8601String(),
+        }),
+      );
+    } on Object {
+      // Presentation cache only; a write failure never affects control.
+    }
+  }
+
+  Future<CachedServerSnapshot?> readCachedServerSnapshot({
+    required String vehicleId,
+  }) async {
+    final key = _scopedKey(
+      '$_snapshotKey.vehicle.${Uri.encodeComponent(vehicleId)}',
+    );
+    if (key == null) return null;
+    try {
+      final raw = await _storage.read(key: key);
+      if (raw == null) return null;
+      final json = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+      return CachedServerSnapshot(
+        status: SmartChargerStatus.fromJson(
+          Map<String, dynamic>.from(json['status'] as Map),
+        ),
+        capabilities: json['capabilities'] is Map
+            ? SmartChargerCapabilities.fromJson(
+                Map<String, dynamic>.from(json['capabilities'] as Map),
+              )
+            : null,
+        updatedAt: DateTime.tryParse(json['updatedAt']?.toString() ?? ''),
+      );
     } on Object {
       return null;
     }
@@ -130,6 +187,11 @@ class SmartChargerCredentialsService {
     }
     final existing = _serverRestoreInFlight;
     if (existing != null && _serverRestoreUid == uid) return existing;
+    // Throttle every attempt, not only successful restores: a server_cloud
+    // enrollment has no phone-side profile, so an empty/failed result used to
+    // re-query the API on each read and exhausted the Firestore quota (Task108).
+    _lastServerSyncAt = DateTime.now();
+    _lastServerSyncUid = uid;
     final operation = () async {
       try {
         final server = ServerSmartChargerService();
@@ -382,4 +444,16 @@ class SmartChargerVerificationState {
         verifiedModel: json['verifiedModel']?.toString(),
         verificationFingerprint: json['verificationFingerprint']?.toString(),
       );
+}
+
+class CachedServerSnapshot {
+  const CachedServerSnapshot({
+    required this.status,
+    this.capabilities,
+    this.updatedAt,
+  });
+
+  final SmartChargerStatus status;
+  final SmartChargerCapabilities? capabilities;
+  final DateTime? updatedAt;
 }

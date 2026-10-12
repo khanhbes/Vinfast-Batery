@@ -1,0 +1,15 @@
+{
+ "exitCode": 0,
+ "elapsedSeconds": 4,
+ "timedOut": false,
+ "cleanupError": null,
+ "command": [
+  "C:\\Users\\khanh\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin\\docker.exe",
+  "build",
+  "-f",
+  "web/Dockerfile.api",
+  "-t",
+  "vinfast-api-qa:task108b",
+  "web"
+ ]
+}

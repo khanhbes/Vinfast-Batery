@@ -21,6 +21,18 @@ from .safety_fingerprint import FINGERPRINT_VERSION
 def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
     bp = Blueprint("shelly_cloud_first", __name__)
 
+    def _clear_capabilities(response=None):
+        # Any mutating Shelly request may change readiness; drop cached results
+        # before and after it runs (Task108 read-reduction cache).
+        if request.method != "GET":
+            invalidate = getattr(service, "invalidate_capabilities", None)
+            if invalidate:
+                invalidate()
+        return response
+
+    bp.before_request(_clear_capabilities)
+    bp.after_request(_clear_capabilities)
+
     def authenticated(handler):
         @wraps(handler)
         def wrapped(*args, **kwargs):
@@ -243,8 +255,30 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
         guard = execute(service.require_worker_ready)
         if guard is not None:
             return guard
+
+        def relay_read_off() -> bool:
+            # Fresh Cloud readback only; any failure keeps the device locked.
+            confirm = getattr(service.provider, "confirm_relay_off", None)
+            if confirm is not None:
+                return confirm(binding) is True
+            try:
+                return service.provider.get_status(binding).relay is False
+            except Exception:
+                return False
+
         if not repository.claim_device_session(uid, device_id, operation_id):
-            return jsonify({"success": False, "error": {"code": "deviceBusy", "message": "Le Shelly est déjà utilisé"}}), 409
+            # Recover only this account's own abandoned safety-test lock: no
+            # charging session behind it and a fresh readback proves OFF.
+            stale = repository.device_lock(device_id)
+            stale_id = str(stale.get("sessionId") or "")
+            if not (stale.get("ownerUid") == uid and stale_id.startswith("safety-")
+                    and stale.get("leaseKind", "charging") == "charging"
+                    and repository.get_session(uid, stale_id) is None and relay_read_off()):
+                return jsonify({"success": False, "error": {"code": "deviceBusy", "message": "Shelly đang bận với thao tác khác"}}), 409
+            repository.release_device_session(uid, device_id, stale_id)
+            repository.append_audit(uid, "shelly_safety_lock_recovered", device_id=device_id, operation_id=operation_id)
+            if not repository.claim_device_session(uid, device_id, operation_id):
+                return jsonify({"success": False, "error": {"code": "deviceBusy", "message": "Shelly đang bận với thao tác khác"}}), 409
         try:
             result = service.provider.run_no_load_test(binding)
             if (not all(result.get(field) is True for field in (
@@ -281,11 +315,13 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
             return ok({"verified": True, "result": result})
         except Exception as error:
             repository.append_audit(uid, "shelly_safety_test_failed", device_id=device_id, operation_id=operation_id, code=getattr(error, "code", "verificationFailed"))
-            return jsonify({"success": False, "error": {"code": getattr(error, "code", "verificationFailed"), "message": "Shelly safety test did not complete"}}), 503
+            code = getattr(error, "code", "verificationFailed")
+            return jsonify({"success": False, "error": {"code": code, "message": f"Kiểm tra an toàn chưa hoàn tất ({code})."}}), 503
         finally:
             # A failed safety test may have left the relay uncertain. Only a
-            # verified-OFF result releases the operation lease.
-            if locals().get("result", {}).get("relayOffVerified") is True:
+            # verified-OFF result (from the test or a fresh readback) releases
+            # the operation lease; ON/unknown keeps it locked for recovery.
+            if locals().get("result", {}).get("relayOffVerified") is True or relay_read_off():
                 repository.release_device_session(uid, device_id, operation_id)
 
     @bp.post("/api/shelly/profiles/<device_id>/verify")
@@ -389,7 +425,9 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
     @bp.get("/api/shelly/capabilities")
     @authenticated
     def capabilities(uid):
-        return ok(service.capabilities(uid, request.args.get("vehicleId") or None))
+        from .service import CAPABILITIES_CACHE_SECONDS
+        return ok(service.capabilities(uid, request.args.get("vehicleId") or None,
+                                       max_age_seconds=CAPABILITIES_CACHE_SECONDS))
 
     @bp.post("/api/shelly/devices/<device_id>/select")
     @authenticated

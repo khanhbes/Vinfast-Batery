@@ -30,6 +30,9 @@ class ShellyConnectionSnapshot {
     this.serverBinding,
     this.capabilities,
     this.controlUncertain = false,
+    this.syncDelayed = false,
+    this.fromCache = false,
+    this.updatedAt,
   });
 
   final ShellyConnectionFlowState state;
@@ -45,15 +48,31 @@ class ShellyConnectionSnapshot {
   final SmartChargerCapabilities? capabilities;
   final bool controlUncertain;
 
+  /// Server reads are failing but the last good readback is recent (grace);
+  /// the UI keeps showing it while control stays blocked (Task108).
+  final bool syncDelayed;
+
+  /// Restored from the on-device cache at launch; display only until fresh.
+  final bool fromCache;
+
+  /// When [status] was last read from the server.
+  final DateTime? updatedAt;
+
   // Historical evidence and a live connection are not authorization to turn ON.
   bool get readyForControl =>
       state == ShellyConnectionFlowState.connected &&
       !controlUncertain &&
+      !syncDelayed &&
+      !fromCache &&
       status?.relay == false &&
       capabilities?.readyForControl == true &&
       capabilities?.canManualOn == true;
   String? get controlBlockedMessage => controlUncertain
       ? 'Chưa xác minh được trạng thái ổ cắm. Hãy đọc lại hoặc dừng sạc; không bật lại.'
+      : syncDelayed
+      ? 'Đang đồng bộ lại với máy chủ. Chờ trạng thái mới trước khi bật sạc.'
+      : fromCache && state == ShellyConnectionFlowState.connected
+      ? 'Đang cập nhật trạng thái mới nhất của Shelly...'
       : state == ShellyConnectionFlowState.serverConnectionRequired
       ? 'Liên kết cũ chưa cho phép điều khiển qua máy chủ. Hãy nhập mã kết nối do quản trị viên cấp.'
       : status?.relay == true
@@ -75,8 +94,9 @@ class ShellyConnectionSnapshot {
       return 'Nút sạc đang mở: Shelly đã kết nối qua máy chủ, đang tắt và đủ điều kiện an toàn. Bạn vẫn phải xác nhận trước khi bật.';
     }
     final reason = controlBlockedMessage;
-    if (reason != null && reason.isNotEmpty)
+    if (reason != null && reason.isNotEmpty) {
       return 'Nút sạc bị khóa vì: $reason';
+    }
     if (!isLinked && serverBinding == null) {
       return 'Xe này chưa liên kết Shelly. Hãy nhập mã kết nối 6 ký tự do quản trị viên cấp trong thiết lập Shelly.';
     }
@@ -92,10 +112,26 @@ class ShellyConnectionSnapshot {
     };
   }
 
+  /// One-line realtime readout shared by Settings, Sạc pin and BatteryBot:
+  /// relay · W · V · A · last server read time. Null when nothing was read.
+  String? get metricsLine {
+    final value = status;
+    if (value == null || !isLinked) return null;
+    final at = updatedAt?.toLocal();
+    final time = at == null
+        ? ''
+        : ' · ${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}';
+    return '${value.relay ? 'Đang bật' : 'Đang tắt'} · '
+        '${value.powerW.toStringAsFixed(0)} W · '
+        '${value.voltageV.toStringAsFixed(0)} V · '
+        '${value.currentA.toStringAsFixed(2)} A$time';
+  }
+
   String get connectionLabel => controlUncertain
       ? 'Đã liên kết · Chưa xác minh trạng thái'
       : switch (state) {
-          ShellyConnectionFlowState.connected => 'Đã kết nối Shelly',
+          ShellyConnectionFlowState.connected =>
+            syncDelayed ? 'Đã kết nối · Đang đồng bộ lại' : 'Đã kết nối Shelly',
           ShellyConnectionFlowState.offline =>
             isLinked ? 'Đã liên kết · Tạm mất kết nối' : 'Tạm mất kết nối',
           ShellyConnectionFlowState.verifying =>
@@ -114,6 +150,9 @@ class ShellyConnectionSnapshot {
     SmartChargerStatus? status,
     SmartChargerCapabilities? capabilities,
     String? errorMessage,
+    bool syncDelayed = false,
+    bool fromCache = false,
+    DateTime? updatedAt,
   }) {
     final evidence =
         binding.model.toUpperCase() == 'S3PL-00112EU' &&
@@ -158,6 +197,9 @@ class ShellyConnectionSnapshot {
       ],
       deviceName: binding.displayName,
       status: status,
+      syncDelayed: syncDelayed,
+      fromCache: fromCache,
+      updatedAt: updatedAt,
     );
   }
 }
@@ -211,6 +253,39 @@ class ShellyConnectionCoordinator {
   int _accountGeneration = 0;
   Future<ShellyConnectionSnapshot>? _restoreInFlight;
   String? _vehicleId;
+  DateTime? _lastServerOkAt;
+  DateTime? _lastRestoreOkAt;
+
+  /// Keep the last good readback this long while server reads fail.
+  static const serverGrace = Duration(minutes: 3);
+
+  /// Repeated restore() calls (resume, Settings, More) within this window
+  /// reuse the current snapshot instead of re-reading the server.
+  static const restoreTtl = Duration(seconds: 60);
+
+  void _recordServerOk(
+    SmartChargerStatus status,
+    SmartChargerCapabilities? capabilities,
+  ) {
+    final now = DateTime.now();
+    _lastServerOkAt = now;
+    final vehicleId = _vehicleId;
+    if (vehicleId != null && vehicleId.isNotEmpty && status.online) {
+      unawaited(
+        _credentials.cacheServerSnapshot(
+          vehicleId: vehicleId,
+          status: status,
+          capabilities: capabilities,
+          updatedAt: now,
+        ),
+      );
+    }
+  }
+
+  bool get _withinServerGrace {
+    final last = _lastServerOkAt;
+    return last != null && DateTime.now().difference(last) <= serverGrace;
+  }
 
   /// Clears UI context, not persisted bindings or hardware state.
   void activateAccount(String? uid) {
@@ -220,6 +295,8 @@ class ShellyConnectionCoordinator {
     _vehicleId = null;
     _restoreInFlight = null;
     _busy = false;
+    _lastServerOkAt = null;
+    _lastRestoreOkAt = null;
     _pendingProfile = null;
     _pendingDevice = null;
     _pendingServerCloud = false;
@@ -240,18 +317,35 @@ class ShellyConnectionCoordinator {
     if (!_states.isClosed) _states.add(value);
   }
 
-  Future<ShellyConnectionSnapshot> restore({String? vehicleId}) {
+  Future<ShellyConnectionSnapshot> restore({
+    String? vehicleId,
+    bool force = false,
+  }) {
     if (vehicleId != null && vehicleId != _vehicleId) {
       // Invalidate in-flight reads for the previous vehicle, never actuate.
       if (_busy) return Future.value(_current);
+      final switchingVehicle = _vehicleId != null;
       _vehicleId = vehicleId;
       _accountGeneration++;
       _restoreInFlight = null;
-      _emit(
-        const ShellyConnectionSnapshot(
-          state: ShellyConnectionFlowState.verifying,
-        ),
-      );
+      _lastRestoreOkAt = null;
+      // A cold start (no vehicle yet) keeps the linked view instead of
+      // flashing an unlinked "verifying" state; a real vehicle switch clears.
+      if (switchingVehicle) {
+        _lastServerOkAt = null;
+        _emit(
+          const ShellyConnectionSnapshot(
+            state: ShellyConnectionFlowState.verifying,
+          ),
+        );
+      }
+    } else if (!force && _restoreInFlight == null) {
+      final last = _lastRestoreOkAt;
+      if (last != null &&
+          _current.isLinked &&
+          DateTime.now().difference(last) <= restoreTtl) {
+        return Future.value(_current);
+      }
     }
     if (_restoreInFlight != null) return _restoreInFlight!;
     late final Future<ShellyConnectionSnapshot> task;
@@ -282,13 +376,16 @@ class ShellyConnectionCoordinator {
     if (old.serverBinding != null) {
       // Relay ON alone cannot resolve an ambiguous command/session.
       if (old.controlUncertain && (status.relay || !status.online)) return;
+      final merged = old.controlUncertain
+          ? capabilities
+          : capabilities ?? old.capabilities;
+      _recordServerOk(status, merged);
       _emit(
         ShellyConnectionSnapshot.fromServerBinding(
           old.serverBinding!,
           status: status,
-          capabilities: old.controlUncertain
-              ? capabilities
-              : capabilities ?? old.capabilities,
+          capabilities: merged,
+          updatedAt: DateTime.now(),
         ),
       );
       return;
@@ -351,6 +448,19 @@ class ShellyConnectionCoordinator {
         old.serverBinding == null) {
       return;
     }
+    // One failed read (429, timeout, network) must not flip a working charger
+    // to offline: keep the last good readback during the grace window.
+    if (old.status != null && _withinServerGrace) {
+      _emit(
+        ShellyConnectionSnapshot.fromServerBinding(
+          old.serverBinding!,
+          status: old.status,
+          syncDelayed: true,
+          updatedAt: old.updatedAt,
+        ),
+      );
+      return;
+    }
     _emit(
       ShellyConnectionSnapshot(
         state: ShellyConnectionFlowState.offline,
@@ -386,11 +496,18 @@ class ShellyConnectionCoordinator {
             !sameShellyDevice(status.deviceId, binding.deviceId))) {
       return;
     }
+    final merged =
+        capabilities ??
+        (sameShellyDevice(_current.serverBinding?.deviceId, binding.deviceId)
+            ? _current.capabilities
+            : null);
+    _recordServerOk(status, merged);
     _emit(
       ShellyConnectionSnapshot.fromServerBinding(
         binding,
         status: status,
-        capabilities: capabilities,
+        capabilities: merged,
+        updatedAt: DateTime.now(),
       ),
     );
   }
@@ -542,7 +659,42 @@ class ShellyConnectionCoordinator {
         .readCachedServerBinding(vehicleId: _vehicleId);
     if (generation != _accountGeneration) return _current;
     if (restoredBinding != null) {
-      _emit(ShellyConnectionSnapshot.fromServerBinding(restoredBinding));
+      // Show the last good readback immediately (display-only) so a relaunch
+      // does not fall back to "verifying"/"offline" before the network answers.
+      final sameLinked =
+          _current.isLinked &&
+          sameShellyDevice(
+            _current.serverBinding?.deviceId,
+            restoredBinding.deviceId,
+          ) &&
+          _current.status != null;
+      if (sameLinked) {
+        _emit(
+          ShellyConnectionSnapshot.fromServerBinding(
+            restoredBinding,
+            status: _current.status,
+            capabilities: _current.capabilities,
+            fromCache: _current.fromCache,
+            syncDelayed: _current.syncDelayed,
+            updatedAt: _current.updatedAt,
+          ),
+        );
+      } else {
+        final vehicleId = _vehicleId;
+        final cached = vehicleId == null
+            ? null
+            : await _credentials.readCachedServerSnapshot(vehicleId: vehicleId);
+        if (generation != _accountGeneration) return _current;
+        _emit(
+          ShellyConnectionSnapshot.fromServerBinding(
+            restoredBinding,
+            status: cached?.status,
+            capabilities: cached?.capabilities,
+            fromCache: cached != null,
+            updatedAt: cached?.updatedAt,
+          ),
+        );
+      }
     }
     try {
       final binding = await serverCharger.getBinding(vehicleId: _vehicleId);
@@ -560,7 +712,19 @@ class ShellyConnectionCoordinator {
       restoredBinding = binding;
       await _credentials.cacheServerBinding(binding, vehicleId: _vehicleId);
       if (generation != _accountGeneration) return _current;
-      _emit(ShellyConnectionSnapshot.fromServerBinding(binding));
+      final keep = sameShellyDevice(
+        _current.serverBinding?.deviceId,
+        binding.deviceId,
+      );
+      _emit(
+        ShellyConnectionSnapshot.fromServerBinding(
+          binding,
+          status: keep ? _current.status : null,
+          capabilities: keep ? _current.capabilities : null,
+          fromCache: keep && _current.status != null,
+          updatedAt: keep ? _current.updatedAt : null,
+        ),
+      );
       if (binding.mode != SmartChargerConnectionMode.serverCloud) {
         // Retain authorized legacy metadata without silently changing transport
         // or treating historical evidence as server control permission.
@@ -569,8 +733,15 @@ class ShellyConnectionCoordinator {
         _pendingServerCloud = false;
         return _current;
       }
-      final status = await serverCharger.getStatus(vehicleId: _vehicleId);
+      // One shared /live read gives status and capabilities together.
+      final live = await serverCharger.getLive(
+        vehicleId: _vehicleId,
+        shared: true,
+      );
       if (generation != _accountGeneration) return _current;
+      final status = SmartChargerStatus.fromJson(
+        Map<String, dynamic>.from(live['status'] as Map? ?? const {}),
+      );
       final device = DiscoveredShellyDevice(
         id: binding.deviceId,
         address: 'Shelly Cloud',
@@ -579,18 +750,28 @@ class ShellyConnectionCoordinator {
         generation: 3,
       );
       SmartChargerCapabilities capabilities;
-      try {
-        capabilities = await serverCharger.getCapabilities(
-          vehicleId: _vehicleId,
+      final rawCapabilities = live['capabilities'];
+      if (rawCapabilities is Map) {
+        capabilities = SmartChargerCapabilities.fromJson(
+          Map<String, dynamic>.from(rawCapabilities),
         );
-      } on SmartChargerException {
-        capabilities = SmartChargerCapabilities.unavailable;
+      } else {
+        try {
+          capabilities = await serverCharger.getCapabilities(
+            vehicleId: _vehicleId,
+          );
+        } on SmartChargerException {
+          capabilities = SmartChargerCapabilities.unavailable;
+        }
       }
       if (generation != _accountGeneration) return _current;
+      _recordServerOk(status, capabilities);
+      _lastRestoreOkAt = DateTime.now();
       final restored = ShellyConnectionSnapshot.fromServerBinding(
         binding,
         status: status,
         capabilities: capabilities,
+        updatedAt: DateTime.now(),
       );
       if (!binding.noLoadTestVerified ||
           !binding.safeBootVerified ||
@@ -611,6 +792,7 @@ class ShellyConnectionCoordinator {
       return _current;
     } on SmartChargerException catch (error) {
       if (generation != _accountGeneration) return _current;
+      if (_keepLastGoodOnFailure(restoredBinding)) return _current;
       _emit(
         ShellyConnectionSnapshot(
           state: ShellyConnectionFlowState.offline,
@@ -619,12 +801,15 @@ class ShellyConnectionCoordinator {
           codeRefreshRequired: restoredBinding?.codeRefreshRequired ?? false,
           isLinked: restoredBinding != null,
           serverBinding: restoredBinding,
+          status: _current.status,
+          updatedAt: _current.updatedAt,
           errorMessage: error.message,
         ),
       );
       return _current;
     } on Object {
       if (generation != _accountGeneration) return _current;
+      if (_keepLastGoodOnFailure(restoredBinding)) return _current;
       _emit(
         ShellyConnectionSnapshot(
           state: ShellyConnectionFlowState.offline,
@@ -639,6 +824,28 @@ class ShellyConnectionCoordinator {
       );
       return _current;
     }
+  }
+
+  /// During the grace window (or with a fresh on-device copy) a failed read
+  /// keeps the last good view with control blocked instead of "offline".
+  bool _keepLastGoodOnFailure(SmartChargerBinding? binding) {
+    final status = _current.status;
+    final updatedAt = _current.updatedAt;
+    if (binding == null || status == null || !status.online) return false;
+    final recent =
+        _withinServerGrace ||
+        (updatedAt != null &&
+            DateTime.now().difference(updatedAt) <= serverGrace);
+    if (!recent) return false;
+    _emit(
+      ShellyConnectionSnapshot.fromServerBinding(
+        binding,
+        status: status,
+        syncDelayed: true,
+        updatedAt: updatedAt,
+      ),
+    );
+    return true;
   }
 
   Future<ShellyConnectionSnapshot> autoConnect() async {
@@ -1043,6 +1250,23 @@ class ShellyConnectionCoordinator {
       // previously verified enrollment or force another no-load ON test.
       final restored = await _restoreServerCloudBinding();
       if (generation != _accountGeneration) return _current;
+      final stillLegacy = _current.serverBinding;
+      if (_current.state ==
+              ShellyConnectionFlowState.serverConnectionRequired &&
+          stillLegacy != null) {
+        // The code was accepted but the server kept the legacy link; never
+        // report this silently as success (Task108).
+        _emit(
+          ShellyConnectionSnapshot.fromServerBinding(
+            stillLegacy,
+            status: _current.status,
+            capabilities: _current.capabilities,
+            errorMessage:
+                'Mã đã được nhận nhưng máy chủ vẫn giữ liên kết cũ. Hãy báo quản trị viên để kiểm tra.',
+          ),
+        );
+        return _current;
+      }
       if (restored?.state == ShellyConnectionFlowState.connected) {
         _pendingProfile = null;
         _pendingDevice = null;

@@ -40,7 +40,7 @@ function Get-ProtectedHash($app) {
             $_
         })
     }
-    $shape = @{ template = $template; configuration = $app.properties.configuration; identity = $app.identity; environment = $app.properties.managedEnvironmentId }
+    $shape = [ordered]@{ template = $template; configuration = $app.properties.configuration; identity = $app.identity; environment = $app.properties.managedEnvironmentId }
     $bytes = [Text.Encoding]::UTF8.GetBytes(($shape | ConvertTo-Json -Depth 50 -Compress))
     $hasher = [Security.Cryptography.SHA256]::Create()
     try { return ([BitConverter]::ToString($hasher.ComputeHash($bytes))).Replace('-', '').ToLowerInvariant() }

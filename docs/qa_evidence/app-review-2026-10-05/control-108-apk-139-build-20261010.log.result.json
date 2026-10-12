@@ -1,0 +1,1 @@
+{"exitCode": 0, "elapsedSeconds": 140, "timedOut": false, "command": "flutter build apk --debug --no-pub --dart-define=APP_API_BASE_URL=https://vinfast-api.nicestone-4d213368.eastasia.azurecontainerapps.io"}

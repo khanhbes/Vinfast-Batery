@@ -4,7 +4,7 @@ import pytest
 
 from shelly.models import DeviceBinding, DeviceStatus
 from shelly.providers.base import ProviderError
-from shelly.providers.vault_cloud import VaultCloudControlProvider
+from shelly.providers.vault_cloud import NO_LOAD_TIMER_SECONDS, VaultCloudControlProvider
 from shelly.repositories import SmartChargeRepository
 
 
@@ -17,7 +17,13 @@ def status(on=False, timer=0):
 
 
 def provider_with_readbacks(readbacks):
-    provider = VaultCloudControlProvider(Mock(), sleeper=lambda _: None)
+    now = [0.0]
+
+    def sleep(seconds):
+        now[0] += seconds
+
+    # Fake clock advances with sleep so the time-bounded polling loops end.
+    provider = VaultCloudControlProvider(Mock(), sleeper=sleep, clock=lambda: now[0])
     # Isolate the timer-observation state machine. The real live context,
     # credential/fingerprint and transport guards are tested without this mock
     # in test_shelly_live_safety.py.
@@ -43,7 +49,7 @@ def test_no_load_requires_timer_to_switch_off_before_cleanup():
 
 def test_manual_cleanup_off_does_not_fake_timer_verification():
     provider = provider_with_readbacks([
-        status(), status(True, 4), *[status(True, 1) for _ in range(8)], status(),
+        status(), status(True, 4), *[status(True, 1) for _ in range(40)],
     ])
     with pytest.raises(ProviderError) as caught:
         provider.run_no_load_test(binding())
@@ -54,7 +60,7 @@ def test_manual_cleanup_off_does_not_fake_timer_verification():
 
 def test_missing_on_readback_never_passes_even_after_off_cleanup():
     provider = provider_with_readbacks([
-        status(), *[status() for _ in range(5)], status(),
+        status(), *[status() for _ in range(20)],
     ])
     with pytest.raises(ProviderError) as caught:
         provider.run_no_load_test(binding())
@@ -83,9 +89,13 @@ def test_gen3_timer_uses_live_utc_start_and_duration():
 
 @pytest.mark.parametrize("switch,sys_status", [
     ({"output": True, "timer_duration": 5}, {"unixtime": 1800000002}),
-    ({"output": True, "timer_started_at": 1800000000, "timer_duration": 5}, {}),
-    ({"output": True, "timer_started_at": 1800000000, "timer_duration": 5},
-     {"unixtime": 1799999900}),
+    # Stale/missing device clock: server-clock fallback still rejects expired
+    # or future timers (Task108).
+    ({"output": True, "timer_started_at": 1799999900, "timer_duration": 5}, {}),
+    ({"output": True, "timer_started_at": 1799999900, "timer_duration": 5},
+     {"unixtime": 1799998500}),
+    ({"output": True, "timer_started_at": 1800000090, "timer_duration": 5},
+     {"unixtime": 1799998500}),
     ({"output": True, "timer_started_at": 1800000090, "timer_duration": 5},
      {"unixtime": 1800000002}),
     ({"output": False, "timer_started_at": 1800000000, "timer_duration": 5},
@@ -94,6 +104,15 @@ def test_gen3_timer_uses_live_utc_start_and_duration():
 def test_missing_stale_or_future_timer_evidence_never_arms(switch, sys_status):
     provider = VaultCloudControlProvider(Mock(), clock=lambda: 1800000002.5)
     assert provider._timer_remaining({"status": {"sys": sys_status}}, switch) == 0
+
+
+@pytest.mark.parametrize("sys_status", [{}, {"unixtime": 1799998500}, {"unixtime": 1799999900}])
+def test_stale_cloud_device_clock_falls_back_to_server_clock(sys_status):
+    """Task108: Shelly Cloud served sys.unixtime ~1500s old while the relay
+    was ON with a fresh 20s timer; the server clock bounds the countdown."""
+    provider = VaultCloudControlProvider(Mock(), clock=lambda: 1800000002.5)
+    switch = {"output": True, "timer_started_at": 1800000000, "timer_duration": 20}
+    assert provider._timer_remaining({"status": {"sys": sys_status}}, switch) == 17
 
 
 def test_expired_timer_does_not_reset_to_configured_duration():
@@ -127,7 +146,7 @@ def test_timeout_after_on_does_not_retry_on_and_still_cleans_up():
     target = binding()
     with pytest.raises(ProviderError):
         provider.run_no_load_test(target)
-    provider._send_verified_on.assert_called_once_with(target, 5, provider._live_safety_context.return_value)
+    provider._send_verified_on.assert_called_once_with(target, NO_LOAD_TIMER_SECONDS, provider._live_safety_context.return_value)
     provider.turn_off.assert_called_once()
 
 
@@ -160,3 +179,16 @@ def test_non_200_command_never_counts_as_acceptance(http_status):
     with pytest.raises(ProviderError):
         provider.turn_off(binding())
     http.post.assert_called_once()
+
+
+def test_lagging_cloud_status_still_observes_20s_timer():
+    """Task108: Cloud readback lagging ~7s must still see ON+timer, then self-OFF."""
+    provider = provider_with_readbacks([
+        status(), *[status() for _ in range(6)], status(True, 12), status(True, 9),
+        status(True, 5), status(), status(),
+    ])
+    result = provider.run_no_load_test(binding())
+    assert result["noLoadTestVerified"] is True
+    assert result["timerAutoOffObserved"] is True
+    provider._send_verified_on.assert_called_once()
+    provider.turn_off.assert_called_once()

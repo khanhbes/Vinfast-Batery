@@ -11,6 +11,7 @@ import hashlib
 import uuid
 
 from shelly.models import utcnow, NONTERMINAL_SESSION_STATES
+from shelly.service import TRANSIENT_READ_CODES
 from shelly.providers import ProviderError
 from shelly.personal_model_registry import PersonalModelRegistry, validate_candidate
 
@@ -41,6 +42,10 @@ def _reconcile_session(service, uid: str, session, binding, *, lease_guard=None)
     except ProviderError as error:
         if lease_guard is not None:
             lease_guard()
+        # A busy/rate-limited Cloud read is retried next cycle; it must not turn
+        # a verified session into "unknown" (which triggers recovery_off).
+        if error.code in TRANSIENT_READ_CODES:
+            return session
         return service.mark_session_unknown(uid, session, error.code)
     if lease_guard is not None:
         lease_guard()

@@ -89,9 +89,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             snapshot.isLinked ||
             snapshot.state == ShellyConnectionFlowState.connected ||
             snapshot.state == ShellyConnectionFlowState.verificationRequired;
-        _shellyLabel = snapshot.codeRefreshRequired
-            ? '${snapshot.connectionLabel}\nThiết bị có mã kết nối mới'
-            : snapshot.connectionLabel;
+        final metrics = snapshot.metricsLine;
+        _shellyLabel = [
+          snapshot.connectionLabel,
+          ?metrics,
+          if (snapshot.codeRefreshRequired) 'Thiết bị có mã kết nối mới',
+        ].join('\n');
       });
     }
   }

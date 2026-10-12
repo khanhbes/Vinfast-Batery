@@ -260,8 +260,11 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                 icon: Icons.power_rounded,
                 iconColor: CockpitColors.info,
                 title: 'Sạc thông minh Shelly',
-                subtitle:
-                    snapshot.data?.connectionLabel ?? 'Chưa kết nối Shelly',
+                // Same label + realtime readout as Sạc pin/BatteryBot (Task108).
+                subtitle: [
+                  snapshot.data?.connectionLabel ?? 'Chưa kết nối Shelly',
+                  ?snapshot.data?.metricsLine,
+                ].join('\n'),
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(

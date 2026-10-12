@@ -397,3 +397,25 @@ def test_account_scan_failure_propagates_for_worker_instead_of_empty_cache(setup
     repo.db.collection.side_effect = RuntimeError("qa index unavailable")
     with pytest.raises(RuntimeError):
         repo.active_sessions("qa-owner", strict=True)
+
+
+@pytest.mark.parametrize("code", ["cloudQueueBusy", "cloudRateLimited", "cloudRateLimiterUnavailable"])
+def test_transient_cloud_read_error_never_cuts_a_verified_session(setup, code):
+    """Task108: a busy Cloud *read* turned the session unknown and the next
+    reconcile ran recovery_off, switching a healthy charge OFF after ~1 min."""
+    repo, provider, service, binding, session = start(setup)
+    assert session.state == "active"
+    real_status = provider.get_status
+    provider.get_status = Mock(side_effect=ProviderError(code, "busy", True))
+    assert service.current("qa-owner", "qa-vehicle").state == "active"
+    assert reconcile_once(service, "qa-owner").state == "active"
+    provider.get_status = real_status
+    after = service.current("qa-owner", "qa-vehicle")
+    assert after.state == "active" and after.stop_reason is None
+    assert provider.get_status(binding).relay is True
+
+
+def test_non_transient_read_error_still_marks_session_unknown(setup):
+    repo, provider, service, binding, session = start(setup)
+    provider.get_status = Mock(side_effect=ProviderError("deviceOffline", "offline", True))
+    assert service.current("qa-owner", "qa-vehicle").state == "unknown"
