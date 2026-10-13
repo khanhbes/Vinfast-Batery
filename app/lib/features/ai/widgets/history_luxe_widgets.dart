@@ -443,12 +443,14 @@ class HistoryChip extends StatelessWidget {
                   ),
                   const SizedBox(width: 7),
                 ],
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: fg,
-                    fontSize: 13,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                Flexible(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: fg,
+                      fontSize: 13,
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                    ),
                   ),
                 ),
               ],

@@ -12,6 +12,18 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
+## 115. Task Completion Log — Dọn dẹp toàn repo, deploy rule Thành tựu, xác nhận "vuốt để sạc" (13/10/2026) — Done
+
+User chọn: dọn toàn repo kể cả backend; xóa file không dùng cùng test của chúng; đối chiếu rồi deploy rule; xác nhận bật sạc bằng thao tác vuốt.
+
+| ID | Thay đổi | Bằng chứng |
+|---|---|---|
+| CL115-01 | **App:** đồ thị import từ `main.dart` → xóa **69 file Dart không được dùng** (~20,9k dòng: `features/dashboard`, `charge_log`, `statistics`, widget/service/repository cũ…). Giữ `local_personal_calibration.dart` (thuật toán độc lập đã ghi ở Task 93). Xóa 12 test chỉ kiểm tra code chết; cắt phần chết trong `smoke_test`, `phase4_voice…`, `chatbot_uiux_overflow`, `app_motion`, `qa_audit_responsive_uiux`, `firebase_bootstrap_lifecycle`; `responsive_cards_test` đổi `StatCard` → ô thường để vẫn kiểm `ResponsiveCardGrid`. Bỏ package `lottie`, `assets/lottie/`, `assets/models/ev_soc_pipeline.pkl` (pickle Python, Dart không đọc được; `tools/audit_mobile_models.py` vẫn dùng bản ở gốc repo). Formatter lỡ chạm 16 test không liên quan → đã xác minh chỉ là định dạng rồi khôi phục | `git diff`: lib −21.277 dòng, test −1.901 dòng |
+| CL115-02 | **Backend:** xóa `web/shelly/recovery_worker.py` (thay bằng `smart_charge_worker` + `service.recover`, Task 108) và test của nó; xóa `web/run_ai_server.py` (`run.ps1` gọi thẳng uvicorn kèm token). Giữ `tools/`, `web/scripts/` (công cụ chạy tay). **Dashboard:** xóa 8 file không dùng (`ModelDetailPanel` 1.133 dòng, `ChargingTimeEstimator`, `RangePredictionLab`, `ui/progress`, `ui/table`, `style.css`, `types.ts`, `dataNormalization` + test của nó); gộp `firebase.js` (chỉ re-export) vào `firebase.ts`. **Gốc repo:** `plan1.1.6.md` → `docs/archive/plans/`; xóa log cục bộ đã ignore (`.emu-out.log` 36 MB…). Giữ `docs/qa_evidence` (script deploy dùng), `ev_soc_pipeline.pkl` gốc, `output/playwright` (bằng chứng theo `.gitignore`) | pytest web **561 Pass / 15 skip**, gateway **59 Pass** (cần `--basetemp` vì WinError 5 ở thư mục tạm mặc định); dashboard lint 0, test 31/31, build OK |
+| CL115-03 | **Deploy Firestore Rules (user duyệt):** đọc chỉ-đọc release `cloud.firestore` qua phiên Firebase CLI: production `5c384356…` (07/10). Diff đúng dự kiến: thêm `users/{uid}/achievements/{docId}` + chặn client `smartChargeWorkerHealth/Leases`. Emulator **54 assertions Pass** → `firebase deploy --only firestore:rules --project vinfast-873db` (không indexes/hosting/storage) → ruleset **`fa0df5b6-fc39-47a0-8b14-ddce8f82c451`** (04:05:29 UTC 13/10); đọc lại **khớp 100%** file local | — |
+| CL115-04 | **Xác nhận "vuốt để sạc":** `core/widgets/luxe_slide_to_confirm.dart` (núm bạch kim phải kéo hết thanh, thả sớm bật về, haptic, khóa khi chưa đủ điều kiện, TalkBack chạm đúp; không animation lặp). Sheet Bắt đầu luxe (huy chương chế độ, 22% → 85% + thanh, thời gian/giờ tự ngắt, ô "pin là ước tính" **vẫn bắt buộc** trước khi mở khóa thanh vuốt). Sheet Dừng luxe (thanh SoC, chip lý do, nút "Dừng sạc" bấm thường — OFF không bị cản). BatteryBot: chỉ `start_timed_charging` dùng thanh vuốt, lệnh khác giữ nút | `luxe_confirmations_test` 8 (chạm không bật, vuốt nửa bật về, vuốt đủ 1 lần, khóa, semantics, 320dp ×1/×2), `smart_charging_control_screen_test` cập nhật 13/13 |
+| CL115-05 | Kiểm thử | Flutter **889/889 Pass** (giảm vì bỏ test của code chết), analyze 0. Profile `1.1.9+155` SHA-256 `140aa8779affc36ebe2830a46c29b36e6d8be146040fa3179be51843bfd9f154` (127,4 MB) cài OnePlus: mở 4 tab không lỗi Flutter. Sheet Bắt đầu/Dừng chưa mở được trên máy vì Evo200 chưa liên kết Shelly; giao diện được kiểm bằng ảnh render từ widget test. **Không gửi lệnh relay** |
+
 ## 114. Task Completion Log — Lịch sử sạc "Luxe" (13/10/2026) — Done
 
 User chọn: dòng thời gian theo ngày, vòng năng lượng + KPI, chi tiết dạng sheet kính toàn màn, màn trống có minh họa động + nút sang Sạc pin. Đã xóa `features/dashboard/dashboard_screen.dart` (không còn dùng; chưa commit).
@@ -39,7 +51,7 @@ User chọn: hero = ảnh xe thật từ danh mục, Bảo dưỡng = trục ODO
 
 Ghi chú: `features/dashboard/dashboard_screen.dart` (1.824 dòng) không còn được dùng ở đâu — đã xóa ở Task 114 theo yêu cầu user. Ảnh xe thật cần quản trị thêm `media` cho mẫu xe trong trang Danh mục xe (web).
 
-## 112. Task Completion Log — "Thành tựu" thay Hành trình năng lượng (12/10/2026) — Done (Firestore rule chưa deploy)
+## 112. Task Completion Log — "Thành tựu" thay Hành trình năng lượng (12/10/2026) — Done (Firestore rule đã deploy ở Task 115)
 
 User chọn: tên "Thành tựu", Thành tựu + Hạng, sổ cái trên máy + đồng bộ nhẹ, nghi thức mở khóa toàn màn. Lý do làm lại: 36 cấp cũ cần 4.450 kWh (~1.500 lần sạc), tổng kWh chỉ cộng trang lịch sử gần nhất (mở từ "Thêm" luôn 0), chỉ đo kWh.
 
@@ -2860,7 +2872,7 @@ Trước khi trả lời người dùng rằng bạn đã hoàn thành nhiệm v
 
 ### Kết quả kiểm tra
 
-Kiểm tra toàn bộ 6 Phase trong `plan1.1.6.md` so với codebase hiện tại:
+Kiểm tra toàn bộ 6 Phase trong `docs/archive/plans/plan1.1.6.md` so với codebase hiện tại:
 
 | Phase | Nội dung | Trạng thái |
 |---|---|---|

@@ -1,4 +1,4 @@
-import { auth } from './firebase.js'
+import { auth } from './firebase.ts'
 import { requestPortal, PortalHttpError } from './lib/httpClient'
 
 // Production normally reaches the API through the same-origin Caddy proxy.

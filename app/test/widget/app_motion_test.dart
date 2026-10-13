@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vinfast_battery/core/theme/app_motion.dart';
 import 'package:vinfast_battery/core/widgets/app_tab_stack.dart';
-import 'package:vinfast_battery/core/widgets/animated_battery_gauge.dart';
-import 'package:vinfast_battery/core/widgets/premium_card.dart';
 
 void main() {
   testWidgets(
@@ -38,9 +35,7 @@ void main() {
     },
   );
 
-  testWidgets('Reduced motion shows reveals and battery value immediately', (
-    tester,
-  ) async {
+  testWidgets('Reduced motion shows reveals immediately', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: MediaQuery(
@@ -49,31 +44,13 @@ void main() {
             children: [
               const Text('Ready').appFadeSlideIn(index: 99),
               const Text('Badge').appScalePop(),
-              const AnimatedBatteryGauge(batteryPercent: 68),
             ],
           ),
         ),
       ),
     );
-    expect(find.text('68%'), findsOneWidget);
     expect(find.text('Ready'), findsOneWidget);
     expect(tester.hasRunningAnimations, isFalse);
-  });
-
-  testWidgets('Battery reports target SOC during decorative interpolation', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      const MaterialApp(home: AnimatedBatteryGauge(batteryPercent: 68)),
-    );
-    expect(find.text('68%'), findsOneWidget);
-    await tester.pump(const Duration(milliseconds: 100));
-    await tester.pumpWidget(
-      const MaterialApp(home: AnimatedBatteryGauge(batteryPercent: 73)),
-    );
-    expect(find.text('73%'), findsOneWidget);
-    await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
   });
 
   for (final reduce in [false, true]) {
@@ -111,28 +88,6 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
-
-  testWidgets('Premium card supports pointer and keyboard activation', (
-    tester,
-  ) async {
-    var taps = 0;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Center(
-          child: PremiumCard(onTap: () => taps++, child: const Text('Open')),
-        ),
-      ),
-    );
-    await tester.tap(find.text('Open'));
-    await tester.pumpAndSettle();
-    expect(taps, 1);
-    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-    await tester.pump();
-    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-    await tester.pumpAndSettle();
-    expect(taps, 2);
-    expect(tester.takeException(), isNull);
-  });
 
   testWidgets('AppTactileBounce handles tap, scale compression, and rebounds', (
     tester,

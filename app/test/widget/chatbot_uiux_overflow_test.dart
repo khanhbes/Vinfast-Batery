@@ -5,7 +5,6 @@ import 'package:vinfast_battery/features/ai/models/function_call_action.dart';
 import 'package:vinfast_battery/features/ai/widgets/action_confirmation_card.dart';
 import 'package:vinfast_battery/features/ai/widgets/battery_status_card.dart';
 import 'package:vinfast_battery/features/ai/widgets/breathing_bot_avatar.dart';
-import 'package:vinfast_battery/features/ai/widgets/chat_input_bar.dart';
 import 'package:vinfast_battery/features/ai/widgets/chat_message_bubble.dart';
 import 'package:vinfast_battery/features/ai/widgets/charging_progress_card.dart';
 import 'package:vinfast_battery/features/ai/widgets/trip_summary_card.dart';
@@ -269,19 +268,6 @@ void main() {
       );
 
       await tester.pump(const Duration(milliseconds: 300));
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('ChatInputBar renders at 320px width without overflow', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        _wrapWithNarrowViewport(child: ChatInputBar(onSend: (_) {})),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-
-      expect(find.byType(TextField), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 

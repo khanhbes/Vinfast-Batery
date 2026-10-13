@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_ui_colors.dart';
+import '../../../core/widgets/luxe_slide_to_confirm.dart';
 import '../models/function_call_action.dart';
 import '../theme/chatbot_glass_theme.dart';
 
@@ -18,6 +19,9 @@ class ActionConfirmationCard extends StatelessWidget {
   final VoidCallback onCancel;
   final bool isLoading;
 
+  /// The only chat tool that can switch the charger relay ON.
+  static const energizingTool = 'start_timed_charging';
+
   @override
   Widget build(BuildContext context) {
     final uiColors = AppUiColors.of(context);
@@ -26,6 +30,7 @@ class ActionConfirmationCard extends StatelessWidget {
     final desc = card?.description ?? '';
     final safety = card?.safetyNote;
     final estTime = card?.estimatedTime;
+    final energizes = action.toolName == energizingTool;
 
     final accentColor = action.isConfirmed
         ? Colors.green
@@ -188,6 +193,31 @@ class ActionConfirmationCard extends StatelessWidget {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   ),
                 ),
+              )
+            else if (energizes)
+              // Switching a relay ON needs a full slide, never a single tap.
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  LuxeSlideToConfirm(
+                    key: const Key('action_card_confirm_slider'),
+                    label: 'Vuốt để bật sạc',
+                    height: 54,
+                    onConfirmed: onConfirm,
+                  ),
+                  const SizedBox(height: 4),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      key: const Key('action_card_cancel_button'),
+                      onPressed: onCancel,
+                      child: Text(
+                        'HỦY',
+                        style: TextStyle(fontSize: 11.5, color: uiColors.muted),
+                      ),
+                    ),
+                  ),
+                ],
               )
             else
               Wrap(
