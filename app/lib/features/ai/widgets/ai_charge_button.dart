@@ -1,381 +1,202 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-import '../../../core/theme/cockpit_design_system.dart';
+import '../../../core/theme/luxe_theme.dart';
 
-/// Circular AI charge button with premium ambient pulsing halo, ripple, and shimmer animations.
+/// Primary AI action: a wide brushed-platinum pill with a slow light sweep
+/// and a sparkle that breathes. [emphasis] marks the final "start" step.
 class AIChargeButton extends StatefulWidget {
   const AIChargeButton({
     super.key,
     required this.onPressed,
-    required this.isAiMode,
+    required this.label,
     this.enabled = true,
-    this.size = 112,
+    this.emphasis = false,
+    this.busy = false,
   });
 
   final VoidCallback onPressed;
-  final bool isAiMode;
+  final String label;
   final bool enabled;
-  final double size;
+  final bool emphasis;
+  final bool busy;
 
   @override
   State<AIChargeButton> createState() => _AIChargeButtonState();
 }
 
 class _AIChargeButtonState extends State<AIChargeButton>
-    with TickerProviderStateMixin {
-  late AnimationController _pulseController;
-  late AnimationController _rotateController;
-  late AnimationController _ringController;
-  late AnimationController _rippleController;
-  late AnimationController _gradientController;
-  late AnimationController _shimmerController;
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _sheen = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 3200),
+  );
   bool _pressed = false;
 
   @override
-  void initState() {
-    super.initState();
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2800),
-    )..repeat(reverse: true);
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _sync();
+  }
 
-    _rotateController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 20),
-    )..repeat();
+  @override
+  void didUpdateWidget(AIChargeButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _sync();
+  }
 
-    _ringController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2000),
-    )..repeat(reverse: true);
-
-    _rippleController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 3),
-    )..repeat();
-
-    _gradientController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 8),
-    )..repeat();
-
-    _shimmerController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2500),
-    )..repeat();
+  void _sync() {
+    final animate = widget.enabled && !MediaQuery.disableAnimationsOf(context);
+    if (animate && !_sheen.isAnimating) {
+      _sheen.repeat();
+    } else if (!animate && _sheen.isAnimating) {
+      _sheen.stop();
+    }
   }
 
   @override
   void dispose() {
-    _pulseController.dispose();
-    _rotateController.dispose();
-    _ringController.dispose();
-    _rippleController.dispose();
-    _gradientController.dispose();
-    _shimmerController.dispose();
+    _sheen.dispose();
     super.dispose();
-  }
-
-  Alignment _getAlignment(double value, double offset) {
-    final angle = value * 2 * math.pi + offset;
-    return Alignment(math.cos(angle), math.sin(angle));
-  }
-
-  void _handleTapDown(TapDownDetails details) {
-    if (widget.enabled) {
-      setState(() => _pressed = true);
-    }
-  }
-
-  void _handleTapUp(TapUpDetails details) {
-    if (widget.enabled) {
-      setState(() => _pressed = false);
-      widget.onPressed();
-    }
-  }
-
-  void _handleTapCancel() {
-    if (widget.enabled) {
-      setState(() => _pressed = false);
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final reducedMotion = MediaQuery.disableAnimationsOf(context);
-    final enabled = widget.enabled;
-    // Ensure ripples have enough space to draw without clipping
-    final boxSize = widget.size + 80;
-
-    return SizedBox(
-      width: boxSize,
-      height: boxSize,
-      child: Stack(
-        alignment: Alignment.center,
-        clipBehavior: Clip.none,
-        children: [
-          // Expanding Ripple Halo
-          if (enabled && !reducedMotion)
-            CustomPaint(
-              size: Size(boxSize, boxSize),
-              painter: _RipplePainter(
-                animation: _rippleController,
-                color: CockpitColors.emerald,
-                baseRadius: widget.size / 2,
-              ),
-            ),
-
-          // Layer 1: Outer blur glow (pulsing) - Multi-layer neon
-          if (enabled && !reducedMotion)
-            AnimatedBuilder(
-              animation: _pulseController,
-              builder: (context, _) => Container(
-                width: widget.size,
-                height: widget.size,
+    final enabled = widget.enabled && !widget.busy;
+    final reduced = MediaQuery.disableAnimationsOf(context);
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      label: widget.label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
+        onTapCancel: () => setState(() => _pressed = false),
+        onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
+        onTap: enabled
+            ? () {
+                HapticFeedback.mediumImpact();
+                widget.onPressed();
+              }
+            : null,
+        child: AnimatedScale(
+          scale: _pressed && !reduced ? 0.97 : 1,
+          duration: const Duration(milliseconds: 140),
+          child: AnimatedBuilder(
+            animation: _sheen,
+            builder: (context, _) {
+              final t = _sheen.value;
+              final sparkle = 0.6 + 0.4 * math.sin(t * 2 * math.pi);
+              return Container(
+                constraints: const BoxConstraints(minHeight: 58),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 22,
+                  vertical: 14,
+                ),
                 decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: CockpitColors.emerald.withValues(
-                        alpha: .05 + _pulseController.value * .08,
+                  borderRadius: BorderRadius.circular(99),
+                  gradient: enabled
+                      ? const LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            LuxeColors.platinumHi,
+                            LuxeColors.platinum,
+                            Color(0xFFB4B7BC),
+                          ],
+                        )
+                      : null,
+                  color: enabled ? null : LuxeColors.glass,
+                  border: Border.all(
+                    color: widget.emphasis && enabled
+                        ? LuxeColors.emerald
+                        : enabled
+                        ? const Color(0x66FFFFFF)
+                        : LuxeColors.hairline,
+                    width: widget.emphasis && enabled ? 1.5 : 1,
+                  ),
+                  boxShadow: enabled
+                      ? [
+                          BoxShadow(
+                            color:
+                                (widget.emphasis
+                                        ? LuxeColors.emerald
+                                        : Colors.white)
+                                    .withValues(
+                                      alpha: widget.emphasis ? 0.35 : 0.16,
+                                    ),
+                            blurRadius: 24,
+                            spreadRadius: -4,
+                          ),
+                        ]
+                      : null,
+                ),
+                foregroundDecoration: enabled && !reduced
+                    ? BoxDecoration(
+                        borderRadius: BorderRadius.circular(99),
+                        gradient: LinearGradient(
+                          begin: Alignment(-1.6 + 3.2 * t, -0.4),
+                          end: Alignment(-0.9 + 3.2 * t, 0.4),
+                          colors: const [
+                            Color(0x00FFFFFF),
+                            Color(0x8CFFFFFF),
+                            Color(0x00FFFFFF),
+                          ],
+                        ),
+                      )
+                    : null,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (widget.busy)
+                      const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Color(0xFF2A2C30),
+                        ),
+                      )
+                    else
+                      Opacity(
+                        opacity: enabled ? sparkle : 0.5,
+                        child: Icon(
+                          widget.emphasis
+                              ? Icons.bolt_rounded
+                              : Icons.auto_awesome_rounded,
+                          size: 20,
+                          color: enabled
+                              ? (widget.emphasis
+                                    ? LuxeColors.emeraldDeep
+                                    : const Color(0xFF1D1F22))
+                              : LuxeColors.dim,
+                        ),
                       ),
-                      blurRadius: 20 + _pulseController.value * 10,
-                      spreadRadius: 4 + _pulseController.value * 6,
-                    ),
-                    BoxShadow(
-                      color: CockpitColors.emerald.withValues(
-                        alpha: .10 + _pulseController.value * .15,
+                    const SizedBox(width: 10),
+                    Flexible(
+                      child: Text(
+                        widget.label,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: enabled
+                              ? const Color(0xFF0B0C0E)
+                              : LuxeColors.dim,
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.4,
+                        ),
                       ),
-                      blurRadius: 32,
-                      spreadRadius: 8 + _pulseController.value * 10,
-                    ),
-                    BoxShadow(
-                      color: CockpitColors.emerald.withValues(
-                        alpha: .15 + _pulseController.value * .20,
-                      ),
-                      blurRadius: 45,
-                      spreadRadius: 12 + _pulseController.value * 15,
                     ),
                   ],
                 ),
-              ),
-            ),
-
-          // Layer 2: Pulsing ring border
-          if (enabled && !reducedMotion)
-            AnimatedBuilder(
-              animation: _ringController,
-              builder: (context, _) => Container(
-                width: widget.size + 8,
-                height: widget.size + 8,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: CockpitColors.emerald.withValues(
-                      alpha: .15 + _ringController.value * .25,
-                    ),
-                    width: 1.5,
-                  ),
-                ),
-              ),
-            ),
-
-          // Layer 3: Particle Ring
-          if (enabled && !reducedMotion)
-            AnimatedBuilder(
-              animation: _rotateController,
-              builder: (context, _) => Transform.rotate(
-                angle: _rotateController.value * 2 * math.pi,
-                child: CustomPaint(
-                  size: Size(widget.size + 16, widget.size + 16),
-                  painter: _ParticleRingPainter(
-                    color: CockpitColors.emerald,
-                    rotateValue: _rotateController.value,
-                  ),
-                ),
-              ),
-            ),
-
-          // Main button with Scale bounce
-          AnimatedScale(
-            scale: _pressed ? 0.92 : 1.0,
-            duration: const Duration(milliseconds: 150),
-            curve: Curves.easeOutBack,
-            child: GestureDetector(
-              onTapDown: _handleTapDown,
-              onTapUp: _handleTapUp,
-              onTapCancel: _handleTapCancel,
-              child: AnimatedOpacity(
-                duration: CockpitMotion.standard,
-                opacity: enabled ? 1.0 : 0.35,
-                child: AnimatedBuilder(
-                  animation: _gradientController,
-                  builder: (context, child) {
-                    return Container(
-                      width: widget.size,
-                      height: widget.size,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: enabled
-                            ? LinearGradient(
-                                begin: _getAlignment(
-                                  _gradientController.value,
-                                  0,
-                                ),
-                                end: _getAlignment(
-                                  _gradientController.value,
-                                  math.pi,
-                                ),
-                                colors: const [
-                                  CockpitColors.emeraldStrong,
-                                  CockpitColors.emerald,
-                                  Color(0xFF5EEAD4),
-                                ],
-                              )
-                            : null,
-                        color: enabled ? null : CockpitColors.elevated,
-                        border: Border.all(
-                          color: enabled
-                              ? CockpitColors.emerald.withValues(alpha: .4)
-                              : CockpitColors.border,
-                          width: 2,
-                        ),
-                      ),
-                      child: child,
-                    );
-                  },
-                  child: ClipOval(
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        // Shimmer sweep
-                        if (enabled && !reducedMotion)
-                          CustomPaint(
-                            size: Size(widget.size, widget.size),
-                            painter: _ShimmerPainter(
-                              animation: _shimmerController,
-                            ),
-                          ),
-                        // Icon
-                        Icon(
-                          widget.isAiMode
-                              ? Icons.auto_awesome_rounded
-                              : Icons.power_settings_new_rounded,
-                          size: widget.size * 0.38,
-                          color: enabled
-                              ? const Color(0xFF0A0A0A)
-                              : CockpitColors.dim,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
+              );
+            },
           ),
-        ],
+        ),
       ),
     );
   }
-}
-
-class _RipplePainter extends CustomPainter {
-  _RipplePainter({
-    required this.animation,
-    required this.color,
-    required this.baseRadius,
-  }) : super(repaint: animation);
-
-  final Animation<double> animation;
-  final Color color;
-  final double baseRadius;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final maxRadius = size.width / 2;
-
-    final radius = baseRadius + (maxRadius - baseRadius) * animation.value;
-    final opacity = 0.3 * (1 - animation.value);
-
-    if (opacity <= 0) return;
-
-    final paint = Paint()
-      ..color = color.withValues(alpha: opacity)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0;
-
-    canvas.drawCircle(center, radius, paint);
-  }
-
-  @override
-  bool shouldRepaint(_RipplePainter old) =>
-      old.animation != animation ||
-      old.color != color ||
-      old.baseRadius != baseRadius;
-}
-
-class _ShimmerPainter extends CustomPainter {
-  _ShimmerPainter({required this.animation}) : super(repaint: animation);
-  final Animation<double> animation;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.08)
-      ..style = PaintingStyle.fill;
-
-    // Sweep from left-to-right diagonally
-    final offset = -size.width + (size.width * 3) * animation.value;
-
-    final path = Path()
-      ..moveTo(offset, 0)
-      ..lineTo(offset + 30, 0)
-      ..lineTo(offset - 20, size.height)
-      ..lineTo(offset - 50, size.height)
-      ..close();
-
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(_ShimmerPainter old) => old.animation != animation;
-}
-
-class _ParticleRingPainter extends CustomPainter {
-  _ParticleRingPainter({required this.color, required this.rotateValue});
-  final Color color;
-  final double rotateValue;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2 - 2;
-    const particleCount = 40;
-    const angleStep = (2 * math.pi) / particleCount;
-
-    final paint = Paint()..style = PaintingStyle.fill;
-
-    for (var i = 0; i < particleCount; i++) {
-      final baseAngle = i * angleStep;
-      // Modulate size and opacity for an organic feel
-      final phase = math.sin(baseAngle * 4 + rotateValue * 2 * math.pi * 6);
-
-      final pRadius = 1.0 + 1.2 * (0.5 + 0.5 * phase);
-      final pOpacity = 0.15 + 0.85 * (0.5 + 0.5 * phase);
-
-      paint.color = color.withValues(alpha: pOpacity);
-
-      final x = center.dx + radius * math.cos(baseAngle);
-      final y = center.dy + radius * math.sin(baseAngle);
-
-      canvas.drawCircle(Offset(x, y), pRadius, paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_ParticleRingPainter old) =>
-      old.color != color || old.rotateValue != rotateValue;
 }

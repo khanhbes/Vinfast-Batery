@@ -1,17 +1,25 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:vinfast_battery/core/widgets/bootstrap_splash.dart';
 
 void main() {
   test(
-    'Android native splash uses ONE LINE background and transparent icon',
+    'Android native splash matches the Flutter splash background',
     () {
       for (final qualifier in ['values', 'values-night']) {
         final colors = File(
           'android/app/src/main/res/$qualifier/colors.xml',
         ).readAsStringSync();
+        // The first native frame must match the Flutter splash exactly.
+        final hex = BootstrapSplash.background
+            .toARGB32()
+            .toRadixString(16)
+            .padLeft(8, '0')
+            .substring(2)
+            .toUpperCase();
         expect(
           colors,
-          contains('<color name="splash_background">#0B0F0E</color>'),
+          contains('<color name="splash_background">#$hex</color>'),
         );
       }
       for (final qualifier in ['drawable', 'drawable-v21']) {

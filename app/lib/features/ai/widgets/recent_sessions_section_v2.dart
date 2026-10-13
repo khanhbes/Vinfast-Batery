@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../../core/theme/cockpit_design_system.dart';
+import '../../../core/theme/luxe_theme.dart';
 import '../../../data/models/smart_charging_session.dart';
 
-/// Recent sessions section for the Smart Charge tab bottom area.
-/// Shows the 3 most recent charging sessions with premium styling.
+/// Recent sessions on glass: start → end level as a small platinum/emerald
+/// bar, the state and a compact meta line.
 class RecentSessionsSectionV2 extends StatelessWidget {
   const RecentSessionsSectionV2({
     super.key,
@@ -22,80 +22,81 @@ class RecentSessionsSectionV2 extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (sessions.isEmpty) {
-      return _EmptyState(onViewAll: onViewAll);
-    }
-
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Header
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.history_rounded,
-                  size: 18,
-                  color: CockpitColors.emerald,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Lịch sử gần đây',
-                  style: TextStyle(
-                    color: CockpitColors.text,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-            InkWell(
-              onTap: onViewAll,
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Tất cả',
-                      style: TextStyle(
-                        color: CockpitColors.emerald,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(width: 2),
-                    Icon(
-                      Icons.chevron_right_rounded,
-                      size: 16,
-                      color: CockpitColors.emerald,
-                    ),
-                  ],
+            const Expanded(
+              child: Text(
+                'Lịch sử gần đây',
+                style: TextStyle(
+                  color: LuxeColors.text,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -0.2,
                 ),
               ),
             ),
+            TextButton(
+              onPressed: onViewAll,
+              style: TextButton.styleFrom(foregroundColor: LuxeColors.emerald),
+              child: const Text('Tất cả'),
+            ),
           ],
         ),
-
-        if (syncedAt != null) ...[
-          const SizedBox(height: 4),
-          Text(
-            'Đồng bộ lần cuối ${DateFormat('HH:mm').format(syncedAt!.toLocal())}',
-            style: TextStyle(color: CockpitColors.dim, fontSize: 10),
+        if (syncedAt != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              'Đồng bộ lần cuối ${DateFormat('HH:mm').format(syncedAt!.toLocal())}',
+              style: const TextStyle(color: LuxeColors.dim, fontSize: 12),
+            ),
           ),
-        ],
-
-        const SizedBox(height: 12),
-
-        // Session tiles
-        for (final session in sessions.take(3)) ...[
-          _SessionTile(session: session, onTap: () => onOpen(session)),
-          if (session != sessions.take(3).last)
-            Divider(height: 1, color: CockpitColors.border, indent: 42),
-        ],
+        if (sessions.isEmpty)
+          const LuxeGlass(
+            padding: EdgeInsets.symmetric(horizontal: 18, vertical: 22),
+            child: Column(
+              children: [
+                Icon(
+                  Icons.history_toggle_off_rounded,
+                  size: 28,
+                  color: LuxeColors.platinumMid,
+                ),
+                SizedBox(height: 10),
+                Text(
+                  'Chưa có phiên sạc',
+                  style: TextStyle(
+                    color: LuxeColors.text,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'Phiên Smart Charge hoàn tất sẽ xuất hiện tại đây.',
+                  textAlign: TextAlign.center,
+                  style: LuxeText.caption,
+                ),
+              ],
+            ),
+          )
+        else
+          LuxeGlass(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            child: Column(
+              children: [
+                for (var i = 0; i < sessions.take(5).length; i++) ...[
+                  if (i > 0)
+                    const Divider(height: 1, indent: 12, endIndent: 12),
+                  _SessionTile(
+                    session: sessions[i],
+                    onTap: () => onOpen(sessions[i]),
+                  ),
+                ],
+              ],
+            ),
+          ),
       ],
     );
   }
@@ -116,40 +117,41 @@ class _SessionTile extends StatelessWidget {
     final energy = session.energyUsedWh >= 1000
         ? '${(session.energyUsedWh / 1000).toStringAsFixed(2)} kWh'
         : '${session.energyUsedWh.toStringAsFixed(0)} Wh';
-
-    // Terminal state styling
-    final isCompleted = session.state == ChargingSessionState.completed;
-    final stateColor = isCompleted
-        ? CockpitColors.emerald
-        : CockpitColors.amber;
-    final stateLabel = isCompleted ? 'Hoàn thành' : 'Đã dừng';
+    final (label, color) = switch (session.state) {
+      ChargingSessionState.completed => ('Hoàn thành', LuxeColors.emerald),
+      ChargingSessionState.cancelled => ('Đã dừng', LuxeColors.platinumMid),
+      ChargingSessionState.interrupted ||
+      ChargingSessionState.failed => ('Gián đoạn', const Color(0xFFFBBF24)),
+      _ => ('Đang sạc', LuxeColors.emerald),
+    };
 
     return Material(
-      color: Colors.transparent,
+      type: MaterialType.transparency,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
           child: Row(
             children: [
-              // Icon
               Container(
-                width: 34,
-                height: 34,
+                width: 38,
+                height: 38,
                 decoration: BoxDecoration(
-                  color: stateColor.withValues(alpha: .12),
-                  borderRadius: BorderRadius.circular(10),
+                  shape: BoxShape.circle,
+                  gradient: const RadialGradient(
+                    center: Alignment(-0.3, -0.4),
+                    colors: [Color(0x24FFFFFF), Color(0x08FFFFFF)],
+                  ),
+                  border: Border.all(color: LuxeColors.hairline),
                 ),
                 child: Icon(
-                  isAi ? Icons.auto_awesome_rounded : Icons.timer_rounded,
-                  size: 16,
-                  color: stateColor,
+                  isAi ? Icons.auto_awesome_rounded : Icons.schedule_rounded,
+                  size: 17,
+                  color: LuxeColors.platinum,
                 ),
               ),
-              const SizedBox(width: 10),
-
-              // Content
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -158,67 +160,53 @@ class _SessionTile extends StatelessWidget {
                       children: [
                         Text(
                           '${session.startSoc.toStringAsFixed(0)}%',
-                          style: CockpitTypography.numbers(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
+                          style: const TextStyle(
+                            color: LuxeColors.platinum,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 6),
                           child: Icon(
                             Icons.arrow_forward_rounded,
-                            size: 12,
-                            color: CockpitColors.muted,
+                            size: 13,
+                            color: LuxeColors.dim,
                           ),
                         ),
                         Text(
                           '${endSoc.toStringAsFixed(0)}%',
-                          style: CockpitTypography.numbers(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: stateColor,
+                          style: const TextStyle(
+                            color: LuxeColors.emerald,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: stateColor.withValues(alpha: .10),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            stateLabel,
-                            style: TextStyle(
-                              color: stateColor,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                            ),
+                        const Spacer(),
+                        Text(
+                          label,
+                          style: TextStyle(
+                            color: color,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 6),
+                    _LevelBar(start: session.startSoc / 100, end: endSoc / 100),
+                    const SizedBox(height: 6),
                     Text(
                       '${DateFormat('dd/MM · HH:mm').format(session.createdAt.toLocal())} · ${_compactDuration(duration)} · $energy',
-                      style: TextStyle(
-                        color: CockpitColors.muted,
-                        fontSize: 11,
-                      ),
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: LuxeColors.dim,
+                        fontSize: 11.5,
+                      ),
                     ),
                   ],
                 ),
-              ),
-
-              // Chevron
-              Icon(
-                Icons.chevron_right_rounded,
-                size: 18,
-                color: CockpitColors.dim,
               ),
             ],
           ),
@@ -228,58 +216,52 @@ class _SessionTile extends StatelessWidget {
   }
 }
 
-class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.onViewAll});
-  final VoidCallback onViewAll;
+class _LevelBar extends StatelessWidget {
+  const _LevelBar({required this.start, required this.end});
+  final double start;
+  final double end;
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Row(
-        children: [
-          Icon(Icons.history_rounded, size: 18, color: CockpitColors.emerald),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              'Lịch sử gần đây',
-              style: TextStyle(
-                color: CockpitColors.text,
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 20),
-      Center(
-        child: Column(
+  Widget build(BuildContext context) => SizedBox(
+    height: 4,
+    child: LayoutBuilder(
+      builder: (context, c) {
+        final s = start.clamp(0.0, 1.0) * c.maxWidth;
+        final e = end.clamp(0.0, 1.0) * c.maxWidth;
+        return Stack(
           children: [
-            Icon(
-              Icons.electric_bolt_rounded,
-              size: 32,
-              color: CockpitColors.emerald.withValues(alpha: .4),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'Chưa có phiên sạc',
-              style: TextStyle(
-                color: CockpitColors.muted,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(2),
+                color: const Color(0x14FFFFFF),
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              'Phiên Smart Charge hoàn tất sẽ xuất hiện tại đây.',
-              style: TextStyle(color: CockpitColors.dim, fontSize: 11),
-              textAlign: TextAlign.center,
+            Container(
+              width: s,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(2),
+                color: const Color(0x66D6D8DB),
+              ),
             ),
+            if (e > s)
+              Positioned(
+                left: s,
+                width: e - s,
+                top: 0,
+                bottom: 0,
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(2),
+                    gradient: const LinearGradient(
+                      colors: [LuxeColors.emeraldDeep, LuxeColors.emerald],
+                    ),
+                  ),
+                ),
+              ),
           ],
-        ),
-      ),
-    ],
+        );
+      },
+    ),
   );
 }
 

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/cockpit_design_system.dart';
+import '../../../core/theme/luxe_theme.dart';
 
-/// Premium prediction card showing AI estimation with stage badge.
-/// Matches the EV cockpit reference's prediction display.
+/// AI charging plan: duration as the hero figure, the automatic stop time
+/// and the model provenance. Energy/cost estimates are intentionally not
+/// shown (no BMS, the user enters both levels).
 class PredictionCardV2 extends StatelessWidget {
   const PredictionCardV2({
     super.key,
@@ -12,9 +13,6 @@ class PredictionCardV2 extends StatelessWidget {
     required this.fromSoc,
     required this.toSoc,
     required this.personalizationLabel,
-    this.energyWh,
-    this.costVnd,
-    this.onViewDetails,
     this.warnings = const [],
   });
 
@@ -23,206 +21,122 @@ class PredictionCardV2 extends StatelessWidget {
   final int fromSoc;
   final int toSoc;
   final String personalizationLabel;
-  final double? energyWh;
-  final double? costVnd;
-  final VoidCallback? onViewDetails;
   final List<String> warnings;
 
-  /// AI stage badge color based on personalization label.
-  Color get _stageColor {
-    if (personalizationLabel.contains('cá nhân') ||
-        personalizationLabel.contains('personal')) {
-      return CockpitColors.emerald;
-    }
-    if (personalizationLabel.contains('học') ||
-        personalizationLabel.contains('learn')) {
-      return CockpitColors.info;
-    }
-    return CockpitColors.amber;
-  }
-
-  String _formatDuration(int totalMinutes) {
-    final h = totalMinutes ~/ 60;
-    final m = totalMinutes % 60;
+  String get _duration {
+    final h = durationMinutes ~/ 60;
+    final m = durationMinutes % 60;
     if (h > 0) return '$h giờ $m phút';
     return '$m phút';
   }
 
-  String _formatEnergy(double wh) => wh >= 1000
-      ? '${(wh / 1000).toStringAsFixed(2)} kWh'
-      : '${wh.toStringAsFixed(0)} Wh';
-
   @override
-  Widget build(BuildContext context) => CockpitSurface(
-    padding: const EdgeInsets.all(16),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Header row
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.auto_awesome_rounded, size: 16, color: _stageColor),
-                const SizedBox(width: 6),
-                Text(
-                  'Kế hoạch sạc',
-                  style: TextStyle(
-                    color: CockpitColors.text,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-            // SOC range badge
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: _stageColor.withValues(alpha: .12),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: _stageColor.withValues(alpha: .30)),
-              ),
-              child: Text(
-                '$fromSoc% → $toSoc%',
-                style: CockpitTypography.numbers(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: _stageColor,
-                ),
-              ),
-            ),
-          ],
-        ),
-
-        const SizedBox(height: 16),
-
-        // Duration display (hero)
-        Text(
-          _formatDuration(durationMinutes),
-          style: CockpitTypography.numbers(
-            fontSize: 28,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'Dự kiến dừng lúc $stopTime',
-          style: TextStyle(color: CockpitColors.muted, fontSize: 12),
-        ),
-
-        const SizedBox(height: 14),
-
-        // Detail rows
-        if (energyWh != null) ...[
-          _DetailRow(label: 'Điện cần nạp', value: _formatEnergy(energyWh!)),
-          const SizedBox(height: 6),
-        ],
-        if (costVnd != null) ...[
-          _DetailRow(
-            label: 'Chi phí dự kiến',
-            value:
-                '~${costVnd!.round().toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+$)'), (m) => '${m[1]}.')} đ',
-          ),
-          const SizedBox(height: 6),
-        ],
-
-        // Personalization badge
-        const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: _stageColor.withValues(alpha: .10),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                personalizationLabel,
-                style: TextStyle(
-                  color: _stageColor,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            if (onViewDetails != null)
-              InkWell(
-                onTap: onViewDetails,
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Xem chi tiết',
-                        style: TextStyle(
-                          color: CockpitColors.emerald,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(width: 2),
-                      Icon(
-                        Icons.chevron_right_rounded,
-                        size: 16,
-                        color: CockpitColors.emerald,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-          ],
-        ),
-
-        // Warnings
-        for (final warning in warnings) ...[
-          const SizedBox(height: 8),
+  Widget build(BuildContext context) {
+    return LuxeGlass(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Row(
             children: [
-              Icon(
-                Icons.warning_amber_rounded,
-                size: 14,
-                color: CockpitColors.amber,
+              const Icon(
+                Icons.auto_awesome_rounded,
+                size: 16,
+                color: LuxeColors.emerald,
               ),
-              const SizedBox(width: 6),
-              Expanded(
+              const SizedBox(width: 8),
+              const Expanded(
                 child: Text(
-                  warning,
-                  style: TextStyle(color: CockpitColors.amber, fontSize: 11),
+                  'Kế hoạch sạc',
+                  style: TextStyle(
+                    color: LuxeColors.text,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Text(
+                '$fromSoc% → $toSoc%',
+                style: const TextStyle(
+                  color: LuxeColors.muted,
+                  fontSize: 13,
+                  fontFeatures: [FontFeature.tabularFigures()],
                 ),
               ),
             ],
           ),
+          const SizedBox(height: 14),
+          LuxeMetalText(
+            _duration,
+            style: const TextStyle(
+              fontSize: 30,
+              height: 1.1,
+              fontWeight: FontWeight.w300,
+              letterSpacing: -0.4,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              const Icon(
+                Icons.power_settings_new_rounded,
+                size: 14,
+                color: LuxeColors.emerald,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Dự kiến dừng lúc $stopTime · rơ-le tự ngắt',
+                  style: const TextStyle(color: LuxeColors.muted, fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Divider(height: 1),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              const Icon(
+                Icons.insights_rounded,
+                size: 14,
+                color: LuxeColors.platinumMid,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  personalizationLabel,
+                  style: const TextStyle(color: LuxeColors.dim, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+          for (final warning in warnings) ...[
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.info_outline_rounded,
+                  size: 14,
+                  color: Color(0xFFFBBF24),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    warning,
+                    style: const TextStyle(
+                      color: LuxeColors.muted,
+                      fontSize: 12,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
-      ],
-    ),
-  );
-}
-
-class _DetailRow extends StatelessWidget {
-  const _DetailRow({required this.label, required this.value});
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-    children: [
-      Text(label, style: TextStyle(color: CockpitColors.muted, fontSize: 12)),
-      Text(
-        value,
-        style: CockpitTypography.numbers(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-        ),
       ),
-    ],
-  );
+    );
+  }
 }

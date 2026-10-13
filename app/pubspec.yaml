@@ -1,7 +1,7 @@
 name: vinfast_battery
 description: "VinFast Battery - Quản lý pin xe máy điện VinFast"
 publish_to: 'none'
-version: 1.1.9+144
+version: 1.1.9+154
 
 environment:
   sdk: ^3.11.0
@@ -112,9 +112,9 @@ flutter_native_splash:
   android: false
   ios: false
   web: false
-  color: "#0B0F0E"
-  color_dark: "#0B0F0E"
+  color: "#050506"
+  color_dark: "#050506"
   android_12:
-    color: "#0B0F0E"
-    color_dark: "#0B0F0E"
+    color: "#050506"
+    color_dark: "#050506"
   ios_content_mode: center

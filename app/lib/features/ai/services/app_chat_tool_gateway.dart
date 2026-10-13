@@ -10,6 +10,8 @@ import '../../../data/services/account_reminder_service.dart';
 import '../../../data/services/shelly_connection_coordinator.dart';
 import '../../../core/utils/battery_bot_faq.dart';
 import 'local_chat_engine.dart';
+import '../../achievements/models/achievement.dart';
+import '../../achievements/services/achievement_signals.dart';
 
 class AppChatToolGateway implements ChatToolGateway {
   AppChatToolGateway({
@@ -649,6 +651,8 @@ class AppChatToolGateway implements ChatToolGateway {
           capabilities: caps,
           controlResolved: true,
         );
+        // Explore achievement: a confirmed, verified ON through BatteryBot.
+        AchievementSignals.instance.emit(AchievementEvents.botCharge);
       } else {
         _connections.markControlUnknown(
           uid: owner,

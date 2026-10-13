@@ -538,15 +538,15 @@ class _FeedbackButton extends StatelessWidget {
                 color: isSelected
                     ? const Color(0xFF10B981).withValues(alpha: 0.20)
                     : (isDark
-                        ? Colors.white.withValues(alpha: 0.06)
-                        : Colors.black.withValues(alpha: 0.05)),
+                          ? Colors.white.withValues(alpha: 0.06)
+                          : Colors.black.withValues(alpha: 0.05)),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
                   color: isSelected
                       ? const Color(0xFF10B981).withValues(alpha: 0.45)
                       : (isDark
-                          ? Colors.white.withValues(alpha: 0.08)
-                          : Colors.black.withValues(alpha: 0.06)),
+                            ? Colors.white.withValues(alpha: 0.08)
+                            : Colors.black.withValues(alpha: 0.06)),
                   width: 1,
                 ),
               ),
@@ -557,8 +557,10 @@ class _FeedbackButton extends StatelessWidget {
                   color: isSelected
                       ? const Color(0xFF10B981)
                       : (isDark
-                          ? const Color(0xFF94A3B8)
-                          : theme.colorScheme.onSurface.withValues(alpha: 0.6)),
+                            ? const Color(0xFF94A3B8)
+                            : theme.colorScheme.onSurface.withValues(
+                                alpha: 0.6,
+                              )),
                 ),
               ),
             ),

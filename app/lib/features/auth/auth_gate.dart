@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/app_providers.dart';
+import '../../core/services/active_charging_session_coordinator.dart';
 import '../../core/services/app_update_service.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/models/onboarding_draft.dart';
@@ -24,7 +25,7 @@ import '../../data/repositories/smart_charger_repository.dart';
 import '../../data/models/smart_charger_binding.dart';
 import '../../main.dart' show firebaseInitErrorProvider;
 import '../../navigation/app_navigation.dart';
-import 'login_screen.dart';
+import 'getting_started_screen.dart';
 import 'onboarding_chat_screen.dart';
 
 /// AuthGate: gate có trạng thái khởi động rõ ràng.
@@ -32,9 +33,9 @@ import 'onboarding_chat_screen.dart';
 /// 1. Chờ Firebase Auth restore xong (connectionState != waiting).
 /// 2. Nếu user != null → vào AppNavigation.
 /// 3. Nếu user == null → kiểm tra:
-///    - Nếu explicit_signed_out → về LoginScreen ngay.
+///    - Nếu explicit_signed_out → về SignedOutEntry ngay.
 ///    - Nếu was_authenticated (cold start, chưa restore xong) → chờ thêm timeout.
-///    - Ngược lại → LoginScreen.
+///    - Ngược lại → SignedOutEntry (Getting started lần đầu, sau đó Login).
 ///
 /// Không swallow lỗi Firebase.initializeApp(); nếu init lỗi thì hiện retry.
 class AuthGate extends ConsumerStatefulWidget {
@@ -66,6 +67,9 @@ class _AuthGateState extends ConsumerState<AuthGate> {
   @override
   void initState() {
     super.initState();
+    // Resolve the first-run flag during the splash so the signed-out entry
+    // can pick Getting started or Login without a blank frame.
+    unawaited(GettingStartedPrefs.seen());
     _initialize();
   }
 
@@ -295,7 +299,7 @@ class _AuthGateState extends ConsumerState<AuthGate> {
             }
             // User null → về Login (không reset markers ở đây để cold-start
             // sau update vẫn được _initialize() phát hiện).
-            return const LoginScreen();
+            return const SignedOutEntry();
           },
         ),
       );
@@ -303,12 +307,22 @@ class _AuthGateState extends ConsumerState<AuthGate> {
 
     final reducedMotion =
         MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    // A signed-in (or still resolving) stream first shows the same held brand
+    // frame, so swap instantly; _AuthenticatedRoot runs the real exit once the
+    // app is ready. Animating here would ghost two marks over each other.
+    final handsOffToHeldSplash =
+        content.key == const ValueKey('gate-stream') &&
+        (_authUser != null || !_authResolved);
     return AnimatedSwitcher(
-      duration: reducedMotion
+      duration: reducedMotion || handsOffToHeldSplash
           ? Duration.zero
-          : const Duration(milliseconds: 240),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
+          : BootstrapSplash.exitDuration,
+      // The splash drifts forward as it fades; the next screen settles in.
+      transitionBuilder: (child, animation) => BootstrapSplash.exitTransition(
+        child,
+        animation,
+        isSplash: child.key == const ValueKey('gate-splash'),
+      ),
       child: content,
     );
   }
@@ -402,6 +416,14 @@ class _BootstrapErrorScreen extends StatelessWidget {
   }
 }
 
+/// Profile read + local draft, resolved together so the held brand frame
+/// hands over to exactly one destination.
+typedef _RouteInputs = ({
+  DocumentSnapshot<Map<String, dynamic>>? profile,
+  bool profileFailed,
+  OnboardingDraft? draft,
+});
+
 class _AuthenticatedRoot extends ConsumerStatefulWidget {
   const _AuthenticatedRoot({super.key});
 
@@ -416,6 +438,9 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
   Future<DocumentSnapshot<Map<String, dynamic>>>? _profileFuture;
   Future<OnboardingDraft?>? _draftFuture;
   String? _draftUid;
+  Future<_RouteInputs>? _routeFuture;
+  Future<DocumentSnapshot<Map<String, dynamic>>>? _routeProfile;
+  Future<OnboardingDraft?>? _routeDraft;
 
   Future<void> _retryPendingOnboarding() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -448,13 +473,18 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
     // Khi logout / unmount: gỡ lifecycle observer của AppUpdateService.
     AppUpdateService().stopObservingLifecycle();
     WidgetsBinding.instance.removeObserver(this);
-    ref.read(activeChargingSessionProvider).clear();
+    // `ref` is unusable in dispose (Riverpod throws), so clear the session
+    // coordinator captured while mounted.
+    _activeSession.clear();
     super.dispose();
   }
+
+  late final ActiveChargingSessionCoordinator _activeSession;
 
   @override
   void initState() {
     super.initState();
+    _activeSession = ref.read(activeChargingSessionProvider);
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // Initialize notification center and sync models
@@ -621,89 +651,122 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
         .doc(currentUser.uid)
         .get()
         .timeout(_profileLoadTimeout);
-    return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      future: _profileFuture,
+    if (!identical(_routeProfile, _profileFuture) ||
+        !identical(_routeDraft, _draftFuture)) {
+      _routeProfile = _profileFuture;
+      _routeDraft = _draftFuture;
+      _routeFuture = _resolveRouteInputs(_profileFuture!, _draftFuture!);
+    }
+    final reducedMotion =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    return FutureBuilder<_RouteInputs>(
+      future: _routeFuture,
       builder: (context, snapshot) {
-        final createdAt = currentUser.metadata.creationTime;
-        final isNew =
-            createdAt != null &&
-            DateTime.now().difference(createdAt) < const Duration(minutes: 15);
-
-        // Auth can succeed before the first profile write reaches Firestore.
-        // Route a new account through its retryable onboarding bootstrap,
-        // rather than treating a transient read failure as permission to enter.
-        if (snapshot.hasError) {
-          return FutureBuilder<OnboardingDraft?>(
-            future: _draftFuture,
-            builder: (context, draftSnapshot) {
-              if (draftSnapshot.connectionState == ConnectionState.waiting) {
-                return const Scaffold(
-                  body: Center(child: CircularProgressIndicator()),
-                );
-              }
-              if (draftSnapshot.data?.isEligibleForCommit == true) {
-                return InternetConnectionNotice(
-                  onboardingPending: true,
-                  onRetryOnboarding: _retryPendingOnboarding,
-                  child: const AppNavigation(),
-                );
-              }
-              return isNew || draftSnapshot.data != null
-                  ? OnboardingChatScreen(onCompleted: _refreshOnboardingRoute)
-                  : const InternetConnectionNotice(child: AppNavigation());
-            },
-          );
-        }
-        if (!snapshot.hasData) {
-          // Restored older accounts can still have unfinished onboarding.
-          // Never flash the shell while its profile eligibility is unresolved.
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-
-        final data = snapshot.data?.data();
-        return FutureBuilder<OnboardingDraft?>(
-          future: _draftFuture,
-          builder: (context, draftSnapshot) {
-            if (draftSnapshot.connectionState == ConnectionState.waiting) {
-              return const Scaffold(
-                body: Center(child: CircularProgressIndicator()),
-              );
-            }
-            final draft = draftSnapshot.data;
-            // A draft that reached the final step but is waiting for the API
-            // must not trap the user on the wizard after a restart. The app
-            // shell can show cached data and a retry status strip.
-            final syncPending = draft?.isEligibleForCommit == true;
-            if (data == null) {
-              if (syncPending) {
-                return InternetConnectionNotice(
-                  onboardingPending: true,
-                  onRetryOnboarding: _retryPendingOnboarding,
-                  child: const AppNavigation(),
-                );
-              }
-              if (draft != null || isNew) {
-                return OnboardingChatScreen(
-                  onCompleted: _refreshOnboardingRoute,
-                );
-              }
-              return const InternetConnectionNotice(child: AppNavigation());
-            }
-            final flowVer = data['registrationFlowVersion'] as int? ?? 1;
-            final completedAt = data['onboardingCompletedAt'];
-            if (flowVer >= 2 && completedAt == null && !syncPending) {
-              return OnboardingChatScreen(onCompleted: _refreshOnboardingRoute);
-            }
-            return InternetConnectionNotice(
-              onboardingPending: completedAt == null && syncPending,
-              onRetryOnboarding: _retryPendingOnboarding,
-              child: const AppNavigation(),
-            );
-          },
+        // A refresh keeps routing on the previous inputs until the new ones
+        // resolve, as the per-future builders did before.
+        final inputs = snapshot.data;
+        // Restored older accounts can still have unfinished onboarding.
+        // Never flash the shell while its profile eligibility is unresolved;
+        // hold the brand frame (identical to the finished splash) instead of
+        // a spinner, then hand over once with the splash exit.
+        final held = inputs == null;
+        return AnimatedSwitcher(
+          duration: reducedMotion
+              ? Duration.zero
+              : BootstrapSplash.exitDuration,
+          transitionBuilder: (child, animation) =>
+              BootstrapSplash.exitTransition(
+                child,
+                animation,
+                isSplash: child.key == const ValueKey('auth-held'),
+              ),
+          child: held
+              ? const KeyedSubtree(
+                  key: ValueKey('auth-held'),
+                  child: BootstrapSplash(
+                    message: 'Đang tải hồ sơ...',
+                    animate: false,
+                  ),
+                )
+              : KeyedSubtree(
+                  key: const ValueKey('auth-ready'),
+                  child: _route(currentUser, inputs),
+                ),
         );
       },
+    );
+  }
+
+  static Future<_RouteInputs> _resolveRouteInputs(
+    Future<DocumentSnapshot<Map<String, dynamic>>> profile,
+    Future<OnboardingDraft?> draft,
+  ) async {
+    DocumentSnapshot<Map<String, dynamic>>? doc;
+    var profileFailed = false;
+    try {
+      doc = await profile;
+    } on Object {
+      profileFailed = true;
+    }
+    OnboardingDraft? loaded;
+    try {
+      loaded = await draft;
+    } on Object {
+      loaded = null;
+    }
+    return (profile: doc, profileFailed: profileFailed, draft: loaded);
+  }
+
+  Widget _route(User currentUser, _RouteInputs inputs) {
+    final createdAt = currentUser.metadata.creationTime;
+    final isNew =
+        createdAt != null &&
+        DateTime.now().difference(createdAt) < const Duration(minutes: 15);
+    final draft = inputs.draft;
+
+    // Auth can succeed before the first profile write reaches Firestore.
+    // Route a new account through its retryable onboarding bootstrap,
+    // rather than treating a transient read failure as permission to enter.
+    if (inputs.profileFailed) {
+      if (draft?.isEligibleForCommit == true) {
+        return InternetConnectionNotice(
+          onboardingPending: true,
+          onRetryOnboarding: _retryPendingOnboarding,
+          child: const AppNavigation(),
+        );
+      }
+      return isNew || draft != null
+          ? OnboardingChatScreen(onCompleted: _refreshOnboardingRoute)
+          : const InternetConnectionNotice(child: AppNavigation());
+    }
+
+    final data = inputs.profile?.data();
+    // A draft that reached the final step but is waiting for the API
+    // must not trap the user on the wizard after a restart. The app
+    // shell can show cached data and a retry status strip.
+    final syncPending = draft?.isEligibleForCommit == true;
+    if (data == null) {
+      if (syncPending) {
+        return InternetConnectionNotice(
+          onboardingPending: true,
+          onRetryOnboarding: _retryPendingOnboarding,
+          child: const AppNavigation(),
+        );
+      }
+      if (draft != null || isNew) {
+        return OnboardingChatScreen(onCompleted: _refreshOnboardingRoute);
+      }
+      return const InternetConnectionNotice(child: AppNavigation());
+    }
+    final flowVer = data['registrationFlowVersion'] as int? ?? 1;
+    final completedAt = data['onboardingCompletedAt'];
+    if (flowVer >= 2 && completedAt == null && !syncPending) {
+      return OnboardingChatScreen(onCompleted: _refreshOnboardingRoute);
+    }
+    return InternetConnectionNotice(
+      onboardingPending: completedAt == null && syncPending,
+      onRetryOnboarding: _retryPendingOnboarding,
+      child: const AppNavigation(),
     );
   }
 }

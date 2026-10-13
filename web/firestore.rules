@@ -129,6 +129,26 @@ service cloud.firestore {
           request.resource.data.revision == resource.data.revision + 1;
       }
 
+      // Achievements: one summary per account, written by the owner when a
+      // badge unlocks (cross-device backup of unlock dates). Progress is
+      // recomputed from charge history, so the summary carries no authority.
+      match /achievements/{docId} {
+        allow read: if isAuth() && request.auth.uid == uid;
+        allow delete: if false;
+        allow create, update: if isAuth() && request.auth.uid == uid &&
+          docId == 'summary' &&
+          request.resource.data.keys().hasOnly(['schemaVersion', 'unlocked', 'points', 'rank', 'updatedAt']) &&
+          request.resource.data.schemaVersion == 1 &&
+          request.resource.data.unlocked is map &&
+          request.resource.data.unlocked.size() <= 128 &&
+          request.resource.data.points is int &&
+          request.resource.data.points >= 0 &&
+          request.resource.data.points <= 10000 &&
+          request.resource.data.rank is string &&
+          request.resource.data.rank.size() <= 40 &&
+          request.resource.data.updatedAt == request.time;
+      }
+
       match /appPreferences/{prefDoc} {
         allow read: if isAuth() && request.auth.uid == uid;
         allow write: if isAuth() && request.auth.uid == uid && prefDoc == 'ui' &&

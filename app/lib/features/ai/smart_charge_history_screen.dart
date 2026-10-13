@@ -1,26 +1,27 @@
 import 'dart:async';
-import '../../core/widgets/adaptive_detail_rows.dart';
-import '../../core/theme/app_ui_colors.dart';
-import 'widgets/session_soc_summary.dart';
-import 'widgets/confirm_session_soc_dialog.dart';
 import 'dart:math';
+import 'dart:ui' as ui;
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import '../../data/models/smart_charge_history.dart';
-import '../../data/models/smart_charge_cost.dart';
-import '../../data/models/smart_charging_session.dart';
 import '../../core/services/app_error_reporter.dart';
-import '../../core/widgets/app_popup.dart';
+import '../../core/theme/luxe_theme.dart';
 import '../../core/utils/app_error_formatter.dart';
+import '../../core/widgets/adaptive_detail_rows.dart';
+import '../../core/widgets/app_popup.dart';
 import '../../core/widgets/responsive_card_grid.dart';
-import 'widgets/smart_charge_cockpit_theme.dart';
-import '../../core/theme/cockpit_design_system.dart';
-import 'controllers/smart_charging_controller.dart';
+import '../../data/models/smart_charge_cost.dart';
+import '../../data/models/smart_charge_history.dart';
+import '../../data/models/smart_charging_session.dart';
 import '../auth/auth_providers.dart';
+import 'controllers/smart_charging_controller.dart';
+import 'widgets/confirm_session_soc_dialog.dart';
+import 'widgets/history_luxe_widgets.dart';
+import 'widgets/session_soc_summary.dart';
 
 class SmartChargeHistoryScreen extends StatefulWidget {
   const SmartChargeHistoryScreen({
@@ -30,6 +31,7 @@ class SmartChargeHistoryScreen extends StatefulWidget {
     this.initialItems = const [],
     this.initialSessionId,
     this.onPendingTargetConsumed,
+    this.onStartCharging,
     this.embedded = false,
   });
 
@@ -38,6 +40,9 @@ class SmartChargeHistoryScreen extends StatefulWidget {
   final List<SmartChargingSession> initialItems;
   final String? initialSessionId;
   final VoidCallback? onPendingTargetConsumed;
+
+  /// Empty-state call to action ("start the first session"). Hidden if null.
+  final VoidCallback? onStartCharging;
   final bool embedded;
 
   @override
@@ -67,6 +72,9 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
   Timer? _liveTimer;
   bool _openedPending = false;
 
+  /// Direction of the last month change, so the summary slides that way.
+  int _monthDirection = 0;
+
   DateTime get _monthEnd => DateTime(
     _selectedMonth.month == 12 ? _selectedMonth.year + 1 : _selectedMonth.year,
     _selectedMonth.month == 12 ? 1 : _selectedMonth.month + 1,
@@ -95,6 +103,15 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
 
   SmartChargingSession? get _activeSession =>
       _items.where((item) => !item.state.isTerminal).firstOrNull;
+
+  bool get _isFiltered =>
+      _filter != null ||
+      _statusFilter != SmartChargeHistorySessionFilter.all ||
+      _customRange != null ||
+      _allVehicles;
+
+  bool get _canGoNext =>
+      _customRange == null && !_monthEnd.isAfter(DateTime.now());
 
   @override
   void initState() {
@@ -241,7 +258,11 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final visible = _filteredItems;
+    final visible = _filteredItems
+      ..sort(
+        (a, b) =>
+            (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt),
+      );
     final shown = visible.take(_visibleCount).toList();
     final initialLoadFailed =
         _error != null && !_hasSuccessfulLoad && _items.isEmpty;
@@ -250,229 +271,553 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
       from: _rangeStart,
       to: _rangeEnd,
     );
-    return SmartChargeCockpitTheme(
-      adaptive: true,
+    final active = _activeSession;
+    return Theme(
+      data: LuxeTheme.of(context),
       child: Scaffold(
-        appBar: widget.embedded ? null : AppBar(title: Text('Lịch sử sạc')),
-        body: RefreshIndicator(
-          onRefresh: () => _load(reset: true),
-          child: CustomScrollView(
-            slivers: [
-              SliverPadding(
-                padding: EdgeInsets.fromLTRB(16, 12, 16, 10),
-                sliver: SliverToBoxAdapter(
-                  child: _HistoryHeader(onExport: _export),
+        backgroundColor: LuxeColors.background,
+        appBar: widget.embedded
+            ? null
+            : AppBar(
+                title: const Text('Lịch sử sạc'),
+                backgroundColor: LuxeColors.background,
+              ),
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            const LuxeBackdrop(),
+            SafeArea(
+              bottom: false,
+              child: RefreshIndicator(
+                color: LuxeColors.emerald,
+                backgroundColor: const Color(0xFF17181B),
+                onRefresh: () => _load(reset: true),
+                child: CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(20, 14, 16, 14),
+                      sliver: SliverToBoxAdapter(
+                        child: LuxeReveal(
+                          child: _HistoryHeader(onExport: _export),
+                        ),
+                      ),
+                    ),
+                    if (active != null)
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                        sliver: SliverToBoxAdapter(
+                          child: LuxeReveal(
+                            index: 1,
+                            child: HistoryActiveCard(
+                              session: active,
+                              powerW: widget
+                                  .controller
+                                  .currentUiState
+                                  .chargerStatus
+                                  ?.powerW,
+                              onTap: () => _openDetail(active),
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (_loading && !_hasSuccessfulLoad && _items.isEmpty)
+                      const SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: Center(
+                          child: SizedBox.square(
+                            dimension: 28,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: LuxeColors.emerald,
+                            ),
+                          ),
+                        ),
+                      )
+                    else if (initialLoadFailed)
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: _errorState(),
+                      )
+                    else ...[
+                      if (_error != null)
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                          sliver: SliverToBoxAdapter(
+                            child: _StaleNotice(
+                              message: _error!,
+                              onRetry: () => _load(reset: true),
+                            ),
+                          ),
+                        ),
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                        sliver: SliverToBoxAdapter(
+                          child: LuxeReveal(
+                            index: 2,
+                            child: _summaryCard(summary),
+                          ),
+                        ),
+                      ),
+                      SliverToBoxAdapter(
+                        child: LuxeReveal(index: 3, child: _filters()),
+                      ),
+                      if (visible.isEmpty && active == null)
+                        SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: _EmptyHistory(
+                            isFiltered: _isFiltered,
+                            onStartCharging: widget.onStartCharging,
+                            onClearFilter: () => setState(() {
+                              _filter = null;
+                              _statusFilter =
+                                  SmartChargeHistorySessionFilter.all;
+                              _customRange = null;
+                              _allVehicles = false;
+                              _visibleCount = 20;
+                              _load(reset: true, clearItems: true);
+                            }),
+                          ),
+                        ),
+                      if (visible.isNotEmpty || active != null) ...[
+                        _timeline(shown),
+                        SliverToBoxAdapter(child: _footer(shown, visible)),
+                      ],
+                    ],
+                  ],
                 ),
               ),
-              if (_activeSession != null)
-                SliverPadding(
-                  padding: EdgeInsets.fromLTRB(16, 2, 16, 10),
-                  sliver: SliverToBoxAdapter(
-                    child: _ActiveHistoryCard(
-                      session: _activeSession!,
-                      powerW: widget
-                          .controller
-                          .currentUiState
-                          .chargerStatus
-                          ?.powerW,
-                      onTap: () => _openDetail(_activeSession!),
-                    ),
-                  ),
-                ),
-              if (_loading && !_hasSuccessfulLoad && _items.isEmpty)
-                const SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (initialLoadFailed)
-                SliverFillRemaining(child: _errorState())
-              else ...[
-                if (_error != null)
-                  SliverToBoxAdapter(
-                    child: _StaleNotice(
-                      message: _error!,
-                      onRetry: () => _load(reset: true),
-                    ),
-                  ),
-                SliverPadding(
-                  padding: EdgeInsets.fromLTRB(16, 2, 16, 10),
-                  sliver: SliverToBoxAdapter(
-                    child: _MonthlySummary(
-                      month: _selectedMonth,
-                      range: _customRange,
-                      summary: summary,
-                      onPrevious: _customRange == null
-                          ? () => _changeMonth(-1)
-                          : null,
-                      onNext:
-                          _customRange != null ||
-                              _monthEnd.isAfter(DateTime.now())
-                          ? null
-                          : () => _changeMonth(1),
-                    ),
-                  ),
-                ),
-                SliverPadding(
-                  padding: EdgeInsets.fromLTRB(16, 2, 16, 12),
-                  sliver: SliverToBoxAdapter(child: _filters()),
-                ),
-                if (visible.isEmpty && _activeSession == null)
-                  SliverFillRemaining(
-                    child: _EmptyHistory(
-                      isFiltered:
-                          _filter != null ||
-                          _statusFilter !=
-                              SmartChargeHistorySessionFilter.all ||
-                          _customRange != null ||
-                          _allVehicles,
-                      onClearFilter: () => setState(() {
-                        _filter = null;
-                        _statusFilter = SmartChargeHistorySessionFilter.all;
-                        _customRange = null;
-                        _allVehicles = false;
-                        _visibleCount = 20;
-                        _load(reset: true, clearItems: true);
-                      }),
-                    ),
-                  ),
-                if (visible.isNotEmpty || _activeSession != null) ...[
-                  SliverList.separated(
-                    itemCount: shown.length,
-                    separatorBuilder: (_, _) =>
-                        Divider(height: 1, indent: 16, endIndent: 16),
-                    itemBuilder: (context, index) => _HistoryRow(
-                      session: shown[index],
-                      onTap: () => _openDetail(shown[index]),
-                      onHide: () => _hide(shown[index]),
-                    ),
-                  ),
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.all(20),
-                      child: _cursor == null && shown.length >= visible.length
-                          ? Center(child: Text('Đã hiển thị toàn bộ phiên sạc'))
-                          : OutlinedButton(
-                              onPressed: _loading
-                                  ? null
-                                  : () {
-                                      if (shown.length < visible.length) {
-                                        setState(() => _visibleCount += 20);
-                                      } else {
-                                        _load(reset: false);
-                                      }
-                                    },
-                              child: _loadingMore
-                                  ? SizedBox.square(
-                                      dimension: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : Text('TẢI THÊM'),
-                            ),
-                    ),
-                  ),
-                ],
-              ],
-              // Keep this comment close to the conditional above: the stale
-              // notice is intentionally rendered only after a successful
-              // response has populated the list.
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 
+  // ─────────────── Summary: energy ring + KPIs + month switcher ───────────────
+
+  Widget _summaryCard(SmartChargeHistorySummary summary) {
+    final ring = _ringData(summary);
+    final periodTitle = _customRange == null
+        ? 'Tháng ${DateFormat('MM · yyyy').format(_selectedMonth)}'
+        : '${DateFormat('dd/MM').format(_customRange!.start)} – ${DateFormat('dd/MM/yyyy').format(_customRange!.end)}';
+    final reduced = MediaQuery.disableAnimationsOf(context);
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onHorizontalDragEnd: _customRange != null
+          ? null
+          : (details) {
+              final v = details.primaryVelocity ?? 0;
+              if (v > 280) {
+                _changeMonth(-1);
+              } else if (v < -280 && _canGoNext) {
+                _changeMonth(1);
+              }
+            },
+      child: LuxeGlass(
+        radius: 26,
+        padding: const EdgeInsets.fromLTRB(10, 12, 10, 18),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                HistoryGlassButton(
+                  icon: Icons.chevron_left_rounded,
+                  tooltip: 'Tháng trước',
+                  size: 38,
+                  onPressed: _customRange == null
+                      ? () => _changeMonth(-1)
+                      : null,
+                ),
+                Expanded(
+                  child: Column(
+                    children: [
+                      Text(
+                        _customRange == null ? 'TỔNG KẾT THÁNG' : 'TỔNG KẾT',
+                        style: LuxeText.eyebrow.copyWith(fontSize: 10.5),
+                      ),
+                      const SizedBox(height: 3),
+                      AnimatedSwitcher(
+                        duration: reduced
+                            ? Duration.zero
+                            : const Duration(milliseconds: 260),
+                        child: Text(
+                          periodTitle,
+                          key: ValueKey(periodTitle),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: LuxeColors.text,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                HistoryGlassButton(
+                  icon: Icons.chevron_right_rounded,
+                  tooltip: 'Tháng sau',
+                  size: 38,
+                  onPressed: _canGoNext ? () => _changeMonth(1) : null,
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 250),
+              child: AnimatedSwitcher(
+                duration: reduced
+                    ? Duration.zero
+                    : const Duration(milliseconds: 420),
+                switchInCurve: LuxeMotion.enter,
+                switchOutCurve: Curves.easeOut,
+                transitionBuilder: (child, animation) {
+                  final incoming = child.key == ValueKey(periodTitle);
+                  final dx = incoming
+                      ? 0.12 * _monthDirection
+                      : -0.12 * _monthDirection;
+                  return FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(
+                      position: Tween(
+                        begin: Offset(dx, 0),
+                        end: Offset.zero,
+                      ).animate(animation),
+                      child: child,
+                    ),
+                  );
+                },
+                child: HistoryEnergyRing(
+                  key: ValueKey(periodTitle),
+                  buckets: ring.buckets,
+                  highlightIndex: ring.today,
+                  totalWh: summary.totalGridEnergyWh,
+                  caption: ring.caption,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: HistoryKpi(
+                      label: 'Chi phí',
+                      value: summary.totalCostVnd <= 0
+                          ? '0 đ'
+                          : '${NumberFormat.compact(locale: 'vi').format(summary.totalCostVnd)} đ',
+                    ),
+                  ),
+                  const _KpiDivider(),
+                  Expanded(
+                    child: HistoryKpi(
+                      label: 'Thời gian',
+                      value: historyDuration(summary.totalDuration),
+                    ),
+                  ),
+                  const _KpiDivider(),
+                  Expanded(
+                    child: HistoryKpi(
+                      label: 'Phiên',
+                      value: '${summary.completedSessions}',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Per-day energy for the ring; ranges longer than ~2 months use weeks.
+  ({List<double> buckets, int? today, String caption}) _ringData(
+    SmartChargeHistorySummary summary,
+  ) {
+    final byDay = {for (final d in summary.daily) d.day: d.energyWh};
+    final start = DateTime(
+      _rangeStart.year,
+      _rangeStart.month,
+      _rangeStart.day,
+    );
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final days = <DateTime>[];
+    for (var i = 0; i < 400; i++) {
+      final day = DateTime(start.year, start.month, start.day + i);
+      if (!day.isBefore(_rangeEnd)) break;
+      days.add(day);
+    }
+    final weekly = days.length > 62;
+    final buckets = <double>[];
+    int? todayIndex;
+    for (var i = 0; i < days.length; i++) {
+      final slot = weekly ? i ~/ 7 : i;
+      if (slot >= buckets.length) buckets.add(0);
+      buckets[slot] += byDay[days[i]] ?? 0;
+      if (days[i] == today) todayIndex = slot;
+    }
+    final caption = weekly
+        ? 'điện nạp · ${buckets.length} tuần'
+        : 'điện nạp · ${days.length} ngày';
+    return (buckets: buckets, today: todayIndex, caption: caption);
+  }
+
+  // ─────────────── Filters ───────────────
+
   Widget _filters() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      SegmentedButton<bool>(
-        showSelectedIcon: false,
-        segments: [
-          ButtonSegment(value: false, label: Text('Xe này')),
-          ButtonSegment(value: true, label: Text('Tất cả xe')),
-        ],
-        selected: {_allVehicles},
-        onSelectionChanged: (value) {
-          _allVehicles = value.first;
-          _cursor = null;
-          _load(reset: true, clearItems: true);
-        },
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: HistoryScopeToggle(
+          allVehicles: _allVehicles,
+          onChanged: (value) {
+            HapticFeedback.selectionClick();
+            _allVehicles = value;
+            _cursor = null;
+            _load(reset: true, clearItems: true);
+          },
+        ),
       ),
-      SizedBox(height: 8),
-      Row(
-        children: [
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: _pickDateRange,
-              icon: Icon(Icons.date_range_rounded),
-              label: Text(
-                _customRange == null
-                    ? 'Chọn khoảng ngày'
-                    : '${DateFormat('dd/MM').format(_customRange!.start)} – ${DateFormat('dd/MM/yyyy').format(_customRange!.end)}',
-              ),
-            ),
-          ),
-          if (_customRange != null) ...[
-            SizedBox(width: 8),
-            IconButton(
-              tooltip: 'Trở về tháng hiện tại',
-              onPressed: () => setState(() {
-                _customRange = null;
-                _visibleCount = 20;
-              }),
-              icon: Icon(Icons.close_rounded),
-            ),
-          ],
-        ],
-      ),
-      SizedBox(height: 8),
+      const SizedBox(height: 10),
       SingleChildScrollView(
         scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Row(
           children: [
-            _filterChip('Tất cả', _filter == null, () => _setStrategy(null)),
-            _filterChip(
+            HistoryChip(
+              icon: Icons.date_range_rounded,
+              label: _customRange == null
+                  ? 'Chọn khoảng ngày'
+                  : '${DateFormat('dd/MM').format(_customRange!.start)} – ${DateFormat('dd/MM/yyyy').format(_customRange!.end)}',
+              selected: _customRange != null,
+              onTap: _pickDateRange,
+            ),
+            if (_customRange != null) ...[
+              const SizedBox(width: 6),
+              HistoryGlassButton(
+                icon: Icons.close_rounded,
+                tooltip: 'Trở về tháng hiện tại',
+                size: 38,
+                onPressed: () => setState(() {
+                  _customRange = null;
+                  _monthDirection = 0;
+                  _visibleCount = 20;
+                }),
+              ),
+            ],
+            Container(
+              width: 1,
+              height: 22,
+              margin: const EdgeInsets.symmetric(horizontal: 10),
+              color: LuxeColors.hairline,
+            ),
+            _chip('Tất cả', _filter == null, () => _setStrategy(null)),
+            _chip(
               'Sạc AI',
               _filter == ChargingStrategy.aiTarget,
               () => _setStrategy(ChargingStrategy.aiTarget),
             ),
-            _filterChip(
-              'Thủ công',
+            _chip(
+              'Hẹn giờ',
               _filter == ChargingStrategy.manualTimed,
               () => _setStrategy(ChargingStrategy.manualTimed),
             ),
-            _filterChip(
+            _chip(
               'Hoàn thành',
               _statusFilter == SmartChargeHistorySessionFilter.completed,
               () => _setStatus(SmartChargeHistorySessionFilter.completed),
+              dot: LuxeColors.emerald,
             ),
-            _filterChip(
+            _chip(
               'Dừng sớm',
               _statusFilter == SmartChargeHistorySessionFilter.stoppedEarly,
               () => _setStatus(SmartChargeHistorySessionFilter.stoppedEarly),
+              dot: historyAmber,
             ),
-            _filterChip(
-              'Sạc một phần',
+            _chip(
+              'Một phần',
               _statusFilter == SmartChargeHistorySessionFilter.partial,
               () => _setStatus(SmartChargeHistorySessionFilter.partial),
+              dot: LuxeColors.platinumMid,
             ),
           ],
         ),
       ),
+      const SizedBox(height: 6),
     ],
   );
 
-  Widget _filterChip(String label, bool selected, VoidCallback onTap) =>
+  Widget _chip(String label, bool selected, VoidCallback onTap, {Color? dot}) =>
       Padding(
-        padding: EdgeInsets.only(right: 8),
-        child: ChoiceChip(
-          label: Text(label),
+        padding: const EdgeInsets.only(right: 8),
+        child: HistoryChip(
+          label: label,
           selected: selected,
-          onSelected: (_) => onTap(),
+          dot: dot,
+          onTap: () {
+            HapticFeedback.selectionClick();
+            onTap();
+          },
         ),
       );
+
+  // ─────────────── Timeline ───────────────
+
+  Widget _timeline(List<SmartChargingSession> shown) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    DateTime dayOf(SmartChargingSession s) {
+      final t = (s.startedAt ?? s.createdAt).toLocal();
+      return DateTime(t.year, t.month, t.day);
+    }
+
+    final groups = <DateTime, List<SmartChargingSession>>{};
+    for (final s in shown) {
+      groups.putIfAbsent(dayOf(s), () => []).add(s);
+    }
+    final entries = <Widget>[];
+    var reveal = 0;
+    for (final group in groups.entries) {
+      final day = group.key;
+      final label = day == today
+          ? 'Hôm nay'
+          : day == today.subtract(const Duration(days: 1))
+          ? 'Hôm qua'
+          : DateFormat('EEEE, dd/MM', 'vi').format(day);
+      entries.add(
+        HistoryDayHeader(
+          label: label,
+          count: group.value.length,
+          totalWh: group.value.fold(0.0, (v, s) => v + max(0, s.energyUsedWh)),
+        ),
+      );
+      for (var i = 0; i < group.value.length; i++) {
+        final session = group.value[i];
+        entries.add(
+          LuxeReveal(
+            key: ValueKey('reveal-${session.sessionId}'),
+            index: reveal < 6 ? reveal : 0,
+            child: _sessionTile(
+              session,
+              isFirst: i == 0,
+              isLast: i == group.value.length - 1,
+            ),
+          ),
+        );
+        reveal++;
+      }
+    }
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+      sliver: SliverList.list(children: entries),
+    );
+  }
+
+  Widget _sessionTile(
+    SmartChargingSession session, {
+    required bool isFirst,
+    required bool isLast,
+  }) => Dismissible(
+    key: ValueKey('history-session-${session.sessionId}'),
+    direction: session.state.isTerminal
+        ? DismissDirection.endToStart
+        : DismissDirection.none,
+    confirmDismiss: (_) async {
+      _hide(session);
+      return false;
+    },
+    background: Container(
+      margin: const EdgeInsets.only(left: 34, bottom: 10),
+      alignment: Alignment.centerRight,
+      padding: const EdgeInsets.only(right: 20),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        color: LuxeColors.danger.withValues(alpha: 0.12),
+        border: Border.all(color: LuxeColors.danger.withValues(alpha: 0.35)),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.visibility_off_rounded,
+            color: LuxeColors.danger,
+            size: 20,
+          ),
+          SizedBox(width: 8),
+          Text(
+            'Ẩn phiên',
+            style: TextStyle(
+              color: LuxeColors.danger,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    ),
+    child: HistoryTimelineTile(
+      session: session,
+      isFirst: isFirst,
+      isLast: isLast,
+      onTap: () => _openDetail(session),
+      onLongPress: session.state.isTerminal ? () => _hide(session) : null,
+    ),
+  );
+
+  Widget _footer(
+    List<SmartChargingSession> shown,
+    List<SmartChargingSession> visible,
+  ) {
+    final done = _cursor == null && shown.length >= visible.length;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 36),
+      child: done
+          ? Row(
+              children: [
+                const Expanded(child: Divider()),
+                Flexible(
+                  flex: 3,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Text(
+                      'Đã hiển thị toàn bộ phiên sạc',
+                      textAlign: TextAlign.center,
+                      style: LuxeText.label.copyWith(fontSize: 11.5),
+                    ),
+                  ),
+                ),
+                const Expanded(child: Divider()),
+              ],
+            )
+          : Center(
+              child: OutlinedButton(
+                onPressed: _loading
+                    ? null
+                    : () {
+                        if (shown.length < visible.length) {
+                          setState(() => _visibleCount += 20);
+                        } else {
+                          _load(reset: false);
+                        }
+                      },
+                child: _loadingMore
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: LuxeColors.emerald,
+                        ),
+                      )
+                    : const Text('TẢI THÊM'),
+              ),
+            ),
+    );
+  }
 
   void _setStrategy(ChargingStrategy? value) {
     if (_filter == value) return;
@@ -488,14 +833,18 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
         : value;
   });
 
-  void _changeMonth(int delta) => setState(() {
-    _customRange = null;
-    _visibleCount = 20;
-    _selectedMonth = DateTime(
-      _selectedMonth.year,
-      _selectedMonth.month + delta,
-    );
-  });
+  void _changeMonth(int delta) {
+    HapticFeedback.selectionClick();
+    setState(() {
+      _customRange = null;
+      _visibleCount = 20;
+      _monthDirection = delta;
+      _selectedMonth = DateTime(
+        _selectedMonth.year,
+        _selectedMonth.month + delta,
+      );
+    });
+  }
 
   Future<void> _pickDateRange() async {
     final contextGeneration = _contextGeneration;
@@ -522,6 +871,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
     }
     setState(() {
       _customRange = selected;
+      _monthDirection = 0;
       _visibleCount = 20;
     });
   }
@@ -538,12 +888,13 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
       builder: (_) => FractionallySizedBox(
         heightFactor: .96,
         child: ClipRRect(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
           child: Consumer(
             builder: (context, ref, _) => SmartChargeSessionDetailScreen(
               controller: controller,
               ownerUid: ref.watch(currentUidProvider),
               session: session,
+              asSheet: true,
             ),
           ),
         ),
@@ -569,34 +920,48 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
     final vehicleId = _vehicleId;
     final format = await showModalBottomSheet<ChargeReportFormat>(
       context: context,
-      showDragHandle: true,
+      backgroundColor: const Color(0xFF0C0D0F),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        side: BorderSide(color: LuxeColors.hairline),
+      ),
       builder: (context) => SafeArea(
         child: Padding(
-          padding: EdgeInsets.fromLTRB(20, 0, 20, 20),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                'Xuất báo cáo',
-                style: Theme.of(context).textTheme.titleLarge,
+              Center(
+                child: Container(
+                  width: 38,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(2),
+                    color: LuxeColors.hairlineStrong,
+                  ),
+                ),
               ),
-              SizedBox(height: 6),
+              const SizedBox(height: 18),
+              const Text('BÁO CÁO', style: LuxeText.eyebrow),
+              const SizedBox(height: 6),
+              const Text('Xuất báo cáo', style: LuxeText.title),
+              const SizedBox(height: 6),
               Text(
                 '${_customRange == null ? DateFormat('MM/yyyy').format(_selectedMonth) : '${DateFormat('dd/MM/yyyy').format(_customRange!.start)} – ${DateFormat('dd/MM/yyyy').format(_customRange!.end)}'} · ${_allVehicles ? 'Tất cả xe' : 'Xe đang chọn'}',
-                style: Theme.of(context).textTheme.bodySmall,
+                style: LuxeText.caption,
               ),
-              SizedBox(height: 18),
+              const SizedBox(height: 20),
               FilledButton.icon(
                 onPressed: () => Navigator.pop(context, ChargeReportFormat.pdf),
-                icon: Icon(Icons.picture_as_pdf_rounded),
-                label: Text('Xuất PDF'),
+                icon: const Icon(Icons.picture_as_pdf_rounded),
+                label: const Text('Xuất PDF'),
               ),
-              SizedBox(height: 10),
+              const SizedBox(height: 10),
               OutlinedButton.icon(
                 onPressed: () => Navigator.pop(context, ChargeReportFormat.csv),
-                icon: Icon(Icons.table_view_rounded),
-                label: Text('Xuất CSV'),
+                icon: const Icon(Icons.table_view_rounded),
+                label: const Text('Xuất CSV'),
               ),
             ],
           ),
@@ -630,23 +995,40 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
     }
   }
 
-  Widget _errorState() => ListView(
-    children: [
-      SizedBox(height: 120),
-      Icon(
-        Icons.cloud_off_rounded,
-        size: 44,
-        color: Theme.of(context).colorScheme.outline,
-      ),
-      SizedBox(height: 12),
-      Center(child: Text(_error!)),
-      Center(
-        child: TextButton(
-          onPressed: () => _load(reset: true),
-          child: Text('THỬ LẠI'),
+  Widget _errorState() => Padding(
+    padding: const EdgeInsets.fromLTRB(32, 24, 32, 48),
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Container(
+          width: 64,
+          height: 64,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: LuxeColors.glass,
+            border: Border.all(color: LuxeColors.hairline),
+          ),
+          child: const Icon(
+            Icons.cloud_off_rounded,
+            size: 28,
+            color: LuxeColors.platinumMid,
+          ),
         ),
-      ),
-    ],
+        const SizedBox(height: 16),
+        Text(_error!, textAlign: TextAlign.center, style: LuxeText.item),
+        const SizedBox(height: 6),
+        const Text(
+          'Kiểm tra kết nối mạng rồi thử lại.',
+          textAlign: TextAlign.center,
+          style: LuxeText.caption,
+        ),
+        const SizedBox(height: 18),
+        OutlinedButton(
+          onPressed: () => _load(reset: true),
+          child: const Text('THỬ LẠI'),
+        ),
+      ],
+    ),
   );
 
   Future<void> _hide(SmartChargingSession session) async {
@@ -656,18 +1038,19 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Ẩn phiên sạc?'),
-        content: Text(
+        backgroundColor: const Color(0xFF121315),
+        title: const Text('Ẩn phiên sạc?'),
+        content: const Text(
           'Phiên sẽ được ẩn khỏi lịch sử thường. Dữ liệu gốc vẫn được giữ lại.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text('HỦY'),
+            child: const Text('HỦY'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text('ẨN PHIÊN'),
+            child: const Text('ẨN PHIÊN'),
           ),
         ],
       ),
@@ -684,9 +1067,9 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
           () =>
               _items.removeWhere((item) => item.sessionId == session.sessionId),
         );
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Đã ẩn phiên khỏi lịch sử.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đã ẩn phiên khỏi lịch sử.')),
+        );
       }
     } catch (error) {
       if (mounted && contextGeneration == _contextGeneration) {
@@ -704,336 +1087,106 @@ class _HistoryHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Expanded(
+      const Expanded(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Lịch sử sạc điện',
-              style: Theme.of(
-                context,
-              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
-            ),
-            SizedBox(height: 3),
+            Text('NHẬT KÝ NĂNG LƯỢNG', style: LuxeText.eyebrow),
+            SizedBox(height: 6),
+            Text('Lịch sử sạc', style: LuxeText.title),
+            SizedBox(height: 4),
             Text(
               'Phiên sạc, điện năng và chi phí đã đo.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: AppUiColors.of(context).muted,
-              ),
+              style: LuxeText.caption,
             ),
           ],
         ),
       ),
-      OutlinedButton.icon(
+      const SizedBox(width: 12),
+      HistoryGlassButton(
+        icon: Icons.ios_share_rounded,
+        tooltip: 'Xuất báo cáo',
         onPressed: onExport,
-        icon: Icon(Icons.ios_share_rounded, size: 18),
-        label: Text('Xuất'),
       ),
     ],
   );
 }
 
-class _ActiveHistoryCard extends StatelessWidget {
-  const _ActiveHistoryCard({
-    required this.session,
-    required this.onTap,
-    this.powerW,
-  });
-  final SmartChargingSession session;
-  final VoidCallback onTap;
-  final double? powerW;
-
+class _KpiDivider extends StatelessWidget {
+  const _KpiDivider();
   @override
-  Widget build(BuildContext context) {
-    final cost = session.estimatedCostVnd == null
-        ? 'Chưa đặt giá điện'
-        : '${NumberFormat.decimalPattern('vi_VN').format(session.estimatedCostVnd)} đ tạm tính';
-    return Semantics(
-      button: true,
-      label: 'Phiên đang sạc, mở chi tiết realtime',
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(24),
-        child: CockpitPanel(
-          adaptive: true,
-          highlight: true,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    Icons.bolt_rounded,
-                    color: AppUiColors.of(context).primary,
-                  ),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'ĐANG SẠC',
-                      style: TextStyle(fontWeight: FontWeight.w900),
-                    ),
-                  ),
-                  Text(
-                    _duration(session.remaining()),
-                    style: TextStyle(fontWeight: FontWeight.w900),
-                  ),
-                ],
-              ),
-              SizedBox(height: 12),
-              Text(
-                '~${(session.estimatedSoc ?? session.startSoc).round()}% → Mục tiêu ~${session.targetSoc.round()}%',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
-              ),
-              SizedBox(height: 5),
-              Text(
-                '${powerW == null ? '— W' : '${powerW!.toStringAsFixed(0)} W'} · ${_energy(session.energyUsedWh)} · $cost',
-                style: TextStyle(color: AppUiColors.of(context).muted),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MonthlySummary extends StatelessWidget {
-  const _MonthlySummary({
-    required this.month,
-    required this.range,
-    required this.summary,
-    this.onPrevious,
-    this.onNext,
-  });
-  final DateTime month;
-  final DateTimeRange? range;
-  final SmartChargeHistorySummary summary;
-  final VoidCallback? onPrevious;
-  final VoidCallback? onNext;
-
-  @override
-  Widget build(BuildContext context) {
-    final recent = <SmartChargeDailyEnergy>[];
-    final now = DateTime.now();
-    for (var offset = 6; offset >= 0; offset--) {
-      final day = DateTime(
-        now.year,
-        now.month,
-        now.day,
-      ).subtract(Duration(days: offset));
-      recent.add(
-        summary.daily.firstWhere(
-          (item) => item.day == day,
-          orElse: () => SmartChargeDailyEnergy(day, 0, 0),
-        ),
-      );
-    }
-    return CockpitPanel(
-      adaptive: true,
-      child: Column(
-        children: [
-          Row(
-            children: [
-              IconButton(
-                onPressed: onPrevious,
-                icon: Icon(Icons.chevron_left_rounded),
-              ),
-              Expanded(
-                child: Text(
-                  range == null
-                      ? 'TỔNG KẾT THÁNG ${DateFormat('MM/yyyy').format(month)}'
-                      : 'TỔNG KẾT ${DateFormat('dd/MM').format(range!.start)} – ${DateFormat('dd/MM/yyyy').format(range!.end)}',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: AppUiColors.of(context).primary,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 12,
-                    letterSpacing: .5,
-                  ),
-                ),
-              ),
-              IconButton(
-                onPressed: onNext,
-                icon: Icon(Icons.chevron_right_rounded),
-              ),
-            ],
-          ),
-          Divider(),
-          Wrap(
-            spacing: 24,
-            runSpacing: 16,
-            children: [
-              _SummaryKpi('Điện nạp', _energy(summary.totalGridEnergyWh)),
-              _SummaryKpi(
-                'Tổng tiền',
-                summary.totalCostVnd <= 0
-                    ? '0 đ'
-                    : '${NumberFormat.compact(locale: 'vi').format(summary.totalCostVnd)} đ',
-              ),
-              _SummaryKpi('Thời gian', _duration(summary.totalDuration)),
-              _SummaryKpi('Phiên', '${summary.completedSessions}'),
-            ],
-          ),
-          SizedBox(height: 18),
-          SizedBox(height: 72, child: _SevenDayBars(days: recent)),
-        ],
-      ),
-    );
-  }
-}
-
-class _SummaryKpi extends StatelessWidget {
-  const _SummaryKpi(this.label, this.value);
-  final String label;
-  final String value;
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    width: 116,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(color: AppUiColors.of(context).muted, fontSize: 11),
-        ),
-        SizedBox(height: 3),
-        Text(
-          value,
-          style: CockpitTypography.numbers(
-            color: Theme.of(context).colorScheme.onSurface,
-            fontSize: 16,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class _SevenDayBars extends StatelessWidget {
-  const _SevenDayBars({required this.days});
-  final List<SmartChargeDailyEnergy> days;
-  @override
-  Widget build(BuildContext context) {
-    final hasData = days.any((d) => d.energyWh > 0);
-    if (!hasData) {
-      return Container(
-        alignment: Alignment.center,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.bar_chart_rounded,
-              size: 16,
-              color: AppUiColors.of(context).muted,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              'Chưa có dữ liệu nạp sạc 7 ngày qua',
-              style: TextStyle(
-                fontSize: 11.5,
-                color: AppUiColors.of(context).muted,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-    final maximum = days.fold<double>(
-      1,
-      (value, item) => max(value, item.energyWh),
-    );
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        for (final day in days)
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: Align(
-                    alignment: Alignment.bottomCenter,
-                    child: FractionallySizedBox(
-                      heightFactor: max(.06, day.energyWh / maximum),
-                      child: Container(
-                        width: 16,
-                        decoration: BoxDecoration(
-                          color: AppUiColors.of(context).primary,
-                          borderRadius: BorderRadius.circular(5),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  DateFormat('E', 'vi').format(day.day),
-                  style: TextStyle(
-                    fontSize: 9,
-                    color: AppUiColors.of(context).muted,
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
+  Widget build(BuildContext context) =>
+      Container(width: 1, height: 30, color: LuxeColors.hairline);
 }
 
 class _EmptyHistory extends StatelessWidget {
-  const _EmptyHistory({this.isFiltered = false, this.onClearFilter});
+  const _EmptyHistory({
+    this.isFiltered = false,
+    this.onClearFilter,
+    this.onStartCharging,
+  });
   final bool isFiltered;
   final VoidCallback? onClearFilter;
+  final VoidCallback? onStartCharging;
 
   @override
-  Widget build(BuildContext context) => ListView(
-    physics: const AlwaysScrollableScrollPhysics(),
-    children: [
-      const SizedBox(height: 100),
-      Icon(
-        isFiltered
-            ? Icons.filter_alt_off_rounded
-            : Icons.electric_bolt_outlined,
-        size: 48,
-        color: Theme.of(context).colorScheme.outline,
-      ),
-      const SizedBox(height: 12),
-      Center(
-        child: Text(
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(28, 18, 28, 48),
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        if (isFiltered)
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: LuxeColors.glass,
+              border: Border.all(color: LuxeColors.hairline),
+            ),
+            child: const Icon(
+              Icons.filter_alt_off_rounded,
+              size: 26,
+              color: LuxeColors.platinumMid,
+            ),
+          )
+        else
+          const HistoryEmptyArt(),
+        const SizedBox(height: 18),
+        Text(
           isFiltered
               ? 'Không có phiên sạc phù hợp bộ lọc'
               : 'Chưa có phiên Smart Charge hoàn tất',
-          style: Theme.of(
-            context,
-          ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+          textAlign: TextAlign.center,
+          style: LuxeText.item,
         ),
-      ),
-      const SizedBox(height: 6),
-      Center(
-        child: Text(
+        const SizedBox(height: 6),
+        Text(
           isFiltered
               ? 'Thử đổi khoảng ngày hoặc chuyển bộ lọc sang Tất cả.'
               : 'Lịch sử sạc sẽ hiển thị tại đây sau khi phiên sạc kết thúc và ngắt kết nối an toàn.',
           textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodySmall,
+          style: LuxeText.caption,
         ),
-      ),
-      if (isFiltered && onClearFilter != null) ...[
-        const SizedBox(height: 16),
-        Center(
-          child: OutlinedButton.icon(
+        if (isFiltered && onClearFilter != null) ...[
+          const SizedBox(height: 18),
+          OutlinedButton.icon(
             onPressed: onClearFilter,
             icon: const Icon(Icons.clear_all_rounded, size: 18),
             label: const Text('Xóa bộ lọc'),
           ),
-        ),
+        ] else if (!isFiltered && onStartCharging != null) ...[
+          const SizedBox(height: 20),
+          FilledButton.icon(
+            onPressed: onStartCharging,
+            icon: const Icon(Icons.bolt_rounded, size: 20),
+            label: const Text('Bắt đầu phiên sạc đầu tiên'),
+          ),
+        ],
       ],
-    ],
+    ),
   );
 }
 
@@ -1042,171 +1195,30 @@ class _StaleNotice extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.fromLTRB(14, 4, 4, 4),
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(16),
+      color: historyAmber.withValues(alpha: 0.08),
+      border: Border.all(color: historyAmber.withValues(alpha: 0.3)),
+    ),
     child: Row(
       children: [
-        Icon(Icons.info_outline_rounded, size: 18),
-        SizedBox(width: 8),
-        Expanded(child: Text('$message Đang hiển thị dữ liệu gần nhất.')),
-        TextButton(onPressed: onRetry, child: Text('THỬ LẠI')),
+        const Icon(Icons.info_outline_rounded, size: 18, color: historyAmber),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            '$message Đang hiển thị dữ liệu gần nhất.',
+            style: LuxeText.caption.copyWith(color: LuxeColors.text),
+          ),
+        ),
+        TextButton(onPressed: onRetry, child: const Text('THỬ LẠI')),
       ],
     ),
   );
 }
 
-class _HistoryRow extends StatelessWidget {
-  const _HistoryRow({
-    required this.session,
-    required this.onTap,
-    required this.onHide,
-  });
-  final SmartChargingSession session;
-  final VoidCallback onTap;
-  final VoidCallback onHide;
-
-  @override
-  Widget build(BuildContext context) {
-    final duration = (session.stoppedAt ?? session.updatedAt).difference(
-      session.startedAt ?? session.createdAt,
-    );
-    final cost = session.estimatedCostVnd == null
-        ? '—'
-        : '${NumberFormat.decimalPattern('vi_VN').format(session.estimatedCostVnd)} đ';
-    final isPartial = session.energyQuality == 'partial';
-    final isCompleted = session.state == ChargingSessionState.completed;
-    final statusText = isPartial
-        ? 'Partial'
-        : isCompleted
-        ? 'Hoàn thành'
-        : 'Đã dừng';
-    final statusBg = isPartial
-        ? Colors.grey.withValues(alpha: 0.15)
-        : isCompleted
-        ? CockpitColors.emerald.withValues(alpha: 0.15)
-        : CockpitColors.amber.withValues(alpha: 0.15);
-    final statusFg = isPartial
-        ? AppUiColors.of(context).muted
-        : isCompleted
-        ? CockpitColors.emeraldStrong
-        : CockpitColors.amber;
-
-    return Semantics(
-      button: true,
-      label:
-          'Chi tiết phiên sạc ${DateFormat('dd/MM/yyyy').format(session.createdAt)}, trạng thái $statusText',
-      child: Dismissible(
-        key: ValueKey('history-session-${session.sessionId}'),
-        direction: session.state.isTerminal
-            ? DismissDirection.endToStart
-            : DismissDirection.none,
-        confirmDismiss: (_) async {
-          onHide();
-          return false;
-        },
-        background: Container(
-          alignment: Alignment.centerRight,
-          padding: const EdgeInsets.only(right: 20),
-          color: Theme.of(context).colorScheme.errorContainer,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.visibility_off_rounded,
-                color: Theme.of(context).colorScheme.error,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Ẩn phiên',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.error,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-        ),
-        child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 8,
-          ),
-          onTap: onTap,
-          title: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  session.strategy == ChargingStrategy.manualTimed
-                      ? 'Sạc thủ công'
-                      : 'Sạc theo AI',
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: statusBg,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  statusText,
-                  style: TextStyle(
-                    color: statusFg,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                _energy(session.energyUsedWh),
-                style: const TextStyle(fontWeight: FontWeight.w800),
-              ),
-            ],
-          ),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '${DateFormat('dd/MM · HH:mm').format(session.createdAt.toLocal())} · ${_duration(duration)} · $cost',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppUiColors.of(context).muted,
-                    ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 1,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    '${session.startSoc.toStringAsFixed(0)}% → ${session.targetSoc.toStringAsFixed(0)}%',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: AppUiColors.of(context).text,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          trailing: const Icon(Icons.chevron_right_rounded),
-          onLongPress: session.state.isTerminal ? onHide : null,
-        ),
-      ),
-    );
-  }
-}
+// ═════════════════════════════ Session detail ═════════════════════════════
 
 enum _ChartMetric { power, voltage, current, temperature, energy }
 
@@ -1216,10 +1228,14 @@ class SmartChargeSessionDetailScreen extends StatefulWidget {
     required this.controller,
     required this.session,
     this.ownerUid,
+    this.asSheet = false,
   });
   final SmartChargingController controller;
   final SmartChargingSession session;
   final String? ownerUid;
+
+  /// Shows a drag handle; the same layout also works as a pushed page.
+  final bool asSheet;
 
   @override
   State<SmartChargeSessionDetailScreen> createState() => _DetailState();
@@ -1235,6 +1251,7 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
   bool _loadingTelemetry = false;
   int _contextGeneration = 0;
   bool _contextUnavailable = false;
+  bool _showTechnical = false;
 
   @override
   void initState() {
@@ -1340,232 +1357,191 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    if (_contextUnavailable) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Chi tiết phiên sạc')),
-        body: const Center(
-          child: Padding(
-            padding: EdgeInsets.all(24),
-            child: Text(
-              'Tài khoản đã thay đổi. Hãy mở lại lịch sử sạc.',
-              textAlign: TextAlign.center,
+  Widget _frame(List<Widget> children) => Theme(
+    data: LuxeTheme.of(context),
+    child: Scaffold(
+      backgroundColor: LuxeColors.background,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          const LuxeBackdrop(),
+          SafeArea(
+            top: !widget.asSheet,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(18, 10, 18, 36),
+              children: children,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _topBar() => Column(
+    children: [
+      if (widget.asSheet)
+        Center(
+          child: Container(
+            width: 38,
+            height: 4,
+            margin: const EdgeInsets.only(bottom: 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(2),
+              color: LuxeColors.hairlineStrong,
             ),
           ),
         ),
-      );
+      Align(
+        alignment: Alignment.centerRight,
+        child: HistoryGlassButton(
+          icon: widget.asSheet ? Icons.close_rounded : Icons.arrow_back_rounded,
+          tooltip: 'Đóng',
+          size: 40,
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+      ),
+    ],
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    if (_contextUnavailable) {
+      return _frame([
+        _topBar(),
+        const SizedBox(height: 120),
+        const Icon(
+          Icons.lock_outline_rounded,
+          size: 34,
+          color: LuxeColors.platinumMid,
+        ),
+        const SizedBox(height: 14),
+        const Text(
+          'Tài khoản đã thay đổi. Hãy mở lại lịch sử sạc.',
+          textAlign: TextAlign.center,
+          style: LuxeText.item,
+        ),
+      ]);
     }
-    final duration = (_session.stoppedAt ?? _session.updatedAt).difference(
-      _session.startedAt ?? _session.createdAt,
-    );
-    return SmartChargeCockpitTheme(
-      adaptive: true,
-      child: Scaffold(
-        appBar: AppBar(title: Text('Chi tiết phiên sạc')),
-        body: ListView(
-          padding: EdgeInsets.fromLTRB(16, 8, 16, 32),
+    final (_, statusColor) = historyStatus(_session);
+    final started = (_session.startedAt ?? _session.createdAt).toLocal();
+    final stateLabel = switch (_session.state) {
+      ChargingSessionState.arming => 'Đang chuẩn bị',
+      ChargingSessionState.starting => 'Đang bật sạc',
+      ChargingSessionState.active =>
+        'Đang sạc · Mục tiêu ~${_session.targetSoc.round()}%',
+      ChargingSessionState.stopping => 'Đang dừng sạc',
+      ChargingSessionState.completed =>
+        _session.energyQuality == 'partial'
+            ? 'Hoàn tất · một phần'
+            : 'Đã hoàn tất',
+      ChargingSessionState.cancelled => 'Đã dừng',
+      ChargingSessionState.interrupted => 'Bị gián đoạn',
+      ChargingSessionState.failed => 'Phiên gặp lỗi',
+    };
+    final terminal = _session.state.isTerminal;
+    return _frame([
+      _topBar(),
+      LuxeReveal(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              _session.strategy == ChargingStrategy.manualTimed
-                  ? 'Sạc thủ công'
-                  : 'Sạc theo AI',
-              style: Theme.of(
-                context,
-              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+              DateFormat('dd/MM/yyyy · HH:mm').format(started).toUpperCase(),
+              style: LuxeText.eyebrow,
             ),
-            ...[
-              SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Chip(
-                  avatar: Icon(Icons.bolt_rounded, size: 18),
-                  label: Text(switch (_session.state) {
-                    ChargingSessionState.arming => 'Đang chuẩn bị',
-                    ChargingSessionState.starting => 'Đang bật sạc',
-                    ChargingSessionState.active =>
-                      'Đang sạc · Mục tiêu ~${_session.targetSoc.round()}%',
-                    ChargingSessionState.stopping => 'Đang dừng sạc',
-                    ChargingSessionState.completed => 'Đã hoàn tất',
-                    ChargingSessionState.cancelled => 'Đã hủy',
-                    ChargingSessionState.interrupted => 'Bị gián đoạn',
-                    ChargingSessionState.failed => 'Phiên gặp lỗi',
-                  }),
+            const SizedBox(height: 6),
+            Text(historyStrategy(_session), style: LuxeText.title),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 10,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                HistoryStatusPill(label: stateLabel, color: statusColor),
+                Text(
+                  historyDuration(historySessionDuration(_session)),
+                  style: LuxeText.label,
                 ),
-              ),
-            ],
-            SizedBox(height: 6),
-            Text(
-              '${DateFormat('dd/MM/yyyy · HH:mm').format(_session.createdAt.toLocal())}  ·  ${_duration(duration)}',
-              style: CockpitTypography.label(
-                fontSize: 12,
-                color: CockpitColors.muted,
-              ),
-            ),
-            const SizedBox(height: 16),
-            SessionSocSummary(session: _session),
-            const SizedBox(height: 16),
-            _kpis(),
-            const SizedBox(height: 16),
-            // Card 3: Telemetry & Curves Card
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: CockpitColors.surface,
-                borderRadius: BorderRadius.circular(CockpitRadius.large),
-                border: Border.all(color: CockpitColors.border),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: CockpitColors.info.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(
-                          Icons.show_chart_rounded,
-                          size: 20,
-                          color: CockpitColors.info,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Diễn biến telemetry',
-                              style: CockpitTypography.heading(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                                color: CockpitColors.text,
-                              ),
-                            ),
-                            Text(
-                              'Chạm và kéo trên biểu đồ để xem chi tiết',
-                              style: CockpitTypography.label(
-                                fontSize: 11,
-                                color: CockpitColors.dim,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  _metricSelector(),
-                  const SizedBox(height: 16),
-                  if (_error != null && _points != null)
-                    _StaleNotice(message: _error!, onRetry: _load),
-                  SizedBox(height: 250, child: _chart()),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            // Card 4: Technical & AI Diagnostics Card
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: CockpitColors.surface,
-                borderRadius: BorderRadius.circular(CockpitRadius.large),
-                border: Border.all(color: CockpitColors.border),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: CockpitColors.amber.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(
-                          Icons.memory_rounded,
-                          size: 20,
-                          color: CockpitColors.amber,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        'Thông số kỹ thuật & AI',
-                        style: CockpitTypography.heading(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: CockpitColors.text,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  _technicalSummary(),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            OutlinedButton.icon(
-              onPressed: _session.state.isTerminal ? _confirmSoc : null,
-              icon: const Icon(Icons.battery_saver_rounded),
-              label: const Text('XÁC NHẬN SOC THỰC TẾ KHI KẾT THÚC'),
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: _session.state.isTerminal ? _hideSession : null,
-              icon: const Icon(Icons.visibility_off_outlined),
-              label: const Text('ẨN PHIÊN KHỎI LỊCH SỬ'),
-            ),
-            const SizedBox(height: 8),
-            TextButton.icon(
-              onPressed: _session.state.isTerminal ? _privacyErase : null,
-              icon: const Icon(Icons.delete_forever_outlined),
-              label: const Text('XÓA VĨNH VIỄN DỮ LIỆU PHIÊN'),
-              style: TextButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.error,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Các chỉ số pin là ước tính, không phải dữ liệu BMS. Dung lượng khả dụng chỉ hiện khi phiên đủ chất lượng.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.tertiary,
-              ),
+              ],
             ),
           ],
         ),
       ),
-    );
+      const SizedBox(height: 18),
+      LuxeReveal(index: 1, child: SessionSocSummary(session: _session)),
+      const SizedBox(height: 14),
+      LuxeReveal(index: 2, child: _kpis()),
+      const SizedBox(height: 14),
+      LuxeReveal(
+        index: 3,
+        child: LuxeGlass(
+          radius: 24,
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const _SectionTitle(
+                title: 'Diễn biến telemetry',
+                subtitle: 'Chạm và kéo trên biểu đồ để xem chi tiết',
+              ),
+              const SizedBox(height: 12),
+              _metricSelector(),
+              const SizedBox(height: 14),
+              if (_error != null && _points != null) ...[
+                _StaleNotice(message: _error!, onRetry: _load),
+                const SizedBox(height: 10),
+              ],
+              SizedBox(height: 230, child: _chart()),
+            ],
+          ),
+        ),
+      ),
+      const SizedBox(height: 14),
+      LuxeReveal(index: 4, child: _technicalCard()),
+      const SizedBox(height: 22),
+      FilledButton.icon(
+        onPressed: terminal ? _confirmSoc : null,
+        icon: const Icon(Icons.battery_saver_rounded, size: 20),
+        label: const Text('Xác nhận SoC thực tế khi kết thúc'),
+      ),
+      const SizedBox(height: 10),
+      OutlinedButton.icon(
+        onPressed: terminal ? _hideSession : null,
+        icon: const Icon(Icons.visibility_off_outlined, size: 20),
+        label: const Text('Ẩn phiên khỏi lịch sử'),
+      ),
+      const SizedBox(height: 4),
+      TextButton.icon(
+        onPressed: terminal ? _privacyErase : null,
+        icon: const Icon(Icons.delete_forever_outlined, size: 20),
+        label: const Text('Xóa vĩnh viễn dữ liệu phiên'),
+        style: TextButton.styleFrom(foregroundColor: LuxeColors.danger),
+      ),
+      const SizedBox(height: 10),
+      const Text(
+        'Các chỉ số pin là ước tính, không phải dữ liệu BMS. Dung lượng khả dụng chỉ hiện khi phiên đủ chất lượng.',
+        textAlign: TextAlign.center,
+        style: TextStyle(color: LuxeColors.dim, fontSize: 12, height: 1.45),
+      ),
+    ]);
   }
 
   Widget _kpis() {
     final summary = _summary;
-    final cost = _session.estimatedCostVnd == null
-        ? '—'
-        : '${NumberFormat.decimalPattern('vi_VN').format(_session.estimatedCostVnd)} đ';
-    final duration = (_session.stoppedAt ?? _session.updatedAt).difference(
-      _session.startedAt ?? _session.createdAt,
-    );
-    final durationStr = _duration(duration);
     final avgPower = summary == null
         ? '—'
         : '${(summary.averagePowerW / 1000).toStringAsFixed(2)} kW';
-
     final items = [
       (
         icon: Icons.electric_bolt_rounded,
         title: 'Điện từ lưới',
-        value: summary == null ? '—' : _energy(summary.gridEnergyWh),
+        value: summary == null ? '—' : historyEnergy(summary.gridEnergyWh),
         highlight: true,
       ),
       (
         icon: Icons.payments_rounded,
         title: 'Chi phí phiên',
-        value: cost,
+        value: historyCost(_session.estimatedCostVnd),
         highlight: false,
       ),
       (
@@ -1577,13 +1553,13 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
       (
         icon: Icons.timer_outlined,
         title: 'Thời gian sạc',
-        value: durationStr,
+        value: historyDuration(historySessionDuration(_session)),
         highlight: false,
       ),
       (
         icon: Icons.battery_charging_full_rounded,
         title: 'Vào pin (ước tính)',
-        value: summary == null ? '—' : _energy(summary.estimatedStoredWh),
+        value: summary == null ? '—' : historyEnergy(summary.estimatedStoredWh),
         highlight: false,
       ),
       (
@@ -1591,127 +1567,96 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
         title: 'Dung lượng khả dụng',
         value: summary?.estimatedUsableCapacityWh == null
             ? 'Cần xác nhận'
-            : _energy(summary!.estimatedUsableCapacityWh!),
+            : historyEnergy(summary!.estimatedUsableCapacityWh!),
         highlight: false,
       ),
     ];
-
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: CockpitColors.surface,
-        borderRadius: BorderRadius.circular(CockpitRadius.large),
-        border: Border.all(color: CockpitColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: CockpitColors.emerald.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.dashboard_customize_rounded,
-                  size: 20,
-                  color: CockpitColors.emeraldStrong,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                'Tổng quan phiên sạc',
-                style: CockpitTypography.heading(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: CockpitColors.text,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          ResponsiveCardGrid(
-            spacing: 12,
-            minCardWidth: 140,
-            children: [
-              for (final item in items)
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: item.highlight
-                        ? CockpitColors.emeraldStrong.withValues(alpha: 0.08)
-                        : CockpitColors.surfaceSoft,
-                    borderRadius: BorderRadius.circular(CockpitRadius.medium),
-                    border: Border.all(
-                      color: item.highlight
-                          ? CockpitColors.emeraldStrong.withValues(alpha: 0.3)
-                          : CockpitColors.border,
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            item.icon,
-                            size: 16,
-                            color: item.highlight
-                                ? CockpitColors.emeraldStrong
-                                : CockpitColors.muted,
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              item.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: CockpitTypography.label(
-                                fontSize: 11,
-                                color: CockpitColors.muted,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        item.value,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: CockpitTypography.numbers(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(left: 4, bottom: 10),
+          child: _SectionTitle(title: 'Tổng quan phiên sạc'),
+        ),
+        ResponsiveCardGrid(
+          spacing: 10,
+          minCardWidth: 140,
+          children: [
+            for (final item in items)
+              LuxeGlass(
+                selected: item.highlight,
+                radius: 18,
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          item.icon,
+                          size: 15,
                           color: item.highlight
-                              ? CockpitColors.emeraldStrong
-                              : CockpitColors.text,
+                              ? LuxeColors.emerald
+                              : LuxeColors.platinumMid,
                         ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            item.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: LuxeText.label.copyWith(fontSize: 11.5),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      item.value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: item.highlight
+                            ? LuxeColors.emerald
+                            : LuxeColors.platinumHi,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w500,
+                        fontFeatures: const [ui.FontFeature.tabularFigures()],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-            ],
-          ),
-        ],
-      ),
+              ),
+          ],
+        ),
+      ],
     );
   }
 
   Widget _metricSelector() => SingleChildScrollView(
     scrollDirection: Axis.horizontal,
-    child: SegmentedButton<_ChartMetric>(
-      showSelectedIcon: false,
-      segments: [
-        ButtonSegment(value: _ChartMetric.power, label: Text('W')),
-        ButtonSegment(value: _ChartMetric.voltage, label: Text('V')),
-        ButtonSegment(value: _ChartMetric.current, label: Text('A')),
-        ButtonSegment(value: _ChartMetric.temperature, label: Text('°C')),
-        ButtonSegment(value: _ChartMetric.energy, label: Text('Wh')),
+    child: Row(
+      children: [
+        for (final (metric, label) in const [
+          (_ChartMetric.power, 'W'),
+          (_ChartMetric.voltage, 'V'),
+          (_ChartMetric.current, 'A'),
+          (_ChartMetric.temperature, '°C'),
+          (_ChartMetric.energy, 'Wh'),
+        ])
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: HistoryChip(
+              label: label,
+              selected: _metric == metric,
+              onTap: () {
+                if (_metric == metric) return;
+                HapticFeedback.selectionClick();
+                setState(() => _metric = metric);
+              },
+            ),
+          ),
       ],
-      selected: {_metric},
-      onSelectionChanged: (value) => setState(() => _metric = value.first),
     ),
   );
 
@@ -1721,22 +1666,36 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_error!, textAlign: TextAlign.center),
-            SizedBox(height: 8),
+            Text(_error!, textAlign: TextAlign.center, style: LuxeText.caption),
+            const SizedBox(height: 10),
             OutlinedButton.icon(
               onPressed: _load,
-              icon: Icon(Icons.refresh_rounded),
-              label: Text('Thử lại'),
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: const Text('Thử lại'),
             ),
           ],
         ),
       );
     }
     if (_points == null) {
-      return Center(child: CircularProgressIndicator());
+      return const Center(
+        child: SizedBox.square(
+          dimension: 26,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: LuxeColors.emerald,
+          ),
+        ),
+      );
     }
     if (_points!.isEmpty) {
-      return Center(child: Text('Phiên này chưa có telemetry chi tiết.'));
+      return const Center(
+        child: Text(
+          'Phiên này chưa có telemetry chi tiết.',
+          textAlign: TextAlign.center,
+          style: LuxeText.caption,
+        ),
+      );
     }
     final source = _downsample(_points!, 500);
     double read(SmartChargeTelemetryPoint point) => switch (_metric) {
@@ -1750,7 +1709,7 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
     for (final point in source) {
       if (segments.isEmpty ||
           point.timestamp.difference(segments.last.last.timestamp) >
-              Duration(seconds: 75)) {
+              const Duration(seconds: 75)) {
         segments.add([point]);
       } else {
         segments.last.add(point);
@@ -1770,39 +1729,54 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
         rearmMarkers.add(source[index].elapsedSeconds / 60);
       }
     }
-    final color = Theme.of(context).colorScheme.primary;
+    const axisStyle = TextStyle(fontSize: 10, color: LuxeColors.dim);
     return AnimatedSwitcher(
       duration: MediaQuery.disableAnimationsOf(context)
           ? Duration.zero
-          : Duration(milliseconds: 180),
+          : const Duration(milliseconds: 260),
       child: LineChart(
         key: ValueKey(_metric),
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : const Duration(milliseconds: 450),
         LineChartData(
           minY: 0,
-          gridData: FlGridData(show: true, drawVerticalLine: false),
+          gridData: FlGridData(
+            show: true,
+            drawVerticalLine: false,
+            getDrawingHorizontalLine: (_) => const FlLine(
+              color: Color(0x14FFFFFF),
+              strokeWidth: 1,
+              dashArray: [3, 5],
+            ),
+          ),
           borderData: FlBorderData(show: false),
           titlesData: FlTitlesData(
-            topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            topTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
+            rightTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
             bottomTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
-                reservedSize: 28,
+                reservedSize: 26,
                 getTitlesWidget: (value, meta) =>
-                    Text('${value.round()}m', style: TextStyle(fontSize: 10)),
+                    Text('${value.round()}m', style: axisStyle),
               ),
             ),
             leftTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
-                reservedSize: 52,
+                reservedSize: 46,
                 getTitlesWidget: (value, meta) {
                   final text = value == value.roundToDouble()
                       ? '${value.toInt()}'
                       : value.toStringAsFixed(1);
                   return Text(
                     text,
-                    style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
+                    style: axisStyle,
                     maxLines: 1,
                     softWrap: false,
                   );
@@ -1811,14 +1785,35 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
             ),
           ),
           lineTouchData: LineTouchData(
+            getTouchedSpotIndicator: (bar, indexes) => [
+              for (final _ in indexes)
+                TouchedSpotIndicatorData(
+                  const FlLine(color: Color(0x55FFFFFF), strokeWidth: 1),
+                  FlDotData(
+                    getDotPainter: (spot, percent, bar, index) =>
+                        FlDotCirclePainter(
+                          radius: 4.5,
+                          color: LuxeColors.platinumHi,
+                          strokeWidth: 3,
+                          strokeColor: LuxeColors.emerald.withValues(
+                            alpha: 0.45,
+                          ),
+                        ),
+                  ),
+                ),
+            ],
             touchTooltipData: LineTouchTooltipData(
+              getTooltipColor: (_) => const Color(0xFF1D1F22),
+              tooltipRoundedRadius: 12,
+              tooltipBorder: const BorderSide(color: LuxeColors.hairline),
               getTooltipItems: (items) => items
                   .map(
                     (item) => LineTooltipItem(
                       '${item.x.toStringAsFixed(1)} phút\n${item.y.toStringAsFixed(1)} ${_metricUnit(_metric)}',
-                      TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
+                      const TextStyle(
+                        color: LuxeColors.text,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
                       ),
                     ),
                   )
@@ -1829,14 +1824,14 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
             verticalLines: [
               VerticalLine(
                 x: 0,
-                color: AppUiColors.of(context).primary,
-                strokeWidth: 1.5,
+                color: LuxeColors.emerald.withValues(alpha: 0.6),
+                strokeWidth: 1.2,
               ),
               for (final minute in rearmMarkers)
                 VerticalLine(
                   x: minute,
-                  color: AppUiColors.of(context).warning,
-                  strokeWidth: 1.5,
+                  color: historyAmber,
+                  strokeWidth: 1.2,
                   dashArray: [5, 4],
                 ),
               for (final event in _session.safetyEvents)
@@ -1849,8 +1844,8 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
                             )
                             .inSeconds /
                         60,
-                    color: AppUiColors.of(context).warning,
-                    strokeWidth: 1.5,
+                    color: historyAmber,
+                    strokeWidth: 1.2,
                     dashArray: [4, 4],
                   ),
               if (_session.state.isTerminal)
@@ -1859,9 +1854,9 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
                   color:
                       _session.stopReason == ChargingStopReason.manual ||
                           _session.userStopReason != UserStopReason.none
-                      ? AppUiColors.of(context).danger
-                      : AppUiColors.of(context).primary,
-                  strokeWidth: 2,
+                      ? LuxeColors.danger
+                      : LuxeColors.emerald,
+                  strokeWidth: 1.6,
                 ),
             ],
           ),
@@ -1878,8 +1873,11 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
                     .toList(),
                 isCurved: true,
                 curveSmoothness: 0.25,
-                color: color,
-                barWidth: 3,
+                gradient: const LinearGradient(
+                  colors: [LuxeColors.platinum, LuxeColors.emerald],
+                ),
+                barWidth: 2.4,
+                isStrokeCapRound: true,
                 dotData: FlDotData(
                   show: true,
                   checkToShowDot: (spot, _) =>
@@ -1887,7 +1885,14 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
                 ),
                 belowBarData: BarAreaData(
                   show: true,
-                  color: color.withValues(alpha: 0.14),
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      LuxeColors.emerald.withValues(alpha: 0.22),
+                      LuxeColors.emerald.withValues(alpha: 0.0),
+                    ],
+                  ),
                 ),
               ),
           ],
@@ -1907,6 +1912,59 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
         points[min(points.length - 1, index.floor())],
     ];
   }
+
+  Widget _technicalCard() => LuxeGlass(
+    radius: 24,
+    padding: EdgeInsets.zero,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(24),
+            onTap: () => setState(() => _showTechnical = !_showTechnical),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: _SectionTitle(
+                      title: 'Thông số kỹ thuật & AI',
+                      subtitle: 'Mã phiên, thiết bị, mô hình dự đoán',
+                    ),
+                  ),
+                  AnimatedRotation(
+                    turns: _showTechnical ? 0.5 : 0,
+                    duration: MediaQuery.disableAnimationsOf(context)
+                        ? Duration.zero
+                        : const Duration(milliseconds: 260),
+                    child: const Icon(
+                      Icons.expand_more_rounded,
+                      color: LuxeColors.platinumMid,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        AnimatedSize(
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 320),
+          curve: LuxeMotion.enter,
+          alignment: Alignment.topCenter,
+          child: _showTechnical
+              ? Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                  child: _technicalSummary(),
+                )
+              : const SizedBox(width: double.infinity),
+        ),
+      ],
+    ),
+  );
 
   Widget _technicalSummary() {
     final s = _summary;
@@ -1984,7 +2042,6 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
             content: Text(
               'Đã xác nhận SOC thực tế: ${value.toStringAsFixed(0)}%',
             ),
-            backgroundColor: Color(0xFF10B981),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -2006,21 +2063,24 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text('Xóa vĩnh viễn phiên sạc?'),
+        backgroundColor: const Color(0xFF121315),
+        title: const Text('Xóa vĩnh viễn phiên sạc?'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Thao tác này xóa summary, telemetry và không thể hoàn tác.'),
-            SizedBox(height: 12),
+            const Text(
+              'Thao tác này xóa summary, telemetry và không thể hoàn tác.',
+            ),
+            const SizedBox(height: 12),
             SelectableText(
               sessionId,
-              style: TextStyle(fontWeight: FontWeight.w700),
+              style: const TextStyle(fontWeight: FontWeight.w700),
             ),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             TextField(
               controller: input,
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 labelText: 'Nhập mã phiên để xác nhận',
               ),
               autofocus: true,
@@ -2030,12 +2090,12 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text('HỦY'),
+            child: const Text('HỦY'),
           ),
           FilledButton(
             onPressed: () =>
                 Navigator.pop(dialogContext, input.text.trim() == sessionId),
-            child: Text('XÓA VĨNH VIỄN'),
+            child: const Text('XÓA VĨNH VIỄN'),
           ),
         ],
       ),
@@ -2074,18 +2134,19 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Ẩn phiên sạc?'),
-        content: Text(
+        backgroundColor: const Color(0xFF121315),
+        title: const Text('Ẩn phiên sạc?'),
+        content: const Text(
           'Phiên sẽ biến mất khỏi danh sách thường nhưng dữ liệu gốc vẫn được giữ.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text('HỦY'),
+            child: const Text('HỦY'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text('ẨN PHIÊN'),
+            child: const Text('ẨN PHIÊN'),
           ),
         ],
       ),
@@ -2117,9 +2178,30 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
   }
 }
 
-String _energy(double wh) => wh >= 1000
-    ? '${(wh / 1000).toStringAsFixed(2)} kWh'
-    : '${wh.toStringAsFixed(0)} Wh';
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle({required this.title, this.subtitle});
+  final String title;
+  final String? subtitle;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        title,
+        style: const TextStyle(
+          color: LuxeColors.text,
+          fontSize: 15.5,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      if (subtitle != null) ...[
+        const SizedBox(height: 2),
+        Text(subtitle!, style: LuxeText.caption.copyWith(fontSize: 12)),
+      ],
+    ],
+  );
+}
 
 String _metricUnit(_ChartMetric metric) => switch (metric) {
   _ChartMetric.power => 'W',
@@ -2128,11 +2210,3 @@ String _metricUnit(_ChartMetric metric) => switch (metric) {
   _ChartMetric.temperature => '°C',
   _ChartMetric.energy => 'Wh',
 };
-
-String _duration(Duration value) {
-  final hours = value.inHours;
-  final minutes = value.inMinutes.remainder(60);
-  return hours == 0
-      ? '$minutes phút'
-      : '${hours}g ${minutes.toString().padLeft(2, '0')}p';
-}

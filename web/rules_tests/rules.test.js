@@ -13,6 +13,7 @@ const {
   getDocs,
   query,
   runTransaction,
+  serverTimestamp,
   setDoc,
   updateDoc,
   where,
@@ -252,6 +253,23 @@ async function run() {
       scope: 'qa-staging', workerId: 'forged-worker', epoch: 1, expiresAt: new Date(),
     }));
     await assertFails(getDoc(doc(aliceDb, 'smartChargeWorkerLeases/qa-staging')));
+    // Achievements summary: owner-only, fixed shape, no deletes.
+    const summary = {
+      schemaVersion: 1,
+      unlocked: {ses_1: new Date('2030-03-04T10:00:00Z')},
+      points: 10,
+      rank: 'Hạng Đồng',
+      updatedAt: serverTimestamp(),
+    };
+    await assertSucceeds(setDoc(doc(aliceDb, 'users/alice/achievements/summary'), summary));
+    await assertSucceeds(getDoc(doc(aliceDb, 'users/alice/achievements/summary')));
+    await assertFails(getDoc(doc(bobDb, 'users/alice/achievements/summary')));
+    await assertFails(setDoc(doc(bobDb, 'users/alice/achievements/summary'), summary));
+    await assertFails(setDoc(doc(aliceDb, 'users/alice/achievements/other'), summary));
+    await assertFails(setDoc(doc(aliceDb, 'users/alice/achievements/summary'), {...summary, role: 'admin'}));
+    await assertFails(setDoc(doc(aliceDb, 'users/alice/achievements/summary'), {...summary, points: 999999}));
+    await assertFails(setDoc(doc(aliceDb, 'users/alice/achievements/summary'), {...summary, updatedAt: new Date('2001-01-01')}));
+    await assertFails(deleteDoc(doc(aliceDb, 'users/alice/achievements/summary')));
     console.log(`Firestore Rules: ${assertionCount} allow/deny assertions passed.`);
   } finally {
     await teardown();
