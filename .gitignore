@@ -50,6 +50,8 @@ __pycache__/
 **/.pytest-temp/
 **/.pytest-run-*/
 **/.pytest_*/
+**/pytest-of-*/
+/docs/qa_evidence/**/pytest-*/
 *.pyo
 *.pyd
 .venv/
