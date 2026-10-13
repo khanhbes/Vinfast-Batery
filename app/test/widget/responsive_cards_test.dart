@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vinfast_battery/core/widgets/responsive_card_grid.dart';
-import 'package:vinfast_battery/core/widgets/stat_card.dart';
 import 'package:vinfast_battery/core/widgets/empty_state.dart';
 import 'package:vinfast_battery/core/widgets/error_state.dart';
 
@@ -24,17 +23,27 @@ void main() {
                     child: ResponsiveCardGrid(
                       children: [
                         for (var i = 0; i < 4; i++)
-                          StatCard(
+                          DecoratedBox(
                             key: ValueKey(i),
-                            icon: Icons.bolt,
-                            iconColor: Colors.green,
-                            title: i.isEven
-                                ? 'Pin'
-                                : 'Thời gian sạc trung bình mỗi phiên',
-                            value: i.isEven ? '100%' : '123456.7 Wh',
-                            subtitle: i.isEven
-                                ? null
-                                : 'Dữ liệu do người dùng xác nhận',
+                            decoration: BoxDecoration(border: Border.all()),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    i.isEven
+                                        ? 'Pin'
+                                        : 'Thời gian sạc trung bình mỗi phiên',
+                                  ),
+                                  Text(i.isEven ? '100%' : '123456.7 Wh'),
+                                  if (i.isOdd)
+                                    const Text(
+                                      'Dữ liệu do người dùng xác nhận',
+                                    ),
+                                ],
+                              ),
+                            ),
                           ),
                       ],
                     ),

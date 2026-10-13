@@ -59,19 +59,19 @@ Vinfast-Batery/
 │   │   │   ├── constants/            # app_constants.dart (API Base URL, build info)
 │   │   │   ├── providers/            # auth_provider, vehicle_provider, battery_provider...
 │   │   │   └── widgets/              # InternetConnectionNotice, Status strips
-│   │   ├── features/
-│   │   │   ├── auth/                 # AuthGate, Login, Register
-│   │   │   ├── onboarding/           # Onboarding chat, OnboardingDraft, OnboardingSyncCoordinator
-│   │   │   ├── home/                 # HomeScreen, Battery gauge, Quick actions
-│   │   │   ├── dashboard/            # DashboardScreen, Fleet stats, Energy graph
-│   │   │   ├── battery/              # BatteryMonitorScreen, Cell health, Temperature
-│   │   │   ├── trip/                 # TripPlannerScreen, GPS tracking, Live route
-│   │   │   ├── smart_charging/       # SmartChargingControlScreen, Target SoC, Schedule
-│   │   │   ├── ai/                   # AI Chatbot, Range & charging time widgets, Model lab
-│   │   │   │   ├── controllers/      # chat_controller, behavior_tracker (Riverpod)
-│   │   │   │   ├── models/           # chat_session, chat_message, behavior_profile
-│   │   │   │   ├── services/         # chat_api_service, behavior_sync_service, suggestion_service
-│   │   │   │   └── widgets/          # chat_message_bubble, action_confirmation_card, streaming_text
+│   │   ├── features/                 # (rà soát 13/10/2026, Task 115 — đã xóa code không dùng)
+│   │   │   ├── auth/                 # AuthGate, Getting started, Login/Register, Survey (onboarding_chat_screen)
+│   │   │   ├── overview/ · home/     # Tab Tổng quan (luxe hero, thẻ, biểu đồ 7 ngày)
+│   │   │   ├── charge/               # Tab Sạc pin → ai/smart_charging_control_screen
+│   │   │   ├── ai/                   # Sạc AI/hẹn giờ, Lịch sử sạc, BatteryBot (assistant_sheet)
+│   │   │   │   ├── controllers/      # smart_charging_controller
+│   │   │   │   ├── models/ services/ # chat models, tool gateway, local calibration
+│   │   │   │   └── widgets/          # luxe dial, history_luxe_widgets, xác nhận Start/Stop, action_confirmation_card
+│   │   │   ├── achievements/         # Thành tựu + hạng (sổ cái local + users/{uid}/achievements/summary)
+│   │   │   ├── maintenance/          # Lịch bảo dưỡng (trục ODO, lịch chuẩn VinFast)
+│   │   │   ├── smart_charging/       # Kết nối/thiết lập Shelly (3-flow, mã admin)
+│   │   │   ├── battery_monitor/ · trip_planner/ · notifications/
+│   │   │   ├── more/                 # Tab Cài đặt (menu)
 │   │   │   └── settings/             # SettingsScreen, Vehicle profile, Server config
 │   │   └── navigation/               # app_navigation.dart (AppNavigation shell & routes)
 │   └── test/                         # Flutter Unit & Widget tests
@@ -168,6 +168,10 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
 - **Tải tối đa cho phép**: ≤ 12A / 2500W (tiêu chuẩn an toàn điện áp lưới sinh hoạt).
 - **Safety Watchdog**: Tự động ngắt relay khi nhiệt độ Shelly vượt ngưỡng (>75°C), công suất vượt định mức hoặc mất heartbeat quá 60s.
 - **Auto Cutoff**: Ngắt relay ngay khi SoC đạt mức mục tiêu được thiết lập bởi người dùng (Target SoC).
+
+### 3.5.1. Xác nhận bật/tắt sạc (Task 115)
+- **Bật relay luôn cần "vuốt để sạc"** (`core/widgets/luxe_slide_to_confirm.dart`): sheet Bắt đầu (sau ô xác nhận "pin là ước tính") và thẻ BatteryBot cho tool `start_timed_charging` (`ActionConfirmationCard.energizingTool`). Một lần chạm không bao giờ bật relay; TalkBack kích hoạt bằng chạm đúp.
+- **Tắt sạc là nút bấm thường** (không thêm thao tác cản trở OFF). Giao diện chỉ là bước xác nhận; repository vẫn kiểm tra backend tươi trước mọi lệnh.
 
 ### 3.6. Cơ Chế Kết Nối Shelly 3-Flow & Cấp Mã Admin (v1.1.6+)
 - **Flow 1 (mDNS/LAN Auto-discovery)**: Ứng dụng tự động quét mạng nội bộ tìm kiếm thiết bị Shelly Plug S Gen3 qua mDNS.

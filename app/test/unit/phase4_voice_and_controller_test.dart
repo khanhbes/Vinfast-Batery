@@ -1,12 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:vinfast_battery/features/ai/controllers/chat_controller.dart';
 import 'package:vinfast_battery/features/ai/models/chat_message.dart';
-import 'package:vinfast_battery/features/ai/models/function_call_action.dart';
-import 'package:vinfast_battery/features/ai/services/behavior_sync_service.dart';
-import 'package:vinfast_battery/features/ai/services/behavior_tracker.dart';
-import 'package:vinfast_battery/features/ai/services/chat_api_service.dart';
 import 'package:vinfast_battery/features/ai/services/chat_history_storage.dart';
 import 'package:vinfast_battery/features/ai/services/voice_input_service.dart';
 
@@ -133,105 +128,6 @@ void main() {
       // Offset vượt quá
       final pageEmpty = await storage.listSessions(limit: 2, offset: 10);
       expect(pageEmpty.isEmpty, isTrue);
-    });
-  });
-
-  group('Phase 4: ChatController Offline Queue & Retry Tests', () {
-    setUp(() {
-      SharedPreferences.setMockInitialValues({});
-      FlutterSecureStorage.setMockInitialValues({});
-    });
-
-    test(
-      'offline queuing: queues messages when offline and drains on processOfflineQueue',
-      () async {
-        final apiService = ChatApiService();
-        final storage = ChatHistoryStorage();
-        final tracker = BehaviorTracker();
-        final sync = BehaviorSyncService(tracker: tracker);
-
-        final controller = ChatController(
-          apiService: apiService,
-          storage: storage,
-          behaviorTracker: tracker,
-          behaviorSync: sync,
-        );
-
-        // Ban đầu có tin nhắn chào mừng
-        expect(controller.state.messages.isNotEmpty, isTrue);
-
-        // Giả lập trạng thái offline
-        controller.state = controller.state.copyWith(isOnline: false);
-
-        // Gửi tin nhắn khi offline
-        await controller.sendMessage(text: 'Sạc đầy cho tôi nhé');
-
-        // Phải có trong offlineQueue
-        expect(controller.state.offlineQueue.length, 1);
-        expect(
-          controller.state.offlineQueue.first.content,
-          'Sạc đầy cho tôi nhé',
-        );
-
-        // Trong danh sách tin nhắn có thông báo offline
-        final lastMsg = controller.state.messages.last;
-        expect(lastMsg.content.contains('ngoại tuyến'), isTrue);
-
-        // Giả lập online trở lại và xả hàng đợi
-        controller.state = controller.state.copyWith(isOnline: true);
-        await controller.processOfflineQueue();
-
-        // Hàng đợi offline được làm rỗng
-        expect(controller.state.offlineQueue.isEmpty, isTrue);
-      },
-    );
-
-    test('confirmAction updates message actionCard status', () async {
-      final apiService = ChatApiService();
-      final storage = ChatHistoryStorage();
-      final tracker = BehaviorTracker();
-      final sync = BehaviorSyncService(tracker: tracker);
-
-      final controller = ChatController(
-        apiService: apiService,
-        storage: storage,
-        behaviorTracker: tracker,
-        behaviorSync: sync,
-      );
-
-      final action = FunctionCallAction(
-        callId: 'call-ctrl-1',
-        toolName: 'start_smart_charging',
-        args: {'target_soc': 80},
-        cardData: const ActionConfirmationCardData(
-          title: 'Sạc thông minh',
-          description: 'Sạc tới 80%',
-        ),
-      );
-
-      controller.state = controller.state.copyWith(
-        messages: [
-          ChatMessage(
-            id: 'bot-msg-1',
-            role: ChatRole.model,
-            content: 'Tôi đã tạo lệnh sạc.',
-            timestamp: DateTime.now(),
-            actionCard: action,
-          ),
-        ],
-      );
-
-      final success = await controller.confirmAction(
-        callId: 'call-ctrl-1',
-        toolName: 'start_smart_charging',
-        args: {'target_soc': 80},
-        confirmed: true,
-      );
-
-      expect(success, isFalse);
-      final updatedMsg = controller.state.messages.first;
-      expect(updatedMsg.actionCard?.isConfirmed, isFalse);
-      expect(updatedMsg.actionCard?.status, 'failed');
     });
   });
 }

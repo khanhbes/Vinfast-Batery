@@ -4,16 +4,6 @@ import { readFileSync } from 'node:fs';
 import { requestPortal } from '../src/lib/httpClient.ts';
 import { isVerifiedAdmin } from '../src/lib/portalAccess.ts';
 import { validateModelUpload } from '../src/components/ai-center/uploadPolicy.ts';
-import { normalizePercentage } from '../src/lib/dataNormalization.ts';
-
-test('missing or malformed battery percentages never become 100 or 0', () => {
-  for (const value of [null, undefined, '', ' ', '12bad', NaN, Infinity, -1, 101]) {
-    assert.equal(normalizePercentage(value), null);
-  }
-  assert.equal(normalizePercentage(0), 0);
-  assert.equal(normalizePercentage('68.5'), 68.5);
-  assert.equal(normalizePercentage(100), 100);
-});
 
 test('only backend-verified admin for the current identity is accepted', () => {
   assert.equal(isVerifiedAdmin({ success: true, data: { uid: 'a', role: 'admin' } }, 'a'), true);

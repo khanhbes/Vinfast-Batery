@@ -13,6 +13,20 @@ import 'package:vinfast_battery/core/widgets/app_popup.dart';
 import 'package:vinfast_battery/features/ai/controllers/smart_charging_controller.dart';
 import 'package:vinfast_battery/features/ai/smart_charging_control_screen.dart';
 import 'package:vinfast_battery/features/ai/widgets/timed_charging_section_v2.dart';
+import 'package:vinfast_battery/core/widgets/luxe_slide_to_confirm.dart';
+
+LuxeSlideToConfirm startSlider(WidgetTester tester) =>
+    tester.widget<LuxeSlideToConfirm>(
+      find.byKey(const ValueKey('start-charge-slider')),
+    );
+
+Future<void> slideToConfirm(WidgetTester tester) async {
+  final knob = find.byKey(LuxeSlideToConfirm.knobKey);
+  await tester.ensureVisible(knob);
+  await tester.pump();
+  await tester.drag(knob, const Offset(800, 0));
+  await tester.pump();
+}
 
 void main() {
   setUp(() => ShellyConnectionCoordinator.shared.activateAccount(null));
@@ -114,20 +128,14 @@ void main() {
     expect(find.text('Xác nhận bắt đầu sạc'), findsOneWidget);
     expect(find.text('Sạc hẹn giờ'), findsWidgets);
     expect(find.text('6 giờ 0 phút'), findsOneWidget);
-    final disabled = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'BẮT ĐẦU SẠC'),
-    );
-    expect(disabled.onPressed, isNull);
+    expect(startSlider(tester).enabled, isFalse);
 
     final acknowledgement = find.byType(Checkbox);
     await tester.ensureVisible(acknowledgement);
     await tester.pump();
     await tester.tap(acknowledgement);
     await tester.pump();
-    final startButton = find.widgetWithText(FilledButton, 'BẮT ĐẦU SẠC');
-    await tester.ensureVisible(startButton);
-    await tester.pump();
-    await tester.tap(startButton);
+    await slideToConfirm(tester);
     await tester.pump(const Duration(milliseconds: 300));
     expect(controller.lastManualDuration, const Duration(hours: 6));
     AppPopup.dismiss();
@@ -180,10 +188,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.text('Xác nhận bắt đầu sạc'), findsOneWidget);
-    final startButton = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'BẮT ĐẦU SẠC'),
-    );
-    expect(startButton.onPressed, isNull);
+    expect(startSlider(tester).enabled, isFalse);
+    // A full slide before the acknowledgement must not start anything.
+    await slideToConfirm(tester);
+    expect(find.text('Xác nhận bắt đầu sạc'), findsOneWidget);
 
     final acknowledgement = find.byType(Checkbox);
     await tester.ensureVisible(acknowledgement);
@@ -191,10 +199,7 @@ void main() {
     await tester.tap(acknowledgement);
     await tester.pump();
 
-    final enabled = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'BẮT ĐẦU SẠC'),
-    );
-    expect(enabled.onPressed, isNotNull);
+    expect(startSlider(tester).enabled, isTrue);
   });
 
   testWidgets(

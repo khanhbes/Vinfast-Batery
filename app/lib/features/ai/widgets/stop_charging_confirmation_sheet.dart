@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../../../core/theme/luxe_theme.dart';
 import '../../../data/models/smart_charging_session.dart';
+import 'history_luxe_widgets.dart';
+import 'start_charge_confirmation_sheet.dart';
 
 class StopChargingDecision {
   const StopChargingDecision(this.reason);
   final UserStopReason reason;
 }
 
+/// Stopping is never gated behind a gesture: switching OFF must stay fast.
 Future<StopChargingDecision?> showStopChargingConfirmationSheet(
   BuildContext context, {
   required double currentSoc,
@@ -14,8 +19,9 @@ Future<StopChargingDecision?> showStopChargingConfirmationSheet(
   required Duration remaining,
 }) => showModalBottomSheet<StopChargingDecision>(
   context: context,
-  showDragHandle: true,
   isScrollControlled: true,
+  backgroundColor: Colors.transparent,
+  barrierColor: Colors.black.withValues(alpha: .72),
   builder: (context) => _StopChargingConfirmationSheet(
     currentSoc: currentSoc,
     targetSoc: targetSoc,
@@ -45,137 +51,129 @@ class _StopChargingConfirmationSheetState
   bool _submitting = false;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          0,
-          20,
-          20 + MediaQuery.viewInsetsOf(context).bottom,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Dừng sạc?', style: theme.textTheme.headlineSmall),
-            const SizedBox(height: 6),
-            Text(
-              'Dữ liệu đã ghi vẫn được giữ và chỉ dùng để học phần sạc thực tế.',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: colors.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 20),
-            _BatteryProgress(
-              currentSoc: widget.currentSoc,
-              targetSoc: widget.targetSoc,
-            ),
-            const SizedBox(height: 16),
-            _MetricRow('Pin hiện tại', '${widget.currentSoc.round()}%'),
-            _MetricRow('Mục tiêu', '${widget.targetSoc.round()}%'),
-            _MetricRow('Còn lại', _duration(widget.remaining)),
-            const SizedBox(height: 16),
-            Text('Lý do (không bắt buộc)', style: theme.textTheme.labelLarge),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+  Widget build(BuildContext context) => Theme(
+    data: LuxeTheme.of(context),
+    child: LuxeSheetFrame(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text('ĐANG SẠC', style: LuxeText.eyebrow),
+          const SizedBox(height: 6),
+          const Text('Dừng sạc?', style: LuxeText.title),
+          const SizedBox(height: 6),
+          const Text(
+            'Dữ liệu đã ghi vẫn được giữ và chỉ dùng để học phần sạc thực tế.',
+            style: LuxeText.caption,
+          ),
+          const SizedBox(height: 18),
+          LuxeGlass(
+            radius: 20,
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _reasonChip('Cần dùng xe', UserStopReason.needVehicle),
-                _reasonChip('Pin đã đủ', UserStopReason.enoughCharge),
-                _reasonChip('Lo ngại an toàn', UserStopReason.safetyConcern),
-                _reasonChip('Khác', UserStopReason.other),
+                HistorySocTrack(
+                  start: 0,
+                  end: widget.currentSoc,
+                  showLabel: false,
+                ),
+                const SizedBox(height: 4),
+                LuxeInfoRow(
+                  icon: Icons.battery_5_bar_rounded,
+                  label: 'Pin hiện tại',
+                  value: '${widget.currentSoc.round()}%',
+                ),
+                const Divider(height: 1),
+                LuxeInfoRow(
+                  icon: Icons.flag_outlined,
+                  label: 'Mục tiêu',
+                  value: '${widget.targetSoc.round()}%',
+                  valueColor: LuxeColors.emerald,
+                ),
+                const Divider(height: 1),
+                LuxeInfoRow(
+                  icon: Icons.timer_outlined,
+                  label: 'Còn lại',
+                  value: _duration(widget.remaining),
+                ),
               ],
             ),
-            const SizedBox(height: 24),
-            OutlinedButton(
-              onPressed: _submitting ? null : () => Navigator.pop(context),
-              child: const Text('Tiếp tục sạc'),
-            ),
-            const SizedBox(height: 8),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: colors.error,
-                foregroundColor: colors.onError,
-                minimumSize: const Size.fromHeight(52),
+          ),
+          const SizedBox(height: 18),
+          Text(
+            'LÝ DO (KHÔNG BẮT BUỘC)',
+            style: LuxeText.label.copyWith(letterSpacing: 1.4),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _reasonChip('Cần dùng xe', UserStopReason.needVehicle),
+              _reasonChip('Pin đã đủ', UserStopReason.enoughCharge),
+              _reasonChip('Lo ngại an toàn', UserStopReason.safetyConcern),
+              _reasonChip('Khác', UserStopReason.other),
+            ],
+          ),
+          const SizedBox(height: 22),
+          FilledButton.icon(
+            key: const ValueKey('stop-charge-confirm'),
+            style: ButtonStyle(
+              foregroundColor: const WidgetStatePropertyAll(Color(0xFF1A0505)),
+              backgroundBuilder: (context, states, child) => DecoratedBox(
+                decoration: ShapeDecoration(
+                  shape: const StadiumBorder(),
+                  gradient: states.contains(WidgetState.disabled)
+                      ? null
+                      : const LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [Color(0xFFFBC4C4), LuxeColors.danger],
+                        ),
+                  color: states.contains(WidgetState.disabled)
+                      ? LuxeColors.glass
+                      : null,
+                ),
+                child: child,
               ),
-              onPressed: _submitting
-                  ? null
-                  : () {
-                      setState(() => _submitting = true);
-                      Navigator.pop(context, StopChargingDecision(_reason));
-                    },
-              child: _submitting
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Text('Dừng sạc'),
             ),
-          ],
-        ),
+            onPressed: _submitting
+                ? null
+                : () {
+                    HapticFeedback.mediumImpact();
+                    setState(() => _submitting = true);
+                    Navigator.pop(context, StopChargingDecision(_reason));
+                  },
+            icon: _submitting
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Color(0xFF1A0505),
+                    ),
+                  )
+                : const Icon(Icons.power_settings_new_rounded, size: 20),
+            label: const Text('Dừng sạc'),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton(
+            onPressed: _submitting ? null : () => Navigator.pop(context),
+            child: const Text('Tiếp tục sạc'),
+          ),
+        ],
       ),
-    );
-  }
-
-  Widget _reasonChip(String label, UserStopReason value) => FilterChip(
-    label: Text(label),
-    selected: _reason == value,
-    onSelected: (_) => setState(() => _reason = value),
-  );
-}
-
-class _MetricRow extends StatelessWidget {
-  const _MetricRow(this.label, this.value);
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 5),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
-      ],
     ),
   );
-}
 
-class _BatteryProgress extends StatelessWidget {
-  const _BatteryProgress({required this.currentSoc, required this.targetSoc});
-  final double currentSoc;
-  final double targetSoc;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
-      child: SizedBox(
-        height: 18,
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: ColoredBox(color: colors.surfaceContainerHighest),
-            ),
-            FractionallySizedBox(
-              widthFactor: currentSoc.clamp(0, 100) / 100,
-              child: ColoredBox(color: colors.primary),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget _reasonChip(String label, UserStopReason value) => HistoryChip(
+    label: label,
+    selected: _reason == value,
+    onTap: () {
+      HapticFeedback.selectionClick();
+      setState(() => _reason = _reason == value ? UserStopReason.none : value);
+    },
+  );
 }
 
 String _duration(Duration value) {
