@@ -96,6 +96,27 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
 
+    testWidgets('held brand breathes without replay or spinner', (
+      tester,
+    ) async {
+      var calls = 0;
+      await tester.pumpWidget(buildSplash(onFinished: () => calls++));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 5016));
+      expect(calls, 1);
+      // Hold for as long as a slow startup might take: still one callback,
+      // brand visible, no progress indicators.
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(seconds: 2));
+        expect(tester.takeException(), isNull);
+      }
+      expect(calls, 1);
+      expect(find.text('VINFAST BATTERY'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+    });
+
     testWidgets('displays branding text elements', (tester) async {
       await tester.pumpWidget(buildSplash());
 

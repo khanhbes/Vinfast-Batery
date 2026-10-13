@@ -88,8 +88,11 @@ class ActionConfirmationCard extends StatelessWidget {
                       ? 'ĐÃ XÁC MINH'
                       : action.isCancelled
                       ? 'ĐÃ HỦY'
-                      : action.status == 'unknown' ? 'CHƯA XÁC MINH'
-                      : action.isPending ? 'CHỜ XÁC NHẬN' : 'CHƯA THỰC HIỆN',
+                      : action.status == 'unknown'
+                      ? 'CHƯA XÁC MINH'
+                      : action.isPending
+                      ? 'CHỜ XÁC NHẬN'
+                      : 'CHƯA THỰC HIỆN',
                   style: TextStyle(
                     fontSize: 9.5,
                     fontWeight: FontWeight.bold,
@@ -271,8 +274,13 @@ class ActionConfirmationCard extends StatelessWidget {
               ),
             ),
           ] else if (action.resultMessage != null) ...[
-            Semantics(liveRegion: true, child: Text(action.resultMessage!,
-              style: TextStyle(color: uiColors.text, height: 1.4))),
+            Semantics(
+              liveRegion: true,
+              child: Text(
+                action.resultMessage!,
+                style: TextStyle(color: uiColors.text, height: 1.4),
+              ),
+            ),
           ],
         ],
       ),

@@ -3,28 +3,24 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shimmer/shimmer.dart';
 import '../../core/services/dashboard_preferences_service.dart';
 import '../../core/services/guide_registry.dart';
 import '../../core/theme/app_motion.dart';
-import '../../core/theme/cockpit_design_system.dart';
 import '../../core/theme/app_ui_colors.dart';
-import '../../core/widgets/responsive_card_grid.dart';
+import '../../core/theme/luxe_theme.dart';
+import 'widgets/luxe_dashboard_cards.dart';
+import 'widgets/luxe_vehicle_hero.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/services/session_service.dart';
 import '../../core/services/sync_service.dart';
 import '../../core/utils/app_error_formatter.dart';
 import '../../data/models/vehicle_model.dart';
-import '../../data/services/battery_state_service.dart';
 import 'widgets/range_prediction_card.dart';
 import 'widgets/recent_charging_chart.dart';
 import '../smart_charging/smart_charger_setup_hub_screen.dart';
 import '../trip_planner/trip_planner_wrapper.dart';
 import '../maintenance/maintenance_screen.dart';
-import '../../core/widgets/responsive_text.dart';
-import '../../core/widgets/ev_energy_animations.dart';
 import '../../core/widgets/debug_error_sheet.dart';
 import '../battery_monitor/battery_monitor_screen.dart';
 
@@ -97,94 +93,110 @@ class HomeScreen extends ConsumerWidget {
       }
     });
 
-    return Scaffold(
-      backgroundColor: AppUiColors.of(context).background,
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720),
-            child: RefreshIndicator(
-              color: AppUiColors.of(context).primary,
-              onRefresh: () async {
-                final requests = <Future<Object?>>[
-                  ref.refresh(allVehiclesProvider.future),
-                ];
-                if (vehicleId.isNotEmpty) {
-                  requests.add(ref.refresh(vehicleProvider(vehicleId).future));
-                }
-                try {
-                  await Future.wait(requests);
-                } catch (_) {
-                  // The providers keep the real failure for the inline retry
-                  // state. Refresh must finish without opening a second notice.
-                }
-              },
-              child: CustomScrollView(
-                physics: AlwaysScrollableScrollPhysics(
-                  parent: BouncingScrollPhysics(),
-                ),
-                slivers: [
-                  // ── Hiển thị banner cảnh báo nếu user chưa có xe nào ──
-                  if (allVehiclesAsync.hasValue &&
-                      (allVehiclesAsync.value?.isEmpty ?? true))
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: EdgeInsets.fromLTRB(20, 8, 20, 0),
-                        child: _NoVehicleBanner(),
+    return Theme(
+      data: LuxeTheme.of(context),
+      child: Scaffold(
+        backgroundColor: LuxeColors.background,
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            const LuxeBackdrop(),
+            SafeArea(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 720),
+                  child: RefreshIndicator(
+                    color: LuxeColors.emerald,
+                    backgroundColor: const Color(0xFF17181B),
+                    onRefresh: () async {
+                      final requests = <Future<Object?>>[
+                        ref.refresh(allVehiclesProvider.future),
+                      ];
+                      if (vehicleId.isNotEmpty) {
+                        requests.add(
+                          ref.refresh(vehicleProvider(vehicleId).future),
+                        );
+                      }
+                      try {
+                        await Future.wait(requests);
+                      } catch (_) {
+                        // The providers keep the real failure for the inline retry
+                        // state. Refresh must finish without opening a second notice.
+                      }
+                    },
+                    child: CustomScrollView(
+                      physics: AlwaysScrollableScrollPhysics(
+                        parent: BouncingScrollPhysics(),
                       ),
-                    ),
+                      slivers: [
+                        // ── Hiển thị banner cảnh báo nếu user chưa có xe nào ──
+                        if (allVehiclesAsync.hasValue &&
+                            (allVehiclesAsync.value?.isEmpty ?? true))
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: EdgeInsets.fromLTRB(20, 8, 20, 0),
+                              child: _NoVehicleBanner(),
+                            ),
+                          ),
 
-                  // ── Hiển thị banner lỗi nếu allVehiclesProvider failed ──
-                  if (allVehiclesAsync.hasError)
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: EdgeInsets.fromLTRB(20, 8, 20, 0),
-                        child: _InlineErrorBanner(
-                          title: 'Không tải được danh sách xe',
-                          error: allVehiclesAsync.error!,
-                          onRetry: () => ref.invalidate(allVehiclesProvider),
-                        ),
-                      ),
-                    ),
+                        // ── Hiển thị banner lỗi nếu allVehiclesProvider failed ──
+                        if (allVehiclesAsync.hasError)
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: EdgeInsets.fromLTRB(20, 8, 20, 0),
+                              child: _InlineErrorBanner(
+                                title: 'Không tải được danh sách xe',
+                                error: allVehiclesAsync.error!,
+                                onRetry: () =>
+                                    ref.invalidate(allVehiclesProvider),
+                              ),
+                            ),
+                          ),
 
-                  // ── Vehicle Banner ──
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(20, 8, 20, 0),
-                      child: KeyedSubtree(
-                        key: GuideRegistry.keyBatterySummary,
-                        child: vehicleAsync.when(
-                          data: (vehicle) => _VehicleBanner(vehicle: vehicle),
-                          loading: () => _VehicleBannerShimmer(),
-                          error: (e, _) => _InlineErrorBanner(
-                            title: 'Không tải được thông tin xe',
-                            error: e,
-                            onRetry: () =>
-                                ref.invalidate(vehicleProvider(vehicleId)),
+                        // ── Vehicle Banner ──
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: EdgeInsets.fromLTRB(20, 8, 20, 0),
+                            child: KeyedSubtree(
+                              key: GuideRegistry.keyBatterySummary,
+                              child: vehicleAsync.when(
+                                data: (vehicle) => LuxeReveal(
+                                  child: LuxeVehicleHero(vehicle: vehicle),
+                                ),
+                                loading: () => const _LuxeSkeleton(height: 330),
+                                error: (e, _) => _InlineErrorBanner(
+                                  title: 'Không tải được thông tin xe',
+                                  error: e,
+                                  onRetry: () => ref.invalidate(
+                                    vehicleProvider(vehicleId),
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
                         ),
-                      ),
+
+                        // ── Shelly checklist banner if skipped in onboarding ──
+                        const _ShellyChecklistSliver(),
+
+                        // ── Dynamic Customizable Widgets ──
+                        for (final id in visibleWidgets)
+                          _buildDashboardWidget(
+                            id: id,
+                            vehicleAsync: vehicleAsync,
+                            vehicleId: vehicleId,
+                            context: context,
+                            ref: ref,
+                          ),
+
+                        SliverToBoxAdapter(child: SizedBox(height: 100)),
+                      ],
                     ),
                   ),
-
-                  // ── Shelly checklist banner if skipped in onboarding ──
-                  const _ShellyChecklistSliver(),
-
-                  // ── Dynamic Customizable Widgets ──
-                  for (final id in visibleWidgets)
-                    _buildDashboardWidget(
-                      id: id,
-                      vehicleAsync: vehicleAsync,
-                      vehicleId: vehicleId,
-                      context: context,
-                      ref: ref,
-                    ),
-
-                  SliverToBoxAdapter(child: SizedBox(height: 100)),
-                ],
+                ),
               ),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -203,14 +215,18 @@ class HomeScreen extends ConsumerWidget {
           key: const ValueKey('widget_quick_actions'),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-            child: vehicleAsync.when(
-              data: (vehicle) => _QuickActionsRow(
-                vehicleId: vehicle?.vehicleId ?? '',
-                onSync: () => _showSyncDialog(context),
-              ),
-              loading: () => const _QuickActionsShimmer(),
-              error: (_, _) => _QuickActionsRow(
-                vehicleId: '',
+            child: LuxeReveal(
+              index: 1,
+              child: LuxeQuickActions(
+                tripKey: GuideRegistry.keyTripPlannerAction,
+                onTrip: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => TripPlannerWrapper()),
+                ),
+                onMaintenance: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const MaintenanceScreen()),
+                ),
                 onSync: () => _showSyncDialog(context),
               ),
             ),
@@ -223,9 +239,10 @@ class HomeScreen extends ConsumerWidget {
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
             child: vehicleAsync.when(
-              data: (vehicle) => _StatCardsRow(vehicle: vehicle),
-              loading: () => const _StatCardsRowShimmer(),
-              error: (_, _) => const _StatCardsRow(vehicle: null),
+              data: (vehicle) =>
+                  LuxeReveal(index: 2, child: LuxeStatsStrip(vehicle: vehicle)),
+              loading: () => const _LuxeSkeleton(height: 96),
+              error: (_, _) => const LuxeStatsStrip(vehicle: null),
             ),
           ),
         );
@@ -242,7 +259,7 @@ class HomeScreen extends ConsumerWidget {
                         vehicle.hasSohData &&
                         vehicle.hasEfficiencyData
                   ? RangePredictionCard(vehicle: vehicle)
-                  : const _MissingVehicleDataCard(
+                  : const LuxeDataHint(
                       message: 'Cần thêm dữ liệu pin để dự đoán quãng đường',
                     ),
               loading: () => const SizedBox.shrink(),
@@ -257,16 +274,31 @@ class HomeScreen extends ConsumerWidget {
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
             child: vehicleAsync.when(
-              data: (vehicle) => _BatteryHealthCard(
-                key: GuideRegistry.keyBatteryHealthCard,
-                soh: vehicle?.hasSohData == true
-                    ? vehicle?.stateOfHealth
-                    : null,
-                vehicleId: vehicle?.vehicleId ?? '',
+              data: (vehicle) => LuxeReveal(
+                index: 3,
+                child: LuxeBatteryHealthCard(
+                  key: GuideRegistry.keyBatteryHealthCard,
+                  soh: vehicle?.hasSohData == true
+                      ? vehicle?.stateOfHealth
+                      : null,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const BatteryMonitorScreen(),
+                    ),
+                  ),
+                ),
               ),
-              loading: () => const _BatteryHealthShimmer(),
-              error: (_, _) =>
-                  const _BatteryHealthCard(soh: null, vehicleId: ''),
+              loading: () => const _LuxeSkeleton(height: 116),
+              error: (_, _) => LuxeBatteryHealthCard(
+                soh: null,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const BatteryMonitorScreen(),
+                  ),
+                ),
+              ),
             ),
           ),
         );
@@ -276,9 +308,12 @@ class HomeScreen extends ConsumerWidget {
           key: const ValueKey('widget_recent_charging'),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-            child: RecentChargingChart(
-              onViewHistory: () =>
-                  ref.read(currentTabProvider.notifier).state = 2,
+            child: LuxeReveal(
+              index: 4,
+              child: RecentChargingChart(
+                onViewHistory: () =>
+                    ref.read(currentTabProvider.notifier).state = 2,
+              ),
             ),
           ),
         );
@@ -289,7 +324,7 @@ class HomeScreen extends ConsumerWidget {
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
             child: vehicleAsync.when(
-              data: (vehicle) => _EfficiencyReference(vehicle: vehicle),
+              data: (vehicle) => LuxeEfficiencyNote(vehicle: vehicle),
               loading: () => const SizedBox.shrink(),
               error: (_, _) => const SizedBox.shrink(),
             ),
@@ -332,87 +367,12 @@ class _ShellyChecklistSliver extends StatelessWidget {
           return SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-              child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF151C26),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: const Color(0xFF10B981).withValues(alpha: 0.3),
-                    width: 1,
+              child: LuxeShellyPrompt(
+                onSetup: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const SmartChargerSetupHubScreen(),
                   ),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(
-                        Icons.power_rounded,
-                        color: Color(0xFF10B981),
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text(
-                            'Thiết lập bộ sạc thông minh Shelly',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          SizedBox(height: 2),
-                          Text(
-                            'Kích hoạt điều khiển relay tự động và ngắt sạc an toàn.',
-                            style: TextStyle(
-                              color: Color(0xFF94A3B8),
-                              fontSize: 11.5,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    FilledButton.tonal(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const SmartChargerSetupHubScreen(),
-                          ),
-                        );
-                      },
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(
-                          0xFF10B981,
-                        ).withValues(alpha: 0.2),
-                        foregroundColor: const Color(0xFF10B981),
-                        visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                      child: const Text(
-                        'Thiết lập',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
                 ),
               ),
             ),
@@ -427,921 +387,6 @@ class _ShellyChecklistSliver extends StatelessWidget {
 // =============================================================================
 // Widget Classes
 // =============================================================================
-
-class _VehicleBanner extends StatelessWidget {
-  final VehicleModel? vehicle;
-
-  const _VehicleBanner({this.vehicle});
-
-  @override
-  Widget build(BuildContext context) {
-    final name = vehicle?.nickname?.isNotEmpty == true
-        ? vehicle!.nickname!
-        : (vehicle?.vinfastModelName?.isNotEmpty == true
-              ? vehicle!.vinfastModelName!
-              : (vehicle?.vehicleName.isNotEmpty == true
-                    ? vehicle!.vehicleName
-                    : 'Chưa có dữ liệu xe'));
-    final plate = vehicle?.licensePlate?.trim().isNotEmpty == true
-        ? vehicle!.licensePlate!
-        : 'Chưa có BSX';
-    final percent = vehicle?.hasBatteryData == true
-        ? (vehicle?.lastBatteryPercent ?? vehicle?.currentBattery)
-        : vehicle?.currentBattery;
-
-    final vehicleImageUrl = vehicle?.imageUrl;
-    final hasVehicleImage =
-        vehicleImageUrl != null && vehicleImageUrl.trim().isNotEmpty;
-
-    return Container(
-      height: 210,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
-        color: const Color(0xFF0F172A),
-        image: hasVehicleImage
-            ? DecorationImage(
-                onError: (_, _) {},
-                image: NetworkImage(vehicleImageUrl),
-                fit: BoxFit.cover,
-              )
-            : null,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.45),
-            blurRadius: 18,
-            offset: const Offset(0, 6),
-          ),
-          if (!hasVehicleImage)
-            BoxShadow(
-              color: CockpitColors.emerald.withValues(alpha: 0.14),
-              blurRadius: 24,
-              spreadRadius: 2,
-            ),
-        ],
-        border: Border.all(
-          color: CockpitColors.emerald.withValues(alpha: 0.28),
-          width: 1.2,
-        ),
-      ),
-      child: Stack(
-        children: [
-          // Fallback nền Cockpit EV cao cấp khi chưa có ảnh thực
-          if (!hasVehicleImage) ...[
-            Positioned.fill(
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(28),
-                  gradient: const RadialGradient(
-                    center: Alignment(0.45, -0.2),
-                    radius: 1.2,
-                    colors: [
-                      Color(0xFF064E3B),
-                      Color(0xFF0F172A),
-                      Color(0xFF020617),
-                    ],
-                    stops: [0.0, 0.55, 1.0],
-                  ),
-                ),
-              ),
-            ),
-            // Hoạ tiết pin năng lượng EV 2D nổi bật ở góc phải
-            Positioned(
-              right: 24,
-              top: 36,
-              child: Opacity(
-                opacity: 0.85,
-                child: EvBatteryFillAnim(
-                  width: 58,
-                  height: 92,
-                  fillPercentage: (percent != null ? percent / 100.0 : 0.85)
-                      .clamp(0.1, 1.0),
-                  isCharging: false,
-                ),
-              ),
-            ),
-          ],
-
-          // Gradient dark overlay
-          Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(28),
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.black.withValues(alpha: hasVehicleImage ? 0.35 : 0.1),
-                  Colors.black.withValues(alpha: hasVehicleImage ? 0.85 : 0.75),
-                ],
-              ),
-            ),
-          ),
-
-          // Top Row: Active connection status & Model badge
-          Positioned(
-            top: 16,
-            left: 16,
-            right: 16,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // Active badge
-                Flexible(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.65),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: CockpitColors.emeraldStrong.withValues(
-                          alpha: 0.4,
-                        ),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 7,
-                          height: 7,
-                          decoration: const BoxDecoration(
-                            color: CockpitColors.emeraldStrong,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: CockpitColors.emeraldStrong,
-                                blurRadius: 6,
-                                spreadRadius: 1,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Flexible(
-                          child: Text(
-                            vehicle == null ? 'Chưa đồng bộ' : 'Đã chọn xe',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: CockpitTypography.label(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Model tag
-                Flexible(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.15),
-                      ),
-                    ),
-                    child: ResponsiveText(
-                      vehicle?.vinfastModelName?.toUpperCase() ?? 'VF COCKPIT',
-                      maxLines: 1,
-                      strategy: ResponsiveTextStrategy.name,
-                      style: CockpitTypography.label(
-                        color: Colors.white70,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Bottom Row: Vehicle Name & Plate, plus Battery SOC badge
-          Positioned(
-            bottom: 16,
-            left: 16,
-            right: 16,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ResponsiveText(
-                        name,
-                        maxLines: 1,
-                        strategy: ResponsiveTextStrategy.name,
-                        style: CockpitTypography.heading(
-                          color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.2),
-                          ),
-                        ),
-                        child: Text(
-                          plate,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing:
-                                vehicle?.licensePlate?.trim().isNotEmpty == true
-                                ? 1.0
-                                : 0.2,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Battery SOC Pill
-                if (percent != null)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: CockpitColors.emeraldStrong.withValues(
-                        alpha: 0.15,
-                      ),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: CockpitColors.emeraldStrong.withValues(
-                          alpha: 0.5,
-                        ),
-                        width: 1.2,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: CockpitColors.emeraldStrong.withValues(
-                            alpha: 0.2,
-                          ),
-                          blurRadius: 10,
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.electric_bolt_rounded,
-                          size: 18,
-                          color: CockpitColors.emeraldStrong,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '$percent%',
-                          style: CockpitTypography.numbers(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                            color: CockpitColors.emeraldStrong,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    ).appScalePop();
-  }
-}
-
-class _VehicleBannerShimmer extends StatelessWidget {
-  const _VehicleBannerShimmer();
-
-  @override
-  Widget build(BuildContext context) {
-    return Shimmer.fromColors(
-      baseColor: AppUiColors.of(context).surface,
-      highlightColor: AppUiColors.of(context).border,
-      child: Container(
-        height: 210,
-        decoration: BoxDecoration(
-          color: AppUiColors.of(context).surface,
-          borderRadius: BorderRadius.circular(28),
-        ),
-        child: Stack(
-          children: [
-            // Top-left badge placeholder
-            Positioned(
-              top: 16,
-              left: 16,
-              child: Container(
-                width: 100,
-                height: 22,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-              ),
-            ),
-            // Top-right badge placeholder
-            Positioned(
-              top: 16,
-              right: 16,
-              child: Container(
-                width: 70,
-                height: 22,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-            // Bottom-left name placeholder
-            Positioned(
-              bottom: 40,
-              left: 16,
-              child: Container(
-                width: 160,
-                height: 22,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
-            // Bottom-left plate placeholder
-            Positioned(
-              bottom: 16,
-              left: 16,
-              child: Container(
-                width: 80,
-                height: 18,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-              ),
-            ),
-            // Bottom-right SOC pill placeholder
-            Positioned(
-              bottom: 16,
-              right: 16,
-              child: Container(
-                width: 72,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StatCardsRow extends StatelessWidget {
-  final VehicleModel? vehicle;
-
-  const _StatCardsRow({this.vehicle});
-
-  @override
-  Widget build(BuildContext context) {
-    final percent = vehicle?.hasBatteryData == true
-        ? (vehicle?.lastBatteryPercent ?? vehicle?.currentBattery)
-        : vehicle?.currentBattery;
-    final efficiency = vehicle?.hasEfficiencyData == true
-        ? vehicle?.defaultEfficiency
-        : (vehicle?.defaultEfficiency ?? 1.2);
-    final range =
-        percent != null && percent > 0 && efficiency != null && efficiency > 0
-        ? '${(percent * efficiency).toInt()} km'
-        : '-- km';
-    final odo = vehicle?.hasOdoData == true
-        ? '${vehicle?.currentOdo ?? 0} km'
-        : (vehicle != null ? '${vehicle!.currentOdo} km' : '0 km');
-
-    return ResponsiveCardGrid(
-      maxColumns: 3,
-      minCardWidth: 100,
-      children: [
-        _StatCard(
-          icon: Icons.bolt_outlined,
-          value: percent == null ? '-- %' : '$percent%',
-          label: 'MỨC PIN',
-          isHighlighted: false,
-        ),
-        _StatCard(
-          icon: Icons.near_me_outlined,
-          value: range,
-          label: 'QUÃNG ĐƯỜNG',
-          isHighlighted: true,
-        ),
-        _StatCard(
-          icon: Icons.speed_rounded,
-          value: odo,
-          label: 'TỔNG ODO',
-          isHighlighted: false,
-        ),
-      ],
-    ).appFadeSlideIn(index: 2);
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  final IconData icon;
-  final String value;
-  final String label;
-  final bool isHighlighted;
-
-  const _StatCard({
-    required this.icon,
-    required this.value,
-    required this.label,
-    required this.isHighlighted,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isHighlighted
-            ? AppUiColors.of(context).primarySurface
-            : AppUiColors.of(context).surface,
-        borderRadius: BorderRadius.circular(24),
-        border: isHighlighted
-            ? null
-            : Border.all(color: AppUiColors.of(context).border),
-      ),
-      child: Column(
-        children: [
-          Icon(
-            icon,
-            color: isHighlighted
-                ? AppUiColors.of(context).primary
-                : AppUiColors.of(context).muted,
-            size: 24,
-          ),
-          SizedBox(height: 12),
-          Text(
-            value,
-            style: TextStyle(
-              color: AppUiColors.of(context).text,
-              fontSize: value.length > 7 ? 18 : 22,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.5,
-            ),
-          ),
-          SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              color: isHighlighted
-                  ? AppUiColors.of(context).primary.withValues(alpha: 0.8)
-                  : AppUiColors.of(context).muted,
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.5,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatCardsRowShimmer extends StatelessWidget {
-  const _StatCardsRowShimmer();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: List.generate(
-        3,
-        (index) => Expanded(
-          child: Container(
-            margin: EdgeInsets.only(right: index < 2 ? 12 : 0),
-            height: 100,
-            decoration: BoxDecoration(
-              color: AppUiColors.of(context).surface,
-              borderRadius: BorderRadius.circular(24),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _BatteryHealthCard extends StatefulWidget {
-  final double? soh;
-  final String vehicleId;
-
-  const _BatteryHealthCard({
-    super.key,
-    required this.soh,
-    required this.vehicleId,
-  });
-
-  @override
-  State<_BatteryHealthCard> createState() => _BatteryHealthCardState();
-}
-
-class _BatteryHealthCardState extends State<_BatteryHealthCard>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
-  // ignore: unused_field
-  bool _isLoading = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: Duration(milliseconds: 150),
-      vsync: this,
-    );
-    _scaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 0.97,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  // ignore: unused_element
-  Future<void> _syncBatteryState() async {
-    if (widget.vehicleId.isEmpty) return;
-
-    setState(() => _isLoading = true);
-
-    try {
-      // Sync battery state to web
-      await BatteryStateService.syncWithWebDashboard(widget.vehicleId);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Battery health synced to web dashboard'),
-            backgroundColor: AppUiColors.of(context).primary,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Sync failed: $e'),
-            backgroundColor: AppUiColors.of(context).danger,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final hasData = widget.soh != null && widget.soh!.isFinite;
-    final score = widget.soh ?? 0;
-    final isHealthy = hasData && score >= 90;
-
-    return GestureDetector(
-      onTapDown: (_) => _controller.forward(),
-      onTapUp: (_) {
-        _controller.reverse();
-        HapticFeedback.lightImpact();
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const BatteryMonitorScreen()),
-        );
-      },
-      onTapCancel: () => _controller.reverse(),
-      child: ScaleTransition(
-        scale: _scaleAnimation,
-        child: Container(
-          padding: EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: AppUiColors.of(context).surface,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: AppUiColors.of(context).border),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppUiColors.of(context).primary.withAlpha(26),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      Icons.favorite_outline,
-                      color: AppUiColors.of(context).primary,
-                      size: 18,
-                    ),
-                  ),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Điểm sức khỏe pin',
-                      style: TextStyle(
-                        color: AppUiColors.of(context).text,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    hasData ? '${score.toInt()}%' : '—',
-                    style: TextStyle(
-                      color: AppUiColors.of(context).text,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    color: AppUiColors.of(context).muted,
-                    size: 20,
-                  ),
-                ],
-              ),
-              SizedBox(height: 16),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: hasData ? (score / 100).clamp(0.0, 1.0) : 0,
-                  backgroundColor: AppUiColors.of(context).elevated,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    isHealthy
-                        ? AppUiColors.of(context).primary
-                        : AppUiColors.of(context).warning,
-                  ),
-                  minHeight: 8,
-                ),
-              ),
-              SizedBox(height: 12),
-              Wrap(
-                spacing: 12,
-                runSpacing: 8,
-                children: [
-                  Text(
-                    !hasData
-                        ? 'Cần thêm dữ liệu xe'
-                        : isHealthy
-                        ? 'Tình trạng xuất sắc (SOH tối ưu)'
-                        : 'Cần kiểm tra bảo dưỡng pin',
-                    style: TextStyle(
-                      color: !hasData
-                          ? AppUiColors.of(context).muted
-                          : isHealthy
-                          ? AppUiColors.of(context).primary
-                          : AppUiColors.of(context).warning,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  Text(
-                    'Chi tiết cell pin >',
-                    style: TextStyle(
-                      color: AppUiColors.of(context).primary,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    ).appFadeSlideIn(index: 3);
-  }
-}
-
-class _QuickActionsRow extends StatelessWidget {
-  final String vehicleId;
-  final VoidCallback onSync;
-
-  const _QuickActionsRow({required this.vehicleId, required this.onSync});
-
-  @override
-  Widget build(BuildContext context) {
-    return ResponsiveCardGrid(
-      maxColumns: 3,
-      minCardWidth: 100,
-      children: [
-        _AnimatedActionButton(
-          key: GuideRegistry.keyTripPlannerAction,
-          icon: Icons.map_outlined,
-          label: 'Lộ trình sạc',
-          color: AppUiColors.of(context).primary,
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => TripPlannerWrapper()),
-          ),
-        ),
-        _AnimatedActionButton(
-          icon: Icons.build_outlined,
-          label: 'Bảo dưỡng xe',
-          color: Color(0xFFE8A87C),
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => MaintenanceScreen()),
-          ),
-        ),
-        _AnimatedActionButton(
-          icon: Icons.sync_rounded,
-          label: 'Đồng bộ ngay',
-          color: AppUiColors.of(context).primary,
-          onTap: onSync,
-        ),
-      ],
-    ).appFadeSlideIn(index: 4);
-  }
-}
-
-class _AnimatedActionButton extends StatefulWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _AnimatedActionButton({
-    super.key,
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  State<_AnimatedActionButton> createState() => _AnimatedActionButtonState();
-}
-
-class _AnimatedActionButtonState extends State<_AnimatedActionButton>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
-  late Animation<double> _rotateAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: Duration(milliseconds: 200),
-      vsync: this,
-    );
-    _scaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 0.92,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
-    _rotateAnimation = Tween<double>(
-      begin: 0,
-      end: 0.1,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => _controller.forward(),
-      onTapUp: (_) {
-        _controller.reverse();
-        HapticFeedback.lightImpact();
-        widget.onTap();
-      },
-      onTapCancel: () => _controller.reverse(),
-      child: ScaleTransition(
-        scale: _scaleAnimation,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 88),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
-          decoration: BoxDecoration(
-            color: CockpitColors.surface,
-            borderRadius: BorderRadius.circular(CockpitRadius.medium),
-            border: Border.all(
-              color: widget.color.withValues(alpha: 0.25),
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: widget.color.withValues(alpha: 0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              RotationTransition(
-                turns: _rotateAnimation,
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: widget.color.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(widget.icon, color: widget.color, size: 20),
-                ),
-              ),
-              const SizedBox(height: 8),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  widget.label,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  softWrap: false,
-                  style: CockpitTypography.label(
-                    color: AppUiColors.of(context).text,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _QuickActionsShimmer extends StatelessWidget {
-  const _QuickActionsShimmer();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: List.generate(
-        3,
-        (index) => Expanded(
-          child: Container(
-            margin: EdgeInsets.only(right: index < 2 ? 12 : 0),
-            height: 80,
-            decoration: BoxDecoration(
-              color: AppUiColors.of(context).surface,
-              borderRadius: BorderRadius.circular(20),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class _SyncDialog extends StatefulWidget {
   @override
@@ -1713,25 +758,6 @@ class _AnimatedButtonState extends State<_AnimatedButton>
   }
 }
 
-class _BatteryHealthShimmer extends StatelessWidget {
-  const _BatteryHealthShimmer();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 120,
-      decoration: BoxDecoration(
-        color: AppUiColors.of(context).surface,
-        borderRadius: BorderRadius.circular(24),
-      ),
-    );
-  }
-}
-
-// =============================================================================
-// Error & Empty banners — replace shimmer-on-error to surface lỗi rõ ràng.
-// =============================================================================
-
 class _InlineErrorBanner extends StatelessWidget {
   final String title;
   final Object error;
@@ -1873,79 +899,18 @@ class _NoVehicleBanner extends StatelessWidget {
   }
 }
 
-class _MissingVehicleDataCard extends StatelessWidget {
-  final String message;
-
-  const _MissingVehicleDataCard({required this.message});
+/// Quiet glass placeholder while a card loads.
+class _LuxeSkeleton extends StatelessWidget {
+  const _LuxeSkeleton({required this.height});
+  final double height;
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppUiColors.of(context).surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: AppUiColors.of(context).warning.withValues(alpha: .35),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.info_outline_rounded,
-            color: AppUiColors.of(context).warning,
-          ),
-          SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              message,
-              style: TextStyle(
-                color: AppUiColors.of(context).text,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _EfficiencyReference extends StatelessWidget {
-  const _EfficiencyReference({this.vehicle});
-  final VehicleModel? vehicle;
-  @override
-  Widget build(BuildContext context) {
-    final v = vehicle;
-    final valid =
-        v != null &&
-        v.hasEfficiencyData &&
-        v.defaultEfficiency.isFinite &&
-        v.defaultEfficiency > 0;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Divider(),
-        SizedBox(height: 12),
-        Text(
-          'Thông số quãng đường cơ sở',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-        SizedBox(height: 8),
-        Text(
-          valid
-              ? '${v.defaultEfficiency.toStringAsFixed(2)} km / 1% pin'
-              : 'Chưa có dữ liệu cấu hình',
-          style: Theme.of(context).textTheme.headlineSmall,
-        ),
-        SizedBox(height: 8),
-        Text(
-          'Thông số cấu hình dùng để ước tính quãng đường. '
-          'Không phải hiệu suất đo thực tế hay điểm đánh giá lái xe.',
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => Container(
+    height: height,
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(20),
+      color: LuxeColors.glass,
+      border: Border.all(color: LuxeColors.hairline),
+    ),
+  );
 }

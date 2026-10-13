@@ -16,6 +16,7 @@ import '../../data/services/push_notification_service.dart';
 import '../../data/services/shelly_connection_coordinator.dart';
 import '../../data/models/shelly_connection_state.dart';
 import '../../core/theme/app_motion.dart';
+import '../../core/theme/luxe_theme.dart';
 import '../../core/widgets/app_popup.dart';
 import '../../core/widgets/battery_bot_mascot.dart';
 import '../../data/models/vinfast_model_spec.dart';
@@ -711,6 +712,8 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
       initialDate: initial,
       firstDate: DateTime(1930),
       lastDate: DateTime(now.year - 16, now.month, now.day),
+      builder: (context, child) =>
+          Theme(data: LuxeTheme.of(context), child: child!),
     );
 
     if (picked != null && mounted) {
@@ -840,53 +843,61 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
   // Presentation is deliberately separate from draft and safety operations.
   @override
   Widget build(BuildContext context) {
-    if (_initialLoadError != null) {
-      return Scaffold(
-        body: SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.cloud_off_rounded,
-                      size: 48,
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      _initialLoadError!,
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyLarge,
-                    ),
-                    const SizedBox(height: 20),
-                    FilledButton.icon(
-                      onPressed: _initOnboardingFlow,
-                      icon: const Icon(Icons.refresh_rounded),
-                      label: const Text('Thử lại'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-    if (_isLoading) {
-      return Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+    if (_initialLoadError != null || _isLoading) {
+      final failed = _initialLoadError != null;
+      return Theme(
+        data: LuxeTheme.of(context),
+        child: Scaffold(
+          backgroundColor: LuxeColors.background,
+          body: Stack(
+            fit: StackFit.expand,
             children: [
-              const CircularProgressIndicator(),
-              const SizedBox(height: 16),
-              Text(
-                'Đang tải thông tin thiết lập',
-                style: Theme.of(context).textTheme.bodyMedium,
+              const LuxeBackdrop(accent: 0.5),
+              SafeArea(
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 420),
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (failed)
+                            const Icon(
+                              Icons.cloud_off_rounded,
+                              size: 40,
+                              color: LuxeColors.platinumMid,
+                            )
+                          else
+                            const SizedBox(
+                              width: 28,
+                              height: 28,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 1.6,
+                                color: LuxeColors.platinum,
+                              ),
+                            ),
+                          const SizedBox(height: 18),
+                          Text(
+                            failed
+                                ? _initialLoadError!
+                                : 'Đang tải thông tin thiết lập',
+                            textAlign: TextAlign.center,
+                            style: LuxeText.body,
+                          ),
+                          if (failed) ...[
+                            const SizedBox(height: 22),
+                            FilledButton.icon(
+                              onPressed: _initOnboardingFlow,
+                              icon: const Icon(Icons.refresh_rounded),
+                              label: const Text('Thử lại'),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
@@ -934,77 +945,116 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
   }
 
   Widget _buildStep0Welcome() {
+    const chapters = [
+      (
+        '01',
+        'Chọn mẫu xe',
+        'Thông số từ danh mục giúp hiển thị thông tin pin của xe.',
+      ),
+      (
+        '02',
+        'Bổ sung khi thuận tiện',
+        'Bạn có thể bỏ qua câu hỏi phụ và thiết lập bộ sạc sau.',
+      ),
+      (
+        '03',
+        'Kiểm tra trước khi lưu',
+        'Xem lại các lựa chọn ở bước cuối để hoàn tất thiết lập.',
+      ),
+    ];
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _plainInfo(
-          Icons.electric_scooter_outlined,
-          'Chọn mẫu xe',
-          'Thông số từ danh mục giúp hiển thị thông tin pin của xe.',
+        LuxeGlass(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.schedule_rounded,
+                size: 18,
+                color: LuxeColors.emerald,
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'Khoảng 2 phút · phần lớn câu hỏi có thể bỏ qua',
+                  style: LuxeText.caption,
+                ),
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: 20),
-        _plainInfo(
-          Icons.tune_rounded,
-          'Bổ sung khi thuận tiện',
-          'Bạn có thể bỏ qua câu hỏi phụ và thiết lập bộ sạc sau.',
-        ),
-        const SizedBox(height: 20),
-        _plainInfo(
-          Icons.fact_check_outlined,
-          'Kiểm tra trước khi lưu',
-          'Xem lại các lựa chọn ở bước cuối để hoàn tất thiết lập.',
-        ),
+        const SizedBox(height: 18),
+        for (var i = 0; i < chapters.length; i++)
+          LuxeReveal(
+            index: 3 + i,
+            child: _chapter(
+              chapters[i].$1,
+              chapters[i].$2,
+              chapters[i].$3,
+              last: i == chapters.length - 1,
+            ),
+          ),
       ],
     );
   }
 
-  Widget _plainInfo(IconData icon, String title, String description) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: colors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: colors.outlineVariant.withValues(alpha: isDark ? 0.20 : 0.30),
-          width: 1,
+  Widget _chapter(
+    String numeral,
+    String title,
+    String description, {
+    bool last = false,
+  }) => Container(
+    padding: const EdgeInsets.symmetric(vertical: 16),
+    decoration: BoxDecoration(
+      border: last
+          ? null
+          : const Border(bottom: BorderSide(color: LuxeColors.hairline)),
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 46,
+          child: LuxeMetalText(
+            numeral,
+            style: const TextStyle(
+              fontSize: 24,
+              height: 1.0,
+              fontWeight: FontWeight.w200,
+              letterSpacing: -0.5,
+            ),
+          ),
         ),
-      ),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: LuxeText.item),
+              const SizedBox(height: 4),
+              Text(description, style: LuxeText.caption),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+
+  /// Icon medallion + copy on glass, for informational rows.
+  Widget _plainInfo(IconData icon, String title, String description) {
+    return LuxeGlass(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: colors.primary.withValues(alpha: isDark ? 0.16 : 0.10),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: ExcludeSemantics(
-              child: Icon(icon, color: colors.primary, size: 22),
-            ),
-          ),
+          _medallion(icon),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.1,
-                  ),
-                ),
+                Text(title, style: LuxeText.item),
                 const SizedBox(height: 4),
-                Text(
-                  description,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colors.onSurfaceVariant,
-                    height: 1.35,
-                  ),
-                ),
+                Text(description, style: LuxeText.caption),
               ],
             ),
           ),
@@ -1013,13 +1063,46 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
     );
   }
 
+  Widget _medallion(IconData icon, {bool active = false, double size = 44}) =>
+      Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(
+            center: const Alignment(-0.3, -0.4),
+            colors: active
+                ? const [Color(0x4434D399), Color(0x1434D399)]
+                : const [Color(0x24FFFFFF), Color(0x08FFFFFF)],
+          ),
+          border: Border.all(
+            color: active
+                ? LuxeColors.emerald.withValues(alpha: 0.6)
+                : LuxeColors.hairlineStrong,
+          ),
+        ),
+        child: ExcludeSemantics(
+          child: Icon(
+            icon,
+            size: size * 0.48,
+            color: active ? LuxeColors.emerald : LuxeColors.platinum,
+          ),
+        ),
+      );
+
   Widget _buildStep1VehiclePicker() {
     if (_catalogIsLoading) {
       return const Padding(
         padding: EdgeInsets.all(24),
         child: Center(
-          child: CircularProgressIndicator(
-            semanticsLabel: 'Đang tải danh sách xe',
+          child: SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(
+              strokeWidth: 1.6,
+              color: LuxeColors.platinum,
+              semanticsLabel: 'Đang tải danh sách xe',
+            ),
           ),
         ),
       );
@@ -1032,35 +1115,39 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
             _catalogLoadFailed
                 ? 'Chưa tải được danh sách xe. Kiểm tra kết nối rồi thử lại.'
                 : 'Chưa có mẫu xe để chọn. Thử tải lại danh sách.',
+            style: LuxeText.body,
           ),
           const SizedBox(height: 16),
           OutlinedButton.icon(
             onPressed: _loadCatalog,
             icon: const Icon(Icons.refresh_rounded),
             label: const Text('Thử lại'),
-            style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
           ),
         ],
       );
     }
     return Column(
       children: [
-        for (final spec in _catalogSpecs)
+        for (var i = 0; i < _catalogSpecs.length; i++)
           Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: OnboardingVehicleChoice(
-              spec: spec,
-              selected: _selectedSpec?.modelId == spec.modelId,
-              onSelected: () {
-                HapticFeedback.selectionClick();
-                setState(() {
-                  _selectedSpec = spec;
-                  _botMood = BatteryBotMood.happy;
-                  _botSpeech =
-                      'Oa! ${spec.modelName} - một lựa chọn tuyệt vời! Bấm Tiếp tục nhé! 🛵⚡';
-                });
-                _resetIdleTimer();
-              },
+            padding: const EdgeInsets.only(bottom: 10),
+            child: LuxeReveal(
+              index: 3 + i,
+              child: OnboardingVehicleChoice(
+                spec: _catalogSpecs[i],
+                selected: _selectedSpec?.modelId == _catalogSpecs[i].modelId,
+                onSelected: () {
+                  final spec = _catalogSpecs[i];
+                  HapticFeedback.selectionClick();
+                  setState(() {
+                    _selectedSpec = spec;
+                    _botMood = BatteryBotMood.happy;
+                    _botSpeech =
+                        '${spec.modelName}, lựa chọn tuyệt vời. Bấm Tiếp tục nhé.';
+                  });
+                  _resetIdleTimer();
+                },
+              ),
             ),
           ),
       ],
@@ -1075,9 +1162,33 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          _selectedSpec?.modelName ?? 'Thông tin xe',
-          style: Theme.of(context).textTheme.titleMedium,
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(10, 6, 14, 6),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(99),
+              color: LuxeColors.glass,
+              border: Border.all(color: LuxeColors.hairline),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.electric_scooter_outlined,
+                  size: 16,
+                  color: LuxeColors.emerald,
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    _selectedSpec?.modelName ?? 'Thông tin xe',
+                    style: LuxeText.label.copyWith(color: LuxeColors.text),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
         const SizedBox(height: 20),
         _buildInputField(
@@ -1086,14 +1197,14 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
           hint: 'Ví dụ: Xe đi làm',
           icon: Icons.edit_note_rounded,
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
         _buildInputField(
           controller: _plateCtrl,
           label: 'Biển số',
           hint: 'Ví dụ: 29-X1 123.45',
           icon: Icons.credit_card_rounded,
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
         _buildInputField(
           controller: _odoCtrl,
           label: 'Số km đã đi (ODO)',
@@ -1104,7 +1215,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
           keyboardType: TextInputType.number,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         _skipButton(() => _handleCreateVehicle(skipDetails: true)),
       ],
     );
@@ -1112,9 +1223,6 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
 
   Widget _buildStep3Dob() {
     final text = _dobCtrl.text.trim();
-    final colors = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1125,6 +1233,12 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
           textInputAction: TextInputAction.done,
           onChanged: (_) => setState(() {}),
           scrollPadding: const EdgeInsets.all(24),
+          style: const TextStyle(
+            color: LuxeColors.text,
+            fontSize: 17,
+            letterSpacing: 1.2,
+            fontFeatures: [FontFeature.tabularFigures()],
+          ),
           decoration: InputDecoration(
             labelText: 'Ngày sinh',
             hintText: 'dd/mm/yyyy',
@@ -1135,28 +1249,6 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
                 : null,
             errorMaxLines: 3,
             prefixIcon: const Icon(Icons.cake_outlined),
-            filled: true,
-            fillColor: colors.surfaceContainerLow,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(
-                color: colors.outlineVariant.withValues(
-                  alpha: isDark ? 0.25 : 0.35,
-                ),
-              ),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(
-                color: colors.outlineVariant.withValues(
-                  alpha: isDark ? 0.25 : 0.35,
-                ),
-              ),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: colors.primary, width: 1.8),
-            ),
             suffixIcon: IconButton(
               onPressed: _pickDateOfBirth,
               tooltip: 'Chọn ngày sinh trên lịch',
@@ -1165,29 +1257,104 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
             ),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         _skipButton(_skipDob),
+      ],
+    );
+  }
+
+  String _distanceSpeech(double km) => km <= 15
+      ? 'Đi lại nhẹ nhàng (${km.toInt()} km/ngày). Pin đủ cho nhiều ngày mới cần sạc.'
+      : km <= 40
+      ? 'Quãng đường lý tưởng (${km.toInt()} km/ngày). Khoảng 2-3 ngày sạc một lần là đẹp nhất.'
+      : 'Di chuyển nhiều (${km.toInt()} km/ngày). Ứng dụng sẽ ưu tiên tầm vận hành cho bạn.';
+
+  BatteryBotMood _distanceMood(double km) => km <= 15
+      ? BatteryBotMood.happy
+      : km <= 40
+      ? BatteryBotMood.listening
+      : BatteryBotMood.charging;
+
+  void _setDistance(double km) {
+    setState(() {
+      _dailyDistanceKm = km;
+      _botSpeech = _distanceSpeech(km);
+      _botMood = _distanceMood(km);
+    });
+    _resetIdleTimer();
+  }
+
+  /// Large platinum readout that rolls between values.
+  Widget _readout({
+    required double? value,
+    required String unit,
+    required String empty,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
+      children: [
+        if (value == null)
+          const Text(
+            '—',
+            style: TextStyle(
+              color: LuxeColors.dim,
+              fontSize: 56,
+              height: 1.0,
+              fontWeight: FontWeight.w200,
+            ),
+          )
+        else
+          TweenAnimationBuilder<double>(
+            tween: Tween(end: value),
+            duration: AppMotion.durationFor(
+              context,
+              const Duration(milliseconds: 420),
+            ),
+            curve: LuxeMotion.enter,
+            builder: (context, v, _) => LuxeMetalText(
+              '${v.round()}',
+              style: const TextStyle(
+                fontSize: 56,
+                height: 1.0,
+                fontWeight: FontWeight.w200,
+                letterSpacing: -1.5,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            value == null ? empty : unit,
+            style: LuxeText.body.copyWith(
+              color: value == null ? LuxeColors.dim : LuxeColors.muted,
+            ),
+          ),
+        ),
       ],
     );
   }
 
   Widget _buildStep4DailyDistance() {
     final value = _dailyDistanceKm;
-    final colors = Theme.of(context).colorScheme;
-    final isDark = Theme.brightnessOf(context) == Brightness.dark;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          value == null ? 'Chưa chọn quãng đường' : '${value.toInt()} km/ngày',
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-            fontWeight: FontWeight.w800,
-            color: value != null ? colors.primary : null,
+        Semantics(
+          liveRegion: true,
+          child: _readout(
+            value: value,
+            unit: 'km mỗi ngày',
+            empty: 'Chưa chọn quãng đường',
           ),
         ),
-        const SizedBox(height: 8),
-        const Text('Chạm một mức gợi ý hoặc kéo thanh để chọn.'),
+        const SizedBox(height: 6),
+        const Text(
+          'Chạm một mức gợi ý hoặc kéo thanh để chọn.',
+          style: LuxeText.caption,
+        ),
+        const SizedBox(height: 6),
         Semantics(
           label: 'Quãng đường mỗi ngày',
           value: value == null ? 'Chưa chọn' : '${value.toInt()} km',
@@ -1196,28 +1363,12 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
             min: 5,
             max: 100,
             divisions: 19,
-            activeColor: colors.primary,
             label: value == null ? 'Chưa chọn' : '${value.toInt()} km',
             semanticFormatterCallback: (value) =>
                 '${value.toInt()} km mỗi ngày',
             onChanged: (value) {
-              setState(() {
-                _dailyDistanceKm = value;
-                if (value <= 15) {
-                  _botSpeech =
-                      'Đi lại nhẹ nhàng (${value.toInt()} km/ngày). Pin xe tha hồ vi vu cả tuần mới cần sạc! 🍃';
-                  _botMood = BatteryBotMood.happy;
-                } else if (value <= 40) {
-                  _botSpeech =
-                      'Quãng đường lý tưởng (${value.toInt()} km/ngày)! Khoảng 2-3 ngày cắm sạc một lần là đẹp nhất. 🛵';
-                  _botMood = BatteryBotMood.listening;
-                } else {
-                  _botSpeech =
-                      'Di chuyển nhiều (${value.toInt()} km/ngày)! AI sẽ ưu tiên tối ưu tầm vận hành cho bạn. 🚀';
-                  _botMood = BatteryBotMood.charging;
-                }
-              });
-              _resetIdleTimer();
+              if (value != _dailyDistanceKm) HapticFeedback.selectionClick();
+              _setDistance(value);
             },
           ),
         ),
@@ -1229,35 +1380,13 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
               ChoiceChip(
                 label: Text('${km.toInt()} km'),
                 selected: value != null && (value - km).abs() < 2.5,
-                selectedColor: colors.primary.withValues(
-                  alpha: isDark ? 0.22 : 0.16,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
                 onSelected: (_) {
                   HapticFeedback.selectionClick();
-                  setState(() {
-                    _dailyDistanceKm = km;
-                    if (km <= 15) {
-                      _botSpeech =
-                          'Đi lại nhẹ nhàng (${km.toInt()} km/ngày). Pin xe tha hồ vi vu cả tuần mới cần sạc! 🍃';
-                      _botMood = BatteryBotMood.happy;
-                    } else if (km <= 40) {
-                      _botSpeech =
-                          'Quãng đường lý tưởng (${km.toInt()} km/ngày)! Khoảng 2-3 ngày cắm sạc một lần là đẹp nhất. 🛵';
-                      _botMood = BatteryBotMood.listening;
-                    } else {
-                      _botSpeech =
-                          'Di chuyển nhiều (${km.toInt()} km/ngày)! AI sẽ ưu tiên tối ưu tầm vận hành cho bạn. 🚀';
-                      _botMood = BatteryBotMood.charging;
-                    }
-                  });
-                  _resetIdleTimer();
+                  _setDistance(km);
                 },
                 materialTapTargetSize: MaterialTapTargetSize.padded,
-                showCheckmark: true,
-                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                showCheckmark: false,
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
               ),
           ],
         ),
@@ -1292,147 +1421,76 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
         icon: Icons.two_wheeler_rounded,
       ),
     ];
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
+    final soc = _typicalSocWhenCharge;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Mục đích chính', style: theme.textTheme.titleMedium),
-        const SizedBox(height: 8),
-        for (final purpose in purposes)
+        const Text('MỤC ĐÍCH CHÍNH', style: LuxeText.eyebrow),
+        const SizedBox(height: 12),
+        for (var i = 0; i < purposes.length; i++)
           Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Semantics(
-              selected: _selectedUsagePurpose == purpose.id,
-              inMutuallyExclusiveGroup: true,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: _selectedUsagePurpose == purpose.id
-                        ? colors.primary
-                        : colors.outlineVariant.withValues(
-                            alpha: isDark ? 0.25 : 0.35,
-                          ),
-                    width: _selectedUsagePurpose == purpose.id ? 1.6 : 1.0,
-                  ),
-                ),
-                child: ListTile(
-                  minVerticalPadding: 12,
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: _selectedUsagePurpose == purpose.id
-                          ? colors.primary.withValues(
-                              alpha: isDark ? 0.20 : 0.12,
-                            )
-                          : colors.surfaceContainerHighest.withValues(
-                              alpha: 0.35,
-                            ),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      purpose.icon,
-                      color: _selectedUsagePurpose == purpose.id
-                          ? colors.primary
-                          : colors.onSurfaceVariant,
-                      size: 20,
-                    ),
-                  ),
-                  title: Text(
-                    purpose.title,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: _selectedUsagePurpose == purpose.id
-                          ? FontWeight.w700
-                          : FontWeight.w600,
-                    ),
-                  ),
-                  subtitle: Text(purpose.detail),
-                  trailing: Icon(
-                    _selectedUsagePurpose == purpose.id
-                        ? Icons.check_circle_rounded
-                        : Icons.radio_button_off,
-                    color: _selectedUsagePurpose == purpose.id
-                        ? colors.primary
-                        : colors.onSurfaceVariant,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  tileColor: _selectedUsagePurpose == purpose.id
-                      ? colors.primaryContainer
-                      : colors.surfaceContainerLow,
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    setState(() {
-                      _selectedUsagePurpose = purpose.id;
-                      if (purpose.id == 'daily_commute') {
-                        _botSpeech =
-                            'Đi làm & đi học hàng ngày: Lộ trình ổn định giúp AI học thói quen sạc cực nhanh! 🎓';
-                        _botMood = BatteryBotMood.happy;
-                      } else if (purpose.id == 'delivery_work') {
-                        _botSpeech =
-                            'Chạy xe dịch vụ / giao hàng: Chế độ sạc nhanh an toàn giúp xe luôn sẵn sàng lăn bánh! 📦';
-                        _botMood = BatteryBotMood.charging;
-                      } else {
-                        _botSpeech =
-                            'Đi chơi dạo phố cuối tuần: Tận hưởng trải nghiệm êm ái cùng xe điện VinFast! 🌿';
-                        _botMood = BatteryBotMood.greeting;
-                      }
-                    });
-                    _resetIdleTimer();
-                  },
-                ),
+            padding: const EdgeInsets.only(bottom: 10),
+            child: LuxeReveal(
+              index: 3 + i,
+              child: _purposeCard(
+                purposes[i].id,
+                purposes[i].title,
+                purposes[i].detail,
+                purposes[i].icon,
               ),
             ),
           ),
-        const SizedBox(height: 16),
-        Text(
+        const SizedBox(height: 18),
+        const Text('MỨC PIN KHI BẮT ĐẦU SẠC', style: LuxeText.eyebrow),
+        const SizedBox(height: 4),
+        const Text(
           'Mức pin khi bạn thường bắt đầu sạc',
-          style: theme.textTheme.titleMedium,
+          style: LuxeText.caption,
         ),
-        const SizedBox(height: 8),
-        Text(
-          _typicalSocWhenCharge == null
-              ? 'Chưa chọn mức pin'
-              : '${_typicalSocWhenCharge!.toInt()}%',
-          style: theme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w800,
-            color: _typicalSocWhenCharge != null ? colors.primary : null,
-          ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: Semantics(
+                liveRegion: true,
+                child: _readout(
+                  value: soc,
+                  unit: '%',
+                  empty: 'Chưa chọn mức pin',
+                ),
+              ),
+            ),
+            ExcludeSemantics(child: _MiniCell(level: (soc ?? 0) / 100)),
+          ],
         ),
         Semantics(
           label: 'Mức pin khi bắt đầu sạc',
-          value: _typicalSocWhenCharge == null
-              ? 'Chưa chọn'
-              : '${_typicalSocWhenCharge!.toInt()}%',
+          value: soc == null ? 'Chưa chọn' : '${soc.toInt()}%',
           child: Slider(
-            value: _typicalSocWhenCharge ?? 20,
+            value: soc ?? 20,
             min: 10,
             max: 60,
             divisions: 10,
-            activeColor: colors.primary,
-            label: _typicalSocWhenCharge == null
-                ? 'Chưa chọn'
-                : '${_typicalSocWhenCharge!.toInt()}%',
+            label: soc == null ? 'Chưa chọn' : '${soc.toInt()}%',
             semanticFormatterCallback: (value) => '${value.toInt()} phần trăm',
             onChanged: (value) {
+              if (value != _typicalSocWhenCharge) {
+                HapticFeedback.selectionClick();
+              }
               setState(() {
                 _typicalSocWhenCharge = value;
                 if (value >= 20 && value <= 30) {
                   _botSpeech =
-                      'Khoảng ${value.toInt()}% là "tỉ lệ vàng" của pin LFP! Giúp cell pin bền bỉ nhất. 🏆';
+                      'Khoảng ${value.toInt()}% là mức lý tưởng để bắt đầu sạc, giúp pin bền hơn.';
                   _botMood = BatteryBotMood.happy;
                 } else if (value < 20) {
                   _botSpeech =
-                      'Còn ${value.toInt()}% mới sạc: Nhớ cắm sạc sớm, tránh để cạn dưới 10% bạn nha! 💡';
+                      'Còn ${value.toInt()}% mới sạc: nhớ cắm sạc sớm, tránh để pin dưới 10%.';
                   _botMood = BatteryBotMood.listening;
                 } else {
                   _botSpeech =
-                      'Cắm sạc từ ${value.toInt()}%: Bạn rất chu đáo, xe sẽ luôn dồi dào năng lượng! 👍';
+                      'Cắm sạc từ ${value.toInt()}%: xe luôn sẵn sàng cho mọi hành trình.';
                   _botMood = BatteryBotMood.charging;
                 }
               });
@@ -1440,10 +1498,71 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
             },
           ),
         ),
-        const Text('Bạn có thể trả lời một trong hai câu hỏi hoặc bỏ qua.'),
-        const SizedBox(height: 16),
+        const Text(
+          'Bạn có thể trả lời một trong hai câu hỏi hoặc bỏ qua.',
+          style: LuxeText.caption,
+        ),
+        const SizedBox(height: 12),
         _skipButton(_skipUsageSurvey),
       ],
+    );
+  }
+
+  Widget _purposeCard(String id, String title, String detail, IconData icon) {
+    final selected = _selectedUsagePurpose == id;
+    return Semantics(
+      selected: selected,
+      inMutuallyExclusiveGroup: true,
+      button: true,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          splashColor: const Color(0x1434D399),
+          onTap: () {
+            HapticFeedback.selectionClick();
+            setState(() {
+              _selectedUsagePurpose = id;
+              if (id == 'commute') {
+                _botSpeech =
+                    'Đi làm hằng ngày: lộ trình ổn định giúp ứng dụng hiểu thói quen sạc của bạn.';
+                _botMood = BatteryBotMood.happy;
+              } else if (id == 'delivery') {
+                _botSpeech =
+                    'Chạy xe dịch vụ, giao hàng: hẹn giờ sạc giúp xe luôn sẵn sàng lăn bánh.';
+                _botMood = BatteryBotMood.charging;
+              } else {
+                _botSpeech =
+                    'Đi lại cá nhân: tận hưởng những chuyến đi êm ái cùng xe điện VinFast.';
+                _botMood = BatteryBotMood.greeting;
+              }
+            });
+            _resetIdleTimer();
+          },
+          child: LuxeGlass(
+            selected: selected,
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                _medallion(icon, active: selected, size: 42),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: LuxeText.item),
+                      const SizedBox(height: 2),
+                      Text(detail, style: LuxeText.caption),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _LuxeCheck(selected: selected),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -1456,21 +1575,23 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
           'Thiết lập bộ sạc',
           'Ứng dụng sẽ hướng dẫn kiểm tra kết nối và an toàn. Chỉ điều khiển sau khi thiết bị được xác minh.',
         ),
+        const SizedBox(height: 10),
+        _plainInfo(
+          Icons.timer_outlined,
+          'Tự ngắt bằng bộ đếm phần cứng',
+          'Hẹn giờ được nạp vào rơ-le, an toàn kể cả khi điện thoại mất mạng.',
+        ),
         const SizedBox(height: 20),
         OutlinedButton.icon(
           onPressed: _isSubmitting ? null : _openShellySetup,
-          icon: const Icon(Icons.settings_input_component_outlined),
+          icon: const Icon(Icons.settings_input_component_outlined, size: 18),
           label: const Text('Thiết lập ngay', textAlign: TextAlign.center),
-          style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
         ),
         if (_shellySetupMessage != null) ...[
           const SizedBox(height: 12),
-          Text(
-            _shellySetupMessage!,
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
+          Text(_shellySetupMessage!, style: LuxeText.body),
         ],
-        const SizedBox(height: 12),
+        const SizedBox(height: 6),
         _skipButton(() {
           HapticFeedback.selectionClick();
           setState(() => _shellyStatus = 'skipped');
@@ -1489,7 +1610,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
           'Theo dõi trạng thái sạc',
           'Nhận thông báo khi có cập nhật từ phiên sạc.',
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 10),
         _plainInfo(
           Icons.build_outlined,
           'Nhắc nhở bảo dưỡng',
@@ -1498,17 +1619,37 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
         const SizedBox(height: 20),
         OutlinedButton.icon(
           onPressed: _isSubmitting ? null : () => _chooseNotifications(true),
-          icon: const Icon(Icons.notifications_active_outlined),
+          icon: const Icon(Icons.notifications_active_outlined, size: 18),
           label: const Text('Bật thông báo', textAlign: TextAlign.center),
-          style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
         ),
+        const SizedBox(height: 6),
         _skipButton(() => _chooseNotifications(false), label: 'Để sau'),
         if (_notificationOptIn != null)
-          Text(
-            _notificationOptIn!
-                ? 'Thông báo đã được cho phép.'
-                : 'Thông báo chưa bật. Bạn vẫn có thể tiếp tục và bật lại trong Cài đặt.',
-            style: Theme.of(context).textTheme.bodyMedium,
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  _notificationOptIn!
+                      ? Icons.check_circle_rounded
+                      : Icons.info_outline_rounded,
+                  size: 18,
+                  color: _notificationOptIn!
+                      ? LuxeColors.emerald
+                      : LuxeColors.muted,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _notificationOptIn!
+                        ? 'Thông báo đã được cho phép.'
+                        : 'Thông báo chưa bật. Bạn vẫn có thể tiếp tục và bật lại trong Cài đặt.',
+                    style: LuxeText.body,
+                  ),
+                ),
+              ],
+            ),
           ),
       ],
     );
@@ -1519,71 +1660,89 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _summaryHeading('Xe'),
-        _buildSummaryRow(
-          label: 'Mẫu xe',
-          value:
-              spec?.modelName ??
-              (_createdVehicleId != null ? 'Đã lưu trong hồ sơ' : 'Chưa chọn'),
+        LuxeReveal(
+          index: 3,
+          child: _summaryGroup('Xe', [
+            _buildSummaryRow(
+              label: 'Mẫu xe',
+              value:
+                  spec?.modelName ??
+                  (_createdVehicleId != null
+                      ? 'Đã lưu trong hồ sơ'
+                      : 'Chưa chọn'),
+            ),
+            _buildSummaryRow(
+              label: 'Dung lượng theo danh mục',
+              value: spec == null
+                  ? 'Chưa có dữ liệu'
+                  : '${(spec.nominalCapacityWh / 1000).toStringAsFixed(1)} kWh',
+            ),
+            _buildSummaryRow(
+              label: 'Tên gợi nhớ',
+              value: _provided(
+                _draft != null ? _draft!.nickname : _nicknameCtrl.text,
+              ),
+            ),
+            _buildSummaryRow(
+              label: 'Biển số',
+              value: _provided(
+                _draft != null ? _draft!.licensePlate : _plateCtrl.text,
+              ),
+            ),
+            _buildSummaryRow(
+              label: 'Số km đã đi',
+              value: _draft?.initialOdo == null
+                  ? 'Chưa cung cấp'
+                  : '${_draft!.initialOdo} km',
+            ),
+          ]),
         ),
-        _buildSummaryRow(
-          label: 'Dung lượng theo danh mục',
-          value: spec == null
-              ? 'Chưa có dữ liệu'
-              : '${(spec.nominalCapacityWh / 1000).toStringAsFixed(1)} kWh',
+        const SizedBox(height: 12),
+        LuxeReveal(
+          index: 4,
+          child: _summaryGroup('Thông tin sử dụng', [
+            _buildSummaryRow(
+              label: 'Ngày sinh',
+              value: _provided(_dateOfBirth),
+            ),
+            _buildSummaryRow(
+              label: 'Quãng đường mỗi ngày',
+              value: _dailyDistanceKm == null
+                  ? 'Chưa cung cấp'
+                  : '${_dailyDistanceKm!.toInt()} km/ngày',
+            ),
+            _buildSummaryRow(
+              label: 'Mục đích chính',
+              value: _getUsagePurposeName(_selectedUsagePurpose),
+            ),
+            _buildSummaryRow(
+              label: 'Mức pin khi bắt đầu sạc',
+              value: _typicalSocWhenCharge == null
+                  ? 'Chưa cung cấp'
+                  : '${_typicalSocWhenCharge!.toInt()}%',
+            ),
+          ]),
         ),
-        _buildSummaryRow(
-          label: 'Tên gợi nhớ',
-          value: _provided(
-            _draft != null ? _draft!.nickname : _nicknameCtrl.text,
-          ),
-        ),
-        _buildSummaryRow(
-          label: 'Biển số',
-          value: _provided(
-            _draft != null ? _draft!.licensePlate : _plateCtrl.text,
-          ),
-        ),
-        _buildSummaryRow(
-          label: 'Số km đã đi',
-          value: _draft?.initialOdo == null
-              ? 'Chưa cung cấp'
-              : '${_draft!.initialOdo} km',
-        ),
-        const Divider(height: 32),
-        _summaryHeading('Thông tin sử dụng'),
-        _buildSummaryRow(label: 'Ngày sinh', value: _provided(_dateOfBirth)),
-        _buildSummaryRow(
-          label: 'Quãng đường mỗi ngày',
-          value: _dailyDistanceKm == null
-              ? 'Chưa cung cấp'
-              : '${_dailyDistanceKm!.toInt()} km/ngày',
-        ),
-        _buildSummaryRow(
-          label: 'Mục đích chính',
-          value: _getUsagePurposeName(_selectedUsagePurpose),
-        ),
-        _buildSummaryRow(
-          label: 'Mức pin khi bắt đầu sạc',
-          value: _typicalSocWhenCharge == null
-              ? 'Chưa cung cấp'
-              : '${_typicalSocWhenCharge!.toInt()}%',
-        ),
-        const Divider(height: 32),
-        _summaryHeading('Kết nối và thông báo'),
-        _buildSummaryRow(
-          label: 'Bộ sạc Shelly',
-          value: _shellyStatus == 'connected'
-              ? 'Đã xác minh trong thiết lập'
-              : 'Chưa thiết lập',
-        ),
-        _buildSummaryRow(
-          label: 'Thông báo',
-          value: _notificationOptIn == true ? 'Đã cho phép' : 'Để sau',
+        const SizedBox(height: 12),
+        LuxeReveal(
+          index: 5,
+          child: _summaryGroup('Kết nối và thông báo', [
+            _buildSummaryRow(
+              label: 'Bộ sạc Shelly',
+              value: _shellyStatus == 'connected'
+                  ? 'Đã xác minh trong thiết lập'
+                  : 'Chưa thiết lập',
+            ),
+            _buildSummaryRow(
+              label: 'Thông báo',
+              value: _notificationOptIn == true ? 'Đã cho phép' : 'Để sau',
+            ),
+          ]),
         ),
         const SizedBox(height: 16),
         const Text(
           'Chọn Hoàn tất để lưu thông tin. Nếu chưa đồng bộ được, ứng dụng sẽ thông báo trạng thái thực tế.',
+          style: LuxeText.caption,
         ),
       ],
     );
@@ -1599,25 +1758,49 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
     _ => 'Chưa cung cấp',
   };
 
-  Widget _summaryHeading(String title) => Padding(
-    padding: const EdgeInsets.only(bottom: 12),
-    child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+  Widget _summaryGroup(String title, List<Widget> rows) => LuxeGlass(
+    padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Semantics(
+          header: true,
+          child: Text(title.toUpperCase(), style: LuxeText.eyebrow),
+        ),
+        const SizedBox(height: 6),
+        for (var i = 0; i < rows.length; i++) ...[
+          if (i > 0) const Divider(height: 1),
+          rows[i],
+        ],
+      ],
+    ),
   );
 
   Widget _buildSummaryRow({required String label, required String value}) {
+    final missing =
+        value == 'Chưa cung cấp' ||
+        value == 'Chưa thiết lập' ||
+        value == 'Chưa chọn' ||
+        value == 'Chưa có dữ liệu' ||
+        value == 'Để sau';
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.symmetric(vertical: 11),
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 12,
+        runSpacing: 4,
         children: [
+          Text(label, style: LuxeText.caption),
           Text(
-            label,
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            value,
+            textAlign: TextAlign.end,
+            style: TextStyle(
+              color: missing ? LuxeColors.dim : LuxeColors.text,
+              fontSize: 14,
+              fontWeight: missing ? FontWeight.w400 : FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 4),
-          Text(value, style: Theme.of(context).textTheme.bodyLarge),
         ],
       ),
     );
@@ -1633,8 +1816,6 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
     TextInputType keyboardType = TextInputType.text,
     List<TextInputFormatter>? inputFormatters,
   }) {
-    final colors = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
@@ -1642,6 +1823,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
       inputFormatters: inputFormatters,
       onChanged: (_) => setState(() {}),
       scrollPadding: const EdgeInsets.all(24),
+      style: const TextStyle(color: LuxeColors.text, fontSize: 15.5),
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
@@ -1649,28 +1831,6 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
         prefixIcon: Icon(icon),
         errorText: errorText,
         errorMaxLines: 3,
-        filled: true,
-        fillColor: colors.surfaceContainerLow,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(
-            color: colors.outlineVariant.withValues(
-              alpha: isDark ? 0.25 : 0.35,
-            ),
-          ),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(
-            color: colors.outlineVariant.withValues(
-              alpha: isDark ? 0.25 : 0.35,
-            ),
-          ),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: colors.primary, width: 1.8),
-        ),
       ),
     );
   }
@@ -1678,10 +1838,113 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
   Widget _skipButton(VoidCallback action, {String label = 'Bỏ qua bước này'}) {
     return TextButton(
       onPressed: _isSubmitting ? null : action,
-      style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
       child: Text(label, textAlign: TextAlign.center),
     );
   }
+}
+
+/// Radio-style check that scales in, matching the vehicle choice.
+class _LuxeCheck extends StatelessWidget {
+  const _LuxeCheck({required this.selected});
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final duration = AppMotion.durationFor(
+      context,
+      const Duration(milliseconds: 260),
+    );
+    return AnimatedContainer(
+      duration: duration,
+      curve: LuxeMotion.enter,
+      width: 22,
+      height: 22,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: selected ? LuxeColors.emerald : Colors.transparent,
+        border: Border.all(
+          color: selected ? LuxeColors.emerald : LuxeColors.hairlineStrong,
+          width: 1.5,
+        ),
+      ),
+      child: AnimatedScale(
+        scale: selected ? 1 : 0,
+        duration: duration,
+        curve: Curves.easeOutBack,
+        child: const Icon(
+          Icons.check_rounded,
+          size: 14,
+          color: Color(0xFF04140D),
+        ),
+      ),
+    );
+  }
+}
+
+/// Small battery cell that fills to the chosen start-of-charge level.
+class _MiniCell extends StatelessWidget {
+  const _MiniCell({required this.level});
+  final double level;
+
+  @override
+  Widget build(BuildContext context) => TweenAnimationBuilder<double>(
+    tween: Tween(end: level),
+    duration: AppMotion.durationFor(context, const Duration(milliseconds: 420)),
+    curve: LuxeMotion.enter,
+    builder: (context, v, _) =>
+        CustomPaint(size: const Size(26, 46), painter: _MiniCellPainter(v)),
+  );
+}
+
+class _MiniCellPainter extends CustomPainter {
+  _MiniCellPainter(this.level);
+  final double level;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final body = RRect.fromLTRBR(
+      0,
+      5,
+      size.width,
+      size.height,
+      const Radius.circular(6),
+    );
+    canvas.drawRRect(
+      RRect.fromLTRBR(
+        size.width * 0.32,
+        0,
+        size.width * 0.68,
+        5,
+        const Radius.circular(2),
+      ),
+      Paint()..color = LuxeColors.platinumMid,
+    );
+    final inner = body.deflate(3);
+    final h = inner.height * level.clamp(0.0, 1.0);
+    if (h > 0) {
+      final low = level < 0.2;
+      canvas.drawRRect(
+        RRect.fromLTRBR(
+          inner.left,
+          inner.bottom - h,
+          inner.right,
+          inner.bottom,
+          const Radius.circular(3),
+        ),
+        Paint()..color = low ? const Color(0xFFFBBF24) : LuxeColors.emerald,
+      );
+    }
+    canvas.drawRRect(
+      body,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.4
+        ..color = LuxeColors.platinum,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_MiniCellPainter old) => old.level != level;
 }
 
 /// Content metadata only: validation and persistence stay in the screen state.
@@ -1766,450 +2029,242 @@ class OnboardingStepFrame extends StatelessWidget {
   final String? botSpeech;
   final VoidCallback? onBotTap;
 
+  static final _emoji = RegExp(
+    r'[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}\u{200D}]',
+    unicode: true,
+  );
+
+  /// The assistant speaks in a calm voice here: no emoji, single spaces.
+  static String cleanSpeech(String text) =>
+      text.replaceAll(_emoji, '').replaceAll(RegExp(r'\s{2,}'), ' ').trim();
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
     final copy = OnboardingStepCopy.steps[step];
+    final total = OnboardingStepCopy.steps.length;
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
-    // Keep the assistant in a stable dock. The legacy in-form rendering is
-    // disabled so changing from one to two lines never moves the form.
-    final botInDock =
-        !keyboardOpen ||
-        botSpeech != null ||
-        botMood != null ||
-        onBotTap != null;
-    final stepLabel = 'Bước ${step + 1}/${OnboardingStepCopy.steps.length}';
+    final reduced = MediaQuery.disableAnimationsOf(context);
     final duration = AppMotion.durationFor(
       context,
       const Duration(milliseconds: 220),
     );
+    final kind = copy.optional
+        ? 'Tùy chọn'
+        : step == 1
+        ? 'Bắt buộc'
+        : 'Thiết lập';
+    final progress = (step + 1) / total;
 
-    return Scaffold(
-      resizeToAvoidBottomInset: true,
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
-            child: Column(
-              children: [
-                // Header & Segmented Progress Bar
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Semantics(
-                        liveRegion: true,
-                        child: Text(
-                          '$stepLabel · ${copy.optional
-                              ? 'Tùy chọn'
-                              : step == 1
-                              ? 'Bắt buộc'
-                              : 'Thiết lập'}',
-                          style: theme.textTheme.labelLarge?.copyWith(
-                            color: copy.optional
-                                ? colors.onSurfaceVariant
-                                : colors.primary,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.2,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      // Segmented EV Energy Progress Bar
-                      ExcludeSemantics(
-                        child: Row(
-                          children: List.generate(
-                            OnboardingStepCopy.steps.length,
-                            (index) {
-                              final isPassed = index <= step;
-                              final isCurrent = index == step;
-                              return Expanded(
-                                child: Padding(
-                                  padding: EdgeInsets.only(
-                                    right:
-                                        index <
-                                            OnboardingStepCopy.steps.length - 1
-                                        ? 3.0
-                                        : 0.0,
-                                  ),
-                                  child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 220),
-                                    curve: Curves.easeOutCubic,
-                                    height: isCurrent ? 5 : 3.5,
-                                    decoration: BoxDecoration(
-                                      color: isPassed
-                                          ? colors.primary
-                                          : colors.surfaceContainerHighest
-                                                .withValues(
-                                                  alpha: isDark ? 0.35 : 0.45,
-                                                ),
-                                      borderRadius: BorderRadius.circular(4),
-                                      boxShadow: isCurrent
-                                          ? [
-                                              BoxShadow(
-                                                color: colors.primary
-                                                    .withValues(alpha: 0.45),
-                                                blurRadius: 4,
-                                                spreadRadius: 0.5,
-                                              ),
-                                            ]
-                                          : null,
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (!keyboardOpen) _buildBotDock(context, colors, isDark),
-                Expanded(
-                  child: LayoutBuilder(
-                    builder: (context, constraints) => AnimatedSwitcher(
-                      duration: duration,
-                      switchInCurve: AppMotion.enter,
-                      switchOutCurve: AppMotion.exit,
-                      layoutBuilder: (current, previous) => Stack(
-                        alignment: Alignment.topCenter,
-                        children: [
-                          for (final child in previous)
-                            IgnorePointer(
-                              child: ExcludeSemantics(child: child),
-                            ),
-                          ?current,
-                        ],
-                      ),
-                      transitionBuilder: (child, animation) => FadeTransition(
-                        opacity: animation,
-                        child: AnimatedBuilder(
-                          animation: animation,
-                          child: child,
-                          builder: (context, child) => Transform.translate(
-                            offset: Offset(
-                              (forward ? 20 : -20) * (1 - animation.value),
-                              0,
-                            ),
-                            child: child,
-                          ),
-                        ),
-                      ),
-                      child: SingleChildScrollView(
-                        key: ValueKey('onboarding-step-$step'),
-                        keyboardDismissBehavior:
-                            ScrollViewKeyboardDismissBehavior.onDrag,
-                        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-                        child: FocusTraversalGroup(
+    return Theme(
+      data: LuxeTheme.of(context),
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle.light.copyWith(
+          statusBarColor: Colors.transparent,
+          systemNavigationBarColor: LuxeColors.background,
+        ),
+        child: Scaffold(
+          resizeToAvoidBottomInset: true,
+          backgroundColor: LuxeColors.background,
+          body: Stack(
+            fit: StackFit.expand,
+            children: [
+              LuxeBackdrop(accent: 0.5 + 0.5 * progress),
+              SafeArea(
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 560),
+                    child: Column(
+                      children: [
+                        // ── Header: step label + continuous energy line ──
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
                           child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              if (!keyboardOpen && !botInDock) ...[
-                                if (botSpeech != null &&
-                                    botSpeech!.isNotEmpty) ...[
-                                  SizedBox(
-                                    height: 78,
-                                    child: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        ExcludeSemantics(
-                                          child: BatteryBotMascot(
-                                            size: BatteryBotSize.avatar,
-                                            displayMode:
-                                                BatteryBotDisplayMode.avatar,
-                                            enableFloating: true,
-                                            mood:
-                                                botMood ?? BatteryBotMood.idle,
-                                            onTap: onBotTap,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                          child: GestureDetector(
-                                            onTap: onBotTap,
-                                            behavior: HitTestBehavior.opaque,
-                                            child: Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 12,
-                                                    vertical: 8,
-                                                  ),
-                                              decoration: BoxDecoration(
-                                                color: colors
-                                                    .surfaceContainerHighest
-                                                    .withValues(
-                                                      alpha: isDark
-                                                          ? 0.38
-                                                          : 0.52,
-                                                    ),
-                                                borderRadius:
-                                                    const BorderRadius.only(
-                                                      topRight: Radius.circular(
-                                                        16,
-                                                      ),
-                                                      bottomLeft:
-                                                          Radius.circular(16),
-                                                      bottomRight:
-                                                          Radius.circular(16),
-                                                    ),
-                                                border: Border.all(
-                                                  color: colors.primary
-                                                      .withValues(
-                                                        alpha: isDark
-                                                            ? 0.32
-                                                            : 0.20,
-                                                      ),
-                                                  width: 1,
-                                                ),
-                                              ),
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Row(
-                                                    mainAxisSize:
-                                                        MainAxisSize.min,
-                                                    children: [
-                                                      Container(
-                                                        width: 6,
-                                                        height: 6,
-                                                        decoration:
-                                                            BoxDecoration(
-                                                              color: colors
-                                                                  .primary,
-                                                              shape: BoxShape
-                                                                  .circle,
-                                                            ),
-                                                      ),
-                                                      const SizedBox(width: 6),
-                                                      Flexible(
-                                                        child: Text(
-                                                          'BatteryBot AI',
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                          style: theme
-                                                              .textTheme
-                                                              .labelSmall
-                                                              ?.copyWith(
-                                                                color: colors
-                                                                    .primary,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w700,
-                                                                fontSize: 10.5,
-                                                              ),
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                  const SizedBox(height: 4),
-                                                  Text(
-                                                    botSpeech!,
-                                                    key: ValueKey(botSpeech),
-                                                    maxLines: 2,
-                                                    overflow: TextOverflow.clip,
-                                                    style: theme
-                                                        .textTheme
-                                                        .bodySmall
-                                                        ?.copyWith(
-                                                          color:
-                                                              colors.onSurface,
-                                                          fontSize: 12.0,
-                                                          height: 1.3,
-                                                          fontWeight:
-                                                              FontWeight.w500,
-                                                        ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                ] else ...[
-                                  Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: ExcludeSemantics(
-                                      child: BatteryBotMascot(
-                                        size: BatteryBotSize.avatar,
-                                        displayMode:
-                                            BatteryBotDisplayMode.avatar,
-                                        enableFloating: true,
-                                        mood: botMood ?? BatteryBotMood.idle,
-                                        onTap: onBotTap,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                ],
-                              ],
                               Semantics(
-                                header: true,
-                                child: Text(
-                                  copy.title,
-                                  style: theme.textTheme.headlineSmall
-                                      ?.copyWith(
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: -0.2,
+                                liveRegion: true,
+                                child: Text.rich(
+                                  TextSpan(
+                                    children: [
+                                      TextSpan(
+                                        text: 'Bước ${step + 1}',
+                                        style: const TextStyle(
+                                          color: LuxeColors.text,
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                       ),
+                                      TextSpan(text: '/$total'),
+                                      const TextSpan(text: ' · '),
+                                      TextSpan(
+                                        text: kind,
+                                        style: TextStyle(
+                                          color: copy.optional
+                                              ? LuxeColors.muted
+                                              : LuxeColors.emerald,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  style: LuxeText.label,
                                 ),
                               ),
-                              const SizedBox(height: 8),
-                              Text(
-                                copy.description,
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                  height: 1.4,
+                              const SizedBox(height: 10),
+                              ExcludeSemantics(
+                                child: _EnergyLine(
+                                  progress: progress,
+                                  steps: total,
+                                  animate: !reduced,
                                 ),
                               ),
-                              const SizedBox(height: 24),
-                              child,
                             ],
                           ),
                         ),
-                      ),
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-                  child: Row(
-                    children: [
-                      if (step > 0) ...[
-                        IconButton.outlined(
-                          onPressed: submitting ? null : onBack,
-                          tooltip: 'Quay lại bước trước',
-                          constraints: const BoxConstraints(
-                            minWidth: 48,
-                            minHeight: 48,
-                          ),
-                          style: IconButton.styleFrom(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                          ),
-                          icon: const Icon(Icons.arrow_back_rounded),
-                        ),
-                        const SizedBox(width: 12),
-                      ],
-                      Expanded(
-                        child: FilledButton(
-                          onPressed: submitting ? null : onContinue,
-                          style: FilledButton.styleFrom(
-                            minimumSize: const Size(48, 48),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
-                          ),
-                          child: submitting
-                              ? const SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    semanticsLabel: 'Đang lưu thông tin',
+                        if (!keyboardOpen) _buildBotDock(context),
+                        // ── Step content: one shared-axis transition ──
+                        Expanded(
+                          child: AnimatedSwitcher(
+                            duration: duration,
+                            switchInCurve: LuxeMotion.enter,
+                            switchOutCurve: AppMotion.exit,
+                            layoutBuilder: (current, previous) => Stack(
+                              alignment: Alignment.topCenter,
+                              children: [
+                                for (final child in previous)
+                                  IgnorePointer(
+                                    child: ExcludeSemantics(child: child),
                                   ),
-                                )
-                              : Text(
-                                  step == 8
-                                      ? 'Hoàn tất'
-                                      : step == 0
-                                      ? 'Bắt đầu thiết lập'
-                                      : 'Tiếp tục',
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 15,
+                                ?current,
+                              ],
+                            ),
+                            transitionBuilder: (child, animation) =>
+                                FadeTransition(
+                                  opacity: animation,
+                                  child: AnimatedBuilder(
+                                    animation: animation,
+                                    child: child,
+                                    builder: (context, child) =>
+                                        Transform.translate(
+                                          offset: Offset(
+                                            (forward ? 28 : -28) *
+                                                (1 - animation.value),
+                                            0,
+                                          ),
+                                          child: child,
+                                        ),
                                   ),
                                 ),
+                            child: SingleChildScrollView(
+                              key: ValueKey('onboarding-step-$step'),
+                              keyboardDismissBehavior:
+                                  ScrollViewKeyboardDismissBehavior.onDrag,
+                              padding: const EdgeInsets.fromLTRB(20, 6, 20, 24),
+                              child: FocusTraversalGroup(
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    LuxeReveal(
+                                      child: Semantics(
+                                        header: true,
+                                        child: Text(
+                                          copy.title,
+                                          style: LuxeText.title,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    LuxeReveal(
+                                      index: 1,
+                                      child: Text(
+                                        copy.description,
+                                        style: LuxeText.body,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 22),
+                                    LuxeReveal(index: 2, child: child),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBotDock(BuildContext context, ColorScheme colors, bool isDark) {
-    final speech = botSpeech?.trim();
-    return SizedBox(
-      height: 78,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-        child: Semantics(
-          container: true,
-          label: speech == null || speech.isEmpty
-              ? 'BatteryBot'
-              : 'BatteryBot: $speech',
-          button: onBotTap != null,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ExcludeSemantics(
-                child: BatteryBotMascot(
-                  size: BatteryBotSize.avatar,
-                  displayMode: BatteryBotDisplayMode.avatar,
-                  enableFloating: true,
-                  mood: botMood ?? BatteryBotMood.idle,
-                  onTap: onBotTap,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: GestureDetector(
-                  onTap: onBotTap,
-                  behavior: HitTestBehavior.opaque,
-                  child: Container(
-                    constraints: const BoxConstraints(minHeight: 60),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: colors.surfaceContainerHighest.withValues(
-                        alpha: isDark ? 0.38 : 0.52,
-                      ),
-                      borderRadius: const BorderRadius.only(
-                        topRight: Radius.circular(16),
-                        bottomLeft: Radius.circular(16),
-                        bottomRight: Radius.circular(16),
-                      ),
-                      border: Border.all(
-                        color: colors.primary.withValues(
-                          alpha: isDark ? 0.32 : 0.20,
+                        // ── Actions ──
+                        DecoratedBox(
+                          decoration: const BoxDecoration(
+                            border: Border(
+                              top: BorderSide(color: Color(0x0FFFFFFF)),
+                            ),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
+                            child: Row(
+                              children: [
+                                if (step > 0) ...[
+                                  IconButton.outlined(
+                                    onPressed: submitting ? null : onBack,
+                                    tooltip: 'Quay lại bước trước',
+                                    constraints: const BoxConstraints(
+                                      minWidth: 52,
+                                      minHeight: 52,
+                                    ),
+                                    style: IconButton.styleFrom(
+                                      side: const BorderSide(
+                                        color: LuxeColors.hairlineStrong,
+                                      ),
+                                      backgroundColor: LuxeColors.glass,
+                                    ),
+                                    icon: const Icon(
+                                      Icons.arrow_back_rounded,
+                                      size: 20,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                ],
+                                Expanded(
+                                  child: FilledButton(
+                                    onPressed: submitting ? null : onContinue,
+                                    child: submitting
+                                        ? const SizedBox(
+                                            width: 22,
+                                            height: 22,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: LuxeColors.platinum,
+                                              semanticsLabel:
+                                                  'Đang lưu thông tin',
+                                            ),
+                                          )
+                                        : Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Flexible(
+                                                child: Text(
+                                                  step == 8
+                                                      ? 'Hoàn tất'
+                                                      : step == 0
+                                                      ? 'Bắt đầu thiết lập'
+                                                      : 'Tiếp tục',
+                                                  textAlign: TextAlign.center,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Icon(
+                                                step == 8
+                                                    ? Icons.check_rounded
+                                                    : Icons
+                                                          .arrow_forward_rounded,
+                                                size: 18,
+                                              ),
+                                            ],
+                                          ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                    child: Text(
-                      (speech == null || speech.isEmpty)
-                          ? 'Mình sẽ hướng dẫn từng bước.'
-                          : speech,
-                      maxLines: 2,
-                      overflow: TextOverflow.clip,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: colors.onSurface,
-                        fontSize: 12,
-                        height: 1.3,
-                        fontWeight: FontWeight.w500,
-                      ),
+                      ],
                     ),
                   ),
                 ),
@@ -2220,6 +2275,173 @@ class OnboardingStepFrame extends StatelessWidget {
       ),
     );
   }
+
+  Widget _buildBotDock(BuildContext context) {
+    final raw = botSpeech?.trim();
+    final speech = cleanSpeech(
+      raw == null || raw.isEmpty ? 'Mình sẽ hướng dẫn từng bước.' : raw,
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+      child: Semantics(
+        container: true,
+        label: 'BatteryBot: $speech',
+        button: onBotTap != null,
+        child: GestureDetector(
+          onTap: onBotTap,
+          behavior: HitTestBehavior.opaque,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 56),
+            padding: const EdgeInsets.fromLTRB(8, 8, 14, 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(28),
+              gradient: const LinearGradient(
+                colors: [Color(0x14FFFFFF), Color(0x06FFFFFF)],
+              ),
+              border: Border.all(color: LuxeColors.hairline),
+            ),
+            child: Row(
+              children: [
+                ExcludeSemantics(
+                  child: BatteryBotMascot(
+                    size: BatteryBotSize.avatar,
+                    displayMode: BatteryBotDisplayMode.avatar,
+                    enableFloating: true,
+                    mood: botMood ?? BatteryBotMood.idle,
+                    onTap: onBotTap,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ExcludeSemantics(
+                    // New lines fade in; no second AnimatedSwitcher here.
+                    child: TweenAnimationBuilder<double>(
+                      key: ValueKey(speech),
+                      tween: Tween(begin: 0, end: 1),
+                      duration: AppMotion.durationFor(
+                        context,
+                        const Duration(milliseconds: 320),
+                      ),
+                      curve: Curves.easeOut,
+                      builder: (context, t, child) => Opacity(
+                        opacity: t,
+                        child: Transform.translate(
+                          offset: Offset(6 * (1 - t), 0),
+                          child: child,
+                        ),
+                      ),
+                      child: Text(
+                        speech,
+                        maxLines: 2,
+                        overflow: TextOverflow.clip,
+                        style: const TextStyle(
+                          color: LuxeColors.platinum,
+                          fontSize: 12.5,
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Continuous progress: a hairline track with an emerald → platinum fill,
+/// a glowing head and faint step ticks.
+class _EnergyLine extends StatelessWidget {
+  const _EnergyLine({
+    required this.progress,
+    required this.steps,
+    required this.animate,
+  });
+
+  final double progress;
+  final int steps;
+  final bool animate;
+
+  @override
+  Widget build(BuildContext context) => TweenAnimationBuilder<double>(
+    tween: Tween(end: progress),
+    duration: animate ? const Duration(milliseconds: 700) : Duration.zero,
+    curve: LuxeMotion.enter,
+    builder: (context, value, _) => SizedBox(
+      height: 8,
+      width: double.infinity,
+      child: CustomPaint(
+        painter: _EnergyLinePainter(value: value, steps: steps),
+      ),
+    ),
+  );
+}
+
+class _EnergyLinePainter extends CustomPainter {
+  _EnergyLinePainter({required this.value, required this.steps});
+  final double value;
+  final int steps;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final y = size.height / 2;
+    final track = RRect.fromLTRBR(
+      0,
+      y - 1.5,
+      size.width,
+      y + 1.5,
+      const Radius.circular(2),
+    );
+    canvas.drawRRect(track, Paint()..color = const Color(0x1AFFFFFF));
+    for (var i = 1; i < steps; i++) {
+      final x = size.width * i / steps;
+      canvas.drawCircle(
+        Offset(x, y),
+        1.2,
+        Paint()..color = const Color(0x33FFFFFF),
+      );
+    }
+    final w = size.width * value.clamp(0.0, 1.0);
+    if (w <= 0) return;
+    final fill = RRect.fromLTRBR(
+      0,
+      y - 1.5,
+      w,
+      y + 1.5,
+      const Radius.circular(2),
+    );
+    canvas.drawRRect(
+      fill,
+      Paint()
+        ..shader = const LinearGradient(
+          colors: [
+            LuxeColors.emeraldDeep,
+            LuxeColors.emerald,
+            LuxeColors.platinumHi,
+          ],
+          stops: [0.0, 0.85, 1.0],
+        ).createShader(Rect.fromLTWH(0, 0, w, size.height)),
+    );
+    canvas.drawCircle(
+      Offset(w, y),
+      5,
+      Paint()
+        ..color = LuxeColors.emerald.withValues(alpha: 0.55)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
+    );
+    canvas.drawCircle(
+      Offset(w, y),
+      2.4,
+      Paint()..color = LuxeColors.platinumHi,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_EnergyLinePainter old) =>
+      old.value != value || old.steps != steps;
 }
 
 class OnboardingVehicleChoice extends StatelessWidget {
@@ -2235,111 +2457,117 @@ class OnboardingVehicleChoice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
     final image = spec.imageUrl?.trim();
+    final duration = AppMotion.durationFor(
+      context,
+      const Duration(milliseconds: 260),
+    );
+    final fallback = Icon(
+      Icons.electric_scooter_outlined,
+      color: selected ? LuxeColors.emerald : LuxeColors.platinumMid,
+      size: 28,
+    );
 
     return Semantics(
       selected: selected,
       inMutuallyExclusiveGroup: true,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: selected
-                ? colors.primary
-                : colors.outlineVariant.withValues(alpha: isDark ? 0.25 : 0.35),
-            width: selected ? 1.8 : 1.0,
-          ),
-          boxShadow: selected
-              ? [
-                  BoxShadow(
-                    color: colors.primary.withValues(
-                      alpha: isDark ? 0.16 : 0.08,
-                    ),
-                    blurRadius: 10,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : null,
-        ),
-        child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 14,
-            vertical: 8,
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          tileColor: selected
-              ? colors.primaryContainer
-              : colors.surfaceContainerLow,
-          leading: Container(
-            width: 48,
-            height: 48,
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: selected
-                  ? colors.primary.withValues(alpha: isDark ? 0.18 : 0.12)
-                  : colors.surfaceContainerHighest.withValues(alpha: 0.35),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: image == null || image.isEmpty
-                ? Icon(
-                    Icons.electric_scooter_outlined,
-                    color: selected ? colors.primary : colors.onSurfaceVariant,
-                    size: 26,
-                  )
-                : ExcludeSemantics(
-                    child: Image.network(
-                      image,
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, _, _) => Icon(
-                        Icons.electric_scooter_outlined,
-                        color: selected
-                            ? colors.primary
-                            : colors.onSurfaceVariant,
-                        size: 26,
-                      ),
-                    ),
-                  ),
-          ),
-          title: Text(
-            spec.modelName,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-            ),
-          ),
-          subtitle: Text(
-            '${(spec.nominalCapacityWh / 1000).toStringAsFixed(1)} kWh · Theo danh mục',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: selected ? colors.primary : colors.onSurfaceVariant,
-            ),
-          ),
-          trailing: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            width: 24,
-            height: 24,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: selected ? colors.primary : Colors.transparent,
-              border: Border.all(
-                color: selected
-                    ? colors.primary
-                    : colors.onSurfaceVariant.withValues(alpha: 0.5),
-                width: 2,
-              ),
-            ),
-            child: selected
-                ? Icon(Icons.check_rounded, size: 16, color: colors.onPrimary)
-                : null,
-          ),
+      button: true,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          splashColor: const Color(0x1434D399),
+          highlightColor: const Color(0x0AFFFFFF),
           onTap: () {
             HapticFeedback.selectionClick();
             onSelected();
           },
+          child: LuxeGlass(
+            selected: selected,
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Container(
+                  width: 60,
+                  height: 60,
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    gradient: const RadialGradient(
+                      center: Alignment(0, -0.3),
+                      colors: [Color(0x1FFFFFFF), Color(0x05FFFFFF)],
+                    ),
+                    border: Border.all(color: LuxeColors.hairline),
+                  ),
+                  child: image == null || image.isEmpty
+                      ? fallback
+                      : ExcludeSemantics(
+                          child: Image.network(
+                            image,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, _, _) => fallback,
+                          ),
+                        ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(spec.modelName, style: LuxeText.item),
+                      const SizedBox(height: 4),
+                      AnimatedDefaultTextStyle(
+                        duration: duration,
+                        style: LuxeText.caption.copyWith(
+                          color: selected
+                              ? LuxeColors.emerald
+                              : LuxeColors.muted,
+                        ),
+                        child: Text(
+                          '${(spec.nominalCapacityWh / 1000).toStringAsFixed(1)} kWh · Theo danh mục',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                AnimatedContainer(
+                  duration: duration,
+                  curve: LuxeMotion.enter,
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: selected ? LuxeColors.emerald : Colors.transparent,
+                    border: Border.all(
+                      color: selected
+                          ? LuxeColors.emerald
+                          : LuxeColors.hairlineStrong,
+                      width: 1.5,
+                    ),
+                    boxShadow: selected
+                        ? const [
+                            BoxShadow(
+                              color: LuxeColors.emeraldGlow,
+                              blurRadius: 12,
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: AnimatedScale(
+                    scale: selected ? 1 : 0,
+                    duration: duration,
+                    curve: Curves.easeOutBack,
+                    child: const Icon(
+                      Icons.check_rounded,
+                      size: 15,
+                      color: Color(0xFF04140D),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

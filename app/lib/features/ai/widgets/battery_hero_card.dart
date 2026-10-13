@@ -637,7 +637,12 @@ class _HeroBatteryTrack extends StatelessWidget {
 
                     // Draggable Floating Thumb at target percent (Clamped to avoid overflow)
                     Positioned(
-                      left: (targetX).clamp(thumbRadius, trackWidth - thumbRadius) - thumbRadius,
+                      left:
+                          (targetX).clamp(
+                            thumbRadius,
+                            trackWidth - thumbRadius,
+                          ) -
+                          thumbRadius,
                       top: (trackHeight / 2) - thumbRadius,
                       child: Container(
                         width: thumbRadius * 2,
@@ -716,11 +721,7 @@ class _BatteryBarPainter extends CustomPainter {
         ..shader = const LinearGradient(
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
-          colors: [
-            Color(0xFF047857),
-            Color(0xFF10B981),
-            Color(0xFF6EE7B7),
-          ],
+          colors: [Color(0xFF047857), Color(0xFF10B981), Color(0xFF6EE7B7)],
         ).createShader(fullRect);
       canvas.drawRect(fullRect, fullPaint);
 
@@ -750,10 +751,7 @@ class _BatteryBarPainter extends CustomPainter {
         ..shader = const LinearGradient(
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
-          colors: [
-            Color(0xFF064E3B),
-            Color(0xFF047857),
-          ],
+          colors: [Color(0xFF064E3B), Color(0xFF047857)],
         ).createShader(currentRect);
       canvas.drawRect(currentRect, currentPaint);
 

@@ -1,40 +1,46 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:fl_chart/fl_chart.dart';
 
 import '../../core/providers/app_state_providers.dart';
-import '../../core/theme/app_tokens.dart';
-import '../../core/theme/cockpit_design_system.dart';
+import '../../core/theme/luxe_theme.dart';
 import '../../core/widgets/app_popup.dart';
-import '../../core/widgets/pulse_glow_button.dart';
 import '../../core/widgets/debug_error_sheet.dart';
-import '../../data/models/smart_charge_history.dart';
+import '../../data/models/shelly_connection_state.dart';
 import '../../data/models/smart_charging_session.dart';
 import '../../data/services/shelly_connection_coordinator.dart';
-import '../../data/models/shelly_connection_state.dart';
-import '../smart_charging/smart_charger_setup_hub_screen.dart';
 import '../auth/auth_providers.dart';
+import '../achievements/achievements_screen.dart';
+import '../achievements/controllers/achievements_controller.dart';
+import '../achievements/models/achievement.dart';
+import '../achievements/services/achievement_signals.dart';
+import '../achievements/widgets/achievement_unlock_ceremony.dart';
+import '../achievements/widgets/achievements_teaser_card.dart';
+import '../smart_charging/smart_charger_setup_hub_screen.dart';
 import 'controllers/smart_charging_controller.dart';
 import 'smart_charge_history_screen.dart';
-import '../energy_journey/controllers/energy_journey_controller.dart';
-import '../energy_journey/energy_journey_screen.dart';
 import 'widgets/active_charging_card_v2.dart';
 import 'widgets/ai_charge_button.dart';
-import 'widgets/battery_hero_card.dart';
 import 'widgets/charge_mode_switcher_v2.dart';
-import 'widgets/charging_battery_animation.dart';
-import 'widgets/energy_journey_teaser_card.dart';
-import 'widgets/horizontal_battery_target_selector.dart';
+import 'widgets/edit_current_battery_sheet.dart';
+import 'widgets/luxe_soc_dial.dart';
 import 'widgets/prediction_card_v2.dart';
-import 'widgets/prediction_detail_sheet.dart';
 import 'widgets/recent_sessions_section_v2.dart';
 import 'widgets/start_charge_confirmation_sheet.dart';
 import 'widgets/stop_charging_confirmation_sheet.dart';
-import 'widgets/smart_charge_cockpit_theme.dart';
 import 'widgets/timed_charging_section_v2.dart';
 
+/// Sạc pin — luxe platinum/emerald workspace.
+///
+/// There is no BMS feed: the user enters the level read off the scooter
+/// (platinum knob) and the level to charge to (emerald knob). Control
+/// authority never comes from presentation: every start/stop still goes
+/// through the controller's fresh backend checks.
 class SmartChargingControlScreen extends ConsumerStatefulWidget {
   const SmartChargingControlScreen({
     super.key,
@@ -56,6 +62,8 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
   bool _aiMode = true;
   bool _initialNoticesScheduled = false;
 
+  StreamSubscription<ShellyConnectionSnapshot>? _connectionEvents;
+
   @override
   void initState() {
     super.initState();
@@ -64,12 +72,57 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
       currentSoc: widget.currentSoc,
     );
     WidgetsBinding.instance.addObserver(this);
+    _noteConnection(ShellyConnectionCoordinator.shared.current);
+    _connectionEvents = ShellyConnectionCoordinator.shared.states.listen(
+      _noteConnection,
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final achievements = ref.read(achievementsControllerProvider.notifier);
+      achievements.ingest(
+        ref.read(smartChargingControllerProvider(args)).history,
+      );
+      achievements.sync();
+    });
   }
 
   @override
   void dispose() {
+    _connectionEvents?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  /// Explore achievements for a verified Shelly link.
+  void _noteConnection(ShellyConnectionSnapshot c) {
+    if (c.isLinked && c.state == ShellyConnectionFlowState.connected) {
+      AchievementSignals.instance.emit(AchievementEvents.shellyLinked);
+    }
+    if (c.serverBinding?.noLoadTestVerified == true ||
+        c.capabilities?.noLoadTestVerified == true) {
+      AchievementSignals.instance.emit(AchievementEvents.safetyVerified);
+    }
+  }
+
+  void _openAchievements() => Navigator.of(
+    context,
+  ).push(MaterialPageRoute<void>(builder: (_) => const AchievementsScreen()));
+
+  /// Plays waiting unlock ceremonies while this screen is the visible one.
+  void _celebrate() {
+    if (!mounted ||
+        !TickerMode.valuesOf(context).enabled ||
+        !(ModalRoute.of(context)?.isCurrent ?? true)) {
+      return;
+    }
+    final ids = ref
+        .read(achievementsControllerProvider.notifier)
+        .takeCelebrations();
+    if (ids.isEmpty) return;
+    AchievementUnlockCeremony.show(context, [
+      for (final d in achievementCatalog)
+        if (ids.contains(d.id)) d,
+    ], onOpenCollection: _openAchievements);
   }
 
   @override
@@ -79,11 +132,20 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     }
   }
 
+  void _openSetup(SmartChargingController controller) => Navigator.of(context)
+      .push(
+        MaterialPageRoute<void>(
+          builder: (_) => const SmartChargerSetupHubScreen(),
+        ),
+      )
+      .then((_) => controller.refresh());
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(smartChargingControllerProvider(args));
     final controller = ref.read(smartChargingControllerProvider(args).notifier);
-    // Outgoing animated children retain their own mode while subscribed.
+    final reduced = MediaQuery.disableAnimationsOf(context);
+    // Outgoing animated children keep the mode they were built with.
     final aiMode = _aiMode;
 
     ref.listen<SmartChargingUiState>(
@@ -93,6 +155,12 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     ref.listen<int>(currentTabProvider, (previous, next) {
       if (next == 1) {
         controller.refresh();
+        WidgetsBinding.instance.addPostFrameCallback((_) => _celebrate());
+      }
+    });
+    ref.listen<AchievementsState>(achievementsControllerProvider, (p, n) {
+      if (n.pendingCelebrations.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _celebrate());
       }
     });
     if (!_initialNoticesScheduled) {
@@ -102,193 +170,406 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
       });
     }
 
-    return SmartChargeCockpitTheme(
+    return Theme(
+      data: LuxeTheme.of(context),
       child: Scaffold(
+        backgroundColor: LuxeColors.background,
         appBar: widget.embedded
             ? null
-            : AppBar(title: const Text('Smart Charge')),
-        body: SafeArea(
-          child: RefreshIndicator(
-            onRefresh: controller.refresh,
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
-              children: [
-                // ── Premium header matching reference ──
-                StreamBuilder<ShellyConnectionSnapshot>(
-                  stream: ShellyConnectionCoordinator.shared.states,
-                  initialData: ShellyConnectionCoordinator.shared.current,
-                  builder: (context, snapshot) => _SmartChargeHeader(
-                    state: state,
-                    connection: snapshot.data,
-                    onSetup: () => Navigator.of(context)
-                        .push(
-                          MaterialPageRoute(
-                            builder: (_) => const SmartChargerSetupHubScreen(),
-                          ),
-                        )
-                        .then((_) => controller.refresh()),
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                AnimatedSwitcher(
-                  duration: MediaQuery.disableAnimationsOf(context)
-                      ? Duration.zero
-                      : const Duration(milliseconds: 220),
-                  child: state.hasActiveSession
-                      ? _buildActiveChargingV2(state, controller)
-                      : Column(
-                          key: const ValueKey('plan-workspace'),
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // V2: Premium mode switcher
-                            ChargeModeSwitcherV2(
-                              isAiMode: _aiMode,
-                              onChanged: (value) =>
-                                  setState(() => _aiMode = value),
-                            ),
-                            const SizedBox(height: 16),
-                            AnimatedSwitcher(
-                              duration: CockpitMotion.enabled(context)
-                                  ? CockpitMotion.standard
-                                  : Duration.zero,
-                              transitionBuilder: (child, animation) =>
-                                  FadeTransition(
-                                    opacity: animation,
-                                    child: SlideTransition(
-                                      position:
-                                          Tween<Offset>(
-                                            begin: const Offset(0, .025),
-                                            end: Offset.zero,
-                                          ).animate(
-                                            CurvedAnimation(
-                                              parent: animation,
-                                              curve: Curves.easeOutCubic,
-                                            ),
-                                          ),
-                                      child: child,
-                                    ),
+            : AppBar(
+                title: const Text('Smart Charge'),
+                backgroundColor: LuxeColors.background,
+              ),
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            const LuxeBackdrop(),
+            SafeArea(
+              child: RefreshIndicator(
+                color: LuxeColors.emerald,
+                backgroundColor: const Color(0xFF17181B),
+                onRefresh: controller.refresh,
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 40),
+                  children: [
+                    StreamBuilder<ShellyConnectionSnapshot>(
+                      stream: ShellyConnectionCoordinator.shared.states,
+                      initialData: ShellyConnectionCoordinator.shared.current,
+                      builder: (context, snapshot) => LuxeReveal(
+                        child: _LuxeChargeHeader(
+                          state: state,
+                          connection: snapshot.data,
+                          onSetup: () => _openSetup(controller),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    AnimatedSwitcher(
+                      duration: reduced
+                          ? Duration.zero
+                          : const Duration(milliseconds: 320),
+                      switchInCurve: LuxeMotion.enter,
+                      child: state.hasActiveSession
+                          ? _buildActiveCharging(state, controller)
+                          : Column(
+                              key: const ValueKey('plan-workspace'),
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                LuxeReveal(
+                                  index: 1,
+                                  child: ChargeModeSwitcherV2(
+                                    isAiMode: _aiMode,
+                                    onChanged: (value) =>
+                                        setState(() => _aiMode = value),
                                   ),
-                              child: StreamBuilder<ShellyConnectionSnapshot>(
-                                key: ValueKey(
-                                  aiMode ? 'ai-mode' : 'timed-mode',
                                 ),
-                                stream:
-                                    ShellyConnectionCoordinator.shared.states,
-                                initialData:
-                                    ShellyConnectionCoordinator.shared.current,
-                                builder: (context, snapshot) {
-                                  final connection =
-                                      snapshot.data ??
-                                      ShellyConnectionCoordinator
-                                          .shared
-                                          .current;
-                                  return aiMode
-                                      ? _buildAiPlanV2(
-                                          context,
-                                          state,
-                                          controller,
-                                          connection,
-                                        )
-                                      : TimedChargingSectionV2(
-                                          key: const ValueKey('timed-mode'),
-                                          disabledReason:
-                                              connection
-                                                  .controlBlockedMessage ??
-                                              state
-                                                  .capabilities
-                                                  .controlBlockedMessage ??
-                                              (!_sharedConnectionReady(
-                                                    connection,
-                                                  )
-                                                  ? 'Hãy kết nối Shelly qua Thiết lập trước khi bật sạc.'
-                                                  : null),
-                                          readyForControl:
-                                              _sharedConnectionReady(
-                                                connection,
-                                              ) &&
-                                              state
-                                                  .capabilities
-                                                  .readyForControl &&
-                                              state.capabilities.canManualOn &&
-                                              state.phase !=
-                                                  SmartChargingViewPhase
-                                                      .starting &&
-                                              state.phase !=
-                                                  SmartChargingViewPhase
-                                                      .stopping &&
-                                              state.phase !=
-                                                  SmartChargingViewPhase
-                                                      .loading,
-                                          onStart: (duration) =>
-                                              _startTimedCharge(
-                                                state,
-                                                controller,
-                                                duration,
-                                              ),
-                                          onOff: () =>
-                                              _emergencyOff(controller),
-                                          onOpenSetup: () =>
-                                              Navigator.of(context).push(
-                                                MaterialPageRoute<void>(
-                                                  builder: (_) =>
-                                                      const SmartChargerSetupHubScreen(),
-                                                ),
-                                              ),
-                                        );
-                                },
+                                const SizedBox(height: 16),
+                                AnimatedSwitcher(
+                                  duration: reduced
+                                      ? Duration.zero
+                                      : const Duration(milliseconds: 260),
+                                  switchInCurve: LuxeMotion.enter,
+                                  switchOutCurve: Curves.easeInCubic,
+                                  transitionBuilder: (child, animation) =>
+                                      FadeTransition(
+                                        opacity: animation,
+                                        child: SlideTransition(
+                                          position: Tween<Offset>(
+                                            begin: Offset(
+                                              child.key ==
+                                                      const ValueKey('ai-mode')
+                                                  ? -0.04
+                                                  : 0.04,
+                                              0,
+                                            ),
+                                            end: Offset.zero,
+                                          ).animate(animation),
+                                          child: child,
+                                        ),
+                                      ),
+                                  child:
+                                      StreamBuilder<ShellyConnectionSnapshot>(
+                                        key: ValueKey(
+                                          aiMode ? 'ai-mode' : 'timed-mode',
+                                        ),
+                                        stream: ShellyConnectionCoordinator
+                                            .shared
+                                            .states,
+                                        initialData: ShellyConnectionCoordinator
+                                            .shared
+                                            .current,
+                                        builder: (context, snapshot) {
+                                          final connection =
+                                              snapshot.data ??
+                                              ShellyConnectionCoordinator
+                                                  .shared
+                                                  .current;
+                                          return aiMode
+                                              ? _buildAiPlan(
+                                                  context,
+                                                  state,
+                                                  controller,
+                                                  connection,
+                                                )
+                                              : _buildTimed(
+                                                  state,
+                                                  controller,
+                                                  connection,
+                                                );
+                                        },
+                                      ),
+                                ),
+                              ],
+                            ),
+                    ),
+                    const SizedBox(height: 32),
+                    LuxeReveal(
+                      index: 4,
+                      child: RecentSessionsSectionV2(
+                        sessions: state.history,
+                        syncedAt: state.historySyncedAt,
+                        onViewAll: () {
+                          AchievementSignals.instance.emit(
+                            AchievementEvents.historyViewed,
+                          );
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => Consumer(
+                                builder: (context, routeRef, _) =>
+                                    SmartChargeHistoryScreen(
+                                      controller: controller,
+                                      ownerUid: routeRef.watch(
+                                        currentUidProvider,
+                                      ),
+                                      initialItems: state.history,
+                                      onStartCharging: () =>
+                                          Navigator.of(context).maybePop(),
+                                    ),
                               ),
                             ),
-                          ],
+                          );
+                        },
+                        onOpen: (session) => showModalBottomSheet<void>(
+                          context: context,
+                          isScrollControlled: true,
+                          useSafeArea: true,
+                          backgroundColor: Colors.transparent,
+                          barrierColor: Colors.black.withValues(alpha: .72),
+                          builder: (_) => FractionallySizedBox(
+                            heightFactor: .96,
+                            child: ClipRRect(
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(28),
+                              ),
+                              child: Consumer(
+                                builder: (context, routeRef, _) =>
+                                    SmartChargeSessionDetailScreen(
+                                      controller: controller,
+                                      ownerUid: routeRef.watch(
+                                        currentUidProvider,
+                                      ),
+                                      session: session,
+                                    ),
+                              ),
+                            ),
+                          ),
                         ),
+                      ),
+                    ),
+                  ],
                 ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-                const SizedBox(height: 32),
-                // V2: Premium recent sessions section
-                RecentSessionsSectionV2(
-                  sessions: state.history,
-                  syncedAt: state.historySyncedAt,
-                  onViewAll: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => Consumer(
-                        builder: (context, routeRef, _) =>
-                            SmartChargeHistoryScreen(
-                              controller: controller,
-                              ownerUid: routeRef.watch(currentUidProvider),
-                              initialItems: state.history,
-                            ),
-                      ),
-                    ),
+  // ── AI plan: dial → presets → plan → CTA → journey ──
+  Widget _buildAiPlan(
+    BuildContext context,
+    SmartChargingUiState state,
+    SmartChargingController controller,
+    ShellyConnectionSnapshot connection,
+  ) {
+    final draft = state.draft;
+    final busy =
+        state.phase == SmartChargingViewPhase.loading ||
+        state.phase == SmartChargingViewPhase.starting;
+    final preview = state.preview;
+    final canStart =
+        preview?.isDisplayOnly == false &&
+        (preview?.aiChargeEligible == true ||
+            preview?.isPhysicsFallback == true) &&
+        state.capabilities.readyForControl &&
+        _sharedConnectionReady(connection) &&
+        state.connectionState.shellyReachable;
+    final full = draft.currentSoc >= 100;
+    final currentTarget = draft.targetSoc.clamp(
+      (draft.currentSoc.ceil() + 1).clamp(1, 99).toDouble(),
+      100.0,
+    );
+    final String label;
+    final String? note;
+    if (preview == null) {
+      label = 'DỰ ĐOÁN VỚI AI';
+      note = null;
+    } else if (canStart) {
+      label = 'SẠC THEO AI';
+      note = null;
+    } else {
+      label = 'DỰ ĐOÁN LẠI';
+      note = preview.isDisplayOnly
+          ? 'Dự đoán tham khảo · Dùng Sạc hẹn giờ'
+          : (preview.aiChargeEligible || preview.isPhysicsFallback)
+          ? 'Hoàn tất cài đặt ổ sạc'
+          : 'Chưa khả dụng';
+    }
+
+    return Column(
+      key: const ValueKey('ai-mode-v2'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        LuxeReveal(
+          index: 2,
+          child: LuxeGlass(
+            padding: const EdgeInsets.fromLTRB(12, 18, 12, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 6),
+                  child: Text('NHẬP MỨC PIN', style: LuxeText.eyebrow),
+                ),
+                const SizedBox(height: 4),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 6),
+                  child: Text(
+                    'Kéo núm bạc theo số pin trên xe, núm xanh tới mức muốn sạc.',
+                    style: LuxeText.caption,
                   ),
-                  onOpen: (session) => showModalBottomSheet<void>(
-                    context: context,
-                    isScrollControlled: true,
-                    useSafeArea: true,
-                    backgroundColor: Colors.transparent,
-                    barrierColor: Colors.black.withValues(alpha: .72),
-                    builder: (_) => FractionallySizedBox(
-                      heightFactor: .96,
-                      child: ClipRRect(
-                        borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(28),
-                        ),
-                        child: Consumer(
-                          builder: (context, routeRef, _) =>
-                              SmartChargeSessionDetailScreen(
-                                controller: controller,
-                                ownerUid: routeRef.watch(currentUidProvider),
-                                session: session,
-                              ),
-                        ),
-                      ),
-                    ),
+                ),
+                const SizedBox(height: 6),
+                LuxeSocDial(
+                  key: const ValueKey('target-battery-selector'),
+                  current: draft.currentSoc,
+                  target: currentTarget,
+                  enabled: !busy,
+                  etaLabel: preview == null
+                      ? null
+                      : _shortDuration(preview.predictedMinutes),
+                  onCurrentChanged: (value) =>
+                      controller.updateDraft(currentSoc: value),
+                  onTargetChanged: (value) =>
+                      controller.updateDraft(targetSoc: value),
+                  onEditCurrent: () => EditCurrentBatterySheet.show(
+                    context,
+                    initialPercent: draft.currentSoc,
+                    onSave: (value) =>
+                        controller.updateDraft(currentSoc: value),
                   ),
+                ),
+                const SizedBox(height: 6),
+                _TargetPresets(
+                  target: currentTarget,
+                  enabled: !busy && !full,
+                  minimum: draft.currentSoc,
+                  onSelected: (value) =>
+                      controller.updateDraft(targetSoc: value),
                 ),
               ],
             ),
           ),
         ),
-      ),
+        AnimatedSize(
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 360),
+          curve: LuxeMotion.enter,
+          child: preview == null
+              ? const SizedBox(width: double.infinity)
+              : Padding(
+                  padding: const EdgeInsets.only(top: 14),
+                  child: LuxeReveal(
+                    child: PredictionCardV2(
+                      key: const ValueKey('plan-preview'),
+                      durationMinutes: preview.predictedMinutes,
+                      stopTime: _time(preview.effectiveStopAt),
+                      fromSoc: draft.currentSoc.round(),
+                      toSoc: currentTarget.round(),
+                      personalizationLabel: preview.personalizationLabel,
+                      warnings: preview.warnings,
+                    ),
+                  ),
+                ),
+        ),
+        const SizedBox(height: 18),
+        LuxeReveal(
+          index: 3,
+          child: AIChargeButton(
+            key: preview == null
+                ? const ValueKey('create-plan-button')
+                : const ValueKey('confirm-plan-button'),
+            label: label,
+            emphasis: canStart,
+            enabled: !busy && !full,
+            busy: state.phase == SmartChargingViewPhase.loading,
+            onPressed: preview == null
+                ? controller.createPreview
+                : canStart
+                ? () => _aiStart(state, controller)
+                : controller.createPreview,
+          ),
+        ),
+        if (note != null || full) ...[
+          const SizedBox(height: 10),
+          Text(
+            full
+                ? 'Pin đang đầy. Nhập lại mức pin thực tế trên xe để lên kế hoạch.'
+                : note!,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Color(0xFFFBBF24),
+              fontSize: 12.5,
+              height: 1.4,
+            ),
+          ),
+        ],
+        const SizedBox(height: 18),
+        LuxeReveal(
+          index: 4,
+          child: Consumer(
+            builder: (context, ref, _) => AchievementsTeaserCard(
+              state: ref.watch(achievementsControllerProvider),
+              onTap: _openAchievements,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTimed(
+    SmartChargingUiState state,
+    SmartChargingController controller,
+    ShellyConnectionSnapshot connection,
+  ) {
+    final ready =
+        _sharedConnectionReady(connection) &&
+        state.capabilities.readyForControl &&
+        state.capabilities.canManualOn &&
+        state.phase != SmartChargingViewPhase.starting &&
+        state.phase != SmartChargingViewPhase.stopping &&
+        state.phase != SmartChargingViewPhase.loading;
+    return TimedChargingSectionV2(
+      key: const ValueKey('timed-mode'),
+      disabledReason:
+          connection.controlBlockedMessage ??
+          state.capabilities.controlBlockedMessage ??
+          (!_sharedConnectionReady(connection)
+              ? 'Hãy kết nối Shelly qua Thiết lập trước khi bật sạc.'
+              : null),
+      readyForControl: ready,
+      onStart: (duration) => _startTimedCharge(state, controller, duration),
+      onOff: () => _emergencyOff(controller),
+      onOpenSetup: () => _openSetup(controller),
+    );
+  }
+
+  Widget _buildActiveCharging(
+    SmartChargingUiState state,
+    SmartChargingController controller,
+  ) {
+    final session = state.session;
+    final status = state.chargerStatus;
+    final remaining =
+        status?.timerRemaining ??
+        (session != null ? session.remaining(state.now) : Duration.zero);
+    final startSoc =
+        session?.startSoc.round() ?? state.draft.currentSoc.round();
+    final targetSoc =
+        session?.targetSoc.round() ?? state.draft.targetSoc.round();
+    final estimatedSoc = session?.estimatedSoc ?? startSoc.toDouble();
+    final stopAt = session?.effectiveStopAt ?? state.now;
+
+    return ActiveChargingCardV2(
+      key: const ValueKey('active-session-v2'),
+      currentPercent: estimatedSoc,
+      targetPercent: targetSoc.toDouble(),
+      remaining: remaining,
+      completionTime: _time(stopAt),
+      sessionEnergyWh: session?.energyUsedWh ?? 0,
+      powerW: status?.powerW ?? 0,
+      voltageV: status?.voltageV ?? 0,
+      currentA: status?.currentA ?? 0,
+      temperatureC: status?.temperatureC,
+      timerVerified:
+          session?.timerVerified == true || status?.timerRemaining != null,
+      estimatedSoc: estimatedSoc,
+      isStopping: state.phase == SmartChargingViewPhase.stopping,
+      isStarting: state.phase == SmartChargingViewPhase.starting,
+      onStop: () => _stopWithConfirmation(state, controller),
     );
   }
 
@@ -297,11 +578,8 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     SmartChargingUiState next,
   ) {
     // Background refresh/sync failures belong in the non-blocking connection
-    // status strip.  Showing them as overlays made the tab bar unusable and
-    // caused the same failure to reappear after the user dismissed it.
-    // `chargerError` and `sessionError` remain part of the typed state so the
-    // strip can describe the affected service; they are intentionally not
-    // promoted to a popup here.
+    // status strip. Only explicit action errors and urgent safety warnings
+    // surface above content.
     if (next.actionError != null && previous?.actionError != next.actionError) {
       _showFloatingDetail('Thao tác chưa hoàn tất', next.actionError!);
     }
@@ -314,23 +592,14 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
       );
     }
 
-    // Trigger Energy Journey calculation when a charging session finishes
-    if (previous?.hasActiveSession == true && !next.hasActiveSession) {
-      final totalEnergyWh = next.history.fold<double>(
-        0.0,
-        (sum, s) =>
-            sum +
-            (s.energyUsedWh > 0
-                ? s.energyUsedWh
-                : (s.estimatedStoredEnergyWh ?? 0.0)),
-      );
-      ref
-          .read(energyJourneyControllerProvider.notifier)
-          .updateEnergyFromSessions(totalEnergyWh / 1000.0);
+    // Achievements: fold finished sessions into the ledger (no extra reads)
+    // and note the first AI plan.
+    if (previous == null || !identical(previous.history, next.history)) {
+      ref.read(achievementsControllerProvider.notifier).ingest(next.history);
     }
-    // Connection changes are also rendered by the shared status strip.  An
-    // urgent safety warning is the only background condition that may remain
-    // persistent above content.
+    if (previous?.preview == null && next.preview != null) {
+      AchievementSignals.instance.emit(AchievementEvents.aiPreview);
+    }
   }
 
   void _showFloatingDetail(
@@ -400,198 +669,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
       connection.status?.online == true &&
       connection.status?.relay == false;
 
-  // ── V2 AI Plan Section ──
-  Widget _buildAiPlanV2(
-    BuildContext context,
-    SmartChargingUiState state,
-    SmartChargingController controller,
-    ShellyConnectionSnapshot connection,
-  ) {
-    final draft = state.draft;
-    final busy =
-        state.phase == SmartChargingViewPhase.loading ||
-        state.phase == SmartChargingViewPhase.starting;
-    final canStart =
-        state.preview?.isDisplayOnly == false &&
-        (state.preview?.aiChargeEligible == true ||
-            state.preview?.isPhysicsFallback == true) &&
-        state.capabilities.readyForControl &&
-        _sharedConnectionReady(connection) &&
-        state.connectionState.shellyReachable;
-    final currentTarget = draft.targetSoc.clamp(
-      (draft.currentSoc.ceil() + 1).clamp(1, 99).toDouble(),
-      100.0,
-    );
-    final energyWh = draft.estimatedCapacityWh > 0
-        ? draft.estimatedCapacityWh * (currentTarget - draft.currentSoc) / 100
-        : null;
-    final costVnd =
-        energyWh == null || state.preferences?.tariffVndPerKwh == null
-        ? null
-        : energyWh / .90 / 1000 * state.preferences!.tariffVndPerKwh!;
-
-    final totalEnergyWh = state.history.fold<double>(
-      0.0,
-      (sum, s) =>
-          sum +
-          (s.energyUsedWh > 0
-              ? s.energyUsedWh
-              : (s.estimatedStoredEnergyWh ?? 0.0)),
-    );
-    final totalKWh = totalEnergyWh / 1000.0;
-
-    return Column(
-      key: const ValueKey('ai-mode-v2'),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // V2: Premium battery hero card
-        BatteryHeroCard(
-          key: const ValueKey('target-battery-selector'),
-          currentPercent: draft.currentSoc,
-          targetPercent: currentTarget,
-          isCharging: false,
-          onTargetChanged: (value) => controller.updateDraft(targetSoc: value),
-          onCurrentChanged: (value) =>
-              controller.updateDraft(currentSoc: value),
-        ),
-
-        const SizedBox(height: 16),
-
-        // V2: Prediction card
-        AnimatedSize(
-          duration: MediaQuery.disableAnimationsOf(context)
-              ? Duration.zero
-              : const Duration(milliseconds: 180),
-          child: state.preview == null
-              ? const SizedBox.shrink(key: ValueKey('no-plan-preview'))
-              : PredictionCardV2(
-                  key: const ValueKey('plan-preview'),
-                  durationMinutes: state.preview!.predictedMinutes,
-                  stopTime: _time(state.preview!.effectiveStopAt),
-                  fromSoc: draft.currentSoc.round(),
-                  toSoc: currentTarget.round(),
-                  personalizationLabel: state.preview!.personalizationLabel,
-                  energyWh: energyWh,
-                  costVnd: costVnd,
-                  warnings: state.preview!.warnings,
-                  onViewDetails: () => PredictionDetailSheet.show(
-                    context,
-                    currentSoc: draft.currentSoc.round(),
-                    targetSoc: currentTarget.round(),
-                    estimatedMinutes: state.preview!.predictedMinutes,
-                    stopTime: _time(state.preview!.effectiveStopAt),
-                    personalizationLabel: state.preview!.personalizationLabel,
-                    energyWh: energyWh,
-                    costVnd: costVnd,
-                    rangeAddedKm: energyWh != null
-                        ? (energyWh / 1000 * 35).round()
-                        : null,
-                  ),
-                ),
-        ),
-
-        const SizedBox(height: 16),
-
-        // Gamified Energy Journey Teaser Card
-        EnergyJourneyTeaserCard(
-          totalKWh: totalKWh,
-          onTap: () {
-            ref
-                .read(energyJourneyControllerProvider.notifier)
-                .updateEnergyFromSessions(totalKWh);
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const EnergyJourneyScreen(),
-              ),
-            );
-          },
-        ),
-
-        const SizedBox(height: 20),
-
-        // V2: AI Charge button
-        Center(
-          child: AIChargeButton(
-            key: state.preview == null
-                ? const ValueKey('create-plan-button')
-                : const ValueKey('confirm-plan-button'),
-            isAiMode: true,
-            enabled: !busy,
-            onPressed: state.preview == null
-                ? controller.createPreview
-                : canStart
-                ? () => _aiStartV2(state, controller)
-                : controller.createPreview,
-          ),
-        ),
-
-        // V2: Caption under button
-        const SizedBox(height: 8),
-        Center(
-          child: Text(
-            state.preview == null
-                ? 'DỰ ĐOÁN VỚI AI'
-                : canStart
-                ? 'SẠC THEO AI'
-                : state.preview!.isDisplayOnly
-                ? 'Dự đoán tham khảo · Dùng Sạc hẹn giờ'
-                : (state.preview!.aiChargeEligible ||
-                      state.preview!.isPhysicsFallback)
-                ? 'Hoàn tất cài đặt ổ sạc'
-                : 'Chưa khả dụng',
-            style: TextStyle(
-              color: state.preview != null && !canStart
-                  ? CockpitColors.amber
-                  : CockpitColors.muted,
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.8,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ── V2 Active Charging View ──
-  Widget _buildActiveChargingV2(
-    SmartChargingUiState state,
-    SmartChargingController controller,
-  ) {
-    final session = state.session;
-    final status = state.chargerStatus;
-    final remaining =
-        status?.timerRemaining ??
-        (session != null ? session.remaining(state.now) : Duration.zero);
-    final startSoc =
-        session?.startSoc.round() ?? state.draft.currentSoc.round();
-    final targetSoc =
-        session?.targetSoc.round() ?? state.draft.targetSoc.round();
-    final estimatedSoc = session?.estimatedSoc ?? startSoc.toDouble();
-    final stopAt = session?.effectiveStopAt ?? state.now;
-
-    return ActiveChargingCardV2(
-      key: const ValueKey('active-session-v2'),
-      currentPercent: estimatedSoc,
-      targetPercent: targetSoc.toDouble(),
-      remaining: remaining,
-      completionTime: _time(stopAt),
-      sessionEnergyWh: session?.energyUsedWh ?? 0,
-      powerW: status?.powerW ?? 0,
-      voltageV: status?.voltageV ?? 0,
-      currentA: status?.currentA ?? 0,
-      temperatureC: status?.temperatureC,
-      timerVerified:
-          session?.timerVerified == true || status?.timerRemaining != null,
-      estimatedSoc: estimatedSoc,
-      isStopping: state.phase == SmartChargingViewPhase.stopping,
-      isStarting: state.phase == SmartChargingViewPhase.starting,
-      onStop: () => _stopWithConfirmation(state, controller),
-    );
-  }
-
-  // ── V2 AI Start with premium confirmation sheet ──
-  Future<void> _aiStartV2(
+  Future<void> _aiStart(
     SmartChargingUiState state,
     SmartChargingController controller,
   ) async {
@@ -606,205 +684,6 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
       stopTime: _time(preview.effectiveStopAt),
       isAiMode: true,
       personalizationLabel: preview.personalizationLabel,
-    );
-
-    if (confirmed != true) return;
-    final ok = await controller.start(confirmed: true);
-    if (ok) {
-      AppPopup.showSuccess(
-        'Đang sạc',
-        detail: 'Tự động tắt lúc ${_time(preview.effectiveStopAt)}',
-      );
-    } else {
-      AppPopup.showError('Không thể bật sạc', userInitiated: true);
-    }
-  }
-
-  // ignore: unused_element
-  Future<void> _manualOn(SmartChargingController controller) async {
-    const defaultDuration = Duration(hours: 1);
-    final duration = await showModalBottomSheet<Duration>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (context) {
-        var selectedMinutes = defaultDuration.inMinutes;
-        return StatefulBuilder(
-          builder: (context, setSheetState) => SafeArea(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(
-                20,
-                0,
-                20,
-                20 + MediaQuery.viewInsetsOf(context).bottom,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Bật sạc',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Mọi lựa chọn đều cài timer tự ngắt trực tiếp trên Shelly.',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 54,
-                    child: FilledButton.icon(
-                      key: const ValueKey('manual-on-now'),
-                      onPressed: () => Navigator.pop(context, defaultDuration),
-                      icon: const Icon(Icons.bolt_rounded),
-                      label: const Text(
-                        'BẬT NGAY',
-                        style: TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Center(
-                    child: Text(
-                      'Tự ngắt sau 1 giờ',
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Row(
-                    children: [
-                      const Expanded(child: Divider()),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: Text(
-                          'HOẶC CHỌN THỜI GIAN TỰ NGẮT',
-                          style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
-                                letterSpacing: .5,
-                              ),
-                        ),
-                      ),
-                      const Expanded(child: Divider()),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final minutes in const [30, 60, 120, 240, 360, 600])
-                        ChoiceChip(
-                          label: Text(_duration(minutes)),
-                          selected: selectedMinutes == minutes,
-                          onSelected: (_) =>
-                              setSheetState(() => selectedMinutes = minutes),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: OutlinedButton.icon(
-                      key: const ValueKey('manual-on-custom-duration'),
-                      onPressed: () => Navigator.pop(
-                        context,
-                        Duration(minutes: selectedMinutes),
-                      ),
-                      icon: const Icon(Icons.timer_outlined),
-                      label: Text(
-                        'BẬT & TỰ NGẮT SAU ${_duration(selectedMinutes).toUpperCase()}',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Center(
-                    child: TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Hủy'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-    if (duration == null) return;
-    final ok = await controller.manualOn(duration);
-    if (ok) {
-      AppPopup.showSuccess(
-        'Đang sạc',
-        detail: 'Hẹn giờ ${_duration(duration.inMinutes)}.',
-      );
-    } else {
-      AppPopup.showError('Không thể bật sạc', userInitiated: true);
-    }
-  }
-
-  // ignore: unused_element
-  Future<void> _aiStart(
-    SmartChargingUiState state,
-    SmartChargingController controller,
-  ) async {
-    final preview = state.preview;
-    if (preview == null) return;
-
-    var acknowledged = false;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Xác nhận bắt đầu sạc'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Ổ sạc sẽ bật và tự động tắt lúc ${_time(preview.effectiveStopAt)}.',
-              ),
-              const SizedBox(height: 10),
-              const Text('Pin hiện tại là giá trị ước tính.'),
-              const SizedBox(height: 4),
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                value: acknowledged,
-                onChanged: (value) =>
-                    setDialogState(() => acknowledged = value == true),
-                title: const Text('Tôi đã hiểu'),
-                controlAffinity: ListTileControlAffinity.leading,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Hủy'),
-            ),
-            FilledButton(
-              onPressed: acknowledged
-                  ? () => Navigator.pop(dialogContext, true)
-                  : null,
-              child: const Text('Bắt đầu sạc'),
-            ),
-          ],
-        ),
-      ),
     );
 
     if (confirmed != true) return;
@@ -858,119 +737,10 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
   }
 }
 
-// ignore: unused_element
-class _ChargeModeSwitch extends StatelessWidget {
-  const _ChargeModeSwitch({required this.aiMode, required this.onChanged});
-
-  final bool aiMode;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) => Semantics(
-    label: aiMode ? 'Đang chọn sạc theo AI' : 'Đang chọn sạc hẹn giờ',
-    child: Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: CockpitColors.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: CockpitColors.border),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _ModeOption(
-              selected: aiMode,
-              icon: Icons.auto_awesome_rounded,
-              label: 'Sạc theo AI',
-              onTap: () => onChanged(true),
-            ),
-          ),
-          Expanded(
-            child: _ModeOption(
-              selected: !aiMode,
-              icon: Icons.timer_outlined,
-              label: 'Sạc hẹn giờ',
-              onTap: () => onChanged(false),
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-class _ModeOption extends StatelessWidget {
-  const _ModeOption({
-    required this.selected,
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final bool selected;
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => Material(
-    color: Colors.transparent,
-    child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: AnimatedContainer(
-        duration: CockpitMotion.enabled(context)
-            ? CockpitMotion.standard
-            : Duration.zero,
-        curve: Curves.easeOutCubic,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        decoration: BoxDecoration(
-          color: selected
-              ? CockpitColors.emerald.withValues(alpha: .14)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: selected
-                ? CockpitColors.emerald.withValues(alpha: .28)
-                : Colors.transparent,
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: 18,
-              color: selected ? CockpitColors.emerald : CockpitColors.muted,
-            ),
-            const SizedBox(width: 7),
-            Flexible(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: selected ? CockpitColors.emerald : CockpitColors.muted,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 12,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
-
-/// Premium header matching the EV cockpit reference:
-/// ⚡ Smart Charge [AI POWERED]  ⏰ 14:13
-/// VinFast Feliz 2025 · 35% pin
-/// ● Bộ sạc đã kết nối
-///
-/// Animated: dot pulse, lightning glow/rotation, badge shimmer, slide-in.
-class _SmartChargeHeader extends StatefulWidget {
-  const _SmartChargeHeader({
+/// Status capsule: breathing dot, the shared Shelly connection label and
+/// realtime metrics, setup shortcut while not ready, and the clock.
+class _LuxeChargeHeader extends StatefulWidget {
+  const _LuxeChargeHeader({
     required this.state,
     required this.onSetup,
     this.connection,
@@ -980,1492 +750,309 @@ class _SmartChargeHeader extends StatefulWidget {
   final ShellyConnectionSnapshot? connection;
 
   @override
-  State<_SmartChargeHeader> createState() => _SmartChargeHeaderState();
+  State<_LuxeChargeHeader> createState() => _LuxeChargeHeaderState();
 }
 
-class _SmartChargeHeaderState extends State<_SmartChargeHeader>
-    with TickerProviderStateMixin {
-  late AnimationController _dotPulseController;
-  late AnimationController _boltGlowController;
-  late AnimationController _shimmerController;
-  late AnimationController _slideInController;
+class _LuxeChargeHeaderState extends State<_LuxeChargeHeader>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2200),
+  );
 
   @override
-  void initState() {
-    super.initState();
-    // Breathing dot pulse
-    _dotPulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1800),
-    )..repeat(reverse: true);
-    // Lightning icon subtle glow breathing
-    _boltGlowController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2400),
-    )..repeat(reverse: true);
-    // Shimmer sweep across AI POWERED badge
-    _shimmerController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2800),
-    )..repeat();
-    // Entry slide-in (one-shot)
-    _slideInController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 600),
-    )..forward();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _pulse.stop();
+    } else if (!_pulse.isAnimating) {
+      _pulse.repeat();
+    }
   }
 
   @override
   void dispose() {
-    _dotPulseController.dispose();
-    _boltGlowController.dispose();
-    _shimmerController.dispose();
-    _slideInController.dispose();
+    _pulse.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final state = widget.state;
-    final soc = state.draft.currentSoc.round();
-    final now = DateFormat('HH:mm').format(state.now.toLocal());
-    final reducedMotion = MediaQuery.disableAnimationsOf(context);
-
-    // A transport response without a verified binding is not enrollment.
-    // Use exactly the same connection label as Settings and Setup, even when
-    // the independent status poll happens to report an online relay.
     final connection = widget.connection;
-    final dotColor =
+    // A transport response without a verified binding is not enrollment:
+    // use exactly the same label as Settings and Setup.
+    final connected =
         connection?.state == ShellyConnectionFlowState.connected &&
-            connection?.controlUncertain != true
-        ? CockpitColors.emerald
-        : CockpitColors.amber;
+        connection?.controlUncertain != true;
+    final dotColor = connected ? LuxeColors.emerald : const Color(0xFFFBBF24);
     final statusText = connection?.connectionLabel ?? 'Chưa kết nối Shelly';
+    final now = DateFormat('HH:mm').format(widget.state.now.toLocal());
 
-    // Slide-in animation wrapper
-    Widget slideIn({required Widget child, double delay = 0.0}) {
-      if (reducedMotion) return child;
-      final curved = CurvedAnimation(
-        parent: _slideInController,
-        curve: Interval(
-          delay,
-          (delay + 0.6).clamp(0, 1),
-          curve: Curves.easeOutCubic,
-        ),
-      );
-      return FadeTransition(
-        opacity: curved,
-        child: SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(-0.08, 0),
-            end: Offset.zero,
-          ).animate(curved),
-          child: child,
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // ── Main header row ──
-        slideIn(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Lightning bolt icon with animated glow
-              reducedMotion
-                  ? _buildBoltIcon(1.0)
-                  : AnimatedBuilder(
-                      animation: _boltGlowController,
-                      builder: (context, _) =>
-                          _buildBoltIcon(_boltGlowController.value),
-                    ),
-              const SizedBox(width: 12),
-
-              // Title + subtitle
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 5,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Text(
-                          'Smart Charge',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: CockpitColors.text,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        // AI POWERED badge with shimmer
-                        reducedMotion
-                            ? _buildBadgeStatic()
-                            : AnimatedBuilder(
-                                animation: _shimmerController,
-                                builder: (context, _) => _buildBadgeShimmer(),
-                              ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Wrap(
-                      spacing: 4,
-                      runSpacing: 2,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Text(
-                          // Vehicle document IDs are internal identifiers and
-                          // must never leak into visual text or semantics.
-                          // The selected vehicle name is shown by the app
-                          // shell; this feature header uses a safe generic
-                          // label when that name is not available here.
-                          'Xe đang chọn',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: CockpitColors.muted,
-                            fontSize: 13,
-                          ),
-                        ),
-                        Text(
-                          '·',
-                          style: TextStyle(
-                            color: CockpitColors.dim,
-                            fontSize: 13,
-                          ),
-                        ),
-                        Text(
-                          '$soc% pin',
-                          style: TextStyle(
-                            color: CockpitColors.emerald,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 12),
-
-        // ── Connection status strip with animated dot ──
-        slideIn(
-          delay: 0.25,
-          child: Row(
-            children: [
-              // Animated pulsing dot
-              reducedMotion
-                  ? _buildDotStatic(dotColor)
-                  : AnimatedBuilder(
-                      animation: _dotPulseController,
-                      builder: (context, _) => _buildDotAnimated(
-                        dotColor,
-                        _dotPulseController.value,
-                      ),
-                    ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      statusText,
-                      style: TextStyle(
-                        color: CockpitColors.muted,
-                        fontSize: 13,
-                      ),
-                    ),
-                    // Same realtime readout as Settings/BatteryBot (Task108).
-                    if (connection?.metricsLine != null)
-                      Text(
-                        connection!.metricsLine!,
-                        key: const ValueKey('shelly-metrics-line'),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: CockpitColors.text,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              if (!state.capabilities.readyForControl)
-                InkWell(
-                  onTap: widget.onSetup,
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: CockpitColors.amber.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: CockpitColors.amber.withValues(alpha: 0.4),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.settings_suggest_rounded,
-                          size: 13,
-                          color: CockpitColors.amber,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Thiết lập',
-                          style: TextStyle(
-                            color: CockpitColors.amber,
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: .05),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: CockpitColors.border),
-                ),
-                child: Text(
-                  now,
-                  style: CockpitTypography.numbers(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ── Lightning bolt icon with breathing glow ──
-  Widget _buildBoltIcon(double glowValue) {
     return Container(
-      width: 44,
-      height: 44,
+      padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
       decoration: BoxDecoration(
-        color: CockpitColors.emerald.withValues(alpha: .10 + glowValue * .10),
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: CockpitColors.emerald.withValues(alpha: .20 + glowValue * .15),
+        borderRadius: BorderRadius.circular(22),
+        gradient: const LinearGradient(
+          colors: [Color(0x12FFFFFF), Color(0x05FFFFFF)],
         ),
-        boxShadow: [
-          BoxShadow(
-            color: CockpitColors.emerald.withValues(
-              alpha: .08 + glowValue * .18,
-            ),
-            blurRadius: 12 + glowValue * 8,
-            spreadRadius: glowValue * 3,
-          ),
-        ],
+        border: Border.all(color: LuxeColors.hairline),
       ),
-      child: Icon(
-        Icons.bolt_rounded,
-        color: CockpitColors.emerald.withValues(alpha: .80 + glowValue * .20),
-        size: 24,
-      ),
-    );
-  }
-
-  // ── AI POWERED badge — static fallback ──
-  Widget _buildBadgeStatic() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: CockpitColors.emerald.withValues(alpha: .12),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: CockpitColors.emerald.withValues(alpha: .30)),
-      ),
-      child: Text(
-        'CÔNG NGHỆ AI',
-        style: TextStyle(
-          color: CockpitColors.emerald,
-          fontSize: 9,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.8,
-        ),
-      ),
-    );
-  }
-
-  // ── AI POWERED badge — shimmer sweep ──
-  Widget _buildBadgeShimmer() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(6),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(
-          color: CockpitColors.emerald.withValues(alpha: .12),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            color: CockpitColors.emerald.withValues(alpha: .30),
-          ),
-        ),
-        child: ShaderMask(
-          shaderCallback: (bounds) {
-            final shimmerPos = _shimmerController.value * 3.0 - 1.0;
-            return LinearGradient(
-              begin: Alignment(shimmerPos - 0.3, 0),
-              end: Alignment(shimmerPos + 0.3, 0),
-              colors: [
-                CockpitColors.emerald,
-                const Color(0xFF86EFAC), // lighter emerald
-                CockpitColors.emerald,
-              ],
-              stops: const [0.0, 0.5, 1.0],
-            ).createShader(bounds);
-          },
-          blendMode: BlendMode.srcIn,
-          child: Text(
-            'CÔNG NGHỆ AI',
-            style: TextStyle(
-              color: CockpitColors.emerald,
-              fontSize: 9,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.8,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ── Connection dot — static fallback ──
-  Widget _buildDotStatic(Color dotColor) {
-    return Container(
-      width: 8,
-      height: 8,
-      decoration: BoxDecoration(
-        color: dotColor,
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(color: dotColor.withValues(alpha: .5), blurRadius: 6),
-        ],
-      ),
-    );
-  }
-
-  // ── Connection dot — animated breathing pulse ──
-  Widget _buildDotAnimated(Color dotColor, double pulseValue) {
-    return SizedBox(
-      width: 16,
-      height: 16,
-      child: Stack(
-        alignment: Alignment.center,
+      child: Row(
         children: [
-          // Outer pulse ring
-          Container(
-            width: 8 + pulseValue * 8,
-            height: 8 + pulseValue * 8,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: dotColor.withValues(alpha: .20 + pulseValue * .15),
-                width: 1,
+          SizedBox.square(
+            dimension: 22,
+            child: AnimatedBuilder(
+              animation: _pulse,
+              builder: (context, _) => CustomPaint(
+                painter: _PulseDotPainter(
+                  color: dotColor,
+                  t: _pulse.value,
+                  animate: _pulse.isAnimating,
+                ),
               ),
             ),
           ),
-          // Core dot
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              color: dotColor,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: dotColor.withValues(alpha: .40 + pulseValue * .30),
-                  blurRadius: 4 + pulseValue * 6,
-                  spreadRadius: pulseValue * 2,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Target battery planning workspace
-// ignore: unused_element
-class _PlanSection extends StatelessWidget {
-  const _PlanSection({
-    required this.state,
-    required this.controller,
-    required this.onStart,
-  });
-
-  final SmartChargingUiState state;
-  final SmartChargingController controller;
-  final VoidCallback onStart;
-
-  @override
-  Widget build(BuildContext context) {
-    final draft = state.draft;
-    final busy =
-        state.phase == SmartChargingViewPhase.loading ||
-        state.phase == SmartChargingViewPhase.starting;
-    final canStart =
-        state.preview?.isDisplayOnly == false &&
-        state.preview?.aiChargeEligible == true &&
-        state.capabilities.readyForControl &&
-        state.connectionState.shellyReachable;
-
-    final currentPercent = draft.currentSoc.round();
-    final minTarget = (currentPercent + 1).clamp(1, 99).toDouble();
-    final currentTarget = draft.targetSoc.clamp(minTarget, 100.0);
-
-    return CockpitPanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Current SOC context. The interactive battery below remains the
-          // dominant visual; this row only provides provenance and edit access.
-          CockpitPanel(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            child: Row(
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.primary.withValues(alpha: .12),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Icon(
-                    Icons.battery_5_bar_rounded,
-                    color: Theme.of(context).colorScheme.primary,
+                Text(
+                  statusText,
+                  style: const TextStyle(
+                    color: LuxeColors.text,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                // Same realtime readout as Settings/BatteryBot (Task108).
+                if (connection?.metricsLine != null)
+                  Text(
+                    connection!.metricsLine!,
+                    key: const ValueKey('shelly-metrics-line'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: LuxeColors.muted,
+                      fontSize: 12,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (!widget.state.capabilities.readyForControl) ...[
+            const SizedBox(width: 6),
+            Material(
+              type: MaterialType.transparency,
+              child: InkWell(
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  widget.onSetup();
+                },
+                borderRadius: BorderRadius.circular(99),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(99),
+                    border: Border.all(
+                      color: const Color(0xFFFBBF24).withValues(alpha: 0.5),
+                    ),
+                    color: const Color(0x14FBBF24),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        'Pin hiện tại',
-                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w700,
-                        ),
+                      Icon(
+                        Icons.tune_rounded,
+                        size: 14,
+                        color: Color(0xFFFBBF24),
                       ),
+                      SizedBox(width: 6),
                       Text(
-                        '~$currentPercent%',
-                        style: Theme.of(context).textTheme.headlineSmall
-                            ?.copyWith(
-                              fontWeight: FontWeight.w900,
-                              height: 1.05,
-                            ),
-                      ),
-                      Text(
-                        'Hồ sơ xe · ước tính, không phải dữ liệu BMS',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        'Thiết lập',
+                        style: TextStyle(
+                          color: Color(0xFFFBBF24),
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                IconButton.outlined(
-                  onPressed: () => _editSoc(context, draft.currentSoc),
-                  icon: const Icon(Icons.edit_outlined, size: 19),
-                  tooltip: 'Chỉnh mức pin hiện tại',
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // Target Battery Title & Display
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Expanded(
-                child: Text(
-                  'Pin muốn sạc tới',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '${currentTarget.round()}%',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 10),
-
-          HorizontalBatteryTargetSelector(
-            key: const ValueKey('target-battery-selector'),
-            value: currentTarget,
-            currentSoc: draft.currentSoc,
-            onChanged: (value) => controller.updateDraft(targetSoc: value),
-          ),
-
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              const Icon(
-                Icons.add_circle_outline_rounded,
-                size: 17,
-                color: SmartChargeCockpitColors.verified,
-              ),
-              const SizedBox(width: 7),
-              Expanded(
-                child: Text(
-                  '+${(currentTarget - draft.currentSoc).round()}% cần nạp',
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-              ),
-              Text(
-                draft.estimatedCapacityWh > 0
-                    ? '~${_energy(draft.estimatedCapacityWh * (currentTarget - draft.currentSoc) / 100)}'
-                    : 'Chưa có dung lượng pin',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: draft.estimatedCapacityWh > 0
-                      ? SmartChargeCockpitColors.warning
-                      : SmartChargeCockpitColors.muted,
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 20),
-
-          // Preview Card if calculation succeeded
-          AnimatedSize(
-            duration: MediaQuery.disableAnimationsOf(context)
-                ? Duration.zero
-                : const Duration(milliseconds: 180),
-            child: state.preview == null
-                ? const SizedBox.shrink(key: ValueKey('no-plan-preview'))
-                : _PreviewCard(
-                    key: const ValueKey('plan-preview'),
-                    preview: state.preview!,
-                    tariffVndPerKwh: state.preferences?.tariffVndPerKwh,
-                  ),
-          ),
-
-          const SizedBox(height: 20),
-
-          // Dominant circular action mirrors the EV cockpit reference while
-          // preserving the existing preview/start safety gates.
-          Center(
-            child: Container(
-              width: 132,
-              height: 132,
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: CockpitColors.emerald.withValues(alpha: .20),
-                ),
-                boxShadow: CockpitMotion.enabled(context)
-                    ? [
-                        BoxShadow(
-                          color: CockpitColors.emerald.withValues(alpha: .13),
-                          blurRadius: 32,
-                          spreadRadius: 3,
-                        ),
-                      ]
-                    : const [],
-              ),
-              child: state.preview == null
-                  ? FilledButton(
-                      key: const ValueKey('create-plan-button'),
-                      onPressed: busy ? null : controller.createPreview,
-                      style: FilledButton.styleFrom(
-                        shape: const CircleBorder(),
-                        padding: const EdgeInsets.all(8),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      child: busy
-                          ? const CircularProgressIndicator(strokeWidth: 2)
-                          : const Column(
-                              mainAxisSize: MainAxisSize.min,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.auto_awesome_rounded, size: 22),
-                                SizedBox(height: 4),
-                                FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    'DỰ ĐOÁN VỚI AI',
-                                    maxLines: 1,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 10,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                    )
-                  : FilledButton(
-                      key: const ValueKey('confirm-plan-button'),
-                      onPressed: busy || !canStart ? null : onStart,
-                      style: FilledButton.styleFrom(
-                        shape: const CircleBorder(),
-                        padding: const EdgeInsets.all(8),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      child: const Column(
-                        mainAxisSize: MainAxisSize.min,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.bolt_rounded, size: 24),
-                          SizedBox(height: 4),
-                          FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              'SẠC THEO AI',
-                              maxLines: 1,
-                              style: TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 10,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-            ),
-          ),
-
-          if (state.preview != null && !canStart) ...[
-            const SizedBox(height: 8),
-            Text(
-              state.preview!.isDisplayOnly
-                  ? 'Dự đoán chỉ để tham khảo. Dùng Sạc hẹn giờ để chọn thời gian.'
-                  : state.preview!.aiChargeEligible
-                  ? 'Hãy hoàn tất cài đặt ổ sạc để bắt đầu sạc.'
-                  : 'Dự đoán thời gian chưa khả dụng.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.error,
               ),
             ),
           ],
+          const SizedBox(width: 8),
+          Text(
+            now,
+            style: const TextStyle(
+              color: LuxeColors.platinumMid,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w500,
+              fontFeatures: [FontFeature.tabularFigures()],
+            ),
+          ),
+          const SizedBox(width: 4),
         ],
       ),
     );
   }
-
-  Future<void> _editSoc(BuildContext context, double initial) async {
-    var value = initial;
-    final result = await showDialog<double>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Chỉnh mức pin hiện tại'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '${value.round()}%',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Slider(
-                key: const ValueKey('current-soc-slider'),
-                value: value,
-                min: 0,
-                max: 99,
-                divisions: 99,
-                onChanged: (next) => setState(() => value = next),
-              ),
-              const SizedBox(height: 6),
-              const Text('Pin hiện tại là giá trị ước tính.'),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Hủy'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, value),
-              child: const Text('Lưu'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (result != null) controller.updateDraft(currentSoc: result);
-  }
 }
 
-/// Simplified clean Preview Card showing duration, stop time, and target pin
-class _PreviewCard extends StatelessWidget {
-  const _PreviewCard({super.key, required this.preview, this.tariffVndPerKwh});
-  final SmartChargingPlanPreview preview;
-  final double? tariffVndPerKwh;
+class _PulseDotPainter extends CustomPainter {
+  _PulseDotPainter({
+    required this.color,
+    required this.t,
+    required this.animate,
+  });
+  final Color color;
+  final double t;
+  final bool animate;
 
   @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final energyWh = preview.draft.estimatedCapacityWh > 0
-        ? preview.draft.estimatedCapacityWh *
-              (preview.draft.targetSoc - preview.draft.currentSoc) /
-              100
-        : null;
-    final costVnd = energyWh == null || tariffVndPerKwh == null
-        ? null
-        : energyWh / .90 / 1000 * tariffVndPerKwh!;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: colors.surfaceContainerHighest,
-        borderRadius: AppRadii.lg,
-        border: Border.all(color: colors.primary.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Kế hoạch sạc',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: colors.primary.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  '${preview.draft.currentSoc.round()}% → ${preview.draft.targetSoc.round()}%',
-                  style: TextStyle(
-                    color: colors.primary,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _PreviewRow(
-            label: 'Thời gian dự kiến',
-            value: _formatPreviewDuration(preview.predictedMinutes),
-            emphasized: true,
-          ),
-          _PreviewRow(
-            label: 'Dự kiến dừng lúc',
-            value: _time(preview.effectiveStopAt),
-          ),
-          _PreviewRow(
-            label: 'Điện ước tính cần nạp',
-            value: energyWh == null
-                ? 'Chưa có dung lượng pin'
-                : _energy(energyWh),
-          ),
-          _PreviewRow(
-            label: 'Chi phí dự kiến',
-            value: costVnd == null
-                ? 'Chưa đặt giá điện'
-                : '~${NumberFormat.decimalPattern('vi_VN').format(costVnd)} đ',
-          ),
-          const SizedBox(height: 6),
-          Text(
-            preview.personalizationLabel,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: colors.primary,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          if (preview.etaCandidates.isNotEmpty) ...[
-            ExpansionTile(
-              tilePadding: EdgeInsets.zero,
-              childrenPadding: EdgeInsets.zero,
-              title: const Text('Chi tiết dự đoán'),
-              children: [
-                for (final candidate in preview.etaCandidates)
-                  _PreviewRow(
-                    label: switch (candidate.source) {
-                      'global_ai' => 'Mô hình nền',
-                      'physics' => 'Dung lượng và công suất',
-                      'personal' => 'Dữ liệu xe này',
-                      _ => candidate.source,
-                    },
-                    value:
-                        '${_formatPreviewDuration((candidate.durationSeconds / 60).round())} · ${(candidate.weight * 100).round()}%',
-                  ),
-              ],
-            ),
-          ],
-          for (final warning in preview.warnings)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                warning,
-                style: TextStyle(color: colors.error, fontSize: 12),
-              ),
-            ),
-        ],
-      ),
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    if (animate) {
+      canvas.drawCircle(
+        c,
+        4 + 7 * Curves.easeOut.transform(t),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2
+          ..color = color.withValues(alpha: 0.6 * (1 - t)),
+      );
+    }
+    canvas.drawCircle(
+      c,
+      4.5,
+      Paint()
+        ..color = color.withValues(alpha: 0.5)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
     );
+    canvas.drawCircle(c, 4, Paint()..color = color);
   }
+
+  @override
+  bool shouldRepaint(_PulseDotPainter old) =>
+      old.t != t || old.color != color || old.animate != animate;
 }
 
-class _PreviewRow extends StatelessWidget {
-  const _PreviewRow({
-    required this.label,
-    required this.value,
-    this.emphasized = false,
+/// Quick targets: 80% (recommended), 90%, 100%.
+class _TargetPresets extends StatelessWidget {
+  const _TargetPresets({
+    required this.target,
+    required this.minimum,
+    required this.enabled,
+    required this.onSelected,
   });
 
-  final String label;
-  final String value;
-  final bool emphasized;
+  final double target;
+  final double minimum;
+  final bool enabled;
+  final ValueChanged<double> onSelected;
+
+  static const _presets = [
+    (value: 80.0, title: 'Bảo vệ pin', recommended: true),
+    (value: 90.0, title: 'Cân bằng', recommended: false),
+    (value: 100.0, title: 'Đầy pin', recommended: false),
+  ];
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 4),
-    child: Row(
-      children: [
-        Expanded(
-          child: Text(label, style: Theme.of(context).textTheme.bodyMedium),
-        ),
-        Text(
-          value,
-          style: TextStyle(
-            color: emphasized ? Theme.of(context).colorScheme.primary : null,
-            fontWeight: emphasized ? FontWeight.w900 : FontWeight.w600,
-            fontSize: emphasized ? 16 : 14,
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-/// Active Charging view when relay is ON
-// ignore: unused_element
-class _ActiveChargingView extends StatelessWidget {
-  const _ActiveChargingView({required this.state, required this.onStop});
-
-  final SmartChargingUiState state;
-  final VoidCallback onStop;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final timerIsVerified =
-        state.session?.timerVerified == true ||
-        state.chargerStatus?.timerRemaining != null;
-    final verifiedColor = timerIsVerified
-        ? colors.primary
-        : SmartChargeCockpitColors.warning;
-    final session = state.session;
-    final remaining =
-        state.chargerStatus?.timerRemaining ??
-        (session != null ? session.remaining(state.now) : Duration.zero);
-
-    final hh = remaining.inHours.toString().padLeft(2, '0');
-    final mm = (remaining.inMinutes % 60).toString().padLeft(2, '0');
-    final ss = (remaining.inSeconds % 60).toString().padLeft(2, '0');
-
-    final powerW = state.chargerStatus?.powerW ?? 0;
-    final energyWh = session?.energyUsedWh ?? 0;
-    final status = state.chargerStatus;
-    final costVnd = session?.estimatedCostVnd;
-
-    final startSoc =
-        session?.startSoc.round() ?? state.draft.currentSoc.round();
-    final targetSoc =
-        session?.targetSoc.round() ?? state.draft.targetSoc.round();
-
-    return CockpitPanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Live charging badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: verifiedColor.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: verifiedColor.withValues(alpha: 0.4)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.bolt_rounded, color: verifiedColor, size: 18),
-                const SizedBox(width: 6),
-                Text(
-                  'ĐANG SẠC',
-                  style: TextStyle(
-                    color: verifiedColor,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'Mục tiêu ~$targetSoc% · SOC là giá trị ước tính',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: SmartChargeCockpitColors.text,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          ChargingBatteryAnimationV3(
-            currentSoc: session?.estimatedSoc ?? startSoc.toDouble(),
-            targetSoc: targetSoc.toDouble(),
-            sampleRevision: session?.updatedAt.millisecondsSinceEpoch ?? 0,
-          ),
-
-          const SizedBox(height: 16),
-
-          // Countdown timer card
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              borderRadius: AppRadii.lg,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Còn khoảng',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '$hh:$mm:$ss',
-                  key: const ValueKey('session-countdown'),
-                  style: CockpitTypography.numbers(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Divider(height: 1),
-                const SizedBox(height: 16),
-                // Essential metrics
-                Wrap(
-                  spacing: 22,
-                  runSpacing: 16,
-                  children: [
-                    _Metric(
-                      label: 'Công suất',
-                      value: '${powerW.toStringAsFixed(0)} W',
-                    ),
-                    _Metric(
-                      label: 'Điện áp',
-                      value: status == null
-                          ? '—'
-                          : '${status.voltageV.toStringAsFixed(1)} V',
-                    ),
-                    _Metric(
-                      label: 'Dòng điện',
-                      value: status == null
-                          ? '—'
-                          : '${status.currentA.toStringAsFixed(2)} A',
-                    ),
-                    _Metric(
-                      label: 'Nhiệt độ',
-                      value: status?.temperatureC == null
-                          ? '—'
-                          : '${status!.temperatureC!.toStringAsFixed(1)} °C',
-                    ),
-                    if (session?.effectiveStopAt != null)
-                      _Metric(
-                        label: 'Tự tắt lúc',
-                        value: _time(session!.effectiveStopAt),
-                      ),
-                    _Metric(label: 'Năng lượng', value: _energy(energyWh)),
-                    _Metric(
-                      label: 'Chi phí tạm tính',
-                      value: costVnd == null
-                          ? 'Chưa đặt giá điện'
-                          : '${NumberFormat.decimalPattern('vi_VN').format(costVnd)} đ',
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Icon(
-                      session?.timerVerified == true ||
-                              status?.timerRemaining != null
-                          ? Icons.verified_rounded
-                          : Icons.warning_amber_rounded,
-                      size: 17,
-                      color:
-                          session?.timerVerified == true ||
-                              status?.timerRemaining != null
-                          ? SmartChargeCockpitColors.verified
-                          : SmartChargeCockpitColors.warning,
-                    ),
-                    const SizedBox(width: 7),
-                    Expanded(
-                      child: Text(
-                        session?.timerVerified == true ||
-                                status?.timerRemaining != null
-                            ? 'Timer đã cài trên Shelly'
-                            : 'Chưa xác minh timer thiết bị',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          if (state.livePowerSamples.length >= 2) ...[
-            const SizedBox(height: 14),
-            _LivePowerSparkline(samples: state.livePowerSamples),
-          ],
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: onStop,
-              icon: const Icon(Icons.stop_circle_outlined),
-              label: const Text('DỪNG PHIÊN'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Metric extends StatelessWidget {
-  const _Metric({required this.label, required this.value});
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
+  Widget build(BuildContext context) => Row(
     children: [
-      Text(label, style: Theme.of(context).textTheme.bodySmall),
-      const SizedBox(height: 2),
-      Text(value, style: CockpitTypography.numbers(fontSize: 15)),
+      for (var i = 0; i < _presets.length; i++) ...[
+        if (i > 0) const SizedBox(width: 8),
+        Expanded(child: _tile(_presets[i])),
+      ],
     ],
   );
-}
 
-class _LivePowerSparkline extends StatelessWidget {
-  const _LivePowerSparkline({required this.samples});
-  final List<double> samples;
-
-  @override
-  Widget build(BuildContext context) {
-    final visible = samples.length > 180
-        ? samples.sublist(samples.length - 180)
-        : samples;
+  Widget _tile(({double value, String title, bool recommended}) p) {
+    final selected = target.round() == p.value.round();
+    final available = enabled && p.value > minimum;
     return Semantics(
-      label:
-          'Biểu đồ công suất 15 phút gần nhất, hiện tại ${visible.last.toStringAsFixed(0)} watt',
-      child: Container(
-        height: 104,
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
-        decoration: BoxDecoration(
-          color: SmartChargeCockpitColors.elevated,
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'CÔNG SUẤT · 15 PHÚT GẦN NHẤT',
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: SmartChargeCockpitColors.muted,
-                fontWeight: FontWeight.w800,
-                letterSpacing: .5,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: LineChart(
-                LineChartData(
-                  minY: 0,
-                  gridData: const FlGridData(show: false),
-                  titlesData: const FlTitlesData(show: false),
-                  borderData: FlBorderData(show: false),
-                  lineTouchData: const LineTouchData(enabled: false),
-                  lineBarsData: [
-                    LineChartBarData(
-                      spots: [
-                        for (var index = 0; index < visible.length; index++)
-                          FlSpot(index.toDouble(), visible[index]),
-                      ],
-                      isCurved: true,
-                      curveSmoothness: .22,
-                      barWidth: 2.5,
-                      color: SmartChargeCockpitColors.verified,
-                      dotData: const FlDotData(show: false),
-                      belowBarData: BarAreaData(
-                        show: true,
-                        color: SmartChargeCockpitColors.verified.withValues(
-                          alpha: .10,
+      button: true,
+      selected: selected,
+      enabled: available,
+      child: Opacity(
+        opacity: available ? 1 : 0.4,
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            splashColor: const Color(0x1434D399),
+            onTap: available
+                ? () {
+                    HapticFeedback.selectionClick();
+                    onSelected(p.value);
+                  }
+                : null,
+            child: LuxeGlass(
+              selected: selected,
+              radius: 16,
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+              child: Column(
+                children: [
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      '${p.value.round()}%',
+                      style: TextStyle(
+                        color: selected ? LuxeColors.emerald : LuxeColors.text,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w300,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      p.title,
+                      style: const TextStyle(
+                        color: LuxeColors.muted,
+                        fontSize: 11.5,
+                      ),
+                    ),
+                  ),
+                  if (p.recommended) ...[
+                    const SizedBox(height: 4),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        'Khuyên dùng',
+                        style: TextStyle(
+                          color: LuxeColors.emerald.withValues(alpha: 0.9),
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.4,
                         ),
                       ),
                     ),
                   ],
-                ),
+                ],
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
   }
-}
-
-/// Manual controls section
-// ignore: unused_element
-class _ManualControlsSection extends StatelessWidget {
-  const _ManualControlsSection({
-    required this.state,
-    required this.onOn,
-    required this.onOff,
-  });
-
-  final SmartChargingUiState state;
-  final VoidCallback onOn;
-  final VoidCallback onOff;
-
-  @override
-  Widget build(BuildContext context) {
-    final error = Theme.of(context).colorScheme.error;
-    return CockpitPanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Sạc hẹn giờ',
-            style: Theme.of(
-              context,
-            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'Bật ngay với timer mặc định 1 giờ, hoặc chọn thời gian tự ngắt trực tiếp trên Shelly.',
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: CockpitColors.muted),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: PulseGlowButton(
-                  key: const ValueKey('manual-on-button'),
-                  isActive: state.hasActiveSession,
-                  commandState: state.phase == SmartChargingViewPhase.starting
-                      ? CommandState.sending
-                      : (state.hasActiveSession
-                            ? CommandState.confirmed
-                            : (state.phase == SmartChargingViewPhase.error
-                                  ? CommandState.failed
-                                  : CommandState.idle)),
-                  onTap: state.capabilities.readyForControl ? onOn : () {},
-                  icon: Icons.power_rounded,
-                  label: 'BẬT SẠC',
-                  activeLabel: 'ĐANG SẠC',
-                  activeColor: CockpitColors.emeraldStrong,
-                  height: 46,
-                  borderRadius: CockpitRadius.medium,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: PulseGlowButton(
-                  key: const ValueKey('smart-charging-manual-off'),
-                  isActive: false,
-                  commandState: state.phase == SmartChargingViewPhase.stopping
-                      ? CommandState.sending
-                      : CommandState.idle,
-                  onTap: onOff,
-                  icon: Icons.power_settings_new_rounded,
-                  label: 'TẮT SẠC',
-                  activeColor: error,
-                  inactiveColor: CockpitColors.surfaceSoft,
-                  height: 46,
-                  borderRadius: CockpitRadius.medium,
-                  showGlow: false,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// History section showing previous charging sessions
-// ignore: unused_element
-class _HistorySection extends StatelessWidget {
-  const _HistorySection({
-    required this.sessions,
-    required this.status,
-    required this.error,
-    required this.syncedAt,
-    required this.onRetry,
-    required this.onViewAll,
-    required this.onOpen,
-  });
-
-  final List<SmartChargingSession> sessions;
-  final SmartChargeHistoryStatus status;
-  final String? error;
-  final DateTime? syncedAt;
-  final VoidCallback onRetry;
-  final VoidCallback onViewAll;
-  final ValueChanged<SmartChargingSession> onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final syncText = syncedAt == null
-        ? 'Chưa đồng bộ'
-        : 'Đồng bộ lần cuối ${DateFormat('HH:mm').format(syncedAt!.toLocal())}';
-
-    return Semantics(
-      container: true,
-      label: 'Lịch sử Smart Charge gần đây',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Lịch sử gần đây',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              Text(
-                syncText,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (status == SmartChargeHistoryStatus.loading && sessions.isEmpty)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: CircularProgressIndicator(),
-              ),
-            )
-          else if (status == SmartChargeHistoryStatus.error && sessions.isEmpty)
-            _HistoryMessage(
-              icon: Icons.cloud_off_rounded,
-              title: 'Chưa thể đồng bộ lịch sử',
-              message: error ?? 'Dữ liệu sạc sẽ được thử đồng bộ lại.',
-              actionLabel: 'Thử lại lịch sử',
-              onAction: onRetry,
-            )
-          else if (sessions.isEmpty)
-            const _HistoryMessage(
-              icon: Icons.electric_bolt_rounded,
-              title: 'Chưa có phiên sạc',
-              message: 'Phiên Smart Charge hoàn tất sẽ xuất hiện tại đây.',
-            )
-          else ...[
-            if (status == SmartChargeHistoryStatus.stale || error != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  'Đang hiển thị dữ liệu đã lưu trên thiết bị.',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: colors.tertiary),
-                ),
-              ),
-            for (final session in sessions.take(3))
-              _RecentSessionTile(
-                session: session,
-                onTap: () => onOpen(session),
-              ),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: onViewAll,
-                icon: const Icon(Icons.history_rounded),
-                label: const Text('XEM TOÀN BỘ LỊCH SỬ'),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _RecentSessionTile extends StatelessWidget {
-  const _RecentSessionTile({required this.session, required this.onTap});
-
-  final SmartChargingSession session;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final duration = (session.stoppedAt ?? session.updatedAt).difference(
-      session.startedAt ?? session.createdAt,
-    );
-    final isAi = session.strategy != ChargingStrategy.manualTimed;
-    final endSoc = session.estimatedSoc ?? session.targetSoc;
-    final energy = session.energyUsedWh >= 1000
-        ? '${(session.energyUsedWh / 1000).toStringAsFixed(2)} kWh'
-        : '${session.energyUsedWh.toStringAsFixed(0)} Wh';
-    final cost = session.estimatedCostVnd == null
-        ? 'Chưa có giá điện'
-        : '${NumberFormat.decimalPattern('vi_VN').format(session.estimatedCostVnd)} đ';
-
-    return ListTile(
-      minVerticalPadding: 12,
-      contentPadding: EdgeInsets.zero,
-      onTap: onTap,
-      leading: CircleAvatar(
-        child: Icon(isAi ? Icons.auto_awesome_rounded : Icons.timer_rounded),
-      ),
-      title: Text(
-        '${session.startSoc.toStringAsFixed(0)}% → ${endSoc.toStringAsFixed(0)}%',
-        style: const TextStyle(fontWeight: FontWeight.w700),
-      ),
-      subtitle: Text(
-        '${DateFormat('dd/MM · HH:mm').format(session.createdAt.toLocal())}\n'
-        '${isAi ? 'Sạc AI' : 'Thủ công'} · $energy · $cost · ${_compactDuration(duration)}',
-      ),
-      trailing: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Text(
-            session.state == ChargingSessionState.completed
-                ? 'Hoàn thành'
-                : 'Đã dừng',
-            style: Theme.of(context).textTheme.labelSmall,
-          ),
-          const Icon(Icons.chevron_right_rounded),
-        ],
-      ),
-    );
-  }
-}
-
-class _HistoryMessage extends StatelessWidget {
-  const _HistoryMessage({
-    required this.icon,
-    required this.title,
-    required this.message,
-    this.actionLabel,
-    this.onAction,
-  });
-
-  final IconData icon;
-  final String title;
-  final String message;
-  final String? actionLabel;
-  final VoidCallback? onAction;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 20),
-    child: Center(
-      child: Column(
-        children: [
-          Icon(icon, size: 34, color: Theme.of(context).colorScheme.primary),
-          const SizedBox(height: 10),
-          Text(title, style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 4),
-          Text(message, textAlign: TextAlign.center),
-          if (onAction != null && actionLabel != null) ...[
-            const SizedBox(height: 8),
-            TextButton(onPressed: onAction, child: Text(actionLabel!)),
-          ],
-        ],
-      ),
-    ),
-  );
-}
-
-String _compactDuration(Duration value) {
-  final minutes = value.inMinutes.clamp(0, 10 * 60);
-  final hours = minutes ~/ 60;
-  final remaining = minutes % 60;
-  if (hours == 0) return '$remaining phút';
-  return remaining == 0 ? '$hours giờ' : '$hours giờ $remaining phút';
 }
 
 String _time(DateTime value) => DateFormat('HH:mm').format(value.toLocal());
-String _energy(double wh) => wh >= 1000
-    ? '${(wh / 1000).toStringAsFixed(2)} kWh'
-    : '${wh.toStringAsFixed(0)} Wh';
 String _duration(int minutes) =>
     minutes < 60 ? '$minutes phút' : '${minutes ~/ 60} giờ';
 
-String _formatPreviewDuration(int totalMinutes) {
-  final h = totalMinutes ~/ 60;
-  final m = totalMinutes % 60;
-  if (h > 0) {
-    return '$h giờ $m phút';
-  }
-  return '$m phút';
+/// Compact ETA for the dial pill: "≈ 1g10" / "≈ 45 phút".
+String _shortDuration(int minutes) {
+  final m = math.max(0, minutes);
+  if (m < 60) return '≈ $m phút';
+  return '≈ ${m ~/ 60}g${(m % 60).toString().padLeft(2, '0')}';
 }

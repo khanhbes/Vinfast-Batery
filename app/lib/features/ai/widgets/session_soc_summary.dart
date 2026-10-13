@@ -1,91 +1,80 @@
+import 'dart:math' as math;
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
-import '../../../core/theme/cockpit_design_system.dart';
+
+import '../../../core/theme/luxe_theme.dart';
 import '../../../data/models/smart_charging_session.dart';
 
-/// Session SOC summary that adapts to compact phones and large text.
+/// Session SOC as a 240° platinum arc: start → end lit emerald, the preset
+/// target as a notch. Adapts to compact phones and large text.
 class SessionSocSummary extends StatelessWidget {
   const SessionSocSummary({super.key, required this.session});
   final SmartChargingSession session;
 
-  String _soc(double? value) =>
-      value != null && value.isFinite && value >= 0 && value <= 100
-      ? '${value.round()}%'
-      : '\u2014';
+  static bool _valid(double? v) =>
+      v != null && v.isFinite && v >= 0 && v <= 100;
+
+  String _soc(double? value) => _valid(value) ? '${value!.round()}%' : '—';
 
   @override
   Widget build(BuildContext context) {
     final confirmed = session.actualEndSoc;
     final estimated = session.estimatedSoc;
-    final actualValid =
-        confirmed != null &&
-        confirmed.isFinite &&
-        confirmed >= 0 &&
-        confirmed <= 100;
+    final actualValid = _valid(confirmed);
     final startSoc = session.startSoc >= 0 && session.startSoc <= 100
         ? session.startSoc
         : 0.0;
     // A stored estimate is already the server's reconciled value. Older
     // sessions do not carry a quality field, so do not hide a valid estimate
     // merely because that optional metadata is absent.
-    final estimatedValid =
-        estimated != null &&
-        estimated.isFinite &&
-        estimated >= 0 &&
-        estimated <= 100;
+    final estimatedValid = _valid(estimated);
     final double? endSoc = actualValid
         ? confirmed
         : (estimatedValid ? estimated : null);
     final gain = endSoc == null
         ? 0.0
         : (endSoc - startSoc).clamp(-100.0, 100.0);
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: CockpitColors.surface,
-        borderRadius: BorderRadius.circular(CockpitRadius.large),
-        border: Border.all(color: CockpitColors.border),
-      ),
+    final endLabel = actualValid
+        ? 'Thực tế cuối'
+        : (estimatedValid
+              ? 'SOC ước tính'
+              : (session.state.isTerminal ? 'Ước tính cuối' : 'Hiện tại'));
+    final target = _valid(session.targetSoc) ? session.targetSoc : null;
+
+    return LuxeGlass(
+      radius: 24,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: CockpitColors.emerald.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.battery_charging_full_rounded,
-                  size: 20,
-                  color: CockpitColors.emeraldStrong,
-                ),
-              ),
-              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Ti\u1EBFn tr\u00ecnh s\u1EA1c pin (SOC)',
-                      style: CockpitTypography.heading(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: CockpitColors.text,
+                    const Text(
+                      'Tiến trình sạc pin (SOC)',
+                      style: TextStyle(
+                        color: LuxeColors.text,
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
+                    const SizedBox(height: 2),
                     Text(
                       actualValid
-                          ? 'Cu\u1ED1i phi\u00ean \u00b7 \u0111\u00e3 x\u00e1c nh\u1EADn'
+                          ? 'Cuối phiên · đã xác nhận'
                           : (session.state.isTerminal
-                                ? '\u01AF\u1EDBc t\u00ednh k\u1EBFt th\u00fac'
-                                : '\u0110ang ti\u1EBFp t\u1EE5c n\u1EA1p'),
-                      style: CockpitTypography.label(
-                        fontSize: 11,
+                                ? 'Ước tính kết thúc'
+                                : 'Đang tiếp tục nạp'),
+                      style: TextStyle(
+                        fontSize: 12,
                         color: actualValid
-                            ? CockpitColors.emeraldStrong
-                            : CockpitColors.muted,
+                            ? LuxeColors.emerald
+                            : LuxeColors.muted,
                       ),
                     ),
                   ],
@@ -98,155 +87,114 @@ class SessionSocSummary extends StatelessWidget {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: CockpitColors.emerald.withValues(alpha: 0.15),
+                    color: LuxeColors.emerald.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(999),
                     border: Border.all(
-                      color: CockpitColors.emerald.withValues(alpha: 0.3),
+                      color: LuxeColors.emerald.withValues(alpha: 0.35),
                     ),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.trending_up_rounded,
-                        size: 14,
-                        color: CockpitColors.emeraldStrong,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '+${gain.round()}% pin',
-                        style: CockpitTypography.numbers(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: CockpitColors.emeraldStrong,
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    '+${gain.round()}% pin',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: LuxeColors.emerald,
+                    ),
                   ),
                 ),
             ],
           ),
-          const SizedBox(height: 20),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
-              final narrow = constraints.maxWidth < 420 || scale > 1.3;
-              final start = _SocBox(
-                label: 'B\u1EAFt \u0111\u1EA7u',
-                value: _soc(startSoc),
-                color: CockpitColors.muted,
-              );
-              final end = _SocBox(
-                label: actualValid
-                    ? 'Th\u1EF1c t\u1EBF cu\u1ED1i'
-                    : (estimatedValid
-                          ? 'SOC \u01B0\u1EDBc t\u00ednh'
-                          : (session.state.isTerminal
-                                ? '\u01AF\u1EDBc t\u00ednh cu\u1ED1i'
-                                : 'Hi\u1EC7n t\u1EA1i')),
-                value: endSoc == null
-                    ? 'Ch\u01B0a c\u00f3 d\u1EEF li\u1EC7u'
-                    : _soc(endSoc),
-                color: CockpitColors.emeraldStrong,
-                isHighlighted: true,
-              );
-              final target = _SocBox(
-                label:
-                    'M\u1EE5c ti\u00eau \u0111\u1EB7t tr\u01B0\u1EDBc: ${_soc(session.targetSoc)}',
-                value: '\u2014',
-                color: CockpitColors.info,
-              );
-              if (narrow) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    start,
-                    const SizedBox(height: 8),
-                    const Center(
-                      child: Icon(
-                        Icons.arrow_downward_rounded,
-                        size: 18,
-                        color: CockpitColors.dim,
-                      ),
+          const SizedBox(height: 8),
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 230),
+              child: AspectRatio(
+                aspectRatio: 1.25,
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: 1),
+                  duration: MediaQuery.disableAnimationsOf(context)
+                      ? Duration.zero
+                      : const Duration(milliseconds: 1300),
+                  curve: LuxeMotion.enter,
+                  builder: (context, t, child) => CustomPaint(
+                    painter: _SocArcPainter(
+                      start: startSoc / 100,
+                      end: endSoc == null ? null : endSoc / 100,
+                      target: target == null ? null : target / 100,
+                      reveal: t,
                     ),
-                    const SizedBox(height: 8),
-                    end,
-                    const SizedBox(height: 8),
-                    const Center(
-                      child: Icon(
-                        Icons.arrow_downward_rounded,
-                        size: 18,
-                        color: CockpitColors.dim,
+                    child: child,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(40, 34, 40, 6),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (endSoc == null)
+                            const Text(
+                              'Chưa có dữ liệu',
+                              style: TextStyle(
+                                color: LuxeColors.platinum,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            )
+                          else
+                            LuxeMetalText(
+                              _soc(endSoc),
+                              style: const TextStyle(
+                                fontSize: 44,
+                                height: 1.05,
+                                fontWeight: FontWeight.w200,
+                                fontFeatures: [ui.FontFeature.tabularFigures()],
+                              ),
+                            ),
+                          const SizedBox(height: 2),
+                          Text(
+                            endLabel,
+                            style: const TextStyle(
+                              color: LuxeColors.emerald,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    target,
-                  ],
-                );
-              }
-              return Row(
-                children: [
-                  Expanded(child: start),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12),
-                    child: Icon(
-                      Icons.arrow_forward_rounded,
-                      size: 18,
-                      color: CockpitColors.dim,
                     ),
                   ),
-                  Expanded(child: end),
-                  const SizedBox(width: 12),
-                  Expanded(child: target),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 18),
-          Stack(
-            children: [
-              Container(
-                height: 10,
-                decoration: BoxDecoration(
-                  color: CockpitColors.surfaceSoft,
-                  borderRadius: BorderRadius.circular(999),
                 ),
               ),
-              FractionallySizedBox(
-                widthFactor: ((endSoc ?? startSoc) / 100.0).clamp(0.0, 1.0),
-                child: Container(
-                  height: 10,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(999),
-                    gradient: const LinearGradient(
-                      colors: [
-                        Color(0xFF059669),
-                        CockpitColors.emeraldStrong,
-                        Color(0xFF34D399),
-                      ],
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: CockpitColors.emeraldStrong.withValues(
-                          alpha: 0.3,
-                        ),
-                        blurRadius: 6,
-                        offset: Offset(0, 1),
-                      ),
-                    ],
-                  ),
-                ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            runSpacing: 6,
+            spacing: 12,
+            children: [
+              _Legend(
+                color: LuxeColors.platinumMid,
+                label: 'Bắt đầu',
+                value: _soc(startSoc),
+              ),
+              _Legend(
+                color: LuxeColors.platinumHi,
+                label: 'Mục tiêu đặt trước: ${_soc(session.targetSoc)}',
               ),
             ],
           ),
           const SizedBox(height: 12),
           Text(
             actualValid
-                ? '\u2713 SOC cu\u1ED1i \u0111\u01B0\u1EE3c ghi nh\u1EADn theo th\u00f4ng s\u1ED1 ng\u01B0\u1EDDi d\u00f9ng x\u00e1c nh\u1EADn.'
-                : '\u2022 S\u1ED1 \u0111o SOC \u01B0\u1EDBc t\u00ednh d\u1EF1a tr\u00ean c\u00f4ng su\u1EA5t n\u1EA1p l\u01B0\u1EDBi v\u00e0 dung l\u01B0\u1EE3ng xe.',
-            style: CockpitTypography.label(
-              fontSize: 11,
-              color: CockpitColors.dim,
+                ? '✓ SOC cuối được ghi nhận theo thông số người dùng xác nhận.'
+                : '• Số đo SOC ước tính dựa trên công suất nạp lưới và dung lượng xe.',
+            style: const TextStyle(
+              fontSize: 11.5,
+              height: 1.4,
+              color: LuxeColors.dim,
             ),
           ),
         ],
@@ -255,56 +203,154 @@ class SessionSocSummary extends StatelessWidget {
   }
 }
 
-class _SocBox extends StatelessWidget {
-  const _SocBox({
-    required this.label,
-    required this.value,
-    required this.color,
-    this.isHighlighted = false,
-  });
-  final String label;
-  final String value;
+class _Legend extends StatelessWidget {
+  const _Legend({required this.color, required this.label, this.value});
   final Color color;
-  final bool isHighlighted;
+  final String label;
+  final String? value;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-    decoration: BoxDecoration(
-      color: isHighlighted
-          ? color.withValues(alpha: 0.08)
-          : CockpitColors.surfaceSoft.withValues(alpha: 0.5),
-      borderRadius: BorderRadius.circular(CockpitRadius.medium),
-      border: Border.all(
-        color: isHighlighted
-            ? color.withValues(alpha: 0.35)
-            : CockpitColors.border,
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Container(
+        width: 7,
+        height: 7,
+        decoration: BoxDecoration(shape: BoxShape.circle, color: color),
       ),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
+      const SizedBox(width: 6),
+      Flexible(
+        child: Text(
           label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: CockpitTypography.label(
-            fontSize: 10,
-            color: CockpitColors.muted,
-          ),
+          style: const TextStyle(color: LuxeColors.muted, fontSize: 12.5),
         ),
-        const SizedBox(height: 4),
+      ),
+      if (value != null) ...[
+        const SizedBox(width: 6),
         Text(
-          value,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: CockpitTypography.numbers(
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-            color: isHighlighted ? color : CockpitColors.text,
+          value!,
+          style: const TextStyle(
+            color: LuxeColors.text,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ],
-    ),
+    ],
   );
+}
+
+class _SocArcPainter extends CustomPainter {
+  _SocArcPainter({
+    required this.start,
+    required this.end,
+    required this.target,
+    required this.reveal,
+  });
+
+  final double start;
+  final double? end;
+  final double? target;
+  final double reveal;
+
+  static const _from = math.pi * 5 / 6; // 150°
+  static const _sweep = math.pi * 4 / 3; // 240°
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final r = math.min(size.width / 2, size.height / 1.5) - 10;
+    final c = Offset(size.width / 2, r + 10);
+    final rect = Rect.fromCircle(center: c, radius: r);
+    double angle(double f) => _from + _sweep * f.clamp(0.0, 1.0);
+
+    canvas.drawArc(
+      rect,
+      _from,
+      _sweep,
+      false,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 8
+        ..strokeCap = StrokeCap.round
+        ..color = const Color(0x17FFFFFF),
+    );
+    // Fine 10 % graduations outside the track.
+    for (var i = 0; i <= 10; i++) {
+      final a = angle(i / 10);
+      final dir = Offset(math.cos(a), math.sin(a));
+      canvas.drawLine(
+        c + dir * (r + 9),
+        c + dir * (r + (i % 5 == 0 ? 15 : 12)),
+        Paint()
+          ..strokeWidth = 1
+          ..color = const Color(0x33FFFFFF),
+      );
+    }
+
+    final e = end;
+    if (e != null) {
+      final lo = math.min(start, e);
+      final hi = lo + (math.max(start, e) - lo) * reveal;
+      if (hi - lo > 0.002) {
+        final arcPaint = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 8
+          ..strokeCap = StrokeCap.round
+          ..shader = SweepGradient(
+            startAngle: angle(lo),
+            endAngle: angle(lo) + math.max(0.01, _sweep * (hi - lo)),
+            colors: const [LuxeColors.emeraldDeep, LuxeColors.emerald],
+          ).createShader(rect);
+        canvas.drawArc(
+          rect,
+          angle(lo),
+          _sweep * (hi - lo),
+          false,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 14
+            ..strokeCap = StrokeCap.round
+            ..color = LuxeColors.emerald.withValues(alpha: 0.18)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7),
+        );
+        canvas.drawArc(rect, angle(lo), _sweep * (hi - lo), false, arcPaint);
+        final tip = angle(hi);
+        canvas.drawCircle(
+          c + Offset(math.cos(tip), math.sin(tip)) * r,
+          5,
+          Paint()..color = LuxeColors.platinumHi,
+        );
+      }
+    }
+
+    // Start marker.
+    final s = angle(start);
+    canvas.drawCircle(
+      c + Offset(math.cos(s), math.sin(s)) * r,
+      3.2,
+      Paint()..color = LuxeColors.platinumMid,
+    );
+
+    // Target notch across the track.
+    final tg = target;
+    if (tg != null) {
+      final a = angle(tg);
+      final dir = Offset(math.cos(a), math.sin(a));
+      canvas.drawLine(
+        c + dir * (r - 9),
+        c + dir * (r + 9),
+        Paint()
+          ..strokeWidth = 2
+          ..strokeCap = StrokeCap.round
+          ..color = LuxeColors.platinumHi,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_SocArcPainter old) =>
+      old.reveal != reveal ||
+      old.start != start ||
+      old.end != end ||
+      old.target != target;
 }

@@ -382,6 +382,7 @@ class _SelectedHistory extends ConsumerWidget {
           initialItems: state.history,
           embedded: true,
           initialSessionId: pending?.sessionId,
+          onStartCharging: () => AppNavigation.navigateToTab(context, 1),
           onPendingTargetConsumed: pending == null
               ? null
               : () =>

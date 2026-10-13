@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/theme/app_motion.dart';
-import '../../../core/theme/app_ui_colors.dart';
+import '../../../core/theme/luxe_theme.dart';
 import '../../../data/models/vehicle_model.dart';
 
 class RangePredictionCard extends StatefulWidget {
@@ -104,15 +104,10 @@ class _RangePredictionCardState extends State<RangePredictionCard> {
 
   @override
   Widget build(BuildContext context) {
-    final ui = AppUiColors.of(context);
     final text = Theme.of(context).textTheme;
     return AppReveal(
-      child: Container(
+      child: LuxeGlass(
         padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: ui.primarySurface,
-          borderRadius: BorderRadius.circular(24),
-        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
