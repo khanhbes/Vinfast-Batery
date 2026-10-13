@@ -1,5 +1,15 @@
 # VinFast Battery — Project Status & Task Tracker
 
+## Git sync — Task Completion Log (13/10/2026)
+
+- **Quyền:** user duyệt backup và làm sạch chỉ commit chưa push; giữ file trên máy, code/báo cáo, không sửa lịch sử remote hoặc force-push. Baseline hiện tại đã có 7 commit local (không chỉ 5 commit ở checkpoint10/10), HEAD `968e20726c0fcefa01f5e76d31c0ec5e61b95455`, remote base `a433b726ba5e839d35cb12b120b0bbe35b3beab1`.
+- **Backup local:** `backup/deploy-azure-student-before-cleanup-20261013-968e2072` giữ toàn bộ lịch sử gốc, kể cả APK/cache. Không push nhánh backup vì vẫn chứa blob APK quá lớn. Không git gc, reset/stash, checkout đè file hoặc xóa dữ liệu trên đĩa.
+- **Cleanup exit0:** tái tạo 7 commit theo thứ tự, giữ message/author/committer/date. HEAD sạch `d33fa9536f47f7bc8e4601d9f080622fcb4a383c`. Loại 861 path khỏi các tree Git: 2 đường dẫn APK lớn (cùng blob233.160.631 bytes) và 859 entries cache pytest; cả861 path có trên đĩa trước/sau. Từng tree còn lại so sánh mode/object/size giống hệt, không đổi code/báo cáo. Index/tracked worktree clean; remote base vẫn ancestor, push fast-forward được.
+- **Kiểm độc lập exit0:** đối chiếu lại cả7 commit/message/identity/date và file presence. Verifier đầu có bước lặp `ls-tree` dư thừa chạy chậm nhưng cuối exit0; kiểm thứ hai đọc mỗi tree một lần, cùng kết quả. Yêu cầu dừng tiến trình đã kết thúc trả nonzero do không khớp PID; không có process nào bị dừng, không coi là lỗi Git hoặc mất dữ liệu.
+- **Hygiene:** quét1051 blobs mới chưa push, không phát hiện private-key/token/JWT theo mẫu. `.env` server/dashboard và storage-key literal được preflight cảnh báo là byte-identical với remote, không phải dữ liệu mới. Không in giá trị; không rotate key hoặc rewrite lịch sử đã push. Nếu `AI_SERVER_INTERNAL_TOKEN`/`DEV_ADMIN_KEY` đang track là credential thật, cần phối hợp rotation và bỏ track riêng; không xem việc push này là chứng nhận không lộ bí mật trong lịch sử cũ.
+- **File mới sửa:** `.gitignore` bổ sung cache `pytest-of-*` và thư mục QA `pytest-*`; `PROJECT_STATUS.md` ghi kết quả; JSON `docs/qa_evidence/app-review-2026-10-05/git-sync-cleanup-20261013.json` lưu mapping/baseline. Không build APK, rerun app/hardware suites, deploy API/worker hoặc relay action trong task Git; giữ bằng chứng Task108–114, không chấm lại release gate.
+- **Trạng thái:** cleanup **Automated verified**; commit báo cáo/push **In progress**. Push chỉ `deploy/azure-student`; xác minh SHA remote sau push trước khi bàn giao. Các dòng Blocked ở mục Git10/10 phía dưới là checkpoint lịch sử đã được xử lý local ở lượt này, không xóa chúng.
+
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
 ## 114. Task Completion Log — Lịch sử sạc "Luxe" (13/10/2026) — Done
