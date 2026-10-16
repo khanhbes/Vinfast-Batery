@@ -115,6 +115,30 @@ async function run() {
       });
     });
 
+    // Task 125: deterministic notification ids. The owner may check that its
+    // own id is free; another account may not probe it.
+    await assertSucceeds(getDoc(doc(aliceDb, 'UserNotifications/alice_sc_s1_completed')));
+    await assertFails(getDoc(doc(bobDb, 'UserNotifications/alice_sc_s1_completed')));
+    await assertSucceeds(setDoc(doc(aliceDb, 'UserNotifications/alice_sc_s1_completed'), {
+      userId: 'alice', title: 'Phiên sạc đã hoàn tất', status: 'unread',
+    }));
+    await assertSucceeds(getDoc(doc(aliceDb, 'UserNotifications/alice_sc_s1_completed')));
+    await assertFails(getDoc(doc(bobDb, 'UserNotifications/alice_sc_s1_completed')));
+
+    // Task 125: Smart Charge SoC provenance fields are owner-writable;
+    // catalog/ownership fields stay server-only.
+    await assertSucceeds(updateDoc(doc(aliceDb, 'Vehicles/vehicle-alice'), {
+      currentBattery: 80, lastBatteryPercent: 80, hasBatteryData: true,
+      batteryDataSource: 'shelly_energy', batteryDataSessionId: 'qa-session',
+      batteryDataUpdatedAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    }));
+    await assertFails(updateDoc(doc(aliceDb, 'Vehicles/vehicle-alice'), {
+      batteryDataSource: 'shelly_energy', ownerUid: 'bob',
+    }));
+    await assertFails(updateDoc(doc(bobDb, 'Vehicles/vehicle-alice'), {
+      batteryDataSource: 'shelly_energy',
+    }));
+
     await assertSucceeds(setDoc(doc(aliceDb, 'TripLogs/trip-alice'), {
       ownerUid: 'alice', vehicleId: 'vehicle-alice', isDeleted: false,
     }));

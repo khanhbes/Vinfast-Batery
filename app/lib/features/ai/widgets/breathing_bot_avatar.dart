@@ -26,19 +26,23 @@ class _BreathingBotAvatarState extends State<BreathingBotAvatar>
     super.initState();
     _animController = AnimationController(
       vsync: this,
-      duration: Duration(milliseconds: widget.isStreaming ? 1000 : 2400),
-    )..repeat(reverse: true);
+      duration: const Duration(milliseconds: 1000),
+    );
+    // Glow only while this reply is being written (Task 125): every bubble
+    // used to run its own endless ticker.
+    if (widget.isStreaming) _animController.repeat(reverse: true);
   }
 
   @override
   void didUpdateWidget(covariant BreathingBotAvatar oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.isStreaming != widget.isStreaming) {
-      _animController.duration = Duration(
-        milliseconds: widget.isStreaming ? 1000 : 2400,
-      );
-      if (!_animController.isAnimating) {
+      if (widget.isStreaming) {
         _animController.repeat(reverse: true);
+      } else {
+        _animController
+          ..stop()
+          ..value = 0;
       }
     }
   }

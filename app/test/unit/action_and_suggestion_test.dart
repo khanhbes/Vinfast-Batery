@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vinfast_battery/features/ai/models/chat_message.dart';
@@ -5,6 +6,7 @@ import 'package:vinfast_battery/features/ai/models/function_call_action.dart';
 import 'package:vinfast_battery/features/ai/models/proactive_suggestion.dart';
 import 'package:vinfast_battery/features/ai/services/suggestion_service.dart';
 import 'package:vinfast_battery/features/ai/services/chat_api_service.dart';
+import 'package:vinfast_battery/features/ai/widgets/action_confirmation_card.dart';
 
 void main() {
   group('FunctionCallAction and ActionConfirmationCardData Tests', () {
@@ -203,6 +205,29 @@ void main() {
         expect(resCancelled['success'], isFalse);
         expect(resCancelled.containsKey('data'), isFalse);
       },
+    );
+  });
+
+  test('only charger commands show the bolt icon', () {
+    expect(
+      ActionConfirmationCard.pendingIcon('start_timed_charging'),
+      Icons.bolt_rounded,
+    );
+    expect(
+      ActionConfirmationCard.pendingIcon('stop_charging'),
+      Icons.bolt_rounded,
+    );
+    expect(
+      ActionConfirmationCard.pendingIcon('create_reminder'),
+      Icons.event_rounded,
+    );
+    expect(
+      ActionConfirmationCard.pendingIcon('app_set_app_setting'),
+      Icons.tune_rounded,
+    );
+    expect(
+      ActionConfirmationCard.pendingIcon('app_update_battery_level'),
+      Icons.edit_rounded,
     );
   });
 }

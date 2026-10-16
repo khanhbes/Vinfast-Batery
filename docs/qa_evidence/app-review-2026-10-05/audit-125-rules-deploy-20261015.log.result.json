@@ -1,0 +1,19 @@
+{
+  "command": [
+    "C:\\Users\\khanh\\AppData\\Roaming\\npm\\firebase.cmd",
+    "deploy",
+    "--only",
+    "firestore:rules",
+    "--project",
+    "vinfast-873db",
+    "--non-interactive"
+  ],
+  "cwd": "web",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\audit-125-rules-deploy-20261015.log",
+  "processId": 37140,
+  "timeoutSeconds": 180,
+  "timedOut": false,
+  "exitCode": 1,
+  "cleanupError": null,
+  "elapsedSeconds": 99.64
+}

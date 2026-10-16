@@ -85,6 +85,7 @@ class ConnectionCoordinator {
       return null;
     }
   }
+
   String _scopedPrefix(String uid) => '$_snapshotPrefix$uid.';
   static const _backoff = <Duration>[
     Duration(seconds: 1),
@@ -147,12 +148,8 @@ class ConnectionCoordinator {
     ),
   );
 
-  void markApiReachable(bool reachable) => _emit(
-    _state.copyWith(
-      apiReachable: reachable,
-      reconnecting: !reachable,
-    ),
-  );
+  void markApiReachable(bool reachable) =>
+      _emit(_state.copyWith(apiReachable: reachable, reconnecting: !reachable));
 
   void markFirebaseReachable(bool reachable) => _emit(
     _state.copyWith(
@@ -207,12 +204,11 @@ class ConnectionCoordinator {
     ]);
   }
 
-  Future<void> clearSnapshot(String sessionId) async =>
-      _uid == null
-          ? false
-          : (await SharedPreferences.getInstance()).remove(
-              '${_scopedPrefix(_uid!)}$sessionId',
-            );
+  Future<void> clearSnapshot(String sessionId) async => _uid == null
+      ? false
+      : (await SharedPreferences.getInstance()).remove(
+          '${_scopedPrefix(_uid!)}$sessionId',
+        );
 
   /// Returns locally persisted active-session snapshots for the shell pill.
   /// Snapshots contain no credentials and allow an active vehicle to remain
@@ -231,16 +227,20 @@ class ConnectionCoordinator {
       final soc = double.tryParse(values[3]);
       final energy = double.tryParse(values[4]);
       final relay = values[5].toLowerCase() == 'true';
-      if (stopAt == null || target == null || soc == null || energy == null) continue;
-      result.add(ActiveChargingSnapshot(
-        sessionId: key.substring(prefix.length),
-        vehicleId: values[0],
-        targetSoc: target,
-        effectiveStopAt: stopAt,
-        lastEstimatedSoc: soc,
-        lastSessionEnergyWh: energy,
-        lastKnownRelay: relay,
-      ));
+      if (stopAt == null || target == null || soc == null || energy == null) {
+        continue;
+      }
+      result.add(
+        ActiveChargingSnapshot(
+          sessionId: key.substring(prefix.length),
+          vehicleId: values[0],
+          targetSoc: target,
+          effectiveStopAt: stopAt,
+          lastEstimatedSoc: soc,
+          lastSessionEnergyWh: energy,
+          lastKnownRelay: relay,
+        ),
+      );
     }
     return result;
   }

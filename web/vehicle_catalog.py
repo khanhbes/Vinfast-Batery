@@ -36,11 +36,15 @@ try:
 except Exception:  # pragma: no cover
     PdfReader = None
 
-try:
-    from PIL import Image, ImageOps
-except Exception:  # pragma: no cover
-    Image = None
-    ImageOps = None
+from vehicle_media import (
+    MediaStore,
+    add_showroom_angle,
+    media_store_from_env,
+    refresh_primary,
+    sanitize_showroom,
+    store_vehicle_image,
+    update_showroom,
+)
 
 try:
     from firebase_admin import messaging as _firebase_messaging
@@ -221,12 +225,19 @@ def normalize_catalog_document(payload: dict[str, Any], *, existing: dict[str, A
                     for key in (
                         "thumbnailUrl", "mediumUrl", "heroUrl", "sourceUrl",
                         "credit", "licenseNote", "checksum", "approvedAt", "kind",
+                        "backgroundRemoved", "width", "height",
                     )
                     if incoming_view.get(key) is not None
                 }
         if views:
             media["views"] = views
-        base["media"] = media
+        if "showroom" in source["media"]:
+            showroom = sanitize_showroom(source["media"].get("showroom"))
+            if showroom:
+                media["showroom"] = showroom
+            else:
+                media.pop("showroom", None)
+        base["media"] = refresh_primary(media)
     if "sources" in source and isinstance(source["sources"], list):
         base["sources"] = [
             {
@@ -764,45 +775,25 @@ def _upload_vehicle_media(
     credit: str,
     license_note: str,
     media_kind: str,
+    *,
+    store: MediaStore | None = None,
+    remove_background: bool = True,
+    crop: bool = True,
+    subpath: str = "",
 ) -> dict[str, Any]:
-    if Image is None:
-        raise ValueError("Image processing is unavailable")
     content = file_storage.read(10 * 1024 * 1024 + 1)
-    if len(content) > 10 * 1024 * 1024:
-        raise ValueError("Image exceeds 10 MB")
-    image = Image.open(BytesIO(content))
-    image = ImageOps.exif_transpose(image).convert("RGB")
-    try:
-        from firebase_admin import storage
-    except Exception as exc:  # pragma: no cover
-        raise ValueError("Firebase Storage is unavailable") from exc
-    bucket = storage.bucket()
-    checksum = hashlib.sha256(content).hexdigest()
-    urls: dict[str, str] = {}
-    for width, label in ((320, "thumbnail"), (768, "medium"), (1280, "hero")):
-        resized = image.copy()
-        if resized.width > width:
-            height = max(1, round(resized.height * width / resized.width))
-            resized = resized.resize((width, height), Image.Resampling.LANCZOS)
-        output = BytesIO()
-        resized.save(output, "WEBP", quality=84, method=6)
-        path = f"vehicle-catalog/{catalog_id}/{media_kind}/{checksum[:12]}/{label}.webp"
-        blob = bucket.blob(path)
-        token = str(uuid.uuid4())
-        blob.metadata = {"firebaseStorageDownloadTokens": token}
-        blob.upload_from_string(output.getvalue(), content_type="image/webp")
-        urls[label] = f"https://firebasestorage.googleapis.com/v0/b/{bucket.name}/o/{path.replace('/', '%2F')}?alt=media&token={token}"
-    return {
-        "thumbnailUrl": urls["thumbnail"],
-        "mediumUrl": urls["medium"],
-        "heroUrl": urls["hero"],
-        "sourceUrl": source_url,
-        "credit": credit,
-        "licenseNote": license_note,
-        "checksum": checksum,
-        "kind": media_kind,
-        "approvedAt": utcnow(),
-    }
+    return store_vehicle_image(
+        store or media_store_from_env(),
+        catalog_id,
+        content,
+        media_kind=media_kind,
+        source_url=source_url,
+        credit=credit,
+        license_note=license_note,
+        remove_background=remove_background,
+        crop=crop,
+        subpath=subpath,
+    )
 
 
 def merge_catalog_media(existing: dict[str, Any], asset: dict[str, Any], media_kind: str) -> dict[str, Any]:
@@ -811,13 +802,9 @@ def merge_catalog_media(existing: dict[str, Any], asset: dict[str, Any], media_k
     views = _nested_map(media.get("views"))
     views[media_kind] = asset
     media["views"] = views
-    # 2D is the default app/catalog image. If only a render is approved, it is
-    # used until a 2D photograph is available.
-    primary = views.get("twoD") or views.get("threeD") or asset
-    for key in ("thumbnailUrl", "mediumUrl", "heroUrl", "sourceUrl", "credit", "licenseNote", "checksum", "approvedAt"):
-        if key in primary:
-            media[key] = primary[key]
-    return media
+    # Primary image: showroom default colour, else the 2D photo, else the 3D
+    # render (see vehicle_media.refresh_primary).
+    return refresh_primary(media)
 
 
 def commit_catalog_publish(
@@ -932,8 +919,17 @@ def create_catalog_blueprint(
     require_auth: Callable,
     get_db: Callable[[], Any],
     audit: Callable[..., None],
+    media_store: MediaStore | None = None,
 ) -> Blueprint:
     bp = Blueprint("vehicle_catalog", __name__)
+    store_holder: dict[str, MediaStore] = {}
+
+    def media_store_for_request() -> MediaStore:
+        if media_store is not None:
+            return media_store
+        if "store" not in store_holder:
+            store_holder["store"] = media_store_from_env()
+        return store_holder["store"]
 
     def database():
         db = get_db()
@@ -1095,19 +1091,69 @@ def create_catalog_blueprint(
         if "file" not in request.files:
             return jsonify({"success": False, "error": "Image file is required"}), 400
         media_kind = _clean_text(request.form.get("kind"), 20)
-        if media_kind not in {"twoD", "threeD"}:
-            return jsonify({"success": False, "error": "Media kind must be twoD or threeD"}), 422
+        if media_kind not in {"twoD", "threeD", "angle"}:
+            return jsonify({"success": False, "error": "Media kind must be twoD, threeD or angle"}), 422
+        remove_background = request.form.get("removeBackground", "true").lower() not in {"false", "0", "no"}
+        color_id = _clean_text(request.form.get("colorId"), 40).lower()
+        if media_kind == "angle" and not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,39}", color_id):
+            return jsonify({"success": False, "error": "colorId is required (lowercase letters, digits, dashes)"}), 422
+        angle_index = _integer(request.form.get("angleIndex"))
         ref = database().collection(DRAFT_COLLECTION).document(catalog_id)
         draft_snapshot = ref.get()
         if not draft_snapshot.exists:
             return jsonify({"success": False, "error": "Draft not found; create a draft before uploading media"}), 404
         try:
-            asset = _upload_vehicle_media(database(), catalog_id, request.files["file"], _clean_text(request.form.get("sourceUrl"), 1200), _clean_text(request.form.get("credit"), 160), _clean_text(request.form.get("licenseNote"), 500), media_kind)
+            asset = _upload_vehicle_media(
+                database(),
+                catalog_id,
+                request.files["file"],
+                _clean_text(request.form.get("sourceUrl"), 1200),
+                _clean_text(request.form.get("credit"), 160),
+                _clean_text(request.form.get("licenseNote"), 500),
+                media_kind,
+                store=media_store_for_request(),
+                remove_background=remove_background,
+                # Angle frames keep one shared framing so the spin is steady.
+                crop=media_kind != "angle",
+                subpath=color_id if media_kind == "angle" else "",
+            )
+            existing = _nested_map((draft_snapshot.to_dict() or {}).get("media"))
+            if media_kind == "angle":
+                media = add_showroom_angle(
+                    existing,
+                    color_id=color_id,
+                    color_name=_clean_text(request.form.get("colorName"), 60),
+                    swatch_hex=_clean_text(request.form.get("swatchHex"), 7),
+                    angle_index=angle_index,
+                    asset=asset,
+                )
+            else:
+                media = merge_catalog_media(existing, asset, media_kind)
         except (ValueError, OSError) as exc:
             return jsonify({"success": False, "error": str(exc)}), 422
-        media = merge_catalog_media(_nested_map((draft_snapshot.to_dict() or {}).get("media")), asset, media_kind)
         ref.update({"media": media, "updatedAt": utcnow(), "updatedBy": request._uid})
-        audit("catalog_media_upload", DRAFT_COLLECTION, catalog_id, request._uid, request._email, {"checksum": asset["checksum"], "kind": media_kind})
+        audit("catalog_media_upload", DRAFT_COLLECTION, catalog_id, request._uid, request._email, {
+            "checksum": asset["checksum"], "kind": media_kind, "colorId": color_id or None,
+            "backgroundRemoved": asset.get("backgroundRemoved", False),
+        })
+        return jsonify({"success": True, "data": media})
+
+    @bp.put("/api/admin/vehicle-catalog/<catalog_id>/showroom")
+    @require_admin
+    def admin_catalog_showroom(catalog_id: str):
+        payload = request.get_json(silent=True) or {}
+        ref = database().collection(DRAFT_COLLECTION).document(catalog_id)
+        snapshot = ref.get()
+        if not snapshot.exists:
+            return jsonify({"success": False, "error": "Draft not found"}), 404
+        try:
+            media = update_showroom(_nested_map((snapshot.to_dict() or {}).get("media")), payload)
+        except ValueError as exc:
+            return jsonify({"success": False, "error": str(exc)}), 422
+        ref.update({"media": media, "updatedAt": utcnow(), "updatedBy": request._uid})
+        audit("catalog_showroom_update", DRAFT_COLLECTION, catalog_id, request._uid, request._email, {
+            "colors": len((media.get("showroom") or {}).get("colors") or []),
+        })
         return jsonify({"success": True, "data": media})
 
     @bp.get("/api/admin/vehicle-manufacturers")

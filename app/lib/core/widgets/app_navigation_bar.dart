@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import '../services/guide_registry.dart';
-import '../theme/cockpit_design_system.dart';
-import '../theme/app_ui_colors.dart';
+import '../theme/luxe_theme.dart';
 
-/// Equal-width, uniform destinations with smooth animations and emerald glow indicator.
+/// LUXE tab bar: a dark rail with a hairline top edge and one platinum glass
+/// "jewel" that glides to the selected destination, topped by a short emerald
+/// light line. Equal-width destinations; motion is instant in reduced motion.
 class AppNavigationBar extends StatelessWidget {
   const AppNavigationBar({
     super.key,
@@ -21,129 +22,80 @@ class AppNavigationBar extends StatelessWidget {
     (Icons.tune_rounded, 'Cài đặt'),
   ];
 
+  /// Rail colour, shared with the system navigation bar.
+  static const railColor = Color(0xFF08090A);
+
+  static Key? _guideKey(int i) => switch (i) {
+    1 => GuideRegistry.keyChargeTab,
+    2 => GuideRegistry.keyHistoryTab,
+    3 => GuideRegistry.keyMoreSettingsTab,
+    _ => null,
+  };
+
   @override
   Widget build(BuildContext context) {
-    final ui = AppUiColors.of(context);
-    // Keep the navigation label readable at large system text sizes. A fixed
-    // 58dp viewport clips labels at 200% and causes a RenderFlex overflow.
+    // Keep the label readable at large system text sizes. A fixed 58dp
+    // viewport clips labels at 200% and causes a RenderFlex overflow.
     final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
     final barHeight = (58 * textScale).clamp(58.0, 104.0);
-    final duration = MediaQuery.disableAnimationsOf(context)
-        ? Duration.zero
-        : const Duration(milliseconds: 240);
+    final reduce = MediaQuery.disableAnimationsOf(context);
+    final glide = reduce ? Duration.zero : const Duration(milliseconds: 420);
+    final fade = reduce ? Duration.zero : const Duration(milliseconds: 240);
+    final n = destinations.length;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: (Theme.of(context).bottomNavigationBarTheme.backgroundColor ??
-                ui.surface)
-            .withValues(alpha: 0.96),
-        border: Border(
-          top: BorderSide(color: ui.border, width: 1),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: ui.dark ? 0.4 : 0.08),
-            blurRadius: 16,
-            offset: const Offset(0, -4),
-          ),
-        ],
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        color: railColor,
+        border: Border(top: BorderSide(color: LuxeColors.hairline)),
       ),
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
           child: SizedBox(
             height: barHeight,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            child: Stack(
               children: [
-                for (var i = 0; i < destinations.length; i++) ...[
-                  if (i > 0) const SizedBox(width: 6),
-                  Expanded(
-                    child: Semantics(
-                      selected: selectedIndex == i,
-                      button: true,
-                      label: destinations[i].$2,
-                      hint: 'Chuyển sang màn hình ${destinations[i].$2}',
-                      onTap: () => onSelected(i),
-                      child: KeyedSubtree(
-                        key: ValueKey('navigation-destination-$i'),
-                        child: InkWell(
-                        key: i == 1
-                            ? GuideRegistry.keyChargeTab
-                            : (i == 2
-                                  ? GuideRegistry.keyHistoryTab
-                                  : (i == 3
-                                        ? GuideRegistry.keyMoreSettingsTab
-                                        : null)),
-                        onTap: () => onSelected(i),
-                        borderRadius:
-                            BorderRadius.circular(CockpitRadius.medium),
-                        splashColor:
-                            CockpitColors.emerald.withValues(alpha: 0.15),
-                        highlightColor:
-                            CockpitColors.emerald.withValues(alpha: 0.08),
-                        child: AnimatedContainer(
-                          duration: duration,
-                          curve: Curves.easeOutCubic,
-                          padding: const EdgeInsets.symmetric(vertical: 6),
-                          decoration: BoxDecoration(
-                            color: selectedIndex == i
-                                ? CockpitColors.emerald.withValues(alpha: 0.12)
-                                : Colors.transparent,
-                            borderRadius:
-                                BorderRadius.circular(CockpitRadius.medium),
-                            border: Border.all(
-                              color: selectedIndex == i
-                                  ? CockpitColors.emerald.withValues(alpha: 0.3)
-                                  : Colors.transparent,
-                              width: 1,
-                            ),
-                          ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              AnimatedScale(
-                                duration: duration,
-                                curve: Curves.easeOutBack,
-                                scale: selectedIndex == i ? 1.12 : 1.0,
-                                child: Icon(
-                                  destinations[i].$1,
-                                  size: 22,
-                                  color: selectedIndex == i
-                                      ? CockpitColors.emeraldStrong
-                                      : ui.muted,
-                                ),
-                              ),
-                              const SizedBox(height: 3),
-                              ExcludeSemantics(
-                                child: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    destinations[i].$2,
-                                    maxLines: 1,
-                                    softWrap: false,
-                                    textAlign: TextAlign.center,
-                                    style: CockpitTypography.label(
-                                      fontSize: 11,
-                                      fontWeight: selectedIndex == i
-                                          ? FontWeight.w700
-                                          : FontWeight.w500,
-                                      color: selectedIndex == i
-                                          ? CockpitColors.emeraldStrong
-                                          : ui.muted,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        ),
-                      ),
+                // The gliding jewel sits beneath the destinations.
+                AnimatedAlign(
+                  duration: glide,
+                  curve: LuxeMotion.enter,
+                  alignment: Alignment(-1 + 2 * selectedIndex / (n - 1), 0),
+                  child: FractionallySizedBox(
+                    widthFactor: 1 / n,
+                    heightFactor: 1,
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 3),
+                      child: _Jewel(),
                     ),
                   ),
-                ],
+                ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (var i = 0; i < n; i++)
+                      Expanded(
+                        child: Semantics(
+                          selected: selectedIndex == i,
+                          button: true,
+                          label: destinations[i].$2,
+                          hint: 'Chuyển sang màn hình ${destinations[i].$2}',
+                          onTap: () => onSelected(i),
+                          child: KeyedSubtree(
+                            key: ValueKey('navigation-destination-$i'),
+                            child: _Destination(
+                              key: _guideKey(i),
+                              icon: destinations[i].$1,
+                              label: destinations[i].$2,
+                              selected: selectedIndex == i,
+                              duration: fade,
+                              onTap: () => onSelected(i),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -151,4 +103,100 @@ class AppNavigationBar extends StatelessWidget {
       ),
     );
   }
+}
+
+class _Jewel extends StatelessWidget {
+  const _Jewel();
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(18),
+      gradient: const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Color(0x1FFFFFFF), Color(0x08FFFFFF)],
+      ),
+      border: Border.all(color: LuxeColors.hairlineStrong),
+    ),
+    child: Align(
+      alignment: Alignment.topCenter,
+      child: Container(
+        width: 22,
+        height: 2,
+        decoration: BoxDecoration(
+          color: LuxeColors.emerald,
+          borderRadius: BorderRadius.circular(2),
+          boxShadow: const [
+            BoxShadow(color: LuxeColors.emeraldGlow, blurRadius: 10),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _Destination extends StatelessWidget {
+  const _Destination({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.duration,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final Duration duration;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(18),
+    splashColor: LuxeColors.emerald.withValues(alpha: 0.10),
+    highlightColor: Colors.white.withValues(alpha: 0.03),
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        TweenAnimationBuilder<Color?>(
+          duration: duration,
+          curve: LuxeMotion.enter,
+          tween: ColorTween(
+            end: selected ? LuxeColors.emerald : LuxeColors.platinumMid,
+          ),
+          builder: (context, color, _) => AnimatedScale(
+            duration: duration,
+            curve: LuxeMotion.enter,
+            scale: selected ? 1.08 : 1.0,
+            child: Icon(icon, size: 22, color: color),
+          ),
+        ),
+        const SizedBox(height: 4),
+        ExcludeSemantics(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: AnimatedDefaultTextStyle(
+              duration: duration,
+              curve: LuxeMotion.enter,
+              style: TextStyle(
+                fontSize: 11,
+                letterSpacing: 0.3,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                color: selected ? LuxeColors.text : LuxeColors.muted,
+              ),
+              child: Text(
+                label,
+                maxLines: 1,
+                softWrap: false,
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 }

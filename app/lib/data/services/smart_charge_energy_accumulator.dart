@@ -66,7 +66,9 @@ class SmartChargeEnergyAccumulator {
     ]);
     if (capacity == null) return const SmartChargeSocEstimate.unavailable();
     final efficiency = _validEfficiency(session.chargingEfficiency);
-    final gridEnergy = math.max(0, energyUsedWh ?? session.energyUsedWh).toDouble();
+    final gridEnergy = math
+        .max(0, energyUsedWh ?? session.energyUsedWh)
+        .toDouble();
     final stored = gridEnergy * efficiency;
     final soc = (session.startSoc + stored / capacity * 100)
         .clamp(session.startSoc, 100.0)
@@ -94,8 +96,8 @@ class SmartChargeEnergyAccumulator {
 
   static double _validEfficiency(double? value) =>
       value != null && value.isFinite && value >= .65 && value <= .98
-          ? value
-          : defaultChargingEfficiency;
+      ? value
+      : defaultChargingEfficiency;
 }
 
 class SmartChargeMeterUpdate {

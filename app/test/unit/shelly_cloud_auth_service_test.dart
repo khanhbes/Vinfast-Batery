@@ -47,39 +47,42 @@ void main() {
       expect(list.first.isOnline, isTrue);
     });
 
-    test('parses devices list from device/all_status fallback format', () async {
-      final client = MockClient((request) async {
-        if (request.url.path == '/interface/device/list') {
-          return http.Response('Not found', 404);
-        }
-        expect(request.url.path, '/device/all_status');
-        return http.Response(
-          jsonEncode({
-            'isok': true,
-            'data': {
-              'devices_status': {
-                'shellyplugs3-123456abcdef': {
-                  'name': 'Gara Xe',
-                  'type': 'relay',
-                  'online': true,
+    test(
+      'parses devices list from device/all_status fallback format',
+      () async {
+        final client = MockClient((request) async {
+          if (request.url.path == '/interface/device/list') {
+            return http.Response('Not found', 404);
+          }
+          expect(request.url.path, '/device/all_status');
+          return http.Response(
+            jsonEncode({
+              'isok': true,
+              'data': {
+                'devices_status': {
+                  'shellyplugs3-123456abcdef': {
+                    'name': 'Gara Xe',
+                    'type': 'relay',
+                    'online': true,
+                  },
                 },
               },
-            },
-          }),
-          200,
+            }),
+            200,
+          );
+        });
+
+        final service = ShellyCloudAuthService(client: client);
+        final list = await service.listDevices(
+          authKey: 'test-auth-key',
+          cloudHost: 'https://shelly-108-eu.shelly.cloud',
         );
-      });
 
-      final service = ShellyCloudAuthService(client: client);
-      final list = await service.listDevices(
-        authKey: 'test-auth-key',
-        cloudHost: 'https://shelly-108-eu.shelly.cloud',
-      );
-
-      expect(list.length, 1);
-      expect(list.first.id, 'shellyplugs3-123456abcdef');
-      expect(list.first.name, 'Gara Xe');
-      expect(list.first.isOnline, isTrue);
-    });
+        expect(list.length, 1);
+        expect(list.first.id, 'shellyplugs3-123456abcdef');
+        expect(list.first.name, 'Gara Xe');
+        expect(list.first.isOnline, isTrue);
+      },
+    );
   });
 }

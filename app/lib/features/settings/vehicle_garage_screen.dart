@@ -1,18 +1,26 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
+import '../../core/widgets/error_state.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/app_providers.dart';
 import '../../core/services/auth_service.dart';
-import '../../core/theme/app_colors.dart';
-import '../../core/theme/app_motion.dart';
+import '../../core/theme/luxe_theme.dart';
 import '../../core/widgets/app_popup.dart';
+import '../../core/widgets/empty_state.dart';
+import '../../core/widgets/loading_skeleton.dart';
+import '../../core/widgets/luxe_kit.dart';
+import '../../core/widgets/luxe_settings.dart';
 import '../../data/models/vinfast_model_spec.dart';
 import '../../data/repositories/vehicle_spec_repository.dart';
+import '../home/widgets/luxe_vehicle_hero.dart' show LuxeScooterArt;
 import 'vehicle_spec_detail_screen.dart';
+import '../home/widgets/vehicle_showroom.dart' show showroomImageProvider;
 
-/// Vehicle Garage Screen — PLAN #5
-/// - List user vehicles
+/// Vehicle Garage Screen — LUXE (Task 119)
+/// - List user vehicles (active / archived)
 /// - Add vehicle from VinFast spec catalog
 /// - View/edit vehicle specs
 class VehicleGarageScreen extends ConsumerStatefulWidget {
@@ -26,6 +34,7 @@ class VehicleGarageScreen extends ConsumerStatefulWidget {
 class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
   List<Map<String, dynamic>> _vehicles = [];
   bool _isLoading = true;
+  Object? _loadError;
   bool _showArchived = false;
 
   @override
@@ -35,7 +44,10 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
   }
 
   Future<void> _loadVehicles() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+    });
     try {
       final vehicles = await AuthService().getUserVehicles(
         includeArchived: true,
@@ -47,7 +59,14 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+      // A failed load is not "no vehicles": that invited adding a duplicate
+      // (Task 125).
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _loadError = e;
+        });
+      }
     }
   }
 
@@ -64,10 +83,8 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
   }
 
   void _showAddVehicleSheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+    showLuxeSheet<void>(
+      context,
       builder: (ctx) => _AddVehicleSheet(
         onVehicleAdded: (newVehicleId) {
           // Auto-select xe vừa thêm (Step 2's listener sẽ tự persist vào
@@ -83,40 +100,12 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
   }
 
   Future<void> _deleteVehicle(String vehicleId) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.card,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          'Lưu trữ xe',
-          style: TextStyle(color: AppColors.textPrimary),
-        ),
-        content: const Text(
+    final confirmed = await showLuxeConfirm(
+      context,
+      title: 'Lưu trữ xe',
+      message:
           'Xe sẽ được ẩn khỏi danh sách sử dụng. Lịch sử sạc và dữ liệu AI vẫn được giữ lại để khôi phục.',
-          style: TextStyle(color: AppColors.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text(
-              'Hủy',
-              style: TextStyle(color: AppColors.textSecondary),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.error,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            child: const Text('Lưu trữ'),
-          ),
-        ],
-      ),
+      confirmLabel: 'Lưu trữ',
     );
 
     if (confirmed == true) {
@@ -131,180 +120,156 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
     }
   }
 
+  bool _isArchived(Map<String, dynamic> v) =>
+      v['isArchived'] == true || v['archivedAt'] != null;
+
+  List<Map<String, dynamic>> get _visibleVehicles => _vehicles
+      .where((vehicle) => _isArchived(vehicle) == _showArchived)
+      .toList();
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      floatingActionButton: _showArchived
+    final activeCount = _vehicles.where((v) => !_isArchived(v)).length;
+    final archivedCount = _vehicles.length - activeCount;
+    return LuxeScaffold(
+      floatingActionButton: _showArchived || _isLoading
           ? null
           : FloatingActionButton.extended(
               onPressed: _showAddVehicleSheet,
-              backgroundColor: AppColors.primary,
-              foregroundColor: AppColors.background,
               icon: const Icon(Icons.add_rounded),
               label: const Text(
                 'Thêm xe mới',
-                style: TextStyle(fontWeight: FontWeight.w700),
+                style: TextStyle(fontWeight: FontWeight.w600),
               ),
-              elevation: 4,
             ),
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back_ios_new_rounded,
-            color: AppColors.textPrimary,
-            size: 20,
-          ),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          'Garage Xe',
-          style: TextStyle(
-            color: AppColors.textPrimary,
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
+      appBar: LuxeAppBar(
         actions: [
-          IconButton(
-            tooltip: _showArchived ? 'Xem xe đang dùng' : 'Xem xe đã lưu trữ',
-            icon: Icon(
-              _showArchived ? Icons.directions_car : Icons.archive_outlined,
-            ),
-            onPressed: () => setState(() => _showArchived = !_showArchived),
-          ),
-          IconButton(
+          LuxeCircleButton(
             tooltip: 'Thêm xe mới',
-            icon: const Icon(
-              Icons.add_circle_outline_rounded,
-              color: AppColors.primary,
-              size: 24,
-            ),
+            icon: Icons.add_rounded,
+            color: LuxeColors.emerald,
             onPressed: _showArchived ? null : _showAddVehicleSheet,
           ),
-          const SizedBox(width: 8),
         ],
       ),
-      body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: AppColors.primary),
+      body: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+              child: LuxeReveal(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('GARA', style: LuxeText.eyebrow),
+                    const SizedBox(height: 6),
+                    const Text('Xe của tôi', style: LuxeText.title),
+                    const SizedBox(height: 4),
+                    Text(
+                      _isLoading
+                          ? 'Đang tải danh sách xe…'
+                          : '$activeCount xe đang dùng · $archivedCount đã lưu trữ',
+                      style: LuxeText.caption,
+                    ),
+                    const SizedBox(height: 16),
+                    LuxeSegmented<bool>(
+                      segments: const [
+                        (false, 'Đang dùng'),
+                        (true, 'Đã lưu trữ'),
+                      ],
+                      selected: _showArchived,
+                      onChanged: (v) => setState(() => _showArchived = v),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (_isLoading)
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20),
+                child: LoadingSkeleton(layout: SkeletonLayout.list),
+              ),
             )
-          : _visibleVehicles.isEmpty
-          ? _buildEmptyState()
-          : _buildVehicleList(),
+          else if (_loadError != null)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: ErrorState.fromError(
+                error: _loadError!,
+                prefix: 'Chưa tải được danh sách xe',
+                onRetry: _loadVehicles,
+              ),
+            )
+          else if (_visibleVehicles.isEmpty)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: _showArchived
+                  ? const EmptyState(
+                      icon: Icons.archive_outlined,
+                      title: 'Chưa có xe lưu trữ',
+                      message:
+                          'Xe bạn lưu trữ sẽ nằm ở đây và có thể khôi phục.',
+                    )
+                  : EmptyState(
+                      icon: Icons.electric_moped_rounded,
+                      title: 'Chưa có xe nào',
+                      message: 'Thêm xe để bắt đầu theo dõi pin',
+                      actionLabel: 'Thêm xe mới',
+                      onAction: _showAddVehicleSheet,
+                    ),
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 110),
+              sliver: SliverList.separated(
+                itemCount: _visibleVehicles.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 14),
+                itemBuilder: (ctx, i) => LuxeReveal(
+                  key: ValueKey('garage-${_showArchived ? 'a' : 'u'}-$i'),
+                  index: i,
+                  child: _buildVehicleCard(_visibleVehicles[i]),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
-  List<Map<String, dynamic>> get _visibleVehicles => _vehicles.where((vehicle) {
-    final archived =
-        vehicle['isArchived'] == true || vehicle['archivedAt'] != null;
-    return _showArchived ? archived : !archived;
-  }).toList();
+  Widget _buildVehicleCard(Map<String, dynamic> v) {
+    final archived = _isArchived(v);
+    final id = (v['id'] ?? v['vehicleId'] ?? '').toString();
+    final isSelected = ref.watch(selectedVehicleIdProvider) == id;
+    double? num2(Object? x) => x is num ? x.toDouble() : null;
 
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceVariant,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.directions_car_outlined,
-              color: AppColors.textTertiary,
-              size: 48,
-            ),
+    return _VehicleCard(
+      heroTag: 'vehicle-hero-$id',
+      model: (v['model'] ?? v['vehicleName'] ?? 'Xe không tên').toString(),
+      year: v['year'] is num ? (v['year'] as num).toInt() : null,
+      battery: num2(v['batteryCapacity']),
+      soh: num2(v['stateOfHealth']),
+      odo: num2(v['currentOdo']),
+      level: num2(v['currentBattery']),
+      licensePlate: v['licensePlate'] as String?,
+      batteryType: (v['batteryType'] ?? v['batteryChemistry']) as String?,
+      isSelected: isSelected,
+      isArchived: archived,
+      onTap: archived
+          ? () {}
+          : () {
+              HapticFeedback.selectionClick();
+              ref.read(selectedVehicleIdProvider.notifier).state = id;
+            },
+      onDelete: archived ? () => _restoreVehicle(id) : () => _deleteVehicle(id),
+      onViewSpec: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) =>
+                VehicleSpecDetailScreen(vehicleId: id, vehicleData: v),
           ),
-          const SizedBox(height: 20),
-          const Text(
-            'Chưa có xe nào',
-            style: TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Thêm xe để bắt đầu theo dõi pin',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: _showAddVehicleSheet,
-            icon: const Icon(Icons.add_rounded),
-            label: const Text('Thêm xe mới'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: AppColors.background,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-            ),
-          ),
-        ],
-      ),
-    ).animate().fadeIn();
-  }
-
-  Widget _buildVehicleList() {
-    return ListView.separated(
-      padding: const EdgeInsets.all(20),
-      itemCount: _visibleVehicles.length,
-      separatorBuilder: (_, index) => const SizedBox(height: 12),
-      itemBuilder: (ctx, i) {
-        final v = _visibleVehicles[i];
-        final archived = v['isArchived'] == true || v['archivedAt'] != null;
-        final isSelected =
-            ref.watch(selectedVehicleIdProvider) == (v['id'] ?? v['vehicleId']);
-
-        return _VehicleCard(
-              model: v['model'] ?? v['vehicleName'] ?? 'Xe không tên',
-              year: v['year'] is num ? (v['year'] as num).toInt() : null,
-              battery: v['batteryCapacity'] is num
-                  ? (v['batteryCapacity'] as num).toDouble()
-                  : null,
-              soh: v['stateOfHealth'] is num
-                  ? (v['stateOfHealth'] as num).toDouble()
-                  : null,
-              odo: v['currentOdo'] is num
-                  ? (v['currentOdo'] as num).toDouble()
-                  : null,
-              licensePlate: v['licensePlate'] as String?,
-              batteryType:
-                  (v['batteryType'] ?? v['batteryChemistry']) as String?,
-              isSelected: isSelected,
-              onTap: archived
-                  ? () {}
-                  : () {
-                      final id = v['id'] ?? v['vehicleId'] ?? '';
-                      ref.read(selectedVehicleIdProvider.notifier).state = id;
-                    },
-              onDelete: archived
-                  ? () => _restoreVehicle(v['id'] ?? v['vehicleId'] ?? '')
-                  : () => _deleteVehicle(v['id'] ?? v['vehicleId'] ?? ''),
-              isArchived: archived,
-              onViewSpec: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => VehicleSpecDetailScreen(
-                      vehicleId: v['id'] ?? v['vehicleId'] ?? '',
-                      vehicleData: v,
-                    ),
-                  ),
-                );
-              },
-            )
-            .animate()
-            .fadeIn(delay: Duration(milliseconds: i * 80))
-            .slideX(begin: 0.05);
+        );
       },
     );
   }
@@ -315,11 +280,13 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
 // ============================================================================
 
 class _VehicleCard extends StatelessWidget {
+  final String heroTag;
   final String model;
   final int? year;
   final double? battery;
   final double? soh;
   final double? odo;
+  final double? level;
   final String? licensePlate;
   final String? batteryType;
   final bool isSelected;
@@ -329,11 +296,13 @@ class _VehicleCard extends StatelessWidget {
   final VoidCallback onViewSpec;
 
   const _VehicleCard({
+    required this.heroTag,
     required this.model,
     required this.year,
     required this.battery,
     required this.soh,
     required this.odo,
+    required this.level,
     this.licensePlate,
     this.batteryType,
     required this.isSelected,
@@ -345,223 +314,156 @@ class _VehicleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected
-                ? AppColors.primary.withAlpha(102)
-                : AppColors.glassBorder,
-            width: isSelected ? 1.5 : 1,
-          ),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: AppColors.primary.withAlpha(15),
-                    blurRadius: 16,
-                    spreadRadius: 2,
-                  ),
-                ]
-              : null,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? AppColors.primaryContainer
-                        : AppColors.surfaceVariant,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Icon(
-                    Icons.electric_moped_rounded,
-                    color: isSelected
-                        ? AppColors.primary
-                        : AppColors.textSecondary,
-                    size: 24,
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        model,
-                        style: const TextStyle(
-                          color: AppColors.textPrimary,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      if (licensePlate != null &&
-                          licensePlate!.trim().isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          'Biển số: $licensePlate · ${batteryType ?? 'LFP'}',
-                          style: const TextStyle(
-                            color: AppColors.primary,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
+    final plate = licensePlate?.trim() ?? '';
+    final meta = [
+      if (plate.isNotEmpty) plate,
+      year == null ? 'Năm —' : 'Năm $year',
+      battery == null || battery! <= 0 ? 'Pin —' : '${battery!.toInt()} Wh',
+      ?batteryType,
+    ].join(' · ');
+    final sohColor = soh == null
+        ? LuxeColors.platinumMid
+        : soh! < 80
+        ? LuxeColors.danger
+        : soh! < 90
+        ? LuxeColors.champagne
+        : LuxeColors.emerald;
+
+    return Semantics(
+      button: !isArchived,
+      selected: isSelected,
+      label: '$model${isSelected ? ', đang dùng' : ''}',
+      child: Hero(
+        tag: heroTag,
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(26),
+            child: Opacity(
+              opacity: isArchived ? 0.72 : 1,
+              child: LuxeGlass(
+                selected: isSelected,
+                radius: 26,
+                padding: const EdgeInsets.fromLTRB(18, 16, 14, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                model,
+                                style: LuxeText.item.copyWith(fontSize: 17),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(meta, style: LuxeText.caption),
+                            ],
                           ),
                         ),
+                        const SizedBox(width: 8),
+                        if (isArchived)
+                          const LuxeTag(
+                            'Đã lưu trữ',
+                            color: LuxeColors.champagne,
+                          )
+                        else
+                          AnimatedSwitcher(
+                            duration: luxeDuration(context, 260),
+                            child: isSelected
+                                ? const LuxeTag(
+                                    'Đang dùng',
+                                    color: LuxeColors.emerald,
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
                       ],
-                      const SizedBox(height: 2),
-                      Text(
-                        '${year == null ? 'Năm —' : 'Năm $year'} • '
-                        '${battery == null || battery! <= 0 ? 'Pin —' : '${battery!.toInt()} Wh'}'
-                        '${(licensePlate == null || licensePlate!.trim().isEmpty) && batteryType != null ? ' • $batteryType' : ''}',
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 12,
+                    ),
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      height: 96,
+                      child: LuxeScooterArt(
+                        level: (level ?? 0).clamp(0.0, 100.0) / 100,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        LuxeRing(
+                          value: (soh ?? 0) / 100,
+                          size: 46,
+                          stroke: 4,
+                          color: sohColor,
+                          semanticLabel: soh == null
+                              ? 'Chưa có SoH'
+                              : 'SoH ${soh!.toInt()} phần trăm',
+                          child: ExcludeSemantics(
+                            child: Text(
+                              soh == null ? '—' : '${soh!.toInt()}',
+                              style: const TextStyle(
+                                color: LuxeColors.text,
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'SoH · ODO',
+                                style: LuxeText.label.copyWith(fontSize: 11),
+                              ),
+                              Text(
+                                odo == null ? '— km' : '${odo!.toInt()} km',
+                                style: const TextStyle(
+                                  color: LuxeColors.text,
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.w600,
+                                  fontFeatures: [FontFeature.tabularFigures()],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        LuxeCircleButton(
+                          icon: Icons.info_outline_rounded,
+                          tooltip: 'Thông số chi tiết',
+                          onPressed: onViewSpec,
+                        ),
+                        const SizedBox(width: 6),
+                        LuxeCircleButton(
+                          icon: isArchived
+                              ? Icons.unarchive_outlined
+                              : Icons.archive_outlined,
+                          tooltip: isArchived ? 'Khôi phục xe' : 'Lưu trữ xe',
+                          color: isArchived
+                              ? LuxeColors.emerald
+                              : LuxeColors.danger,
+                          onPressed: onDelete,
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                if (isArchived)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.warning.withAlpha(30),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Text(
-                      'ĐÃ LƯU TRỮ',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  )
-                else if (isSelected)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.success.withAlpha(26),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      'ĐANG DÙNG',
-                      style: TextStyle(
-                        color: AppColors.success,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-              ],
+              ),
             ),
-            const SizedBox(height: 16),
-            // Stats row
-            Row(
-              children: [
-                _buildMiniStat(
-                  'SoH',
-                  soh == null ? '—' : '${soh!.toInt()}%',
-                  soh == null ? AppColors.textSecondary : AppColors.success,
-                ),
-                const SizedBox(width: 16),
-                _buildMiniStat(
-                  'ODO',
-                  odo == null ? '—' : '${odo!.toInt()} km',
-                  AppColors.primary,
-                ),
-                const Spacer(),
-                // Action buttons
-                GestureDetector(
-                  onTap: onViewSpec,
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceVariant,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.info_outline_rounded,
-                      color: AppColors.textSecondary,
-                      size: 18,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: onDelete,
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.errorBg,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      isArchived
-                          ? Icons.unarchive_outlined
-                          : Icons.archive_outlined,
-                      color: isArchived ? AppColors.primary : AppColors.error,
-                      size: 18,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
       ),
-    );
-  }
-
-  Widget _buildMiniStat(String label, String value, Color color) {
-    return Row(
-      children: [
-        Container(
-          width: 6,
-          height: 6,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 6),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                color: AppColors.textTertiary,
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            Text(
-              value,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-        ),
-      ],
     );
   }
 }
 
 // ============================================================================
-// Add Vehicle Sheet — PLAN #5
-// Select from VinFast spec catalog
+// Add Vehicle Sheet — select from the verified VinFast spec catalog
 // ============================================================================
 
 class _AddVehicleSheet extends StatefulWidget {
@@ -686,278 +588,220 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
     await showDialog(
       context: context,
       barrierDismissible: false,
-      barrierColor: Colors.black.withAlpha(180),
+      barrierColor: Colors.black.withAlpha(190),
       builder: (_) => _SuccessOverlay(modelName: modelName),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final h = MediaQuery.of(context).size.height * 0.92;
+    final h = MediaQuery.sizeOf(context).height * 0.9;
     final brands = _allSpecs.map((spec) => spec.brandName).toSet().toList()
       ..sort();
     final markets = _allSpecs.map((spec) => spec.market).toSet().toList()
       ..sort();
-    final years = _allSpecs
-        .map((spec) => spec.releaseYear)
-        .whereType<int>()
-        .toSet()
-        .toList()
-      ..sort((a, b) => b.compareTo(a));
+    final years =
+        _allSpecs
+            .map((spec) => spec.releaseYear)
+            .whereType<int>()
+            .toSet()
+            .toList()
+          ..sort((a, b) => b.compareTo(a));
 
-    return Container(
+    return SizedBox(
       height: h,
-      decoration: const BoxDecoration(
-        color: AppColors.background,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
       child: SafeArea(
         top: false,
-        child: Column(
-        children: [
-          // Handle
-          Container(
-            margin: const EdgeInsets.only(top: 12),
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: AppColors.textTertiary,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          // Header
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-            child: Row(
-              children: [
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Thêm xe mới',
-                        style: TextStyle(
-                          color: AppColors.textPrimary,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'Chọn cấu hình đã được quản trị viên xác minh',
-                        style: TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
+        child: CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
+                child: LuxeSheetHeader(
+                  eyebrow: 'Catalog đã xác minh',
+                  title: 'Thêm xe mới',
+                  caption: 'Chọn cấu hình đã được quản trị viên xác minh',
+                  trailing: LuxeCircleButton(
+                    icon: Icons.close_rounded,
+                    tooltip: 'Đóng',
+                    onPressed: () => Navigator.pop(context),
                   ),
                 ),
-                GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceVariant,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.close,
-                      color: AppColors.textSecondary,
-                      size: 20,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Search
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            child: TextField(
-              controller: _searchCtrl,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 14,
-              ),
-              decoration: InputDecoration(
-                hintText: 'Tìm kiếm model...',
-                hintStyle: const TextStyle(color: AppColors.textHint),
-                prefixIcon: const Icon(
-                  Icons.search_rounded,
-                  color: AppColors.textSecondary,
-                  size: 20,
-                ),
-                filled: true,
-                fillColor: AppColors.surfaceLight,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: const EdgeInsets.symmetric(vertical: 14),
               ),
             ),
-          ),
-          // Catalog type filters
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-            child: SizedBox(
-              height: 40,
-              child: Row(
-                children: [
-                  Text(
-                    'Loại xe:',
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 13,
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 6,
+                ),
+                child: TextField(
+                  controller: _searchCtrl,
+                  style: const TextStyle(color: LuxeColors.text, fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText: 'Tìm kiếm model...',
+                    prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(99),
+                      borderSide: const BorderSide(color: LuxeColors.hairline),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(99),
+                      borderSide: const BorderSide(
+                        color: LuxeColors.emerald,
+                        width: 1.4,
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: _vehicleTypes.length,
-                      separatorBuilder: (_, index) => const SizedBox(width: 8),
-                      itemBuilder: (ctx, i) {
-                        final value = _vehicleTypes[i].$1;
-                        final selected = value == _selectedVehicleType;
-                        return GestureDetector(
-                          onTap: () {
-                            setState(() => _selectedVehicleType = value);
-                            _filterSpecs();
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: selected
-                                  ? AppColors.primary
-                                  : AppColors.surfaceVariant,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              _vehicleTypes[i].$2,
-                              style: TextStyle(
-                                color: selected
-                                    ? AppColors.background
-                                    : AppColors.textSecondary,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        );
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: SizedBox(
+                height: 52,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 4,
+                  ),
+                  itemCount: _vehicleTypes.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 8),
+                  itemBuilder: (ctx, i) {
+                    final value = _vehicleTypes[i].$1;
+                    return ChoiceChip(
+                      label: Text(_vehicleTypes[i].$2),
+                      selected: value == _selectedVehicleType,
+                      showCheckmark: false,
+                      onSelected: (_) {
+                        HapticFeedback.selectionClick();
+                        setState(() => _selectedVehicleType = value);
+                        _filterSpecs();
                       },
-                    ),
-                  ),
-                ],
+                    );
+                  },
+                ),
               ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 6),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _catalogDropdown(
-                    label: 'Hãng',
-                    value: _selectedBrand,
-                    items: brands,
-                    onChanged: (value) {
-                      setState(() => _selectedBrand = value);
-                      _filterSpecs();
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _catalogDropdown(
-                    label: 'Thị trường',
-                    value: _selectedMarket,
-                    items: markets,
-                    onChanged: (value) {
-                      setState(() => _selectedMarket = value);
-                      _filterSpecs();
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _catalogDropdown(
-                    label: 'Năm',
-                    value: _selectedYear,
-                    items: years.map((year) => year.toString()).toList(),
-                    onChanged: (value) {
-                      setState(() => _selectedYear = value);
-                      _filterSpecs();
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Personal values only; catalog technical values are read-only.
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-            child: Column(
-              children: [
-                TextField(
-                  controller: _nicknameCtrl,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 13,
-                  ),
-                  decoration: _personalFieldDecoration(
-                    hint: 'Tên gọi riêng (không bắt buộc)',
-                    icon: Icons.drive_file_rename_outline_rounded,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _licensePlateCtrl,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 13,
-                  ),
-                  decoration: _personalFieldDecoration(
-                    hint: 'Biển số (không bắt buộc)',
-                    icon: Icons.pin_outlined,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          // List
-          Expanded(
-            child: _isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(color: AppColors.primary),
-                  )
-                : _filteredSpecs.isEmpty
-                ? Center(
-                    child: Text(
-                      'Không tìm thấy model nào',
-                      style: TextStyle(color: AppColors.textSecondary),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 6, 20, 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _catalogDropdown(
+                        label: 'Hãng',
+                        value: _selectedBrand,
+                        items: brands,
+                        onChanged: (value) {
+                          setState(() => _selectedBrand = value);
+                          _filterSpecs();
+                        },
+                      ),
                     ),
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
-                    itemCount: _filteredSpecs.length,
-                    separatorBuilder: (_, index) => const SizedBox(height: 10),
-                    itemBuilder: (ctx, i) {
-                      final spec = _filteredSpecs[i];
-                      return _SpecCard(
-                        spec: spec,
-                        isAdding: _isAdding,
-                        onAdd: () => _addVehicle(spec),
-                        onPreview: () => _showSpecPreview(spec),
-                      ).appFadeSlideIn(index: i);
-                    },
-                  ),
-          ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _catalogDropdown(
+                        label: 'Thị trường',
+                        value: _selectedMarket,
+                        items: markets,
+                        onChanged: (value) {
+                          setState(() => _selectedMarket = value);
+                          _filterSpecs();
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _catalogDropdown(
+                        label: 'Năm',
+                        value: _selectedYear,
+                        items: years.map((year) => year.toString()).toList(),
+                        onChanged: (value) {
+                          setState(() => _selectedYear = value);
+                          _filterSpecs();
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // Personal values only; catalog technical values are read-only.
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 6, 20, 4),
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: _nicknameCtrl,
+                      style: const TextStyle(
+                        color: LuxeColors.text,
+                        fontSize: 14,
+                      ),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        hintText: 'Tên gọi riêng (không bắt buộc)',
+                        prefixIcon: Icon(
+                          Icons.drive_file_rename_outline_rounded,
+                          size: 18,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _licensePlateCtrl,
+                      style: const TextStyle(
+                        color: LuxeColors.text,
+                        fontSize: 14,
+                      ),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        hintText: 'Biển số (không bắt buộc)',
+                        prefixIcon: Icon(Icons.pin_outlined, size: 18),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (_isLoading)
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(20, 12, 20, 0),
+                  child: LoadingSkeleton(layout: SkeletonLayout.list),
+                ),
+              )
+            else if (_filteredSpecs.isEmpty)
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: EmptyState(
+                  icon: Icons.search_off_rounded,
+                  title: 'Không tìm thấy model nào',
+                  message: 'Thử bỏ bớt bộ lọc hoặc đổi từ khóa.',
+                ),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 40),
+                sliver: SliverList.separated(
+                  itemCount: _filteredSpecs.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 10),
+                  itemBuilder: (ctx, i) {
+                    final spec = _filteredSpecs[i];
+                    final card = _SpecCard(
+                      spec: spec,
+                      isAdding: _isAdding,
+                      onAdd: () => _addVehicle(spec),
+                      onPreview: () => _showSpecPreview(spec),
+                    );
+                    return i < 8 ? LuxeReveal(index: i, child: card) : card;
+                  },
+                ),
+              ),
           ],
         ),
       ),
@@ -974,23 +818,15 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
       initialValue: value,
       isExpanded: true,
       icon: const Icon(Icons.expand_more_rounded, size: 18),
-      dropdownColor: AppColors.card,
+      dropdownColor: LuxeColors.raised,
+      borderRadius: BorderRadius.circular(16),
       decoration: InputDecoration(
         isDense: true,
         labelText: label,
-        labelStyle: const TextStyle(
-          color: AppColors.textSecondary,
-          fontSize: 11,
-        ),
-        filled: true,
-        fillColor: AppColors.surfaceLight,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide.none,
-        ),
-        contentPadding: const EdgeInsets.fromLTRB(10, 10, 4, 8),
+        labelStyle: const TextStyle(color: LuxeColors.muted, fontSize: 11.5),
+        contentPadding: const EdgeInsets.fromLTRB(12, 12, 4, 10),
       ),
-      style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+      style: const TextStyle(color: LuxeColors.text, fontSize: 12.5),
       items: [
         const DropdownMenuItem(value: 'all', child: Text('Tất cả')),
         ...items.map(
@@ -1003,25 +839,6 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
       onChanged: (next) {
         if (next != null) onChanged(next);
       },
-    );
-  }
-
-  InputDecoration _personalFieldDecoration({
-    required String hint,
-    required IconData icon,
-  }) {
-    return InputDecoration(
-      isDense: true,
-      hintText: hint,
-      hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 12),
-      prefixIcon: Icon(icon, color: AppColors.textSecondary, size: 18),
-      filled: true,
-      fillColor: AppColors.surfaceLight,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide.none,
-      ),
-      contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
     );
   }
 
@@ -1054,158 +871,113 @@ class _SpecCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: isAdding ? null : onPreview,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.glassBorder),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                _CatalogVehicleImage(spec: spec),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        onTap: isAdding ? null : onPreview,
+        borderRadius: BorderRadius.circular(22),
+        child: LuxeGlass(
+          radius: 22,
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  _CatalogVehicleImage(spec: spec),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
                               spec.modelName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: AppColors.textPrimary,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                              ),
+                              style: LuxeText.item.copyWith(fontSize: 15),
                             ),
-                          ),
-                          if (spec.releaseYear != null) ...[
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.surfaceVariant,
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                '${spec.releaseYear}',
-                                style: TextStyle(
-                                  color: AppColors.textSecondary,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
+                            if (spec.releaseYear != null)
+                              LuxeTag('${spec.releaseYear}'),
                           ],
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${spec.brandName} · ${spec.vehicleType.toUpperCase()} · ${spec.market}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: AppColors.primary,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        spec.tagline ??
-                            'Pin: ${spec.nominalCapacityWh.toInt()} Wh • ${spec.nominalVoltageV.toInt()}V',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                GestureDetector(
-                  onTap: isAdding ? null : onAdd,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: isAdding
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppColors.background,
-                            ),
-                          )
-                        : Text(
-                            'Thêm',
-                            style: TextStyle(
-                              color: AppColors.background,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                            ),
+                        const SizedBox(height: 3),
+                        Text(
+                          '${spec.brandName} · ${spec.vehicleType.toUpperCase()} · ${spec.market}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: LuxeText.eyebrow.copyWith(
+                            fontSize: 10,
+                            letterSpacing: 1.2,
                           ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          spec.tagline ??
+                              'Pin: ${spec.nominalCapacityWh.toInt()} Wh • ${spec.nominalVoltageV.toInt()}V',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: LuxeText.caption.copyWith(fontSize: 12.5),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            // Quick specs
-            Wrap(
-              spacing: 8,
-              runSpacing: 6,
-              children: [
-                _specChip(
-                  'Pin: ${spec.nominalCapacityWh.toInt()} Wh • ${spec.nominalVoltageV.toInt()}V',
-                ),
-                _specChip(
-                  'Motor: ${(spec.ratedMotorPowerW / 1000).toStringAsFixed(1)} kW',
-                ),
-                if (spec.topSpeedKmh != null)
-                  _specChip('Tốc độ: ${spec.topSpeedKmh!.toInt()} km/h'),
-                if (spec.rangeKm != null)
-                  _specChip('Tầm: ${spec.rangeKm!.toInt()} km'),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _specChip(String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceVariant,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: AppColors.textSecondary,
-          fontSize: 11,
-          fontWeight: FontWeight.w500,
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  LuxeTag(
+                    'Pin ${spec.nominalCapacityWh.toInt()} Wh • ${spec.nominalVoltageV.toInt()}V',
+                  ),
+                  LuxeTag(
+                    'Motor ${(spec.ratedMotorPowerW / 1000).toStringAsFixed(1)} kW',
+                  ),
+                  if (spec.topSpeedKmh != null)
+                    LuxeTag('${spec.topSpeedKmh!.toInt()} km/h'),
+                  if (spec.rangeKm != null)
+                    LuxeTag(
+                      'Tầm ${spec.rangeKm!.toInt()} km',
+                      color: LuxeColors.emerald,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: isAdding ? null : onPreview,
+                      child: const Text('Xem thông số'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: isAdding ? null : onAdd,
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(48, 48),
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                      ),
+                      child: isAdding
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Color(0xFF0B0C0E),
+                              ),
+                            )
+                          : const Text('Thêm'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1219,33 +991,35 @@ class _CatalogVehicleImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fallback = Container(
-      width: 52,
+    final isCar = {'car', 'suv', 'pickup', 'van'}.contains(spec.vehicleType);
+    final fallback = SizedBox(
+      width: 72,
       height: 52,
-      decoration: BoxDecoration(
-        color: AppColors.primaryContainer,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Icon(
-        {'car', 'suv', 'pickup', 'van'}.contains(spec.vehicleType)
-            ? Icons.directions_car_filled_rounded
-            : Icons.electric_moped_rounded,
-        color: AppColors.primary,
-        size: 24,
-      ),
+      child: isCar
+          ? const Center(
+              child: LuxeMedallion(
+                icon: Icons.directions_car_filled_rounded,
+                size: 46,
+              ),
+            )
+          : const LuxeScooterArt(level: 0),
     );
-    final url = spec.imageUrl?.trim() ?? '';
+    final url = spec.showroom?.primary.thumbnailUrl ?? '';
     if (url.isEmpty) return fallback;
     return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: Image.network(
-        url,
-        width: 68,
+      borderRadius: BorderRadius.circular(14),
+      child: Image(
+        image: showroomImageProvider(url),
+        width: 72,
         height: 52,
-        fit: BoxFit.cover,
-        frameBuilder: (context, child, frame, _) => frame == null
-            ? Container(width: 68, height: 52, color: AppColors.surfaceVariant)
-            : child,
+        fit: BoxFit.contain,
+        frameBuilder: (context, child, frame, _) => AnimatedOpacity(
+          opacity: frame == null ? 0 : 1,
+          duration: luxeDuration(context, 320),
+          child: frame == null
+              ? Container(width: 72, height: 52, color: LuxeColors.raised)
+              : child,
+        ),
         errorBuilder: (_, error, stackTrace) => fallback,
       ),
     );
@@ -1253,7 +1027,7 @@ class _CatalogVehicleImage extends StatelessWidget {
 }
 
 // ============================================================================
-// Success overlay — hiển thị check-mark animation sau khi thêm xe
+// Success overlay — a ring sweeps and a check draws itself once
 // ============================================================================
 
 class _SuccessOverlay extends StatefulWidget {
@@ -1277,53 +1051,82 @@ class _SuccessOverlayState extends State<_SuccessOverlay> {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.success.withAlpha(80)),
+      child: Material(
+        type: MaterialType.transparency,
+        child: LuxeGlass(
+          selected: true,
+          radius: 26,
+          padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 26),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox.square(
+                dimension: 72,
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: 1),
+                  duration: luxeDuration(context, 760),
+                  curve: LuxeMotion.enter,
+                  builder: (context, t, _) =>
+                      CustomPaint(painter: _CheckBurstPainter(t)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text('Đã thêm xe', style: LuxeText.item.copyWith(fontSize: 17)),
+              const SizedBox(height: 4),
+              Text(widget.modelName, style: LuxeText.caption),
+            ],
+          ),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: AppColors.success.withAlpha(40),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.check_rounded,
-                color: AppColors.success,
-                size: 36,
-              ),
-            ).animate().scale(
-              begin: const Offset(0.4, 0.4),
-              end: const Offset(1, 1),
-              duration: AppMotion.base,
-              curve: AppMotion.emphasized,
-            ),
-            const SizedBox(height: 14),
-            const Text(
-              'Đã thêm xe',
-              style: TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              widget.modelName,
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-            ),
-          ],
-        ),
-      ).animate().fadeIn(duration: AppMotion.fast),
+      ),
     );
   }
+}
+
+class _CheckBurstPainter extends CustomPainter {
+  _CheckBurstPainter(this.t);
+  final double t;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = (Offset.zero & size).deflate(2);
+    final ringT = (t * 1.6).clamp(0.0, 1.0);
+    canvas.drawArc(
+      rect,
+      -math.pi / 2,
+      math.pi * 2 * ringT,
+      false,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..strokeCap = StrokeCap.round
+        ..color = LuxeColors.emerald,
+    );
+    canvas.drawCircle(
+      rect.center,
+      rect.width * 0.38,
+      Paint()..color = LuxeColors.emerald.withValues(alpha: 0.10 * ringT),
+    );
+    final checkT = ((t - 0.4) / 0.6).clamp(0.0, 1.0);
+    if (checkT <= 0) return;
+    final path = Path()
+      ..moveTo(size.width * 0.3, size.height * 0.52)
+      ..lineTo(size.width * 0.45, size.height * 0.66)
+      ..lineTo(size.width * 0.72, size.height * 0.38);
+    for (final m in path.computeMetrics()) {
+      canvas.drawPath(
+        m.extractPath(0, m.length * checkT),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..color = LuxeColors.emerald,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_CheckBurstPainter old) => old.t != t;
 }
 
 // ============================================================================
@@ -1339,21 +1142,11 @@ class _SpecPreviewDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: AppColors.card,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       title: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: AppColors.primaryContainer,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.electric_moped_rounded,
-              color: AppColors.primary,
-              size: 22,
-            ),
+          const LuxeMedallion(
+            icon: Icons.electric_moped_rounded,
+            accent: LuxeColors.emerald,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1362,21 +1155,14 @@ class _SpecPreviewDialog extends StatelessWidget {
               children: [
                 Text(
                   spec.modelName,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: LuxeText.item.copyWith(fontSize: 16),
                 ),
                 if (spec.tagline != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
                       spec.tagline!,
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 12,
-                      ),
+                      style: LuxeText.caption.copyWith(fontSize: 12),
                     ),
                   ),
               ],
@@ -1386,55 +1172,47 @@ class _SpecPreviewDialog extends StatelessWidget {
       ),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 360),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _row(
-              'Pin',
-              '${spec.nominalCapacityWh.toInt()} Wh • ${spec.nominalCapacityAh.toInt()} Ah',
-            ),
-            _row('Điện áp', '${spec.nominalVoltageV.toInt()} V'),
-            _row('Sạc tối đa', '${spec.maxChargePowerW.toInt()} W'),
-            _row(
-              'Motor (định mức)',
-              '${(spec.ratedMotorPowerW / 1000).toStringAsFixed(1)} kW',
-            ),
-            _row(
-              'Motor (đỉnh)',
-              '${(spec.peakMotorPowerW / 1000).toStringAsFixed(1)} kW',
-            ),
-            if (spec.topSpeedKmh != null)
-              _row('Tốc độ tối đa', '${spec.topSpeedKmh!.toInt()} km/h'),
-            if (spec.rangeKm != null)
-              _row('Tầm hoạt động', '~${spec.rangeKm!.toInt()} km'),
-            _row(
-              'Hiệu suất',
-              '~${spec.defaultEfficiencyKmPerPercent.toStringAsFixed(2)} km/%',
-            ),
-            if (spec.releaseYear != null)
-              _row('Năm ra mắt', '${spec.releaseYear}'),
-          ],
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _row(
+                'Pin',
+                '${spec.nominalCapacityWh.toInt()} Wh • ${spec.nominalCapacityAh.toInt()} Ah',
+              ),
+              _row('Điện áp', '${spec.nominalVoltageV.toInt()} V'),
+              _row('Sạc tối đa', '${spec.maxChargePowerW.toInt()} W'),
+              _row(
+                'Motor (định mức)',
+                '${(spec.ratedMotorPowerW / 1000).toStringAsFixed(1)} kW',
+              ),
+              _row(
+                'Motor (đỉnh)',
+                '${(spec.peakMotorPowerW / 1000).toStringAsFixed(1)} kW',
+              ),
+              if (spec.topSpeedKmh != null)
+                _row('Tốc độ tối đa', '${spec.topSpeedKmh!.toInt()} km/h'),
+              if (spec.rangeKm != null)
+                _row('Tầm hoạt động', '~${spec.rangeKm!.toInt()} km'),
+              _row(
+                'Hiệu suất',
+                '~${spec.defaultEfficiencyKmPerPercent.toStringAsFixed(2)} km/%',
+              ),
+              if (spec.releaseYear != null)
+                _row('Năm ra mắt', '${spec.releaseYear}'),
+            ],
+          ),
         ),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text(
-            'Đóng',
-            style: TextStyle(color: AppColors.textSecondary),
-          ),
+          child: const Text('Đóng'),
         ),
         FilledButton.icon(
           onPressed: onAdd,
           icon: const Icon(Icons.add_rounded, size: 18),
           label: const Text('Thêm xe này'),
-          style: FilledButton.styleFrom(
-            backgroundColor: AppColors.primary,
-            foregroundColor: AppColors.background,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
         ),
       ],
     );
@@ -1442,23 +1220,27 @@ class _SpecPreviewDialog extends StatelessWidget {
 
   Widget _row(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 130,
+          Expanded(
+            flex: 5,
             child: Text(
               label,
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              style: LuxeText.caption.copyWith(fontSize: 12.5),
             ),
           ),
           Expanded(
+            flex: 6,
             child: Text(
               value,
+              textAlign: TextAlign.right,
               style: const TextStyle(
-                color: AppColors.textPrimary,
+                color: LuxeColors.text,
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
+                fontFeatures: [FontFeature.tabularFigures()],
               ),
             ),
           ),

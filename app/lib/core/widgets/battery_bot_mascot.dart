@@ -3,14 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/cockpit_design_system.dart';
 
 /// Các trạng thái biểu cảm (mood) của mascot BatteryBot
-enum BatteryBotMood {
-  idle,
-  greeting,
-  happy,
-  thinking,
-  charging,
-  listening,
-}
+enum BatteryBotMood { idle, greeting, happy, thinking, charging, listening }
 
 /// Kích thước chuẩn cho mascot BatteryBot
 enum BatteryBotSize {
@@ -26,10 +19,7 @@ enum BatteryBotSize {
 }
 
 /// Chế độ hiển thị mascot: toàn thân (full) hoặc avatar thu nhỏ (avatar)
-enum BatteryBotDisplayMode {
-  full,
-  avatar,
-}
+enum BatteryBotDisplayMode { full, avatar }
 
 /// Mascot 2D thông minh - BatteryBot
 /// Được vẽ 100% vector mượt mà bằng CustomPainter theo phong cách Tech-Cute.
@@ -84,19 +74,19 @@ class _BatteryBotMascotState extends State<BatteryBotMascot>
     _floatCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2400),
-    )..repeat(reverse: true);
+    );
 
     // Xung nhịp năng lượng pin & antenna
     _pulseCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1600),
-    )..repeat(reverse: true);
+    );
 
     // Chớp mắt ngẫu nhiên tự nhiên
     _blinkCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 3200),
-    )..repeat();
+    );
 
     // Hiệu ứng nảy và bung hạt khi chạm (Tap interaction)
     _tapCtrl = AnimationController(
@@ -105,15 +95,42 @@ class _BatteryBotMascotState extends State<BatteryBotMascot>
     );
   }
 
+  /// Moods tied to real work (Task 125, LUXE motion rule): idle, greeting
+  /// and happy stay still; the floating bot over every tab no longer runs
+  /// three endless tickers.
+  bool get _alive => const {
+    BatteryBotMood.thinking,
+    BatteryBotMood.charging,
+    BatteryBotMood.listening,
+  }.contains(widget.mood);
+
+  void _syncLoops() {
+    if (MediaQuery.disableAnimationsOf(context) || !_alive) {
+      for (final controller in [_floatCtrl, _pulseCtrl, _blinkCtrl]) {
+        controller
+          ..stop()
+          ..value = 0;
+      }
+      if (MediaQuery.disableAnimationsOf(context) && _tapCtrl.isAnimating) {
+        _tapCtrl.stop();
+      }
+      return;
+    }
+    if (!_floatCtrl.isAnimating) _floatCtrl.repeat(reverse: true);
+    if (!_pulseCtrl.isAnimating) _pulseCtrl.repeat(reverse: true);
+    if (!_blinkCtrl.isAnimating) _blinkCtrl.repeat();
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (MediaQuery.disableAnimationsOf(context)) {
-      if (_floatCtrl.isAnimating) _floatCtrl.stop();
-      if (_pulseCtrl.isAnimating) _pulseCtrl.stop();
-      if (_blinkCtrl.isAnimating) _blinkCtrl.stop();
-      if (_tapCtrl.isAnimating) _tapCtrl.stop();
-    }
+    _syncLoops();
+  }
+
+  @override
+  void didUpdateWidget(covariant BatteryBotMascot oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.mood != widget.mood) _syncLoops();
   }
 
   @override
@@ -139,9 +156,7 @@ class _BatteryBotMascotState extends State<BatteryBotMascot>
           dx: math.cos(angle) * dist,
           dy: math.sin(angle) * dist,
           size: 3.0 + _random.nextDouble() * 3.5,
-          color: i % 2 == 0
-              ? CockpitColors.emerald
-              : CockpitColors.emeraldGlow,
+          color: i % 2 == 0 ? CockpitColors.emerald : CockpitColors.emeraldGlow,
         ),
       );
     }
@@ -151,13 +166,19 @@ class _BatteryBotMascotState extends State<BatteryBotMascot>
   @override
   Widget build(BuildContext context) {
     final motionEnabled = CockpitMotion.enabled(context);
-    final isAvatar = widget.displayMode == BatteryBotDisplayMode.avatar ||
+    final isAvatar =
+        widget.displayMode == BatteryBotDisplayMode.avatar ||
         widget.size == BatteryBotSize.avatar;
 
     if (isAvatar) {
       final avatarSize = widget.customWidth ?? widget.size.width;
       Widget avatarGraphic = AnimatedBuilder(
-        animation: Listenable.merge([_floatCtrl, _pulseCtrl, _blinkCtrl, _tapCtrl]),
+        animation: Listenable.merge([
+          _floatCtrl,
+          _pulseCtrl,
+          _blinkCtrl,
+          _tapCtrl,
+        ]),
         builder: (context, _) {
           final floatVal = (motionEnabled && widget.enableFloating)
               ? math.sin(_floatCtrl.value * math.pi) * 2.5
@@ -211,7 +232,12 @@ class _BatteryBotMascotState extends State<BatteryBotMascot>
     final height = widget.customHeight ?? widget.size.height;
 
     Widget botGraphic = AnimatedBuilder(
-      animation: Listenable.merge([_floatCtrl, _pulseCtrl, _blinkCtrl, _tapCtrl]),
+      animation: Listenable.merge([
+        _floatCtrl,
+        _pulseCtrl,
+        _blinkCtrl,
+        _tapCtrl,
+      ]),
       builder: (context, _) {
         final floatVal = (motionEnabled && widget.enableFloating)
             ? math.sin(_floatCtrl.value * math.pi) * 5.0
@@ -318,21 +344,13 @@ class _BatteryBotMascotState extends State<BatteryBotMascot>
         return Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            bubble,
-            const SizedBox(height: 8),
-            botGraphic,
-          ],
+          children: [bubble, const SizedBox(height: 8), botGraphic],
         );
       case BubblePosition.bottom:
         return Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            botGraphic,
-            const SizedBox(height: 8),
-            bubble,
-          ],
+          children: [botGraphic, const SizedBox(height: 8), bubble],
         );
       case BubblePosition.right:
         return Row(
@@ -424,8 +442,16 @@ class _BatteryBotPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
 
     // Que ăng-ten trái & phải
-    canvas.drawLine(Offset(leftX, bodyTop + 2), Offset(leftX, rodTop), rodPaint);
-    canvas.drawLine(Offset(rightX, bodyTop + 2), Offset(rightX, rodTop), rodPaint);
+    canvas.drawLine(
+      Offset(leftX, bodyTop + 2),
+      Offset(leftX, rodTop),
+      rodPaint,
+    );
+    canvas.drawLine(
+      Offset(rightX, bodyTop + 2),
+      Offset(rightX, rodTop),
+      rodPaint,
+    );
 
     // Đỉnh cực pin ở giữa (Cap terminal)
     final capRect = Rect.fromCenter(
@@ -457,14 +483,13 @@ class _BatteryBotPainter extends CustomPainter {
 
       // Viên bi năng lượng
       final orbPaint = Paint()
-        ..shader = RadialGradient(
-          colors: [
-            Colors.white,
-            glowColor,
-            const Color(0xFF047857),
-          ],
-          stops: const [0.1, 0.6, 1.0],
-        ).createShader(Rect.fromCircle(center: Offset(x, rodTop), radius: glowRadius));
+        ..shader =
+            RadialGradient(
+              colors: [Colors.white, glowColor, const Color(0xFF047857)],
+              stops: const [0.1, 0.6, 1.0],
+            ).createShader(
+              Rect.fromCircle(center: Offset(x, rodTop), radius: glowRadius),
+            );
       canvas.drawCircle(Offset(x, rodTop), glowRadius * 0.75, orbPaint);
     }
   }
@@ -539,7 +564,10 @@ class _BatteryBotPainter extends CustomPainter {
           Color(0xFF0F172A), // Tối dần xuống dưới
         ],
       ).createShader(bodyRect);
-    canvas.drawRRect(RRect.fromRectAndRadius(bodyRect, bodyRadius), borderPaint);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(bodyRect, bodyRadius),
+      borderPaint,
+    );
 
     // Vệt sáng lướt qua thân (Specular highlight)
     final highlightPath = Path()
@@ -564,14 +592,20 @@ class _BatteryBotPainter extends CustomPainter {
 
     // Nền visor siêu đen sâu
     final visorPaint = Paint()..color = const Color(0xFF020617);
-    canvas.drawRRect(RRect.fromRectAndRadius(visorRect, visorRadius), visorPaint);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(visorRect, visorRadius),
+      visorPaint,
+    );
 
     // Viền visor tinh xảo
     final visorBorder = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0
       ..color = CockpitColors.emerald.withValues(alpha: 0.35);
-    canvas.drawRRect(RRect.fromRectAndRadius(visorRect, visorRadius), visorBorder);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(visorRect, visorRadius),
+      visorBorder,
+    );
   }
 
   /// 5. Vẽ đôi mắt biểu cảm Anime Tech-Cute
@@ -594,20 +628,44 @@ class _BatteryBotPainter extends CustomPainter {
         break;
 
       case BatteryBotMood.greeting:
-        _drawSparkleEyes(canvas, leftEyeCenter, rightEyeCenter, bodyW, eyeColor);
+        _drawSparkleEyes(
+          canvas,
+          leftEyeCenter,
+          rightEyeCenter,
+          bodyW,
+          eyeColor,
+        );
         _drawBlush(canvas, leftEyeCenter, rightEyeCenter, bodyW);
         break;
 
       case BatteryBotMood.thinking:
-        _drawThinkingEyes(canvas, leftEyeCenter, rightEyeCenter, bodyW, eyeColor);
+        _drawThinkingEyes(
+          canvas,
+          leftEyeCenter,
+          rightEyeCenter,
+          bodyW,
+          eyeColor,
+        );
         break;
 
       case BatteryBotMood.charging:
-        _drawChargingEyes(canvas, leftEyeCenter, rightEyeCenter, bodyW, eyeColor);
+        _drawChargingEyes(
+          canvas,
+          leftEyeCenter,
+          rightEyeCenter,
+          bodyW,
+          eyeColor,
+        );
         break;
 
       case BatteryBotMood.listening:
-        _drawListeningEyes(canvas, leftEyeCenter, rightEyeCenter, bodyW, eyeColor);
+        _drawListeningEyes(
+          canvas,
+          leftEyeCenter,
+          rightEyeCenter,
+          bodyW,
+          eyeColor,
+        );
         break;
 
       case BatteryBotMood.idle:
@@ -707,11 +765,20 @@ class _BatteryBotPainter extends CustomPainter {
         final a1 = (i * math.pi / 2);
         final a2 = a1 + (math.pi / 4);
         if (i == 0) {
-          starPath.moveTo(center.dx + math.cos(a1) * r, center.dy + math.sin(a1) * r);
+          starPath.moveTo(
+            center.dx + math.cos(a1) * r,
+            center.dy + math.sin(a1) * r,
+          );
         } else {
-          starPath.lineTo(center.dx + math.cos(a1) * r, center.dy + math.sin(a1) * r);
+          starPath.lineTo(
+            center.dx + math.cos(a1) * r,
+            center.dy + math.sin(a1) * r,
+          );
         }
-        starPath.lineTo(center.dx + math.cos(a2) * inner, center.dy + math.sin(a2) * inner);
+        starPath.lineTo(
+          center.dx + math.cos(a2) * inner,
+          center.dy + math.sin(a2) * inner,
+        );
       }
       starPath.close();
 
@@ -730,7 +797,11 @@ class _BatteryBotPainter extends CustomPainter {
   ) {
     final r = bodyW * 0.10;
     for (final center in [left, right]) {
-      canvas.drawCircle(center, r, Paint()..color = color.withValues(alpha: 0.25));
+      canvas.drawCircle(
+        center,
+        r,
+        Paint()..color = color.withValues(alpha: 0.25),
+      );
 
       // Tròng mắt nhìn lên góc trên bên phải
       final pupilCenter = Offset(center.dx + r * 0.35, center.dy - r * 0.35);
@@ -799,8 +870,16 @@ class _BatteryBotPainter extends CustomPainter {
       ..color = const Color(0xFFFB7185).withValues(alpha: 0.45)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
     final r = bodyW * 0.055;
-    canvas.drawCircle(Offset(left.dx - bodyW * 0.04, left.dy + bodyW * 0.09), r, blushPaint);
-    canvas.drawCircle(Offset(right.dx + bodyW * 0.04, right.dy + bodyW * 0.09), r, blushPaint);
+    canvas.drawCircle(
+      Offset(left.dx - bodyW * 0.04, left.dy + bodyW * 0.09),
+      r,
+      blushPaint,
+    );
+    canvas.drawCircle(
+      Offset(right.dx + bodyW * 0.04, right.dy + bodyW * 0.09),
+      r,
+      blushPaint,
+    );
   }
 
   /// 6. Các vạch LED dung lượng pin dưới ngực
@@ -826,8 +905,8 @@ class _BatteryBotPainter extends CustomPainter {
 
       final barColor = isActive
           ? (i == 0 && activeCount == 1
-              ? const Color(0xFFF59E0B)
-              : CockpitColors.emerald)
+                ? const Color(0xFFF59E0B)
+                : CockpitColors.emerald)
           : const Color(0xFF1E293B);
 
       final barPaint = Paint()..color = barColor;
@@ -975,11 +1054,7 @@ class _BatteryBotAvatarPainter extends CustomPainter {
       ..shader = const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [
-          Color(0xFF1E293B),
-          Color(0xFF0F172A),
-          Color(0xFF064E3B),
-        ],
+        colors: [Color(0xFF1E293B), Color(0xFF0F172A), Color(0xFF064E3B)],
       ).createShader(Rect.fromCircle(center: center, radius: radius));
     canvas.drawCircle(center, radius - 1.5, bgPaint);
 
@@ -990,11 +1065,7 @@ class _BatteryBotAvatarPainter extends CustomPainter {
       ..shader = const LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: [
-          Color(0xFF34D399),
-          Color(0xFF10B981),
-          Color(0xFF047857),
-        ],
+        colors: [Color(0xFF34D399), Color(0xFF10B981), Color(0xFF047857)],
       ).createShader(Rect.fromCircle(center: center, radius: radius));
     canvas.drawCircle(center, radius - 1.5, borderPaint);
 
@@ -1006,13 +1077,19 @@ class _BatteryBotAvatarPainter extends CustomPainter {
     );
     final visorRadius = Radius.circular(visorRect.height * 0.45);
     final visorPaint = Paint()..color = const Color(0xFF020617);
-    canvas.drawRRect(RRect.fromRectAndRadius(visorRect, visorRadius), visorPaint);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(visorRect, visorRadius),
+      visorPaint,
+    );
 
     final visorBorder = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 0.8
       ..color = CockpitColors.emerald.withValues(alpha: 0.35);
-    canvas.drawRRect(RRect.fromRectAndRadius(visorRect, visorRadius), visorBorder);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(visorRect, visorRadius),
+      visorBorder,
+    );
 
     // 5. Đôi mắt anime dễ thương
     final eyeSpacing = w * 0.18;
@@ -1036,14 +1113,23 @@ class _BatteryBotAvatarPainter extends CustomPainter {
       for (final pt in [leftEye, rightEye]) {
         final path = Path()
           ..moveTo(pt.dx - eyeRadiusX, pt.dy + 1)
-          ..quadraticBezierTo(pt.dx, pt.dy - eyeRadiusY * 1.5, pt.dx + eyeRadiusX, pt.dy + 1);
+          ..quadraticBezierTo(
+            pt.dx,
+            pt.dy - eyeRadiusY * 1.5,
+            pt.dx + eyeRadiusX,
+            pt.dy + 1,
+          );
         canvas.drawPath(path, archPaint);
       }
     } else {
       final eyePaint = Paint()..color = eyeColor;
       for (final pt in [leftEye, rightEye]) {
         canvas.drawOval(
-          Rect.fromCenter(center: pt, width: eyeRadiusX * 2, height: eyeRadiusY * 2),
+          Rect.fromCenter(
+            center: pt,
+            width: eyeRadiusX * 2,
+            height: eyeRadiusY * 2,
+          ),
           eyePaint,
         );
         if (eyeOpen > 0.6) {
@@ -1062,8 +1148,16 @@ class _BatteryBotAvatarPainter extends CustomPainter {
       final blushPaint = Paint()
         ..color = const Color(0xFFF43F5E).withValues(alpha: 0.6)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5);
-      canvas.drawCircle(Offset(leftEye.dx - 2, eyeCenterY + 5), 2.5, blushPaint);
-      canvas.drawCircle(Offset(rightEye.dx + 2, eyeCenterY + 5), 2.5, blushPaint);
+      canvas.drawCircle(
+        Offset(leftEye.dx - 2, eyeCenterY + 5),
+        2.5,
+        blushPaint,
+      );
+      canvas.drawCircle(
+        Offset(rightEye.dx + 2, eyeCenterY + 5),
+        2.5,
+        blushPaint,
+      );
     }
   }
 
@@ -1074,4 +1168,3 @@ class _BatteryBotAvatarPainter extends CustomPainter {
         oldDelegate.eyeOpen != eyeOpen;
   }
 }
-

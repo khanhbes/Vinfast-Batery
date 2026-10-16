@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,7 +10,9 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/theme/app_ui_colors.dart';
-import '../../core/theme/cockpit_design_system.dart';
+import '../../core/theme/luxe_theme.dart';
+import '../../core/widgets/luxe_kit.dart';
+import '../../core/widgets/luxe_settings.dart';
 import '../../data/models/shelly_connection.dart';
 import '../../data/models/shelly_connection_state.dart';
 import '../../data/services/shelly_cloud_auth_service.dart';
@@ -193,7 +197,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
       builder: (dialogContext) => StatefulBuilder(
         builder: (ctx, setModalState) => AlertDialog(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(CockpitRadius.medium),
+            borderRadius: BorderRadius.circular(20),
           ),
           backgroundColor: AppUiColors.of(context).surface,
           title: Row(
@@ -284,9 +288,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
     final approved = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(CockpitRadius.medium),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: AppUiColors.of(context).surface,
         title: Row(
           children: [
@@ -406,9 +408,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(CockpitRadius.medium),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: AppUiColors.of(context).surface,
         title: const Text('Ngắt kết nối Shelly?'),
         content: const Text(
@@ -464,126 +464,114 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
           ShellyConnectionFlowState.verifying,
         }.contains(state);
 
-    return Scaffold(
-      backgroundColor: ui.background,
-      appBar: AppBar(
-        backgroundColor: ui.background,
-        elevation: 0,
-        leading: IconButton(
-          tooltip: 'Quay lại',
-          onPressed: () => Navigator.of(context).maybePop(),
-          icon: Icon(Icons.arrow_back_rounded, color: ui.text),
+    return Theme(
+      data: LuxeTheme.of(context),
+      child: LuxeScaffold(
+        appBar: LuxeAppBar(
+          title: 'Sạc thông minh Shelly',
+          actions: [
+            if (_developerUnlocked)
+              LuxeCircleButton(
+                tooltip: 'Cấu hình kỹ thuật (Developer)',
+                onPressed: _openDeveloperSetup,
+                icon: Icons.tune_rounded,
+              ),
+          ],
         ),
-        title: Text(
-          'Smart Charger',
-          style: CockpitTypography.heading(
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-            color: ui.text,
-          ),
-        ),
-        actions: [
-          if (_developerUnlocked)
-            IconButton(
-              tooltip: 'Cấu hình kỹ thuật (Developer)',
-              onPressed: _openDeveloperSetup,
-              icon: Icon(Icons.tune_rounded, color: ui.muted),
-            ),
-        ],
-      ),
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-              children: [
-                if (_snapshot.codeRefreshRequired)
-                  ListTile(
-                    title: const Text('Thiết bị có mã kết nối mới'),
-                    subtitle: const Text(
-                      'Liên kết hiện tại vẫn được giữ. Nhập mã mới do quản trị viên cấp khi thuận tiện.',
-                    ),
-                    trailing: TextButton(
-                      onPressed: () => setState(() => _activeFlow = 3),
-                      child: const Text('Nhập mã'),
-                    ),
-                  ),
-                if (state == ShellyConnectionFlowState.discovering) ...[
-                  const SizedBox(height: 16),
-                  Center(child: _PulsingRadar(color: ui.primary)),
-                  const SizedBox(height: 16),
-                ] else ...[
-                  Center(
-                    child: Container(
-                      width: 52,
-                      height: 52,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: _badgeColorFor(
-                          state,
-                          ui,
-                        ).withValues(alpha: 0.14),
-                        border: Border.all(
-                          color: _badgeColorFor(
-                            state,
-                            ui,
-                          ).withValues(alpha: 0.4),
-                          width: 1.5,
+        body: SafeArea(
+          top: false,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: ListView(
+                // A short form: keep every step built so recovery actions
+                // and focused fields never fall outside the lazy window.
+                cacheExtent: 2000,
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+                children: [
+                  if (_snapshot.codeRefreshRequired) ...[
+                    LuxeNotice(
+                      icon: Icons.vpn_key_outlined,
+                      color: LuxeColors.champagne,
+                      message:
+                          'Thiết bị có mã kết nối mới. Liên kết hiện tại vẫn được giữ. Nhập mã mới do quản trị viên cấp khi thuận tiện.',
+                      action: TextButton(
+                        onPressed: () => setState(() => _activeFlow = 3),
+                        style: TextButton.styleFrom(
+                          foregroundColor: LuxeColors.emerald,
                         ),
+                        child: const Text('Nhập mã'),
                       ),
-                      child: Icon(
-                        _iconFor(state),
-                        size: 28,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (state == ShellyConnectionFlowState.discovering) ...[
+                    const SizedBox(height: 8),
+                    const Center(child: _LuxeRadar()),
+                    const SizedBox(height: 16),
+                  ] else ...[
+                    Center(
+                      child: _StatusEmblem(
+                        key: ValueKey('emblem-$state-$_activeFlow'),
+                        icon: _iconFor(state),
                         color: _badgeColorFor(state, ui),
                       ),
                     ),
+                    const SizedBox(height: 14),
+                  ],
+                  LuxeReveal(
+                    key: ValueKey('title-$state-$_activeFlow'),
+                    child: Column(
+                      children: [
+                        Text(
+                          _titleFor(state),
+                          textAlign: TextAlign.center,
+                          softWrap: true,
+                          style: LuxeText.title.copyWith(fontSize: 20),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          _subtitleFor(state),
+                          textAlign: TextAlign.center,
+                          style: LuxeText.body.copyWith(fontSize: 13.5),
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 18),
+                  if (_snapshot.isLinked &&
+                      _snapshot.controlBlockedMessage != null) ...[
+                    Text(
+                      _snapshot.controlBlockedMessage!,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: ui.muted, fontSize: 13),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
+                  if (busy &&
+                      state != ShellyConnectionFlowState.discovering) ...[
+                    const Center(
+                      child: SizedBox.square(
+                        dimension: 28,
+                        child: CircularProgressIndicator(strokeWidth: 2.2),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    const Text(
+                      'Đang kiểm tra và xác thực thiết bị…',
+                      textAlign: TextAlign.center,
+                      style: LuxeText.caption,
+                    ),
+                  ] else ...[
+                    ..._buildStateContent(ui),
+                  ],
+                  if (_developerUnlocked &&
+                      state != ShellyConnectionFlowState.discovering) ...[
+                    const SizedBox(height: 32),
+                    _buildDeveloperBanner(ui),
+                  ],
                 ],
-                Text(
-                  _titleFor(state),
-                  textAlign: TextAlign.center,
-                  softWrap: true,
-                  style: CockpitTypography.heading(
-                    fontSize: 18.5,
-                    fontWeight: FontWeight.w800,
-                    color: ui.text,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  _subtitleFor(state),
-                  textAlign: TextAlign.center,
-                  style: CockpitTypography.body(fontSize: 13, color: ui.muted),
-                ),
-                const SizedBox(height: 14),
-                if (_snapshot.isLinked &&
-                    _snapshot.controlBlockedMessage != null) ...[
-                  Text(
-                    _snapshot.controlBlockedMessage!,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: ui.muted, fontSize: 13),
-                  ),
-                  const SizedBox(height: 14),
-                ],
-                if (busy && state != ShellyConnectionFlowState.discovering) ...[
-                  const Center(child: CircularProgressIndicator()),
-                  const SizedBox(height: 14),
-                  Text(
-                    'Đang kiểm tra và xác thực thiết bị…',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: ui.muted, fontSize: 13),
-                  ),
-                ] else ...[
-                  ..._buildStateContent(ui),
-                ],
-                if (_developerUnlocked &&
-                    state != ShellyConnectionFlowState.discovering) ...[
-                  const SizedBox(height: 32),
-                  _buildDeveloperBanner(ui),
-                ],
-              ],
+              ),
             ),
           ),
         ),
@@ -635,87 +623,16 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
   }
 
   Widget _buildStepIndicator(AppUiColors ui) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-      decoration: BoxDecoration(
-        color: ui.surface,
-        borderRadius: BorderRadius.circular(CockpitRadius.medium),
-        border: Border.all(color: ui.border),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _stepTab(
-              title: '1. Wi-Fi gần',
-              icon: Icons.wifi_rounded,
-              isActive: _activeFlow == 1,
-              ui: ui,
-              onTap: () => setState(() => _activeFlow = 1),
-            ),
-          ),
-          Container(width: 1, height: 16, color: ui.border),
-          Expanded(
-            child: _stepTab(
-              title: '2. Cloud',
-              icon: Icons.cloud_outlined,
-              isActive: _activeFlow == 2,
-              ui: ui,
-              onTap: () => setState(() => _activeFlow = 2),
-            ),
-          ),
-          Container(width: 1, height: 16, color: ui.border),
-          Expanded(
-            child: _stepTab(
-              title: '3. Mã Admin',
-              icon: Icons.vpn_key_outlined,
-              isActive: _activeFlow == 3,
-              ui: ui,
-              onTap: () => setState(() => _activeFlow = 3),
-            ),
-          ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: LuxeSegmented<int>(
+        segments: const [
+          (1, '1. Wi-Fi gần'),
+          (2, '2. Cloud'),
+          (3, '3. Mã Admin'),
         ],
-      ),
-    );
-  }
-
-  Widget _stepTab({
-    required String title,
-    required IconData icon,
-    required bool isActive,
-    required AppUiColors ui,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: isActive ? ui.primary.withValues(alpha: 0.12) : Colors.transparent,
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 2),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 14, color: isActive ? ui.primary : ui.muted),
-              const SizedBox(width: 4),
-              Flexible(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    title,
-                    maxLines: 1,
-                    style: TextStyle(
-                      color: isActive ? ui.primary : ui.muted,
-                      fontSize: 11,
-                      fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+        selected: _activeFlow,
+        onChanged: (v) => setState(() => _activeFlow = v),
       ),
     );
   }
@@ -725,9 +642,9 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
       Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: ui.surface,
-          borderRadius: BorderRadius.circular(CockpitRadius.medium),
-          border: Border.all(color: ui.border),
+          gradient: _glass,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: LuxeColors.hairline),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -757,7 +674,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: ui.primary.withValues(alpha: 0.06),
+                gradient: _glassEmerald,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: ui.primary.withValues(alpha: 0.2)),
               ),
@@ -825,7 +742,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                         height: 18,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: Color(0xFF0B0C0E),
                         ),
                       )
                     : const Icon(Icons.search_rounded),
@@ -834,11 +751,6 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                       ? 'Đang tìm thiết bị…'
                       : 'Tìm thiết bị trên Cloud',
                   style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-                style: FilledButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(CockpitRadius.medium),
-                  ),
                 ),
               ),
             ),
@@ -868,16 +780,16 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
           (dev) => Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Material(
-              color: ui.surface,
-              borderRadius: BorderRadius.circular(CockpitRadius.medium),
+              type: MaterialType.transparency,
+              borderRadius: BorderRadius.circular(20),
               child: InkWell(
                 onTap: () => _connectCloudDevice(dev),
-                borderRadius: BorderRadius.circular(CockpitRadius.medium),
+                borderRadius: BorderRadius.circular(20),
                 child: Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(CockpitRadius.medium),
-                    border: Border.all(color: ui.border),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: LuxeColors.hairline),
                   ),
                   child: Row(
                     children: [
@@ -918,9 +830,9 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
       Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: ui.surface,
-          borderRadius: BorderRadius.circular(CockpitRadius.medium),
-          border: Border.all(color: ui.border),
+          gradient: _glass,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: LuxeColors.hairline),
         ),
         child: Row(
           children: [
@@ -934,7 +846,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
             ),
             TextButton(
               onPressed: () => setState(() => _activeFlow = 3),
-              child: const Text('Nhập mã Admin ➔'),
+              child: const Text('Nhập mã Admin'),
             ),
           ],
         ),
@@ -947,8 +859,8 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
       Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: ui.surface,
-          borderRadius: BorderRadius.circular(CockpitRadius.medium),
+          gradient: _glass,
+          borderRadius: BorderRadius.circular(20),
           border: Border.all(color: ui.primary.withValues(alpha: 0.4)),
         ),
         child: Column(
@@ -996,39 +908,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
               style: TextStyle(color: ui.muted, fontSize: 13, height: 1.4),
             ),
             const SizedBox(height: 18),
-            Center(
-              child: SizedBox(
-                width: 260,
-                child: TextField(
-                  controller: _codeController,
-                  textAlign: TextAlign.center,
-                  textCapitalization: TextCapitalization.characters,
-                  inputFormatters: [
-                    LengthLimitingTextInputFormatter(6),
-                    FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9]')),
-                  ],
-                  style: TextStyle(
-                    color: ui.text,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 8,
-                    fontFamily: 'monospace',
-                  ),
-                  decoration: InputDecoration(
-                    hintText: 'A8X9K2',
-                    hintStyle: TextStyle(
-                      color: ui.muted.withValues(alpha: 0.4),
-                      letterSpacing: 8,
-                    ),
-                    counterText: '',
-                    contentPadding: const EdgeInsets.symmetric(
-                      vertical: 14,
-                      horizontal: 16,
-                    ),
-                  ),
-                ),
-              ),
-            ),
+            Center(child: _EngravedCodeField(controller: _codeController)),
             if (_codeError != null) ...[
               const SizedBox(height: 12),
               Container(
@@ -1060,7 +940,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                         height: 18,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: Color(0xFF0B0C0E),
                         ),
                       )
                     : const Icon(Icons.check_circle_outline_rounded),
@@ -1069,11 +949,6 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
-                  ),
-                ),
-                style: FilledButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(CockpitRadius.medium),
                   ),
                 ),
               ),
@@ -1085,9 +960,9 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
       Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: ui.surface,
-          borderRadius: BorderRadius.circular(CockpitRadius.medium),
-          border: Border.all(color: ui.border),
+          gradient: _glass,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: LuxeColors.hairline),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1133,11 +1008,6 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
           },
           icon: const Icon(Icons.refresh_rounded, size: 18),
           label: const Text('Quét lại từ Bước 1 (Wi-Fi)'),
-          style: OutlinedButton.styleFrom(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(CockpitRadius.medium),
-            ),
-          ),
         ),
       ),
     ];
@@ -1148,9 +1018,9 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
       Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: ui.surface,
-          borderRadius: BorderRadius.circular(CockpitRadius.medium),
-          border: Border.all(color: ui.border),
+          gradient: _glass,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: LuxeColors.hairline),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1207,24 +1077,25 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
             'Tìm và kết nối Shelly',
             style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
           ),
-          style: FilledButton.styleFrom(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(CockpitRadius.medium),
-            ),
-          ),
         ),
       ),
     ];
   }
 
-  Widget _featurePill(IconData icon, String text, AppUiColors ui) => Row(
-    children: [
-      Icon(icon, size: 16, color: ui.primary),
-      const SizedBox(width: 8),
-      Expanded(
-        child: Text(text, style: TextStyle(color: ui.text, fontSize: 12)),
-      ),
-    ],
+  Widget _featurePill(IconData icon, String text, AppUiColors ui) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 3),
+    child: Row(
+      children: [
+        Icon(icon, size: 16, color: LuxeColors.emerald),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(color: LuxeColors.text, fontSize: 13),
+          ),
+        ),
+      ],
+    ),
   );
 
   List<Widget> _buildConnectedView(AppUiColors ui) {
@@ -1233,8 +1104,8 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
       Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: ui.surface,
-          borderRadius: BorderRadius.circular(CockpitRadius.medium),
+          gradient: _glass,
+          borderRadius: BorderRadius.circular(20),
           border: Border.all(color: ui.primary.withValues(alpha: 0.4)),
         ),
         child: Column(
@@ -1331,18 +1202,10 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
         ),
       ),
       const SizedBox(height: 20),
-      ElevatedButton.icon(
+      FilledButton.icon(
         onPressed: () => Navigator.of(context).maybePop(true),
         icon: const Icon(Icons.bolt_rounded),
         label: const Text('Đến trang điều khiển Smart Charger'),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: ui.primary,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(CockpitRadius.medium),
-          ),
-        ),
       ),
       const SizedBox(height: 10),
       OutlinedButton.icon(
@@ -1350,12 +1213,8 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
         icon: const Icon(Icons.power_settings_new_rounded),
         label: const Text('Ngắt kết nối thiết bị'),
         style: OutlinedButton.styleFrom(
-          foregroundColor: ui.danger,
-          side: BorderSide(color: ui.danger.withValues(alpha: 0.4)),
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(CockpitRadius.medium),
-          ),
+          foregroundColor: LuxeColors.danger,
+          side: BorderSide(color: LuxeColors.danger.withValues(alpha: 0.4)),
         ),
       ),
     ];
@@ -1366,20 +1225,27 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
     String value,
     IconData icon,
     AppUiColors ui,
-  ) => Column(
-    children: [
-      Icon(icon, size: 20, color: ui.primary),
-      const SizedBox(height: 4),
-      Text(
-        value,
-        style: CockpitTypography.numbers(
-          fontSize: 16,
-          fontWeight: FontWeight.w700,
-          color: ui.text,
+  ) => Expanded(
+    child: Column(
+      children: [
+        Icon(icon, size: 18, color: LuxeColors.emerald),
+        const SizedBox(height: 6),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            value,
+            style: const TextStyle(
+              color: LuxeColors.text,
+              fontSize: 18,
+              fontWeight: FontWeight.w300,
+              fontFeatures: [FontFeature.tabularFigures()],
+            ),
+          ),
         ),
-      ),
-      Text(label, style: TextStyle(color: ui.muted, fontSize: 11)),
-    ],
+        const SizedBox(height: 2),
+        Text(label, style: LuxeText.label.copyWith(fontSize: 11)),
+      ],
+    ),
   );
 
   List<Widget> _buildVerificationRequiredView(AppUiColors ui) {
@@ -1392,8 +1258,8 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
       Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: ui.primary.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(CockpitRadius.medium),
+          gradient: _glassEmerald,
+          borderRadius: BorderRadius.circular(20),
           border: Border.all(color: ui.primary.withValues(alpha: 0.3)),
         ),
         child: Column(
@@ -1431,11 +1297,6 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
             'Chạy kiểm tra an toàn',
             style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
           ),
-          style: FilledButton.styleFrom(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(CockpitRadius.medium),
-            ),
-          ),
         ),
       ),
       const SizedBox(height: 12),
@@ -1460,11 +1321,6 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
           label: const Text(
             'Kết nối thiết bị này',
             style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-          ),
-          style: FilledButton.styleFrom(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(CockpitRadius.medium),
-            ),
           ),
         ),
       ),
@@ -1512,79 +1368,52 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
     VoidCallback? onTap,
   }) {
     return Material(
-      color: isSelected ? ui.primary.withValues(alpha: 0.1) : ui.surface,
-      borderRadius: BorderRadius.circular(CockpitRadius.medium),
+      type: MaterialType.transparency,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(CockpitRadius.medium),
-        child: Container(
+        borderRadius: BorderRadius.circular(22),
+        child: LuxeGlass(
+          selected: isSelected,
+          radius: 22,
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(CockpitRadius.medium),
-            border: Border.all(
-              color: isSelected ? ui.primary : ui.border,
-              width: isSelected ? 1.5 : 1,
-            ),
-          ),
           child: Row(
             children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: ui.primary.withValues(alpha: 0.12),
-                ),
-                child: Icon(Icons.power_rounded, color: ui.primary),
+              const LuxeMedallion(
+                icon: Icons.power_rounded,
+                accent: LuxeColors.emerald,
+                size: 46,
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        Expanded(
-                          child: Text(
-                            _friendlyName(dev),
-                            style: TextStyle(
-                              color: ui.text,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 15,
-                            ),
-                          ),
+                        Text(
+                          _friendlyName(dev),
+                          style: LuxeText.item.copyWith(fontSize: 15.5),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: ui.primary.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            'Online',
-                            style: TextStyle(
-                              color: ui.primary,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
+                        const LuxeTag('Trực tuyến', color: LuxeColors.emerald),
                       ],
                     ),
                     const SizedBox(height: 4),
                     Text(
                       'IP: ${dev.address} • ${dev.model.isNotEmpty ? dev.model : 'Gen 3'}',
-                      style: TextStyle(color: ui.muted, fontSize: 12),
+                      style: LuxeText.caption.copyWith(
+                        fontSize: 12,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
                     ),
                   ],
                 ),
               ),
               if (onTap != null) ...[
                 const SizedBox(width: 8),
-                Icon(Icons.chevron_right_rounded, color: ui.muted),
+                const Icon(Icons.chevron_right_rounded, color: LuxeColors.dim),
               ],
             ],
           ),
@@ -1599,8 +1428,8 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
       Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: ui.surface,
-          borderRadius: BorderRadius.circular(CockpitRadius.medium),
+          gradient: _glass,
+          borderRadius: BorderRadius.circular(20),
           border: Border.all(color: ui.amber.withValues(alpha: 0.4)),
         ),
         child: Column(
@@ -1645,8 +1474,8 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
       Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: ui.danger.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(CockpitRadius.medium),
+          color: LuxeColors.danger.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(20),
           border: Border.all(color: ui.danger.withValues(alpha: 0.3)),
         ),
         child: Column(
@@ -1714,8 +1543,8 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
       Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: ui.surface,
-          borderRadius: BorderRadius.circular(CockpitRadius.medium),
+          gradient: _glass,
+          borderRadius: BorderRadius.circular(20),
           border: Border.all(color: ui.primary.withValues(alpha: 0.3)),
         ),
         child: Column(
@@ -1794,12 +1623,20 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '• ',
-          style: TextStyle(color: ui.primary, fontWeight: FontWeight.bold),
+        Container(
+          width: 6,
+          height: 6,
+          margin: const EdgeInsets.only(top: 6, right: 10),
+          decoration: const BoxDecoration(
+            color: LuxeColors.emerald,
+            shape: BoxShape.circle,
+          ),
         ),
         Expanded(
-          child: Text(text, style: TextStyle(color: ui.muted, fontSize: 12.5)),
+          child: Text(
+            text,
+            style: LuxeText.caption.copyWith(fontSize: 12.5, height: 1.4),
+          ),
         ),
       ],
     ),
@@ -1810,8 +1647,8 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
       Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: ui.amber.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(CockpitRadius.medium),
+          color: LuxeColors.champagne.withValues(alpha: 0.07),
+          borderRadius: BorderRadius.circular(20),
           border: Border.all(color: ui.amber.withValues(alpha: 0.3)),
         ),
         child: Column(
@@ -1847,34 +1684,14 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
   }
 
   Widget _buildDeveloperBanner(AppUiColors ui) {
-    return InkWell(
-      onTap: _openDeveloperSetup,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: ui.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: ui.border),
+    return LuxeSettingsGroup(
+      children: [
+        LuxeSettingsRow(
+          icon: Icons.developer_mode_rounded,
+          title: 'Mở cấu hình kỹ thuật nâng cao (Developer)',
+          onTap: _openDeveloperSetup,
         ),
-        child: Row(
-          children: [
-            Icon(Icons.developer_mode_rounded, size: 18, color: ui.primary),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Mở cấu hình kỹ thuật nâng cao (Developer)',
-                style: TextStyle(
-                  color: ui.muted,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            Icon(Icons.chevron_right_rounded, size: 18, color: ui.muted),
-          ],
-        ),
-      ),
+      ],
     );
   }
 
@@ -1987,26 +1804,65 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
   }
 }
 
-/// Pulsating radar wave animation for the discovering state.
-class _PulsingRadar extends StatefulWidget {
-  const _PulsingRadar({required this.color});
+const _glass = LinearGradient(
+  begin: Alignment.topLeft,
+  end: Alignment.bottomRight,
+  colors: [Color(0x12FFFFFF), Color(0x06FFFFFF)],
+);
+
+const _glassEmerald = LinearGradient(
+  begin: Alignment.topLeft,
+  end: Alignment.bottomRight,
+  colors: [Color(0x1A34D399), Color(0x0634D399)],
+);
+
+/// Status medallion: a metal well holding the state icon, ringed by an arc
+/// in the state colour that sweeps once when the state changes.
+class _StatusEmblem extends StatelessWidget {
+  const _StatusEmblem({super.key, required this.icon, required this.color});
+  final IconData icon;
   final Color color;
 
   @override
-  State<_PulsingRadar> createState() => _PulsingRadarState();
+  Widget build(BuildContext context) => ExcludeSemantics(
+    child: LuxeRing(
+      value: 1,
+      size: 72,
+      stroke: 2,
+      color: color,
+      duration: const Duration(milliseconds: 900),
+      child: LuxeMedallion(icon: icon, accent: color, size: 54),
+    ),
+  );
 }
 
-class _PulsingRadarState extends State<_PulsingRadar>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
+/// mDNS discovery radar: hairline range rings, a rotating emerald sweep and
+/// a centre beacon. It only exists while discovery is running, pauses with
+/// [TickerMode] and is a still frame under reduced motion.
+class _LuxeRadar extends StatefulWidget {
+  const _LuxeRadar();
 
   @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2200),
-    )..repeat();
+  State<_LuxeRadar> createState() => _LuxeRadarState();
+}
+
+class _LuxeRadarState extends State<_LuxeRadar>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2400),
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (luxeReduceMotion(context)) {
+      _controller
+        ..stop()
+        ..value = 0.15;
+    } else if (!_controller.isAnimating) {
+      _controller.repeat();
+    }
   }
 
   @override
@@ -2016,63 +1872,214 @@ class _PulsingRadarState extends State<_PulsingRadar>
   }
 
   @override
+  Widget build(BuildContext context) => Semantics(
+    label: 'Đang quét mạng Wi-Fi',
+    child: SizedBox.square(
+      dimension: 168,
+      child: RepaintBoundary(
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, child) => CustomPaint(
+            painter: _RadarPainter(_controller.value),
+            child: child,
+          ),
+          child: const Center(
+            child: LuxeMedallion(
+              icon: Icons.wifi_tethering_rounded,
+              accent: LuxeColors.emerald,
+              size: 56,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _RadarPainter extends CustomPainter {
+  _RadarPainter(this.t);
+  final double t;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    final r = size.width / 2 - 2;
+    final ring = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    for (var i = 1; i <= 3; i++) {
+      ring.color = LuxeColors.platinumLow.withValues(alpha: 0.18 + 0.08 * i);
+      canvas.drawCircle(c, r * i / 3, ring);
+    }
+    // Rotating sweep: a soft emerald wedge trailing a bright leading edge.
+    final a = t * 2 * math.pi - math.pi / 2;
+    final rect = Rect.fromCircle(center: c, radius: r);
+    canvas.drawArc(
+      rect,
+      a - 1.1,
+      1.1,
+      true,
+      Paint()
+        ..shader = SweepGradient(
+          startAngle: a - 1.1,
+          endAngle: a,
+          colors: [
+            LuxeColors.emerald.withValues(alpha: 0),
+            LuxeColors.emerald.withValues(alpha: 0.28),
+          ],
+          transform: GradientRotation(0),
+        ).createShader(rect),
+    );
+    canvas.drawLine(
+      c,
+      c + Offset(math.cos(a), math.sin(a)) * r,
+      Paint()
+        ..color = LuxeColors.emerald.withValues(alpha: 0.8)
+        ..strokeWidth = 1.4,
+    );
+    // Expanding pulse ring.
+    final pr = r * (0.35 + 0.65 * ((t * 2) % 1));
+    canvas.drawCircle(
+      c,
+      pr,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2
+        ..color = LuxeColors.emerald.withValues(
+          alpha: 0.35 * (1 - ((t * 2) % 1)),
+        ),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_RadarPainter old) => old.t != t;
+}
+
+/// Six brushed-metal slots for the admin code. One real (invisible)
+/// [TextField] sits on top, so the keyboard, paste and accessibility keep
+/// working; the slots mirror its text and light the next slot emerald.
+class _EngravedCodeField extends StatefulWidget {
+  const _EngravedCodeField({required this.controller});
+  final TextEditingController controller;
+
+  @override
+  State<_EngravedCodeField> createState() => _EngravedCodeFieldState();
+}
+
+class _EngravedCodeFieldState extends State<_EngravedCodeField> {
+  final _focus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 140,
-      width: 140,
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, child) {
-          final progress = _controller.value;
-          final p2 = (progress + 0.5) % 1.0;
-          return Stack(
-            alignment: Alignment.center,
-            children: [
-              Container(
-                width: 60 + progress * 76,
-                height: 60 + progress * 76,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: widget.color.withValues(
-                    alpha: (1.0 - progress) * 0.18,
-                  ),
-                  border: Border.all(
-                    color: widget.color.withValues(
-                      alpha: (1.0 - progress) * 0.35,
+    final duration = luxeDuration(context, 200);
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 320),
+      child: Stack(
+        children: [
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: widget.controller,
+            builder: (context, value, _) {
+              final text = value.text.toUpperCase();
+              return Row(
+                children: [
+                  for (var i = 0; i < 6; i++) ...[
+                    if (i > 0) const SizedBox(width: 6),
+                    Expanded(
+                      child: AnimatedContainer(
+                        duration: duration,
+                        height: 58,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          gradient: const LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [Color(0xFF1D1F22), Color(0xFF0E0F11)],
+                          ),
+                          border: Border.all(
+                            color: _focus.hasFocus && i == text.length
+                                ? LuxeColors.emerald
+                                : i < text.length
+                                ? LuxeColors.hairlineStrong
+                                : LuxeColors.hairline,
+                            width: _focus.hasFocus && i == text.length
+                                ? 1.4
+                                : 1,
+                          ),
+                          boxShadow: _focus.hasFocus && i == text.length
+                              ? const [
+                                  BoxShadow(
+                                    color: Color(0x3334D399),
+                                    blurRadius: 12,
+                                  ),
+                                ]
+                              : null,
+                        ),
+                        child: AnimatedSwitcher(
+                          duration: duration,
+                          transitionBuilder: (child, a) =>
+                              ScaleTransition(scale: a, child: child),
+                          child: i < text.length
+                              ? LuxeMetalText(
+                                  text[i],
+                                  key: ValueKey('$i-${text[i]}'),
+                                  style: const TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                )
+                              : Container(
+                                  key: ValueKey('$i-empty'),
+                                  width: 10,
+                                  height: 2,
+                                  color: LuxeColors.platinumLow,
+                                ),
+                        ),
+                      ),
                     ),
-                    width: 1.5,
-                  ),
-                ),
+                  ],
+                ],
+              );
+            },
+          ),
+          Positioned.fill(
+            child: TextField(
+              controller: widget.controller,
+              focusNode: _focus,
+              textCapitalization: TextCapitalization.characters,
+              autocorrect: false,
+              enableSuggestions: false,
+              showCursor: false,
+              inputFormatters: [
+                LengthLimitingTextInputFormatter(6),
+                FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9]')),
+              ],
+              style: const TextStyle(color: Colors.transparent, fontSize: 1),
+              decoration: const InputDecoration(
+                filled: false,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                counterText: '',
+                contentPadding: EdgeInsets.zero,
+                labelText: null,
+                hintText: null,
               ),
-              Container(
-                width: 60 + p2 * 76,
-                height: 60 + p2 * 76,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: widget.color.withValues(alpha: (1.0 - p2) * 0.14),
-                  border: Border.all(
-                    color: widget.color.withValues(alpha: (1.0 - p2) * 0.25),
-                    width: 1.2,
-                  ),
-                ),
-              ),
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: widget.color.withValues(alpha: 0.16),
-                  border: Border.all(color: widget.color, width: 2),
-                ),
-                child: Icon(
-                  Icons.wifi_tethering_rounded,
-                  size: 34,
-                  color: widget.color,
-                ),
-              ),
-            ],
-          );
-        },
+            ),
+          ),
+        ],
       ),
     );
   }

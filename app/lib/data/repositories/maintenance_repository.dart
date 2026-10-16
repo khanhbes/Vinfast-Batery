@@ -114,6 +114,7 @@ class MaintenanceRepository {
         .collection('MaintenanceTasks')
         .where('ownerUid', isEqualTo: uid)
         .where('isDeleted', isEqualTo: false)
+        .limit(300)
         .snapshots()
         .map((snapshot) {
           final tasks = snapshot.docs

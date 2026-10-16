@@ -1,3 +1,5 @@
+import 'vehicle_showroom.dart';
+
 /// Model thông số kỹ thuật xe VinFast từ catalog.
 ///
 /// Field mới (optional, backward-compat):
@@ -44,6 +46,9 @@ class VinFastModelSpec {
   final double? maxDcChargePowerW;
   final List<Map<String, dynamic>> sources;
 
+  /// Approved catalog photos per colour (2.5D stage / 360° spin).
+  final VehicleShowroomData? showroom;
+
   VinFastModelSpec({
     required this.modelId,
     required this.modelName,
@@ -78,6 +83,7 @@ class VinFastModelSpec {
     this.usableCapacityWh,
     this.maxDcChargePowerW,
     this.sources = const [],
+    this.showroom,
   });
 
   factory VinFastModelSpec.fromMap(
@@ -205,6 +211,9 @@ class VinFastModelSpec {
                   media['heroUrl'] ??
                   data['imageUrl'])
               as String?,
+      showroom:
+          VehicleShowroomData.fromMedia(media) ??
+          VehicleShowroomData.fromMedia({'heroUrl': data['imageUrl']}),
       description:
           (selectedLocale['description'] ?? fallbackLocale['description'])
               as String?,
@@ -258,6 +267,7 @@ class VinFastModelSpec {
       if (usableCapacityWh != null) 'usableCapacityWh': usableCapacityWh,
       if (maxDcChargePowerW != null) 'maxDcChargePowerW': maxDcChargePowerW,
       'sources': sources,
+      if (showroom != null) 'media': {'showroom': showroom!.toMap()},
     };
   }
 

@@ -48,13 +48,21 @@ void main() {
     );
     await tester.tap(find.text('Appearance'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Dark Cockpit'));
+    expect(find.text('Dark Cockpit'), findsNothing);
+    expect(find.text('Sáng'), findsNothing);
+    // Task 125: Vietnamese only until the content is translated.
+    expect(find.text('English'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('appearance-vietnamese-only')),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Tiếng Việt'));
     await tester.pump();
-    expect(service.getThemeMode(), AppThemeMode.dark);
-    expect(pending.isCompleted, isFalse);
+    expect(service.getLanguage(), AppLanguage.vietnamese);
     Navigator.of(tester.element(find.byType(AppearanceSheet))).pop();
     await tester.pumpAndSettle();
     pending.complete();
+    expect(service.getThemeModeValue(), ThemeMode.dark);
     await tester.pump();
     expect(find.byType(AppearanceSheet), findsNothing);
     expect(tester.takeException(), isNull);

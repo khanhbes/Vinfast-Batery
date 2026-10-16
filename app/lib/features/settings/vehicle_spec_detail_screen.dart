@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/luxe_theme.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/widgets/app_popup.dart';
+import '../../core/widgets/luxe_kit.dart';
+import '../../core/widgets/luxe_settings.dart';
 import '../../data/models/vinfast_model_spec.dart';
 import '../../data/repositories/vehicle_spec_repository.dart';
+import '../../data/models/vehicle_showroom.dart';
+import '../home/vehicle_showroom_screen.dart';
+import '../home/widgets/luxe_vehicle_hero.dart' show LuxeScooterArt;
+import '../home/widgets/vehicle_showroom.dart';
 
 /// Vehicle Spec Detail Screen — PLAN #5
 /// Shows detailed spec sheet and allows editing
@@ -25,6 +30,12 @@ class VehicleSpecDetailScreen extends StatefulWidget {
 }
 
 class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
+  late final VehicleShowroomData? _showroom = () {
+    final snapshot = widget.vehicleData['catalogSnapshot'];
+    return snapshot is Map
+        ? VehicleShowroomData.fromMedia(snapshot['media'])
+        : null;
+  }();
   bool _isEditing = false;
   bool _isSaving = false;
   VinFastModelSpec? _spec;
@@ -113,7 +124,7 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isSaving = false);
-        AppPopup.showError('Lỗi: $e');
+        AppPopup.showError('Cập nhật thất bại', error: e);
       }
     }
   }
@@ -121,30 +132,17 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final v = widget.vehicleData;
-    final modelName = v['model'] ?? v['vehicleName'] ?? 'Xe';
+    final modelName = (v['model'] ?? v['vehicleName'] ?? 'Xe').toString();
+    final soh = double.tryParse(_sohCtrl.text);
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back_ios_new_rounded,
-            color: AppColors.textPrimary,
-            size: 20,
-          ),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          modelName,
-          style: const TextStyle(
-            color: AppColors.textPrimary,
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
+    return LuxeScaffold(
+      appBar: LuxeAppBar(
         actions: [
+          if (_isEditing && !_isSaving)
+            TextButton(
+              onPressed: () => setState(() => _isEditing = false),
+              child: const Text('Hủy'),
+            ),
           TextButton(
             onPressed: _isSaving
                 ? null
@@ -155,486 +153,397 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
                       setState(() => _isEditing = true);
                     }
                   },
+            style: TextButton.styleFrom(foregroundColor: LuxeColors.emerald),
             child: _isSaving
                 ? const SizedBox(
                     width: 18,
                     height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppColors.primary,
-                    ),
+                    child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : Text(
                     _isEditing ? 'Lưu' : 'Sửa',
-                    style: TextStyle(
-                      color: AppColors.primary,
-                      fontWeight: FontWeight.w700,
-                    ),
+                    style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
           ),
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Vehicle header card
-            _buildHeaderCard(
-              modelName,
-            ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.05),
-            const SizedBox(height: 24),
-
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppColors.primaryContainer,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.primary.withAlpha(50)),
+            Hero(
+              tag: 'vehicle-hero-${widget.vehicleId}',
+              child: Material(
+                type: MaterialType.transparency,
+                child: _buildHeaderCard(modelName, soh),
               ),
-              child: const Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.verified_user_outlined, color: AppColors.primary),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Thông số hãng được quản lý bởi catalog chung. Bạn chỉ có thể sửa tên gọi riêng, biển số, ODO và tình trạng pin thực tế.',
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 12,
-                        height: 1.4,
+            ),
+            if (_showroom != null) ...[
+              const SizedBox(height: 14),
+              LuxeReveal(
+                index: 1,
+                child: Semantics(
+                  button: true,
+                  label: 'Mở phòng trưng bày xe $modelName',
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => VehicleShowroomScreen.open(
+                      context,
+                      title: modelName,
+                      showroom: _showroom,
+                      figures: [
+                        if (_batteryCapCtrl.text.isNotEmpty)
+                          ('Dung lượng pin', '${_batteryCapCtrl.text} Wh'),
+                        if (_batteryTypeCtrl.text.isNotEmpty)
+                          ('Loại pin', _batteryTypeCtrl.text),
+                        if (_sohCtrl.text.isNotEmpty)
+                          ('Sức khỏe pin', '${_sohCtrl.text}%'),
+                      ],
+                    ),
+                    child: LuxeGlass(
+                      radius: 26,
+                      padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
+                      child: Column(
+                        children: [
+                          AspectRatio(
+                            aspectRatio: 1.7,
+                            child: VehicleShowroomView(
+                              color: _showroom.defaultColor,
+                              interactive: false,
+                              fallback: const LuxeScooterArt(level: 0.6),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  _showroom.anyCanSpin
+                                      ? Icons.threesixty_rounded
+                                      : Icons.view_in_ar_rounded,
+                                  size: 15,
+                                  color: LuxeColors.platinumMid,
+                                ),
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    _showroom.colors.length > 1
+                                        ? 'Chạm để xem · ${_showroom.colors.length} màu'
+                                        : 'Chạm để mở phòng trưng bày',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: LuxeText.label.copyWith(
+                                      fontSize: 11.5,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
+            const LuxeReveal(
+              index: 1,
+              child: LuxeNotice(
+                icon: Icons.verified_user_outlined,
+                message:
+                    'Thông số hãng được quản lý bởi catalog chung. Bạn chỉ có thể sửa tên gọi riêng, biển số, ODO và tình trạng pin thực tế.',
               ),
             ),
-            const SizedBox(height: 16),
-
-            // Editable Specs
-            _buildSpecSection('THÔNG SỐ XE', [
-              _SpecRow(
-                label: 'Tên gọi riêng',
-                controller: _modelCtrl,
-                isEditing: _isEditing,
-                icon: Icons.electric_moped_rounded,
-              ),
-              _SpecRow(
-                label: 'Biển số xe',
-                controller: _licensePlateCtrl,
-                isEditing: _isEditing,
-                icon: Icons.pin_outlined,
-              ),
-              _SpecRow(
-                label: 'Loại pin (LFP / NMC)',
-                controller: _batteryTypeCtrl,
-                isEditing: false,
-                icon: Icons.electric_bolt_rounded,
-              ),
-              _SpecRow(
-                label: 'Năm SX',
-                controller: _yearCtrl,
-                isEditing: false,
-                icon: Icons.calendar_today,
-                keyboardType: TextInputType.number,
-              ),
-              _SpecRow(
-                label: 'Dung lượng pin (Wh)',
-                controller: _batteryCapCtrl,
-                isEditing: false,
-                icon: Icons.battery_full_rounded,
-                keyboardType: TextInputType.number,
-              ),
-              _SpecRow(
-                label: 'SoH (%)',
-                controller: _sohCtrl,
-                isEditing: _isEditing,
-                icon: Icons.favorite_outline,
-                keyboardType: TextInputType.number,
-              ),
-              _SpecRow(
-                label: 'ODO (km)',
-                controller: _odoCtrl,
-                isEditing: _isEditing,
-                icon: Icons.speed_rounded,
-                keyboardType: TextInputType.number,
-              ),
-              _SpecRow(
-                label: 'Hiệu suất (km/%)',
-                controller: _efficiencyCtrl,
-                isEditing: false,
-                icon: Icons.eco_rounded,
-                keyboardType: TextInputType.numberWithOptions(decimal: true),
-              ),
-            ]).animate().fadeIn(delay: 100.ms).slideY(begin: 0.05),
-
-            // Catalog specs (read-only from VinFast database)
-            if (_spec != null) ...[
-              const SizedBox(height: 24),
-              _buildCatalogSection()
-                  .animate()
-                  .fadeIn(delay: 200.ms)
-                  .slideY(begin: 0.05),
-            ],
-
-            const SizedBox(height: 40),
+            LuxeReveal(
+              index: 2,
+              child: _buildSpecSection('Thông số xe', [
+                _SpecRow(
+                  label: 'Tên gọi riêng',
+                  controller: _modelCtrl,
+                  isEditing: _isEditing,
+                  icon: Icons.electric_moped_rounded,
+                ),
+                _SpecRow(
+                  label: 'Biển số xe',
+                  controller: _licensePlateCtrl,
+                  isEditing: _isEditing,
+                  icon: Icons.pin_outlined,
+                ),
+                _SpecRow(
+                  label: 'Loại pin (LFP / NMC)',
+                  controller: _batteryTypeCtrl,
+                  isEditing: false,
+                  icon: Icons.electric_bolt_rounded,
+                ),
+                _SpecRow(
+                  label: 'Năm SX',
+                  controller: _yearCtrl,
+                  isEditing: false,
+                  icon: Icons.calendar_today_rounded,
+                  keyboardType: TextInputType.number,
+                ),
+                _SpecRow(
+                  label: 'Dung lượng pin (Wh)',
+                  controller: _batteryCapCtrl,
+                  isEditing: false,
+                  icon: Icons.battery_full_rounded,
+                  keyboardType: TextInputType.number,
+                ),
+                _SpecRow(
+                  label: 'SoH (%)',
+                  controller: _sohCtrl,
+                  isEditing: _isEditing,
+                  icon: Icons.favorite_outline_rounded,
+                  keyboardType: TextInputType.number,
+                ),
+                _SpecRow(
+                  label: 'ODO (km)',
+                  controller: _odoCtrl,
+                  isEditing: _isEditing,
+                  icon: Icons.speed_rounded,
+                  keyboardType: TextInputType.number,
+                ),
+                _SpecRow(
+                  label: 'Hiệu suất (km/%)',
+                  controller: _efficiencyCtrl,
+                  isEditing: false,
+                  icon: Icons.eco_rounded,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                ),
+              ]),
+            ),
+            if (_spec != null)
+              LuxeReveal(index: 3, child: _buildCatalogSection()),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildHeaderCard(String modelName) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppColors.primaryContainer,
-            AppColors.primaryContainer.withAlpha(120),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.primary.withAlpha(51)),
-      ),
+  Widget _buildHeaderCard(String modelName, double? soh) {
+    return LuxeGlass(
+      radius: 26,
+      padding: const EdgeInsets.fromLTRB(20, 20, 16, 20),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withAlpha(40),
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: const Icon(
-              Icons.electric_moped_rounded,
-              color: AppColors.primary,
-              size: 36,
-            ),
-          ),
-          const SizedBox(width: 20),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text('XE CỦA BẠN', style: LuxeText.eyebrow),
+                const SizedBox(height: 8),
+                LuxeMetalText(
                   modelName,
                   style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
+                    fontSize: 26,
+                    fontWeight: FontWeight.w300,
+                    letterSpacing: -0.6,
+                    height: 1.15,
                   ),
                 ),
-                const SizedBox(height: 6),
-                Row(
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
                   children: [
-                    _miniChip(_yearCtrl.text),
-                    const SizedBox(width: 8),
-                    _miniChip('${_batteryCapCtrl.text} Wh'),
-                    const SizedBox(width: 8),
-                    _miniChip('SoH: ${_sohCtrl.text}%'),
+                    LuxeTag(_yearCtrl.text),
+                    LuxeTag('${_batteryCapCtrl.text} Wh'),
+                    LuxeTag(_batteryTypeCtrl.text, color: LuxeColors.steel),
                   ],
                 ),
               ],
             ),
           ),
+          const SizedBox(width: 12),
+          LuxeRing(
+            value: (soh ?? 0) / 100,
+            size: 92,
+            stroke: 7,
+            color: (soh ?? 0) < 80
+                ? LuxeColors.danger
+                : (soh ?? 0) < 90
+                ? LuxeColors.champagne
+                : LuxeColors.emerald,
+            semanticLabel: 'Sức khỏe pin ${_sohCtrl.text} phần trăm',
+            child: ExcludeSemantics(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: FittedBox(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${_sohCtrl.text}%',
+                        style: const TextStyle(
+                          color: LuxeColors.text,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w300,
+                        ),
+                      ),
+                      Text(
+                        'SoH',
+                        style: LuxeText.label.copyWith(fontSize: 10.5),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
         ],
-      ),
-    );
-  }
-
-  Widget _miniChip(String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: AppColors.primary.withAlpha(30),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: AppColors.primary,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-        ),
       ),
     );
   }
 
   Widget _buildSpecSection(String title, List<_SpecRow> rows) {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.glassBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.settings_outlined,
-                  color: AppColors.primary,
-                  size: 16,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: AppColors.primary,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.5,
-                  ),
-                ),
-                if (_isEditing) ...[
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.warningBg,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      'ĐANG SỬA',
-                      style: TextStyle(
-                        color: AppColors.warning,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        LuxeSectionLabel(
+          title,
+          trailing: AnimatedSwitcher(
+            duration: luxeDuration(context, 220),
+            child: _isEditing
+                ? const LuxeTag('Đang sửa', color: LuxeColors.champagne)
+                : const SizedBox.shrink(),
           ),
-          ...rows.asMap().entries.map((entry) {
-            final i = entry.key;
-            final row = entry.value;
-            return Column(
-              children: [
-                if (i > 0)
-                  Divider(
-                    color: AppColors.glassBorder,
-                    height: 1,
-                    indent: 20,
-                    endIndent: 20,
-                  ),
-                _buildSpecRow(row),
-              ],
-            );
-          }),
-        ],
-      ),
+        ),
+        LuxeSettingsGroup(
+          children: [for (final row in rows) _buildSpecRow(row)],
+        ),
+      ],
     );
   }
 
   Widget _buildSpecRow(_SpecRow row) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      child: Row(
-        children: [
-          Icon(row.icon, color: AppColors.textSecondary, size: 20),
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 2,
-            child: Text(
-              row.label,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 60),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+        child: Row(
+          children: [
+            LuxeMedallion(
+              icon: row.icon,
+              size: 36,
+              accent: row.isEditing ? LuxeColors.emerald : null,
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              flex: 5,
+              child: Text(
+                row.label,
+                style: const TextStyle(
+                  color: LuxeColors.text,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
-          ),
-          Expanded(
-            flex: 3,
-            child: row.isEditing
-                ? TextField(
-                    controller: row.controller,
-                    keyboardType: row.keyboardType,
-                    style: const TextStyle(
-                      color: AppColors.primary,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    textAlign: TextAlign.right,
-                    decoration: InputDecoration(
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                        vertical: 6,
-                        horizontal: 8,
-                      ),
-                      filled: true,
-                      fillColor: AppColors.surfaceLight,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(
-                          color: AppColors.primary.withAlpha(51),
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 4,
+              child: AnimatedSwitcher(
+                duration: luxeDuration(context, 240),
+                child: row.isEditing
+                    ? TextField(
+                        key: const ValueKey('edit'),
+                        controller: row.controller,
+                        keyboardType: row.keyboardType,
+                        style: const TextStyle(
+                          color: LuxeColors.text,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        textAlign: TextAlign.right,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(
+                            vertical: 10,
+                            horizontal: 10,
+                          ),
+                        ),
+                      )
+                    : Align(
+                        key: const ValueKey('view'),
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          row.controller.text.isEmpty
+                              ? '—'
+                              : row.controller.text,
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(
+                            color: LuxeColors.muted,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
                         ),
                       ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: AppColors.primary),
-                      ),
-                    ),
-                  )
-                : Text(
-                    row.controller.text,
-                    textAlign: TextAlign.right,
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-          ),
-        ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildCatalogSection() {
-    if (_spec == null) return const SizedBox();
-
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.glassBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.inventory_2_outlined,
-                  color: AppColors.primary,
-                  size: 16,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'CATALOG XE ĐIỆN',
-                  style: TextStyle(
-                    color: AppColors.primary,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.5,
-                  ),
-                ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.infoBg,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    'CHỈ ĐỌC',
-                    style: TextStyle(
-                      color: AppColors.info,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          _catalogRow('Tên model', _spec!.modelName),
-          Divider(
-            color: AppColors.glassBorder,
-            height: 1,
-            indent: 20,
-            endIndent: 20,
-          ),
-          _catalogRow('Dung lượng (Wh)', '${_spec!.nominalCapacityWh.toInt()}'),
-          Divider(
-            color: AppColors.glassBorder,
-            height: 1,
-            indent: 20,
-            endIndent: 20,
-          ),
-          _catalogRow(
-            'Dung lượng (Ah)',
-            _spec!.nominalCapacityAh.toStringAsFixed(1),
-          ),
-          Divider(
-            color: AppColors.glassBorder,
-            height: 1,
-            indent: 20,
-            endIndent: 20,
-          ),
-          _catalogRow('Điện áp (V)', '${_spec!.nominalVoltageV.toInt()}'),
-          Divider(
-            color: AppColors.glassBorder,
-            height: 1,
-            indent: 20,
-            endIndent: 20,
-          ),
-          _catalogRow('Sạc tối đa (W)', '${_spec!.maxChargePowerW.toInt()}'),
-          Divider(
-            color: AppColors.glassBorder,
-            height: 1,
-            indent: 20,
-            endIndent: 20,
-          ),
-          _catalogRow(
-            'Motor định mức (W)',
-            '${_spec!.ratedMotorPowerW.toInt()}',
-          ),
-          Divider(
-            color: AppColors.glassBorder,
-            height: 1,
-            indent: 20,
-            endIndent: 20,
-          ),
-          _catalogRow('Motor peak (W)', '${_spec!.peakMotorPowerW.toInt()}'),
-          Divider(
-            color: AppColors.glassBorder,
-            height: 1,
-            indent: 20,
-            endIndent: 20,
-          ),
-          _catalogRow('Nguồn dữ liệu', _spec!.source),
-        ],
-      ),
+    final spec = _spec;
+    if (spec == null) return const SizedBox();
+    final rows = <(String, String)>[
+      ('Tên model', spec.modelName),
+      ('Dung lượng (Wh)', '${spec.nominalCapacityWh.toInt()}'),
+      ('Dung lượng (Ah)', spec.nominalCapacityAh.toStringAsFixed(1)),
+      ('Điện áp (V)', '${spec.nominalVoltageV.toInt()}'),
+      ('Sạc tối đa (W)', '${spec.maxChargePowerW.toInt()}'),
+      ('Motor định mức (W)', '${spec.ratedMotorPowerW.toInt()}'),
+      ('Motor peak (W)', '${spec.peakMotorPowerW.toInt()}'),
+      ('Nguồn dữ liệu', spec.source),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const LuxeSectionLabel(
+          'Catalog xe điện',
+          trailing: LuxeTag('Chỉ đọc', color: LuxeColors.steel),
+        ),
+        LuxeSettingsGroup(
+          children: [
+            for (final (label, value) in rows) _catalogRow(label, value),
+          ],
+        ),
+      ],
     );
   }
 
   Widget _catalogRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
       child: Row(
         children: [
           Expanded(
             child: Text(
               label,
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              style: LuxeText.caption.copyWith(fontSize: 13.5),
             ),
           ),
-          Text(
-            value,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
+          const SizedBox(width: 12),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                color: LuxeColors.text,
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
             ),
           ),
         ],

@@ -130,16 +130,29 @@ class AppUpdateService with WidgetsBindingObserver {
     final info = await PackageInfo.fromPlatform();
     final currentBuild = int.tryParse(info.buildNumber) ?? 0;
     final ios = Platform.isIOS;
-    final latestBuild = _asInt(_remoteConfig[ios ? 'iosLatestBuild' : 'latestBuild']) > 0
+    final latestBuild =
+        _asInt(_remoteConfig[ios ? 'iosLatestBuild' : 'latestBuild']) > 0
         ? _asInt(_remoteConfig[ios ? 'iosLatestBuild' : 'latestBuild'])
         : _asInt(_remoteConfig['latestBuild']);
-    final minSupported = _asInt(_remoteConfig[ios ? 'iosMinSupportedBuild' : 'minSupportedBuild']) > 0
-        ? _asInt(_remoteConfig[ios ? 'iosMinSupportedBuild' : 'minSupportedBuild'])
+    final minSupported =
+        _asInt(
+              _remoteConfig[ios ? 'iosMinSupportedBuild' : 'minSupportedBuild'],
+            ) >
+            0
+        ? _asInt(
+            _remoteConfig[ios ? 'iosMinSupportedBuild' : 'minSupportedBuild'],
+          )
         : _asInt(_remoteConfig['minSupportedBuild']);
-    final latestVersion = _asString(_remoteConfig[ios ? 'iosLatestVersion' : 'latestVersion']).isNotEmpty
+    final latestVersion =
+        _asString(
+          _remoteConfig[ios ? 'iosLatestVersion' : 'latestVersion'],
+        ).isNotEmpty
         ? _asString(_remoteConfig[ios ? 'iosLatestVersion' : 'latestVersion'])
         : _asString(_remoteConfig['latestVersion']);
-    final releaseNotes = _asString(_remoteConfig[ios ? 'iosReleaseNotes' : 'releaseNotes']).isNotEmpty
+    final releaseNotes =
+        _asString(
+          _remoteConfig[ios ? 'iosReleaseNotes' : 'releaseNotes'],
+        ).isNotEmpty
         ? _asString(_remoteConfig[ios ? 'iosReleaseNotes' : 'releaseNotes'])
         : _asString(_remoteConfig['releaseNotes']);
     final isForce = _asBool(_remoteConfig['forceUpdate']);
@@ -539,8 +552,11 @@ class _UpdateDialogState extends State<_UpdateDialog> {
   Future<void> _download(BuildContext context) async {
     if (Platform.isIOS) {
       final uri = Uri.tryParse(storeUrl);
-      if (uri == null || !(uri.scheme == 'https' || uri.scheme == 'itms-apps')) {
-        setState(() => _downloadError = 'Chưa cấu hình liên kết TestFlight/App Store.');
+      if (uri == null ||
+          !(uri.scheme == 'https' || uri.scheme == 'itms-apps')) {
+        setState(
+          () => _downloadError = 'Chưa cấu hình liên kết TestFlight/App Store.',
+        );
         return;
       }
       if (await canLaunchUrl(uri)) {

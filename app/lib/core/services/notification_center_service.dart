@@ -177,6 +177,9 @@ class NotificationCenterService {
     required String state,
     required int targetPercent,
   }) async {
+    // Starting is already visible on screen and in the pill; the inbox keeps
+    // outcomes only (one "active" doc per session was noise, Task 125).
+    if (state == 'active') return;
     final (title, message) = switch (state) {
       'active' => (
         'Đã bắt đầu sạc thông minh',
@@ -184,15 +187,24 @@ class NotificationCenterService {
       ),
       'completed' => (
         'Phiên sạc đã hoàn tất',
-        'App đã đọc lại và xác minh relay Shelly đang OFF.',
+        'App đã đọc lại và xác minh ổ Shelly đã tắt.',
       ),
       'cancelled' => (
         'Đã ngắt sạc thủ công',
         'App đã đọc lại và xác minh nguồn Shelly đã ngắt.',
       ),
+      // Never print the raw state code (it showed "interrupted", Task 125).
+      'interrupted' => (
+        'Phiên sạc bị ngắt',
+        'Ổ Shelly đã tắt trước giờ dự kiến. Mở Sạc pin để xem chi tiết.',
+      ),
+      'failed' => (
+        'Phiên sạc cần kiểm tra',
+        'Chưa xác minh được trạng thái ổ. Hãy kiểm tra ổ Shelly trực tiếp.',
+      ),
       _ => (
         'Phiên sạc cần kiểm tra',
-        'Phiên sạc thông minh kết thúc với trạng thái $state.',
+        'Phiên sạc đã kết thúc. Mở Sạc pin để xem chi tiết.',
       ),
     };
     await _repository.createNotification(
@@ -207,6 +219,7 @@ class NotificationCenterService {
       },
       actionTarget:
           '/smart-charge?vehicleId=${Uri.encodeQueryComponent(vehicleId)}&sessionId=${Uri.encodeQueryComponent(sessionId)}',
+      dedupeKey: 'sc_${sessionId}_$state',
     );
   }
 
@@ -219,8 +232,8 @@ class NotificationCenterService {
       type: NotificationType.system,
       title: forceUpdate ? 'Cập nhật bắt buộc' : 'Có phiên bản mới',
       message: latestBuild > 0
-          ? 'EV Battery $latestVersion+$latestBuild đã sẵn sàng để tải về.'
-          : 'EV Battery $latestVersion đã sẵn sàng để tải về.',
+          ? 'VinFast Battery $latestVersion+$latestBuild đã sẵn sàng để tải về.'
+          : 'VinFast Battery $latestVersion đã sẵn sàng để tải về.',
       payload: {
         'latestVersion': latestVersion,
         'latestBuild': latestBuild,

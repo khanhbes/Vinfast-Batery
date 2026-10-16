@@ -3,17 +3,16 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../settings/vehicle_garage_screen.dart';
+import '../../core/constants/beta_capabilities.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/dashboard_preferences_service.dart';
 import '../../core/services/guide_registry.dart';
-import '../../core/theme/app_motion.dart';
-import '../../core/theme/app_ui_colors.dart';
 import '../../core/theme/luxe_theme.dart';
 import 'widgets/luxe_dashboard_cards.dart';
 import 'widgets/luxe_vehicle_hero.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/services/session_service.dart';
-import '../../core/services/sync_service.dart';
 import '../../core/utils/app_error_formatter.dart';
 import '../../data/models/vehicle_model.dart';
 import 'widgets/range_prediction_card.dart';
@@ -22,6 +21,7 @@ import '../smart_charging/smart_charger_setup_hub_screen.dart';
 import '../trip_planner/trip_planner_wrapper.dart';
 import '../maintenance/maintenance_screen.dart';
 import '../../core/widgets/debug_error_sheet.dart';
+import '../../core/widgets/luxe_kit.dart';
 import '../battery_monitor/battery_monitor_screen.dart';
 
 // =============================================================================
@@ -109,6 +109,9 @@ class HomeScreen extends ConsumerWidget {
                     color: LuxeColors.emerald,
                     backgroundColor: const Color(0xFF17181B),
                     onRefresh: () async {
+                      // Single pull-to-refresh for Overview (Task 125).
+                      ref.invalidate(chargeLogsProvider);
+                      ref.invalidate(vehicleStatsProvider);
                       final requests = <Future<Object?>>[
                         ref.refresh(allVehiclesProvider.future),
                       ];
@@ -219,15 +222,22 @@ class HomeScreen extends ConsumerWidget {
               index: 1,
               child: LuxeQuickActions(
                 tripKey: GuideRegistry.keyTripPlannerAction,
-                onTrip: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => TripPlannerWrapper()),
-                ),
+                onTrip: BetaCapabilities.tripPlanner
+                    ? () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => TripPlannerWrapper()),
+                      )
+                    : null,
                 onMaintenance: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const MaintenanceScreen()),
                 ),
-                onSync: () => _showSyncDialog(context),
+                onBatteryMonitor: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const BatteryMonitorScreen(),
+                  ),
+                ),
               ),
             ),
           ),
@@ -335,14 +345,20 @@ class HomeScreen extends ConsumerWidget {
         return const SliverToBoxAdapter(child: SizedBox.shrink());
     }
   }
-
-  void _showSyncDialog(BuildContext context) {
-    showDialog(context: context, builder: (context) => _SyncDialog());
-  }
 }
 
-class _ShellyChecklistSliver extends StatelessWidget {
+class _ShellyChecklistSliver extends StatefulWidget {
   const _ShellyChecklistSliver();
+
+  @override
+  State<_ShellyChecklistSliver> createState() => _ShellyChecklistSliverState();
+}
+
+class _ShellyChecklistSliverState extends State<_ShellyChecklistSliver> {
+  // One listener per account: a new snapshots() stream on every Home rebuild
+  // re-subscribed and re-read users/{uid} (Task 125).
+  String? _uid;
+  Stream<DocumentSnapshot<Map<String, dynamic>>>? _profile;
 
   @override
   Widget build(BuildContext context) {
@@ -355,11 +371,15 @@ class _ShellyChecklistSliver extends StatelessWidget {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return const SliverToBoxAdapter(child: SizedBox.shrink());
 
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
+    if (_uid != user.uid || _profile == null) {
+      _uid = user.uid;
+      _profile = FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
-          .snapshots(),
+          .snapshots();
+    }
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: _profile,
       builder: (context, snapshot) {
         final data = snapshot.data?.data();
         final shellyStatus = data?['shellyOnboardingStatus'];
@@ -388,376 +408,6 @@ class _ShellyChecklistSliver extends StatelessWidget {
 // Widget Classes
 // =============================================================================
 
-class _SyncDialog extends StatefulWidget {
-  @override
-  State<_SyncDialog> createState() => _SyncDialogState();
-}
-
-class _SyncDialogState extends State<_SyncDialog>
-    with SingleTickerProviderStateMixin {
-  bool _isSyncing = false;
-  String _status = 'Sẵn sàng đồng bộ';
-  late AnimationController _animationController;
-
-  @override
-  void initState() {
-    super.initState();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: Duration(seconds: 2),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _performSync() async {
-    setState(() {
-      _isSyncing = true;
-      _status = 'Đang đồng bộ dữ liệu...';
-    });
-
-    final syncService = SyncService();
-    final result = await syncService.performFullSync();
-
-    setState(() {
-      _isSyncing = false;
-      _status = result['success'] ? 'Đồng bộ thành công!' : 'Đồng bộ thất bại';
-    });
-
-    await Future.delayed(Duration(seconds: 1));
-    if (mounted) Navigator.pop(context);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: AppUiColors.of(context).surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: Padding(
-        padding: EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            RotationTransition(
-              turns: _animationController,
-              child: Container(
-                padding: EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppUiColors.of(context).primarySurface,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.sync_rounded,
-                  color: AppUiColors.of(context).primary,
-                  size: 32,
-                ),
-              ),
-            ),
-            SizedBox(height: 20),
-            Text(
-              'Đồng bộ dữ liệu Web',
-              style: TextStyle(
-                color: AppUiColors.of(context).text,
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            SizedBox(height: 8),
-            Text(
-              _status,
-              style: TextStyle(
-                color: AppUiColors.of(context).muted,
-                fontSize: 14,
-              ),
-            ),
-            SizedBox(height: 24),
-            if (_isSyncing)
-              LinearProgressIndicator(
-                backgroundColor: AppUiColors.of(context).elevated,
-                valueColor: AlwaysStoppedAnimation(
-                  AppUiColors.of(context).primary,
-                ),
-                borderRadius: BorderRadius.circular(4),
-              )
-            else
-              Row(
-                children: [
-                  Expanded(
-                    child: _AnimatedButton(
-                      label: 'Hủy',
-                      isSecondary: true,
-                      onTap: () => Navigator.pop(context),
-                    ),
-                  ),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: _AnimatedButton(
-                      label: 'Đồng bộ ngay',
-                      onTap: _performSync,
-                    ),
-                  ),
-                ],
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // Efficiency Card Widget
-  // ignore: unused_element
-  Widget _buildEfficiencyCard({required double efficiency}) {
-    return Container(
-      padding: EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppUiColors.of(context).surface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppUiColors.of(context).border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppUiColors.of(context).primary.withAlpha(26),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
-                  Icons.speed_rounded,
-                  color: AppUiColors.of(context).primary,
-                  size: 18,
-                ),
-              ),
-              SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Hiệu suất lái xe',
-                  style: TextStyle(
-                    color: AppUiColors.of(context).text,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              Text(
-                '${efficiency.toInt()}%',
-                style: TextStyle(
-                  color: AppUiColors.of(context).primary,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 16),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: efficiency / 100,
-              backgroundColor: AppUiColors.of(context).elevated,
-              valueColor: AlwaysStoppedAnimation<Color>(
-                AppUiColors.of(context).primary,
-              ),
-              minHeight: 8,
-            ),
-          ),
-        ],
-      ),
-    ).appFadeSlideIn(index: 4);
-  }
-
-  // Achievement Card Widget
-  // ignore: unused_element
-  Widget _buildAchievementCard({required double efficiency}) {
-    return Container(
-      padding: EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppUiColors.of(context).surface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppUiColors.of(context).border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppUiColors.of(context).primary.withAlpha(26),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
-                  Icons.emoji_events_rounded,
-                  color: AppUiColors.of(context).primary,
-                  size: 18,
-                ),
-              ),
-              SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Thành tích lái xe',
-                  style: TextStyle(
-                    color: AppUiColors.of(context).text,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 16),
-          Row(
-            children: [
-              _buildAchievementItem(
-                icon: Icons.local_florist_rounded,
-                label: 'Eco Master',
-                achieved: efficiency >= 85,
-              ),
-              SizedBox(width: 12),
-              _buildAchievementItem(
-                icon: Icons.bolt,
-                label: 'Energy Saver',
-                achieved: efficiency >= 75,
-              ),
-              SizedBox(width: 12),
-              _buildAchievementItem(
-                icon: Icons.star_rounded,
-                label: 'Top Driver',
-                achieved: efficiency >= 90,
-              ),
-            ],
-          ),
-        ],
-      ),
-    ).appFadeSlideIn(index: 5);
-  }
-
-  Widget _buildAchievementItem({
-    required IconData icon,
-    required String label,
-    required bool achieved,
-  }) {
-    return Expanded(
-      child: Container(
-        padding: EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: achieved
-              ? AppUiColors.of(context).primary.withAlpha(26)
-              : AppUiColors.of(context).elevated,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          children: [
-            Icon(
-              icon,
-              color: achieved
-                  ? AppUiColors.of(context).primary
-                  : AppUiColors.of(context).muted,
-              size: 24,
-            ),
-            SizedBox(height: 6),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: achieved
-                    ? AppUiColors.of(context).primary
-                    : AppUiColors.of(context).muted,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _AnimatedButton extends StatefulWidget {
-  final String label;
-  final VoidCallback onTap;
-  final bool isSecondary;
-
-  const _AnimatedButton({
-    required this.label,
-    required this.onTap,
-    this.isSecondary = false,
-  });
-
-  @override
-  State<_AnimatedButton> createState() => _AnimatedButtonState();
-}
-
-class _AnimatedButtonState extends State<_AnimatedButton>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: Duration(milliseconds: 150),
-      vsync: this,
-    );
-    _scaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 0.95,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => _controller.forward(),
-      onTapUp: (_) {
-        _controller.reverse();
-        widget.onTap();
-      },
-      onTapCancel: () => _controller.reverse(),
-      child: ScaleTransition(
-        scale: _scaleAnimation,
-        child: Container(
-          padding: EdgeInsets.symmetric(vertical: 14),
-          decoration: BoxDecoration(
-            color: widget.isSecondary
-                ? AppUiColors.of(context).elevated
-                : AppUiColors.of(context).primary,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Center(
-            child: Text(
-              widget.label,
-              style: TextStyle(
-                color: widget.isSecondary
-                    ? AppUiColors.of(context).text
-                    : Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _InlineErrorBanner extends StatelessWidget {
   final String title;
   final Object error;
@@ -773,86 +423,74 @@ class _InlineErrorBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final friendly = AppErrorFormatter.format(error);
     return Container(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 14),
       decoration: BoxDecoration(
-        color: AppUiColors.of(context).danger.withValues(alpha: 0.10),
+        color: LuxeColors.danger.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: AppUiColors.of(context).danger.withValues(alpha: 0.4),
-        ),
+        border: Border.all(color: LuxeColors.danger.withValues(alpha: 0.32)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.error_outline_rounded,
-                color: AppUiColors.of(context).danger,
+                color: LuxeColors.danger,
                 size: 20,
               ),
-              SizedBox(width: 8),
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   title,
-                  style: TextStyle(
-                    color: AppUiColors.of(context).text,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: LuxeText.item.copyWith(fontSize: 14.5),
                 ),
               ),
               IconButton(
                 onPressed: onRetry,
-                icon: Icon(
+                icon: const Icon(
                   Icons.refresh_rounded,
-                  color: AppUiColors.of(context).danger,
+                  color: LuxeColors.platinum,
                   size: 20,
                 ),
-                visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.all(4),
-                constraints: const BoxConstraints.tightFor(
-                  width: 36,
-                  height: 36,
-                ),
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                 tooltip: 'Thử lại',
               ),
             ],
           ),
-          SizedBox(height: 4),
-          Text(
-            friendly,
-            style: TextStyle(
-              color: AppUiColors.of(context).muted,
-              fontSize: 12,
-            ),
+          Padding(
+            padding: const EdgeInsets.only(left: 30, right: 8),
+            child: Text(friendly, style: LuxeText.caption),
           ),
           if (kDebugMode) ...[
-            SizedBox(height: 6),
-            GestureDetector(
-              onTap: () =>
-                  DebugErrorSheet.show(context, error: error, source: title),
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.terminal_rounded,
-                      size: 13,
-                      color: AppUiColors.of(context).muted,
-                    ),
-                    SizedBox(width: 4),
-                    Text(
-                      'Xem chi tiết kỹ thuật',
-                      style: TextStyle(
-                        color: AppUiColors.of(context).muted,
-                        fontSize: 11,
-                        decoration: TextDecoration.underline,
+            const SizedBox(height: 6),
+            Padding(
+              padding: const EdgeInsets.only(left: 30),
+              child: GestureDetector(
+                onTap: () =>
+                    DebugErrorSheet.show(context, error: error, source: title),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.terminal_rounded,
+                        size: 13,
+                        color: LuxeColors.dim,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 4),
+                      Text(
+                        'Xem chi tiết kỹ thuật',
+                        style: LuxeText.label.copyWith(
+                          fontSize: 11,
+                          color: LuxeColors.dim,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -864,53 +502,45 @@ class _InlineErrorBanner extends StatelessWidget {
 }
 
 class _NoVehicleBanner extends StatelessWidget {
+  // Vietnamese copy and a real way forward (it named an English menu path
+  // and had no button, Task 125).
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppUiColors.of(context).warning.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: AppUiColors.of(context).warning.withValues(alpha: 0.4),
-        ),
+  Widget build(BuildContext context) => LuxeNotice(
+    icon: Icons.electric_moped_rounded,
+    color: LuxeColors.champagne,
+    message: 'Bạn chưa có xe nào. Thêm xe đầu tiên để theo dõi pin và sạc.',
+    action: TextButton(
+      key: const ValueKey('home-add-first-vehicle'),
+      style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+      onPressed: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const VehicleGarageScreen()),
       ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.directions_car_outlined,
-            color: AppUiColors.of(context).warning,
-            size: 20,
-          ),
-          SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'Bạn chưa có xe nào. Vào Settings → Garage để thêm xe đầu tiên.',
-              style: TextStyle(
-                color: AppUiColors.of(context).text,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+      child: const Text('Thêm xe'),
+    ),
+  );
 }
 
-/// Quiet glass placeholder while a card loads.
+/// Quiet glass placeholder while a card loads (static: home loads behind
+/// pull-to-refresh and tests settle on it).
 class _LuxeSkeleton extends StatelessWidget {
   const _LuxeSkeleton({required this.height});
   final double height;
 
+  // Shimmer while the vehicle is really loading (a plain empty box looked
+  // like a blank card for seconds on cold start, Task 125).
   @override
-  Widget build(BuildContext context) => Container(
-    height: height,
-    decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(20),
-      color: LuxeColors.glass,
-      border: Border.all(color: LuxeColors.hairline),
+  Widget build(BuildContext context) => Semantics(
+    label: 'Đang tải thông tin xe',
+    child: LuxeShimmer(
+      child: Container(
+        height: height,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          color: LuxeColors.glass,
+          border: Border.all(color: LuxeColors.hairline),
+        ),
+      ),
     ),
   );
 }

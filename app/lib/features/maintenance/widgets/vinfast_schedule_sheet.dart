@@ -149,7 +149,7 @@ class _SheetState extends State<_Sheet> {
                     const Text(
                       'ODO đang là 0 km. Nếu xe đã chạy, hãy cập nhật ODO trước để mốc không bị sớm.',
                       style: TextStyle(
-                        color: Color(0xFFFBBF24),
+                        color: LuxeColors.champagne,
                         fontSize: 13,
                         height: 1.4,
                       ),

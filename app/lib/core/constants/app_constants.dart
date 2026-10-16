@@ -42,7 +42,10 @@ class AppConstants {
   /// Builds an absolute API URI only when a valid base URL is configured.
   /// Background services must not concatenate an empty base URL because that
   /// produces a relative URI which the mobile HTTP client cannot send.
-  static Uri? tryBuildApiUri(String endpoint, {Map<String, dynamic>? queryParameters}) {
+  static Uri? tryBuildApiUri(
+    String endpoint, {
+    Map<String, dynamic>? queryParameters,
+  }) {
     if (!isApiConfigured) return null;
     final base = apiBaseUrl.trim().replaceAll(RegExp(r'/+$'), '');
     final path = endpoint.startsWith('/') ? endpoint : '/$endpoint';
@@ -70,7 +73,7 @@ class AppConstants {
     _customApiBaseUrl = candidate;
   }
 
-  static const String appVersion = '1.1.9';
+  static const String appVersion = '1.3.0';
 
   // Firestore Collection Names
   static const String vehiclesCollection = 'Vehicles';
@@ -92,7 +95,8 @@ class AppConstants {
   static const double? defaultBatteryCapacityWh = null;
 
   // VinFast Feliz 2025 specs
-  static const double defaultEfficiency = 1.35; // km per 1% battery
+  // Range efficiency comes from the vehicle/catalog record
+  // (VehicleModel.defaultEfficiency); see data/services/range_estimator.dart.
   static const double defaultChargeRate = 0.42; // % per minute (600W / 2400Wh)
 
   // Battery health thresholds

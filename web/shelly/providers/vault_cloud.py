@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+import re
 import os
 import threading
 import time
@@ -21,6 +22,17 @@ PROFILE_READ_CACHE_SECONDS = 60
 IDLE_STATUS_CACHE_SECONDS = 10
 NO_LOAD_ON_OBSERVE_SECONDS = 12
 NO_LOAD_OFF_GRACE_SECONDS = 10
+# Task 122: an ON request reuses the readiness read when it is this fresh;
+# older contexts are re-read once before the command (never a second ON).
+ON_CONTEXT_REFRESH_SECONDS = 6
+
+
+def _run_parallel(jobs: dict) -> dict:
+    """Start independent reads together; callers inspect each future."""
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=len(jobs)) as pool:
+        futures = {name: pool.submit(job) for name, job in jobs.items()}
+    return futures
 
 
 class VaultCloudControlProvider:
@@ -38,11 +50,14 @@ class VaultCloudControlProvider:
         self.sleep = sleeper
         self.clock = clock
 
-    def _profile(self, binding: DeviceBinding, *, fresh: bool = True) -> tuple[str, str]:
+    def _profile(self, binding: DeviceBinding, *, fresh: bool = True, profile: dict | None = None) -> tuple[str, str]:
         uid = binding.owner_uid
         if not uid:
             raise ProviderError("ownershipUnavailable", "Không xác minh được chủ sở hữu Shelly")
-        profile = self._restore_profile(binding, fresh=fresh)
+        # One fresh vault read can serve every check made at the same moment
+        # (Task 123: an ON used to decrypt the same document ~10 times).
+        if profile is None:
+            profile = self._restore_profile(binding, fresh=fresh)
         if not profile or profile.get("revokedAt"):
             raise ProviderError("profileUnavailable", "Cấu hình Shelly chưa được lưu trên máy chủ")
         if str(profile.get("model") or "").upper() != "S3PL-00112EU":
@@ -73,11 +88,17 @@ class VaultCloudControlProvider:
         return profile
 
     def _post(self, binding: DeviceBinding, path: str, payload: dict, *, command=False,
-              safety_context=None, expected_credentials=None) -> object:
+              safety_context=None, expected_credentials=None, profile=None) -> object:
         is_on = path == "/v2/devices/api/set/switch" and payload.get("on") is True
         if command:
             self._forget_status(binding)
-        host, key = self._profile(binding, fresh=command or is_on or expected_credentials is not None)
+        if is_on and isinstance(safety_context, dict) and safety_context.get("credentials"):
+            # Routing only: the admitted slot below re-reads the vault fresh
+            # and rejects any change before the command is sent.
+            host, key = safety_context["credentials"]
+        else:
+            host, key = self._profile(binding, fresh=command or is_on or expected_credentials is not None,
+                                      profile=profile)
         if is_on and safety_context is None:
             raise ProviderError("safetyVerificationRequired", "Cần kiểm tra an toàn bộ sạc trước khi bật")
         fingerprint = hashlib.sha256(key.encode("utf-8")).hexdigest()
@@ -85,13 +106,15 @@ class VaultCloudControlProvider:
         def send():
             if guard:
                 guard()
-            # These checks remain inside the admitted operation, after queueing.
+            # These checks remain inside the admitted operation, after queueing:
+            # one fresh vault read, shared by the credential and safety checks.
             if expected_credentials is not None or is_on:
-                current = self._profile(binding)
+                fresh_profile = self._restore_profile(binding)
+                current = self._profile(binding, profile=fresh_profile)
                 if current != (host, key) or (expected_credentials is not None and current != expected_credentials):
                     raise ProviderError("verificationChanged", "Cấu hình đã thay đổi; hãy kiểm tra lại")
-            if is_on:
-                self._assert_safety_context(binding, safety_context)
+                if is_on:
+                    self._assert_safety_context(binding, safety_context, profile=fresh_profile)
             try:
                 response = self.http.post(f"{host}{path}", params={"auth_key": key}, json=payload, timeout=7)
             except requests.RequestException as exc:
@@ -100,7 +123,15 @@ class VaultCloudControlProvider:
                 # Sanitized diagnostics only: no key, host or device identifiers.
                 try:
                     body = response.json()
-                    summary = {"isok": body.get("isok"), "hasError": bool(body.get("error"))} if isinstance(body, dict) else {"type": type(body).__name__}
+                    summary = {"isok": body.get("isok"), "hasError": bool(body.get("error") or body.get("errors"))} if isinstance(body, dict) else {"type": type(body).__name__}
+                    if isinstance(body, dict):
+                        # Error codes only (Task 123: an OFF got HTTP 400 and
+                        # the cause was invisible). Never values or ids.
+                        raw = body.get("errors") or body.get("error")
+                        codes = (sorted(str(k)[:40] for k in raw)[:5] if isinstance(raw, dict)
+                                 else [str(raw)[:40]] if isinstance(raw, str) else [])
+                        if codes:
+                            summary["errorCodes"] = [re.sub(r"[^A-Za-z0-9_.-]", "_", c) for c in codes]
                 except ValueError:
                     summary = {"nonJson": True}
                 print(f"[shelly-cloud] command on={payload.get('on')} toggle_after={payload.get('toggle_after')} "
@@ -149,9 +180,11 @@ class VaultCloudControlProvider:
             return value
         return None
 
-    def get_snapshot(self, binding: DeviceBinding, *, expected_credentials=None) -> dict:
+    def get_snapshot(self, binding: DeviceBinding, *, expected_credentials=None, profile=None) -> dict:
         # Keep legacy read/OFF compatible; G2 is mandatory for new ON evidence.
         kwargs = {"expected_credentials": expected_credentials} if expected_credentials is not None else {}
+        if profile is not None:
+            kwargs["profile"] = profile
         raw = self._post(binding, "/v2/devices/api/get", {"ids": [binding.device_id], "select": ["status", "settings"]}, **kwargs)
         device = self._device(raw, binding.device_id)
         if not isinstance(device, dict) or str(device.get("id") or "").lower() != binding.device_id.lower():
@@ -275,23 +308,39 @@ class VaultCloudControlProvider:
         # the countdown. Expired timestamps resolve to zero, not full duration.
         return max(0, math.floor(min(duration, started + duration - reference)))
 
-    def _assert_safety_context(self, binding, context):
+    def _assert_safety_context(self, binding, context, *, profile=None):
         age = self.clock() - context["observedAt"]
         if not math.isfinite(age) or not 0 <= age <= 10:
             raise ProviderError("safetySnapshotStale", "Kiểm tra kết nối đã hết hạn; hãy thử lại", True)
-        host, key = self._profile(binding)
+        if os.environ.get("AZURE_STAGING_HARDWARE_DISABLED", "0") == "1":
+            raise ProviderError("workerUnavailable", "Giám sát sạc chưa sẵn sàng", True)
+        # Independent fresh reads (Firestore is ~0.2 s away): run them together
+        # instead of one after another. Every check below still applies.
+        now = datetime.now(timezone.utc)
+        jobs = {
+            "worker": lambda: self.repository.worker_health_ready(now),
+            "owned": lambda: self.repository.device_owned_by(binding.owner_uid, binding.device_id),
+        }
+        if profile is None:
+            jobs["profile"] = lambda: self._restore_profile(binding)
+        results = _run_parallel(jobs)
+        if profile is None:
+            profile = results["profile"].result()
+        host, key = self._profile(binding, profile=profile)
         if (host, key) != context["credentials"]:
             raise ProviderError("verificationChanged", "Cấu hình đã thay đổi; hãy kiểm tra lại")
-        if (os.environ.get("AZURE_STAGING_HARDWARE_DISABLED", "0") == "1"
-                or not self.repository.worker_health_ready(datetime.now(timezone.utc))):
+        try:
+            worker_ready = results["worker"].result()
+        except Exception:
+            worker_ready = False
+        if not worker_ready:
             raise ProviderError("workerUnavailable", "Giám sát sạc chưa sẵn sàng", True)
         try:
-            owned = self.repository.device_owned_by(binding.owner_uid, binding.device_id)
+            owned = results["owned"].result()
         except Exception as error:
             raise ProviderError("ownershipUnavailable", "Chưa xác minh được quyền điều khiển Shelly", True) from error
         if owned is not True:
             raise ProviderError("ownershipUnavailable", "Chưa xác minh được quyền điều khiển Shelly")
-        profile = self._restore_profile(binding)
         if not profile or profile.get("revokedAt") or profile.get("revision") != context["revision"]:
             raise ProviderError("verificationChanged", "Liên kết đã thay đổi; hãy kiểm tra lại")
         if context["requireHistory"]:
@@ -305,10 +354,11 @@ class VaultCloudControlProvider:
                     or profile.get("verifiedModel") != "S3PL-00112EU"):
                 raise ProviderError("safetyVerificationRequired", "Cần kiểm tra lại an toàn bộ sạc")
 
-    def _live_safety_context(self, binding, *, require_history=True):
-        credentials = self._profile(binding)
+    def _live_safety_context(self, binding, *, require_history=True, verify=True):
         profile = self._restore_profile(binding)
-        snapshot = self.get_snapshot(binding, expected_credentials=credentials)
+        credentials = self._profile(binding, profile=profile)
+        snapshot = (self.get_snapshot(binding, expected_credentials=credentials, profile=profile)
+                    if verify else self.get_snapshot(binding, profile=profile))
         status = self._status_from_snapshot(binding, snapshot)
         fingerprint = cloud_safety_fingerprint(binding.device_id, *credentials, snapshot)
         if status.relay is not False:
@@ -322,7 +372,8 @@ class VaultCloudControlProvider:
             raise ProviderError("verificationChanged", "Chưa xác minh được phiên bản liên kết")
         context = {"credentials": credentials, "revision": revision, "fingerprint": fingerprint,
                    "observedAt": self.clock(), "requireHistory": require_history, "status": status}
-        self._assert_safety_context(binding, context)
+        if verify:
+            self._assert_safety_context(binding, context)
         return context
 
     def verify_control_readiness(self, binding: DeviceBinding) -> None:
@@ -340,6 +391,34 @@ class VaultCloudControlProvider:
         if type(duration_seconds) is not int or not 5 <= duration_seconds <= 36000:
             raise ProviderError("unsafeDuration", "Thời gian sạc phải từ 5 giây đến 10 giờ")
         self._post(binding, "/v2/devices/api/set/switch", {"id": binding.device_id, "channel": 0, "on": True, "toggle_after": duration_seconds}, command=True, safety_context=context)
+
+    def prepare_on(self, binding: DeviceBinding) -> dict:
+        """The single fresh live safety read for one ON request (Task 122).
+
+        The service checks its status for the readiness gate and passes the
+        context to [turn_on_with_context]. Credentials, revision, ownership,
+        worker health and the 10 s age limit are still re-checked inside the
+        admitted Cloud slot right before the command.
+        """
+        previous_budget = getattr(self, "_admission_budget", None)
+        self._admission_budget = 12.0
+        try:
+            # Task 123: the measured thresholds (V/A/W/°C, relay OFF) are
+            # checked here; credentials/revision/fingerprint/history, worker
+            # and ownership are checked fresh inside the admitted ON slot
+            # (they used to be read twice more here, ~3 s from East Asia).
+            return self._live_safety_context(binding, verify=False)
+        finally:
+            self._admission_budget = previous_budget
+
+    def turn_on_with_context(self, binding: DeviceBinding, duration_seconds: int, context: dict) -> None:
+        if not isinstance(context, dict) or "observedAt" not in context:
+            raise ProviderError("safetyVerificationRequired", "Cần kiểm tra an toàn bộ sạc trước khi bật")
+        age = self.clock() - context["observedAt"]
+        if not math.isfinite(age) or age < 0 or age > ON_CONTEXT_REFRESH_SECONDS:
+            # Re-read rather than let the admitted check reject a slow request.
+            context = self._live_safety_context(binding)
+        self._send_verified_on(binding, duration_seconds, context)
 
     def turn_on_with_timer(self, binding: DeviceBinding, duration_seconds: int) -> None:
         # A second live check under the device lock protects every caller,

@@ -11,8 +11,10 @@ import '../../../data/models/smart_charge_cost.dart';
 import '../../../data/models/smart_charger_capabilities.dart';
 import '../../../data/models/smart_charging_session.dart';
 import '../../../data/repositories/charge_log_repository.dart';
+import '../../../data/services/charge_estimator.dart';
 import '../../../data/services/charging_prediction_adapter.dart';
 import '../../../data/services/smart_charger_service.dart';
+import '../../../core/services/smart_charge_remote_events.dart';
 import '../../../data/services/shelly_connection_coordinator.dart';
 import '../../../data/services/smart_charge_telemetry_foreground_service.dart';
 import '../../../data/services/smart_charge_energy_accumulator.dart';
@@ -21,6 +23,7 @@ import '../../../data/services/smart_charge_report_service.dart';
 import '../../../data/services/shelly_charge_log_service.dart';
 import '../../../data/services/notification_service.dart';
 import '../../../data/repositories/smart_charger_repository.dart';
+import '../../../data/models/vinfast_model_spec.dart';
 import '../../../data/repositories/vehicle_spec_repository.dart';
 import '../../../core/services/notification_center_service.dart';
 import '../../../core/services/app_error_reporter.dart';
@@ -121,6 +124,30 @@ class SmartChargingUiState {
       return ChargerDisplayState.charging;
     }
     return ChargerDisplayState.off;
+  }
+
+  /// "Còn ~X · xong ~HH:mm" for the running session (Task 122): estimated
+  /// SOC + capacity + the Shelly power measured right now. Null until real
+  /// measurements exist; the device timer remains the actual cutoff.
+  ChargeEstimate? get remainingEstimate {
+    final running = session;
+    if (running == null || running.state.isTerminal) return null;
+    final soc = running.estimatedSoc;
+    if (soc == null) return null;
+    final capacity =
+        running.effectiveCapacityWh ??
+        running.nominalCapacityWh ??
+        (draft.estimatedCapacityWh > 0 ? draft.estimatedCapacityWh : null);
+    final measured = ChargeEstimator.medianChargingPower(livePowerSamples);
+    if (capacity == null || measured == null) return null;
+    return ChargeEstimator.estimate(
+      currentSoc: soc,
+      targetSoc: running.targetSoc,
+      capacityWh: capacity,
+      powerW: measured,
+      powerSource: ChargePowerSource.measuredLive,
+      now: now,
+    );
   }
 
   /// Active session determined by physical relay verification
@@ -307,6 +334,19 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
   bool _foregroundPolling = false;
   DateTime? _lastForegroundStatusAt;
   StreamSubscription<ChargingConnectionState>? _connectionSubscription;
+  StreamSubscription<ShellyConnectionSnapshot>? _shellySubscription;
+  StreamSubscription<SmartChargeRemoteEvent>? _remoteSubscription;
+
+  // Task 122: short confirmation burst after a relay command (fresh reads at
+  // +1/+2/+4/+7 s) so every screen converges in seconds, then back to the
+  // normal 5 s charging / 60 s idle cadence.
+  static const _burstOffsetsSeconds = [1, 2, 4, 7];
+  Timer? _burstTimer;
+  int _burstStep = 0;
+  bool _refreshQueued = false;
+  bool _queuedFresh = false;
+  String? _pendingStopSessionId;
+  double? _specMaxPowerW;
 
   Future<void> initialize() async {
     try {
@@ -323,10 +363,19 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         if (!_disposed) state = state.copyWith(connectionState: value);
       });
       unawaited(_trainingSyncService.flush().catchError((_) => 0));
-      await _attachForegroundMonitor();
-      await _loadPreferences();
-      await _loadLastTargetSoc();
-      await _loadVehicleCapacity();
+      _shellySubscription ??= ShellyConnectionCoordinator.shared.states.listen(
+        _onSharedSnapshot,
+      );
+      _remoteSubscription ??= SmartChargeRemoteEvents.instance.stream.listen(
+        _onRemoteEvent,
+      );
+      // Independent local reads run together (Task 122: faster first paint).
+      await Future.wait([
+        _attachForegroundMonitor(),
+        _loadPreferences(),
+        _loadLastTargetSoc(),
+        _loadVehicleCapacity(),
+      ]);
       await Future.wait([
         _refreshCapabilities(),
         _refreshStatus(),
@@ -416,17 +465,19 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       );
       var capacityWh = vehicle?.batteryCapacityWh ?? 0;
       final modelId = vehicle?.catalogId ?? vehicle?.vinfastModelId;
-      if (capacityWh <= 0 && modelId != null && modelId.isNotEmpty) {
-        final spec = await VehicleSpecRepository().getSpec(modelId);
-        capacityWh = spec?.nominalCapacityWh ?? 0;
+      VinFastModelSpec? spec;
+      if (modelId != null && modelId.isNotEmpty) {
+        spec = await VehicleSpecRepository().getSpec(modelId);
+        if (capacityWh <= 0) capacityWh = spec?.nominalCapacityWh ?? 0;
       }
       if (capacityWh <= 0 && vehicle != null) {
         final name = (vehicle.vinfastModelName?.isNotEmpty == true)
             ? vehicle.vinfastModelName!
             : vehicle.vehicleName;
-        final spec = await VehicleSpecRepository().matchByVehicleName(name);
+        spec ??= await VehicleSpecRepository().matchByVehicleName(name);
         capacityWh = spec?.nominalCapacityWh ?? 0;
       }
+      _specMaxPowerW = spec?.maxChargePowerW;
 
       if (_disposed || capacityWh <= 0) return;
       final old = state.draft;
@@ -562,14 +613,35 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       // Keep this as a slow recovery path for deployments that cannot expose
       // the combined endpoint, instead of issuing a second query every poll.
       const Duration(seconds: 60),
-      (_) => unawaited(_refreshSession()),
+      (_) {
+        // Server mode reads the session with every /live poll (Task 122).
+        if (_repository is ServerSmartChargerRepository) return;
+        final lifecycle = WidgetsBinding.instance.lifecycleState;
+        if (lifecycle != null && lifecycle != AppLifecycleState.resumed) return;
+        unawaited(_refreshSession());
+      },
     );
     _countdownTimer ??= Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!_disposed) state = state.copyWith(now: _clock());
+      // Only a running session needs a ticking clock; idle screens no longer
+      // rebuild every second (Task 122).
+      if (_disposed || !state.hasActiveSession) return;
+      state = state.copyWith(now: _clock());
     });
   }
 
-  Future<void> refresh() async {
+  DateTime? _lastFullRefreshAt;
+
+  /// Full reload (repository, capabilities, live, session, history). Tab
+  /// switches and app resumes within 20 s only re-read the shared `/live`
+  /// (Task 125): each full refresh cost several API/Firestore reads.
+  Future<void> refresh({bool force = false}) async {
+    final last = _lastFullRefreshAt;
+    final now = _clock();
+    if (!force && last != null && now.difference(last).inSeconds < 20) {
+      await _refreshStatus();
+      return;
+    }
+    _lastFullRefreshAt = now;
     state = state.copyWith(refreshing: true);
     try {
       _repository = await SmartChargerRepositoryFactory.create();
@@ -591,8 +663,9 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
   /// separate from charger connectivity and history state.
   Future<void> retrySession() => _refreshSession();
 
-  Future<void> _refreshStatus() async {
-    if (_foregroundPolling) {
+  /// [fresh] skips the shared 4 s `/live` cache (post-command readback).
+  Future<void> _refreshStatus({bool fresh = false}) async {
+    if (_foregroundPolling && !fresh) {
       final last = _lastForegroundStatusAt;
       if (last != null &&
           _clock().difference(last) <= const Duration(seconds: 15)) {
@@ -601,7 +674,15 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       // A foreground task that stopped emitting must never freeze the UI.
       _foregroundPolling = false;
     }
-    if (_statusRequestRunning || _disposed) return;
+    if (_disposed) return;
+    if (_statusRequestRunning) {
+      // A command readback must not be dropped behind an older poll.
+      if (fresh) {
+        _refreshQueued = true;
+        _queuedFresh = true;
+      }
+      return;
+    }
     _statusRequestRunning = true;
     final shelly = ShellyConnectionCoordinator.shared;
     final owner = shelly.accountUid;
@@ -614,17 +695,30 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         state.draft.vehicleId == vehicleId;
     try {
       // Display poll: may share a /live result read seconds ago elsewhere.
-      final live = await _repository!.live(vehicleId: vehicleId, shared: true);
+      final live = await _repository!.live(
+        vehicleId: vehicleId,
+        shared: !fresh,
+      );
       if (!currentContext()) return;
       final status = live.status;
       _connectionCoordinator.markStatusSuccess(shellyReachable: status.online);
       if (!_disposed) {
-        shelly.updateCodeNotice(
-          status,
-          uid: owner,
-          vehicleId: vehicleId,
-          capabilities: live.capabilities,
-        );
+        if (fresh) {
+          shelly.publishVerifiedReadback(
+            status,
+            uid: owner,
+            vehicleId: vehicleId,
+            capabilities: live.capabilities,
+          );
+        } else {
+          shelly.updateCodeNotice(
+            status,
+            uid: owner,
+            vehicleId: vehicleId,
+            capabilities: live.capabilities,
+          );
+        }
+        final before = state.session;
         state = state.copyWith(
           chargerStatus: status,
           capabilities: live.capabilities ?? state.capabilities,
@@ -641,6 +735,19 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
           unawaited(_recordTelemetry(session, status));
         }
         unawaited(_maybeCalibrate(status));
+        _resolvePendingStop(live.session, status);
+        // The server ended the session (timer, worker, another phone) and
+        // /live no longer carries it: load the terminal row now so the pill,
+        // "sạc xong" notice and reminder cancel happen without waiting for a
+        // tab switch (Task 125).
+        final ended = live.session == null || live.session!.state.isTerminal;
+        if (before != null &&
+            !before.state.isTerminal &&
+            ended &&
+            !status.relay &&
+            _pendingStopSessionId == null) {
+          unawaited(_refreshSession());
+        }
       }
     } on SmartChargerException catch (error) {
       if (!currentContext()) return;
@@ -681,7 +788,115 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       }
     } finally {
       _statusRequestRunning = false;
+      if (_refreshQueued && !_disposed) {
+        final queuedFresh = _queuedFresh;
+        _refreshQueued = false;
+        _queuedFresh = false;
+        unawaited(_refreshStatus(fresh: queuedFresh));
+      }
     }
+  }
+
+  /// An OFF the server accepted but could not read back yet finishes here:
+  /// once `/live` shows the relay OFF and no running session, the stop is
+  /// complete (the server records it as a manual cancel). No second OFF.
+  void _resolvePendingStop(
+    SmartChargingSession? liveSession,
+    SmartChargerStatus status,
+  ) {
+    final pendingId = _pendingStopSessionId;
+    if (pendingId == null || _disposed) return;
+    final stillRunning =
+        liveSession != null &&
+        liveSession.sessionId == pendingId &&
+        !liveSession.state.isTerminal;
+    if (status.relay || stillRunning) return;
+    _pendingStopSessionId = null;
+    final finished = liveSession != null && liveSession.sessionId == pendingId
+        ? _attachCostSnapshot(liveSession)
+        : null;
+    state = state.copyWith(
+      session: finished,
+      phase: SmartChargingViewPhase.editing,
+      actionError: null,
+    );
+    unawaited(_stopForegroundMonitor());
+    unawaited(_refreshHistory(completedSessionId: pendingId));
+  }
+
+  /// Fresh reads at +1/+2/+4/+7 s after a relay command.
+  void _startConfirmationBurst() {
+    _burstTimer?.cancel();
+    _burstStep = 0;
+    _scheduleBurst();
+  }
+
+  void _scheduleBurst() {
+    if (_disposed || _burstStep >= _burstOffsetsSeconds.length) return;
+    final previous = _burstStep == 0 ? 0 : _burstOffsetsSeconds[_burstStep - 1];
+    final wait = _burstOffsetsSeconds[_burstStep] - previous;
+    _burstTimer = Timer(Duration(seconds: wait), () async {
+      _burstStep++;
+      await _refreshStatus(fresh: true);
+      _scheduleBurst();
+    });
+  }
+
+  /// Another surface (BatteryBot, another phone) changed the relay: follow
+  /// the shared snapshot right away instead of waiting for the idle poll.
+  void _onSharedSnapshot(ShellyConnectionSnapshot snapshot) {
+    if (_disposed || _pendingRelayCommand) return;
+    final relay = snapshot.status?.relay;
+    final mine = state.chargerStatus?.relay;
+    if (relay == null || relay == mine) return;
+    final at = snapshot.updatedAt;
+    final syncedAt = state.statusSyncedAt;
+    if (at != null && syncedAt != null && !at.isAfter(syncedAt)) return;
+    // Shared read: reuses the readback the other surface just made.
+    unawaited(_refreshStatus());
+    unawaited(_refreshSession());
+  }
+
+  /// Another phone on this account (or the server) started or ended a
+  /// session: read now instead of waiting for the next poll (Task 123).
+  void _onRemoteEvent(SmartChargeRemoteEvent event) {
+    if (_disposed || _pendingRelayCommand) return;
+    if (event.vehicleId.isNotEmpty &&
+        event.vehicleId != state.draft.vehicleId) {
+      return;
+    }
+    unawaited(_refreshStatus(fresh: true));
+    unawaited(_refreshSession());
+    _startConfirmationBurst();
+  }
+
+  /// Keep the single per-vehicle controller in step with the vehicle's
+  /// battery level (the provider key is the vehicle only, Task 122).
+  void syncCurrentSoc(double soc) {
+    if (_disposed || !soc.isFinite) return;
+    if (state.hasActiveSession ||
+        state.phase == SmartChargingViewPhase.starting ||
+        state.phase == SmartChargingViewPhase.stopping) {
+      return;
+    }
+    if ((state.draft.currentSoc - soc).abs() < 0.5) return;
+    updateDraft(currentSoc: soc.clamp(0, 100).toDouble());
+  }
+
+  /// Present a server-verified relay change on every surface immediately.
+  void _publishVerifiedRelay(bool on, {Duration? timerRemaining}) {
+    final current = state.chargerStatus;
+    if (current == null || _disposed) return;
+    final presented = current.withVerifiedRelay(
+      on,
+      timerRemaining: timerRemaining,
+    );
+    state = state.copyWith(chargerStatus: presented, statusSyncedAt: _clock());
+    ShellyConnectionCoordinator.shared.publishVerifiedReadback(
+      presented,
+      uid: ShellyConnectionCoordinator.shared.accountUid,
+      vehicleId: state.draft.vehicleId,
+    );
   }
 
   /// Last readback stays visible after a failed poll only while idle.
@@ -1032,7 +1247,21 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     try {
       // Forecasting is local and does not refresh/download models or grant
       // relay authorization. Timed control still goes through its repository.
-      final preview = await _repository!.preview(draft);
+      SmartChargingPlanPreview preview;
+      try {
+        preview = await _repository!.preview(draft);
+        if (preview.isPhysicsFallback) {
+          preview = _measuredEstimatePreview(draft, now) ?? preview;
+        }
+      } on SmartChargePredictionException catch (error) {
+        // No verified on-phone model: a clearly labelled physics estimate
+        // from measured power (Task 122), still display-only.
+        final estimate = error.debugCode == 'LOCAL_MODEL_UNAVAILABLE'
+            ? _measuredEstimatePreview(draft, now)
+            : null;
+        if (estimate == null) rethrow;
+        preview = estimate;
+      }
       if (_disposed) return;
       final predictedSeconds =
           preview.predictedDurationSeconds ?? preview.predictedMinutes * 60;
@@ -1080,6 +1309,45 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     }
   }
 
+  /// Last power source used for a forecast (shown on the prediction card).
+  ChargePowerSource? lastEstimatePowerSource;
+  double? lastEstimatePowerW;
+
+  SmartChargingPlanPreview? _measuredEstimatePreview(
+    SmartChargingPlanDraft draft,
+    DateTime now,
+  ) {
+    final power = ChargeEstimator.pickPower(
+      liveSamples: state.chargerStatus?.relay == true
+          ? state.livePowerSamples
+          : const [],
+      recentSessionPowers: [
+        for (final item in state.history.take(10))
+          if (item.averagePowerW != null) item.averagePowerW!,
+      ],
+      specMaxPowerW: _specMaxPowerW,
+    );
+    final estimate = ChargeEstimator.estimate(
+      currentSoc: draft.currentSoc,
+      targetSoc: draft.targetSoc,
+      capacityWh: draft.estimatedCapacityWh,
+      powerW: power.watts,
+      powerSource: power.source,
+      now: now,
+    );
+    if (estimate == null) return null;
+    lastEstimatePowerSource = power.source;
+    lastEstimatePowerW = power.watts;
+    return SmartChargingPlanPreview.fromPrediction(
+      draft: draft,
+      predictedMinutes: estimate.minutes,
+      source: 'physics_fallback',
+      now: now,
+      aiChargeEligible: false,
+      isDisplayOnly: true,
+    );
+  }
+
   void _notify(SmartChargingSession session) {
     final sink = _notificationSink;
     if (session.state.isTerminal) {
@@ -1104,8 +1372,15 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       if (prefs.getBool(key) == true) return;
       await prefs.setBool(key, true);
 
-      await _repository?.flushPendingTelemetry(session.sessionId);
-      await _logSink?.call(session);
+      // Server mode: the API writes the ChargeLog and the vehicle SoC at
+      // terminal state; a second writer from the phone merged client-side
+      // energy over the server's values (Task 125).
+      final serverOwned =
+          _repository?.telemetryOwner != SmartChargeTelemetryOwner.clientDirect;
+      if (!serverOwned) {
+        await _repository?.flushPendingTelemetry(session.sessionId);
+        await _logSink?.call(session);
+      }
       await _trainingSyncService.enqueue(session.sessionId);
       unawaited(_trainingSyncService.flush());
       await _connectionCoordinator.clearSnapshot(session.sessionId);
@@ -1240,6 +1515,14 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         phase: SmartChargingViewPhase.active,
         gatewayError: null,
       );
+      // Same fast cross-screen sync as manualOn (Task 125).
+      if (session.relayVerified) {
+        _publishVerifiedRelay(
+          true,
+          timerRemaining: session.effectiveStopAt.difference(_clock()),
+        );
+      }
+      _startConfirmationBurst();
       unawaited(
         _connectionCoordinator
             .saveSnapshot(
@@ -1290,9 +1573,13 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         source: 'SmartChargingController.start',
       );
       if (!_disposed) {
+        // Unknown outcome: leave "starting" so Stop stays reachable, and
+        // read back at once instead of waiting for the next poll (Task 125).
         state = state.copyWith(
+          phase: SmartChargingViewPhase.preview,
           actionError: 'Không thể bật sạc. Hãy kiểm tra kết nối và thử lại.',
         );
+        _startConfirmationBurst();
       }
       return false;
     } finally {
@@ -1308,10 +1595,15 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       return false;
     }
     if (session == null) return manualOff();
-    // A session restored from another device is display-only until this
-    // device has a live, authenticated Shelly readback. Never expose a Stop
-    // command that cannot prove which relay it would affect.
-    if (state.chargerStatus == null || state.chargerStatus!.online != true) {
+    // Direct mode: a session restored from another device is display-only
+    // until this device has a live, authenticated Shelly readback. Server
+    // mode: the API resolves the session's own device and verifies
+    // ownership, so OFF is never blocked by one failed poll (AGENTS 3.5.1,
+    // Task 125).
+    final directMode =
+        _repository?.telemetryOwner == SmartChargeTelemetryOwner.clientDirect;
+    if (directMode &&
+        (state.chargerStatus == null || state.chargerStatus!.online != true)) {
       if (!_disposed) {
         state = state.copyWith(
           actionError:
@@ -1333,20 +1625,17 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       );
       if (_disposed) return false;
 
-      // Readback to verify relay OFF
-      SmartChargerStatus? currentStatus;
-      try {
-        currentStatus = await _repository!.status(
-          vehicleId: state.draft.vehicleId,
-        );
-      } catch (_) {}
-
-      if (currentStatus != null && currentStatus.relay) {
+      if (result.offPendingReadback) {
+        // OFF accepted; Shelly Cloud has not shown it yet. Stay "stopping"
+        // (never resend OFF) and let the confirmation burst finish it.
+        _pendingStopSessionId = session.sessionId;
         state = state.copyWith(
-          phase: SmartChargingViewPhase.active,
-          actionError: 'Chưa xác nhận được ổ sạc đã tắt. Hãy kiểm tra ổ sạc.',
+          session: result.session ?? session,
+          phase: SmartChargingViewPhase.stopping,
+          actionError: null,
         );
-        return false;
+        _startConfirmationBurst();
+        return true;
       }
 
       final stopped = result.session == null
@@ -1357,16 +1646,14 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
           phase: SmartChargingViewPhase.active,
           actionError: 'Chưa xác nhận được ổ sạc đã tắt. Hãy kiểm tra ổ sạc.',
         );
+        _startConfirmationBurst();
         return false;
       }
-      if (stopped != null) {
-        await _persistTerminal(stopped);
-        _lastLoggedTerminalId = stopped.sessionId;
-      }
-      await _stopForegroundMonitor();
+      // The server verified OFF with a fresh readback: show it everywhere now
+      // and keep durable bookkeeping off the critical path (Task 122).
+      _publishVerifiedRelay(false);
       state = state.copyWith(
         session: stopped,
-        chargerStatus: currentStatus ?? state.chargerStatus,
         phase: SmartChargingViewPhase.editing,
         actionError: null,
         history: stopped == null
@@ -1378,7 +1665,13 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
                 ),
               ],
       );
-      if (stopped != null) _notify(stopped);
+      if (stopped != null) {
+        _lastLoggedTerminalId = stopped.sessionId;
+        unawaited(_persistTerminal(stopped).catchError((_) {}));
+        _notify(stopped);
+      }
+      unawaited(_stopForegroundMonitor());
+      _startConfirmationBurst();
       unawaited(_refreshHistory(completedSessionId: session.sessionId));
       return true;
     } on SmartChargerException catch (error, stack) {
@@ -1399,7 +1692,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       if (!_disposed) {
         state = state.copyWith(
           phase: SmartChargingViewPhase.active,
-          actionError: 'Charging stop failed. Check charger status.',
+          actionError: 'Chưa dừng được sạc. Hãy kiểm tra ổ cắm Shelly.',
         );
       }
       return false;
@@ -1434,27 +1727,23 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
           key,
           vehicleId: state.draft.vehicleId,
           currentSoc: state.draft.currentSoc,
+          targetSoc: state.draft.targetSoc,
         ),
       );
       if (_disposed) return false;
 
-      // Status readback to verify relay ON
-      SmartChargerStatus? currentStatus;
-      try {
-        currentStatus = await _repository!.status(
-          vehicleId: state.draft.vehicleId,
-        );
-      } catch (_) {}
-
-      if (currentStatus != null &&
-          !currentStatus.relay &&
-          !session.relayVerified) {
+      // The server reads the relay and timer back before answering
+      // (Task 122: no second app-side readback on the critical path).
+      if (!session.relayVerified) {
         state = state.copyWith(
           phase: SmartChargingViewPhase.editing,
           actionError: 'Không thể bật sạc: Chưa xác nhận được ổ sạc bật.',
         );
+        _startConfirmationBurst();
         return false;
       }
+      _publishVerifiedRelay(true, timerRemaining: duration);
+      final currentStatus = state.chargerStatus;
 
       state = state.copyWith(
         session: session,
@@ -1483,6 +1772,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
             .catchError((_) {}),
       );
       unawaited(_startForegroundMonitor(session));
+      _startConfirmationBurst();
       return true;
     } on SmartChargerException catch (error, stack) {
       AppErrorReporter.report(
@@ -1522,10 +1812,24 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       return false;
     }
     _pendingRelayCommand = true;
+    final previousPhase = state.phase;
+    state = state.copyWith(
+      phase: SmartChargingViewPhase.stopping,
+      actionError: null,
+    );
     try {
       await _repository!.manualOff(vehicleId: state.draft.vehicleId);
-      await _stopForegroundMonitor();
-      await Future.wait([_refreshStatus(), _refreshSession()]);
+      _publishVerifiedRelay(false);
+      if (!_disposed) {
+        state = state.copyWith(
+          phase: previousPhase == SmartChargingViewPhase.active
+              ? SmartChargingViewPhase.editing
+              : previousPhase,
+        );
+      }
+      unawaited(_stopForegroundMonitor());
+      unawaited(_refreshSession());
+      _startConfirmationBurst();
       return true;
     } on SmartChargerException catch (error, stack) {
       AppErrorReporter.report(
@@ -1533,7 +1837,13 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         stack,
         source: 'SmartChargingController.manualOff',
       );
-      if (!_disposed) state = state.copyWith(actionError: error.message);
+      if (!_disposed) {
+        state = state.copyWith(
+          phase: previousPhase,
+          actionError: error.message,
+        );
+      }
+      _startConfirmationBurst();
       return false;
     } catch (e, stack) {
       AppErrorReporter.report(
@@ -1543,7 +1853,8 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       );
       if (!_disposed) {
         state = state.copyWith(
-          actionError: 'Charging stop failed. Check charger status.',
+          phase: previousPhase,
+          actionError: 'Chưa tắt được sạc. Hãy kiểm tra ổ sạc.',
         );
       }
       return false;
@@ -1631,6 +1942,9 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     _statusTimer?.cancel();
     _sessionTimer?.cancel();
     _countdownTimer?.cancel();
+    _burstTimer?.cancel();
+    unawaited(_shellySubscription?.cancel());
+    unawaited(_remoteSubscription?.cancel());
     unawaited(_foregroundStatusSubscription?.cancel());
     unawaited(_connectionSubscription?.cancel());
     unawaited(_connectionCoordinator.dispose());
@@ -1647,14 +1961,15 @@ class SmartChargingControllerArgs {
   final String vehicleId;
   final double currentSoc;
 
+  /// One controller per vehicle (Task 122). [currentSoc] only seeds a new
+  /// controller; later battery changes go through `syncCurrentSoc`, so the
+  /// Charge tab, pill, History and Settings never poll with two instances.
   @override
   bool operator ==(Object other) =>
-      other is SmartChargingControllerArgs &&
-      other.vehicleId == vehicleId &&
-      other.currentSoc == currentSoc;
+      other is SmartChargingControllerArgs && other.vehicleId == vehicleId;
 
   @override
-  int get hashCode => Object.hash(vehicleId, currentSoc);
+  int get hashCode => vehicleId.hashCode;
 }
 
 final smartChargingControllerProvider = StateNotifierProvider.autoDispose
@@ -1673,6 +1988,15 @@ final smartChargingControllerProvider = StateNotifierProvider.autoDispose
             state: session.state.wireValue,
             targetPercent: session.targetSoc.round(),
           );
+          // Found hours later (app was closed): the inbox entry is enough;
+          // a fresh "sạc xong" alert now would be misleading (Task 125).
+          final stoppedAt = session.stoppedAt;
+          if (session.state.isTerminal &&
+              stoppedAt != null &&
+              DateTime.now().difference(stoppedAt) >
+                  const Duration(minutes: 10)) {
+            return;
+          }
           if (session.state == ChargingSessionState.failed) {
             await NotificationService().notifySmartChargeUnsafe(
               sessionId: session.sessionId,
@@ -1685,7 +2009,9 @@ final smartChargingControllerProvider = StateNotifierProvider.autoDispose
             await NotificationService().notifySmartChargeRelayOff(
               sessionId: session.sessionId,
               vehicleId: session.vehicleId,
-              interrupted: session.state != ChargingSessionState.completed,
+              // A user stop is "cancelled": it is not an interruption.
+              interrupted: session.state == ChargingSessionState.interrupted,
+              userStopped: session.state == ChargingSessionState.cancelled,
             );
           }
         },
@@ -1699,6 +2025,8 @@ final smartChargingControllerProvider = StateNotifierProvider.autoDispose
                 sessionId: sessionId,
               );
             },
-        reminderCanceller: () => NotificationService().cancelChargeReminder(),
+        reminderCanceller: () => NotificationService().cancelChargeReminder(
+          vehicleId: args.vehicleId,
+        ),
       ),
     );

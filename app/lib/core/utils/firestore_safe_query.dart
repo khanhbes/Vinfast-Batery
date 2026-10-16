@@ -31,7 +31,8 @@ class FirestoreSafeQuery {
         additionalWhere?.forEach((field, value) {
           fallback = fallback.where(field, isEqualTo: value);
         });
-        final snapshot = await fallback.get();
+        // Spark plan: never an unbounded read, even on the index fallback.
+        final snapshot = await fallback.limit(500).get();
         final docs = snapshot.docs.toList();
         docs.sort((a, b) {
           final aVal = _getTimestamp(a, orderByField);

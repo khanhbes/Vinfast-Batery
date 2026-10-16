@@ -34,7 +34,9 @@ async function getToken(forceRefresh = false) {
 }
 
 async function apiFetch(path, options = {}) {
-  const { silent = false, retries = 2, ...requestOptions } = options
+  // httpClient already replays a read once on 502-504/network errors; a second
+  // retry layer here sent a failing GET up to 6 times (Task 125).
+  const { silent = false, retries = 0, ...requestOptions } = options
   const retryableAuth = ['GET', 'HEAD'].includes((requestOptions.method ?? 'GET').toUpperCase())
   const retryableMethods = retryableAuth // only retry idempotent methods for network errors
   let refreshed = false
@@ -73,39 +75,9 @@ async function apiFetch(path, options = {}) {
   }
 }
 
-
 // ── Auth ──
 export const authMe = () => apiFetch('/api/auth/me')
 
-// ── Smart Charger encrypted profile vault ──
-export const shellyProfiles = (vehicleId = '') =>
-  apiFetch(`/api/shelly/profiles${vehicleId ? `?vehicleId=${encodeURIComponent(vehicleId)}` : ''}`)
-export const saveShellyProfile = (deviceId, profile) =>
-  apiFetch(`/api/shelly/profiles/${encodeURIComponent(deviceId)}`, {
-    method: 'PUT', body: JSON.stringify(profile),
-  })
-export const revokeShellyProfile = (deviceId) =>
-  apiFetch(`/api/shelly/profiles/${encodeURIComponent(deviceId)}`, { method: 'DELETE' })
-
-// ── Admin CRUD ──
-export const adminList = (entity, params = {}) => {
-  const qs = new URLSearchParams(params).toString()
-  return apiFetch(`/api/admin/${entity}${qs ? '?' + qs : ''}`)
-}
-export const adminGet = (entity, id) => apiFetch(`/api/admin/${entity}/${id}`)
-export const adminCreate = (entity, data) =>
-  apiFetch(`/api/admin/${entity}`, { method: 'POST', body: JSON.stringify(data) })
-export const adminUpdate = (entity, id, data) =>
-  apiFetch(`/api/admin/${entity}/${id}`, { method: 'PUT', body: JSON.stringify(data) })
-export const adminDelete = (entity, id) =>
-  apiFetch(`/api/admin/${entity}/${id}`, { method: 'DELETE' })
-export const adminRestore = (entity, id) =>
-  apiFetch(`/api/admin/${entity}/${id}/restore`, { method: 'POST' })
-export const adminBulkDelete = (entity, ids) =>
-  apiFetch(`/api/admin/${entity}/bulk-delete`, { method: 'POST', body: JSON.stringify({ ids }) })
-
-// ── Users ──
-export const adminUsers = () => apiFetch('/api/admin/users')
 export const adminAccounts = (params = {}) => {
   const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== '' && value != null)).toString()
   return apiFetch(`/api/admin/accounts${query ? `?${query}` : ''}`)
@@ -131,8 +103,6 @@ export const adminDataSnapshot = (limit = 50, datasets = [], force = false) => {
   if (force) query.set('force', '1')
   return apiFetch(`/api/admin/data-snapshot?${query}`, { silent: true })
 }
-export const setAdmin = (email) =>
-  apiFetch('/api/auth/set-admin', { method: 'POST', body: JSON.stringify({ email }) })
 
 // ── Global EV catalog ──
 export const catalogList = (status = '') =>
@@ -153,7 +123,6 @@ export const catalogResearchCreate = (data) =>
   apiFetch('/api/admin/catalog-research-jobs', { method: 'POST', body: JSON.stringify(data) })
 export const catalogResearchGet = (jobId) =>
   apiFetch(`/api/admin/catalog-research-jobs/${encodeURIComponent(jobId)}`)
-export const catalogManufacturers = () => apiFetch('/api/admin/vehicle-manufacturers')
 export const catalogManufacturerSave = (brandId, data) =>
   apiFetch(`/api/admin/vehicle-manufacturers/${encodeURIComponent(brandId)}`, { method: 'PUT', body: JSON.stringify(data) })
 
@@ -167,62 +136,17 @@ export async function catalogUploadMedia(catalogId, file, metadata) {
   })
 }
 
-// ── Import/Export ──
-export const adminExport = (entity, format = 'json', params = {}) => {
-  const qs = new URLSearchParams({ entity, format, ...params }).toString()
-  return apiFetch(`/api/admin/export?${qs}`)
-}
-export const adminImport = (entity, data, mode = 'upsert') =>
-  apiFetch(`/api/admin/import?entity=${entity}&mode=${mode}`, {
-    method: 'POST', body: JSON.stringify({ data }),
-  })
+export const catalogUpdateShowroom = (catalogId, data) =>
+  apiFetch(`/api/admin/vehicle-catalog/${encodeURIComponent(catalogId)}/showroom`, { method: 'PUT', body: JSON.stringify(data) })
 
 // ── Audit ──
 export const adminAuditLogs = () => apiFetch('/api/admin/audit-logs')
-export const adminResetAll = () => apiFetch('/api/admin/reset-all?force=true', { method: 'POST' })
-
-// ── AI ──
-export const aiNormalize = (records) =>
-  apiFetch('/api/admin/ai/normalize-dataset', { method: 'POST', body: JSON.stringify({ records }) })
-export const aiDataset = (vehicleId) =>
-  apiFetch(`/api/admin/ai/dataset/${encodeURIComponent(vehicleId)}`)
-export const aiTrain = (vehicleId, records) =>
-  apiFetch('/api/admin/ai/train', { method: 'POST', body: JSON.stringify({ vehicleId, records }) })
-export const aiTest = (vehicleId, records) =>
-  apiFetch('/api/admin/ai/test', { method: 'POST', body: JSON.stringify({ vehicleId, records }) })
-export const aiPredict = (vehicleId, chargeLogs) =>
-  apiFetch('/api/ai/predict-degradation', { method: 'POST', body: JSON.stringify({ vehicleId, chargeLogs }) })
-export const aiAnalyze = (vehicleId, chargeLogs) =>
-  apiFetch('/api/ai/analyze-patterns', { method: 'POST', body: JSON.stringify({ vehicleId, chargeLogs }) })
-export const aiProfileStatus = (vehicleId) =>
-  apiFetch(`/api/ai/profile-status/${encodeURIComponent(vehicleId)}`)
-export const aiCenterStatus = () =>
-  apiFetch('/api/admin/ai/status')
-export const aiRefreshInsights = (vehicleId) =>
-  apiFetch('/api/admin/ai/refresh-insights', { method: 'POST', body: JSON.stringify({ vehicleId }) })
-
-// ── AI Charging Time Prediction ──
-export const aiPredictChargingTime = (payload) =>
-  apiFetch('/api/ai/predict-charging-time', { method: 'POST', body: JSON.stringify(payload) })
-
-export const aiPredictRange = (payload) =>
-  apiFetch('/api/ai/predict-range', { method: 'POST', body: JSON.stringify(payload) })
-
 
 // ── AI Model Management (per-type; FastAPI via Flask proxy) ──
 export const aiListTypes = () => apiFetch('/api/admin/ai/types')
 
 export const aiListModels = (typeKey = 'soc') =>
   apiFetch(`/api/admin/ai/models/${encodeURIComponent(typeKey)}`)
-
-export const aiModelStatus = (typeKey = 'soc') =>
-  apiFetch(`/api/admin/ai/models/${encodeURIComponent(typeKey)}/status`)
-
-export const aiRollbackModel = (typeKey, version) =>
-  apiFetch(`/api/admin/ai/models/${encodeURIComponent(typeKey)}/rollback`, {
-    method: 'POST',
-    body: JSON.stringify({ version }),
-  })
 
 export const aiDeleteModel = (typeKey, version) =>
   apiFetch(`/api/admin/ai/models/${encodeURIComponent(typeKey)}/${encodeURIComponent(version)}`, { method: 'DELETE' })
@@ -238,21 +162,9 @@ export const aiLoadActiveModel = (typeKey) =>
     method: 'POST',
   })
 
-export const aiActivateModel = (typeKey, version) =>
-  apiFetch(`/api/admin/ai/models/${encodeURIComponent(typeKey)}/activate`, {
-    method: 'POST',
-    body: JSON.stringify({ version }),
-  });
-
 export const aiDeactivateModel = (typeKey) =>
   apiFetch(`/api/admin/ai/models/${encodeURIComponent(typeKey)}/deactivate`, {
     method: 'POST',
-  });
-
-export const aiValidateVersion = (typeKey, version) =>
-  apiFetch(`/api/admin/ai/models/${encodeURIComponent(typeKey)}/validate-version`, {
-    method: 'POST',
-    body: JSON.stringify({ version }),
   });
 
 /// Smoke-test an uploaded version before deployment — PLAN1
@@ -268,12 +180,6 @@ export const aiDeployModel = (typeKey, version) =>
   apiFetch(`/api/admin/ai/models/${encodeURIComponent(typeKey)}/deploy`, {
     method: 'POST',
     body: JSON.stringify({ version }),
-  })
-
-/// Reset (clear all versions) — PLAN1
-export const aiResetModel = (typeKey) =>
-  apiFetch(`/api/admin/ai/models/${encodeURIComponent(typeKey)}/reset`, {
-    method: 'POST',
   })
 
 /**
@@ -304,22 +210,6 @@ export async function aiUploadModel(typeKey, file, version, note = '', skipSmoke
   }
 }
 
-export const aiSocStatus = () => apiFetch('/api/soc/status')
-
-// ── Legacy ──
-export const migrateLegacy = () => apiFetch('/api/admin/migrate-legacy', { method: 'POST' })
-
-// ── Telemetry (authenticated; backend enforces owner/admin scope) ──
-export const getTelemetry = (tripId) => {
-  const qs = tripId ? `?trip_id=${encodeURIComponent(tripId)}` : ''
-  return apiFetch(`/api/telemetry${qs}`)
-}
-export const getChargeLogs = (vehicleId) => {
-  const qs = vehicleId ? `?vehicleId=${encodeURIComponent(vehicleId)}` : ''
-  return apiFetch(`/api/charge-logs${qs}`)
-}
-
-
 // ── Shelly Connection Codes (Admin) ──
 export const adminShellyDevices = () => apiFetch('/api/admin/shelly-devices', { silent: true })
 export const adminSaveShellyDevice = (data) =>
@@ -328,9 +218,11 @@ export const adminDeleteShellyDevice = (deviceId) =>
   apiFetch('/api/admin/shelly-devices/' + encodeURIComponent(deviceId), { method: 'DELETE' })
 export const adminGenerateCodeForDevice = (deviceId, data = {}) =>
   apiFetch('/api/admin/shelly-devices/' + encodeURIComponent(deviceId) + '/generate-code', { method: 'POST', body: JSON.stringify(data) })
-export const adminConnectionCodes = () => apiFetch('/api/admin/connection-codes')
-export const adminGenerateCode = (data) =>
-  apiFetch('/api/admin/connection-codes', { method: 'POST', body: JSON.stringify(data) })
-export const adminRevokeCode = (code) =>
-  apiFetch('/api/admin/connection-codes/' + encodeURIComponent(code), { method: 'DELETE' })
 export { emitPortalError, emitPortalSuccess }
+
+// BatteryBot v2 knowledge (Task 124)
+export const adminAssistantKnowledge = () => apiFetch('/api/admin/assistant/knowledge', { silent: true })
+export const adminSaveAssistantKnowledge = (id, data) =>
+  apiFetch('/api/admin/assistant/knowledge/' + encodeURIComponent(id), { method: 'PUT', body: JSON.stringify(data) })
+export const adminDeleteAssistantKnowledge = (id) =>
+  apiFetch('/api/admin/assistant/knowledge/' + encodeURIComponent(id), { method: 'DELETE' })

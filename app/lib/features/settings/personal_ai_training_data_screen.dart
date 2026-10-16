@@ -5,6 +5,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/theme/luxe_theme.dart';
+import '../../core/widgets/luxe_kit.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/cockpit_design_system.dart';
 import '../../core/widgets/app_popup.dart';
@@ -162,10 +164,11 @@ class _PersonalAiTrainingDataScreenState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('Dữ liệu fine-tune')),
+    return LuxeScaffold(
+      title: 'Dữ liệu fine-tune',
       body: RefreshIndicator(
+        color: LuxeColors.emerald,
+        backgroundColor: LuxeColors.raised,
         onRefresh: _load,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -431,7 +434,7 @@ class _PersonalAiTrainingDataScreenState
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      backgroundColor: AppColors.card,
+      backgroundColor: LuxeColors.sheet,
       builder: (sheetContext) => SafeArea(
         child: SizedBox(
           height: MediaQuery.sizeOf(sheetContext).height * .78,
@@ -507,7 +510,7 @@ class _PersonalAiTrainingDataScreenState
         context: context,
         isScrollControlled: true,
         showDragHandle: true,
-        backgroundColor: AppColors.card,
+        backgroundColor: LuxeColors.sheet,
         builder: (sheetContext) => StatefulBuilder(
           builder: (context, setSheetState) => Padding(
             padding: EdgeInsets.fromLTRB(

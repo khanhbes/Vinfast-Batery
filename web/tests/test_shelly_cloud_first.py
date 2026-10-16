@@ -623,6 +623,22 @@ class RouteContractTests(unittest.TestCase):
         self.assertEqual(allowed.status_code, 200)
         self.assertTrue(allowed.get_json()["data"]["canEditTrainingData"])
 
+    def test_static_admin_key_is_not_a_credential(self):
+        # Task 125: X-Admin-Key alone (even matching DEV_ADMIN_KEY) and
+        # FLASK_ENV=development never grant developer/admin routes.
+        app = Flask(__name__)
+        app.register_blueprint(create_blueprint(self.service, self.repo, lambda: (None, None, None)))
+        with patch.dict(os.environ, {"DEV_ADMIN_KEY": "leaked-key", "FLASK_ENV": "development"}):
+            client = app.test_client()
+            for path in ("/api/smart-charging/developer/training-access", "/api/admin/shelly-devices"):
+                response = client.get(path, headers={"X-Admin-Key": "leaked-key"})
+                self.assertEqual(response.status_code, 401, path)
+        member = Flask(__name__)
+        member.register_blueprint(create_blueprint(self.service, self.repo, lambda: ("u1", "u@test", "user")))
+        with patch.dict(os.environ, {"FLASK_ENV": "development"}):
+            denied = member.test_client().get("/api/smart-charging/developer/training-access")
+        self.assertEqual(denied.status_code, 403)
+
     def test_privacy_erase_route_returns_safe_errors_and_erases_terminal(self):
         self.client.post("/api/shelly/consent/start")
         preview = self.client.post("/api/smart-charging/preview", json={

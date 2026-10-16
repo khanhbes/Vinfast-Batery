@@ -15,3 +15,6 @@ cryptography==46.0.5
 beautifulsoup4>=4.12.3
 pypdf>=5.0.0
 Pillow>=11.0.0
+# Vehicle catalog media (Azure Blob, managed identity)
+azure-storage-blob>=12.20.0
+azure-identity>=1.17.0

@@ -77,22 +77,25 @@ void main() {
   });
 
   group('ChatApiService offline simulation tests', () {
-    test('streamChat produces offline fallback stream when API unconfigured', () async {
-      final service = ChatApiService();
-      final streamResponse = service.streamChat(
-        message: 'Pin của tôi còn bao nhiêu?',
-        vehicleContext: {'model': 'Feliz S', 'currentSoc': 70},
-      );
+    test(
+      'streamChat produces offline fallback stream when API unconfigured',
+      () async {
+        final service = ChatApiService();
+        final streamResponse = service.streamChat(
+          message: 'Pin của tôi còn bao nhiêu?',
+          vehicleContext: {'model': 'Feliz S', 'currentSoc': 70},
+        );
 
-      final chunks = <String>[];
-      await for (final chunk in streamResponse.stream) {
-        chunks.add(chunk);
-      }
+        final chunks = <String>[];
+        await for (final chunk in streamResponse.stream) {
+          chunks.add(chunk);
+        }
 
-      final fullResponse = chunks.join('');
-      expect(fullResponse, contains('Feliz S'));
-      expect(fullResponse, contains('70%'));
-    });
+        final fullResponse = chunks.join('');
+        expect(fullResponse, contains('Feliz S'));
+        expect(fullResponse, contains('70%'));
+      },
+    );
 
     test('streamChat handles tool_call and tool_result SSE events', () async {
       AppConstants.setCustomApiBaseUrl('http://127.0.0.1:5000');

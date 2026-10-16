@@ -44,6 +44,10 @@ class ChargeScreen extends ConsumerWidget {
               onAction: () => VehiclePickerSheet.show(context, ref),
             )
           : SmartChargingControlScreen(
+              // Task 125: one State per vehicle. Its controller args are
+              // fixed in initState, so reusing the State after a vehicle
+              // switch could send Start/Stop for the previous vehicle.
+              key: ValueKey('charge-control-$vehicleId'),
               vehicleId: vehicleId,
               currentSoc: value.currentBattery.toDouble(),
               embedded: true,

@@ -53,9 +53,7 @@ class SmartChargePreferences {
     tariffVndPerKwh: clearTariff
         ? null
         : tariffVndPerKwh ?? this.tariffVndPerKwh,
-    chargePowerW: clearChargePower
-        ? null
-        : chargePowerW ?? this.chargePowerW,
+    chargePowerW: clearChargePower ? null : chargePowerW ?? this.chargePowerW,
     updatedAt: updatedAt ?? this.updatedAt,
   );
 

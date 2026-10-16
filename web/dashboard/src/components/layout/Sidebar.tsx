@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, BrainCircuit, History, Settings, ChevronLeft, ChevronRight, BatteryCharging, LogOut, Database, CarFront, Code2, Wrench, Plug } from 'lucide-react';
+import { LayoutDashboard, Users, BrainCircuit, History, Settings, ChevronLeft, ChevronRight, BatteryCharging, LogOut, Database, CarFront, Code2, Wrench, Plug, Bot } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ const primaryItems = [
   { icon: Users, label: 'Tài khoản', path: '/users' },
   { icon: CarFront, label: 'Danh mục xe', path: '/catalog' },
   { icon: Plug, label: 'Thiết bị Shelly', path: '/shelly' },
+  { icon: Bot, label: 'BatteryBot', path: '/assistant' },
 ];
 const developItems = [
   { icon: Wrench, label: 'Công cụ kỹ thuật', path: '/develop' },

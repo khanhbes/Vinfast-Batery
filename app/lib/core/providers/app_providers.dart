@@ -11,7 +11,8 @@ import '../services/session_service.dart';
 
 /// One-shot notification deep-link. It is consumed by the history tab without
 /// mutating the user's globally selected vehicle.
-final pendingSmartChargeTargetProvider = StateProvider<({String vehicleId, String sessionId})?>((ref) => null);
+final pendingSmartChargeTargetProvider =
+    StateProvider<({String vehicleId, String sessionId})?>((ref) => null);
 
 // =============================================================================
 // Shared Providers for the app

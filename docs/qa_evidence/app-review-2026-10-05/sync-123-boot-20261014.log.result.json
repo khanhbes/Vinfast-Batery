@@ -1,0 +1,24 @@
+{
+  "command": [
+    "powershell",
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    "deploy/azure/08-local-boot-smoke.ps1",
+    "-ApiImage",
+    "vinfast-api-qa:task123",
+    "-Services",
+    "api",
+    "-TimeoutSeconds",
+    "180"
+  ],
+  "cwd": ".",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\sync-123-boot-20261014.log",
+  "processId": 3260,
+  "timeoutSeconds": 600,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 19.66
+}

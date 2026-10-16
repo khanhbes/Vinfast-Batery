@@ -9,10 +9,12 @@ import '../../core/providers/app_state_providers.dart';
 import '../../core/providers/vehicle_context_provider.dart';
 import '../../core/services/assistant_context_coordinator.dart';
 import '../../core/theme/app_ui_colors.dart';
+import '../../core/theme/luxe_theme.dart';
 import '../../core/utils/battery_bot_faq.dart';
 import '../../core/widgets/battery_bot_mascot.dart';
-import '../../data/services/shelly_connection_coordinator.dart';
+import '../settings/assistant_memory_screen.dart';
 import '../smart_charging/shelly_connect_screen.dart';
+import '../../data/services/shelly_connection_coordinator.dart';
 import 'models/chat_message.dart';
 import 'models/chat_session.dart';
 import 'models/function_call_action.dart';
@@ -487,12 +489,13 @@ class _InteractiveAssistantSheetState
     }
     if (!mounted || !_isCurrent(generation)) return;
 
-    final uiColors = AppUiColors.of(context);
+    const uiColors = _LuxePalette();
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: uiColors.surface,
+      backgroundColor: const Color(0xFF0C0D0F),
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        side: BorderSide(color: LuxeColors.hairline),
       ),
       builder: (modalCtx) {
         _historyModalContext = modalCtx;
@@ -684,40 +687,13 @@ class _InteractiveAssistantSheetState
     super.dispose();
   }
 
+  /// What BatteryBot remembers and the learning switch live on one screen
+  /// (Task 124 server memory); the old dialog described the retired
+  /// on-device tracker and a second switch (Task 125).
   Future<void> _showPersonalization() async {
-    final generation = _generation;
-    final tracker = ref.read(behaviorTrackerProvider.notifier);
-    final profile = tracker.currentProfile;
-    final choice = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Cá nhân hóa BatteryBot'),
-        content: Text(
-          '${tracker.personalizationEnabled ? 'Đang bật' : 'Đang tắt'} học thói quen trên điện thoại. Không upload dữ liệu học.\n\nChủ đề đã ghi nhớ: ${tracker.personalizationEnabled && profile.chatPreferences.topTopics.isNotEmpty ? profile.chatPreferences.topTopics.join(', ') : 'Chưa có'}.\nModel dự đoán cá nhân và LLM chưa được nghiệm thu trên thiết bị.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, 'reset'),
-            child: const Text('Xóa dữ liệu học'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, 'toggle'),
-            child: Text(
-              tracker.personalizationEnabled ? 'Tắt học' : 'Đồng ý bật học',
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Đóng'),
-          ),
-        ],
-      ),
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const AssistantMemoryScreen()),
     );
-    if (!_isCurrent(generation)) return;
-    if (choice == 'reset') await tracker.resetPersonalization();
-    if (choice == 'toggle') {
-      await tracker.setPersonalizationEnabled(!tracker.personalizationEnabled);
-    }
   }
 
   void _scrollToBottom() {
@@ -769,53 +745,8 @@ class _InteractiveAssistantSheetState
       _isTyping = true;
     });
     _scrollToBottom();
-    final normalized = BatteryBotFaq.normalize(text);
-    final wantsGuidance = RegExp(
-      r'\b(o dau|huong dan|lam sao|cach|mo|ket noi|bi khoa)\b',
-    ).hasMatch(normalized);
-    var faqAction = wantsGuidance ? BatteryBotFaq.actionFor(text) : null;
-    String? lockReply;
-    if (faqAction == BatteryBotAction.guideCharging &&
-        RegExp(r'khoa').hasMatch(normalized)) {
-      final connection = ShellyConnectionCoordinator.shared.current;
-      lockReply = connection.chatLockExplanation;
-      if (connection.lockFixedInSetup) {
-        faqAction = BatteryBotAction.shellySetup;
-      }
-    }
-    if (faqAction != null) {
-      final action = faqAction;
-      _replyTimer = Timer(const Duration(milliseconds: 180), () {
-        if (!_isCurrent(generation)) return;
-        final reply =
-            lockReply ??
-            switch (action) {
-              BatteryBotAction.shellySetup =>
-                'Mở thiết lập Shelly để kết nối qua Wi-Fi hoặc mã quản trị 6 ký tự.',
-              BatteryBotAction.guideCharging =>
-                'Mở Sạc pin để kiểm tra bộ sạc và chọn thời gian sạc. Chỉ bật sạc sau khi kiểm tra an toàn.',
-              BatteryBotAction.guideHistory =>
-                'Mở Lịch sử để xem thời gian, điện năng và chi phí từng phiên.',
-              BatteryBotAction.guideVehicle =>
-                'Mở Tổng quan để chọn xe và xem mức pin. Kiểm tra nguồn và thời điểm cập nhật.',
-            };
-        setState(() {
-          _isTyping = false;
-          _messages.add(
-            ChatMessage(
-              id: 'faq-${DateTime.now().microsecondsSinceEpoch}',
-              role: ChatRole.model,
-              content: reply,
-              timestamp: DateTime.now(),
-              action: action.name,
-            ),
-          );
-        });
-        _persistConversation();
-        _scrollToBottom();
-      });
-      return;
-    }
+    // Task 124: every question goes to the assistant engine (Gemini with
+    // the on-device basic mode as fallback); no canned FAQ short-circuit.
     final vehicle = ref.read(vehicleContextProvider).vehicle;
     final index = _messages.length;
     final id = 'reply-${DateTime.now().microsecondsSinceEpoch}';
@@ -905,6 +836,11 @@ class _InteractiveAssistantSheetState
       },
       onDone: () {
         if (!current() || failed) return;
+        // Basic mode (no AI): keep the offline shortcut button to the screen.
+        final basicMode =
+            accumulated.startsWith('Chế độ cơ bản') ||
+            accumulated.startsWith('Bạn đã dùng hết lượt AI');
+        final shortcut = basicMode ? BatteryBotFaq.actionFor(text) : null;
         setState(() {
           _isTyping = false;
           _messages[index] = _messages[index].copyWith(
@@ -913,6 +849,7 @@ class _InteractiveAssistantSheetState
                 : accumulated,
             isStreaming: false,
             hasError: accumulated.isEmpty,
+            action: shortcut?.name,
           );
         });
         _persistConversation();
@@ -995,20 +932,15 @@ class _InteractiveAssistantSheetState
     if (s == null) return const SizedBox.shrink();
 
     final isHigh = s.priority.toUpperCase() == 'HIGH';
+    final accent = isHigh ? LuxeColors.champagne : LuxeColors.emerald;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 2),
+      padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
       decoration: BoxDecoration(
-        color: isHigh
-            ? Colors.amber.withValues(alpha: 0.12)
-            : uiColors.primary.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isHigh
-              ? Colors.amber.withValues(alpha: 0.4)
-              : uiColors.primary.withValues(alpha: 0.3),
-        ),
+        color: accent.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: accent.withValues(alpha: 0.35)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1017,54 +949,52 @@ class _InteractiveAssistantSheetState
             isHigh
                 ? Icons.warning_amber_rounded
                 : Icons.tips_and_updates_outlined,
-            color: isHigh ? Colors.amber.shade800 : uiColors.primary,
+            color: accent,
             size: 20,
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   s.title,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: isHigh ? Colors.amber.shade900 : uiColors.text,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                    color: LuxeColors.text,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   s.message,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: uiColors.text.withValues(alpha: 0.85),
-                    height: 1.3,
-                  ),
+                  style: LuxeText.caption.copyWith(fontSize: 12.5),
                 ),
                 if (s.action != null && s.action!.isNotEmpty) ...[
                   const SizedBox(height: 6),
                   InkWell(
                     onTap: () => _applySuggestion(s),
-                    borderRadius: BorderRadius.circular(6),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      constraints: const BoxConstraints(minHeight: 48),
+                      alignment: Alignment.centerLeft,
+                      padding: const EdgeInsets.symmetric(vertical: 4),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
                             'Xem gợi ý',
                             style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: uiColors.primary,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: accent,
                             ),
                           ),
                           const SizedBox(width: 4),
                           Icon(
                             Icons.arrow_forward_rounded,
-                            size: 12,
-                            color: uiColors.primary,
+                            size: 14,
+                            color: accent,
                           ),
                         ],
                       ),
@@ -1075,15 +1005,40 @@ class _InteractiveAssistantSheetState
             ),
           ),
           IconButton(
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-            icon: Icon(Icons.close, size: 16, color: uiColors.muted),
+            tooltip: 'Ẩn gợi ý',
+            icon: const Icon(
+              Icons.close_rounded,
+              size: 18,
+              color: LuxeColors.muted,
+            ),
             onPressed: _dismissActiveSuggestion,
           ),
         ],
       ),
     );
   }
+
+  Widget _bubble(int index, {bool showMeta = true}) {
+    final message = _messages[index];
+    return ChatMessageBubble(
+      message: message,
+      showMeta: showMeta,
+      onFeedback: (rating) => _onFeedback(index, rating),
+      onActionPressed: _executeAction,
+      isActionLoading: _actionLoadingMap[message.actionCard?.callId] ?? false,
+      onConfirmAction: (act) => _handleActionConfirm(index, act),
+      onCancelAction: (act) => _handleActionCancel(index, act),
+      onRetry: () => _handleRetry(index),
+    );
+  }
+
+  ButtonStyle get _glassIcon => IconButton.styleFrom(
+    backgroundColor: LuxeColors.glass,
+    foregroundColor: LuxeColors.text,
+    side: const BorderSide(color: LuxeColors.hairline),
+    fixedSize: const Size(48, 48),
+    minimumSize: const Size(48, 48),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -1099,397 +1054,633 @@ class _InteractiveAssistantSheetState
     final media = MediaQuery.of(context);
     final keyboard = media.viewInsets.bottom;
     final sheetHeight =
-        (media.size.height - keyboard - media.padding.top) * 0.9;
+        (media.size.height - keyboard - media.padding.top) * 0.94;
+    // Fresh conversation: a welcome hero with suggestion cards replaces the
+    // chip row, so each suggestion appears exactly once on screen.
+    final welcome = _messages.length <= 1 && !_isTyping;
 
-    return Padding(
-      padding: EdgeInsets.only(bottom: keyboard),
-      child: Container(
-        height: sheetHeight,
-        decoration: BoxDecoration(
-          color: uiColors.dark ? const Color(0xFF0C1322) : uiColors.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          border: Border(
-            top: BorderSide(
-              color: uiColors.dark
-                  ? const Color(0xFF10B981).withValues(alpha: 0.25)
-                  : Colors.transparent,
-              width: 1.2,
-            ),
+    return Theme(
+      data: LuxeTheme.of(context),
+      child: Padding(
+        padding: EdgeInsets.only(bottom: keyboard),
+        child: Container(
+          height: sheetHeight,
+          clipBehavior: Clip.antiAlias,
+          decoration: const BoxDecoration(
+            color: LuxeColors.background,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+            border: Border(top: BorderSide(color: LuxeColors.hairlineStrong)),
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x99000000),
+                blurRadius: 30,
+                offset: Offset(0, -6),
+              ),
+            ],
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.35),
-              blurRadius: 24,
-              offset: const Offset(0, -4),
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            // Thanh kéo drag handle
-            Center(
-              child: Container(
-                margin: const EdgeInsets.only(top: 10, bottom: 6),
-                width: 44,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: uiColors.border.withValues(alpha: 0.8),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-
-            // Header Cockpit với Mascot và thông tin xe
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const BatteryBotMascot(
-                        size: BatteryBotSize.avatar,
-                        displayMode: BatteryBotDisplayMode.avatar,
-                        mood: BatteryBotMood.happy,
-                        enableFloating: false,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'BatteryBot',
-                          style: TextStyle(
-                            fontSize: 15.5,
-                            fontWeight: FontWeight.w700,
-                            color: uiColors.text,
-                            letterSpacing: -0.2,
-                          ),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              const LuxeBackdrop(),
+              LayoutBuilder(
+                builder: (context, box) => Column(
+                  children: [
+                    Center(
+                      child: Container(
+                        margin: const EdgeInsets.only(top: 10, bottom: 4),
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: LuxeColors.hairlineStrong,
+                          borderRadius: BorderRadius.circular(2),
                         ),
                       ),
-                      IconButton(
-                        key: const Key('assistant_close_button'),
-                        tooltip: 'Đóng BatteryBot',
-                        icon: Icon(
-                          Icons.close_rounded,
-                          color: uiColors.muted,
-                          size: 20,
-                        ),
-                        constraints: const BoxConstraints(
-                          minWidth: 48,
-                          minHeight: 48,
-                        ),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    vehicle?.displayName ?? 'Chưa chọn xe theo dõi',
-                    key: const Key('assistant_vehicle_label'),
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: uiColors.text,
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    vehicle == null || !vehicle.hasBatteryData
-                        ? 'Chưa có dữ liệu pin'
-                        : 'Pin ${vehicle.currentBattery}% · Dữ liệu hồ sơ',
-                    key: const Key('assistant_battery_source'),
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w500,
-                      color: uiColors.dark
-                          ? const Color(0xFF10B981)
-                          : uiColors.muted,
-                    ),
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      IconButton(
-                        key: const Key('assistant_history_button'),
-                        icon: Icon(
-                          Icons.history_rounded,
-                          color: uiColors.muted,
-                          size: 20,
-                        ),
-                        tooltip: 'Lịch sử chat',
-                        padding: const EdgeInsets.all(6),
-                        constraints: const BoxConstraints(
-                          minWidth: 48,
-                          minHeight: 48,
-                        ),
-                        onPressed: _showHistoryModal,
+                    // Header: mascot, name, close; then vehicle chip + tools.
+                    // Capped and scrollable so a long vehicle name, large text
+                    // and the keyboard never push the input dock off screen.
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: box.maxHeight * (keyboard > 0 ? 0.28 : 0.45),
                       ),
-                      IconButton(
-                        key: const Key('assistant_personalization_button'),
-                        tooltip: 'Cá nhân hóa và dữ liệu học',
-                        constraints: const BoxConstraints(
-                          minWidth: 48,
-                          minHeight: 48,
-                        ),
-                        icon: const Icon(Icons.tune_rounded, size: 20),
-                        onPressed: _showPersonalization,
-                      ),
-                      IconButton(
-                        key: const Key('assistant_new_chat_button'),
-                        icon: Icon(
-                          Icons.add_comment_outlined,
-                          color: uiColors.muted,
-                          size: 20,
-                        ),
-                        tooltip: 'Đoạn chat mới',
-                        padding: const EdgeInsets.all(6),
-                        constraints: const BoxConstraints(
-                          minWidth: 48,
-                          minHeight: 48,
-                        ),
-                        onPressed: () => _startNewChat(),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            Divider(
-              height: 1,
-              color: uiColors.dark
-                  ? const Color(0xFF10B981).withValues(alpha: 0.15)
-                  : uiColors.border.withValues(alpha: 0.5),
-            ),
-
-            // Quick Action Chips
-            if (keyboard == 0)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: QuickReplyChips(
-                  customSuggestions: chips,
-                  currentSoc: vehicle?.currentBattery.toDouble(),
-                  isCharging: false,
-                  onSelect: (chipText) => _handleSend(chipText),
-                ),
-              ),
-
-            Divider(
-              height: 1,
-              color: uiColors.dark
-                  ? const Color(0xFF10B981).withValues(alpha: 0.12)
-                  : uiColors.border.withValues(alpha: 0.5),
-            ),
-
-            // Banner gợi ý chủ động (Proactive Suggestion) nếu có
-            if (_activeSuggestion != null) _buildProactiveBanner(uiColors),
-
-            // Danh sách tin nhắn
-            Expanded(
-              child: ListView.builder(
-                controller: _scrollController,
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                itemCount: _messages.length,
-                itemBuilder: (context, index) {
-                  final message = _messages[index];
-                  return ChatMessageBubble(
-                    message: message,
-                    onFeedback: (rating) => _onFeedback(index, rating),
-                    onActionPressed: _executeAction,
-                    isActionLoading:
-                        _actionLoadingMap[message.actionCard?.callId] ?? false,
-                    onConfirmAction: (act) => _handleActionConfirm(index, act),
-                    onCancelAction: (act) => _handleActionCancel(index, act),
-                    onRetry: () => _handleRetry(index),
-                  );
-                },
-              ),
-            ),
-
-            if (_isTyping)
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 4,
-                ),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Đang chuẩn bị câu trả lời…',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontStyle: FontStyle.italic,
-                      color: uiColors.muted,
-                    ),
-                  ),
-                ),
-              ),
-
-            // Thanh nhập tin nhắn & Voice Input (Cockpit Command Dock)
-            Container(
-              padding: EdgeInsets.only(
-                left: 14,
-                right: 14,
-                top: 8,
-                bottom: 12 + media.padding.bottom,
-              ),
-              decoration: BoxDecoration(
-                color: uiColors.dark
-                    ? const Color(0xFF0F1728)
-                    : uiColors.surface,
-                border: Border(
-                  top: BorderSide(
-                    color: uiColors.dark
-                        ? const Color(0xFF10B981).withValues(alpha: 0.18)
-                        : uiColors.border,
-                    width: 1,
-                  ),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _isListeningVoice
-                        ? Container(
-                            height: 46,
-                            padding: const EdgeInsets.symmetric(horizontal: 14),
-                            decoration: BoxDecoration(
-                              color: const Color(
-                                0xFF10B981,
-                              ).withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(24),
-                              border: Border.all(
-                                color: const Color(0xFF10B981),
-                                width: 1.5,
-                              ),
-                            ),
-                            child: Row(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(16, 6, 10, 8),
+                        child: Column(
+                          children: [
+                            Row(
                               children: [
+                                Container(
+                                  width: 50,
+                                  height: 50,
+                                  padding: const EdgeInsets.all(2),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: LuxeColors.emerald.withValues(
+                                        alpha: 0.55,
+                                      ),
+                                    ),
+                                    boxShadow: const [
+                                      BoxShadow(
+                                        color: Color(0x2834D399),
+                                        blurRadius: 16,
+                                      ),
+                                    ],
+                                  ),
+                                  child: const BatteryBotMascot(
+                                    size: BatteryBotSize.avatar,
+                                    displayMode: BatteryBotDisplayMode.avatar,
+                                    mood: BatteryBotMood.happy,
+                                    enableFloating: false,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                const Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'BatteryBot',
+                                        style: TextStyle(
+                                          fontSize: 19,
+                                          fontWeight: FontWeight.w500,
+                                          color: LuxeColors.text,
+                                          letterSpacing: -0.2,
+                                        ),
+                                      ),
+                                      SizedBox(height: 2),
+                                      Text(
+                                        'Trợ lý pin & sạc cá nhân',
+                                        style: TextStyle(
+                                          fontSize: 12.5,
+                                          color: LuxeColors.muted,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                                 IconButton(
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
+                                  key: const Key('assistant_close_button'),
+                                  tooltip: 'Đóng BatteryBot',
+                                  style: _glassIcon,
                                   icon: const Icon(
-                                    Icons.close,
-                                    size: 18,
-                                    color: Colors.redAccent,
+                                    Icons.close_rounded,
+                                    size: 20,
                                   ),
-                                  tooltip: 'Hủy ghi âm',
-                                  onPressed: () {
-                                    _voiceService?.cancelListening();
-                                    setState(() {
-                                      _isListeningVoice = false;
-                                      _voiceSoundLevel = 0.0;
-                                    });
-                                  },
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: AnimatedVoiceWaveform(
-                                    isListening: true,
-                                    soundLevel: _voiceSoundLevel,
-                                    height: 24,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                const Text(
-                                  'Đang nghe...',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF10B981),
-                                  ),
+                                  onPressed: () => Navigator.of(context).pop(),
                                 ),
                               ],
                             ),
-                          )
-                        : TextField(
-                            key: const Key('assistant_input_field'),
-                            controller: _inputController,
-                            textInputAction: TextInputAction.send,
-                            style: TextStyle(
-                              color: uiColors.text,
-                              fontSize: 13.5,
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Container(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      12,
+                                      8,
+                                      12,
+                                      8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(16),
+                                      color: LuxeColors.glass,
+                                      border: Border.all(
+                                        color: LuxeColors.hairline,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.two_wheeler_rounded,
+                                          size: 18,
+                                          color: LuxeColors.emerald,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                vehicle?.displayName ??
+                                                    'Chưa chọn xe theo dõi',
+                                                key: const Key(
+                                                  'assistant_vehicle_label',
+                                                ),
+                                                style: const TextStyle(
+                                                  fontSize: 13.5,
+                                                  fontWeight: FontWeight.w500,
+                                                  color: LuxeColors.text,
+                                                ),
+                                              ),
+                                              Text(
+                                                vehicle == null ||
+                                                        !vehicle.hasBatteryData
+                                                    ? 'Chưa có dữ liệu pin'
+                                                    : 'Pin ${vehicle.currentBattery}% · Dữ liệu hồ sơ',
+                                                key: const Key(
+                                                  'assistant_battery_source',
+                                                ),
+                                                // User-entered, not verified:
+                                                // champagne, not emerald.
+                                                style: const TextStyle(
+                                                  fontSize: 11.5,
+                                                  color: LuxeColors.champagne,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                IconButton(
+                                  key: const Key('assistant_history_button'),
+                                  tooltip: 'Lịch sử chat',
+                                  style: _glassIcon,
+                                  icon: const Icon(
+                                    Icons.history_rounded,
+                                    size: 20,
+                                  ),
+                                  onPressed: _showHistoryModal,
+                                ),
+                                IconButton(
+                                  key: const Key(
+                                    'assistant_personalization_button',
+                                  ),
+                                  tooltip: 'Cá nhân hóa và dữ liệu học',
+                                  style: _glassIcon,
+                                  icon: const Icon(
+                                    Icons.tune_rounded,
+                                    size: 20,
+                                  ),
+                                  onPressed: _showPersonalization,
+                                ),
+                                IconButton(
+                                  key: const Key('assistant_new_chat_button'),
+                                  tooltip: 'Đoạn chat mới',
+                                  style: _glassIcon,
+                                  icon: const Icon(
+                                    Icons.add_comment_outlined,
+                                    size: 20,
+                                  ),
+                                  onPressed: () => _startNewChat(),
+                                ),
+                              ],
                             ),
-                            decoration: InputDecoration(
-                              hintText: 'Hỏi BatteryBot về pin, sạc, xe...',
-                              hintStyle: TextStyle(
-                                fontSize: 13,
-                                color: uiColors.muted,
+                          ],
+                        ),
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    if (keyboard == 0 && !welcome)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: QuickReplyChips(
+                          customSuggestions: chips,
+                          currentSoc: vehicle?.currentBattery.toDouble(),
+                          isCharging:
+                              ShellyConnectionCoordinator
+                                  .shared
+                                  .current
+                                  .status
+                                  ?.relay ==
+                              true,
+                          onSelect: (chipText) => _handleSend(chipText),
+                        ),
+                      ),
+                    Expanded(
+                      child: welcome
+                          // Fresh chat: everything is built at once so the
+                          // greeting and the first suggestions stay in view.
+                          ? SingleChildScrollView(
+                              controller: _scrollController,
+                              padding: const EdgeInsets.fromLTRB(0, 4, 0, 12),
+                              child: Column(
+                                children: [
+                                  if (_activeSuggestion != null)
+                                    _buildProactiveBanner(uiColors),
+                                  const _WelcomeHeader(),
+                                  for (var i = 0; i < _messages.length; i++)
+                                    _bubble(i, showMeta: false),
+                                  _SuggestionCards(
+                                    suggestions: chips,
+                                    onSelect: _handleSend,
+                                  ),
+                                ],
                               ),
-                              filled: true,
-                              fillColor: uiColors.dark
-                                  ? const Color(
-                                      0xFF162338,
-                                    ).withValues(alpha: 0.8)
-                                  : const Color(0xFFF1F5F9),
-                              isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 10,
-                              ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(24),
-                                borderSide: BorderSide(
-                                  color: uiColors.dark
-                                      ? const Color(0xFF1E2D45)
-                                      : uiColors.border,
-                                ),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(24),
-                                borderSide: BorderSide(
-                                  color: uiColors.dark
-                                      ? const Color(0xFF1E2D45)
-                                      : uiColors.border,
-                                ),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(24),
-                                borderSide: const BorderSide(
-                                  color: Color(0xFF10B981),
-                                  width: 1.5,
-                                ),
-                              ),
+                            )
+                          : ListView.builder(
+                              controller: _scrollController,
+                              padding: const EdgeInsets.fromLTRB(0, 8, 0, 12),
+                              itemCount:
+                                  _messages.length +
+                                  (_activeSuggestion != null ? 1 : 0),
+                              itemBuilder: (context, raw) {
+                                final banner = _activeSuggestion != null;
+                                if (banner && raw == 0) {
+                                  return _buildProactiveBanner(uiColors);
+                                }
+                                return _bubble(banner ? raw - 1 : raw);
+                              },
                             ),
-                            onSubmitted: _handleSend,
+                    ),
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 220),
+                      // The streaming reply bubble already shows the
+                      // "preparing" dots; never draw a second indicator.
+                      child:
+                          _isTyping &&
+                              !(_messages.isNotEmpty &&
+                                  _messages.last.isStreaming)
+                          ? const Padding(
+                              padding: EdgeInsets.fromLTRB(20, 2, 20, 6),
+                              child: Row(
+                                children: [
+                                  _TypingDot(),
+                                  SizedBox(width: 10),
+                                  Text(
+                                    'Đang chuẩn bị câu trả lời…',
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      fontStyle: FontStyle.italic,
+                                      color: LuxeColors.muted,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : const SizedBox(width: double.infinity),
+                    ),
+                    // Input dock: one glass capsule holding field, mic and send.
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        12,
+                        6,
+                        12,
+                        12 + media.padding.bottom,
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.fromLTRB(6, 4, 4, 4),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(30),
+                          gradient: const LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [Color(0xFF1A1B1E), Color(0xFF111214)],
                           ),
-                  ),
-                  const SizedBox(width: 6),
-                  IconButton(
-                    key: const Key('assistant_voice_button'),
-                    tooltip: _isListeningVoice
-                        ? 'Dừng ghi âm'
-                        : 'Giọng nói chưa sẵn sàng. Hãy nhập bằng bàn phím.',
-                    icon: Icon(
-                      _isListeningVoice
-                          ? Icons.stop_circle_rounded
-                          : Icons.mic_rounded,
-                      color: _isListeningVoice
-                          ? Colors.redAccent
-                          : (uiColors.dark
-                                ? const Color(0xFF10B981)
-                                : uiColors.primary),
+                          border: Border.all(
+                            color: _isListeningVoice
+                                ? LuxeColors.emerald
+                                : LuxeColors.hairlineStrong,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: _isListeningVoice
+                                  ? SizedBox(
+                                      height: 48,
+                                      child: Row(
+                                        children: [
+                                          IconButton(
+                                            icon: const Icon(
+                                              Icons.close_rounded,
+                                              size: 18,
+                                              color: LuxeColors.danger,
+                                            ),
+                                            tooltip: 'Hủy ghi âm',
+                                            onPressed: () {
+                                              _voiceService?.cancelListening();
+                                              setState(() {
+                                                _isListeningVoice = false;
+                                                _voiceSoundLevel = 0.0;
+                                              });
+                                            },
+                                          ),
+                                          Expanded(
+                                            child: AnimatedVoiceWaveform(
+                                              isListening: true,
+                                              soundLevel: _voiceSoundLevel,
+                                              height: 24,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          const Text(
+                                            'Đang nghe...',
+                                            style: TextStyle(
+                                              fontSize: 12.5,
+                                              fontWeight: FontWeight.w600,
+                                              color: LuxeColors.emerald,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    )
+                                  : TextField(
+                                      key: const Key('assistant_input_field'),
+                                      controller: _inputController,
+                                      textInputAction: TextInputAction.send,
+                                      minLines: 1,
+                                      maxLines: 4,
+                                      style: const TextStyle(
+                                        color: LuxeColors.text,
+                                        fontSize: 15,
+                                      ),
+                                      decoration: const InputDecoration(
+                                        hintText:
+                                            'Hỏi BatteryBot về pin, sạc, xe...',
+                                        hintMaxLines: 1,
+                                        hintStyle: TextStyle(
+                                          fontSize: 14,
+                                          color: LuxeColors.dim,
+                                        ),
+                                        filled: false,
+                                        isDense: true,
+                                        contentPadding: EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 12,
+                                        ),
+                                        border: InputBorder.none,
+                                        enabledBorder: InputBorder.none,
+                                        focusedBorder: InputBorder.none,
+                                      ),
+                                      onSubmitted: _handleSend,
+                                    ),
+                            ),
+                            if (VoiceInputService.isSupported ||
+                                _isListeningVoice)
+                              IconButton(
+                                key: const Key('assistant_voice_button'),
+                                tooltip: _isListeningVoice
+                                    ? 'Dừng ghi âm'
+                                    : 'Giọng nói chưa sẵn sàng. Hãy nhập bằng bàn phím.',
+                                icon: Icon(
+                                  _isListeningVoice
+                                      ? Icons.stop_circle_rounded
+                                      : Icons.mic_none_rounded,
+                                  color: _isListeningVoice
+                                      ? LuxeColors.danger
+                                      : LuxeColors.platinumMid,
+                                ),
+                                onPressed: VoiceInputService.isSupported
+                                    ? _toggleVoiceInput
+                                    : null,
+                              ),
+                            ValueListenableBuilder<TextEditingValue>(
+                              valueListenable: _inputController,
+                              builder: (context, value, _) {
+                                final ready =
+                                    value.text.trim().isNotEmpty && !_isTyping;
+                                return IconButton(
+                                  key: const Key('assistant_send_button'),
+                                  tooltip: _isTyping
+                                      ? 'Đang chờ BatteryBot trả lời'
+                                      : 'Gửi tin nhắn',
+                                  style: IconButton.styleFrom(
+                                    fixedSize: const Size(48, 48),
+                                    backgroundColor: ready
+                                        ? LuxeColors.platinumHi
+                                        : const Color(0xFF232427),
+                                    foregroundColor: ready
+                                        ? const Color(0xFF0B0C0E)
+                                        : LuxeColors.dim,
+                                  ),
+                                  icon: const Icon(
+                                    Icons.arrow_upward_rounded,
+                                    size: 22,
+                                  ),
+                                  onPressed: _isTyping
+                                      ? null
+                                      : () =>
+                                            _handleSend(_inputController.text),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                    onPressed: VoiceInputService.isSupported
-                        ? _toggleVoiceInput
-                        : null,
-                  ),
-                  IconButton(
-                    key: const Key('assistant_send_button'),
-                    tooltip: 'Gửi tin nhắn',
-                    icon: Icon(
-                      Icons.send_rounded,
-                      color: uiColors.dark
-                          ? const Color(0xFF10B981)
-                          : uiColors.primary,
-                    ),
-                    onPressed: () => _handleSend(_inputController.text),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
+}
+
+/// Welcome header for a fresh conversation: mascot and a calm title.
+class _WelcomeHeader extends StatelessWidget {
+  const _WelcomeHeader();
+
+  @override
+  Widget build(BuildContext context) => const Padding(
+    padding: EdgeInsets.fromLTRB(16, 6, 16, 6),
+    child: Column(
+      children: [
+        LuxeReveal(
+          child: BatteryBotMascot(
+            size: BatteryBotSize.sm,
+            mood: BatteryBotMood.happy,
+          ),
+        ),
+        SizedBox(height: 8),
+        LuxeReveal(
+          index: 1,
+          child: Column(
+            children: [
+              Text('TRỢ LÝ PIN CÁ NHÂN', style: LuxeText.eyebrow),
+              SizedBox(height: 4),
+              Text(
+                'Mình có thể giúp gì?',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: LuxeColors.text,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// One glass card per suggestion, shown under the greeting.
+class _SuggestionCards extends StatelessWidget {
+  const _SuggestionCards({required this.suggestions, required this.onSelect});
+  final List<String> suggestions;
+  final ValueChanged<String> onSelect;
+  static IconData _iconFor(String text) {
+    final t = text.toLowerCase();
+    if (t.contains('dừng') || t.contains('tắt')) {
+      return Icons.power_settings_new_rounded;
+    }
+    if (t.contains('shelly') || t.contains('kết nối')) {
+      return Icons.power_rounded;
+    }
+    if (t.contains('khóa')) return Icons.lock_outline_rounded;
+    if (t.contains('pin')) return Icons.battery_5_bar_rounded;
+    if (t.contains('lịch') || t.contains('giờ')) return Icons.schedule_rounded;
+    return Icons.auto_awesome_rounded;
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+    child: LayoutBuilder(
+      builder: (context, box) {
+        final big = MediaQuery.textScalerOf(context).scale(14) > 20;
+        final columns = big || box.maxWidth < 300 ? 1 : 2;
+        final w = (box.maxWidth - 10 * (columns - 1)) / columns;
+        return Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            for (var i = 0; i < suggestions.length; i++)
+              SizedBox(
+                width: w,
+                child: LuxeReveal(
+                  index: i + 2,
+                  child: Material(
+                    type: MaterialType.transparency,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(18),
+                      onTap: () => onSelect(suggestions[i]),
+                      child: LuxeGlass(
+                        radius: 18,
+                        padding: const EdgeInsets.fromLTRB(14, 12, 12, 14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              _iconFor(suggestions[i]),
+                              size: 20,
+                              color: LuxeColors.emerald,
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              suggestions[i],
+                              style: const TextStyle(
+                                color: LuxeColors.text,
+                                fontSize: 14,
+                                height: 1.3,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    ),
+  );
+}
+
+/// Emerald dot that breathes while BatteryBot is preparing an answer. It is
+/// only mounted during typing, so the loop never outlives the reply.
+class _TypingDot extends StatefulWidget {
+  const _TypingDot();
+
+  @override
+  State<_TypingDot> createState() => _TypingDotState();
+}
+
+class _TypingDotState extends State<_TypingDot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!MediaQuery.disableAnimationsOf(context) && !_c.isAnimating) {
+      _c.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => FadeTransition(
+    opacity: Tween(begin: 0.35, end: 1.0).animate(_c),
+    child: Container(
+      width: 8,
+      height: 8,
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+        color: LuxeColors.emerald,
+        boxShadow: [BoxShadow(color: LuxeColors.emeraldGlow, blurRadius: 8)],
+      ),
+    ),
+  );
+}
+
+/// Luxe colours for the history sheet (same names as [AppUiColors]).
+class _LuxePalette {
+  const _LuxePalette();
+  Color get surface => const Color(0xFF0C0D0F);
+  Color get background => const Color(0xFF17181B);
+  Color get primary => LuxeColors.emerald;
+  Color get text => LuxeColors.text;
+  Color get muted => LuxeColors.muted;
 }

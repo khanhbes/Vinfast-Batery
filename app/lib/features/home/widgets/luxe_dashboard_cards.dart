@@ -7,9 +7,10 @@ import 'package:flutter/services.dart';
 import '../../../core/theme/luxe_theme.dart';
 import '../../../data/models/vehicle_model.dart';
 
-/// Medallion icon on glass (shared look for dashboard tiles).
-class LuxeMedallion extends StatelessWidget {
-  const LuxeMedallion({
+/// Tinted glass orb for accented dashboard actions. Neutral icon wells use
+/// the metal [LuxeMedallion] from `core/widgets/luxe_settings.dart`.
+class LuxeOrb extends StatelessWidget {
+  const LuxeOrb({
     super.key,
     required this.icon,
     this.color = LuxeColors.platinum,
@@ -86,40 +87,46 @@ class _LuxePressableState extends State<LuxePressable> {
 class LuxeQuickActions extends StatelessWidget {
   const LuxeQuickActions({
     super.key,
-    required this.onTrip,
     required this.onMaintenance,
-    required this.onSync,
+    required this.onBatteryMonitor,
+    this.onTrip,
     this.tripKey,
   });
 
-  final VoidCallback onTrip;
+  /// Null hides the tile (trip planner off in the beta, Task 125).
+  final VoidCallback? onTrip;
   final VoidCallback onMaintenance;
-  final VoidCallback onSync;
+  final VoidCallback onBatteryMonitor;
   final Key? tripKey;
 
   @override
   Widget build(BuildContext context) {
-    final items = [
-      (
-        Icons.route_rounded,
-        'Lộ trình sạc',
-        LuxeColors.emerald,
-        onTrip,
-        tripKey,
-      ),
+    final trip = onTrip;
+    // Data saves to the account automatically, so a manual "Đồng bộ ngay"
+    // tile contradicted Settings; Battery monitor is a real destination.
+    // Emerald stays for verified states only (Task 125).
+    final items = <(IconData, String, Color, VoidCallback, Key?)>[
+      if (trip != null)
+        (Icons.route_rounded, 'Lộ trình sạc', LuxeColors.steel, trip, tripKey),
       (
         Icons.build_rounded,
         'Bảo dưỡng xe',
-        const Color(0xFFE2B654),
+        LuxeColors.champagne,
         onMaintenance,
         null,
       ),
-      (Icons.sync_rounded, 'Đồng bộ ngay', LuxeColors.platinum, onSync, null),
+      (
+        Icons.monitor_heart_outlined,
+        'Theo dõi pin',
+        LuxeColors.platinum,
+        onBatteryMonitor,
+        null,
+      ),
     ];
     return LayoutBuilder(
       builder: (context, c) {
         final scale = MediaQuery.textScalerOf(context).scale(1);
-        final stacked = c.maxWidth / 3 < 100 || scale > 1.4;
+        final stacked = c.maxWidth / items.length < 100 || scale > 1.4;
         final tiles = [
           for (final it in items)
             LuxePressable(
@@ -135,7 +142,7 @@ class LuxeQuickActions extends StatelessWidget {
                   child: stacked
                       ? Row(
                           children: [
-                            LuxeMedallion(icon: it.$1, color: it.$3, size: 40),
+                            LuxeOrb(icon: it.$1, color: it.$3, size: 40),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
@@ -155,7 +162,7 @@ class LuxeQuickActions extends StatelessWidget {
                         )
                       : Column(
                           children: [
-                            LuxeMedallion(icon: it.$1, color: it.$3),
+                            LuxeOrb(icon: it.$1, color: it.$3),
                             const SizedBox(height: 10),
                             Text(
                               it.$2,
@@ -416,7 +423,7 @@ class _RingPainter extends CustomPainter {
     final color = t >= 0.8
         ? LuxeColors.emerald
         : t >= 0.7
-        ? const Color(0xFFFBBF24)
+        ? LuxeColors.champagne
         : LuxeColors.danger;
     canvas.drawArc(
       rect,
@@ -460,7 +467,7 @@ class LuxeDataHint extends StatelessWidget {
         const Icon(
           Icons.info_outline_rounded,
           size: 18,
-          color: Color(0xFFFBBF24),
+          color: LuxeColors.champagne,
         ),
         const SizedBox(width: 10),
         Expanded(child: Text(message, style: LuxeText.caption)),
@@ -487,7 +494,7 @@ class LuxeEfficiencyNote extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const LuxeMedallion(icon: Icons.tune_rounded, size: 40),
+          const LuxeOrb(icon: Icons.tune_rounded, size: 40),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -537,7 +544,7 @@ class LuxeShellyPrompt extends StatelessWidget {
     padding: const EdgeInsets.all(14),
     child: Row(
       children: [
-        const LuxeMedallion(
+        const LuxeOrb(
           icon: Icons.power_rounded,
           color: LuxeColors.emerald,
           size: 40,

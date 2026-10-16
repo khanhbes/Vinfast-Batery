@@ -6,6 +6,7 @@ class AppFeatureFlags {
   static const smartChargeDesignV2 = 'ui.smart_charge_v2';
   static const aiDashboardDesignV2 = 'ui.ai_dashboard_v2';
   static const fullAppDesignV2 = 'ui.full_app_v2';
+
   /// V4 rollout switch. Defaults on after the V4 shell is deployed, while
   /// remote config can turn it off for rollback during staged rollout.
   static const fullAppV4 = 'ui.full_app_v4';

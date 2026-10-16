@@ -1,11 +1,12 @@
 targetScope = 'resourceGroup'
-param workerResourceId string
 @secure()
 param contactEmail string
 param startDate string
 param endDate string
 
 // Alert only. No action group, shutdown automation or hard spending limit.
+// Task 125: scoped to the whole resource group (the filter pointed at the
+// deleted vinfast-worker-pilot, so nothing was being watched).
 resource budget 'Microsoft.Consumption/budgets@2024-08-01' = {
   name: 'vinfast-worker-pilot-monthly'
   properties: {
@@ -13,7 +14,6 @@ resource budget 'Microsoft.Consumption/budgets@2024-08-01' = {
     category: 'Cost'
     timeGrain: 'Monthly'
     timePeriod: { startDate: startDate, endDate: endDate }
-    filter: { dimensions: { name: 'ResourceId', operator: 'In', values: [workerResourceId] } }
     notifications: {
       actual80: { enabled: true, operator: 'GreaterThanOrEqualTo', threshold: 80, thresholdType: 'Actual', contactEmails: [contactEmail] }
       actual100: { enabled: true, operator: 'GreaterThanOrEqualTo', threshold: 100, thresholdType: 'Actual', contactEmails: [contactEmail] }

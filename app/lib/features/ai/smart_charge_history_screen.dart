@@ -113,10 +113,43 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
   bool get _canGoNext =>
       _customRange == null && !_monthEnd.isAfter(DateTime.now());
 
+  void Function()? _removeControllerListener;
+  String? _runningSessionId;
+
+  /// The History tab stays alive in the tab stack, so it must reload when a
+  /// session ends (or starts) instead of only on first open (Task 123: the
+  /// newest sessions were missing until a manual pull-to-refresh).
+  void _subscribeToController() {
+    _removeControllerListener?.call();
+    _runningSessionId = null;
+    var primed = false;
+    _removeControllerListener = widget.controller.addListener((state) {
+      final session = state.session;
+      final running = session != null && !session.state.isTerminal
+          ? session.sessionId
+          : null;
+      if (!primed) {
+        // The immediate first callback is the current state: already loaded.
+        primed = true;
+        _runningSessionId = running;
+        return;
+      }
+      final changed = running != _runningSessionId;
+      final hadSession = _runningSessionId != null || running != null;
+      _runningSessionId = running;
+      if (!changed || !hadSession) return;
+      // Never setState while the notifier is dispatching.
+      scheduleMicrotask(() {
+        if (mounted) _load(reset: true);
+      });
+    });
+  }
+
   @override
   void initState() {
     super.initState();
     _hasSuccessfulLoad = widget.initialItems.isNotEmpty;
+    _subscribeToController();
     _load(reset: true);
     _liveTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (!_loading && _items.any((item) => !item.state.isTerminal)) {
@@ -129,6 +162,9 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
   void didUpdateWidget(covariant SmartChargeHistoryScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     final vehicleId = widget.controller.currentUiState.draft.vehicleId;
+    if (!identical(oldWidget.controller, widget.controller)) {
+      _subscribeToController();
+    }
     if (!identical(oldWidget.controller, widget.controller) ||
         oldWidget.ownerUid != widget.ownerUid ||
         _vehicleId != vehicleId) {
@@ -149,6 +185,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
 
   @override
   void dispose() {
+    _removeControllerListener?.call();
     _contextGeneration++;
     _requestGeneration++;
     _liveTimer?.cancel();

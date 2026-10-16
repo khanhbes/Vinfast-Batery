@@ -6,7 +6,6 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/utils/battery_bot_faq.dart';
 import '../models/chat_message.dart';
 import '../models/function_call_action.dart';
-import '../theme/chatbot_glass_theme.dart';
 import 'action_confirmation_card.dart';
 import 'battery_status_card.dart';
 import 'breathing_bot_avatar.dart';
@@ -24,6 +23,7 @@ class ChatMessageBubble extends StatelessWidget {
     this.onCancelAction,
     this.onRetry,
     this.isActionLoading = false,
+    this.showMeta = true,
   });
 
   final ChatMessage message;
@@ -33,6 +33,9 @@ class ChatMessageBubble extends StatelessWidget {
   final void Function(FunctionCallAction action)? onCancelAction;
   final VoidCallback? onRetry;
   final bool isActionLoading;
+
+  /// Copy/share/feedback row; hidden for the greeting.
+  final bool showMeta;
 
   void _copyToClipboard(BuildContext context) {
     Clipboard.setData(ClipboardData(text: message.content));
@@ -48,7 +51,7 @@ class ChatMessageBubble extends StatelessWidget {
 
   void _shareMessage() {
     Share.share(
-      '${message.content}\n\n— VinFast Battery Copilot',
+      '${message.content}\n\n— BatteryBot · VinFast Battery',
       subject: 'Chia sẻ từ VinFast Battery',
     );
   }
@@ -90,47 +93,72 @@ class ChatMessageBubble extends StatelessWidget {
     return Semantics(
       label: 'Tin nhắn của bạn: ${message.content}',
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 12),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.end,
+        padding: const EdgeInsets.fromLTRB(48, 8, 16, 8),
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            if (message.isQueued) ...[
-              Icon(
-                Icons.schedule_rounded,
-                size: 12,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+            Container(
+              constraints: BoxConstraints(maxWidth: screenWidth * 0.8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+              decoration: BoxDecoration(
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(22),
+                  topRight: Radius.circular(22),
+                  bottomLeft: Radius.circular(22),
+                  bottomRight: Radius.circular(6),
+                ),
+                gradient: message.isQueued
+                    ? null
+                    : const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Color(0xFFF7F7F5), Color(0xFFD3D6DA)],
+                      ),
+                color: message.isQueued ? const Color(0xFF1D1F22) : null,
+                border: message.isQueued
+                    ? Border.all(color: const Color(0x38FFFFFF))
+                    : null,
+                boxShadow: message.isQueued
+                    ? null
+                    : const [
+                        BoxShadow(
+                          color: Color(0x22FFFFFF),
+                          blurRadius: 16,
+                          spreadRadius: -6,
+                        ),
+                      ],
               ),
-              const SizedBox(width: 4),
-            ],
-            Text(
-              message.isQueued ? 'Chờ mạng' : timeStr,
-              style: TextStyle(
-                fontSize: 10,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+              child: Text(
+                message.content,
+                style: TextStyle(
+                  color: message.isQueued
+                      ? const Color(0xFFF2F2F0)
+                      : const Color(0xFF0B0C0E),
+                  fontSize: 15,
+                  height: 1.4,
+                ),
               ),
             ),
-            const SizedBox(width: 6),
-            Flexible(
-              child: Container(
-                constraints: BoxConstraints(maxWidth: screenWidth * 0.82),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 10,
-                ),
-                decoration: ChatbotGlassTheme.userBubbleDecoration(
-                  context,
-                  isQueued: message.isQueued,
-                ),
-                child: Text(
-                  message.content,
+            const SizedBox(height: 4),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (message.isQueued) ...[
+                  const Icon(
+                    Icons.schedule_rounded,
+                    size: 12,
+                    color: Color(0xFF858990),
+                  ),
+                  const SizedBox(width: 4),
+                ],
+                Text(
+                  message.isQueued ? 'Chờ mạng' : timeStr,
                   style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    height: 1.4,
+                    fontSize: 10.5,
+                    color: Color(0xFF858990),
                   ),
                 ),
-              ),
+              ],
             ),
           ],
         ),
@@ -144,154 +172,113 @@ class ChatMessageBubble extends StatelessWidget {
     String timeStr,
     double screenWidth,
   ) {
-    final hasRichCards =
-        (message.richCards != null && message.richCards!.isNotEmpty) ||
-        message.actionCard != null;
-
-    // Responsive width: normal text bubble takes up to 82% of screen;
-    // rich cards can use up to 88% on small screens so they never squeeze.
-    final maxBubbleWidth = screenWidth * (hasRichCards ? 0.88 : 0.82);
-
+    // Luxe: BatteryBot answers as open text (no bubble) under a small
+    // signature line; cards and actions sit flush with the text.
+    const dim = Color(0xFF858990);
     return Semantics(
       label: 'BatteryBot trả lời: ${message.content}',
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 12),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.start,
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Breathing Bot Avatar with halo
-            BreathingBotAvatar(size: 32, isStreaming: message.isStreaming),
-            const SizedBox(width: 8),
-            Flexible(
+            Row(
+              children: [
+                BreathingBotAvatar(size: 24, isStreaming: message.isStreaming),
+                const SizedBox(width: 10),
+                Text(
+                  timeStr,
+                  style: const TextStyle(fontSize: 10.5, color: dim),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Container(
+              padding: EdgeInsets.only(left: message.hasError ? 12 : 0),
+              decoration: message.hasError
+                  ? BoxDecoration(
+                      border: Border(
+                        left: BorderSide(
+                          color: theme.colorScheme.error.withValues(alpha: 0.6),
+                          width: 2,
+                        ),
+                      ),
+                    )
+                  : null,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    constraints: BoxConstraints(maxWidth: maxBubbleWidth),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 13,
-                      vertical: 11,
-                    ),
-                    decoration: ChatbotGlassTheme.botBubbleDecoration(
-                      context,
-                      hasError: message.hasError,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        StreamingTextWidget(
-                          text: message.content,
-                          isStreaming: message.isStreaming,
-                        ),
-                        if (message.hasError && onRetry != null) ...[
-                          const SizedBox(height: 8),
-                          InkWell(
-                            onTap: onRetry,
-                            borderRadius: BorderRadius.circular(8),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.refresh_rounded,
-                                    size: 14,
-                                    color: theme.colorScheme.error,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'Thử lại câu trả lời',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: theme.colorScheme.error,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                        if (message.actionCard != null) ...[
-                          const SizedBox(height: 8),
-                          ActionConfirmationCard(
-                            action: message.actionCard!,
-                            isLoading: isActionLoading,
-                            onConfirm: () =>
-                                onConfirmAction?.call(message.actionCard!),
-                            onCancel: () =>
-                                onCancelAction?.call(message.actionCard!),
-                          ),
-                        ],
-                        if (message.richCards != null &&
-                            message.richCards!.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          for (final card in message.richCards!)
-                            _buildRichCard(context, card),
-                        ],
-                        if (message.action != null) ...[
-                          const SizedBox(height: 10),
-                          _buildActionChip(context, message.action!),
-                        ],
-                      ],
-                    ),
+                  StreamingTextWidget(
+                    text: message.content,
+                    isStreaming: message.isStreaming,
                   ),
-                  const SizedBox(height: 4),
-
-                  // Bottom action row: Timestamp, Copy, Share, Thumb Up / Down
-                  Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Text(
-                        timeStr,
+                  if (message.hasError && onRetry != null) ...[
+                    const SizedBox(height: 6),
+                    TextButton.icon(
+                      onPressed: onRetry,
+                      style: TextButton.styleFrom(
+                        foregroundColor: theme.colorScheme.error,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                      ),
+                      icon: const Icon(Icons.refresh_rounded, size: 16),
+                      label: const Text(
+                        'Thử lại câu trả lời',
                         style: TextStyle(
-                          fontSize: 10,
-                          color: theme.colorScheme.onSurface.withValues(
-                            alpha: 0.45,
-                          ),
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                      if (!message.isStreaming &&
-                          message.content.isNotEmpty) ...[
-                        const SizedBox(width: 10),
-                        // Nút Copy
-                        _BubbleActionButton(
-                          icon: Icons.copy_rounded,
-                          tooltip: 'Sao chép',
-                          onTap: () => _copyToClipboard(context),
-                        ),
-                        const SizedBox(width: 4),
-                        // Nút Share
-                        _BubbleActionButton(
-                          icon: Icons.share_rounded,
-                          tooltip: 'Chia sẻ',
-                          onTap: _shareMessage,
-                        ),
-                        const SizedBox(width: 6),
-                        // Thumbs up / down feedback
-                        _FeedbackButton(
-                          icon: Icons.thumb_up_alt_outlined,
-                          activeIcon: Icons.thumb_up_alt_rounded,
-                          isSelected: message.userFeedback == 'like',
-                          onTap: () => onFeedback?.call('like'),
-                        ),
-                        const SizedBox(width: 4),
-                        _FeedbackButton(
-                          icon: Icons.thumb_down_alt_outlined,
-                          activeIcon: Icons.thumb_down_alt_rounded,
-                          isSelected: message.userFeedback == 'dislike',
-                          onTap: () => onFeedback?.call('dislike'),
-                        ),
-                      ],
-                    ],
-                  ),
+                    ),
+                  ],
                 ],
               ),
             ),
+            if (message.actionCard != null) ...[
+              const SizedBox(height: 10),
+              ActionConfirmationCard(
+                action: message.actionCard!,
+                isLoading: isActionLoading,
+                onConfirm: () => onConfirmAction?.call(message.actionCard!),
+                onCancel: () => onCancelAction?.call(message.actionCard!),
+              ),
+            ],
+            if (message.richCards != null && message.richCards!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              for (final card in message.richCards!)
+                _buildRichCard(context, card),
+            ],
+            if (message.action != null) ...[
+              const SizedBox(height: 10),
+              _buildActionChip(context, message.action!),
+            ],
+            if (showMeta && !message.isStreaming && message.content.isNotEmpty)
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  _BubbleActionButton(
+                    icon: Icons.copy_rounded,
+                    tooltip: 'Sao chép',
+                    onTap: () => _copyToClipboard(context),
+                  ),
+                  _BubbleActionButton(
+                    icon: Icons.ios_share_rounded,
+                    tooltip: 'Chia sẻ',
+                    onTap: _shareMessage,
+                  ),
+                  _FeedbackButton(
+                    icon: Icons.thumb_up_alt_outlined,
+                    activeIcon: Icons.thumb_up_alt_rounded,
+                    isSelected: message.userFeedback == 'like',
+                    onTap: () => onFeedback?.call('like'),
+                  ),
+                  _FeedbackButton(
+                    icon: Icons.thumb_down_alt_outlined,
+                    activeIcon: Icons.thumb_down_alt_rounded,
+                    isSelected: message.userFeedback == 'dislike',
+                    onTap: () => onFeedback?.call('dislike'),
+                  ),
+                ],
+              ),
           ],
         ),
       ),
@@ -312,23 +299,19 @@ class ChatMessageBubble extends StatelessWidget {
       null => actionKey,
     };
 
-    return ElevatedButton.icon(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Theme.of(
-          context,
-        ).colorScheme.primary.withValues(alpha: 0.12),
-        foregroundColor: Theme.of(context).colorScheme.primary,
-        elevation: 0,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: Theme.of(context).colorScheme.primary),
-        ),
+    return OutlinedButton.icon(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: const Color(0xFF34D399),
+        side: const BorderSide(color: Color(0x8034D399)),
+        backgroundColor: const Color(0x1434D399),
+        minimumSize: const Size(48, 48),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        shape: const StadiumBorder(),
       ),
       icon: const Icon(Icons.arrow_forward_rounded, size: 16),
       label: Text(
         label,
-        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
       ),
       onPressed: () {
         if (action != null) {
@@ -416,7 +399,7 @@ class ChatMessageBubble extends StatelessWidget {
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 const SizedBox(height: 8),
-                Text('Model local · ${data['modelVersion']}'),
+                Text('Mô hình trên máy · ${data['modelVersion']}'),
                 Text('Tính lúc ${DateFormat('HH:mm dd/MM/yyyy').format(time)}'),
                 const SizedBox(height: 8),
                 const Text(
@@ -459,48 +442,11 @@ class _BubbleActionButton extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: SizedBox(
-          width: 48,
-          height: 48,
-          child: Center(
-            child: Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.06)
-                    : Colors.black.withValues(alpha: 0.05),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.08)
-                      : Colors.black.withValues(alpha: 0.06),
-                  width: 1,
-                ),
-              ),
-              child: Center(
-                child: Icon(
-                  icon,
-                  size: 14,
-                  color: isDark
-                      ? const Color(0xFF94A3B8)
-                      : theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => IconButton(
+    tooltip: tooltip,
+    onPressed: onTap,
+    icon: Icon(icon, size: 16, color: const Color(0xFF858990)),
+  );
 }
 
 class _FeedbackButton extends StatelessWidget {
@@ -517,56 +463,24 @@ class _FeedbackButton extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Semantics(
-        button: true,
-        selected: isSelected,
-        label: icon == Icons.thumb_up_outlined ? 'Hữu ích' : 'Chưa hữu ích',
-        child: SizedBox(
-          width: 48,
-          height: 48,
-          child: Center(
-            child: Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? const Color(0xFF10B981).withValues(alpha: 0.20)
-                    : (isDark
-                          ? Colors.white.withValues(alpha: 0.06)
-                          : Colors.black.withValues(alpha: 0.05)),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: isSelected
-                      ? const Color(0xFF10B981).withValues(alpha: 0.45)
-                      : (isDark
-                            ? Colors.white.withValues(alpha: 0.08)
-                            : Colors.black.withValues(alpha: 0.06)),
-                  width: 1,
-                ),
-              ),
-              child: Center(
-                child: Icon(
-                  isSelected ? activeIcon : icon,
-                  size: 14,
-                  color: isSelected
-                      ? const Color(0xFF10B981)
-                      : (isDark
-                            ? const Color(0xFF94A3B8)
-                            : theme.colorScheme.onSurface.withValues(
-                                alpha: 0.6,
-                              )),
-                ),
-              ),
-            ),
-          ),
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    selected: isSelected,
+    label: icon == Icons.thumb_up_alt_outlined ? 'Hữu ích' : 'Chưa hữu ích',
+    excludeSemantics: true,
+    child: IconButton(
+      onPressed: onTap,
+      icon: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 200),
+        transitionBuilder: (child, a) =>
+            ScaleTransition(scale: a, child: child),
+        child: Icon(
+          isSelected ? activeIcon : icon,
+          key: ValueKey(isSelected),
+          size: 16,
+          color: isSelected ? const Color(0xFF34D399) : const Color(0xFF858990),
         ),
       ),
-    );
-  }
+    ),
+  );
 }

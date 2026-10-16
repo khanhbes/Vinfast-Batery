@@ -287,6 +287,30 @@ class ShellyConnectionCoordinator {
     return last != null && DateTime.now().difference(last) <= serverGrace;
   }
 
+  /// Opening the app after a long pause, the first server read can fail
+  /// (token refresh, network wake-up) before any read succeeded. That is
+  /// "checking", not "lost connection" (Task 123 OnePlus run: ~35 s of a
+  /// misleading "Tạm mất kết nối"). Control stays locked either way.
+  final DateTime _createdAt = DateTime.now();
+  static const startupGrace = Duration(seconds: 30);
+
+  bool get _inStartupGrace =>
+      _lastServerOkAt == null &&
+      DateTime.now().difference(_createdAt) <= startupGrace;
+
+  ShellyConnectionSnapshot _startupChecking(
+    SmartChargerBinding binding, {
+    List<DiscoveredShellyDevice>? devices,
+  }) => ShellyConnectionSnapshot(
+    state: ShellyConnectionFlowState.verifying,
+    isLinked: true,
+    deviceName: binding.displayName,
+    devices: devices ?? _current.devices,
+    codeRefreshRequired: binding.codeRefreshRequired,
+    serverBinding: binding,
+    controlUncertain: _current.controlUncertain,
+  );
+
   /// Clears UI context, not persisted bindings or hardware state.
   void activateAccount(String? uid) {
     if (_accountUid == uid) return;
@@ -461,6 +485,10 @@ class ShellyConnectionCoordinator {
       );
       return;
     }
+    if (_inStartupGrace) {
+      _emit(_startupChecking(old.serverBinding!, devices: old.devices));
+      return;
+    }
     _emit(
       ShellyConnectionSnapshot(
         state: ShellyConnectionFlowState.offline,
@@ -472,6 +500,37 @@ class ShellyConnectionCoordinator {
         controlUncertain: old.controlUncertain,
         errorMessage: 'Tạm mất kết nối máy chủ. Hãy thử lại.',
       ),
+    );
+  }
+
+  /// A relay command from any surface (Charge tab, BatteryBot) was verified
+  /// by the server: resolve a pending command and refresh every listener
+  /// (header, Settings, BatteryBot, pill) at once instead of waiting for the
+  /// next idle poll (Task 122). Presentation only; never authorizes ON.
+  void publishVerifiedReadback(
+    SmartChargerStatus status, {
+    required String? uid,
+    required String vehicleId,
+    SmartChargerCapabilities? capabilities,
+  }) {
+    final binding = _current.serverBinding;
+    if (uid == null || binding == null) {
+      updateCodeNotice(
+        status,
+        uid: uid,
+        vehicleId: vehicleId,
+        capabilities: capabilities,
+      );
+      return;
+    }
+    if (!sameShellyDevice(status.deviceId, binding.deviceId)) return;
+    updateServerSnapshot(
+      uid: uid,
+      vehicleId: vehicleId,
+      binding: binding,
+      status: status,
+      capabilities: capabilities,
+      controlResolved: true,
     );
   }
 
@@ -793,6 +852,10 @@ class ShellyConnectionCoordinator {
     } on SmartChargerException catch (error) {
       if (generation != _accountGeneration) return _current;
       if (_keepLastGoodOnFailure(restoredBinding)) return _current;
+      if (restoredBinding != null && _inStartupGrace) {
+        _emit(_startupChecking(restoredBinding));
+        return _current;
+      }
       _emit(
         ShellyConnectionSnapshot(
           state: ShellyConnectionFlowState.offline,
@@ -810,6 +873,10 @@ class ShellyConnectionCoordinator {
     } on Object {
       if (generation != _accountGeneration) return _current;
       if (_keepLastGoodOnFailure(restoredBinding)) return _current;
+      if (restoredBinding != null && _inStartupGrace) {
+        _emit(_startupChecking(restoredBinding));
+        return _current;
+      }
       _emit(
         ShellyConnectionSnapshot(
           state: ShellyConnectionFlowState.offline,

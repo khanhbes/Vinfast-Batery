@@ -68,7 +68,9 @@ class FirebaseEmulatorFixtures {
   };
 
   // User A ChargeLog Document
-  static Map<String, dynamic> chargeLogAlice({String logId = 'charge_alice_101'}) => {
+  static Map<String, dynamic> chargeLogAlice({
+    String logId = 'charge_alice_101',
+  }) => {
     'id': logId,
     'ownerUid': userA.uid,
     'vehicleId': userA.primaryVehicleId,
@@ -84,20 +86,21 @@ class FirebaseEmulatorFixtures {
   };
 
   // User B ChargeLog Document
-  static Map<String, dynamic> chargeLogBob({String logId = 'charge_bob_201'}) => {
-    'id': logId,
-    'ownerUid': userB.uid,
-    'vehicleId': userB.primaryVehicleId,
-    'startSoc': 40.0,
-    'targetSoc': 80.0,
-    'actualEndSoc': 80.0,
-    'energyWh': 1480.0,
-    'durationSeconds': 5400,
-    'sessionState': 'completed',
-    'isDeleted': false,
-    'createdAt': '2026-09-07T07:00:00Z',
-    'completedAt': '2026-09-07T08:30:00Z',
-  };
+  static Map<String, dynamic> chargeLogBob({String logId = 'charge_bob_201'}) =>
+      {
+        'id': logId,
+        'ownerUid': userB.uid,
+        'vehicleId': userB.primaryVehicleId,
+        'startSoc': 40.0,
+        'targetSoc': 80.0,
+        'actualEndSoc': 80.0,
+        'energyWh': 1480.0,
+        'durationSeconds': 5400,
+        'sessionState': 'completed',
+        'isDeleted': false,
+        'createdAt': '2026-09-07T07:00:00Z',
+        'completedAt': '2026-09-07T08:30:00Z',
+      };
 
   // --- MALFORMED FIRESTORE FIXTURES FOR RESILIENCE TESTING ---
 
@@ -113,8 +116,8 @@ class FirebaseEmulatorFixtures {
     'ownerUid': userA.uid,
     'name': 'Type Mismatched Vehicle',
     'batteryCapacityKwh': 'three_point_five', // String instead of num
-    'currentSoc': 'seventy_percent',          // String instead of num
-    'isDeleted': 'false_string',               // String instead of bool
+    'currentSoc': 'seventy_percent', // String instead of num
+    'isDeleted': 'false_string', // String instead of bool
   };
 
   /// Corrupted ChargeLog with boundary violations (SOC > 100, negative duration, negative energy)
@@ -122,10 +125,10 @@ class FirebaseEmulatorFixtures {
     'id': 'corrupt_charge_999',
     'ownerUid': userA.uid,
     'vehicleId': userA.primaryVehicleId,
-    'startSoc': -15.0,        // Negative SOC violation
-    'targetSoc': 150.0,       // SOC > 100 violation
-    'actualEndSoc': 105.0,    // SOC > 100 violation
-    'energyWh': -2500.0,      // Negative energy violation
+    'startSoc': -15.0, // Negative SOC violation
+    'targetSoc': 150.0, // SOC > 100 violation
+    'actualEndSoc': 105.0, // SOC > 100 violation
+    'energyWh': -2500.0, // Negative energy violation
     'durationSeconds': -3600, // Negative duration violation
     'sessionState': 'unknown_corrupted_state',
     'isDeleted': false,
@@ -138,11 +141,20 @@ class FirebaseEmulatorFixtures {
     'vehicleId': userA.primaryVehicleId,
     'distanceKm': -12.4, // Negative distance
     'startSoc': 40.0,
-    'endSoc': 65.0,      // Consumed negative battery (battery went UP during driving)
+    'endSoc':
+        65.0, // Consumed negative battery (battery went UP during driving)
     'routePoints': [
       {'lat': 21.0285, 'lng': 105.8542, 'timestamp': '2026-09-07T10:00:00Z'},
-      {'lat': 21.0350, 'lng': 105.8600, 'timestamp': '2026-09-07T09:45:00Z'}, // Out of order!
-      {'lat': 999.0, 'lng': -999.0, 'timestamp': 'invalid-date-string'},      // Impossible GPS & invalid date
+      {
+        'lat': 21.0350,
+        'lng': 105.8600,
+        'timestamp': '2026-09-07T09:45:00Z',
+      }, // Out of order!
+      {
+        'lat': 999.0,
+        'lng': -999.0,
+        'timestamp': 'invalid-date-string',
+      }, // Impossible GPS & invalid date
     ],
   };
 

@@ -47,7 +47,9 @@ class VehicleSpecRepository {
   /// Lấy tất cả specs, ưu tiên Firestore → cache → local
   Future<List<VinFastModelSpec>> getAllSpecs({bool forceRemote = false}) async {
     final now = DateTime.now();
-    if (!forceRemote && !_catalogInvalidated && _memoryCache != null &&
+    if (!forceRemote &&
+        !_catalogInvalidated &&
+        _memoryCache != null &&
         _lastRemoteCheck != null &&
         now.difference(_lastRemoteCheck!) < _remoteCheckInterval) {
       return List.unmodifiable(_memoryCache!);

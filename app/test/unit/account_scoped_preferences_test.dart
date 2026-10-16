@@ -12,23 +12,46 @@ void main() {
   test('guide progress is isolated by authenticated UID', () async {
     final accountA = DashboardPreferencesService();
     await accountA.initializeForUser('uid-a');
-    await accountA.seedPendingAutoTour(DashboardPreferencesService.overviewTourId);
-    await accountA.markTourCompleted(DashboardPreferencesService.overviewTourId);
+    await accountA.seedPendingAutoTour(
+      DashboardPreferencesService.overviewTourId,
+    );
+    await accountA.markTourCompleted(
+      DashboardPreferencesService.overviewTourId,
+    );
 
     final accountB = DashboardPreferencesService();
     await accountB.initializeForUser('uid-b');
 
-    expect(accountA.isTourCompleted(DashboardPreferencesService.overviewTourId), isTrue);
-    expect(accountB.isTourCompleted(DashboardPreferencesService.overviewTourId), isFalse);
-    expect(accountB.shouldAutoShow(DashboardPreferencesService.overviewTourId), isFalse);
+    expect(
+      accountA.isTourCompleted(DashboardPreferencesService.overviewTourId),
+      isTrue,
+    );
+    expect(
+      accountB.isTourCompleted(DashboardPreferencesService.overviewTourId),
+      isFalse,
+    );
+    expect(
+      accountB.shouldAutoShow(DashboardPreferencesService.overviewTourId),
+      isFalse,
+    );
   });
 
   test('dismissed first-run tour does not auto-show again', () async {
     final preferences = DashboardPreferencesService();
     await preferences.initializeForUser('uid-a');
-    await preferences.seedPendingAutoTour(DashboardPreferencesService.overviewTourId);
-    expect(preferences.shouldAutoShow(DashboardPreferencesService.overviewTourId), isTrue);
-    await preferences.markTourDismissed(DashboardPreferencesService.overviewTourId);
-    expect(preferences.shouldAutoShow(DashboardPreferencesService.overviewTourId), isFalse);
+    await preferences.seedPendingAutoTour(
+      DashboardPreferencesService.overviewTourId,
+    );
+    expect(
+      preferences.shouldAutoShow(DashboardPreferencesService.overviewTourId),
+      isTrue,
+    );
+    await preferences.markTourDismissed(
+      DashboardPreferencesService.overviewTourId,
+    );
+    expect(
+      preferences.shouldAutoShow(DashboardPreferencesService.overviewTourId),
+      isFalse,
+    );
   });
 }

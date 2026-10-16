@@ -1,22 +1,25 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/services/dashboard_preferences_service.dart';
+import 'dart:ui' show lerpDouble;
 
-/// Modal Bottom Sheet cho phép người dùng:
-/// - Kéo thả đổi thứ tự 6 widget nội dung
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/services/dashboard_preferences_service.dart';
+import '../../../core/theme/luxe_theme.dart';
+import '../../../core/widgets/luxe_kit.dart';
+import '../../../core/widgets/luxe_settings.dart';
+
+/// LUXE sheet (Task 118) cho phép người dùng:
+/// - Kéo thả đổi thứ tự 6 widget nội dung (thẻ được "nhấc" lên khi kéo)
 /// - Bật/tắt hiển thị từng widget (ngăn không cho tắt toàn bộ)
 /// - Khôi phục bố cục mặc định
 class DashboardCustomizationSheet extends ConsumerWidget {
   const DashboardCustomizationSheet({super.key});
 
-  static Future<void> show(BuildContext context) {
-    return showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => const DashboardCustomizationSheet(),
-    );
-  }
+  static Future<void> show(BuildContext context) => showLuxeSheet<void>(
+    context,
+    builder: (ctx) => const DashboardCustomizationSheet(),
+  );
 
   IconData _getWidgetIcon(String id) {
     switch (id) {
@@ -37,109 +40,92 @@ class DashboardCustomizationSheet extends ConsumerWidget {
     }
   }
 
+  /// The dragged card lifts: slight scale, deep shadow and an emerald rim.
+  Widget _proxyDecorator(Widget child, int index, Animation<double> anim) =>
+      AnimatedBuilder(
+        animation: anim,
+        child: child,
+        builder: (context, child) {
+          final t = Curves.easeOutCubic.transform(anim.value);
+          return Transform.scale(
+            scale: lerpDouble(1, 1.03, t),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.55 * t),
+                    blurRadius: 24,
+                    offset: Offset(0, 10 * t),
+                  ),
+                  BoxShadow(
+                    color: LuxeColors.emerald.withValues(alpha: 0.18 * t),
+                    blurRadius: 18,
+                    spreadRadius: -4,
+                  ),
+                ],
+              ),
+              child: Material(type: MaterialType.transparency, child: child),
+            ),
+          );
+        },
+      );
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final prefService = ref.watch(dashboardPreferencesProvider);
     final isEn = Localizations.localeOf(context).languageCode == 'en';
     final order = prefService.order;
 
-    return Container(
+    return ConstrainedBox(
       constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.85,
-      ),
-      decoration: BoxDecoration(
-        color: const Color(0xFF13171F), // Cockpit dark sheet
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        border: Border.all(
-          color: const Color(0xFF2E3846),
-          width: 1,
-        ),
+        maxHeight: MediaQuery.sizeOf(context).height * 0.85,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Drag handle
-          Center(
-            child: Container(
-              margin: const EdgeInsets.only(top: 12, bottom: 8),
-              width: 44,
-              height: 4.5,
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(3),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 16, 12),
+            child: LuxeSheetHeader(
+              eyebrow: isEn ? 'Overview' : 'Tổng quan',
+              title: isEn ? 'Customize Dashboard' : 'Tùy chỉnh bố cục',
+              caption: isEn
+                  ? 'Drag to reorder, toggle switches to show/hide.'
+                  : 'Kéo để đổi thứ tự, bật/tắt để ẩn hoặc hiện.',
+              trailing: TextButton.icon(
+                onPressed: () async {
+                  HapticFeedback.selectionClick();
+                  await prefService.resetToDefault();
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        isEn
+                            ? 'Restored default layout'
+                            : 'Đã khôi phục bố cục mặc định',
+                      ),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.restore_rounded, size: 16),
+                label: Text(isEn ? 'Reset' : 'Mặc định'),
+                style: TextButton.styleFrom(
+                  foregroundColor: LuxeColors.emerald,
+                ),
               ),
             ),
           ),
-
-          // Header
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 16, 12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        isEn ? 'Customize Dashboard' : 'Tùy chỉnh bố cục',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.3,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        isEn
-                            ? 'Drag to reorder, toggle switches to show/hide.'
-                            : 'Kéo để đổi thứ tự, bật/tắt để ẩn hoặc hiện.',
-                        style: const TextStyle(
-                          color: Color(0xFF94A3B8),
-                          fontSize: 12.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed: () async {
-                    await prefService.resetToDefault();
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            isEn
-                                ? 'Restored default layout'
-                                : 'Đã khôi phục bố cục mặc định',
-                          ),
-                          duration: const Duration(seconds: 2),
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    }
-                  },
-                  icon: const Icon(Icons.restore_rounded, size: 16),
-                  label: Text(isEn ? 'Reset' : 'Mặc định'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: const Color(0xFF10B981),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const Divider(height: 1, color: Color(0xFF242C38)),
-
-          // Reorderable list
           Flexible(
             child: ReorderableListView.builder(
               shrinkWrap: true,
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              buildDefaultDragHandles: false,
+              proxyDecorator: _proxyDecorator,
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
               itemCount: order.length,
+              onReorderStart: (_) => HapticFeedback.mediumImpact(),
               onReorder: (oldIndex, newIndex) {
+                HapticFeedback.selectionClick();
                 prefService.reorder(oldIndex, newIndex);
               },
               itemBuilder: (context, index) {
@@ -148,124 +134,107 @@ class DashboardCustomizationSheet extends ConsumerWidget {
                 final title = isEn
                     ? DashboardWidgetId.getTitleEn(id)
                     : DashboardWidgetId.getTitleVi(id);
-                final subtitle = isEn ? '' : DashboardWidgetId.getSubtitleVi(id);
+                final subtitle = isEn
+                    ? ''
+                    : DashboardWidgetId.getSubtitleVi(id);
 
-                return Container(
+                return Padding(
                   key: ValueKey('pref_item_$id'),
-                  margin: const EdgeInsets.symmetric(vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1A212D),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: isVisible
-                          ? const Color(0xFF2E3846)
-                          : const Color(0xFF1F2633),
-                    ),
-                  ),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 2,
-                    ),
-                    leading: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: isVisible
-                            ? const Color(0xFF10B981).withValues(alpha: 0.15)
-                            : Colors.white10,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(
-                        _getWidgetIcon(id),
-                        color: isVisible
-                            ? const Color(0xFF10B981)
-                            : Colors.white38,
-                        size: 20,
-                      ),
-                    ),
-                    title: Text(
-                      title,
-                      style: TextStyle(
-                        color: isVisible ? Colors.white : Colors.white54,
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    subtitle: subtitle.isNotEmpty
-                        ? Text(
-                            subtitle,
-                            softWrap: true,
-                            style: TextStyle(
-                              color: isVisible
-                                  ? const Color(0xFF94A3B8)
-                                  : Colors.white30,
-                              fontSize: 11.5,
-                            ),
-                          )
-                        : null,
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Switch.adaptive(
-                          value: isVisible,
-                          activeTrackColor: const Color(0xFF10B981),
-                          onChanged: (val) {
-                            final success = prefService.toggleVisibility(id, val);
-                            if (!success && !val) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    isEn
-                                        ? 'At least one widget must remain visible.'
-                                        : 'Phải giữ lại ít nhất 1 widget nội dung.',
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: AnimatedOpacity(
+                    duration: luxeDuration(context, 240),
+                    opacity: isVisible ? 1 : 0.55,
+                    child: LuxeGlass(
+                      radius: 18,
+                      padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+                      child: Row(
+                        children: [
+                          LuxeMedallion(
+                            icon: _getWidgetIcon(id),
+                            accent: isVisible
+                                ? LuxeColors.emerald
+                                : LuxeColors.platinumLow,
+                            size: 40,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  title,
+                                  style: LuxeText.item.copyWith(
+                                    fontSize: 14.5,
+                                    fontWeight: FontWeight.w500,
                                   ),
-                                  duration: const Duration(seconds: 2),
-                                  behavior: SnackBarBehavior.floating,
                                 ),
-                              );
-                            }
-                          },
-                        ),
-                        const SizedBox(width: 4),
-                        ReorderableDragStartListener(
-                          index: index,
-                          child: const Padding(
-                            padding: EdgeInsets.all(8.0),
-                            child: Icon(
-                              Icons.drag_indicator_rounded,
-                              color: Colors.white38,
-                              size: 22,
+                                if (subtitle.isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    subtitle,
+                                    softWrap: true,
+                                    style: LuxeText.caption.copyWith(
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
-                        ),
-                      ],
+                          LuxeSwitch(
+                            value: isVisible,
+                            semanticLabel: title,
+                            onChanged: (val) {
+                              final success = prefService.toggleVisibility(
+                                id,
+                                val,
+                              );
+                              if (!success && !val) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      isEn
+                                          ? 'At least one widget must remain visible.'
+                                          : 'Phải giữ lại ít nhất 1 widget nội dung.',
+                                    ),
+                                    duration: const Duration(seconds: 2),
+                                  ),
+                                );
+                              }
+                            },
+                          ),
+                          ReorderableDragStartListener(
+                            index: index,
+                            child: Tooltip(
+                              message: isEn ? 'Drag to reorder' : 'Kéo để đổi',
+                              child: const SizedBox(
+                                width: 44,
+                                height: 48,
+                                child: Icon(
+                                  Icons.drag_indicator_rounded,
+                                  color: LuxeColors.platinumMid,
+                                  size: 22,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 );
               },
             ),
           ),
-
-          // Bottom dismiss button
           SafeArea(
+            top: false,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
               child: SizedBox(
                 width: double.infinity,
                 child: FilledButton(
                   onPressed: () => Navigator.pop(context),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF10B981),
-                    foregroundColor: const Color(0xFF042F2E),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    textStyle: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
                   child: Text(isEn ? 'Done' : 'Hoàn tất'),
                 ),
               ),

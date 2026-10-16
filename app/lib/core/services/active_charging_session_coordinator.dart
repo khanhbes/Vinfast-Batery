@@ -65,11 +65,17 @@ class ActiveChargingSessionSnapshot {
     'unknown',
   }.contains(state);
 
-  bool get isStale => DateTime.now().toUtc().difference(updatedAt).inMinutes >= 2;
+  bool get isStale =>
+      DateTime.now().toUtc().difference(updatedAt).inMinutes >= 2;
 
-  Duration? get remaining => timerRemainingSeconds == null
-      ? session?.remaining(DateTime.now())
-      : Duration(seconds: timerRemainingSeconds!.clamp(0, 86400).toInt());
+  /// The synced timer was read at [updatedAt]: count it down from there
+  /// instead of freezing between snapshots (Task 125).
+  Duration? get remaining {
+    final timer = timerRemainingSeconds;
+    if (timer == null) return session?.remaining(DateTime.now());
+    final age = DateTime.now().toUtc().difference(updatedAt.toUtc()).inSeconds;
+    return Duration(seconds: (timer - age.clamp(0, 86400)).clamp(0, 86400));
+  }
 
   Map<String, dynamic> toCacheJson() => {
     'uid': uid,
@@ -90,12 +96,17 @@ class ActiveChargingSessionSnapshot {
     'revision': revision,
   };
 
-  static ActiveChargingSessionSnapshot? fromCacheJson(Map<String, dynamic> json) {
+  static ActiveChargingSessionSnapshot? fromCacheJson(
+    Map<String, dynamic> json,
+  ) {
     final uid = json['uid']?.toString();
     final sessionId = json['sessionId']?.toString();
     final vehicleId = json['vehicleId']?.toString();
     final updatedAt = DateTime.tryParse(json['updatedAt']?.toString() ?? '');
-    if (uid == null || sessionId == null || vehicleId == null || updatedAt == null) {
+    if (uid == null ||
+        sessionId == null ||
+        vehicleId == null ||
+        updatedAt == null) {
       return null;
     }
     return ActiveChargingSessionSnapshot(
@@ -123,9 +134,8 @@ class ActiveChargingSessionSnapshot {
 /// independent of the selected vehicle so a session started on another
 /// device remains visible in the shell and can be reconciled safely.
 class ActiveChargingSessionCoordinator extends ChangeNotifier {
-  ActiveChargingSessionCoordinator({
-    FirebaseFirestore? firestore,
-  }) : _firestore = firestore ?? FirebaseFirestore.instance;
+  ActiveChargingSessionCoordinator({FirebaseFirestore? firestore})
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _subscription;
@@ -154,12 +164,13 @@ class ActiveChargingSessionCoordinator extends ChangeNotifier {
     _subscription = query.snapshots().listen(
       (snapshot) {
         if (_uid != uid) return;
-        _sessions = snapshot.docs
-            .map((doc) => _fromDocument(doc))
-            .whereType<ActiveChargingSessionSnapshot>()
-            .where((item) => item.isActive)
-            .toList(growable: false)
-          ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+        _sessions =
+            snapshot.docs
+                .map((doc) => _fromDocument(doc))
+                .whereType<ActiveChargingSessionSnapshot>()
+                .where((item) => item.isActive)
+                .toList(growable: false)
+              ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
         _loading = false;
         _lastErrorAt = null;
         unawaited(_persistCache(uid));
@@ -192,9 +203,11 @@ class ActiveChargingSessionCoordinator extends ChangeNotifier {
       if (decoded is! List) return;
       _sessions = decoded
           .whereType<Map>()
-          .map((item) => ActiveChargingSessionSnapshot.fromCacheJson(
-                Map<String, dynamic>.from(item),
-              ))
+          .map(
+            (item) => ActiveChargingSessionSnapshot.fromCacheJson(
+              Map<String, dynamic>.from(item),
+            ),
+          )
           .whereType<ActiveChargingSessionSnapshot>()
           .where((item) => item.uid == uid)
           .where((item) => item.isActive)
@@ -230,10 +243,16 @@ class ActiveChargingSessionCoordinator extends ChangeNotifier {
   ) {
     final data = document.data();
     if (data['source']?.toString() != 'shelly_smart_charging') return null;
-    final state = data['sessionState']?.toString() ?? data['status']?.toString();
+    final state =
+        data['sessionState']?.toString() ?? data['status']?.toString();
     if (state == null ||
-        !const {'arming', 'starting', 'active', 'stopping', 'unknown'}
-            .contains(state)) {
+        !const {
+          'arming',
+          'starting',
+          'active',
+          'stopping',
+          'unknown',
+        }.contains(state)) {
       return null;
     }
     final raw = data['smartChargingSession'];
@@ -249,12 +268,15 @@ class ActiveChargingSessionCoordinator extends ChangeNotifier {
       if (value is Timestamp) return value.toDate().toUtc();
       return DateTime.tryParse(value?.toString() ?? '')?.toUtc();
     }
-    final updated = date(data['updatedAt']) ??
+
+    final updated =
+        date(data['updatedAt']) ??
         session?.updatedAt.toUtc() ??
         DateTime.now().toUtc();
     final owner = _uid;
     if (owner == null) return null;
-    final target = (data['targetSoc'] as num?)?.toDouble() ?? session?.targetSoc;
+    final target =
+        (data['targetSoc'] as num?)?.toDouble() ?? session?.targetSoc;
     final timer = (data['timerRemainingSeconds'] as num?)?.toInt();
     return ActiveChargingSessionSnapshot(
       uid: owner,

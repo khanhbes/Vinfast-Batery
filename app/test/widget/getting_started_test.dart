@@ -8,20 +8,17 @@ import 'package:vinfast_battery/features/auth/onboarding_chat_screen.dart';
 void main() {
   setUp(GettingStartedPrefs.debugReset);
 
-  Widget host(
-    Widget home, {
-    double textScale = 1,
-    bool reduced = false,
-  }) => MaterialApp(
-    builder: (context, child) => MediaQuery(
-      data: MediaQuery.of(context).copyWith(
-        textScaler: TextScaler.linear(textScale),
-        disableAnimations: reduced,
-      ),
-      child: child!,
-    ),
-    home: home,
-  );
+  Widget host(Widget home, {double textScale = 1, bool reduced = false}) =>
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(textScale),
+            disableAnimations: reduced,
+          ),
+          child: child!,
+        ),
+        home: home,
+      );
 
   for (final (width, height, scale) in [
     (320.0, 568.0, 1.5),

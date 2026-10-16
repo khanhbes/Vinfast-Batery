@@ -69,7 +69,7 @@ void main() {
           );
           await tester.pump();
           expect(find.text('31 phút'), findsOneWidget);
-          expect(find.text('Model local · qa-v2'), findsOneWidget);
+          expect(find.text('Mô hình trên máy · qa-v2'), findsOneWidget);
           expect(tester.takeException(), isNull);
           await tester.pumpWidget(const SizedBox.shrink());
         },

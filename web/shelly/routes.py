@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 import secrets
+import threading
+import time
 import hashlib
 import uuid
 from datetime import timedelta
@@ -18,8 +20,49 @@ from .service import SmartChargeError
 from .safety_fingerprint import FINGERPRINT_VERSION
 
 
-def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
+CODE_EXPIRY_DEFAULT_HOURS = 24
+CODE_EXPIRY_MAX_HOURS = 168
+REDEEM_FAILURES_PER_WINDOW = 10
+REDEEM_WINDOW_SECONDS = 600
+
+
+def _code_expiry_hours(body) -> int:
+    """Connection codes are single-use and short-lived (AGENTS 3.6, Task 125)."""
+    try:
+        hours = int(body.get("expiresHours") or CODE_EXPIRY_DEFAULT_HOURS)
+    except (TypeError, ValueError):
+        hours = CODE_EXPIRY_DEFAULT_HOURS
+    return max(1, min(CODE_EXPIRY_MAX_HOURS, hours))
+
+
+class _RedeemGuard:
+    """Counts failed code redemptions per account so 6-character codes
+    cannot be guessed (each guess also costs a Firestore read)."""
+
+    def __init__(self, limit=REDEEM_FAILURES_PER_WINDOW, window=REDEEM_WINDOW_SECONDS, clock=time.monotonic):
+        self.limit, self.window, self.clock = limit, window, clock
+        self._failures: dict[str, list[float]] = {}
+        self._lock = threading.Lock()
+
+    def _recent(self, uid):
+        now = self.clock()
+        items = [t for t in self._failures.get(uid, []) if now - t < self.window]
+        self._failures[uid] = items
+        return items
+
+    def blocked(self, uid) -> bool:
+        with self._lock:
+            return len(self._recent(uid)) >= self.limit
+
+    def fail(self, uid):
+        with self._lock:
+            self._recent(uid).append(self.clock())
+
+
+def create_blueprint(service, repository, auth_resolver, trust_verifier=None, dev_admin_allowed=None,
+                     redeem_guard=None):
     bp = Blueprint("shelly_cloud_first", __name__)
+    guard = redeem_guard or _RedeemGuard()
 
     def _clear_capabilities(response=None):
         # Any mutating Shelly request may change readiness; drop cached results
@@ -46,14 +89,15 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
         """Admin-only developer tools; local Developer Mode is not authority."""
         @wraps(handler)
         def wrapped(*args, **kwargs):
-            admin_key = request.headers.get("X-Admin-Key", "").strip()
-            dev_key = os.environ.get("DEV_ADMIN_KEY", "").strip()
-            if admin_key and dev_key and admin_key == dev_key:
+            # The static key is a local-only escape hatch decided by the
+            # server (non-production, localhost, explicit opt-in), never a
+            # production credential (Task 125).
+            if dev_admin_allowed is not None and dev_admin_allowed():
                 return handler("dev-admin", *args, **kwargs)
             uid, _email, role = auth_resolver()
             if not uid:
                 return jsonify({"success": False, "error": {"code": "unauthorized", "message": "Cần đăng nhập"}}), 401
-            if role != "admin" and os.environ.get("FLASK_ENV") != "development":
+            if role != "admin":
                 return jsonify({"success": False, "error": {"code": "developerRequired", "message": "Cần quyền developer để sửa dữ liệu fine-tune"}}), 403
             return handler(uid, *args, **kwargs)
         return wrapped
@@ -69,6 +113,16 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
                 "success": False,
                 "error": {"code": exc.code, "message": exc.message, "retryable": exc.retryable},
             }), exc.status
+        except RuntimeError as exc:
+            # The session row moved on (worker / other phone) between read
+            # and save: a conflict to re-read, never a 500 (Task 125).
+            if str(exc) in {"sessionRevisionConflict", "sessionAlreadyTerminal"}:
+                return jsonify({
+                    "success": False,
+                    "error": {"code": "sessionChanged", "retryable": True,
+                              "message": "Phiên sạc vừa được cập nhật ở nơi khác. Hãy xem lại trạng thái."},
+                }), 409
+            raise
 
     def profile_error(error):
         message = str(error)
@@ -243,15 +297,15 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
     def safety_test(uid, device_id):
         body = request.get_json(silent=True) or {}
         if body.get("confirmedUnplugged") is not True:
-            return jsonify({"success": False, "error": {"code": "confirmationRequired", "message": "Confirme que le véhicule et toute charge sont débranchés"}}), 400
+            return jsonify({"success": False, "error": {"code": "confirmationRequired", "message": "Hãy xác nhận đã rút xe và mọi thiết bị khỏi ổ cắm"}}), 400
         binding = next((item for item in repository.list_bindings(uid) if item.device_id == device_id and item.revoked_at is None), None)
         if not binding or binding.connection_mode != "server_cloud":
-            return jsonify({"success": False, "error": {"code": "deviceNotFound", "message": "Shelly non associé à ce compte"}}), 404
+            return jsonify({"success": False, "error": {"code": "deviceNotFound", "message": "Ổ Shelly này chưa liên kết với tài khoản"}}), 404
         if repository.current_session(uid, device_id=device_id):
-            return jsonify({"success": False, "error": {"code": "activeSessionConflict", "message": "Une session de charge est active"}}), 409
+            return jsonify({"success": False, "error": {"code": "activeSessionConflict", "message": "Đang có phiên sạc trên ổ này"}}), 409
         operation_id = str(body.get("operationId") or "").strip()
         if not operation_id or len(operation_id) > 160:
-            return jsonify({"success": False, "error": {"code": "invalidOperationId", "message": "Identifiant de contrôle invalide"}}), 400
+            return jsonify({"success": False, "error": {"code": "invalidOperationId", "message": "Mã thao tác không hợp lệ"}}), 400
         guard = execute(service.require_worker_ready)
         if guard is not None:
             return guard
@@ -609,12 +663,14 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
                         raise RuntimeError("deviceUnverified")
                 except Exception:
                     raise SmartChargeError("deviceUnverified", "Chưa xác minh được đúng bộ sạc. Hãy thử lại.", 409)
-                service.stop(shared_session.owner_uid, shared_session.session_id,
+                stopped = service.stop(shared_session.owner_uid, shared_session.session_id,
                     user_stop_reason=str(body.get("userStopReason") or "none"),
                     expected_device_id=expected_device_id)
-                repository.append_audit(uid, "shared_relay_off_verified", device_id=binding.device_id)
+                verified = stopped is None or stopped.state != "stopping"
+                if verified:
+                    repository.append_audit(uid, "shared_relay_off_verified", device_id=binding.device_id)
                 # Do not return another account's history, vehicle or identity.
-                return ok(None, relayOffVerified=True)
+                return ok(None, relayOffVerified=verified, offPendingReadback=not verified)
             session = service.stop(
                 uid,
                 expected_version=body.get("expectedVersion"),
@@ -637,6 +693,7 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
             str(body.get("vehicleId") or "manual"),
             float(body.get("currentSoc") or 0),
             expected_device_id=body.get("expectedDeviceId"),
+            target_soc=body.get("targetSoc"),
         ).to_dict()))
 
     @bp.post("/api/smart-charging/session/<session_id>/stop")
@@ -847,7 +904,7 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
             local_password=body.get("localPassword"),
             note=str(body.get("note") or ""),
             created_by=uid,
-            expires_hours=int(body.get("expiresHours") or 720),
+            expires_hours=_code_expiry_hours(body),
             max_redemptions=1,
         )
         return ok({
@@ -879,7 +936,7 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
             lan_address=body.get("lanAddress") or secrets.get("lanAddress") or dev.get("lanAddress"),
             local_password=body.get("localPassword") or secrets.get("localPassword"),
             created_by=uid,
-            expires_hours=int(body.get("expiresHours") or 720),
+            expires_hours=_code_expiry_hours(body),
             max_redemptions=1,
             note=str(body.get("note") or dev.get("note") or ""),
         )
@@ -908,7 +965,7 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
             lan_address=body.get("lanAddress"),
             local_password=body.get("localPassword"),
             created_by=uid,
-            expires_hours=int(body.get("expiresHours") or 720),
+            expires_hours=_code_expiry_hours(body),
             max_redemptions=1,
             note=str(body.get("note") or ""),
         )
@@ -926,12 +983,16 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None):
     @authenticated
     def redeem_code(uid):
         """User redeems a connection code to get a Shelly profile."""
+        if guard.blocked(uid):
+            return jsonify({"success": False, "error": {"code": "tooManyAttempts", "message": "Bạn đã nhập sai mã quá nhiều lần. Hãy thử lại sau 10 phút.", "retryable": True}}), 429
         body = request.get_json(silent=True) or {}
         code = str(body.get("code") or "").strip().upper()
         if len(code) != 6 or not code.isascii() or not code.isalnum():
+            guard.fail(uid)
             return jsonify({"success": False, "error": {"code": "invalidCode", "message": "Mã kết nối không hợp lệ"}}), 400
         entry = code_store.get(code)
         if entry is None or entry.is_revoked or entry.is_expired:
+            guard.fail(uid)
             return jsonify({"success": False, "error": {"code": "connectionCodeUnavailable", "message": "Mã kết nối không còn hiệu lực."}}), 422
         vehicle_id = body.get("vehicleId")
         if vehicle_id is not None:

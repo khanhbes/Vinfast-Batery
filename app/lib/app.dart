@@ -77,17 +77,14 @@ class _VinFastBatteryAppState extends State<VinFastBatteryApp> {
     return AnimatedBuilder(
       animation: _settings,
       builder: (context, _) {
-        final selectedTheme = _settings.getThemeMode() == AppThemeMode.amoled
-            ? AppTheme.amoledTheme
-            : AppTheme.darkTheme;
+        // LUXE is dark only (Task 117): one theme for every screen.
+        final theme = AppTheme.darkTheme;
         return MaterialApp(
           title: 'VinFast Battery',
           debugShowCheckedModeBanner: false,
-
-          // Theme support (Light/Dark/System per PLAN1)
-          theme: AppTheme.lightTheme,
-          darkTheme: selectedTheme,
-          themeMode: _settings.getThemeModeValue(),
+          theme: theme,
+          darkTheme: theme,
+          themeMode: ThemeMode.dark,
 
           // Localization support (Vietnamese/English per PLAN1)
           locale: _settings.getLocale(),

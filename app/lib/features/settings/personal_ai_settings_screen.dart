@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../core/utils/app_error_formatter.dart';
 
+import '../../core/theme/luxe_theme.dart';
 import '../../core/widgets/app_popup.dart';
+import '../../core/widgets/luxe_kit.dart';
+import '../../core/widgets/luxe_settings.dart';
 import '../../data/models/personal_charging_profile.dart';
 import '../../data/services/server_smart_charger_service.dart';
 
@@ -58,24 +61,12 @@ class _PersonalAiSettingsState extends State<PersonalAiSettingsScreen> {
   }
 
   Future<void> _delete() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Xóa dữ liệu AI cá nhân?'),
-        content: const Text(
+    final confirmed = await showLuxeConfirm(
+      context,
+      title: 'Xóa dữ liệu AI cá nhân?',
+      message:
           'Adapter và toàn bộ mẫu học của xe này sẽ bị xóa vĩnh viễn. Dữ liệu sạc trong lịch sử không bị xóa.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Hủy'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Xóa dữ liệu'),
-          ),
-        ],
-      ),
+      confirmLabel: 'Xóa dữ liệu',
     );
     if (confirmed != true) return;
     setState(() => _busy = true);
@@ -95,105 +86,148 @@ class _PersonalAiSettingsState extends State<PersonalAiSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final profile = _profile;
-    return Scaffold(
-      appBar: AppBar(title: const Text('AI cá nhân')),
+    final sessions = profile?.validSessions ?? 0;
+    return LuxeScaffold(
+      appBar: const LuxeAppBar(),
       body: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
         children: [
-          Text(
-            'Dự đoán riêng cho xe',
-            style: Theme.of(
-              context,
-            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+          const LuxeReveal(
+            child: LuxePageHeaderText(
+              eyebrow: 'AI cá nhân',
+              title: 'Dự đoán riêng cho xe',
+              caption:
+                  'Khi bật, dữ liệu sạc của xe này được dùng để điều chỉnh thời gian sạc dự kiến. Dữ liệu không dùng chung với tài khoản hoặc xe khác.',
+            ),
           ),
-          const SizedBox(height: 8),
-          const Text(
-            'Khi bật, dữ liệu sạc của xe này được dùng để điều chỉnh thời gian sạc dự kiến. Dữ liệu không dùng chung với tài khoản hoặc xe khác.',
-          ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 22),
           if (_busy && profile == null)
             const Center(child: CircularProgressIndicator())
           else if (_error != null)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.cloud_off_rounded),
-              title: const Text('Chưa thể tải trạng thái học'),
-              subtitle: Text(AppErrorFormatter.format(_error)),
-              trailing: TextButton(
+            LuxeNotice(
+              icon: Icons.cloud_off_rounded,
+              color: LuxeColors.champagne,
+              message:
+                  'Chưa thể tải trạng thái học. ${AppErrorFormatter.format(_error)}',
+              action: TextButton(
                 onPressed: _load,
+                style: TextButton.styleFrom(
+                  foregroundColor: LuxeColors.emerald,
+                ),
                 child: const Text('Thử lại'),
               ),
             )
           else ...[
-            SwitchListTile.adaptive(
-              contentPadding: EdgeInsets.zero,
-              value: profile?.consentEnabled ?? false,
-              onChanged: _busy ? null : _toggle,
-              title: const Text('Cho phép AI học từ phiên sạc'),
-              subtitle: const Text(
-                'Có thể tắt hoặc xóa dữ liệu bất cứ lúc nào.',
-              ),
-            ),
-            const Divider(),
-            _row(
-              'Trạng thái',
-              profile?.friendlyStageLabel ?? 'AI đang làm quen với xe của bạn',
-            ),
-            _row(
-              'Phiên đủ điều kiện',
-              '${profile?.validSessions ?? 0} phiên đã được dùng để học',
-            ),
-            const Padding(
-              padding: EdgeInsets.only(top: 8),
-              child: Text(
-                'Sau khi đủ ít nhất 5 phiên, backend sẽ fine-tune và gửi kết quả '
-                'vào Trung tâm thông báo. Model cũ vẫn được giữ nếu bản mới kém hơn.',
-                style: TextStyle(fontSize: 12, height: 1.4),
-              ),
-            ),
-            if (profile?.lastTrainedAt != null)
-              _row(
-                'Cập nhật gần nhất',
-                profile!.lastTrainedAt!.toLocal().toString().substring(0, 16),
-              ),
-            if (profile?.lastTrainingError != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                'Lần học gần nhất chưa thành công; app vẫn giữ adapter tốt trước đó.',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.error,
-                  fontWeight: FontWeight.w600,
+            LuxeReveal(
+              index: 1,
+              child: LuxeGlass(
+                radius: 24,
+                padding: const EdgeInsets.all(18),
+                child: Row(
+                  children: [
+                    LuxeRing(
+                      value: sessions / 5,
+                      size: 92,
+                      stroke: 7,
+                      semanticLabel: '$sessions trên 5 phiên cần để học',
+                      child: ExcludeSemantics(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '$sessions',
+                              style: const TextStyle(
+                                color: LuxeColors.text,
+                                fontSize: 24,
+                                fontWeight: FontWeight.w300,
+                              ),
+                            ),
+                            Text(
+                              '/ 5 phiên',
+                              style: LuxeText.label.copyWith(fontSize: 10.5),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('TRẠNG THÁI', style: LuxeText.eyebrow),
+                          const SizedBox(height: 6),
+                          Text(
+                            profile?.friendlyStageLabel ??
+                                'AI đang làm quen với xe của bạn',
+                            style: LuxeText.item.copyWith(fontSize: 15),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '$sessions phiên đã được dùng để học',
+                            style: LuxeText.caption.copyWith(fontSize: 12.5),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
+              ),
+            ),
+            const LuxeSectionLabel('Quyền học dữ liệu'),
+            LuxeReveal(
+              index: 2,
+              child: LuxeSettingsGroup(
+                children: [
+                  LuxeSettingsRow(
+                    icon: Icons.psychology_rounded,
+                    accent: (profile?.consentEnabled ?? false)
+                        ? LuxeColors.emerald
+                        : null,
+                    title: 'Cho phép AI học từ phiên sạc',
+                    subtitle: 'Có thể tắt hoặc xóa dữ liệu bất cứ lúc nào.',
+                    trailing: LuxeSwitch(
+                      value: profile?.consentEnabled ?? false,
+                      semanticLabel: 'Cho phép AI học từ phiên sạc',
+                      onChanged: _busy ? null : _toggle,
+                    ),
+                  ),
+                  if (profile?.lastTrainedAt != null)
+                    LuxeSettingsRow(
+                      icon: Icons.update_rounded,
+                      title: 'Cập nhật gần nhất',
+                      subtitle: profile!.lastTrainedAt!
+                          .toLocal()
+                          .toString()
+                          .substring(0, 16),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            const LuxeNotice(
+              icon: Icons.info_outline_rounded,
+              message:
+                  'Sau khi đủ ít nhất 5 phiên, backend sẽ fine-tune và gửi kết quả vào Trung tâm thông báo. Model cũ vẫn được giữ nếu bản mới kém hơn.',
+            ),
+            if (profile?.lastTrainingError != null) ...[
+              const SizedBox(height: 10),
+              const LuxeNotice(
+                icon: Icons.error_outline_rounded,
+                color: LuxeColors.danger,
+                message:
+                    'Lần học gần nhất chưa thành công; app vẫn giữ adapter tốt trước đó.',
               ),
             ],
             const SizedBox(height: 24),
-            OutlinedButton.icon(
+            LuxeDangerButton(
+              label: 'Xóa model & dữ liệu cá nhân',
+              icon: Icons.delete_outline_rounded,
               onPressed: _busy ? null : _delete,
-              icon: const Icon(Icons.delete_outline_rounded),
-              label: const Text('XÓA MODEL & DỮ LIỆU CÁ NHÂN'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.error,
-              ),
             ),
           ],
         ],
       ),
     );
   }
-
-  Widget _row(String label, String value) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 9),
-    child: Row(
-      children: [
-        Expanded(child: Text(label)),
-        Flexible(
-          child: Text(
-            value,
-            textAlign: TextAlign.end,
-            style: const TextStyle(fontWeight: FontWeight.w700),
-          ),
-        ),
-      ],
-    ),
-  );
 }

@@ -214,15 +214,24 @@ class ShellyChargeLogService {
       'smartChargingSession': finalSession.toJson(),
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
+    // The ChargeLog is the durable record: dequeue as soon as it is written.
+    // A failed vehicle SoC update must not re-run the whole flush (and its
+    // telemetry reads) on every Charge-tab open (Task 125).
+    await _removeQueuedTerminalSession(session.sessionId);
     final estimated = finalSession.estimatedSoc;
     if (estimated != null) {
-      await _updateVehicleSocIfCurrent(
-        finalSession,
-        soc: estimated,
-        source: 'smart_charge_estimated',
-      );
+      try {
+        await _updateVehicleSocIfCurrent(
+          finalSession,
+          soc: estimated,
+          source: 'smart_charge_estimated',
+        );
+      } on Object catch (error) {
+        debugPrint(
+          '[ChargeLog] vehicle SoC update skipped (${error.runtimeType})',
+        );
+      }
     }
-    await _removeQueuedTerminalSession(session.sessionId);
   }
 
   /// Updates a terminal session with user-confirmed actual end SOC.
@@ -518,6 +527,7 @@ class ShellyChargeLogService {
         .doc(sessionId)
         .collection('smartChargeTelemetry')
         .orderBy('startedAt')
+        .limit(300) // batched points: far beyond a 10 h session
         .get();
     final points = <SmartChargeTelemetryPoint>[];
     for (final document in snapshot.docs) {
@@ -915,9 +925,13 @@ class ShellyChargeLogService {
 
   Future<void> _queueTerminalSession(SmartChargingSession session) async {
     final preferences = await _preferences();
+    // Owner-tagged so another account on this phone never replays it.
     await preferences.setString(
       'smart_charge_terminal_${session.sessionId}',
-      jsonEncode(session.toJson()),
+      jsonEncode({
+        'uid': _auth.currentUser?.uid ?? session.ownerUid,
+        'session': session.toJson(),
+      }),
     );
     final ids =
         preferences
@@ -932,7 +946,8 @@ class ShellyChargeLogService {
   }
 
   Future<bool> _flushQueuedTerminalSessions() async {
-    if (_auth.currentUser == null) return false;
+    final currentUid = _auth.currentUser?.uid;
+    if (currentUid == null) return false;
     var allSucceeded = true;
     final preferences = await _preferences();
     final ids =
@@ -943,12 +958,25 @@ class ShellyChargeLogService {
     for (final id in ids) {
       final raw = preferences.getString('smart_charge_terminal_$id');
       if (raw == null) continue;
+      final SmartChargingSession session;
+      final String? owner;
       try {
-        await saveTerminalSession(
-          SmartChargingSession.fromJson(
-            Map<String, dynamic>.from(jsonDecode(raw) as Map),
+        final decoded = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+        final wrapped = decoded['session'] is Map;
+        session = SmartChargingSession.fromJson(
+          Map<String, dynamic>.from(
+            (wrapped ? decoded['session'] : decoded) as Map,
           ),
         );
+        owner = wrapped ? decoded['uid']?.toString() : session.ownerUid;
+      } on Object {
+        await _removeQueuedTerminalSession(id); // unreadable entry
+        continue;
+      }
+      // Another account's session waits for that account (Task 125).
+      if (owner != null && owner != currentUid) continue;
+      try {
+        await saveTerminalSession(session);
       } on Object {
         allSucceeded = false;
         // Retry on the next sync.

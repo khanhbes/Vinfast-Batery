@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
-import '../theme/app_ui_colors.dart';
+import '../theme/luxe_theme.dart';
+import 'luxe_kit.dart';
 
-/// Widget hiển thị trạng thái rỗng — Dark Premium V3
+/// Empty state — LUXE (Task 117): a one-shot orbit emblem, quiet copy and an
+/// optional outlined platinum action.
 class EmptyState extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -21,70 +22,52 @@ class EmptyState extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final colors = AppUiColors.of(context);
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                color: colors.primary.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Icon(icon, size: 36, color: colors.primary),
-            ),
-            const SizedBox(height: 16),
-            Text(
+  Widget build(BuildContext context) => Center(
+    child: SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          LuxeEmptyArt(icon: icon),
+          const SizedBox(height: 18),
+          LuxeReveal(
+            index: 1,
+            child: Text(
               title,
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: colors.text,
-              ),
+              style: LuxeText.item.copyWith(fontSize: 17),
             ),
-            if (message != null) ...[
-              const SizedBox(height: 8),
-              Text(
+          ),
+          if (message != null) ...[
+            const SizedBox(height: 8),
+            LuxeReveal(
+              index: 2,
+              child: Text(
                 message!,
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: colors.muted,
-                  height: 1.4,
-                ),
+                style: LuxeText.body,
               ),
-            ],
-            if (actionLabel != null && onAction != null) ...[
-              const SizedBox(height: 20),
-              ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 48),
-                child: OutlinedButton.icon(
-                  onPressed: onAction,
-                  icon: const Icon(Icons.add_rounded, size: 18),
-                  label: Text(actionLabel!),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.primary,
-                    side: const BorderSide(color: AppColors.primary),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    textStyle: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ],
-        ),
+          if (actionLabel != null && onAction != null) ...[
+            const SizedBox(height: 22),
+            LuxeReveal(
+              index: 3,
+              child: OutlinedButton.icon(
+                onPressed: onAction,
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: Text(actionLabel!),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: LuxeColors.text,
+                  iconColor: LuxeColors.emerald,
+                  side: const BorderSide(color: LuxeColors.hairlineStrong),
+                  minimumSize: const Size(48, 48),
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
-    );
-  }
+    ),
+  );
 }

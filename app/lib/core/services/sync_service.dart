@@ -87,7 +87,9 @@ class SyncService {
           .timeout(_timeout);
 
       if (response.statusCode == 200) {
-        if (kDebugMode) debugPrint('User synced to web successfully: ${user.uid}');
+        if (kDebugMode) {
+          debugPrint('User synced to web successfully: ${user.uid}');
+        }
 
         // Lưu vào SharedPreferences đánh dấu đã sync
         final prefs = await SharedPreferences.getInstance();
@@ -99,7 +101,11 @@ class SyncService {
 
         return true;
       } else {
-        if (kDebugMode) debugPrint('Failed to sync user: ${response.statusCode} - ${response.body}');
+        if (kDebugMode) {
+          debugPrint(
+            'Failed to sync user: ${response.statusCode} - ${response.body}',
+          );
+        }
         return false;
       }
     } catch (e) {
@@ -151,7 +157,9 @@ class SyncService {
 
         return true;
       } else {
-        if (kDebugMode) debugPrint('Failed to sync vehicle: ${response.statusCode}');
+        if (kDebugMode) {
+          debugPrint('Failed to sync vehicle: ${response.statusCode}');
+        }
         return false;
       }
     } catch (e) {
@@ -212,7 +220,9 @@ class SyncService {
           .get();
 
       if (snapshot.docs.isEmpty) {
-        if (kDebugMode) debugPrint('No battery state found for vehicle: $vehicleId');
+        if (kDebugMode) {
+          debugPrint('No battery state found for vehicle: $vehicleId');
+        }
         return false;
       }
 
@@ -235,7 +245,9 @@ class SyncService {
         if (kDebugMode) debugPrint('Battery state synced to web: $vehicleId');
         return true;
       } else {
-        if (kDebugMode) debugPrint('Failed to sync battery state: ${response.statusCode}');
+        if (kDebugMode) {
+          debugPrint('Failed to sync battery state: ${response.statusCode}');
+        }
         return false;
       }
     } catch (e) {
@@ -268,10 +280,14 @@ class SyncService {
           .timeout(_timeout);
 
       if (response.statusCode == 200) {
-        if (kDebugMode) debugPrint('Trip prediction synced to web: $predictionId');
+        if (kDebugMode) {
+          debugPrint('Trip prediction synced to web: $predictionId');
+        }
         return true;
       } else {
-        if (kDebugMode) debugPrint('Failed to sync trip prediction: ${response.statusCode}');
+        if (kDebugMode) {
+          debugPrint('Failed to sync trip prediction: ${response.statusCode}');
+        }
         return false;
       }
     } catch (e) {
@@ -368,36 +384,5 @@ class SyncService {
     } catch (e) {
       return false;
     }
-  }
-
-  /// Lắng nghe thay đổi và auto-sync (real-time)
-  StreamSubscription? _vehicleSubscription;
-
-  void startAutoSync() {
-    final user = _auth.currentUser;
-    if (user == null) return;
-
-    // Lắng nghe thay đổi vehicles
-    _vehicleSubscription = _firestore
-        .collection('Vehicles')
-        .where('ownerUid', isEqualTo: user.uid)
-        .where('needsSync', isEqualTo: true)
-        .snapshots()
-        .listen((snapshot) {
-          for (final change in snapshot.docChanges) {
-            if (change.type == DocumentChangeType.added ||
-                change.type == DocumentChangeType.modified) {
-              syncVehicleToWeb(change.doc.id);
-            }
-          }
-        });
-
-    if (kDebugMode) debugPrint('Auto sync started for user: ${user.uid}');
-  }
-
-  void stopAutoSync() {
-    _vehicleSubscription?.cancel();
-    _vehicleSubscription = null;
-    if (kDebugMode) debugPrint('Auto sync stopped');
   }
 }

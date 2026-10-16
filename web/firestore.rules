@@ -286,7 +286,10 @@ service cloud.firestore {
           'avatarColor', 'hasBatteryData', 'hasSohData', 'hasOdoData',
           'totalCharges', 'totalTrips', 'isDeleted', 'isArchived',
           'archivedAt', 'updatedAt', 'needsSync', 'syncedToWeb',
-          'lastWebSync'
+          'lastWebSync',
+          // Task 125: Direct-mode Smart Charge records where the SoC came
+          // from (it was rejected and retried forever before).
+          'batteryDataSource', 'batteryDataSessionId', 'batteryDataUpdatedAt'
         ]);
       // Vehicles are archived via isDeleted/archivedAt; physical deletion is
       // prohibited so histories and AI profiles remain recoverable.
@@ -474,7 +477,12 @@ service cloud.firestore {
 
     // ── UserNotifications ──
     match /UserNotifications/{notificationId} {
-      allow read: if isAuth() && resource.data.userId == request.auth.uid;
+      // `resource == null`: a client may check that its own deterministic id
+      // (`<uid>_sc_<session>_<state>`, Task 125) does not exist yet; reading a
+      // missing doc reveals nothing.
+      allow read: if isAuth() && (
+        (resource == null && notificationId.matches('^' + request.auth.uid + '_.*')) ||
+        (resource != null && resource.data.userId == request.auth.uid));
       allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
       allow update: if isAuth() && resource.data.userId == request.auth.uid &&
         request.resource.data.userId == resource.data.userId;

@@ -71,7 +71,8 @@ class FirebaseBootstrapCoordinator {
   static void _validate(FirebaseApp app) {
     final expected = DefaultFirebaseOptions.currentPlatform;
     final actual = app.options;
-    if (actual.projectId != expected.projectId || actual.appId != expected.appId) {
+    if (actual.projectId != expected.projectId ||
+        actual.appId != expected.appId) {
       throw StateError(
         'Firebase default app does not match the VinFast Battery configuration.',
       );

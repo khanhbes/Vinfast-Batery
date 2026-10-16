@@ -22,6 +22,7 @@ import '../../core/widgets/battery_bot_mascot.dart';
 import '../../data/models/vinfast_model_spec.dart';
 import '../../data/repositories/vehicle_spec_repository.dart';
 import '../smart_charging/smart_charger_setup_hub_screen.dart';
+import '../home/widgets/vehicle_showroom.dart' show showroomImageProvider;
 
 /// Onboarding keeps the existing draft/validation contract in a calm step UI.
 class OnboardingChatScreen extends ConsumerStatefulWidget {
@@ -177,12 +178,12 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
     if (step >= 0 && step < concise.length) return concise[step];
     switch (step) {
       case 0:
-        return 'Yo! Mình là BatteryBot ⚡ — Trợ lý pin thông minh nhất vũ trụ! Cùng mình thiết lập chiếc xe VinFast để tối ưu pin nhé! 🚀';
+        return 'Chào bạn, mình là BatteryBot — trợ lý pin và sạc của bạn. Cùng thiết lập chiếc xe VinFast để theo dõi pin nhé.';
       case 1:
         return 'Woa, xe VinFast à? Khẩu vị sang và chuẩn gu lắm nè! Bạn đang cưỡi chiến mã nào thế? Chọn ngay nha 🛵';
       case 2:
         if (_selectedSpec != null) {
-          return 'Tuyệt cú mèo! Chiếc ${_selectedSpec!.modelName} này lái thích mê! Cho mình xin biển số & ODO để AI tính toán pin siêu chuẩn xác nhé! ⚡';
+          return 'Đã chọn ${_selectedSpec!.modelName}. Cho mình xin biển số và số ODO để ước tính pin và lịch bảo dưỡng sát hơn nhé.';
         }
         return 'Cho mình xin thêm biển số & ODO để AI tính toán mức tiêu hao pin chuẩn từng km nhé! ⚡';
       case 3:
@@ -192,7 +193,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
       case 5:
         return 'Đi làm hay đi chơi nhiều hơn? Còn bao nhiêu % pin thì bạn thường cắm sạc? Chia sẻ nhỏ để bảo vệ cell pin LFP nhé! 🔋';
       case 6:
-        return 'Sạc thông minh Shelly nè! Tự ngắt khi đạt mức pin mong muốn, tiết kiệm điện và chống chai pin tuyệt đối. Thử xem nào 🔌';
+        return 'Sạc thông minh với ổ cắm Shelly: hẹn giờ sạc, ổ tự ngắt theo bộ đếm phần cứng và báo khi sạc xong. Bạn có muốn kết nối không?';
       case 7:
         return 'Cho mình xin phép nhắc bạn khi pin đầy nhé? Hứa là chỉ báo tin quan trọng, không bao giờ spam bạn đâu! 🔔';
       case 8:
@@ -223,7 +224,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
       case 2:
         return 'Nếu không nhớ chính xác số ODO, cứ ước lượng gần đúng nha. AI thông minh sẽ tự học và hiệu chỉnh dần nè! 💡';
       case 3:
-        return 'Nhập ngày sinh theo mẫu Ngày/Tháng/Năm (ví dụ 15/08/1998) nha bạn. Mọi dữ liệu đều được bảo mật tuyệt đối! 🛡️';
+        return 'Nhập ngày sinh theo mẫu Ngày/Tháng/Năm (ví dụ 15/08/1998). Dữ liệu chỉ dùng cho tài khoản của bạn.';
       case 4:
         return 'Di chuyển quanh phố thường tầm 15-30km. Bạn kéo thanh trượt ước lượng nhé! 🛣️';
       case 5:
@@ -1931,7 +1932,7 @@ class _MiniCellPainter extends CustomPainter {
           inner.bottom,
           const Radius.circular(3),
         ),
-        Paint()..color = low ? const Color(0xFFFBBF24) : LuxeColors.emerald,
+        Paint()..color = low ? LuxeColors.champagne : LuxeColors.emerald,
       );
     }
     canvas.drawRRect(
@@ -2457,7 +2458,7 @@ class OnboardingVehicleChoice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final image = spec.imageUrl?.trim();
+    final image = spec.showroom?.primary.thumbnailUrl ?? spec.imageUrl?.trim();
     final duration = AppMotion.durationFor(
       context,
       const Duration(milliseconds: 260),
@@ -2502,8 +2503,8 @@ class OnboardingVehicleChoice extends StatelessWidget {
                   child: image == null || image.isEmpty
                       ? fallback
                       : ExcludeSemantics(
-                          child: Image.network(
-                            image,
+                          child: Image(
+                            image: showroomImageProvider(image),
                             fit: BoxFit.contain,
                             errorBuilder: (_, _, _) => fallback,
                           ),

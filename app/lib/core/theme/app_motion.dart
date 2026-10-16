@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 
 /// Hệ thống motion thống nhất cho toàn app — Design System V4.
 ///
 /// Mục tiêu:
 /// - Tất cả entrance animations, route transitions, micro-interactions dùng
 ///   chung 1 bộ duration & curve để feel "premium" và đồng nhất.
-/// - Hợp tác với `flutter_animate` (đã có sẵn trong pubspec) để code ngắn gọn.
+/// - Không phụ thuộc thư viện animation ngoài (Task 121).
 class AppMotion {
   AppMotion._();
 
@@ -135,12 +134,12 @@ class AppPageTransitionsBuilder extends PageTransitionsBuilder {
   }
 }
 
-/// Extension trên `Widget` cung cấp các entrance animation chuẩn —
-/// wrapper mỏng quanh `flutter_animate` để callers viết ngắn gọn:
+/// Extension trên `Widget` cung cấp các entrance animation chuẩn để callers
+/// viết ngắn gọn:
 ///
 ///   MyCard().appFadeSlideIn(index: i)
 ///
-/// thay cho lặp lại `flutter_animate` config rời rạc khắp app.
+/// thay cho lặp lại cấu hình animation rời rạc khắp app.
 extension AppMotionAnimate on Widget {
   /// Fade + slide-up nhẹ. Dùng cho cards / list items.
   Widget appFadeSlideIn({
@@ -154,24 +153,6 @@ extension AppMotionAnimate on Widget {
       delay: delay ?? AppMotion.staggerFor(index),
       offset: Offset(0, (slide * 100).clamp(-12.0, 12.0)),
       child: this,
-    );
-  }
-
-  /// Pop scale entrance — dùng cho hero badges, FABs.
-  Widget appScalePop({Duration? delay, Duration? duration}) {
-    return Builder(
-      builder: (context) {
-        if (!AppMotion.enabled(context)) return this;
-        return animate()
-            .fadeIn(delay: delay, duration: duration ?? AppMotion.fast)
-            .scale(
-              begin: const Offset(0.92, 0.92),
-              end: const Offset(1, 1),
-              delay: delay,
-              duration: duration ?? AppMotion.base,
-              curve: AppMotion.emphasized,
-            );
-      },
     );
   }
 

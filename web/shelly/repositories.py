@@ -78,9 +78,35 @@ class SmartChargeRepository:
                     and isinstance(expires, datetime) and expires.tzinfo is not None
                     and 0 < (expires - now).total_seconds() <= 180)
 
+    _WORKER_PARTITION = "workerState"
+
+    def _worker_table(self):
+        """East Asia table for worker lease + health when SHELLY_CONTROL_STATE
+        is "table" (Task 123: the API read nam5 Firestore twice per check)."""
+        override = getattr(self, "_worker_table_override", None)
+        if override is not None:
+            return override
+        from .azure_dispatch import configured_store, control_state_in_table
+        if not control_state_in_table():
+            return None
+        store = configured_store()
+        if store is None:
+            # Misconfigured switch: fail closed rather than fall back silently.
+            raise RuntimeError("controlStateStoreUnavailable")
+        return store
+
     def _change_worker_lease(self, action):
         if self.worker_scope is None:
             raise RuntimeError("workerScopeNotConfigured")
+        table = self._worker_table()
+        if table is not None:
+            def change(data, _now):
+                update = action(dict(data.get("lease") or {}))
+                if update is None:
+                    return data, None
+                return {**data, "lease": update}, update
+
+            return table.change_entity(self._WORKER_PARTITION, self.worker_scope, change)
         if self.db:
             from google.cloud import firestore
             ref = self.db.collection("smartChargeWorkerLeases").document(self.worker_scope)
@@ -145,7 +171,10 @@ class SmartChargeRepository:
         now = now or datetime.now(timezone.utc)
         if self.worker_scope is None:
             raise RuntimeError("workerScopeNotConfigured")
-        if self.db:
+        table = self._worker_table()
+        if table is not None:
+            lease = dict(table.read_entity(self._WORKER_PARTITION, self.worker_scope).get("lease") or {})
+        elif self.db:
             lease = self.db.collection("smartChargeWorkerLeases").document(self.worker_scope).get().to_dict() or {}
         else:
             with self._lock:
@@ -182,6 +211,19 @@ class SmartChargeRepository:
         epoch = self._worker_lease_epochs.get(worker_id)
         payload = {"schemaVersion": 1, "workerId": worker_id, "leaseEpoch": epoch,
                    "healthy": healthy, "updatedAt": now, "scope": self.worker_scope}
+        table = self._worker_table()
+        if table is not None:
+            def publish_table(data, _now):
+                lease = data.get("lease") or {}
+                if (lease.get("workerId") != worker_id or lease.get("epoch") != epoch
+                        or lease.get("scope") != self.worker_scope or not self._valid_worker_lease(lease, now)):
+                    raise RuntimeError("workerLeaseLost")
+                return {**data, "health": payload}, None
+
+            table.change_entity(self._WORKER_PARTITION, self.worker_scope, publish_table)
+            with self._lock:
+                self._worker_heartbeat = payload
+            return
         if self.db:
             from google.cloud import firestore
             lease_ref = self.db.collection("smartChargeWorkerLeases").document(self.worker_scope)
@@ -218,7 +260,12 @@ class SmartChargeRepository:
         try:
             if self.worker_scope is None:
                 return False
-            if self.db:
+            table = self._worker_table()
+            if table is not None:
+                entity = table.read_entity(self._WORKER_PARTITION, self.worker_scope)
+                data = dict(entity.get("health") or {})
+                lease = dict(entity.get("lease") or {})
+            elif self.db:
                 snapshot = self.db.collection("smartChargeWorkerHealth").document(self.worker_scope).get()
                 data = snapshot.to_dict() or {} if snapshot.exists else {}
                 lease = self.db.collection("smartChargeWorkerLeases").document(self.worker_scope).get().to_dict() or {}
@@ -556,6 +603,13 @@ class SmartChargeRepository:
         raise RuntimeError("legacyCloudSlotUnsupported")
 
     def _cloud_dispatch_change(self, credential_fingerprint, action):
+        # Task 123: an East Asia table replaces the nam5 Firestore transaction
+        # (~0.5 s each, three per Cloud call). Same protocol; API and worker
+        # switch together via SHELLY_DISPATCH_TABLE_ACCOUNT.
+        from .azure_dispatch import configured_store
+        store = configured_store()
+        if store is not None:
+            return store.change(credential_fingerprint, action)
         if not self.db:
             raise RuntimeError("cloudRateLimiterUnavailable")
         if not re.fullmatch(r"[a-f0-9]{64}", credential_fingerprint):
@@ -1320,6 +1374,81 @@ class SmartChargeRepository:
         if session.state not in NONTERMINAL_SESSION_STATES:
             self.release_device_session(uid, session.device_id, session.session_id)
 
+    def claim_device_and_create_session(self, uid: str, session: ChargingSession) -> bool:
+        """Reserve the device and write the brand-new session atomically.
+
+        Same rules as claim_device_session() followed by save_session() for a
+        new row (Task 123: one Firestore transaction instead of two, ~1.5 s
+        each from East Asia to nam5). False when the device is taken.
+        """
+        if not self.db:
+            if not self.claim_device_session(uid, session.device_id, session.session_id):
+                return False
+            self.save_session(uid, session)
+            return True
+        if session.owner_uid not in (None, uid):
+            raise PermissionError("sessionOwnerMismatch")
+        lease_key = self._device_owner_doc_id(session.device_id)
+        payload = session.to_dict()
+        payload["owner_uid"] = uid
+        payload["idempotency_key"] = session.idempotency_key
+        now = datetime.now(timezone.utc)
+        try:
+            from google.cloud import firestore
+            lock_ref = self.db.collection("shellyDeviceLocks").document(lease_key)
+            member_ref = self.db.collection("shellyDeviceOwners").document(lease_key)
+            session_ref = (self.db.collection("users").document(uid)
+                           .collection("smartChargingSessions").document(session.session_id))
+
+            @firestore.transactional
+            def claim_and_create(txn):
+                # One batched read inside the transaction (three sequential
+                # reads cost ~0.45 s each from East Asia to nam5).
+                snapshots = {snap.reference.path: snap
+                             for snap in txn.get_all([lock_ref, member_ref, session_ref])}
+                lock = snapshots[lock_ref.path]
+                members = snapshots[member_ref.path]
+                existing = snapshots[session_ref.path]
+                if uid not in self._membership_uids(members.to_dict() or {}):
+                    return False
+                data = lock.to_dict() or {} if lock.exists else {}
+                same_operation = data.get("ownerUid") == uid and data.get("sessionId") == session.session_id
+                if lock.exists and not same_operation:
+                    return False
+                if lock.exists and data.get("leaseKind", "charging") != "charging":
+                    return False
+                if existing.exists:
+                    raise RuntimeError("sessionAlreadyExists")
+                txn.set(lock_ref, {"ownerUid": uid, "sessionId": session.session_id, "leaseKind": "charging",
+                                   "deviceIdHash": lease_key, "updatedAt": now})
+                txn.set(session_ref, payload)
+                return True
+
+            claimed = bool(self._run_metadata_transaction(claim_and_create))
+        except Exception as error:
+            # The combined transaction is only an optimization. On any
+            # unexpected error fall back to the proven two-step path, which
+            # fails closed by itself (a lock already taken by this same
+            # session id is treated as the same operation).
+            import sys
+            print(f"[smart-charge] combined claim failed ({type(error).__name__}); using two-step claim",
+                  file=sys.stderr, flush=True)
+            if not self.claim_device_session(uid, session.device_id, session.session_id):
+                return False
+            self.save_session(uid, session)
+            return True
+        with self._lock:
+            if claimed:
+                self._device_leases[lease_key] = (uid, session.session_id)
+                self._device_lease_kinds[lease_key] = "charging"
+                self._session_write_snapshots[(uid, session.session_id)] = deepcopy(payload)
+                self._sessions.setdefault(uid, {})[session.session_id] = session
+                self._idempotency[(uid, session.idempotency_key)] = session.session_id
+            else:
+                self._device_leases.pop(lease_key, None)
+                self._device_lease_kinds.pop(lease_key, None)
+        return claimed
+
     def claim_device_session(self, uid: str, device_id: str, session_id: str, *, lease_kind: str = "charging") -> bool:
         """Atomically reserve a physical Shelly for one active session.
 
@@ -1643,7 +1772,9 @@ class SmartChargeRepository:
     def get_session(self, uid: str, session_id: str) -> ChargingSession | None:
         with self._lock:
             cached = self._sessions.get(uid, {}).get(session_id)
-        if cached or not self.db:
+        # A running session can be changed by the worker (another container)
+        # or another phone: only terminal copies are safe to reuse (Task 125).
+        if not self.db or (cached and cached.state not in NONTERMINAL_SESSION_STATES):
             return cached
         snapshot = (self.db.collection("users").document(uid)
                     .collection("smartChargingSessions").document(session_id).get())

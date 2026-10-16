@@ -14,29 +14,32 @@ class AppUiColors {
   Color get primary => theme.colorScheme.primary;
   Color get onPrimary => theme.colorScheme.onPrimary;
   Color get primarySurface => theme.colorScheme.primaryContainer;
-  Color get shell => dark ? const Color(0xFF0C0C0C) : const Color(0xFFF1F5F9);
-  Color get surfaceSoft => dark ? const Color(0xFF1D2128) : const Color(0xFFE2E8F0);
-  Color get cardBackground => dark ? const Color(0xFF101216) : Colors.white;
-  Color get dim => dark ? const Color(0xFF64748B) : const Color(0xFF94A3B8);
+  Color get shell => dark ? const Color(0xFF0B0C0E) : const Color(0xFFF1F5F9);
+  Color get surfaceSoft =>
+      dark ? const Color(0xFF1D1F22) : const Color(0xFFE2E8F0);
+  Color get cardBackground => dark ? const Color(0xFF121315) : Colors.white;
+  Color get dim => dark ? const Color(0xFF858990) : const Color(0xFF94A3B8);
   Color get borderStrong => theme.colorScheme.outline;
-  Color get emerald => const Color(0xFF10B981);
-  Color get emeraldGlow => const Color(0x3310B981);
-  Color get amber => dark ? const Color(0xFFFBBF24) : const Color(0xFFD97706);
-  Color get warning => dark ? const Color(0xFFFBBF24) : const Color(0xFF92400E);
+  Color get emerald => const Color(0xFF34D399);
+  Color get emeraldGlow => const Color(0x3334D399);
+  Color get amber => dark ? const Color(0xFFE8C170) : const Color(0xFFD97706);
+  Color get warning => dark ? const Color(0xFFE8C170) : const Color(0xFF92400E);
   Color get warningSurface =>
-      dark ? const Color(0xFF3D2C10) : const Color(0xFFFEF3C7);
+      dark ? const Color(0xFF2A2214) : const Color(0xFFFEF3C7);
   Color get danger => theme.colorScheme.error;
   Color get dangerSurface => theme.colorScheme.errorContainer;
-  Color get info => dark ? const Color(0xFF60A5FA) : const Color(0xFF1D4ED8);
+  Color get info => dark ? const Color(0xFF9DB8E8) : const Color(0xFF1D4ED8);
 
   // Glassmorphism tokens
   Color get glassSurface =>
-      dark ? const Color(0x2E1E293B) : Colors.white.withValues(alpha: 0.78);
-  Color get glassBorder =>
-      dark ? Colors.white.withValues(alpha: 0.14) : Colors.white.withValues(alpha: 0.65);
-  Color get glassHighlight =>
-      dark ? Colors.white.withValues(alpha: 0.08) : Colors.white.withValues(alpha: 0.35);
-  Color get glassShadow =>
-      dark ? Colors.black.withValues(alpha: 0.35) : Colors.black.withValues(alpha: 0.06);
+      dark ? const Color(0x12FFFFFF) : Colors.white.withValues(alpha: 0.78);
+  Color get glassBorder => dark
+      ? Colors.white.withValues(alpha: 0.12)
+      : Colors.white.withValues(alpha: 0.65);
+  Color get glassHighlight => dark
+      ? Colors.white.withValues(alpha: 0.08)
+      : Colors.white.withValues(alpha: 0.35);
+  Color get glassShadow => dark
+      ? Colors.black.withValues(alpha: 0.35)
+      : Colors.black.withValues(alpha: 0.06);
 }
-

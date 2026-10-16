@@ -58,6 +58,11 @@ def normalized_state(data, now):
     return value
 
 
+# Lease covers admission checks plus one 7 s Cloud call with margin; at 12 s
+# a slow Firestore check could let a second holder in mid-operation (Task 125).
+LEASE_SECONDS = 20
+
+
 class CloudDispatchGate:
     def __init__(self, change, *, sleeper=time.sleep, clock=time.monotonic,
                  wall_clock=lambda: datetime.now(timezone.utc)):
@@ -83,7 +88,7 @@ class CloudDispatchGate:
             if active or wait_until > now or (state["offWaiters"] and not priority_off):
                 # Do not allocate a future slot. OFF can take the next free slot.
                 return state, False
-            state.update(leaseId=request, leaseUntil=now + timedelta(seconds=12))
+            state.update(leaseId=request, leaseUntil=now + timedelta(seconds=LEASE_SECONDS))
             state["offWaiters"].pop(request, None)
             return state, True
 

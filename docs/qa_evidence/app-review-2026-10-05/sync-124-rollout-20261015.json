@@ -1,0 +1,34 @@
+{
+  "succeeded": true,
+  "proposedImage": "vinfastbatteryf1c11a09.azurecr.io/vinfast-api@sha256:57331f76c1e9a1f60389bfe70e309054476f43f5cb94d69a7093cf167a659dbf",
+  "afterShapeHash": "0726870732e1712631d0e8db1d72e43b3f93b916a45074753730e360a69b4982",
+  "execute": true,
+  "readinessStatus": 200,
+  "hardwareDisabled": false,
+  "requestIdsPresent": true,
+  "noRelayCalls": true,
+  "stage": "verified",
+  "sourceSha": "669a686d0670e1be90c03707fe22b41b98e19684",
+  "beforeRevision": "vinfast-api--0000010",
+  "lastProbe": "health=200 ready=200 fb=ready",
+  "healthStatus": 200,
+  "afterRevision": "vinfast-api--api106-1014190110",
+  "peers": [
+    {
+      "name": "vinfast-ai",
+      "image": "vinfastbatteryf1c11a09.azurecr.io/vinfast-ai:b7a04fdbca-qa-20261006-task78",
+      "shapeHash": "403e290486335cc5678f8b5354a7f213782755e63a14b94a7a81b4cf403baacd",
+      "revision": "vinfast-ai--c701x0v"
+    },
+    {
+      "name": "vinfast-worker-control",
+      "image": "vinfastbatteryf1c11a09.azurecr.io/vinfast-worker@sha256:d865f7c8117d4efd30533965133666b6b15f1468345a00539e21af3b904fced4",
+      "shapeHash": "bcd3a2782dc21d527fb37a5c93cb0fef7431130aa33c358c76186c6385c165d3",
+      "revision": "vinfast-worker-control--0000007"
+    }
+  ],
+  "beforeImage": "vinfastbatteryf1c11a09.azurecr.io/vinfast-api@sha256:955540a907cffc6e526f6024e793c5acf0bbbf50c4aa6b0effe4e1058b338e07",
+  "rolledBack": false,
+  "firebaseReady": true,
+  "beforeShapeHash": "0726870732e1712631d0e8db1d72e43b3f93b916a45074753730e360a69b4982"
+}

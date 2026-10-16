@@ -271,7 +271,7 @@ class GuideRegistry {
     GuideItem(
       id: 'guide_shelly_setup',
       category: GuideCategory.charging,
-      titleVi: 'Kết nối Shelly Smart Charge',
+      titleVi: 'Kết nối ổ cắm Shelly',
       titleEn: 'Connect Shelly Smart Charge',
       summaryVi: 'Kết nối ổ cắm và xác minh an toàn trước khi điều khiển.',
       summaryEn: 'Connect the plug and verify safety before enabling controls.',

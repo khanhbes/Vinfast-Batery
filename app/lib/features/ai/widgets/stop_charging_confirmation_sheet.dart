@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/theme/luxe_theme.dart';
+import '../../../data/services/charge_estimator.dart';
 import '../../../data/models/smart_charging_session.dart';
 import 'history_luxe_widgets.dart';
 import 'start_charge_confirmation_sheet.dart';
@@ -176,9 +177,4 @@ class _StopChargingConfirmationSheetState
   );
 }
 
-String _duration(Duration value) {
-  final hours = value.inHours;
-  final minutes = value.inMinutes.remainder(60);
-  if (hours <= 0) return '$minutes phút';
-  return '$hours giờ ${minutes.toString().padLeft(2, '0')} phút';
-}
+String _duration(Duration value) => formatChargeDuration(value);

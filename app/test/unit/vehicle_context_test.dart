@@ -11,7 +11,10 @@ void main() {
       currentBattery: 68,
       stateOfHealth: 94.5,
     );
-    final context = VehicleContext(vehicleId: vehicle.vehicleId, vehicle: vehicle);
+    final context = VehicleContext(
+      vehicleId: vehicle.vehicleId,
+      vehicle: vehicle,
+    );
 
     expect(context.hasVehicle, isTrue);
     expect(context.displayName, 'Feliz A');

@@ -1,24 +1,31 @@
 import 'dart:async';
+import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/providers/app_providers.dart';
-import '../../data/services/shelly_connection_coordinator.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/constants/beta_capabilities.dart';
+import '../../core/models/vehicle_context.dart';
+import '../../core/providers/app_providers.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/feature_availability_registry.dart';
-import '../../core/theme/app_motion.dart';
-import '../../core/theme/app_ui_colors.dart';
-import '../../core/theme/cockpit_design_system.dart';
+import '../../core/theme/luxe_theme.dart';
 import '../../core/widgets/app_popup.dart';
+import '../../core/widgets/luxe_settings.dart';
 import '../../core/widgets/vehicle_picker_sheet.dart';
+import '../../data/models/shelly_connection_state.dart';
+import '../../data/services/shelly_connection_coordinator.dart';
+import '../achievements/achievements_screen.dart';
+import '../achievements/controllers/achievements_controller.dart';
+import '../achievements/models/achievement.dart';
 import '../ai/ai_models_screen.dart';
 import '../ai/controllers/smart_charging_controller.dart';
 import '../auth/auth_gate.dart';
+import '../home/widgets/luxe_dashboard_cards.dart' show LuxePressable;
 import '../maintenance/maintenance_screen.dart';
 import '../notifications/notification_center_screen.dart';
 import '../settings/guide_screen.dart';
@@ -27,16 +34,11 @@ import '../settings/settings_screen.dart';
 import '../settings/vehicle_garage_screen.dart';
 import '../smart_charging/smart_charger_setup_hub_screen.dart';
 import '../trip_planner/trip_planner_wrapper.dart';
-import '../achievements/achievements_screen.dart';
-import '../achievements/models/achievement.dart';
+import '../settings/assistant_memory_screen.dart';
 
-/// Driver Profile Hub (Tab 3 — Quản lý & Cài đặt).
-///
-/// Thiết kế theo chuẩn Premium Automotive Dark UI:
-/// - Hero Driver Card: Hồ sơ chủ xe, mã định danh, huy hiệu trạng thái & phương tiện.
-/// - Inset Grouped Cards: Phân loại khoa học (Phương tiện & Sạc, AI & Hệ thống, Hỗ trợ & Tài khoản).
-/// - Central Feature Availability: Đánh giá tính sẵn sàng của Smart Charge / AI.
-/// - Logout an toàn: Xóa session, reset provider và quay về AuthGate.
+/// Tab Cài đặt (luxe): profile card ringed by the achievement rank, a 2×2
+/// grid of live tiles (vehicle, Shelly, achievements, maintenance) and quiet
+/// glass lists for system and support. Logout clears session and providers.
 class MoreScreen extends ConsumerStatefulWidget {
   const MoreScreen({super.key});
 
@@ -87,64 +89,13 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
   }
 
   Future<void> _handleSignOut() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppUiColors.of(context).surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: AppUiColors.of(context).border, width: 1),
-        ),
-        title: const Row(
-          children: [
-            Icon(Icons.logout_rounded, color: Color(0xFFEF4444), size: 22),
-            SizedBox(width: 10),
-            Text(
-              'Đăng xuất',
-              style: TextStyle(
-                color: Color(0xFFF8FAFC),
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-        ),
-        content: const Text(
+    final confirmed = await showLuxeConfirm(
+      context,
+      title: 'Đăng xuất',
+      message:
           'Bạn có chắc chắn muốn đăng xuất khỏi tài khoản trên thiết bị này?',
-          style: TextStyle(color: Color(0xFF94A3B8), fontSize: 14, height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text(
-              'Hủy',
-              style: TextStyle(
-                color: Color(0xFF94A3B8),
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFEF4444),
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            ),
-            child: const Text(
-              'Đăng xuất',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-          ),
-        ],
-      ),
+      confirmLabel: 'Đăng xuất',
     );
-
     if (confirmed != true || !mounted) return;
 
     final result = await _authService.signOut();
@@ -163,6 +114,9 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
     }
   }
 
+  void _push(Widget page) =>
+      Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+
   @override
   Widget build(BuildContext context) {
     ref.listen<String>(selectedVehicleIdProvider, (_, next) {
@@ -177,6 +131,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
         : 0;
     final vehicleId = vehicleContext.vehicleId;
     final vehicle = vehicleContext.vehicle;
+    final achievements = ref.watch(achievementsControllerProvider);
 
     var availability = FeatureAvailabilityRegistry(
       hasVehicleData: vehicleId.isNotEmpty,
@@ -189,816 +144,654 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
         vehicleId: vehicleId,
         currentSoc: vehicle.currentBattery.toDouble(),
       );
-      final charging = ref.watch(smartChargingControllerProvider(args));
+      // Only the flags this tab shows: watching the whole charging state
+      // rebuilt Settings on every 5 s poll (Task 125).
+      final flags = ref.watch(
+        smartChargingControllerProvider(args).select(
+          (charging) => (
+            modelLoaded:
+                charging.preview?.runtimeHealth == 'loaded' ||
+                charging.preview?.aiChargeEligible == true,
+            chargerReady: charging.capabilities.readyForControl,
+            lanAvailable: charging.capabilities.lanAvailable,
+            online: charging.connectionState.internetAvailable,
+          ),
+        ),
+      );
       availability = FeatureAvailabilityRegistry(
-        modelLoaded:
-            charging.preview?.runtimeHealth == 'loaded' ||
-            charging.preview?.aiChargeEligible == true,
-        chargerReady: charging.capabilities.readyForControl,
-        lanAvailable: charging.capabilities.lanAvailable,
+        modelLoaded: flags.modelLoaded,
+        chargerReady: flags.chargerReady,
+        lanAvailable: flags.lanAvailable,
         hasVehicleData: vehicle.batteryCapacityWh > 0 || vehicle.hasModelLink,
-        online: charging.connectionState.internetAvailable,
+        online: flags.online,
       ).smartCharge(ai: true);
     }
 
-    final currentUser = Firebase.apps.isNotEmpty
-        ? FirebaseAuth.instance.currentUser
-        : null;
     final displayName =
         _userData?['name'] ??
         _userData?['displayName'] ??
-        currentUser?.displayName ??
+        user?.displayName ??
         'Chủ xe VinFast';
     final contactInfo =
         _userData?['phone'] ??
-        currentUser?.phoneNumber ??
-        currentUser?.email ??
+        user?.phoneNumber ??
+        user?.email ??
         'Hồ sơ đã kết nối';
 
-    return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      children: [
-        // 1. DRIVER PROFILE HERO CARD
-        _DriverProfileHeroCard(
-          displayName: displayName,
-          contactInfo: contactInfo,
-          vehicle: vehicle,
-          isLoading: _isLoadingUser,
-          onTap: () async {
-            await Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const ProfileScreen()),
-            );
-            _loadUserData();
-          },
-          onSelectVehicle: () => VehiclePickerSheet.show(context, ref),
-        ).appFadeSlideIn(index: 0),
-
-        const SizedBox(height: 20),
-
-        // 2. SECTION: PHƯƠNG TIỆN & SẠC
-        const _SectionHeader(
-          title: 'PHƯƠNG TIỆN & SẠC',
-        ).appFadeSlideIn(index: 1),
-        const SizedBox(height: 8),
-        _GroupCard(
-          children: [
-            _ActionTile(
-              icon: Icons.garage_rounded,
-              iconColor: CockpitColors.emerald,
-              title: 'Xe của tôi',
-              subtitle: 'Quản lý xe sở hữu & thông số pin',
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const VehicleGarageScreen()),
-              ),
-            ),
-            const _CardDivider(),
-            StreamBuilder<ShellyConnectionSnapshot>(
-              stream: ShellyConnectionCoordinator.shared.states,
-              initialData: ShellyConnectionCoordinator.shared.current,
-              builder: (context, snapshot) => _ActionTile(
-                icon: Icons.power_rounded,
-                iconColor: CockpitColors.info,
-                title: 'Sạc thông minh Shelly',
-                // Same label + realtime readout as Sạc pin/BatteryBot (Task108).
-                subtitle: [
-                  snapshot.data?.connectionLabel ?? 'Chưa kết nối Shelly',
-                  ?snapshot.data?.metricsLine,
-                ].join('\n'),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const SmartChargerSetupHubScreen(),
-                  ),
-                ),
-              ),
-            ),
-            if (BetaCapabilities.tripPlanner) ...[
-              const _CardDivider(),
-              _ActionTile(
-                icon: Icons.alt_route_rounded,
-                iconColor: CockpitColors.amber,
-                title: 'Lập hành trình',
-                subtitle: 'Chọn điểm đến và ước tính pin cần dùng',
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const TripPlannerWrapper()),
-                ),
-              ),
-            ],
-            const _CardDivider(),
-            _ActionTile(
-              icon: Icons.workspace_premium_rounded,
-              iconColor: CockpitColors.emerald,
-              title: 'Thành tựu',
-              subtitle: 'Sưu tầm huy hiệu bằng thói quen sạc thông minh',
-              badge: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                  color: CockpitColors.emerald.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: CockpitColors.emerald.withValues(alpha: 0.4),
-                    width: 0.8,
-                  ),
-                ),
-                child: Text(
-                  '${achievementCatalog.length} huy hiệu',
-                  style: TextStyle(
-                    color: CockpitColors.emerald,
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const AchievementsScreen()),
-              ),
-            ),
-          ],
-        ).appFadeSlideIn(index: 2),
-
-        const SizedBox(height: 20),
-
-        // 3. SECTION: HỆ THỐNG & TRÍ TUỆ AI
-        const _SectionHeader(
-          title: BetaCapabilities.advancedAi
-              ? 'HỆ THỐNG & TRÍ TUỆ AI'
-              : 'HỆ THỐNG',
-        ).appFadeSlideIn(index: 3),
-        const SizedBox(height: 8),
-        _GroupCard(
-          children: [
-            if (BetaCapabilities.advancedAi) ...[
-              _ActionTile(
-                icon: Icons.psychology_rounded,
-                iconColor: const Color(0xFFA855F7),
-                title: 'Trợ lý AI & Dự báo Pin',
-                subtitle: availability.enabled
-                    ? 'Thuật toán tối ưu sạc & bảo vệ cell pin'
-                    : availability.reason,
-                badge: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 7,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: availability.enabled
-                        ? CockpitColors.emerald.withValues(alpha: 0.15)
-                        : CockpitColors.amber.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: availability.enabled
-                          ? CockpitColors.emerald.withValues(alpha: 0.4)
-                          : CockpitColors.amber.withValues(alpha: 0.4),
-                      width: 0.8,
-                    ),
-                  ),
-                  child: Text(
-                    availability.enabled ? 'Sẵn sàng' : 'Cần thiết lập',
-                    style: TextStyle(
-                      color: availability.enabled
-                          ? CockpitColors.emerald
-                          : CockpitColors.amber,
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const AiModelsScreen()),
-                ),
-              ),
-              const _CardDivider(),
-            ],
-            _ActionTile(
-              icon: Icons.build_circle_rounded,
-              iconColor: const Color(0xFFF97316),
-              title: 'Bảo dưỡng xe',
-              subtitle: 'Theo dõi chu kỳ bảo dưỡng, lốp & ắc quy',
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const MaintenanceScreen()),
-              ),
-            ),
-            const _CardDivider(),
-            _ActionTile(
-              icon: Icons.tune_rounded,
-              iconColor: const Color(0xFF38BDF8),
-              title: 'Cài đặt hệ thống',
-              subtitle: 'Giao diện, bảo mật & cấu hình đồng bộ',
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const SettingsScreen()),
-              ),
-            ),
-          ],
-        ).appFadeSlideIn(index: 4),
-
-        const SizedBox(height: 20),
-
-        // 4. SECTION: HỖ TRỢ & TÀI KHOẢN
-        const _SectionHeader(
-          title: 'HỖ TRỢ & TÀI KHOẢN',
-        ).appFadeSlideIn(index: 5),
-        const SizedBox(height: 8),
-        _GroupCard(
-          children: [
-            _ActionTile(
-              icon: Icons.support_agent_rounded,
-              iconColor: const Color(0xFF34D399),
-              title: 'Hướng dẫn sử dụng',
-              subtitle: 'Tìm chức năng và làm quen từng bước',
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const GuideScreen()),
-              ),
-            ),
-            const _CardDivider(),
-            _ActionTile(
-              icon: Icons.notifications_outlined,
-              iconColor: const Color(0xFFFBBF24),
-              title: 'Trung tâm thông báo',
-              subtitle: 'Lịch sử cảnh báo sạc & tin tức',
-              trailing: unreadCount > 0
-                  ? Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: CockpitColors.emerald,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        '$unreadCount',
-                        style: const TextStyle(
-                          color: Colors.black,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    )
-                  : const Icon(
-                      Icons.chevron_right_rounded,
-                      color: Color(0xFF64748B),
-                      size: 20,
-                    ),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const NotificationCenterScreen(),
-                ),
-              ),
-            ),
-          ],
-        ).appFadeSlideIn(index: 6),
-
-        const SizedBox(height: 24),
-
-        // 5. SIGN OUT BUTTON
-        _SignOutButton(onTap: _handleSignOut).appFadeSlideIn(index: 7),
-
-        const SizedBox(height: 24),
-
-        // 6. BRANDING FOOTER
-        const _AppBrandingFooter().appFadeSlideIn(index: 8),
-
-        const SizedBox(height: 32),
-      ],
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// COMPONENTS
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title});
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4),
-      child: Text(
-        title,
-        style: const TextStyle(
-          color: Color(0xFF64748B),
-          fontSize: 11.5,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 1.1,
-        ),
-      ),
-    );
-  }
-}
-
-class _GroupCard extends StatelessWidget {
-  const _GroupCard({required this.children});
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF12161F),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF1E293B), width: 1),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(children: children),
-    );
-  }
-}
-
-class _CardDivider extends StatelessWidget {
-  const _CardDivider();
-
-  @override
-  Widget build(BuildContext context) {
-    return Divider(
-      height: 1,
-      thickness: 1,
-      color: const Color(0xFF1E293B).withValues(alpha: 0.6),
-      indent: 68,
-    );
-  }
-}
-
-class _ActionTile extends StatelessWidget {
-  const _ActionTile({
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-    this.badge,
-    this.trailing,
-  });
-
-  final IconData icon;
-  final Color iconColor;
-  final String title;
-  final String? subtitle;
-  final VoidCallback onTap;
-  final Widget? badge;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        splashColor: CockpitColors.emerald.withValues(alpha: 0.08),
-        highlightColor: Colors.white.withValues(alpha: 0.03),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-          child: Row(
+    return Theme(
+      data: LuxeTheme.of(context),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          const LuxeBackdrop(),
+          ListView(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 40),
             children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: iconColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: iconColor.withValues(alpha: 0.28),
-                    width: 1,
-                  ),
+              LuxeReveal(
+                child: _ProfileCard(
+                  displayName: '$displayName',
+                  contactInfo: '$contactInfo',
+                  loading: _isLoadingUser,
+                  vehicle: vehicleContext,
+                  rank: achievements.rank,
+                  points: achievements.points,
+                  rankProgress: achievements.rankProgress,
+                  onOpenProfile: () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                    );
+                    _loadUserData();
+                  },
+                  onSelectVehicle: () => VehiclePickerSheet.show(context, ref),
                 ),
-                child: Icon(icon, color: iconColor, size: 19),
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            title,
-                            style: const TextStyle(
-                              color: Color(0xFFF8FAFC),
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 0.1,
-                            ),
-                            maxLines: 2,
-                            softWrap: true,
-                          ),
-                        ),
-                        if (badge != null) ...[
-                          const SizedBox(width: 8),
-                          badge!,
-                        ],
-                      ],
+              const LuxeSectionLabel('PHƯƠNG TIỆN & SẠC'),
+              LuxeReveal(
+                index: 1,
+                child: _TileGrid(
+                  tiles: [
+                    _GridTile(
+                      icon: Icons.two_wheeler_rounded,
+                      title: 'Xe của tôi',
+                      value: vehicleContext.hasVehicle
+                          ? vehicleContext.displayName
+                          : 'Chưa chọn xe',
+                      onTap: () => _push(const VehicleGarageScreen()),
                     ),
-                    if (subtitle != null) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        subtitle!,
-                        style: const TextStyle(
-                          color: Color(0xFF94A3B8),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w400,
-                        ),
-                        maxLines: 2,
-                        softWrap: true,
-                      ),
-                    ],
+                    _GridTile(
+                      icon: Icons.power_rounded,
+                      title: 'Sạc thông minh Shelly',
+                      shelly: true,
+                      onTap: () => _push(const SmartChargerSetupHubScreen()),
+                    ),
+                    _GridTile(
+                      icon: Icons.workspace_premium_rounded,
+                      title: 'Thành tựu',
+                      value:
+                          '${achievements.unlockedCount}/${achievementCatalog.length} huy hiệu',
+                      accent: achievements.rank.rarity.accent,
+                      onTap: () => _push(const AchievementsScreen()),
+                    ),
+                    _GridTile(
+                      icon: Icons.build_circle_outlined,
+                      title: 'Bảo dưỡng xe',
+                      value: 'Lịch theo ODO',
+                      onTap: () => _push(const MaintenanceScreen()),
+                    ),
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
-              trailing ??
-                  const Icon(
-                    Icons.chevron_right_rounded,
-                    color: Color(0xFF64748B),
-                    size: 20,
-                  ),
+              LuxeSectionLabel(
+                BetaCapabilities.advancedAi
+                    ? 'HỆ THỐNG & TRÍ TUỆ AI'
+                    : 'HỆ THỐNG',
+              ),
+              LuxeReveal(
+                index: 2,
+                child: LuxeSettingsGroup(
+                  children: [
+                    LuxeSettingsRow(
+                      key: const ValueKey('more-assistant-memory'),
+                      icon: Icons.auto_awesome_rounded,
+                      title: 'BatteryBot đang nhớ gì',
+                      subtitle: 'Xem, xóa hoặc tắt học cá nhân của trợ lý',
+                      onTap: () => _push(const AssistantMemoryScreen()),
+                    ),
+                    if (BetaCapabilities.advancedAi)
+                      LuxeSettingsRow(
+                        icon: Icons.psychology_rounded,
+                        title: 'Trợ lý AI & Dự báo Pin',
+                        subtitle: availability.enabled
+                            ? 'Thuật toán tối ưu sạc & bảo vệ cell pin'
+                            : availability.reason,
+                        badge: LuxeTag(
+                          availability.enabled ? 'Sẵn sàng' : 'Cần thiết lập',
+                          color: availability.enabled
+                              ? LuxeColors.emerald
+                              : LuxeColors.champagne,
+                        ),
+                        onTap: () => _push(const AiModelsScreen()),
+                      ),
+                    if (BetaCapabilities.tripPlanner)
+                      LuxeSettingsRow(
+                        icon: Icons.alt_route_rounded,
+                        title: 'Lập hành trình',
+                        subtitle: 'Chọn điểm đến và ước tính pin cần dùng',
+                        onTap: () => _push(const TripPlannerWrapper()),
+                      ),
+                    LuxeSettingsRow(
+                      icon: Icons.tune_rounded,
+                      title: 'Cài đặt hệ thống',
+                      subtitle: 'Thông báo đẩy, dữ liệu, giao diện',
+                      onTap: () => _push(const SettingsScreen()),
+                    ),
+                  ],
+                ),
+              ),
+              const LuxeSectionLabel('HỖ TRỢ & TÀI KHOẢN'),
+              LuxeReveal(
+                index: 3,
+                child: LuxeSettingsGroup(
+                  children: [
+                    LuxeSettingsRow(
+                      icon: Icons.menu_book_rounded,
+                      title: 'Hướng dẫn sử dụng',
+                      subtitle: 'Tìm chức năng và làm quen từng bước',
+                      onTap: () => _push(const GuideScreen()),
+                    ),
+                    LuxeSettingsRow(
+                      icon: Icons.notifications_none_rounded,
+                      title: 'Trung tâm thông báo',
+                      subtitle: 'Lịch sử cảnh báo sạc & tin tức',
+                      trailing: unreadCount > 0
+                          ? _CountBadge(unreadCount)
+                          : null,
+                      onTap: () => _push(const NotificationCenterScreen()),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 28),
+              LuxeReveal(
+                index: 4,
+                child: LuxeDangerButton(
+                  label: 'Đăng xuất tài khoản',
+                  onPressed: _handleSignOut,
+                ),
+              ),
+              const SizedBox(height: 26),
+              const _BrandFooter(),
             ],
           ),
-        ),
+        ],
       ),
-    ).appTactile(pressScale: 0.985);
+    );
   }
 }
 
-class _DriverProfileHeroCard extends StatelessWidget {
-  const _DriverProfileHeroCard({
+// ─────────────────────────────── Profile card ───────────────────────────────
+
+class _ProfileCard extends StatelessWidget {
+  const _ProfileCard({
     required this.displayName,
     required this.contactInfo,
+    required this.loading,
     required this.vehicle,
-    required this.isLoading,
-    required this.onTap,
+    required this.rank,
+    required this.points,
+    required this.rankProgress,
+    required this.onOpenProfile,
     required this.onSelectVehicle,
   });
 
   final String displayName;
   final String contactInfo;
-  final dynamic vehicle;
-  final bool isLoading;
-  final VoidCallback onTap;
+  final bool loading;
+  final VehicleContext vehicle;
+  final AchievementRank rank;
+  final int points;
+  final double rankProgress;
+  final VoidCallback onOpenProfile;
   final VoidCallback onSelectVehicle;
 
   @override
   Widget build(BuildContext context) {
-    final initial = displayName.isNotEmpty
-        ? displayName.trim().substring(0, 1).toUpperCase()
-        : 'V';
-
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF111722),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFF1E293B), width: 1),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF131B28), Color(0xFF0D121B)],
-        ),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          splashColor: CockpitColors.emerald.withValues(alpha: 0.08),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+    final initial = displayName.trim().isEmpty
+        ? 'V'
+        : displayName.trim().substring(0, 1).toUpperCase();
+    final v = vehicle.vehicle;
+    return LuxeGlass(
+      radius: 28,
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(28),
+              ),
+              onTap: () {
+                HapticFeedback.selectionClick();
+                onOpenProfile();
+              },
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 18, 14, 16),
+                child: Row(
                   children: [
-                    // Avatar với emerald ring
-                    Stack(
-                      alignment: Alignment.bottomRight,
-                      children: [
-                        Container(
-                          width: 52,
-                          height: 52,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: const Color(0xFF0B101B),
-                            border: Border.all(
-                              color: CockpitColors.emerald.withValues(
-                                alpha: 0.5,
-                              ),
-                              width: 1.5,
-                            ),
-                          ),
-                          child: Center(
-                            child: Text(
-                              initial,
-                              style: const TextStyle(
-                                color: CockpitColors.emerald,
-                                fontSize: 22,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                        ),
-                        Container(
-                          width: 13,
-                          height: 13,
-                          decoration: BoxDecoration(
-                            color: CockpitColors.emerald,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: const Color(0xFF0D121B),
-                              width: 2,
-                            ),
-                          ),
-                        ),
-                      ],
+                    _RankAvatar(
+                      initial: initial,
+                      rank: rank,
+                      progress: rankProgress,
                     ),
-                    const SizedBox(width: 14),
-                    // Tên & liên hệ
+                    const SizedBox(width: 16),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  displayName,
-                                  style: const TextStyle(
-                                    color: Color(0xFFF8FAFC),
-                                    fontSize: 16.5,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.2,
-                                  ),
-                                  maxLines: 2,
-                                  softWrap: true,
-                                ),
+                          Text(
+                            rank.name.toUpperCase(),
+                            style: LuxeText.eyebrow.copyWith(
+                              color: rank.rarity.accent,
+                              fontSize: 10.5,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 300),
+                            child: Text(
+                              loading ? '…' : displayName,
+                              key: ValueKey(loading),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: LuxeColors.text,
+                                fontSize: 21,
+                                height: 1.2,
+                                fontWeight: FontWeight.w500,
                               ),
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 1.5,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: CockpitColors.emerald.withValues(
-                                    alpha: 0.15,
-                                  ),
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(
-                                    color: CockpitColors.emerald.withValues(
-                                      alpha: 0.3,
-                                    ),
-                                    width: 0.8,
-                                  ),
-                                ),
-                                child: const Text(
-                                  'TIÊN PHONG',
-                                  style: TextStyle(
-                                    color: CockpitColors.emerald,
-                                    fontSize: 8.5,
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: 0.8,
-                                  ),
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
                           const SizedBox(height: 3),
                           Text(
                             contactInfo,
-                            style: const TextStyle(
-                              color: Color(0xFF94A3B8),
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w400,
-                            ),
-                            maxLines: 2,
-                            softWrap: true,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: LuxeText.caption,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '$points điểm thành tựu',
+                            style: LuxeText.label.copyWith(fontSize: 11.5),
                           ),
                         ],
                       ),
                     ),
-                    // Nút mở hồ sơ
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1E293B).withValues(alpha: 0.6),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: const Color(0xFF334155),
-                          width: 0.8,
-                        ),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'Hồ sơ',
-                            style: TextStyle(
-                              color: Color(0xFFCBD5E1),
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          SizedBox(width: 3),
-                          Icon(
-                            Icons.chevron_right_rounded,
-                            size: 14,
-                            color: Color(0xFF94A3B8),
-                          ),
-                        ],
-                      ),
+                    const Icon(
+                      Icons.chevron_right_rounded,
+                      color: LuxeColors.dim,
                     ),
                   ],
                 ),
-
-                const SizedBox(height: 12),
-                Container(
-                  height: 1,
-                  color: const Color(0xFF1E293B).withValues(alpha: 0.7),
-                ),
-                const SizedBox(height: 10),
-
-                // Thanh thông tin xe đang kích hoạt
-                if (vehicle != null)
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.two_wheeler_rounded,
-                        size: 16,
-                        color: CockpitColors.emerald,
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            vehicle.displayName,
-                            style: const TextStyle(
-                              color: Color(0xFFE2E8F0),
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            maxLines: 1,
-                            softWrap: false,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: const BoxDecoration(
-                          color: CockpitColors.emerald,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        '${vehicle.currentBattery}% PIN',
+              ),
+            ),
+          ),
+          const Divider(height: 1, indent: 18, endIndent: 18),
+          Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              borderRadius: const BorderRadius.vertical(
+                bottom: Radius.circular(28),
+              ),
+              onTap: onSelectVehicle,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 12, 14, 14),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.two_wheeler_rounded,
+                      size: 18,
+                      color: LuxeColors.emerald,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        vehicle.hasVehicle
+                            ? vehicle.displayName
+                            : 'Chọn xe để bắt đầu',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          color: CockpitColors.emerald,
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.5,
+                          color: LuxeColors.text,
+                          fontSize: 14.5,
                         ),
                       ),
-                      if (vehicle.currentOdo > 0) ...[
-                        const SizedBox(width: 6),
-                        Text(
-                          '· ${vehicle.currentOdo} km',
-                          style: const TextStyle(
-                            color: Color(0xFF64748B),
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w500,
-                          ),
+                    ),
+                    if (v != null && v.hasBatteryData) ...[
+                      _MiniBattery(percent: v.currentBattery.toDouble()),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${v.currentBattery}%',
+                        style: const TextStyle(
+                          color: LuxeColors.platinumHi,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
                         ),
-                      ],
-                    ],
-                  )
-                else
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.add_circle_outline_rounded,
-                        size: 16,
-                        color: CockpitColors.amber,
                       ),
                       const SizedBox(width: 6),
-                      const Expanded(
-                        child: Text(
-                          'Chưa chọn xe hoạt động',
-                          style: TextStyle(
-                            color: CockpitColors.amber,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      GestureDetector(
-                        onTap: onSelectVehicle,
-                        child: const Text(
-                          'Chọn xe ngay →',
-                          style: TextStyle(
-                            color: CockpitColors.emerald,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
                     ],
-                  ),
-              ],
+                    const LuxeTag('Đổi xe'),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Initial inside a metal ring whose arc shows progress to the next rank.
+class _RankAvatar extends StatelessWidget {
+  const _RankAvatar({
+    required this.initial,
+    required this.rank,
+    required this.progress,
+  });
+  final String initial;
+  final AchievementRank rank;
+  final double progress;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: '${rank.name}, ${(progress * 100).round()}% tới hạng kế tiếp',
+    excludeSemantics: true,
+    child: SizedBox.square(
+      dimension: 74,
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: progress.clamp(0.0, 1.0)),
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : const Duration(milliseconds: 1400),
+        curve: LuxeMotion.enter,
+        builder: (context, t, child) => CustomPaint(
+          painter: _RingPainter(metal: rank.rarity.metal, progress: t),
+          child: child,
+        ),
+        child: Center(
+          child: Container(
+            width: 56,
+            height: 56,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF2A2C30), Color(0xFF0E0F11)],
+              ),
+            ),
+            alignment: Alignment.center,
+            child: LuxeMetalText(
+              initial,
+              style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w300),
             ),
           ),
         ),
       ),
-    ).appTactile(pressScale: 0.98);
-  }
+    ),
+  );
 }
 
-class _SignOutButton extends StatelessWidget {
-  const _SignOutButton({required this.onTap});
+class _RingPainter extends CustomPainter {
+  _RingPainter({required this.metal, required this.progress});
+  final List<Color> metal;
+  final double progress;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    final r = size.shortestSide / 2 - 3;
+    canvas.drawCircle(
+      c,
+      r,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3
+        ..color = const Color(0x1FFFFFFF),
+    );
+    if (progress <= 0) return;
+    final rect = Rect.fromCircle(center: c, radius: r);
+    canvas.drawArc(
+      rect,
+      -math.pi / 2,
+      2 * math.pi * progress,
+      false,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3
+        ..strokeCap = StrokeCap.round
+        ..shader = SweepGradient(
+          startAngle: -math.pi / 2,
+          endAngle: 3 * math.pi / 2,
+          colors: [metal[2], metal[1], metal[0], metal[1]],
+          stops: const [0.0, 0.4, 0.7, 1.0],
+        ).createShader(rect),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_RingPainter old) =>
+      old.progress != progress || old.metal != metal;
+}
+
+class _MiniBattery extends StatelessWidget {
+  const _MiniBattery({required this.percent});
+  final double percent;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 26,
+    height: 12,
+    padding: const EdgeInsets.all(1.5),
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(3),
+      border: Border.all(color: LuxeColors.platinumMid),
+    ),
+    child: Align(
+      alignment: Alignment.centerLeft,
+      child: FractionallySizedBox(
+        widthFactor: (percent / 100).clamp(0.05, 1.0),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(1.5),
+            color: percent < 20 ? LuxeColors.danger : LuxeColors.emerald,
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+// ─────────────────────────────── Tile grid ───────────────────────────────
+
+class _GridTile {
+  const _GridTile({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+    this.value,
+    this.accent,
+    this.shelly = false,
+  });
+  final IconData icon;
+  final String title;
+  final String? value;
+  final Color? accent;
   final VoidCallback onTap;
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF161214),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: const Color(0xFFEF4444).withValues(alpha: 0.25),
-          width: 1,
-        ),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          splashColor: const Color(0xFFEF4444).withValues(alpha: 0.12),
-          child: const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.logout_rounded, color: Color(0xFFEF4444), size: 19),
-                SizedBox(width: 10),
-                Text(
-                  'Đăng xuất tài khoản',
-                  style: TextStyle(
-                    color: Color(0xFFEF4444),
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.2,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    ).appTactile(pressScale: 0.97);
-  }
+  /// Live Shelly status from the shared connection coordinator.
+  final bool shelly;
 }
 
-class _AppBrandingFooter extends StatelessWidget {
-  const _AppBrandingFooter();
+class _TileGrid extends StatelessWidget {
+  const _TileGrid({required this.tiles});
+  final List<_GridTile> tiles;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, box) {
+      final big = MediaQuery.textScalerOf(context).scale(14) > 20;
+      final columns = big || box.maxWidth < 300 ? 1 : 2;
+      final width = (box.maxWidth - 12 * (columns - 1)) / columns;
+      return Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        children: [
+          for (final t in tiles)
+            SizedBox(
+              width: width,
+              child: _TileCard(tile: t),
+            ),
+        ],
+      );
+    },
+  );
+}
+
+class _TileCard extends StatelessWidget {
+  const _TileCard({required this.tile});
+  final _GridTile tile;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    Widget body(String value, Color? dot) => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Row(
+          children: [
+            LuxeMedallion(icon: tile.icon, accent: tile.accent, size: 38),
+            const Spacer(),
+            if (dot != null)
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: dot,
+                  boxShadow: [
+                    BoxShadow(color: dot.withValues(alpha: 0.6), blurRadius: 8),
+                  ],
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 16),
         Text(
-          '${AppConstants.appName} · Phiên bản ${AppConstants.appVersion}',
-          style: TextStyle(
-            color: const Color(0xFF64748B).withValues(alpha: 0.8),
-            fontSize: 11.5,
+          tile.title,
+          maxLines: 2,
+          style: const TextStyle(
+            color: LuxeColors.text,
+            fontSize: 15,
+            height: 1.25,
             fontWeight: FontWeight.w500,
           ),
         ),
-        const SizedBox(height: 3),
-        const Text(
-          'Hệ sinh thái quản lý & tối ưu năng lượng xe điện',
-          style: TextStyle(color: Color(0xFF475569), fontSize: 11),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: LuxeText.caption.copyWith(fontSize: 12.5),
         ),
       ],
     );
+
+    return LuxePressable(
+      radius: 22,
+      semanticsLabel: tile.title,
+      onTap: () {
+        HapticFeedback.selectionClick();
+        tile.onTap();
+      },
+      child: LuxeGlass(
+        radius: 22,
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 124),
+          child: tile.shelly
+              ? StreamBuilder<ShellyConnectionSnapshot>(
+                  stream: ShellyConnectionCoordinator.shared.states,
+                  initialData: ShellyConnectionCoordinator.shared.current,
+                  builder: (context, snap) {
+                    final s = snap.data;
+                    final ok =
+                        s?.state == ShellyConnectionFlowState.connected &&
+                        s?.controlUncertain != true;
+                    final linked = s?.isLinked == true;
+                    return body(
+                      // Same label as Sạc pin / BatteryBot (Task 108).
+                      [
+                        s?.connectionLabel ?? 'Chưa kết nối Shelly',
+                        ?s?.metricsLine,
+                      ].join('\n'),
+                      ok
+                          ? LuxeColors.emerald
+                          : (linked ? LuxeColors.champagne : LuxeColors.dim),
+                    );
+                  },
+                )
+              : body(tile.value ?? '', null),
+        ),
+      ),
+    );
   }
+}
+
+class _CountBadge extends StatelessWidget {
+  const _CountBadge(this.count);
+  final int count;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    constraints: const BoxConstraints(minWidth: 28),
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(99),
+      gradient: const LinearGradient(
+        colors: [LuxeColors.emerald, LuxeColors.emeraldDeep],
+      ),
+    ),
+    child: Text(
+      count > 99 ? '99+' : '$count',
+      textAlign: TextAlign.center,
+      style: const TextStyle(
+        color: Color(0xFF04140D),
+        fontSize: 11.5,
+        fontWeight: FontWeight.w700,
+      ),
+    ),
+  );
+}
+
+class _BrandFooter extends StatelessWidget {
+  const _BrandFooter();
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      Text(
+        '${AppConstants.appName} · Phiên bản ${AppConstants.appVersion}',
+        textAlign: TextAlign.center,
+        style: LuxeText.label.copyWith(fontSize: 11.5, color: LuxeColors.dim),
+      ),
+      const SizedBox(height: 3),
+      const Text(
+        'Hệ sinh thái quản lý & tối ưu năng lượng xe điện',
+        textAlign: TextAlign.center,
+        style: TextStyle(color: LuxeColors.dim, fontSize: 11),
+      ),
+    ],
+  );
 }

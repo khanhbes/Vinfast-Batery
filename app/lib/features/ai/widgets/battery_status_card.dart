@@ -18,11 +18,11 @@ class BatteryStatusCard extends StatelessWidget {
     BuildContext context,
     AppUiColors uiColors,
     Color primaryColor,
-    double soc,
-    double soh,
-    double voltage,
-    double temp,
-    double estRange,
+    double? soc,
+    double? soh,
+    double? voltage,
+    double? temp,
+    double? estRange,
     String vehicleId,
     bool isCharging,
   ) {
@@ -77,30 +77,30 @@ class BatteryStatusCard extends StatelessWidget {
                 const SizedBox(height: 16),
                 _buildDetailRow(
                   'Mức pin (SoC):',
-                  '${soc.toStringAsFixed(1)}%',
+                  _fmt(soc, 1, '%'),
                   uiColors,
                   valueColor: primaryColor,
                 ),
                 _buildDetailRow(
                   'Độ khỏe cell pin (SoH):',
-                  '${soh.toStringAsFixed(1)}%',
+                  _fmt(soh, 1, '%'),
                   uiColors,
-                  valueColor: Colors.teal,
+                  valueColor: Color(0xFF34D399),
                 ),
                 _buildDetailRow(
                   'Điện áp pack pin:',
-                  '${voltage.toStringAsFixed(1)} V',
+                  _fmt(voltage, 1, ' V'),
                   uiColors,
                 ),
                 _buildDetailRow(
                   'Nhiệt độ pack pin:',
-                  '${temp.toStringAsFixed(1)} °C',
+                  _fmt(temp, 1, ' °C'),
                   uiColors,
-                  valueColor: temp > 40 ? Colors.red : null,
+                  valueColor: (temp ?? 0) > 40 ? Color(0xFFF59E9E) : null,
                 ),
                 _buildDetailRow(
                   'Quãng đường ước tính:',
-                  '~${estRange.toStringAsFixed(0)} km',
+                  estRange == null ? '—' : '~${estRange.toStringAsFixed(0)} km',
                   uiColors,
                 ),
                 _buildDetailRow(
@@ -164,21 +164,22 @@ class BatteryStatusCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uiColors = AppUiColors.of(context);
-    final soc = (data['soc'] as num?)?.toDouble() ?? 75.0;
-    final soh = (data['soh'] as num?)?.toDouble() ?? 98.0;
-    final voltage = (data['voltage'] as num?)?.toDouble() ?? 72.0;
-    final temp = (data['temperature'] as num?)?.toDouble() ?? 28.5;
-    final estRange = (data['estimatedRangeKm'] as num?)?.toDouble() ?? 85.0;
+    // Missing readings stay missing ("—"); never invented defaults.
+    final soc = _finite(data['soc']);
+    final soh = _finite(data['soh']);
+    final voltage = _finite(data['voltage']);
+    final temp = _finite(data['temperature']);
+    final estRange = _finite(data['estimatedRangeKm']);
     final chargingStatus = data['chargingStatus'] as String? ?? 'idle';
-    final vehicleId = data['vehicleId'] as String? ?? 'VF-FELIZ';
+    final vehicleId = data['vehicleId'] as String? ?? 'Xe của bạn';
 
     final isCharging = chargingStatus == 'charging';
-    final isLow = soc < 20.0;
-    final isHot = temp > 40.0;
+    final isLow = soc != null && soc < 20.0;
+    final isHot = temp != null && temp > 40.0;
 
     final primaryColor = isLow
-        ? Colors.amber.shade700
-        : (isCharging ? const Color(0xFF00E676) : const Color(0xFF0072BC));
+        ? Color(0xFFE8C170)
+        : (isCharging ? const Color(0xFF34D399) : const Color(0xFF9DB8E8));
 
     return InkWell(
       onTap: () => _showBatteryDiagnosticSheet(
@@ -252,9 +253,9 @@ class BatteryStatusCard extends StatelessWidget {
                   ),
                   decoration: BoxDecoration(
                     color: isCharging
-                        ? const Color(0xFF00E676).withValues(alpha: 0.15)
+                        ? const Color(0xFF34D399).withValues(alpha: 0.15)
                         : (isLow
-                              ? Colors.orange.withValues(alpha: 0.15)
+                              ? Color(0xFFF0A46B).withValues(alpha: 0.15)
                               : uiColors.primary.withValues(alpha: 0.1)),
                     borderRadius: BorderRadius.circular(20),
                   ),
@@ -264,8 +265,8 @@ class BatteryStatusCard extends StatelessWidget {
                       fontSize: 10.5,
                       fontWeight: FontWeight.w600,
                       color: isCharging
-                          ? const Color(0xFF00B050)
-                          : (isLow ? Colors.orange.shade800 : uiColors.primary),
+                          ? const Color(0xFF10B981)
+                          : (isLow ? Color(0xFFF0A46B) : uiColors.primary),
                     ),
                   ),
                 ),
@@ -295,7 +296,7 @@ class BatteryStatusCard extends StatelessWidget {
                           TweenAnimationBuilder<double>(
                             tween: Tween<double>(
                               begin: 0.0,
-                              end: (soc / 100.0).clamp(0.0, 1.0),
+                              end: ((soc ?? 0) / 100.0).clamp(0.0, 1.0),
                             ),
                             duration: const Duration(milliseconds: 1000),
                             curve: Curves.easeOutCubic,
@@ -321,7 +322,7 @@ class BatteryStatusCard extends StatelessWidget {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                '${soc.toStringAsFixed(0)}%',
+                                _fmt(soc, 0, '%'),
                                 style: TextStyle(
                                   fontSize: fontSize,
                                   fontWeight: FontWeight.w800,
@@ -353,9 +354,11 @@ class BatteryStatusCard extends StatelessWidget {
                                 child: _buildMetricTile(
                                   context: context,
                                   label: 'Quãng đường',
-                                  value: '~${estRange.toStringAsFixed(0)} km',
+                                  value: estRange == null
+                                      ? '—'
+                                      : '~${estRange.toStringAsFixed(0)} km',
                                   icon: Icons.navigation_rounded,
-                                  iconColor: const Color(0xFF0072BC),
+                                  iconColor: const Color(0xFF9DB8E8),
                                 ),
                               ),
                               const SizedBox(width: 6),
@@ -363,9 +366,9 @@ class BatteryStatusCard extends StatelessWidget {
                                 child: _buildMetricTile(
                                   context: context,
                                   label: 'Độ khỏe',
-                                  value: '${soh.toStringAsFixed(0)}%',
+                                  value: _fmt(soh, 0, '%'),
                                   icon: Icons.favorite_rounded,
-                                  iconColor: Colors.teal,
+                                  iconColor: Color(0xFF34D399),
                                 ),
                               ),
                             ],
@@ -377,7 +380,7 @@ class BatteryStatusCard extends StatelessWidget {
                                 child: _buildMetricTile(
                                   context: context,
                                   label: 'Điện áp',
-                                  value: '${voltage.toStringAsFixed(1)} V',
+                                  value: _fmt(voltage, 1, ' V'),
                                   icon: Icons.electrical_services_rounded,
                                   iconColor: Colors.deepPurple,
                                 ),
@@ -387,11 +390,11 @@ class BatteryStatusCard extends StatelessWidget {
                                 child: _buildMetricTile(
                                   context: context,
                                   label: 'Nhiệt độ',
-                                  value: '${temp.toStringAsFixed(1)} °C',
+                                  value: _fmt(temp, 1, ' °C'),
                                   icon: Icons.thermostat_rounded,
                                   iconColor: isHot
-                                      ? Colors.red
-                                      : Colors.blueGrey,
+                                      ? Color(0xFFF59E9E)
+                                      : Color(0xFF9EA2A8),
                                 ),
                               ),
                             ],
@@ -412,9 +415,8 @@ class BatteryStatusCard extends StatelessWidget {
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: (isHot ? Colors.red : Colors.orange).withValues(
-                    alpha: 0.12,
-                  ),
+                  color: (isHot ? Color(0xFFF59E9E) : Color(0xFFF0A46B))
+                      .withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
@@ -423,7 +425,7 @@ class BatteryStatusCard extends StatelessWidget {
                     Icon(
                       Icons.info_outline_rounded,
                       size: 14,
-                      color: isHot ? Colors.red : Colors.orange.shade800,
+                      color: isHot ? Color(0xFFF59E9E) : Color(0xFFF0A46B),
                     ),
                     const SizedBox(width: 6),
                     Expanded(
@@ -433,9 +435,7 @@ class BatteryStatusCard extends StatelessWidget {
                             : 'Mức pin dưới 20%. Bạn nên sạc thông minh sớm để bảo vệ tuổi thọ cell pin.',
                         style: TextStyle(
                           fontSize: 10.5,
-                          color: isHot
-                              ? Colors.red.shade900
-                              : Colors.orange.shade900,
+                          color: isHot ? Color(0xFFF59E9E) : Color(0xFFF0A46B),
                         ),
                         softWrap: true,
                       ),
@@ -492,3 +492,11 @@ class BatteryStatusCard extends StatelessWidget {
     );
   }
 }
+
+double? _finite(Object? value) {
+  final number = value is num ? value.toDouble() : null;
+  return number != null && number.isFinite ? number : null;
+}
+
+String _fmt(double? value, int digits, String unit) =>
+    value == null ? '—' : '${value.toStringAsFixed(digits)}$unit';

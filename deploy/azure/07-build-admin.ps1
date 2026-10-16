@@ -106,13 +106,24 @@ try {
             if ($tier -ne 'Free') { throw 'Only Static Web Apps Free is authorized.' }
             $env:SWA_CLI_DEPLOYMENT_TOKEN = Invoke-Azure @('staticwebapp', 'secrets', 'list', '-g', $config.resourceGroup, '-n', $config.adminName, '--query', 'properties.apiKey', '-o', 'tsv')
             # Token is inherited by the process, never placed in command arguments.
+            $updatedBefore = Invoke-Azure @('staticwebapp', 'environment', 'list', '-g', $config.resourceGroup, '-n', $config.adminName, '--query', "[?name=='default'].lastUpdatedOn | [0]", '-o', 'tsv')
             $deployPreference = $ErrorActionPreference
             try {
                 $ErrorActionPreference = 'Continue'
-                $result = Invoke-AdminNpm exec --yes --package=@azure/static-web-apps-cli@2.0.10 -- swa deploy ./dist --env production 2>&1
+                # Quote '--': a bare -- is swallowed by the PowerShell function binder, npm then
+                # consumes --env and the SWA CLI exits 0 without publishing to production.
+                $result = Invoke-AdminNpm exec --yes --package=@azure/static-web-apps-cli@2.0.10 '--' swa deploy ./dist --env production 2>&1
                 $deployExit = $LASTEXITCODE
             } finally { $ErrorActionPreference = $deployPreference }
             if ($deployExit -ne 0) { throw 'SWA deployment failed; diagnostics suppressed to protect token.' }
+            # The SWA CLI can exit 0 without uploading; require the production environment timestamp to move.
+            for ($attempt = 0; $attempt -lt 6; $attempt++) {
+                $updatedAfter = Invoke-Azure @('staticwebapp', 'environment', 'list', '-g', $config.resourceGroup, '-n', $config.adminName, '--query', "[?name=='default'].lastUpdatedOn | [0]", '-o', 'tsv')
+                if ($updatedAfter -and $updatedAfter -ne $updatedBefore) { break }
+                Start-Sleep -Seconds 10
+            }
+            if (-not $updatedAfter -or $updatedAfter -eq $updatedBefore) { throw 'SWA CLI reported success but the production environment was not updated; rerun the deploy.' }
+            Remove-Item Env:SWA_CLI_DEPLOYMENT_TOKEN -ErrorAction SilentlyContinue
             Write-Host 'Frontend deployed to the staging Static Web App. Firebase authorized domain still needs verification.'
         }
     } finally { Pop-Location }

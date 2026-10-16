@@ -306,7 +306,7 @@ class ConnectionCodeStore:
         local_password: str | None = None,
         note: str = "",
         created_by: str = "",
-        expires_hours: int = 720,
+        expires_hours: int = 24,
         max_redemptions: int = 1,
     ) -> tuple[dict, ShellyConnectionCode]:
         dev = self.save_device(
@@ -367,7 +367,7 @@ class ConnectionCodeStore:
         lan_address: str | None = None,
         local_password: str | None = None,
         created_by: str,
-        expires_hours: int | None = 720,  # 30 days
+        expires_hours: int | None = 24,
         expires_at: datetime | None = None,
         max_redemptions: int = 1,
         note: str = "",

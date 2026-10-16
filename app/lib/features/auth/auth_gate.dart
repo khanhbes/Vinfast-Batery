@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/app_providers.dart';
+import '../ai/controllers/smart_charging_controller.dart';
 import '../../core/services/active_charging_session_coordinator.dart';
 import '../../core/services/app_update_service.dart';
 import '../../core/services/auth_service.dart';
@@ -481,15 +482,35 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
 
   late final ActiveChargingSessionCoordinator _activeSession;
 
+  /// Account of the previous authenticated root in this process.
+  static String? _lastRootUid;
+
   @override
   void initState() {
     super.initState();
     _activeSession = ref.read(activeChargingSessionProvider);
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (_lastRootUid != null && _lastRootUid != uid) {
+      // Another account signed in without a process restart: drop the
+      // previous account's vehicles, selection and controllers (Task 125).
+      // After the current build, as providers cannot change during it.
+      Future.microtask(() {
+        if (!mounted) return;
+        ref.read(selectedVehicleIdProvider.notifier).state = '';
+        ref.invalidate(restoreVehicleIdProvider);
+        ref.invalidate(allVehiclesProvider);
+        ref.invalidate(vehicleProvider);
+        ref.invalidate(chargeLogsProvider);
+        ref.invalidate(vehicleStatsProvider);
+        ref.invalidate(smartChargingControllerProvider);
+      });
+    }
+    _lastRootUid = uid;
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // Initialize notification center and sync models
+      // Notification center only: the legacy AI model sync (auto download +
+      // "model deployed" notices) is retired (AGENTS 3.7, Task 125).
       await NotificationCenterService().initialize();
-      await NotificationCenterService().syncModels();
 
       // Authenticated bootstrap (di chuyển từ main.dart — chạy SAU khi auth sẵn sàng)
       await _runAuthenticatedBootstrap();

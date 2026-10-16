@@ -135,6 +135,8 @@ def test_provider_http_failure_never_retries_on(status):
     http.post.return_value.headers = {"Retry-After": "60"}
     provider = VaultCloudControlProvider(repo, session=http)
     provider._profile = Mock(return_value=("https://qa.shelly.cloud", "fixture-only"))
+    # Task 123: the admitted slot reads the vault once and shares it.
+    provider._restore_profile = Mock(return_value={})
     provider._assert_safety_context = Mock()
     binding = DeviceBinding("qa-device", "QA", "S3PL-00112EU", 3, "vault_cloud")
     with pytest.raises(ProviderError) as caught:
