@@ -27,7 +27,7 @@ void main() {
 
     // Renders the setup shell and gives recovery choices when cloud restore
     // cannot be checked in this unauthenticated widget test.
-    expect(find.text('Smart Charger'), findsOneWidget);
+    expect(find.text('Sạc thông minh Shelly'), findsOneWidget);
     expect(find.text('Thử lại'), findsOneWidget);
     expect(find.text('Qua Bước 2: Cloud'), findsOneWidget);
     expect(find.text('Qua Bước 3: Mã Admin'), findsOneWidget);

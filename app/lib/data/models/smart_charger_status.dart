@@ -22,6 +22,7 @@ class SmartChargerStatus {
     this.codeRefreshRequired,
     double? shellyTemperatureC,
     this.batteryTemperatureC,
+    this.readAt,
   }) : shellyTemperatureC = shellyTemperatureC ?? temperatureC;
 
   final bool online;
@@ -39,6 +40,46 @@ class SmartChargerStatus {
   final String? deviceName;
   final String? deviceId;
   final bool? codeRefreshRequired;
+
+  /// When this readback was received. [timerRemaining] is only true at
+  /// that instant; screens count it down with [timerRemainingAt] (Task 125).
+  final DateTime? readAt;
+
+  /// Hardware timer left at [now]: the readback minus its age, never < 0.
+  Duration? timerRemainingAt(DateTime now) {
+    final timer = timerRemaining;
+    if (timer == null) return null;
+    final at = readAt;
+    if (at == null) return timer;
+    final left = timer - now.difference(at);
+    return left.isNegative ? Duration.zero : left;
+  }
+
+  /// Presentation copy after the server has verified a relay command
+  /// (Task 122): every screen can show the new relay state at once while a
+  /// fresh `/live` read follows. Never used as authorization to energize.
+  SmartChargerStatus withVerifiedRelay(bool on, {Duration? timerRemaining}) =>
+      SmartChargerStatus(
+        online: online,
+        relay: on,
+        powerW: on ? powerW : 0,
+        voltageV: voltageV,
+        currentA: on ? currentA : 0,
+        frequencyHz: frequencyHz,
+        temperatureC: temperatureC,
+        energyWh: energyWh,
+        timerRemaining: on
+            ? (timerRemaining ?? this.timerRemaining)
+            : Duration.zero,
+        transport: transport,
+        deviceName: deviceName,
+        deviceId: deviceId,
+        codeRefreshRequired: codeRefreshRequired,
+        shellyTemperatureC: shellyTemperatureC,
+        batteryTemperatureC: batteryTemperatureC,
+        // A verified command's timer is as of now.
+        readAt: on && timerRemaining != null ? DateTime.now() : readAt,
+      );
 
   /// Same wire shape as the server `/live` status (round-trips via fromJson).
   Map<String, dynamic> toJson() => {
@@ -58,6 +99,7 @@ class SmartChargerStatus {
     if (deviceName != null) 'device_name': deviceName,
     if (deviceId != null) 'device_id': deviceId,
     if (codeRefreshRequired != null) 'codeRefreshRequired': codeRefreshRequired,
+    if (readAt != null) 'read_at': readAt!.toUtc().toIso8601String(),
   };
 
   factory SmartChargerStatus.fromJson(Map<String, dynamic> json) {
@@ -106,6 +148,9 @@ class SmartChargerStatus {
         _ => null,
       },
       deviceName: json['device_name']?.toString(),
+      readAt:
+          DateTime.tryParse(json['read_at']?.toString() ?? '')?.toLocal() ??
+          DateTime.now(),
     );
   }
 }

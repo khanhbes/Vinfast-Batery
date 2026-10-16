@@ -7,6 +7,7 @@ import '../constants/app_constants.dart';
 import '../services/api_service.dart';
 import '../services/connection_coordinator.dart';
 import '../services/onboarding_service.dart';
+import '../theme/luxe_theme.dart';
 
 enum _ApiProbeState { checking, ready, unavailable, dependencyUnavailable }
 
@@ -174,44 +175,53 @@ class _InternetNoticeState extends State<InternetConnectionNotice>
         : connectionMessage;
     if (internetMessage == null) return widget.child;
 
-    final colors = Theme.of(context).colorScheme;
     return Column(
       children: [
-        SafeArea(
-          bottom: false,
-          child: Material(
-            color: colors.errorContainer,
-            child: Semantics(
-              liveRegion: true,
-              label: internetMessage,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 6,
+        Material(
+          color: LuxeColors.sheet,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: LuxeColors.champagne.withValues(alpha: 0.35),
                 ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.cloud_off_rounded,
-                      size: 18,
-                      color: colors.onErrorContainer,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        internetMessage,
-                        style: TextStyle(
-                          color: colors.onErrorContainer,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
+              ),
+            ),
+            child: SafeArea(
+              bottom: false,
+              child: Semantics(
+                liveRegion: true,
+                label: internetMessage,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.cloud_off_rounded,
+                        size: 17,
+                        color: LuxeColors.champagne,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          internetMessage,
+                          style: const TextStyle(
+                            color: LuxeColors.text,
+                            fontSize: 12.5,
+                            height: 1.35,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
-                    ),
-                    TextButton(
-                      onPressed: _retrying ? null : _retry,
-                      child: Text(_retrying ? 'Đang thử lại' : 'Thử lại'),
-                    ),
-                  ],
+                      TextButton(
+                        onPressed: _retrying ? null : _retry,
+                        style: TextButton.styleFrom(
+                          foregroundColor: LuxeColors.emerald,
+                        ),
+                        child: Text(_retrying ? 'Đang thử lại' : 'Thử lại'),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

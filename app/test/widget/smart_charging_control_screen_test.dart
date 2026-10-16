@@ -159,7 +159,8 @@ void main() {
     expect(find.byKey(const ValueKey('plan-preview')), findsOneWidget);
     expect(find.text('Kế hoạch sạc'), findsOneWidget);
     expect(find.textContaining('Dự kiến dừng lúc'), findsOneWidget);
-    expect(find.text('1 giờ 0 phút'), findsOneWidget);
+    // One duration wording on every surface (Task 122).
+    expect(find.text('1 giờ'), findsOneWidget);
     expect(find.text('SẠC THEO AI'), findsOneWidget);
   });
 

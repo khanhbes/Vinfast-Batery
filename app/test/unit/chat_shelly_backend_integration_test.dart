@@ -36,7 +36,9 @@ void main() {
   late bool relay, allowOn, timeoutOn, wrongReadback;
   late bool failLive, omitTimer, omitSession, offStillOn;
   late bool failLiveAfterOn;
+  late bool pendingOff;
   late Map<String, dynamic> readbackOverrides;
+  late Map<String, dynamic> onResponseOverrides;
   void Function()? beforeLiveFailure;
   late int onRequests, offRequests;
   late Map<String, dynamic>? session;
@@ -102,7 +104,9 @@ void main() {
     omitTimer = false;
     omitSession = false;
     offStillOn = false;
+    pendingOff = false;
     readbackOverrides = {};
+    onResponseOverrides = {};
     beforeLiveFailure = null;
     onRequests = 0;
     offRequests = 0;
@@ -113,6 +117,32 @@ void main() {
       client: MockClient((request) async {
         requests.add(request);
         expect(request.headers['Authorization'], 'Bearer qa-token');
+        http.Response refuse(int status, String code) => http.Response(
+          jsonEncode({
+            'success': false,
+            'error': {'code': code, 'retryable': false},
+          }),
+          status,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+        final body = request.body.isEmpty
+            ? const <String, dynamic>{}
+            : Map<String, dynamic>.from(jsonDecode(request.body) as Map);
+        final command =
+            request.url.path == '/api/smart-charging/on' ||
+            request.url.path == '/api/smart-charging/off';
+        if (command &&
+            body['expectedDeviceId'] != null &&
+            body['expectedDeviceId'] != device) {
+          return refuse(409, 'bindingChanged');
+        }
+        if (request.url.path == '/api/smart-charging/on' && !allowOn) {
+          return refuse(409, 'STAGING_HARDWARE_DISABLED');
+        }
+        if (request.url.path == '/api/smart-charging/session/qa-session/stop' &&
+            session == null) {
+          return refuse(404, 'sessionNotFound');
+        }
         dynamic data;
         switch (request.url.path) {
           case '/api/shelly/device':
@@ -138,6 +168,8 @@ void main() {
             }
             data = {
               'status': status(),
+              // Mirrors the server: /live carries the binding (Task 122).
+              'binding': binding(),
               'session': omitSession || session == null
                   ? null
                   : {...session!, ...readbackOverrides},
@@ -146,15 +178,15 @@ void main() {
             data = {'profile': binding()};
           case '/api/smart-charging/on':
             onRequests++;
-            expect(jsonDecode(request.body)['expectedDeviceId'], device);
             expect(request.headers['Idempotency-Key'], isNotEmpty);
             if (timeoutOn) throw TimeoutException('simulated lost ON response');
             relay = true;
             session = activeSession();
-            data = session;
+            // Task 123: the ON response (after the server's own readback) is
+            // the verification evidence the app relies on.
+            data = {...session!, ...onResponseOverrides};
           case '/api/smart-charging/off':
             offRequests++;
-            expect(jsonDecode(request.body)['expectedDeviceId'], device);
             expect(request.headers['Idempotency-Key'], isNotEmpty);
             relay = offStillOn;
             session = null;
@@ -162,10 +194,39 @@ void main() {
           case '/api/smart-charging/session/qa-session/stop':
             offRequests++;
             relay = offStillOn;
-            data = {...session!, 'state': 'cancelled', 'relay_verified': true};
-            session = null;
+            if (pendingOff) {
+              // Task 123: OFF accepted, Cloud still reports ON.
+              session = {
+                ...session!,
+                'state': 'stopping',
+                'relay_verified': false,
+                'last_error': 'offPendingReadback',
+              };
+              data = session;
+            } else {
+              data = {
+                ...session!,
+                'state': 'cancelled',
+                'relay_verified': true,
+              };
+              session = null;
+            }
           default:
             throw StateError('Unexpected QA endpoint ${request.url.path}');
+        }
+        if (offStillOn &&
+            !pendingOff &&
+            (request.url.path == '/api/smart-charging/off' ||
+                request.url.path ==
+                    '/api/smart-charging/session/qa-session/stop')) {
+          return http.Response(
+            jsonEncode({
+              'success': false,
+              'error': {'code': 'relayUnverified', 'retryable': true},
+            }),
+            503,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
         }
         if (request.url.path != '/api/smart-charging/session/qa-session/stop') {
           expect(
@@ -288,17 +349,22 @@ void main() {
     },
   );
   test(
-    'failed read after ON preserves uncertainty and never retries ON',
+    'server-verified ON needs no extra live read and is never retried',
     () async {
       final proposal = await engine.reply('bật sạc 5 phút');
-      failLiveAfterOn = true;
+      failLiveAfterOn = true; // a later status read would fail
+      final liveBefore = requests
+          .where((r) => r.url.path == '/api/smart-charging/live')
+          .length;
       final result = await engine.confirm(proposal.action!.callId, true);
-      expect(result['status'], 'unknown');
-      expect(connections.current.state, ShellyConnectionFlowState.offline);
-      expect(connections.current.controlUncertain, true);
-      expect(connections.current.isLinked, true);
-      expect(connections.current.capabilities, isNull);
-      expect(connections.current.readyForControl, false);
+      expect(result['status'], 'verified');
+      expect(connections.current.status!.relay, true);
+      expect(connections.current.controlUncertain, false);
+      final liveAfter = requests
+          .where((r) => r.url.path == '/api/smart-charging/live')
+          .length;
+      // Task 123: no /live round trip before or after the command.
+      expect(liveAfter - liveBefore, 0);
       await engine.confirm(proposal.action!.callId, true);
       expect(onRequests, 1);
       expect(offRequests, 0);
@@ -310,14 +376,12 @@ void main() {
     'terminal session': {'state': 'cancelled'},
     'unverified relay': {'relay_verified': false},
     'unverified timer': {'timer_verified': false},
-    'wrong session': {'session_id': 'other-session'},
     'wrong device': {'device_id': 'other-device'},
     'wrong vehicle': {'vehicle_id': 'other-vehicle'},
-    'older revision': {'version': 0},
   }.entries) {
-    test('fresh ${invalid.key} cannot reuse verified ON receipt', () async {
+    test('server ${invalid.key} is never reported as verified ON', () async {
       final proposal = await engine.reply('bật sạc 5 phút');
-      readbackOverrides = invalid.value;
+      onResponseOverrides = invalid.value;
       final result = await engine.confirm(proposal.action!.callId, true);
       expect(result['success'], false);
       expect(result['status'], 'unknown');
@@ -331,19 +395,6 @@ void main() {
       await engine.confirm(proposal.action!.callId, true);
       expect(onRequests, 1);
       expect(offRequests, 0);
-    });
-  }
-  for (final missing in ['timer', 'session']) {
-    test('missing fresh $missing keeps ON unknown without retry', () async {
-      final proposal = await engine.reply('bật sạc 5 phút');
-      omitTimer = missing == 'timer';
-      omitSession = missing == 'session';
-      final result = await engine.confirm(proposal.action!.callId, true);
-      expect(result['success'], false);
-      expect(result['status'], 'unknown');
-      expect(connections.current.controlUncertain, true);
-      expect(connections.current.readyForControl, false);
-      expect(onRequests, 1);
     });
   }
   test(
@@ -433,6 +484,38 @@ void main() {
       expect(identical(connections.current, original), true);
     },
   );
+  test(
+    'timer ended before the stop confirmation: no OFF, clear wording',
+    () async {
+      relay = true;
+      session = activeSession();
+      final proposal = await engine.reply('dừng sạc');
+      expect(proposal.action, isNotNull);
+      relay = false; // Shelly timer cut the relay meanwhile
+      session = null;
+      final result = await engine.confirm(proposal.action!.callId, true);
+      expect(result['status'], 'expired');
+      expect(result['message'], contains('tự ngắt theo hẹn giờ'));
+      expect(offRequests, 0);
+      expect(connections.current.status!.relay, false);
+    },
+  );
+  test(
+    'accepted OFF awaiting Cloud readback is pending, never resent',
+    () async {
+      relay = true;
+      session = activeSession();
+      final proposal = await engine.reply('dừng sạc');
+      pendingOff = true;
+      offStillOn = true;
+      final result = await engine.confirm(proposal.action!.callId, true);
+      expect(result['status'], 'pending');
+      expect(result['message'], contains('Không gửi lại lệnh'));
+      await engine.confirm(proposal.action!.callId, true);
+      expect(offRequests, 1);
+      expect(onRequests, 0);
+    },
+  );
   for (final privateSession in [false, true]) {
     test(
       'OFF acceptance without OFF readback stays unknown ($privateSession)',
@@ -499,7 +582,9 @@ void main() {
         (await engine.confirm(proposal.action!.callId, true))['status'],
         'expired',
       );
-      expect(onRequests, 0);
+      // The request reaches the server, which refuses before any relay change.
+      expect(relay, false);
+      expect(session, isNull);
     },
   );
   test(

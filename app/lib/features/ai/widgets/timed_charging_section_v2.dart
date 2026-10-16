@@ -83,9 +83,9 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
   }
 
   void _syncPulse() {
-    if (!MediaQuery.disableAnimationsOf(context) &&
-        widget.readyForControl &&
-        !_submitting) {
+    // Pulse only while the command is really in flight; "ready" is a state,
+    // not an activity (LUXE motion rule, Task 125).
+    if (!MediaQuery.disableAnimationsOf(context) && _submitting) {
       if (!_pulse.isAnimating) _pulse.repeat();
     } else {
       _pulse.stop();
@@ -206,7 +206,7 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Timer được nạp thẳng vào rơ-le Shelly, an toàn độc lập với điện thoại.',
+                      'Hẹn giờ được nạp thẳng vào ổ cắm Shelly, an toàn độc lập với điện thoại.',
                       style: TextStyle(
                         color: LuxeColors.muted,
                         fontSize: 12,

@@ -34,7 +34,8 @@ class ApiResult<T> {
       // `error` is kept in the wire envelope for legacy callers, but it may
       // contain provider details. Release UI only consumes the safe message;
       // use a generic fallback when an older endpoint omits it.
-      userMessage: map['userMessage']?.toString() ??
+      userMessage:
+          map['userMessage']?.toString() ??
           (ok ? null : 'Chưa thể hoàn tất yêu cầu. Vui lòng thử lại.'),
       retryable: map['retryable'] == true,
       requestId: map['requestId']?.toString(),
@@ -45,15 +46,15 @@ class ApiResult<T> {
   }
 
   Map<String, dynamic> toLegacyMap() => {
-        'success': success,
-        if (data != null) 'data': data,
-        if (code != null) 'code': code,
-        if (userMessage != null) ...{
-          'userMessage': userMessage,
-          'error': userMessage,
-        },
-        'retryable': retryable,
-        if (requestId != null) 'requestId': requestId,
-        if (httpStatus != null) 'statusCode': httpStatus,
-      };
+    'success': success,
+    if (data != null) 'data': data,
+    if (code != null) 'code': code,
+    if (userMessage != null) ...{
+      'userMessage': userMessage,
+      'error': userMessage,
+    },
+    'retryable': retryable,
+    if (requestId != null) 'requestId': requestId,
+    if (httpStatus != null) 'statusCode': httpStatus,
+  };
 }

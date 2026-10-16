@@ -8,7 +8,7 @@ import '../../../core/theme/luxe_theme.dart';
 import '../../../data/models/smart_charging_session.dart';
 
 /// Amber shared by "stopped early" states across the history surfaces.
-const historyAmber = Color(0xFFFBBF24);
+const historyAmber = LuxeColors.champagne;
 
 String historyEnergy(double wh) => wh >= 1000
     ? '${(wh / 1000).toStringAsFixed(2)} kWh'
@@ -412,7 +412,7 @@ class HistoryChip extends StatelessWidget {
           child: AnimatedContainer(
             duration: _motion(context, 240),
             curve: LuxeMotion.enter,
-            constraints: const BoxConstraints(minHeight: 38),
+            constraints: const BoxConstraints(minHeight: 48),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(99),

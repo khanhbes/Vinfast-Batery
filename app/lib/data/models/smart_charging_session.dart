@@ -18,6 +18,9 @@ enum ChargingStrategy {
 
 enum ChargingTimeMode { duration, stopTime }
 
+/// Server marker (Task 122): OFF accepted, waiting for Cloud readback.
+const offPendingReadbackCode = 'offPendingReadback';
+
 enum ChargingSessionState {
   arming('arming'),
   starting('starting'),

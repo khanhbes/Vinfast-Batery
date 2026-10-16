@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/services/settings_service.dart';
-import '../../core/theme/app_ui_colors.dart';
-import '../../core/theme/cockpit_design_system.dart';
+import '../../core/theme/luxe_theme.dart';
+import '../../core/widgets/luxe_settings.dart';
 
+/// Language picker. The app renders the dark LUXE language only (Task 117),
+/// so the sheet states that instead of offering light/AMOLED modes.
 /// Listens while mounted; persistence finishing after dismissal never calls
 /// setState on a closed sheet. SettingsService owns persistence/error handling.
 class AppearanceSheet extends StatelessWidget {
@@ -15,74 +17,63 @@ class AppearanceSheet extends StatelessWidget {
     child: ListenableBuilder(
       listenable: settings,
       builder: (context, _) => SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Text('GIAO DIỆN', style: LuxeText.eyebrow),
+            const SizedBox(height: 6),
             Text(
               'Giao diện và ngôn ngữ',
-              style: Theme.of(
-                context,
-              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+              style: LuxeText.title.copyWith(fontSize: 22),
             ),
-            const SizedBox(height: 18),
-            const CockpitSectionLabel('Giao diện'),
-            for (final (mode, title, icon) in const [
-              (AppThemeMode.light, 'Sáng', Icons.light_mode_rounded),
-              (
-                AppThemeMode.system,
-                'Theo hệ thống',
-                Icons.brightness_auto_rounded,
-              ),
-              (AppThemeMode.dark, 'Dark Cockpit', Icons.dark_mode_rounded),
-              (AppThemeMode.amoled, 'AMOLED', Icons.brightness_2_rounded),
-            ])
-              _choice(
-                context,
-                title,
-                icon,
-                settings.getThemeMode() == mode,
-                () => unawaited(settings.setThemeMode(mode)),
-              ),
-            const SizedBox(height: 18),
-            const CockpitSectionLabel('Ngôn ngữ'),
-            for (final (language, title, icon) in const [
-              (AppLanguage.vietnamese, 'Tiếng Việt', Icons.language_rounded),
-              (AppLanguage.english, 'English', Icons.translate_rounded),
-            ])
-              _choice(
-                context,
-                title,
-                icon,
-                settings.getLanguage() == language,
-                () => unawaited(settings.setLanguage(language)),
-              ),
+            const SizedBox(height: 6),
+            Text(
+              'VinFast Battery dùng một giao diện tối Platinum duy nhất để '
+              'mọi màn hình đồng bộ và dễ đọc khi sạc ban đêm.',
+              style: LuxeText.caption,
+            ),
+            const LuxeSectionLabel('Ngôn ngữ'),
+            LuxeSettingsGroup(
+              children: [
+                // English is hidden until the app content is translated
+                // (Task 125); a half-English UI was misleading.
+                for (final (language, title, icon) in const [
+                  (
+                    AppLanguage.vietnamese,
+                    'Tiếng Việt',
+                    Icons.language_rounded,
+                  ),
+                ])
+                  LuxeSettingsRow(
+                    icon: icon,
+                    title: title,
+                    accent: settings.getLanguage() == language
+                        ? LuxeColors.emerald
+                        : null,
+                    trailing: AnimatedOpacity(
+                      opacity: settings.getLanguage() == language ? 1 : 0,
+                      duration: MediaQuery.disableAnimationsOf(context)
+                          ? Duration.zero
+                          : const Duration(milliseconds: 220),
+                      child: const Icon(
+                        Icons.check_circle_rounded,
+                        color: LuxeColors.emerald,
+                      ),
+                    ),
+                    onTap: () => unawaited(settings.setLanguage(language)),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Hiện ứng dụng chỉ có tiếng Việt.',
+              key: const ValueKey('appearance-vietnamese-only'),
+              style: LuxeText.caption,
+            ),
           ],
         ),
       ),
     ),
   );
-
-  Widget _choice(
-    BuildContext context,
-    String title,
-    IconData icon,
-    bool selected,
-    VoidCallback onTap,
-  ) {
-    final colors = AppUiColors.of(context);
-    return ListTile(
-      onTap: onTap,
-      minTileHeight: 56,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      tileColor: selected
-          ? colors.primary.withValues(alpha: .10)
-          : Colors.transparent,
-      leading: Icon(icon, color: selected ? colors.primary : colors.muted),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-      trailing: selected
-          ? Icon(Icons.check_circle_rounded, color: colors.primary)
-          : null,
-    );
-  }
 }

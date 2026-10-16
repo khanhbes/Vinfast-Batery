@@ -9,6 +9,7 @@
 !sync_writes.py
 !request_limits.py
 !vehicle_catalog.py
+!vehicle_media.py
 !catalog_research_worker.py
 !smart_charge_worker.py
 !smart_charge_worker_entry.py
@@ -22,3 +23,6 @@
 !shelly/
 !shelly/**/
 !shelly/**/*.py
+!assistant/
+!assistant/**/
+!assistant/**/*.py

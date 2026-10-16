@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/luxe_theme.dart';
+import '../../../data/services/charge_estimator.dart';
 
 /// AI charging plan: duration as the hero figure, the automatic stop time
 /// and the model provenance. Energy/cost estimates are intentionally not
@@ -23,12 +24,8 @@ class PredictionCardV2 extends StatelessWidget {
   final String personalizationLabel;
   final List<String> warnings;
 
-  String get _duration {
-    final h = durationMinutes ~/ 60;
-    final m = durationMinutes % 60;
-    if (h > 0) return '$h giờ $m phút';
-    return '$m phút';
-  }
+  String get _duration =>
+      formatChargeDuration(Duration(minutes: durationMinutes));
 
   @override
   Widget build(BuildContext context) {
@@ -119,7 +116,7 @@ class PredictionCardV2 extends StatelessWidget {
                 const Icon(
                   Icons.info_outline_rounded,
                   size: 14,
-                  color: Color(0xFFFBBF24),
+                  color: LuxeColors.champagne,
                 ),
                 const SizedBox(width: 6),
                 Expanded(

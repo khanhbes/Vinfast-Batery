@@ -130,7 +130,9 @@ class _ShellyQrScannerDialogState extends State<ShellyQrScannerDialog> {
                     tooltip: 'Dán từ bộ nhớ tạm',
                     icon: const Icon(Icons.content_paste_rounded),
                     onPressed: () async {
-                      final data = await Clipboard.getData(Clipboard.kTextPlain);
+                      final data = await Clipboard.getData(
+                        Clipboard.kTextPlain,
+                      );
                       if (data?.text != null) {
                         _inputController.text = data!.text!.trim();
                       }

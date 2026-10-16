@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import '../theme/app_motion.dart';
+import '../theme/luxe_theme.dart';
 
 /// Retains tab state and scroll positions; only the selected tab ticks.
+/// Switching plays a LUXE shared-axis entrance: the new tab fades up from
+/// the side it lives on (right when moving forward, left when moving back).
 /// The charging overlay should stay outside this visual transition.
 class AppTabStack extends StatefulWidget {
   const AppTabStack({super.key, required this.index, required this.children})
@@ -18,14 +21,18 @@ class _AppTabStackState extends State<AppTabStack>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: AppMotion.base,
+    duration: const Duration(milliseconds: 420),
     value: 1,
   );
+
+  /// +1 when the new tab sits to the right of the old one, -1 otherwise.
+  double _direction = 1;
 
   @override
   void didUpdateWidget(covariant AppTabStack oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.index != widget.index) {
+      _direction = widget.index > oldWidget.index ? 1 : -1;
       if (AppMotion.enabled(context)) {
         _controller.forward(from: 0);
       } else {
@@ -57,11 +64,11 @@ class _AppTabStackState extends State<AppTabStack>
       ],
     ),
     builder: (context, child) {
-      final progress = AppMotion.enter.transform(_controller.value);
+      final progress = LuxeMotion.enter.transform(_controller.value);
       return Opacity(
-        opacity: .9 + .1 * progress,
+        opacity: .55 + .45 * progress,
         child: Transform.translate(
-          offset: Offset(0, 6 * (1 - progress)),
+          offset: Offset(18 * _direction * (1 - progress), 0),
           child: child,
         ),
       );

@@ -84,7 +84,11 @@ class AssistantContextCoordinator extends ChangeNotifier {
         showBubble(
           'Pin xe chỉ còn ${vehicle.currentBattery}%. Bạn có muốn mình chuẩn bị lịch sạc thông minh không?',
           mood: BatteryBotMood.thinking,
-          chips: const ['Làm sao dừng sạc?', 'Kết nối Shelly', 'Xem pin ở đâu?'],
+          chips: const [
+            'Làm sao dừng sạc?',
+            'Kết nối Shelly',
+            'Xem pin ở đâu?',
+          ],
         );
         return true;
       }
@@ -92,14 +96,21 @@ class AssistantContextCoordinator extends ChangeNotifier {
 
     // 2. Chào buổi sáng (06:00 - 08:59)
     if (currentTime.hour >= 6 && currentTime.hour < 9) {
-      final dateKey = 'morning_${currentTime.year}_${currentTime.month}_${currentTime.day}';
+      final dateKey =
+          'morning_${currentTime.year}_${currentTime.month}_${currentTime.day}';
       if (_canTrigger(dateKey, currentTime)) {
         _recordTrigger(dateKey, currentTime);
-        final batteryText = vehicle != null ? 'Pin xe đang ở mức ${vehicle.currentBattery}%' : 'Hệ thống đã sẵn sàng';
+        final batteryText = vehicle != null
+            ? 'Pin xe đang ở mức ${vehicle.currentBattery}%'
+            : 'Hệ thống đã sẵn sàng';
         showBubble(
           'Chào buổi sáng! $batteryText, sẵn sàng cho ngày mới rồi nhé!',
           mood: BatteryBotMood.greeting,
-          chips: const ['Xem pin ở đâu?', 'Làm sao dừng sạc?', 'Kết nối Shelly'],
+          chips: const [
+            'Xem pin ở đâu?',
+            'Làm sao dừng sạc?',
+            'Kết nối Shelly',
+          ],
         );
         return true;
       }
@@ -112,7 +123,11 @@ class AssistantContextCoordinator extends ChangeNotifier {
         showBubble(
           'Mẹo: Bạn có thể cài đặt mức pin mục tiêu 80-90% để bảo vệ tuổi thọ pin lâu nhất!',
           mood: BatteryBotMood.charging,
-          chips: const ['Làm sao dừng sạc?', 'Vì sao nút sạc bị khóa?', 'Kết nối Shelly'],
+          chips: const [
+            'Làm sao dừng sạc?',
+            'Vì sao nút sạc bị khóa?',
+            'Kết nối Shelly',
+          ],
         );
         return true;
       }
@@ -141,25 +156,25 @@ class AssistantContextCoordinator extends ChangeNotifier {
 /// Provider cho AssistantContextCoordinator
 final assistantContextCoordinatorProvider =
     ChangeNotifierProvider<AssistantContextCoordinator>((ref) {
-  final coordinator = AssistantContextCoordinator();
+      final coordinator = AssistantContextCoordinator();
 
-  // Tự động lắng nghe thay đổi tab
-  ref.listen<int>(currentTabProvider, (_, nextTab) {
-    final vehicleContext = ref.read(vehicleContextProvider);
-    coordinator.evaluateContext(
-      vehicle: vehicleContext.vehicle,
-      currentTab: nextTab,
-    );
-  });
+      // Tự động lắng nghe thay đổi tab
+      ref.listen<int>(currentTabProvider, (_, nextTab) {
+        final vehicleContext = ref.read(vehicleContextProvider);
+        coordinator.evaluateContext(
+          vehicle: vehicleContext.vehicle,
+          currentTab: nextTab,
+        );
+      });
 
-  // Tự động lắng nghe thay đổi xe
-  ref.listen(vehicleContextProvider, (_, nextContext) {
-    final currentTab = ref.read(currentTabProvider);
-    coordinator.evaluateContext(
-      vehicle: nextContext.vehicle,
-      currentTab: currentTab,
-    );
-  });
+      // Tự động lắng nghe thay đổi xe
+      ref.listen(vehicleContextProvider, (_, nextContext) {
+        final currentTab = ref.read(currentTabProvider);
+        coordinator.evaluateContext(
+          vehicle: nextContext.vehicle,
+          currentTab: currentTab,
+        );
+      });
 
-  return coordinator;
-});
+      return coordinator;
+    });

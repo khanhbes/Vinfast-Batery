@@ -532,38 +532,6 @@ class ApiService {
     };
   }
 
-  /// Predict charging time using AI Center model
-  ///
-  /// Response format for the synchronized backend API:
-  /// {
-  ///   'predictedDurationSec': double,
-  ///   'predictedDurationMin': double,
-  ///   'formattedDuration': string,
-  ///   'modelSource': string,
-  ///   'modelVersion': string,
-  ///   'isBeta': bool,
-  ///   'confidence': double,
-  ///   'warnings': a list of strings,
-  ///   // Backward compat
-  ///   'estimatedMinutes': double,
-  ///   'formattedTime': string,
-  /// }
-  Future<Map<String, dynamic>> predictChargingTime({
-    required String vehicleId,
-    required int currentBattery,
-    required int targetBattery,
-    double? ambientTempC,
-    bool strictAi = false,
-  }) async {
-    return _post('/api/ai/predict-charging-time', {
-      'vehicleId': vehicleId,
-      'currentBattery': currentBattery,
-      'targetBattery': targetBattery,
-      'ambientTempC': ambientTempC ?? 25.0, // Default 25°C
-      'strictAi': strictAi,
-    });
-  }
-
   /// Canonical Smart Charge preview contract. The server owns model
   /// selection, personal-profile fusion and safety validation; the app never
   /// runs a charging-time model locally.
@@ -586,25 +554,6 @@ class ApiService {
   /// Get AI Center charging_time model status
   Future<Map<String, dynamic>> getChargingModelStatus() async {
     return get('/api/ai/charging-model-status');
-  }
-
-  Future<Map<String, dynamic>> predictRemainingRange({
-    required int batteryPercent,
-    required double stateOfHealth,
-    required double baseEfficiencyKmPerPercent,
-    double temperatureC = 30,
-    double averageSpeedKmh = 35,
-    double payloadKg = 75,
-  }) async {
-    return _post('/api/ai/predict-range', {
-      'batteryPercent': batteryPercent,
-      'stateOfHealth': stateOfHealth,
-      'baseEfficiencyKmPerPercent': baseEfficiencyKmPerPercent,
-      'temperatureC': temperatureC,
-      'averageSpeedKmh': averageSpeedKmh,
-      'payloadKg': payloadKg,
-      'reservePercent': 5,
-    });
   }
 
   /// Lấy catalog AI models cho app (canonical — tất cả models + flat status schema)

@@ -5,11 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/notification_center_service.dart';
 import '../../core/providers/app_providers.dart';
-import '../../core/theme/app_ui_colors.dart';
-import '../../core/widgets/app_screen_header.dart';
+import '../../core/theme/luxe_theme.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/error_state.dart';
 import '../../core/widgets/loading_skeleton.dart';
+import '../../core/widgets/luxe_kit.dart';
+import '../../core/widgets/luxe_settings.dart';
 import '../../data/models/user_notification.dart';
 import '../../navigation/app_navigation.dart';
 
@@ -87,87 +88,101 @@ class _NotificationCenterScreenState
 
   @override
   Widget build(BuildContext context) {
-    final colors = AppUiColors.of(context);
     final notificationsAsync = ref.watch(notificationsProvider(_currentUid));
+    final hasItems = notificationsAsync.asData?.value.isNotEmpty == true;
+    final compactHeader = MediaQuery.textScalerOf(context).scale(10) > 14;
 
-    return Scaffold(
-      backgroundColor: colors.background,
-      body: SafeArea(
-        child: Column(
-          children: [
-            AppScreenHeader(
-              icon: Icons.notifications_rounded,
-              title: 'Thông báo',
-              subtitle: 'Cập nhật về pin, sạc và bảo dưỡng',
-              showBackButton: true,
-              iconColor: colors.primary,
-              actions: [
-                IconButton(
-                  tooltip: 'Đánh dấu tất cả là đã đọc',
-                  onPressed: () => _markAllAsRead(),
-                  icon: Icon(
-                    Icons.done_all_rounded,
-                    size: 20,
-                    color: colors.primary,
+    return LuxeScaffold(
+      appBar: LuxeAppBar(
+        actions: [
+          LuxeCircleButton(
+            tooltip: 'Đánh dấu tất cả là đã đọc',
+            onPressed: () => _markAllAsRead(),
+            icon: Icons.done_all_rounded,
+            color: LuxeColors.emerald,
+          ),
+          _isDeletingAll
+              ? const SizedBox.square(
+                  dimension: 48,
+                  child: Center(
+                    child: SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: LuxeColors.danger,
+                      ),
+                    ),
                   ),
-                ),
-                IconButton(
+                )
+              : LuxeCircleButton(
                   tooltip: 'Xóa tất cả thông báo',
-                  onPressed:
-                      notificationsAsync.asData?.value.isNotEmpty == true &&
-                          !_isDeletingAll
-                      ? _confirmDeleteAll
-                      : null,
-                  icon: _isDeletingAll
-                      ? SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: colors.danger,
-                          ),
-                        )
-                      : Icon(Icons.delete_sweep_outlined, color: colors.muted),
+                  onPressed: hasItems ? _confirmDeleteAll : null,
+                  icon: Icons.delete_sweep_outlined,
                 ),
-                const SizedBox(width: 4),
-              ],
-            ),
-            Expanded(
-              child: RefreshIndicator(
-                color: colors.primary,
-                backgroundColor: colors.surface,
-                onRefresh: _refresh,
-                child: notificationsAsync.when(
-                  data: (notifications) {
-                    _lastNotifications = notifications;
-                    return _refreshError == null
-                        ? _buildContent(notifications)
-                        : _buildStaleContent(notifications);
-                  },
-                  loading: () => _refreshError != null
-                      ? (_lastNotifications != null
-                            ? _buildStaleContent(_lastNotifications!)
-                            : _buildScrollableState(
-                                _buildErrorState(_refreshError!),
-                              ))
-                      : _lastNotifications != null
-                      ? _buildContent(_lastNotifications!)
-                      : const Padding(
-                          padding: EdgeInsets.all(16),
-                          child: LoadingSkeleton(layout: SkeletonLayout.list),
-                        ),
-                  error: (error, stack) {
-                    debugPrint(
-                      '[NotificationCenter] Stream error (${error.runtimeType})',
-                    );
-                    return _lastNotifications != null
-                        ? _buildStaleContent(_lastNotifications!)
-                        : _buildScrollableState(_buildErrorState(error));
-                  },
-                ),
+        ],
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // With enlarged text only the title stays, so the list keeps room.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: LuxeReveal(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (!compactHeader) ...[
+                    const Text('TRUNG TÂM', style: LuxeText.eyebrow),
+                    const SizedBox(height: 6),
+                  ],
+                  const Text('Thông báo', style: LuxeText.title),
+                  if (!compactHeader) ...[
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Cập nhật về pin, sạc và bảo dưỡng',
+                      style: LuxeText.caption,
+                    ),
+                  ],
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+          Expanded(
+            child: RefreshIndicator(
+              color: LuxeColors.emerald,
+              backgroundColor: LuxeColors.raised,
+              onRefresh: _refresh,
+              child: notificationsAsync.when(
+                data: (notifications) {
+                  _lastNotifications = notifications;
+                  return _refreshError == null
+                      ? _buildContent(notifications)
+                      : _buildStaleContent(notifications);
+                },
+                loading: () => _refreshError != null
+                    ? (_lastNotifications != null
+                          ? _buildStaleContent(_lastNotifications!)
+                          : _buildScrollableState(
+                              _buildErrorState(_refreshError!),
+                            ))
+                    : _lastNotifications != null
+                    ? _buildContent(_lastNotifications!)
+                    : const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: LoadingSkeleton(layout: SkeletonLayout.list),
+                      ),
+                error: (error, stack) {
+                  debugPrint(
+                    '[NotificationCenter] Stream error (${error.runtimeType})',
+                  );
+                  return _lastNotifications != null
+                      ? _buildStaleContent(_lastNotifications!)
+                      : _buildScrollableState(_buildErrorState(error));
+                },
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -211,14 +226,16 @@ class _NotificationCenterScreenState
   Widget _buildStaleContent(List<UserNotification> notifications) => Column(
     children: [
       Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Row(
-          children: [
-            const Expanded(
-              child: Text('Chưa cập nhật được. Đang hiển thị dữ liệu cũ.'),
-            ),
-            TextButton(onPressed: _refresh, child: const Text('Thử lại')),
-          ],
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+        child: LuxeNotice(
+          icon: Icons.cloud_off_rounded,
+          color: LuxeColors.champagne,
+          message: 'Chưa cập nhật được. Đang hiển thị dữ liệu cũ.',
+          action: TextButton(
+            onPressed: _refresh,
+            style: TextButton.styleFrom(foregroundColor: LuxeColors.emerald),
+            child: const Text('Thử lại'),
+          ),
         ),
       ),
       Expanded(child: _buildContent(notifications)),
@@ -251,17 +268,48 @@ class _NotificationCenterScreenState
     );
   }
 
+  static String _dayGroup(DateTime time) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(time.year, time.month, time.day);
+    final diff = today.difference(day).inDays;
+    if (diff <= 0) return 'Hôm nay';
+    if (diff == 1) return 'Hôm qua';
+    return 'Trước đó';
+  }
+
   Widget _buildNotificationList(List<UserNotification> notifications) {
+    // Flatten into day headers + cards, keeping the service order.
+    final entries = <Object>[];
+    String? group;
+    for (final n in notifications) {
+      final g = _dayGroup(n.createdAt);
+      if (g != group) {
+        entries.add(g);
+        group = g;
+      }
+      entries.add(n);
+    }
+    var cardIndex = 0;
+    final revealIndex = <String, int>{
+      for (final e in entries)
+        if (e is UserNotification) e.id: cardIndex++,
+    };
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: notifications.length,
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 32),
+      itemCount: entries.length,
       itemBuilder: (context, index) {
-        final notification = notifications[index];
-        return _NotificationCard(
+        final entry = entries[index];
+        if (entry is String) return LuxeSectionLabel(entry);
+        final notification = entry as UserNotification;
+        final i = revealIndex[notification.id] ?? 0;
+        final card = _NotificationCard(
           notification: notification,
           onTap: () => _onNotificationTap(notification),
           onDismiss: () => _dismissNotification(notification),
         );
+        return i < 8 ? LuxeReveal(index: i, child: card) : card;
       },
     );
   }
@@ -288,36 +336,11 @@ class _NotificationCenterScreenState
   }
 
   Future<void> _confirmDeleteAll() async {
-    final colors = AppUiColors.of(context);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: colors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          'Xóa tất cả thông báo?',
-          style: TextStyle(color: colors.text, fontWeight: FontWeight.w600),
-        ),
-        content: Text(
-          'Tất cả thông báo trong tài khoản này sẽ bị xóa vĩnh viễn.',
-          style: TextStyle(color: colors.muted),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text('Hủy', style: TextStyle(color: colors.muted)),
-          ),
-          FilledButton.icon(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            icon: const Icon(Icons.delete_sweep_outlined),
-            label: const Text('Xóa tất cả'),
-            style: FilledButton.styleFrom(
-              backgroundColor: colors.danger,
-              foregroundColor: Colors.white,
-            ),
-          ),
-        ],
-      ),
+    final confirmed = await showLuxeConfirm(
+      context,
+      title: 'Xóa tất cả thông báo?',
+      message: 'Tất cả thông báo trong tài khoản này sẽ bị xóa vĩnh viễn.',
+      confirmLabel: 'Xóa tất cả',
     );
     if (confirmed != true || !mounted) return;
 
@@ -354,10 +377,8 @@ class _NotificationCenterScreenState
     if (!mounted || _currentUid != uid) return;
 
     // Show full-detail bottom sheet FIRST so the user sees the whole message
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+    await showLuxeSheet<void>(
+      context,
       builder: (_) => _NotificationDetailSheet(
         notification: notification,
         onNavigate: notification.actionTarget != null
@@ -417,7 +438,8 @@ class _NotificationCenterScreenState
   }
 }
 
-/// Card hiển thị một thông báo
+/// Card hiển thị một thông báo: glass row, metal medallion tinted by type,
+/// an emerald rim + dot while unread. Swipe left to archive.
 class _NotificationCard extends StatelessWidget {
   final UserNotification notification;
   final VoidCallback onTap;
@@ -431,148 +453,113 @@ class _NotificationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = AppUiColors.of(context);
+    final (icon, accent, _) = _typeStyle(notification.type);
+    final unread = notification.isUnread;
 
-    return Dismissible(
-      key: Key(notification.id),
-      direction: DismissDirection.endToStart,
-      background: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(
-          color: colors.danger.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        child: Icon(Icons.archive_outlined, color: colors.danger),
-      ),
-      confirmDismiss: (_) => onDismiss(),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(
-          color: notification.isUnread
-              ? colors.primary.withValues(alpha: 0.08)
-              : colors.surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: notification.isUnread
-                ? colors.primary.withValues(alpha: 0.3)
-                : colors.border,
-            width: 1,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Dismissible(
+        key: Key(notification.id),
+        direction: DismissDirection.endToStart,
+        background: Container(
+          decoration: BoxDecoration(
+            color: LuxeColors.danger.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: LuxeColors.danger.withValues(alpha: 0.3)),
           ),
-        ),
-        child: ListTile(
-          onTap: onTap,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 8,
-          ),
-          leading: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: _getIconBackgroundColor(),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(_getIcon(), color: _getIconColor(), size: 22),
-          ),
-          title: Text(
-            notification.title,
-            style: TextStyle(
-              color: colors.text,
-              fontSize: 15,
-              fontWeight: notification.isUnread
-                  ? FontWeight.w700
-                  : FontWeight.w600,
-            ),
-          ),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          alignment: Alignment.centerRight,
+          padding: const EdgeInsets.only(right: 22),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const SizedBox(height: 4),
               Text(
-                notification.message,
-                style: TextStyle(color: colors.muted, fontSize: 13),
-                softWrap: true,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                _formatTime(notification.createdAt),
+                'Lưu trữ',
                 style: TextStyle(
-                  color: colors.muted.withValues(alpha: 0.7),
-                  fontSize: 11,
+                  color: LuxeColors.danger,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
+              SizedBox(width: 8),
+              Icon(Icons.archive_outlined, color: LuxeColors.danger),
             ],
           ),
-          trailing: notification.isUnread
-              ? Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: colors.primary,
-                    shape: BoxShape.circle,
+        ),
+        confirmDismiss: (_) => onDismiss(),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(20),
+            child: LuxeGlass(
+              selected: unread,
+              radius: 20,
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  LuxeMedallion(icon: icon, accent: accent, size: 42),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          notification.title,
+                          style: TextStyle(
+                            color: LuxeColors.text,
+                            fontSize: 15,
+                            height: 1.3,
+                            fontWeight: unread
+                                ? FontWeight.w600
+                                : FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          notification.message,
+                          style: LuxeText.caption.copyWith(fontSize: 13),
+                          softWrap: true,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _formatTime(notification.createdAt),
+                          style: LuxeText.label.copyWith(
+                            fontSize: 11,
+                            color: LuxeColors.dim,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                )
-              : null,
+                  if (unread)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8, top: 6),
+                      child: Semantics(
+                        label: 'Chưa đọc',
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: LuxeColors.emerald,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: LuxeColors.emeraldGlow,
+                                blurRadius: 8,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
-  }
-
-  IconData _getIcon() {
-    switch (notification.type) {
-      case NotificationType.modelUpdated:
-        return Icons.psychology;
-      case NotificationType.modelDownloadFailed:
-        return Icons.error_outline;
-      case NotificationType.syncCompleted:
-        return Icons.check_circle_outline;
-      case NotificationType.syncFailed:
-        return Icons.cancel_outlined;
-      case NotificationType.maintenanceDue:
-        return Icons.build_outlined;
-      case NotificationType.batteryAlert:
-        return Icons.battery_alert;
-      case NotificationType.chargeReminder:
-        return Icons.electrical_services;
-      case NotificationType.system:
-        return Icons.info_outline;
-    }
-  }
-
-  Color _getIconBackgroundColor() {
-    switch (notification.type) {
-      case NotificationType.modelUpdated:
-      case NotificationType.syncCompleted:
-        return Colors.green.withAlpha(30);
-      case NotificationType.modelDownloadFailed:
-      case NotificationType.syncFailed:
-      case NotificationType.batteryAlert:
-        return Colors.red.withAlpha(30);
-      case NotificationType.maintenanceDue:
-      case NotificationType.chargeReminder:
-        return Colors.orange.withAlpha(30);
-      case NotificationType.system:
-        return Colors.blue.withAlpha(30);
-    }
-  }
-
-  Color _getIconColor() {
-    switch (notification.type) {
-      case NotificationType.modelUpdated:
-      case NotificationType.syncCompleted:
-        return Colors.green;
-      case NotificationType.modelDownloadFailed:
-      case NotificationType.syncFailed:
-      case NotificationType.batteryAlert:
-        return Colors.red;
-      case NotificationType.maintenanceDue:
-      case NotificationType.chargeReminder:
-        return Colors.orange;
-      case NotificationType.system:
-        return Colors.blue;
-    }
   }
 
   String _formatTime(DateTime time) {
@@ -605,172 +592,91 @@ class _NotificationDetailSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = AppUiColors.of(context);
-    final screenHeight = MediaQuery.sizeOf(context).height;
-    final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
+    final (icon, accent, typeLabel) = _typeStyle(notification.type);
+    final metadata = _metadataRows();
 
     return SafeArea(
       top: false,
-      child: Container(
-        constraints: BoxConstraints(maxHeight: screenHeight * 0.86),
-        margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-        padding: EdgeInsets.fromLTRB(20, 16, 20, 20 + bottomPadding),
-        decoration: BoxDecoration(
-          color: colors.surface,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: colors.border),
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          8,
+          20,
+          20 + MediaQuery.viewInsetsOf(context).bottom,
         ),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Handle bar
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: colors.border,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // Icon + type chip row
-              Row(
-                children: [
-                  Container(
-                    width: 52,
-                    height: 52,
-                    decoration: BoxDecoration(
-                      color: _iconBg(),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Icon(_icon(), color: _iconColor(), size: 28),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _iconBg(),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            _typeLabel(),
-                            style: TextStyle(
-                              color: _iconColor(),
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _formatTime(notification.createdAt),
-                          style: TextStyle(color: colors.muted, fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-
-              // Full title
-              Text(
-                notification.title,
-                style: TextStyle(
-                  color: colors.text,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  height: 1.3,
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // Full message — no maxLines truncation
-              Text(
-                notification.message,
-                style: TextStyle(
-                  color: colors.text.withValues(alpha: 0.85),
-                  fontSize: 14,
-                  height: 1.6,
-                ),
-              ),
-
-              // Optional user-facing context
-              if (_metadataRows(colors).isNotEmpty) ...[
-                const SizedBox(height: 16),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: colors.primary.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: colors.primary.withValues(alpha: 0.2),
-                    ),
-                  ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                LuxeMedallion(icon: icon, accent: accent, size: 52),
+                const SizedBox(width: 14),
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: _metadataRows(colors),
+                    children: [
+                      LuxeTag(typeLabel, color: accent),
+                      const SizedBox(height: 6),
+                      Text(
+                        _formatTime(notification.createdAt),
+                        style: LuxeText.caption.copyWith(fontSize: 12),
+                      ),
+                    ],
                   ),
                 ),
               ],
-
-              const SizedBox(height: 24),
-
-              // Action button
-              if (onNavigate != null)
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: onNavigate,
-                    icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                    label: const Text('Xem chi tiết'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: colors.primary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                  ),
-                )
-              else
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: colors.muted,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      side: BorderSide(color: colors.border),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    child: const Text('Đóng'),
-                  ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              notification.title,
+              style: LuxeText.title.copyWith(fontSize: 20, height: 1.3),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              notification.message,
+              style: const TextStyle(
+                color: LuxeColors.text,
+                fontSize: 14.5,
+                height: 1.6,
+              ),
+            ),
+            if (metadata.isNotEmpty) ...[
+              const SizedBox(height: 18),
+              LuxeGlass(
+                radius: 16,
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: metadata,
                 ),
+              ),
             ],
-          ),
+            const SizedBox(height: 24),
+            if (onNavigate != null)
+              FilledButton.icon(
+                onPressed: onNavigate,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(52),
+                ),
+                icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                label: const Text('Xem chi tiết'),
+              )
+            else
+              OutlinedButton(
+                onPressed: () => Navigator.pop(context),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(52),
+                ),
+                child: const Text('Đóng'),
+              ),
+          ],
         ),
       ),
     );
   }
 
-  List<Widget> _metadataRows(AppUiColors colors) {
+  List<Widget> _metadataRows() {
     final payload = notification.payload;
     if (payload == null || payload.isEmpty) return const [];
 
@@ -831,7 +737,11 @@ class _NotificationDetailSheet extends StatelessWidget {
         };
         for (final entry in payload.entries) {
           if (hiddenKeys.contains(entry.key) || entry.value == null) continue;
-          add(_humanizePayloadKey(entry.key), entry.value);
+          // Only fields with a Vietnamese label: raw ids such as sessionId
+          // or vehicleId are not user information (Task 125).
+          final label = _humanizePayloadKey(entry.key);
+          if (label == null) continue;
+          add(label, entry.value);
         }
         break;
     }
@@ -847,20 +757,16 @@ class _NotificationDetailSheet extends StatelessWidget {
                 width: 96,
                 child: Text(
                   rows[i].label,
-                  style: TextStyle(
-                    color: colors.muted,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: LuxeText.label.copyWith(fontSize: 12),
                 ),
               ),
               Expanded(
                 child: Text(
                   rows[i].value,
-                  style: TextStyle(
-                    color: colors.text,
-                    fontSize: 12,
-                    height: 1.35,
+                  style: const TextStyle(
+                    color: LuxeColors.text,
+                    fontSize: 13,
+                    height: 1.4,
                   ),
                 ),
               ),
@@ -882,94 +788,20 @@ class _NotificationDetailSheet extends StatelessWidget {
     return _formatTime(parsed);
   }
 
-  String _humanizePayloadKey(String key) {
+  String? _humanizePayloadKey(String key) {
     switch (key) {
       case 'version':
         return 'Phiên bản';
       case 'latestBuild':
-        return 'Build';
+        return 'Bản dựng';
       case 'latestVersion':
         return 'Phiên bản';
       case 'forceUpdate':
         return 'Bắt buộc';
+      case 'targetPercent':
+        return 'Mục tiêu pin (%)';
       default:
-        return key;
-    }
-  }
-
-  IconData _icon() {
-    switch (notification.type) {
-      case NotificationType.modelUpdated:
-        return Icons.psychology;
-      case NotificationType.modelDownloadFailed:
-        return Icons.error_outline;
-      case NotificationType.syncCompleted:
-        return Icons.check_circle_outline;
-      case NotificationType.syncFailed:
-        return Icons.cancel_outlined;
-      case NotificationType.maintenanceDue:
-        return Icons.build_outlined;
-      case NotificationType.batteryAlert:
-        return Icons.battery_alert;
-      case NotificationType.chargeReminder:
-        return Icons.electrical_services;
-      case NotificationType.system:
-        return Icons.info_outline;
-    }
-  }
-
-  Color _iconBg() {
-    switch (notification.type) {
-      case NotificationType.modelUpdated:
-      case NotificationType.syncCompleted:
-        return Colors.green.withAlpha(30);
-      case NotificationType.modelDownloadFailed:
-      case NotificationType.syncFailed:
-      case NotificationType.batteryAlert:
-        return Colors.red.withAlpha(30);
-      case NotificationType.maintenanceDue:
-      case NotificationType.chargeReminder:
-        return Colors.orange.withAlpha(30);
-      case NotificationType.system:
-        return Colors.blue.withAlpha(30);
-    }
-  }
-
-  Color _iconColor() {
-    switch (notification.type) {
-      case NotificationType.modelUpdated:
-      case NotificationType.syncCompleted:
-        return Colors.green;
-      case NotificationType.modelDownloadFailed:
-      case NotificationType.syncFailed:
-      case NotificationType.batteryAlert:
-        return Colors.red;
-      case NotificationType.maintenanceDue:
-      case NotificationType.chargeReminder:
-        return Colors.orange;
-      case NotificationType.system:
-        return Colors.blue;
-    }
-  }
-
-  String _typeLabel() {
-    switch (notification.type) {
-      case NotificationType.modelUpdated:
-        return 'Model AI';
-      case NotificationType.modelDownloadFailed:
-        return 'Lỗi tải model';
-      case NotificationType.syncCompleted:
-        return 'Đồng bộ xong';
-      case NotificationType.syncFailed:
-        return 'Lỗi đồng bộ';
-      case NotificationType.maintenanceDue:
-        return 'Bảo dưỡng';
-      case NotificationType.batteryAlert:
-        return 'Cảnh báo pin';
-      case NotificationType.chargeReminder:
-        return 'Nhắc sạc';
-      case NotificationType.system:
-        return 'Hệ thống';
+        return null;
     }
   }
 
@@ -991,3 +823,47 @@ class _NotificationDetailSheet extends StatelessWidget {
     }
   }
 }
+
+/// Icon, accent and label per notification type (LUXE palette).
+(IconData, Color, String) _typeStyle(NotificationType type) => switch (type) {
+  NotificationType.modelUpdated => (
+    Icons.psychology_rounded,
+    LuxeColors.emerald,
+    'Model AI',
+  ),
+  NotificationType.modelDownloadFailed => (
+    Icons.error_outline_rounded,
+    LuxeColors.danger,
+    'Lỗi tải model',
+  ),
+  NotificationType.syncCompleted => (
+    Icons.check_circle_outline_rounded,
+    LuxeColors.emerald,
+    'Đồng bộ xong',
+  ),
+  NotificationType.syncFailed => (
+    Icons.cancel_outlined,
+    LuxeColors.danger,
+    'Lỗi đồng bộ',
+  ),
+  NotificationType.maintenanceDue => (
+    Icons.build_outlined,
+    LuxeColors.champagne,
+    'Bảo dưỡng',
+  ),
+  NotificationType.batteryAlert => (
+    Icons.battery_alert_rounded,
+    LuxeColors.danger,
+    'Cảnh báo pin',
+  ),
+  NotificationType.chargeReminder => (
+    Icons.electrical_services_rounded,
+    LuxeColors.champagne,
+    'Nhắc sạc',
+  ),
+  NotificationType.system => (
+    Icons.info_outline_rounded,
+    LuxeColors.steel,
+    'Hệ thống',
+  ),
+};

@@ -12,8 +12,10 @@ from server import app, _heuristic_predict_charging_time
 @pytest.fixture
 def client():
     app.config['TESTING'] = True
-    with app.test_client() as client:
-        yield client
+    # The route requires a signed-in user since Task 125.
+    with patch('server._verify_token', return_value=('qa-user', 'qa@test', 'user')):
+        with app.test_client() as client:
+            yield client
 
 
 def test_charging_prediction_strict_ai_success(client):

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:vinfast_battery/core/services/smart_charge_remote_events.dart';
 import 'package:vinfast_battery/data/models/smart_charger_status.dart';
 import 'package:vinfast_battery/data/models/smart_charger_capabilities.dart';
 import 'package:vinfast_battery/data/models/smart_charging_session.dart';
@@ -52,6 +53,33 @@ void main() {
     expect(controller.state.session?.sessionId, 'session-1');
     expect(service.statusCalls, 1);
     expect(service.currentCalls, 1);
+    controller.dispose();
+  });
+
+  test('a change made on another phone triggers an immediate read', () async {
+    final service = FakeSmartChargerService();
+    final controller = build(service);
+    await controller.initialize();
+    final before = service.statusCalls;
+    SmartChargeRemoteEvents.instance.addFromPush({
+      'event': 'smart_charge',
+      'sessionId': 'session-9',
+      'vehicleId': 'OTHER-VEHICLE',
+      'state': 'active',
+    });
+    await Future<void>.delayed(Duration.zero);
+    expect(service.statusCalls, before); // other vehicle: ignored
+    SmartChargeRemoteEvents.instance.addFromPush({'event': 'catalog_updated'});
+    await Future<void>.delayed(Duration.zero);
+    expect(service.statusCalls, before); // not a Smart Charge event
+    SmartChargeRemoteEvents.instance.addFromPush({
+      'event': 'smart_charge',
+      'sessionId': 'session-9',
+      'vehicleId': 'VF-001',
+      'state': 'active',
+    });
+    await Future<void>.delayed(Duration.zero);
+    expect(service.statusCalls, greaterThan(before));
     controller.dispose();
   });
 
@@ -191,6 +219,22 @@ void main() {
     controller.dispose();
   });
 
+  test(
+    'unexpected start error never leaves the UI stuck in starting',
+    () async {
+      // Task 125: a non-typed failure used to keep phase=starting, which also
+      // blocked Stop until a later refresh.
+      final service = FakeSmartChargerService()..startUnexpected = true;
+      final controller = build(service);
+      await controller.initialize();
+      await controller.createPreview();
+      expect(await controller.start(confirmed: true), isFalse);
+      expect(controller.state.phase, SmartChargingViewPhase.preview);
+      expect(controller.state.actionError, contains('Không thể bật sạc'));
+      controller.dispose();
+    },
+  );
+
   test('stop sends expected version and updates history', () async {
     final service = FakeSmartChargerService()..current = session();
     final controller = build(service);
@@ -220,6 +264,7 @@ class FakeSmartChargerService extends SmartChargerService {
   bool offline = false;
   bool unexpectedFailure = false;
   bool startError = false;
+  bool startUnexpected = false;
   SmartChargingSession? current;
   int statusCalls = 0;
   int currentCalls = 0;
@@ -290,6 +335,7 @@ class FakeSmartChargerService extends SmartChargerService {
     startCalls++;
     lastStartRequest = request;
     lastIdempotencyKey = idempotencyKey;
+    if (startUnexpected) throw const FormatException('unexpected body');
     if (startError) {
       throw const SmartChargerException(
         'version conflict',

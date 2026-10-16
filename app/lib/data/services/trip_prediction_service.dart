@@ -173,7 +173,9 @@ class TripPredictionService {
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) {
-        if (kDebugMode) debugPrint('Skip trip prediction save: not authenticated');
+        if (kDebugMode) {
+          debugPrint('Skip trip prediction save: not authenticated');
+        }
         return;
       }
       final payload = <String, dynamic>{
@@ -185,7 +187,9 @@ class TripPredictionService {
           .doc(prediction.id)
           .set(payload);
 
-      if (kDebugMode) debugPrint('Trip prediction saved to Firestore: ${prediction.id}');
+      if (kDebugMode) {
+        debugPrint('Trip prediction saved to Firestore: ${prediction.id}');
+      }
     } catch (e) {
       if (kDebugMode) debugPrint('Failed to save prediction to Firestore: $e');
     }
@@ -232,7 +236,9 @@ class TripPredictionService {
             'updatedAt': FieldValue.serverTimestamp(),
           });
 
-      if (kDebugMode) debugPrint('Trip status updated: $predictionId -> $status');
+      if (kDebugMode) {
+        debugPrint('Trip status updated: $predictionId -> $status');
+      }
     } catch (e) {
       if (kDebugMode) debugPrint('Failed to update trip status: $e');
     }
@@ -309,7 +315,11 @@ class TripPredictionService {
         await _syncPredictionToWeb(prediction);
       }
 
-      if (kDebugMode) debugPrint('Synced ${localPredictions.length} predictions to web dashboard');
+      if (kDebugMode) {
+        debugPrint(
+          'Synced ${localPredictions.length} predictions to web dashboard',
+        );
+      }
     } catch (e) {
       if (kDebugMode) debugPrint('Failed to sync with web dashboard: $e');
     }

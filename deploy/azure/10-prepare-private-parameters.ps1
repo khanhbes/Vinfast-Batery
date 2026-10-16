@@ -44,15 +44,12 @@ try {
 $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
 try {
     $tokenBytes = New-Object byte[] 32
-    $adminBytes = New-Object byte[] 32
     $rng.GetBytes($tokenBytes)
-    $rng.GetBytes($adminBytes)
     $token = [Convert]::ToBase64String($tokenBytes)
-    $adminToken = [Convert]::ToBase64String($adminBytes)
 } finally { $rng.Dispose() }
 $api = Get-Content -LiteralPath "$PSScriptRoot/api.parameters.example.json" -Raw -Encoding UTF8 | ConvertFrom-Json
 $ai = Get-Content -LiteralPath "$PSScriptRoot/ai.parameters.example.json" -Raw -Encoding UTF8 | ConvertFrom-Json
-$apiSecrets = @{ firebase = $values.FIREBASE_CREDENTIALS_JSON; 'ai-token' = $token; 'admin-key' = $adminToken; 'vault-key' = $values.SHELLY_PROFILE_MASTER_KEY }
+$apiSecrets = @{ firebase = $values.FIREBASE_CREDENTIALS_JSON; 'ai-token' = $token; 'vault-key' = $values.SHELLY_PROFILE_MASTER_KEY }
 foreach ($secret in $api.parameters.secrets.value.entries) { $secret.value = $apiSecrets[$secret.name] }
 $api.parameters.variables.value.ADMIN_EMAILS.value = $values.ADMIN_EMAILS
 $api.parameters.variables.value.AI_SERVER_URL.value = if ($AiUrl) { $AiUrl.TrimEnd('/') } else { 'https://<internal-ai-fqdn>' }
@@ -64,7 +61,8 @@ foreach ($secret in $ai.parameters.secrets.value.entries) {
 $ai.parameters.variables.value.GEMINI_CHAT_MODEL.value = $values.GEMINI_CHAT_MODEL
 $privateDir = Join-Path ([IO.Path]::GetTempPath()) "vinfast-azure-$([Guid]::NewGuid().ToString('N'))"
 New-Item -ItemType Directory -Path $privateDir -ErrorAction Stop | Out-Null
-# No whole-env copying. Only allowlisted secrets; new internal/admin tokens.
+# No whole-env copying. Only allowlisted secrets; a new internal AI token.
+# Production has no static admin key (Task 125): admins sign in with Firebase.
 Write-RestrictedJson -Path (Join-Path $privateDir 'api.private.json') -Data $api
 Write-RestrictedJson -Path (Join-Path $privateDir 'ai.private.json') -Data $ai
 Write-Host "Private parameters prepared with restricted ACL outside Git/OneDrive: $privateDir"

@@ -3,8 +3,12 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../../../data/services/range_estimator.dart';
+
 import '../../../core/theme/luxe_theme.dart';
 import '../../../data/models/vehicle_model.dart';
+import '../vehicle_showroom_screen.dart';
+import 'vehicle_showroom.dart';
 
 /// Dashboard hero: the scooter on a lit stage (the catalog photo when the
 /// admin has provided one, otherwise a platinum line-art scooter whose
@@ -37,7 +41,8 @@ class _LuxeVehicleHeroState extends State<LuxeVehicleHero>
       _float.stop();
       _enter.value = 1;
     } else if (!_started) {
-      _float.repeat();
+      // Entrance only: no endless decorative float (LUXE motion rule,
+      // Task 125); the scooter rests on its final frame.
       _enter.forward();
     }
     _started = true;
@@ -62,14 +67,13 @@ class _LuxeVehicleHeroState extends State<LuxeVehicleHero>
     final plate = v?.licensePlate?.trim().isNotEmpty == true
         ? v!.licensePlate!.trim()
         : 'Chưa có BSX';
-    final percent = v?.hasBatteryData == true
-        ? (v?.lastBatteryPercent ?? v?.currentBattery)
-        : v?.currentBattery;
-    final efficiency = v?.defaultEfficiency;
-    final range = percent != null && efficiency != null && efficiency > 0
-        ? (percent * efficiency).round()
-        : null;
-    final image = v?.imageUrl?.trim();
+    // Only data the owner actually entered or a charge measured: a vehicle
+    // without battery data used to show the model defaults "100% · ~120 km"
+    // (Task 125). One field, the same the Charge tab and BatteryBot write.
+    final percent = v?.hasBatteryData == true ? v?.currentBattery : null;
+    final estimate = v == null || percent == null ? null : estimateRangeKm(v);
+    final range = estimate?.round();
+    final showroom = v?.showroom;
 
     return Semantics(
       container: true,
@@ -137,51 +141,104 @@ class _LuxeVehicleHeroState extends State<LuxeVehicleHero>
                 ),
               ],
             ),
-            SizedBox(
-              height: 176,
-              child: AnimatedBuilder(
-                animation: Listenable.merge([_float, _enter]),
-                builder: (context, _) {
-                  final t = _float.value;
-                  final e = Curves.easeOutCubic.transform(_enter.value);
-                  final bob = 3 * math.sin(t * 2 * math.pi);
-                  return Stack(
-                    alignment: Alignment.bottomCenter,
-                    children: [
-                      Positioned.fill(
-                        child: CustomPaint(
-                          painter: _StagePainter(
-                            glow: 0.85 + 0.15 * math.sin(t * 2 * math.pi),
-                          ),
-                        ),
+            Semantics(
+              button: true,
+              label: 'Mở phòng trưng bày xe',
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => VehicleShowroomScreen.open(
+                  context,
+                  title: name,
+                  eyebrow: model,
+                  showroom: showroom,
+                  batteryLevel: (percent ?? 0) / 100,
+                  figures: [
+                    if (v != null && v.batteryCapacityWh > 0)
+                      (
+                        'Dung lượng pin',
+                        '${(v.batteryCapacityWh / 1000).toStringAsFixed(1)} kWh',
                       ),
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 18,
-                        top: 6,
-                        child: Opacity(
-                          opacity: e,
-                          child: Transform.translate(
-                            offset: Offset(24 * (1 - e), bob),
-                            child: image == null || image.isEmpty
-                                ? _ScooterArt(
-                                    level: (percent ?? 0) / 100,
-                                    spin: t,
-                                  )
-                                : _CatalogPhoto(
-                                    url: image,
-                                    fallback: _ScooterArt(
-                                      level: (percent ?? 0) / 100,
-                                      spin: t,
-                                    ),
-                                  ),
+                    if (range != null) ('Quãng đường ước tính', '~$range km'),
+                    if (percent != null) ('Pin hiện tại', '$percent%'),
+                  ],
+                ),
+                child: SizedBox(
+                  height: 176,
+                  child: AnimatedBuilder(
+                    animation: Listenable.merge([_float, _enter]),
+                    builder: (context, _) {
+                      final t = _float.value;
+                      final e = Curves.easeOutCubic.transform(_enter.value);
+                      final bob = 3 * math.sin(t * 2 * math.pi);
+                      return Stack(
+                        alignment: Alignment.bottomCenter,
+                        children: [
+                          Positioned.fill(
+                            child: CustomPaint(
+                              painter: _StagePainter(
+                                glow: 0.85 + 0.15 * math.sin(t * 2 * math.pi),
+                              ),
+                            ),
                           ),
-                        ),
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 18,
+                            top: 6,
+                            child: Opacity(
+                              opacity: e,
+                              child: Transform.translate(
+                                offset: Offset(24 * (1 - e), bob),
+                                child: showroom == null
+                                    ? LuxeScooterArt(
+                                        level: (percent ?? 0) / 100,
+                                        spin: t,
+                                      )
+                                    : VehicleShowroomView(
+                                        color: showroom.defaultColor,
+                                        interactive: false,
+                                        fallback: LuxeScooterArt(
+                                          level: (percent ?? 0) / 100,
+                                          spin: t,
+                                        ),
+                                      ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      showroom?.anyCanSpin == true
+                          ? Icons.threesixty_rounded
+                          : Icons.view_in_ar_rounded,
+                      size: 15,
+                      color: LuxeColors.platinumMid,
+                    ),
+                    const SizedBox(width: 5),
+                    Flexible(
+                      child: Text(
+                        showroom?.anyCanSpin == true
+                            ? 'Chạm để xem 360°'
+                            : 'Chạm để mở phòng trưng bày',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: LuxeText.label.copyWith(fontSize: 11.5),
                       ),
-                    ],
-                  );
-                },
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 6),
@@ -320,58 +377,10 @@ class _StagePainter extends CustomPainter {
 }
 
 /// Catalog photo with a soft floor reflection; falls back to the line art.
-class _CatalogPhoto extends StatelessWidget {
-  const _CatalogPhoto({required this.url, required this.fallback});
-  final String url;
-  final Widget fallback;
-
-  @override
-  Widget build(BuildContext context) {
-    Widget photo() => Image.network(
-      url,
-      fit: BoxFit.contain,
-      cacheWidth: 900,
-      frameBuilder: (context, child, frame, sync) => AnimatedOpacity(
-        opacity: sync || frame != null ? 1 : 0,
-        duration: const Duration(milliseconds: 450),
-        child: child,
-      ),
-      errorBuilder: (_, _, _) => fallback,
-    );
-    return Column(
-      children: [
-        Expanded(flex: 5, child: photo()),
-        // Mirrored reflection fading into the pedestal.
-        Expanded(
-          child: ShaderMask(
-            blendMode: BlendMode.dstIn,
-            shaderCallback: (b) => const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0x33FFFFFF), Color(0x00FFFFFF)],
-            ).createShader(b),
-            child: Transform(
-              alignment: Alignment.topCenter,
-              transform: Matrix4.diagonal3Values(1, -1, 1),
-              child: ClipRect(
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  heightFactor: 0.25,
-                  child: AspectRatio(aspectRatio: 1.8, child: photo()),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 /// Platinum line-art scooter (side view); the battery under the seat fills
 /// with emerald to the current level, wheels carry a spinning highlight.
-class _ScooterArt extends StatelessWidget {
-  const _ScooterArt({required this.level, required this.spin});
+class LuxeScooterArt extends StatelessWidget {
+  const LuxeScooterArt({super.key, required this.level, this.spin = 0});
   final double level;
   final double spin;
 
@@ -552,7 +561,7 @@ class _ChargeBar extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
                 gradient: LinearGradient(
                   colors: v < 0.2
-                      ? const [Color(0xFFB45309), Color(0xFFFBBF24)]
+                      ? const [Color(0xFFB45309), LuxeColors.champagne]
                       : const [LuxeColors.emeraldDeep, LuxeColors.emerald],
                 ),
                 boxShadow: const [

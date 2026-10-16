@@ -71,7 +71,7 @@ class DebugErrorSheet extends StatelessWidget {
         maxHeight: MediaQuery.of(context).size.height * 0.85,
       ),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E222B) : Colors.white,
+        color: isDark ? const Color(0xFF121315) : Colors.white,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         boxShadow: [
           BoxShadow(
@@ -106,7 +106,7 @@ class DebugErrorSheet extends StatelessWidget {
                 children: [
                   const Icon(
                     Icons.bug_report_rounded,
-                    color: Colors.orangeAccent,
+                    color: Color(0xFFE8C170),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -143,7 +143,7 @@ class DebugErrorSheet extends StatelessWidget {
                         ),
                         decoration: BoxDecoration(
                           color: isDark
-                              ? Colors.blueGrey.shade800
+                              ? const Color(0xFF1D1F22)
                               : Colors.blueGrey.shade100,
                           borderRadius: BorderRadius.circular(6),
                         ),
@@ -153,8 +153,8 @@ class DebugErrorSheet extends StatelessWidget {
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                             color: isDark
-                                ? Colors.lightBlueAccent
-                                : Colors.blueGrey.shade800,
+                                ? const Color(0xFF9DB8E8)
+                                : const Color(0xFF1D1F22),
                           ),
                         ),
                       ),
@@ -185,13 +185,21 @@ class DebugErrorSheet extends StatelessWidget {
                               ),
                               decoration: BoxDecoration(
                                 color: entry.statusCode! >= 500
-                                    ? Colors.red.withValues(alpha: 0.15)
-                                    : Colors.orange.withValues(alpha: 0.15),
+                                    ? const Color(
+                                        0xFFF59E9E,
+                                      ).withValues(alpha: 0.15)
+                                    : const Color(
+                                        0xFFE8C170,
+                                      ).withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(6),
                                 border: Border.all(
                                   color: entry.statusCode! >= 500
-                                      ? Colors.redAccent.withValues(alpha: 0.5)
-                                      : Colors.orangeAccent.withValues(alpha: 0.5),
+                                      ? const Color(
+                                          0xFFF59E9E,
+                                        ).withValues(alpha: 0.5)
+                                      : const Color(
+                                          0xFFE8C170,
+                                        ).withValues(alpha: 0.5),
                                 ),
                               ),
                               child: Text(
@@ -200,8 +208,8 @@ class DebugErrorSheet extends StatelessWidget {
                                   fontSize: 12,
                                   fontWeight: FontWeight.bold,
                                   color: entry.statusCode! >= 500
-                                      ? Colors.redAccent
-                                      : Colors.orangeAccent,
+                                      ? const Color(0xFFF59E9E)
+                                      : const Color(0xFFE8C170),
                                 ),
                               ),
                             ),
@@ -213,10 +221,14 @@ class DebugErrorSheet extends StatelessWidget {
                                 vertical: 4,
                               ),
                               decoration: BoxDecoration(
-                                color: Colors.purple.withValues(alpha: 0.15),
+                                color: const Color(
+                                  0xFF9DB8E8,
+                                ).withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(6),
                                 border: Border.all(
-                                  color: Colors.purpleAccent.withValues(alpha: 0.5),
+                                  color: const Color(
+                                    0xFF9DB8E8,
+                                  ).withValues(alpha: 0.5),
                                 ),
                               ),
                               child: Text(
@@ -224,7 +236,7 @@ class DebugErrorSheet extends StatelessWidget {
                                 style: const TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.purpleAccent,
+                                  color: Color(0xFF9DB8E8),
                                 ),
                               ),
                             ),
@@ -252,7 +264,7 @@ class DebugErrorSheet extends StatelessWidget {
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
                               color: isDark
-                                  ? const Color(0xFF14171E)
+                                  ? const Color(0xFF0E0F11)
                                   : const Color(0xFFF1F3F5),
                               borderRadius: BorderRadius.circular(6),
                             ),
@@ -281,17 +293,17 @@ class DebugErrorSheet extends StatelessWidget {
                     width: double.infinity,
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.red.withValues(alpha: 0.08),
+                      color: const Color(0xFFF59E9E).withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: Colors.redAccent.withValues(alpha: 0.3),
+                        color: const Color(0xFFF59E9E).withValues(alpha: 0.3),
                       ),
                     ),
                     child: Text(
                       entry.message,
                       style: TextStyle(
                         color: isDark
-                            ? Colors.red.shade200
+                            ? const Color(0xFFF59E9E)
                             : Colors.red.shade900,
                         fontWeight: FontWeight.w500,
                       ),
@@ -315,7 +327,7 @@ class DebugErrorSheet extends StatelessWidget {
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
                         color: isDark
-                            ? const Color(0xFF14171E)
+                            ? const Color(0xFF0E0F11)
                             : const Color(0xFFF1F3F5),
                         borderRadius: BorderRadius.circular(6),
                       ),
@@ -346,7 +358,7 @@ class DebugErrorSheet extends StatelessWidget {
                       constraints: const BoxConstraints(maxHeight: 180),
                       decoration: BoxDecoration(
                         color: isDark
-                            ? const Color(0xFF101217)
+                            ? const Color(0xFF0B0C0E)
                             : const Color(0xFFE9ECEF),
                         borderRadius: BorderRadius.circular(8),
                       ),

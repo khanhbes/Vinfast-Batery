@@ -57,7 +57,7 @@ class TripSummaryCard extends StatelessWidget {
                     children: [
                       const Icon(
                         Icons.two_wheeler_rounded,
-                        color: Color(0xFF0072BC),
+                        color: Color(0xFF9DB8E8),
                         size: 24,
                       ),
                       const SizedBox(width: 8),
@@ -96,14 +96,14 @@ class TripSummaryCard extends StatelessWidget {
                     '${efficiency.toStringAsFixed(1)} Wh/km',
                     uiColors,
                     valueColor: isEfficient
-                        ? Colors.green
-                        : Colors.amber.shade800,
+                        ? Color(0xFF34D399)
+                        : Color(0xFFE8C170),
                   ),
                   _buildDetailRow(
                     'CO₂ đã cắt giảm:',
                     '${co2Saved.toStringAsFixed(2)} kg CO₂',
                     uiColors,
-                    valueColor: Colors.green,
+                    valueColor: Color(0xFF34D399),
                   ),
                   _buildDetailRow(
                     'Đánh giá phong cách lái:',
@@ -199,7 +199,7 @@ class TripSummaryCard extends StatelessWidget {
         padding: const EdgeInsets.all(14),
         decoration: ChatbotGlassTheme.cardDecoration(
           context,
-          accentColor: const Color(0xFF0072BC),
+          accentColor: const Color(0xFF9DB8E8),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -211,12 +211,12 @@ class TripSummaryCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF0072BC).withValues(alpha: 0.15),
+                    color: const Color(0xFF9DB8E8).withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(
                     Icons.two_wheeler_rounded,
-                    color: Color(0xFF0072BC),
+                    color: Color(0xFF9DB8E8),
                     size: 20,
                   ),
                 ),
@@ -249,7 +249,7 @@ class TripSummaryCard extends StatelessWidget {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: (isEfficient ? Colors.green : Colors.orange)
+                    color: (isEfficient ? Color(0xFF34D399) : Color(0xFFF0A46B))
                         .withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(20),
                   ),
@@ -259,8 +259,8 @@ class TripSummaryCard extends StatelessWidget {
                       fontSize: 10.5,
                       fontWeight: FontWeight.w600,
                       color: isEfficient
-                          ? Colors.green.shade800
-                          : Colors.orange.shade800,
+                          ? Color(0xFF34D399)
+                          : Color(0xFFF0A46B),
                     ),
                   ),
                 ),
@@ -277,7 +277,7 @@ class TripSummaryCard extends StatelessWidget {
                     label: 'Quãng đường',
                     value: '${distanceKm.toStringAsFixed(1)} km',
                     icon: Icons.alt_route_rounded,
-                    color: const Color(0xFF0072BC),
+                    color: const Color(0xFF9DB8E8),
                   ),
                 ),
                 const SizedBox(width: 6),
@@ -289,7 +289,7 @@ class TripSummaryCard extends StatelessWidget {
                         ? '${(energyWh / 1000).toStringAsFixed(2)} kWh'
                         : '${energyWh.toStringAsFixed(0)} Wh',
                     icon: Icons.offline_bolt_rounded,
-                    color: Colors.amber.shade800,
+                    color: Color(0xFFE8C170),
                   ),
                 ),
               ],
@@ -303,7 +303,7 @@ class TripSummaryCard extends StatelessWidget {
                     label: 'Hiệu suất',
                     value: '${efficiency.toStringAsFixed(1)} Wh/km',
                     icon: Icons.eco_rounded,
-                    color: Colors.teal,
+                    color: Color(0xFF34D399),
                   ),
                 ),
                 const SizedBox(width: 6),
@@ -313,7 +313,7 @@ class TripSummaryCard extends StatelessWidget {
                     label: 'Giảm CO₂',
                     value: '${co2Saved.toStringAsFixed(1)} kg',
                     icon: Icons.forest_rounded,
-                    color: Colors.green.shade700,
+                    color: Color(0xFF34D399),
                   ),
                 ),
               ],
@@ -324,7 +324,7 @@ class TripSummaryCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.green.withValues(alpha: 0.10),
+                color: Color(0xFF34D399).withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
@@ -333,7 +333,7 @@ class TripSummaryCard extends StatelessWidget {
                   Icon(
                     Icons.energy_savings_leaf_rounded,
                     size: 14,
-                    color: Colors.green.shade800,
+                    color: Color(0xFF34D399),
                   ),
                   const SizedBox(width: 6),
                   Expanded(
@@ -343,7 +343,7 @@ class TripSummaryCard extends StatelessWidget {
                           : 'Giữ tốc độ ổn định 35-40 km/h sẽ giúp tăng 15% tầm hoạt động.',
                       style: TextStyle(
                         fontSize: 10.5,
-                        color: Colors.green.shade900,
+                        color: Color(0xFF34D399),
                       ),
                       softWrap: true,
                     ),

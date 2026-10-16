@@ -138,6 +138,23 @@ void main() {
     },
   );
 
+  testWidgets('only one "preparing" indicator while the reply is pending', (
+    tester,
+  ) async {
+    final api = _FakeChat();
+    await open(tester, api);
+    await tester.enterText(
+      find.byKey(const Key('assistant_input_field')),
+      'Xin chào',
+    );
+    await tester.tap(find.byKey(const Key('assistant_send_button')));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.text('Đang chuẩn bị câu trả lời…'), findsOneWidget);
+    await api.replies.first.close();
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('credential is neither shown nor sent to service', (
     tester,
   ) async {

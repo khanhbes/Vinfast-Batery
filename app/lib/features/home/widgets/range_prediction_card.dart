@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../../core/services/api_service.dart';
 import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/luxe_theme.dart';
 import '../../../data/models/vehicle_model.dart';
+import '../../../data/services/range_estimator.dart';
 
 class RangePredictionCard extends StatefulWidget {
   const RangePredictionCard({
@@ -49,15 +49,13 @@ class _RangePredictionCardState extends State<RangePredictionCard> {
       loading = true;
       range = low = high = confidence = null;
     });
+    // Default: the shared on-device formula. Overview no longer calls the
+    // legacy AI server on every render (AGENTS 3.7, Task 125); a server
+    // predictor can still be injected.
+    final predictor = widget.predictRange;
     Map<String, dynamic> response;
     try {
-      response =
-          await (widget.predictRange?.call(vehicle) ??
-              ApiService().predictRemainingRange(
-                batteryPercent: vehicle.currentBattery,
-                stateOfHealth: vehicle.stateOfHealth,
-                baseEfficiencyKmPerPercent: vehicle.defaultEfficiency,
-              ));
+      response = predictor == null ? const {} : await predictor(vehicle);
     } catch (_) {
       response = {};
     }
@@ -84,20 +82,9 @@ class _RangePredictionCardState extends State<RangePredictionCard> {
         }
         final score = _number(data['confidence']);
         confidence = score != null && score >= 0 && score <= 1 ? score : null;
-      } else if (vehicle.hasBatteryData &&
-          vehicle.hasSohData &&
-          vehicle.hasEfficiencyData &&
-          vehicle.defaultEfficiency.isFinite &&
-          vehicle.defaultEfficiency > 0 &&
-          vehicle.stateOfHealth.isFinite &&
-          vehicle.stateOfHealth >= 0 &&
-          vehicle.stateOfHealth <= 100) {
-        range =
-            (vehicle.currentBattery - 5).clamp(0, 100) *
-            vehicle.defaultEfficiency *
-            vehicle.stateOfHealth /
-            100;
-        // No invented confidence or statistical interval for a local formula.
+      } else {
+        // Shared local formula; no invented confidence or interval.
+        range = estimateRangeKm(vehicle);
       }
     });
   }
@@ -160,7 +147,7 @@ class _RangePredictionCardState extends State<RangePredictionCard> {
                     : 'Quãng đường thực tế phụ thuộc tải trọng, tốc độ và điều kiện vận hành.',
                 style: text.bodySmall,
               ),
-              if (offline) ...[
+              if (offline && widget.predictRange != null) ...[
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
                   onPressed: predict,

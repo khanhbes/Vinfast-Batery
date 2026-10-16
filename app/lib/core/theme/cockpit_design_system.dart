@@ -1,32 +1,33 @@
 import 'package:flutter/material.dart';
 import 'app_ui_colors.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'luxe_theme.dart';
 
 /// Shared EV cockpit tokens used across the application.
 ///
 /// Emerald is intentionally reserved for verified state and primary actions.
 /// Estimated values use amber and destructive actions use red.
 abstract final class CockpitColors {
-  /// Deep Obsidian - nền xe sang tối ưu độ sâu quang học (thay vì #000000 phẳng)
-  static const background = Color(0xFF0A0C10);
-  static const shell = Color(0xFF0F131C);
-  static const surface = Color(0xFF131823);
-  static const elevated = Color(0xFF181F2C);
-  static const surfaceSoft = Color(0xFF1E2738);
+  // Task 117: legacy Cockpit names now resolve to the LUXE palette so every
+  // older screen shares the platinum + emerald language.
+  static const background = LuxeColors.background;
+  static const shell = Color(0xFF0B0C0E);
+  static const surface = LuxeColors.sheet;
+  static const elevated = LuxeColors.raised;
+  static const surfaceSoft = LuxeColors.raisedHigh;
 
-  static const emerald = Color(0xFF34D399);
-  static const emeraldStrong = Color(0xFF10B981);
-  static const emeraldGlow = Color(0x3310B981);
-  static const emeraldSubtle = Color(0x1A10B981);
-  static const amber = Color(0xFFFBBF24);
-  static const danger = Color(0xFFF87171);
-  static const info = Color(0xFF60A5FA);
+  static const emerald = LuxeColors.emerald;
+  static const emeraldStrong = LuxeColors.emeraldDeep;
+  static const emeraldGlow = Color(0x3334D399);
+  static const emeraldSubtle = Color(0x1A34D399);
+  static const amber = LuxeColors.champagne;
+  static const danger = LuxeColors.danger;
+  static const info = LuxeColors.steel;
 
-  static const text = Color(0xFFF8FAFC);
-  static const muted = Color(0xFF94A3B8);
-  static const dim = Color(0xFF64748B);
-  static const border = Color(0xFF1E2636);
-  static const borderStrong = Color(0xFF2B364B);
+  static const text = LuxeColors.text;
+  static const muted = LuxeColors.muted;
+  static const dim = LuxeColors.dim;
+  static const border = LuxeColors.rule;
+  static const borderStrong = LuxeColors.ruleStrong;
 }
 
 /// Theme-adaptive color scheme accessor via `context.cockpit`.
@@ -133,7 +134,10 @@ abstract final class CockpitButtonTokens {
   static const double height = 48.0;
   static const double iconSize = 22.0;
   static const double radius = 14.0;
-  static const EdgeInsets padding = EdgeInsets.symmetric(horizontal: 16, vertical: 12);
+  static const EdgeInsets padding = EdgeInsets.symmetric(
+    horizontal: 16,
+    vertical: 12,
+  );
 }
 
 abstract final class CockpitMotion {
@@ -168,40 +172,19 @@ abstract final class CockpitElevation {
   static List<BoxShadow> none = const [];
 
   static List<BoxShadow> low = const [
-    BoxShadow(
-      color: Color(0x0D000000),
-      blurRadius: 4,
-      offset: Offset(0, 1),
-    ),
+    BoxShadow(color: Color(0x0D000000), blurRadius: 4, offset: Offset(0, 1)),
   ];
 
   static List<BoxShadow> medium = const [
-    BoxShadow(
-      color: Color(0x14000000),
-      blurRadius: 12,
-      offset: Offset(0, 4),
-    ),
-    BoxShadow(
-      color: Color(0x0A000000),
-      blurRadius: 4,
-      offset: Offset(0, 1),
-    ),
+    BoxShadow(color: Color(0x14000000), blurRadius: 12, offset: Offset(0, 4)),
+    BoxShadow(color: Color(0x0A000000), blurRadius: 4, offset: Offset(0, 1)),
   ];
 
   static List<BoxShadow> high = const [
-    BoxShadow(
-      color: Color(0x1F000000),
-      blurRadius: 24,
-      offset: Offset(0, 8),
-    ),
-    BoxShadow(
-      color: Color(0x0F000000),
-      blurRadius: 8,
-      offset: Offset(0, 2),
-    ),
+    BoxShadow(color: Color(0x1F000000), blurRadius: 24, offset: Offset(0, 8)),
+    BoxShadow(color: Color(0x0F000000), blurRadius: 8, offset: Offset(0, 2)),
   ];
 }
-
 
 abstract final class CockpitTypography {
   static TextStyle numbers({
@@ -209,11 +192,11 @@ abstract final class CockpitTypography {
     FontWeight fontWeight = FontWeight.w700,
     Color color = CockpitColors.text,
     double? letterSpacing,
-  }) => GoogleFonts.jetBrainsMono(
+  }) => TextStyle(
     fontSize: fontSize,
     fontWeight: fontWeight,
     color: color,
-    letterSpacing: letterSpacing,
+    letterSpacing: letterSpacing ?? -0.2,
     fontFeatures: const [FontFeature.tabularFigures()],
   );
 
@@ -222,7 +205,7 @@ abstract final class CockpitTypography {
     FontWeight fontWeight = FontWeight.w700,
     Color color = CockpitColors.text,
     double? letterSpacing,
-  }) => GoogleFonts.inter(
+  }) => TextStyle(
     fontSize: fontSize,
     fontWeight: fontWeight,
     color: color,
@@ -235,7 +218,7 @@ abstract final class CockpitTypography {
     Color color = CockpitColors.text,
     double? height,
     double? letterSpacing,
-  }) => GoogleFonts.inter(
+  }) => TextStyle(
     fontSize: fontSize,
     fontWeight: fontWeight,
     color: color,
@@ -248,7 +231,7 @@ abstract final class CockpitTypography {
     FontWeight fontWeight = FontWeight.w600,
     Color color = CockpitColors.muted,
     double? letterSpacing,
-  }) => GoogleFonts.inter(
+  }) => TextStyle(
     fontSize: fontSize,
     fontWeight: fontWeight,
     color: color,
@@ -257,7 +240,8 @@ abstract final class CockpitTypography {
 }
 
 /// Restrained surface used only when the region is itself interactive or a
-/// meaningful status group.
+/// meaningful status group. Task 117+: rendered as LUXE glass with a hairline
+/// rim; [highlight] lights the rim emerald with a soft halo.
 class CockpitSurface extends StatelessWidget {
   const CockpitSurface({
     super.key,
@@ -274,22 +258,30 @@ class CockpitSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.cockpit;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: color ?? colors.surface,
-        borderRadius: BorderRadius.circular(CockpitRadius.large),
+        color: color,
+        gradient: color != null
+            ? null
+            : LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: highlight
+                    ? const [Color(0x1A34D399), Color(0x0834D399)]
+                    : const [Color(0x12FFFFFF), Color(0x06FFFFFF)],
+              ),
+        borderRadius: BorderRadius.circular(22),
         border: Border.all(
           color: highlight
-              ? colors.emerald.withValues(alpha: .34)
-              : colors.borderStrong,
+              ? LuxeColors.emerald.withValues(alpha: .55)
+              : LuxeColors.hairline,
         ),
         boxShadow: highlight && CockpitMotion.enabled(context)
             ? [
                 BoxShadow(
-                  color: colors.emerald.withValues(alpha: .09),
-                  blurRadius: 28,
-                  spreadRadius: 1,
+                  color: LuxeColors.emerald.withValues(alpha: .10),
+                  blurRadius: 24,
+                  spreadRadius: -4,
                 ),
               ]
             : const [],
@@ -305,13 +297,14 @@ class CockpitSectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.only(left: 4, bottom: 10),
+    padding: const EdgeInsets.only(left: 6, bottom: 10, top: 6),
     child: Text(
       label.toUpperCase(),
-      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-        color: AppUiColors.of(context).muted,
-        fontWeight: FontWeight.w800,
-        letterSpacing: 1.1,
+      style: const TextStyle(
+        color: LuxeColors.platinumMid,
+        fontSize: 11.5,
+        fontWeight: FontWeight.w500,
+        letterSpacing: 1.8,
       ),
     ),
   );
@@ -359,15 +352,23 @@ class CockpitSettingsRow extends StatelessWidget {
             child: Row(
               children: [
                 Container(
-                  width: 38,
-                  height: 38,
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
-                    color: accent.withValues(alpha: enabled ? .12 : .06),
-                    borderRadius: BorderRadius.circular(12),
+                    shape: BoxShape.circle,
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xFF26282C), Color(0xFF0F1012)],
+                    ),
+                    border: Border.all(
+                      color: (enabled ? accent : LuxeColors.platinumLow)
+                          .withValues(alpha: .4),
+                    ),
                   ),
                   child: Icon(
                     icon,
-                    size: 19,
+                    size: 18,
                     color: enabled ? accent : AppUiColors.of(context).muted,
                   ),
                 ),
@@ -423,9 +424,9 @@ class CockpitSettingsRow extends StatelessWidget {
                   )
                 else
                   trailing ??
-                      Icon(
+                      const Icon(
                         Icons.chevron_right_rounded,
-                        color: AppUiColors.of(context).muted,
+                        color: LuxeColors.dim,
                       ),
               ],
             ),

@@ -10,15 +10,27 @@ import '../models/chat_session.dart';
 import '../models/function_call_action.dart';
 import '../../../core/providers/vehicle_context_provider.dart';
 import '../../../data/services/account_reminder_service.dart';
+import 'app_assistant_host.dart';
 import 'app_chat_tool_gateway.dart';
+import 'assistant_api.dart';
+import 'hybrid_assistant_engine.dart';
 import 'local_chat_engine.dart';
 
 final chatApiServiceProvider = Provider<ChatApiService>((ref) {
-  final engine = BatteryBotLocalEngine(
+  final local = BatteryBotLocalEngine(
     tools: AppChatToolGateway(
       selectedVehicle: () => ref.read(vehicleContextProvider).vehicle,
       reminders: AccountReminderService.instance,
     ),
+  );
+  // BatteryBot v2 (Task 124): Gemini via the API; the on-device engine keeps
+  // charging/reminder proposals and is the basic mode when offline.
+  final engine = HybridAssistantEngine(
+    api: AssistantApi(),
+    local: local,
+    host: AppAssistantActionHost(ref),
+    uidResolver: () =>
+        Firebase.apps.isEmpty ? null : FirebaseAuth.instance.currentUser?.uid,
   );
   ref.listen(vehicleContextProvider, (previous, next) {
     if (previous?.vehicleId != next.vehicleId) engine.cancel();

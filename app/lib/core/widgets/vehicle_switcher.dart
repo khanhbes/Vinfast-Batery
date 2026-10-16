@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/app_providers.dart';
 import '../services/session_service.dart';
-import '../theme/app_ui_colors.dart';
+import '../theme/luxe_theme.dart';
 import 'vehicle_picker_sheet.dart';
 
 /// Compact, global vehicle selector used by the V4 shell.
@@ -53,8 +53,10 @@ class VehicleSwitcher extends ConsumerWidget {
         final displayName = current.nickname?.isNotEmpty == true
             ? current.nickname!
             : (current.vinfastModelName?.isNotEmpty == true
-                ? current.vinfastModelName!
-                : (current.vehicleName.isNotEmpty ? current.vehicleName : 'Chọn xe'));
+                  ? current.vinfastModelName!
+                  : (current.vehicleName.isNotEmpty
+                        ? current.vehicleName
+                        : 'Chọn xe'));
 
         return Semantics(
           button: true,
@@ -72,18 +74,26 @@ class VehicleSwitcher extends ConsumerWidget {
                 onPressed: () => VehiclePickerSheet.show(context, ref),
                 style: TextButton.styleFrom(
                   minimumSize: const Size(48, 48),
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  backgroundColor: AppUiColors.of(context).elevated,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  foregroundColor: LuxeColors.text,
+                  backgroundColor: LuxeColors.glass,
+                  shape: const StadiumBorder(
+                    side: BorderSide(color: LuxeColors.hairline),
+                  ),
+                  textStyle: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-                icon: const Icon(Icons.directions_bike_rounded, size: 16),
+                icon: const Icon(
+                  Icons.electric_moped_rounded,
+                  size: 16,
+                  color: LuxeColors.emerald,
+                ),
                 label: FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
-                  child: Text(
-                    displayName,
-                    maxLines: 1,
-                    softWrap: false,
-                  ),
+                  child: Text(displayName, maxLines: 1, softWrap: false),
                 ),
               ),
             ),

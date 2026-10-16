@@ -2,7 +2,8 @@
 // Re-run `flutterfire configure` on a workstation with Firebase CLI credentials when
 // adding a new iOS app; the values below are safe client identifiers, not secrets.
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform;
 
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {

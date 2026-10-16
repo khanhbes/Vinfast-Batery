@@ -70,7 +70,10 @@ class FakeShellyGateway {
     });
   }
 
-  Future<http.Response> handleRpcRequest(String method, Map<String, dynamic> params) async {
+  Future<http.Response> handleRpcRequest(
+    String method,
+    Map<String, dynamic> params,
+  ) async {
     callHistory.add({
       'method': method,
       'params': params,
@@ -84,14 +87,21 @@ class FakeShellyGateway {
 
     if (isOffline) {
       return http.Response(
-        jsonEncode({'error': {'code': -1, 'message': 'Device offline / unreachable'}}),
+        jsonEncode({
+          'error': {'code': -1, 'message': 'Device offline / unreachable'},
+        }),
         503,
       );
     }
 
     if (forcedHttpError != null) {
       return http.Response(
-        jsonEncode({'error': {'code': forcedHttpError, 'message': 'Simulated Server Error'}}),
+        jsonEncode({
+          'error': {
+            'code': forcedHttpError,
+            'message': 'Simulated Server Error',
+          },
+        }),
         forcedHttpError!,
       );
     }
@@ -110,18 +120,12 @@ class FakeShellyGateway {
           );
         }
         state = ShellyRelayState.on;
-        return http.Response(
-          jsonEncode({'was_on': false, 'is_on': true}),
-          200,
-        );
+        return http.Response(jsonEncode({'was_on': false, 'is_on': true}), 200);
       } else {
         commandOffCount++;
         state = ShellyRelayState.commandOffPending;
         state = ShellyRelayState.off;
-        return http.Response(
-          jsonEncode({'was_on': true, 'is_on': false}),
-          200,
-        );
+        return http.Response(jsonEncode({'was_on': true, 'is_on': false}), 200);
       }
     }
 
@@ -150,7 +154,9 @@ class FakeShellyGateway {
     }
 
     return http.Response(
-      jsonEncode({'error': {'code': 404, 'message': 'Unknown RPC method: $method'}}),
+      jsonEncode({
+        'error': {'code': 404, 'message': 'Unknown RPC method: $method'},
+      }),
       404,
     );
   }

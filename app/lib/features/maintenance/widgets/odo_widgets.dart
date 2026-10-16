@@ -9,7 +9,7 @@ import '../../../data/models/maintenance_task_model.dart';
 /// Colour per urgency, shared by the track, chips and cards.
 Color urgencyColor(MaintenanceUrgency u) => switch (u) {
   MaintenanceUrgency.overdue => const Color(0xFFF59E9E),
-  MaintenanceUrgency.dueSoon => const Color(0xFFFBBF24),
+  MaintenanceUrgency.dueSoon => LuxeColors.champagne,
   MaintenanceUrgency.upcoming => LuxeColors.emerald,
   MaintenanceUrgency.completed => LuxeColors.platinumMid,
 };

@@ -166,10 +166,10 @@ void main() {
         );
 
         // Pin yếu -> gợi ý sạc ngay
-        expect(find.text('⚡ Bật sạc thông minh ngay'), findsOneWidget);
-        await tester.tap(find.text('⚡ Bật sạc thông minh ngay'));
+        expect(find.text('Bật sạc hẹn giờ'), findsOneWidget);
+        await tester.tap(find.text('Bật sạc hẹn giờ'));
         await tester.pump();
-        expect(selected, equals('⚡ Bật sạc thông minh ngay'));
+        expect(selected, equals('Bật sạc hẹn giờ'));
       },
     );
 

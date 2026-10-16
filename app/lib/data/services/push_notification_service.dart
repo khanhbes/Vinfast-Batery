@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
@@ -16,6 +17,7 @@ import '../../core/services/firebase_bootstrap_coordinator.dart';
 import '../repositories/vehicle_spec_repository.dart';
 import '../repositories/notification_repository.dart';
 import 'notification_service.dart';
+import '../../core/services/smart_charge_remote_events.dart';
 
 /// FCM/APNs token lifecycle. Push token documents are server-only; the app
 /// communicates through authenticated REST endpoints and never touches them in
@@ -33,6 +35,7 @@ class PushNotificationService {
   );
   StreamSubscription<String>? _tokenRefresh;
   StreamSubscription<RemoteMessage>? _foregroundMessages;
+  StreamSubscription<RemoteMessage>? _openedMessages;
   StreamSubscription<User?>? _authSubscription;
   String? _registeredUid;
   String? _lastRegisteredFingerprint;
@@ -44,6 +47,15 @@ class PushNotificationService {
   final List<Map<String, dynamic>> _pendingDeepLinks = [];
 
   static const _deviceIdKey = 'push.device_id';
+
+  void _dispatchDeepLink(Map<String, dynamic> data) {
+    final handler = _deepLinkHandler;
+    if (handler != null) {
+      handler(data);
+    } else {
+      _pendingDeepLinks.add(data);
+    }
+  }
 
   void setDeepLinkHandler(void Function(Map<String, dynamic>) handler) {
     _deepLinkHandler = handler;
@@ -75,23 +87,14 @@ class PushNotificationService {
     if (!FirebaseBootstrapCoordinator.isReady) {
       await FirebaseBootstrapCoordinator.ensureInitialized();
     }
-    final handler = _deepLinkHandler;
     _foregroundMessages ??= FirebaseMessaging.onMessage.listen(_handleMessage);
-    FirebaseMessaging.onMessageOpenedApp.listen((message) {
-      if (handler != null) {
-        handler(message.data);
-      } else {
-        _pendingDeepLinks.add(message.data);
-      }
-    });
+    // One listener, and the handler is read when the tap happens: a handler
+    // registered after init (or a retried init) still receives it (Task 125).
+    _openedMessages ??= FirebaseMessaging.onMessageOpenedApp.listen(
+      (message) => _dispatchDeepLink(message.data),
+    );
     final initial = await _messaging.getInitialMessage();
-    if (initial != null) {
-      if (handler != null) {
-        handler(initial.data);
-      } else {
-        _pendingDeepLinks.add(initial.data);
-      }
-    }
+    if (initial != null) _dispatchDeepLink(initial.data);
     _tokenRefresh ??= _messaging.onTokenRefresh.listen(
       (_) => syncCurrentUser(),
     );
@@ -124,6 +127,42 @@ class PushNotificationService {
     return granted;
   }
 
+  static const enabledPreferenceKey = 'pushNotifications';
+
+  /// Last choice applied through [setEnabledByUser], so an open Settings
+  /// screen follows a change made by BatteryBot.
+  final ValueNotifier<bool?> userChoice = ValueNotifier(null);
+
+  /// The user's push choice, true only while the OS still allows it.
+  Future<bool> isEnabledByUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!(prefs.getBool(enabledPreferenceKey) ?? false)) return false;
+    return (await Permission.notification.status).isGranted;
+  }
+
+  /// Applies the user's push choice (Settings switch, BatteryBot). Returns
+  /// the resulting state: false when the OS permission was refused.
+  Future<bool> setEnabledByUser(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (enabled) {
+      final granted = await requestPermissionFromUser();
+      await prefs.setBool(enabledPreferenceKey, granted);
+      userChoice.value = granted;
+      if (!granted) return false;
+      await initialize();
+      await syncCurrentUser();
+      return true;
+    }
+    await prefs.setBool(enabledPreferenceKey, false);
+    userChoice.value = false;
+    try {
+      await revokeCurrentUser();
+    } on Object {
+      // Revocation is best effort; the server drops stale tokens on send.
+    }
+    return false;
+  }
+
   void _handleMessage(RemoteMessage message) {
     final event = message.data['event']?.toString();
     if (event == 'catalog_updated' ||
@@ -134,10 +173,11 @@ class PushNotificationService {
         message.data['notificationUpdated'] == 'true') {
       NotificationRepository().invalidateUnread();
     }
-    final handler = _deepLinkHandler;
-    if (handler != null && message.data.isNotEmpty) {
-      handler(message.data);
-    }
+    // Another phone / the server changed Smart Charge: refresh, never jump.
+    SmartChargeRemoteEvents.instance.addFromPush(message.data);
+    // A message received while the app is open is not a tap: deep links run
+    // only from onMessageOpenedApp/getInitialMessage. Navigating here moved
+    // the user to History mid-command on every session push (Task 123).
   }
 
   Future<String> _deviceId() async {
@@ -271,6 +311,7 @@ class PushNotificationService {
   void dispose() {
     _tokenRefresh?.cancel();
     _foregroundMessages?.cancel();
+    _openedMessages?.cancel();
     _authSubscription?.cancel();
   }
 }

@@ -54,7 +54,9 @@ void main() {
       expect(openDevice.model, 'PlugSGen3');
       expect(openDevice.authEnabled, false);
 
-      final protectedDevice = devices.firstWhere((d) => d.address == '192.168.1.75');
+      final protectedDevice = devices.firstWhere(
+        (d) => d.address == '192.168.1.75',
+      );
       expect(protectedDevice.authEnabled, true);
     });
   });

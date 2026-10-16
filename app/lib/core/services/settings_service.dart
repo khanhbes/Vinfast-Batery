@@ -49,18 +49,9 @@ class SettingsService extends ChangeNotifier {
 
   AppThemeMode getThemeMode() => _themeMode;
 
-  ThemeMode getThemeModeValue() {
-    switch (_themeMode) {
-      case AppThemeMode.light:
-        return ThemeMode.light;
-      case AppThemeMode.dark:
-        return ThemeMode.dark;
-      case AppThemeMode.amoled:
-        return ThemeMode.dark;
-      case AppThemeMode.system:
-        return ThemeMode.system;
-    }
-  }
+  /// The app renders the LUXE dark language only (Task 117). The stored
+  /// preference is kept for compatibility but never switches to light.
+  ThemeMode getThemeModeValue() => ThemeMode.dark;
 
   Future<void> setThemeMode(AppThemeMode mode) async {
     if (_themeMode == mode) return;
@@ -81,11 +72,8 @@ class SettingsService extends ChangeNotifier {
   }
 
   Future<void> _syncNativeSplashTheme(AppThemeMode mode) async {
-    final theme = switch (mode) {
-      AppThemeMode.light => 'light',
-      AppThemeMode.dark || AppThemeMode.amoled => 'dark',
-      AppThemeMode.system => 'system',
-    };
+    // The native splash always matches the dark LUXE launch frame.
+    const theme = 'dark';
     try {
       await _splashChannel.invokeMethod<void>('setSplashTheme', theme);
     } on MissingPluginException {
@@ -101,16 +89,9 @@ class SettingsService extends ChangeNotifier {
 
   AppLanguage getLanguage() => _language;
 
-  Locale? getLocale() {
-    switch (_language) {
-      case AppLanguage.vietnamese:
-        return const Locale('vi');
-      case AppLanguage.english:
-        return const Locale('en');
-      case AppLanguage.system:
-        return null;
-    }
-  }
+  /// App content exists in Vietnamese only (Task 125): English is hidden
+  /// until the screens are translated, so the locale is always `vi`.
+  Locale? getLocale() => const Locale('vi');
 
   Future<void> setLanguage(AppLanguage language) async {
     if (_language == language) return;
@@ -145,18 +126,6 @@ class SettingsService extends ChangeNotifier {
     }
   }
 
-  static AppLanguage _decodeLanguage(String? raw) {
-    switch (raw) {
-      case 'vi':
-      case 'vietnamese':
-        return AppLanguage.vietnamese;
-      case 'en':
-      case 'english':
-        return AppLanguage.english;
-      case 'system':
-        return AppLanguage.system;
-      default:
-        return AppLanguage.vietnamese;
-    }
-  }
+  /// A stored `en`/`system` from older builds resolves to Vietnamese.
+  static AppLanguage _decodeLanguage(String? raw) => AppLanguage.vietnamese;
 }

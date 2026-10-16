@@ -378,12 +378,19 @@ CORS(app, origins=_cors_origins or ['http://localhost:3000', 'http://127.0.0.1:3
 app.secret_key = os.urandom(24)
 
 
+_INCOMING_REQUEST_ID = re.compile(r'^[A-Za-z0-9_-]{8,64}$')
+
+
 def _request_id() -> str:
-    """Return the stable short request id for the current HTTP request."""
+    """Return the stable request id for the current HTTP request.
+
+    A well-formed incoming ``X-Request-Id`` (app, dashboard) is kept so one id
+    follows the request end to end (Task 125); otherwise a new one is made."""
     current = getattr(g, 'request_id', None)
     if current:
         return current
-    current = str(uuid.uuid4())[:12]
+    incoming = (request.headers.get('X-Request-Id') or '').strip()
+    current = incoming if _INCOMING_REQUEST_ID.match(incoming) else str(uuid.uuid4())[:12]
     g.request_id = current
     return current
 
@@ -391,6 +398,7 @@ def _request_id() -> str:
 @app.before_request
 def assign_request_id():
     _request_id()
+    g.request_started = time.perf_counter()
     from deployment_policy import staging_hardware_guard
     return staging_hardware_guard()
 
@@ -417,7 +425,16 @@ def add_security_headers(response):
             payload.setdefault('requestId', _request_id())
             payload.setdefault('success', response.status_code < 400)
             if payload.get('success') is False:
-                message = payload.get('userMessage') or payload.get('error') or 'Yêu cầu thất bại'
+                error = payload.get('error')
+                if isinstance(error, dict):
+                    # Blueprint routes send error={code,message,retryable}:
+                    # surface the same envelope fields as server.py routes
+                    # (AGENTS 3.1) instead of a dict userMessage (Task 125).
+                    payload.setdefault('code', error.get('code') or f'HTTP_{response.status_code}')
+                    if error.get('retryable') is not None:
+                        payload.setdefault('retryable', bool(error.get('retryable')))
+                    error = error.get('message')
+                message = payload.get('userMessage') or error or 'Yêu cầu thất bại'
                 payload.setdefault('userMessage', message)
                 payload.setdefault('error', message)
                 payload.setdefault('retryable', response.status_code >= 500 or response.status_code == 429)
@@ -426,7 +443,38 @@ def add_security_headers(response):
             response.set_data(json.dumps(payload, ensure_ascii=False, separators=(',', ':')))
             response.headers['Content-Type'] = 'application/json; charset=utf-8'
             response.headers.pop('Content-Length', None)
+        _log_request(response)
     return response
+
+
+def _internal_error(exc: BaseException):
+    """500 without internals (Task 125): the detail goes to the log with the
+    request id; the client gets a fixed, Vietnamese envelope."""
+    print(f'[error] rid={_request_id()} route={getattr(request.url_rule, "rule", "?")} '
+          f'type={type(exc).__name__}', flush=True)
+    return jsonify({'success': False, 'code': 'internalError',
+                    'error': 'Máy chủ gặp lỗi khi xử lý yêu cầu. Hãy thử lại.'}), 500
+
+
+_QUIET_PATHS = frozenset({'/api/health', '/api/ready'})
+
+
+def _log_request(response) -> None:
+    """One JSON line per API request (Task 125: production had no access log).
+    The route template, not the concrete path, so ids never reach logs."""
+    if request.path in _QUIET_PATHS:
+        return
+    started = getattr(g, 'request_started', None)
+    rule = getattr(request.url_rule, 'rule', None) or 'unmatched'
+    entry = {
+        'rid': _request_id(), 'method': request.method, 'route': rule,
+        'status': response.status_code,
+        'ms': int((time.perf_counter() - started) * 1000) if started else None,
+    }
+    try:
+        print('[access] ' + json.dumps(entry, separators=(',', ':')), flush=True)
+    except Exception:
+        pass
 
 
 @app.route('/', methods=['GET'])
@@ -474,6 +522,34 @@ _mobile_bootstrap_lock = threading.RLock()
 # ═══════════════════════════════════════════════════════════════
 # AUTH MIDDLEWARE
 # ═══════════════════════════════════════════════════════════════
+# Task 122: a GET poll (/live, /status, …) re-uses a successful revocation
+# check of the same token for 5 minutes. Signature and expiry are still
+# verified on every request; state-changing requests (ON/OFF/safety/redeem)
+# always ask Firebase whether the token was revoked.
+_REVOCATION_CHECK_TTL_SECONDS = 300
+_revocation_checked: dict[str, float] = {}
+_revocation_lock = threading.Lock()
+
+
+def _revocation_recently_checked(token: str) -> bool:
+    key = hashlib.sha256(token.encode('utf-8')).hexdigest()
+    with _revocation_lock:
+        expiry = _revocation_checked.get(key)
+        return expiry is not None and expiry > time.monotonic()
+
+
+def _remember_revocation_check(token: str) -> None:
+    key = hashlib.sha256(token.encode('utf-8')).hexdigest()
+    now = time.monotonic()
+    with _revocation_lock:
+        if len(_revocation_checked) > 2000:
+            for stale in [k for k, v in _revocation_checked.items() if v <= now]:
+                _revocation_checked.pop(stale, None)
+            if len(_revocation_checked) > 2000:
+                _revocation_checked.clear()
+        _revocation_checked[key] = now + _REVOCATION_CHECK_TTL_SECONDS
+
+
 def _verify_token():
     """
     Verify Firebase ID token từ Authorization header.
@@ -491,10 +567,14 @@ def _verify_token():
         return None, None, None
 
     try:
+        read_only = request.method in ('GET', 'HEAD')
+        check_revoked = not (read_only and _revocation_recently_checked(token))
         try:
-            decoded = _firebase_auth.verify_id_token(token, check_revoked=True)
+            decoded = _firebase_auth.verify_id_token(token, check_revoked=check_revoked)
         except TypeError:  # lightweight test doubles retain the old signature
             decoded = _firebase_auth.verify_id_token(token)
+        if check_revoked:
+            _remember_revocation_check(token)
         uid = decoded.get('uid', '')
         email = decoded.get('email', '')
         email_norm = (email or '').strip().lower()
@@ -549,6 +629,17 @@ def _dev_admin_allowed():
         and bool(_DEV_ADMIN_KEY)
         and request.headers.get('X-Admin-Key') == _DEV_ADMIN_KEY
     )
+
+def _retired_route(f):
+    """Task 125: legacy endpoint no client calls any more. It used to run
+    without authentication (cross-account reads, unbounded Firestore reads),
+    so it answers 410 without executing; the body is kept until cleanup."""
+    @functools.wraps(f)
+    def decorated(*args, **kwargs):
+        return jsonify({'success': False, 'code': 'endpointRetired',
+                        'error': 'Endpoint đã ngừng hỗ trợ.'}), 410
+    return decorated
+
 
 def require_admin(f):
     """Decorator: yêu cầu quyền admin."""
@@ -1608,6 +1699,7 @@ def admin_audit_logs():
 
 
 @app.route('/api/admin/reset-all', methods=['POST'])
+@_retired_route
 @require_admin
 def admin_reset_all_data():
     """Xóa toàn bộ dữ liệu nghiệp vụ cũ để làm sạch hệ thống."""
@@ -2139,7 +2231,7 @@ def admin_data_snapshot():
     cache_hits = 0
     cache_dataset_keys = set()
     stale_datasets = []
-    request_id = uuid.uuid4().hex
+    request_id = _request_id()
     started = time.monotonic()
     force_requested = str(request.args.get('force', '')).lower() in ('1', 'true', 'yes')
     force_refresh = force_requested
@@ -2399,8 +2491,15 @@ def revoke_mobile_push_token(device_id):
     return jsonify({'success': True})
 
 
-def send_smart_charge_push(uid, *, session_id, vehicle_id=None, state, target_percent=None, route='smart_charge'):
-    """Send one durable Smart Charge event, deduplicated by eventKey."""
+def send_smart_charge_push(uid, *, session_id, vehicle_id=None, state, target_percent=None, route='smart_charge',
+                           silent=False):
+    """Send one durable Smart Charge event, deduplicated by eventKey.
+    ``silent`` = data-only refresh signal for the account's other phones."""
+    if silent:
+        from shelly.push_notifications import send_state_push
+        return send_state_push(uid, session_id=session_id, vehicle_id=vehicle_id, state=state,
+            db=_firestore_db if _firebase_available else None, messaging=_firebase_messaging,
+            local_tokens=_local_push_tokens)
     from shelly.push_notifications import send_terminal_push
     return send_terminal_push(uid, session_id=session_id, vehicle_id=vehicle_id,
         state=state, target_percent=target_percent, route=route,
@@ -3048,7 +3147,7 @@ def ai_predict():
             pred['modelSource'] = 'rule-based'
         return jsonify({'success': True, 'data': pred})
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return _internal_error(e)
 
 
 @app.route('/api/ai/analyze-patterns', methods=['POST'])
@@ -3068,7 +3167,7 @@ def ai_analyze():
         result['modelSource'] = 'personalized' if profile and profile.get('trainedAt') else 'rule-based'
         return jsonify({'success': True, 'data': result})
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return _internal_error(e)
 
 
 @app.route('/api/ai/train-vehicle-profile', methods=['POST'])
@@ -3109,7 +3208,7 @@ def ai_train():
         return jsonify({'success': True, 'data': profile,
                         'message': f'Profile trained cho {vehicle_id}'})
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return _internal_error(e)
 
 
 @app.route('/api/ai/profile-status/<vehicle_id>', methods=['GET'])
@@ -3251,6 +3350,7 @@ def ai_admin_test():
 # AI ENDPOINT — Predict Consumption (ML model)
 # ═══════════════════════════════════════════════════════════════
 @app.route('/api/ai/predict-consumption', methods=['POST'])
+@_retired_route
 @rate_limit(90, 60)
 def ai_predict_consumption():
     """Predict battery consumption for a planned trip using ev_soc_pipeline.
@@ -3339,6 +3439,7 @@ def _predict_remaining_range(payload: dict) -> dict:
 
 
 @app.route('/api/ai/predict-range', methods=['POST'])
+@require_auth
 @rate_limit(90, 60)
 def ai_predict_range():
     try:
@@ -3598,6 +3699,7 @@ def _guardrail_check(ai_result: dict, heuristic_result: dict,
 
 
 @app.route('/api/ai/predict-charging-time', methods=['POST'])
+@require_auth
 @rate_limit(90, 60)
 def ai_predict_charging_time():
     """Predict charging time — uses AI Center model with heuristic fallback.
@@ -3690,7 +3792,7 @@ def ai_predict_charging_time():
         
         return jsonify({'success': True, 'data': response_data})
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return _internal_error(e)
 
 
 # Backward-compat: redirect old AI endpoints (ai_api.py used /api/ prefix)
@@ -3899,6 +4001,7 @@ def ai_center_status():
 # LEGACY MIGRATION
 # ═══════════════════════════════════════════════════════════════
 @app.route('/api/admin/migrate-legacy', methods=['POST'])
+@_retired_route
 @require_admin
 def migrate_legacy():
     """Đánh dấu bản ghi cũ không có ownerUid là legacy."""
@@ -4969,6 +5072,7 @@ def admin_upload_model_legacy():
     return admin_upload_model_for_type('soc')
 
 @app.route('/api/soc/history', methods=['GET'])
+@_retired_route
 def soc_history():
     """Get SOC prediction history for a vehicle."""
     try:
@@ -5235,6 +5339,7 @@ def chat_history_list_proxy():
 
 
 @app.route('/api/trip/predict', methods=['POST'])
+@_retired_route
 def trip_predict():
     """Predict battery consumption for a trip using AI or heuristic."""
     try:
@@ -5339,6 +5444,7 @@ def trip_predict():
         }), 500
 
 @app.route('/api/trip/history', methods=['GET'])
+@_retired_route
 def trip_history():
     """Get trip prediction history for a vehicle."""
     try:
@@ -5503,7 +5609,7 @@ def ai_charge_feedback():
         
     except Exception as e:
         print(f'❌ Charge feedback error: {e}')
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return _internal_error(e)
 
 @app.route('/api/ai/charging-model-status', methods=['GET'])
 def ai_charging_model_status():
@@ -5578,10 +5684,10 @@ def ai_charging_model_status():
         })
         
     except Exception as e:
-        print(f'❌ Model status error: {e}')
+        print(f'❌ Model status error: {type(e).__name__}')
         return jsonify({
             'success': False,
-            'error': str(e),
+            'error': 'Chưa đọc được trạng thái mô hình.',
             'data': {
                 'version': 'unknown',
                 'samples': 0,
@@ -5619,7 +5725,7 @@ def ai_get_dataset():
         })
     except Exception as exc:
         print(f"Error reading AI dataset: {exc}")
-        return jsonify({'success': False, 'error': str(exc)}), 500
+        return _internal_error(exc)
 
 
 @app.route('/api/ai/dataset/export-csv', methods=['GET'])
@@ -5638,7 +5744,7 @@ def ai_export_dataset_csv():
             }
         )
     except Exception as exc:
-        return jsonify({'success': False, 'error': str(exc)}), 500
+        return _internal_error(exc)
 
 
 @app.route('/api/ai/dataset/records/<session_id>', methods=['PUT'])
@@ -5653,7 +5759,7 @@ def ai_update_dataset_record(session_id):
             return jsonify({'success': False, 'error': f'Sample {session_id} not found'}), 404
         return jsonify({'success': True, 'data': updated})
     except Exception as exc:
-        return jsonify({'success': False, 'error': str(exc)}), 500
+        return _internal_error(exc)
 
 
 @app.route('/api/ai/dataset/records', methods=['POST'])
@@ -5666,7 +5772,7 @@ def ai_add_dataset_record():
         record = add_manual_record(data)
         return jsonify({'success': True, 'data': record})
     except Exception as exc:
-        return jsonify({'success': False, 'error': str(exc)}), 500
+        return _internal_error(exc)
 
 
 @app.route('/api/ai/models/charging_time/fine-tune', methods=['POST'])
@@ -5747,7 +5853,7 @@ def ai_fine_tune_charging_time():
         return jsonify({'success': True, 'data': result})
     except Exception as exc:
         print(f"Fine-tuning failed: {exc}")
-        return jsonify({'success': False, 'error': str(exc)}), 500
+        return _internal_error(exc)
 
 
 # ── Per-Vehicle Charging Time Adapter Endpoints ────────────────────
@@ -5832,10 +5938,11 @@ def ai_fine_tune_vehicle_charging_time():
         })
     except Exception as exc:
         print(f"Vehicle fine-tuning failed: {exc}")
-        return jsonify({'success': False, 'error': str(exc)}), 500
+        return _internal_error(exc)
 
 
 @app.route('/api/ai/models/charging_time/adapters', methods=['GET'])
+@_retired_route
 def ai_list_vehicle_adapters():
     """List all trained vehicle calibration adapters."""
     try:
@@ -5845,10 +5952,11 @@ def ai_list_vehicle_adapters():
         adapters = trainer.list_all_adapters()
         return jsonify({'success': True, 'data': adapters})
     except Exception as exc:
-        return jsonify({'success': False, 'error': str(exc)}), 500
+        return _internal_error(exc)
 
 
 @app.route('/api/ai/models/charging_time/adapters/<vehicle_id>', methods=['GET'])
+@_retired_route
 def ai_get_vehicle_adapter(vehicle_id):
     """Get vehicle adapter details by vehicle_id."""
     try:
@@ -5860,10 +5968,11 @@ def ai_get_vehicle_adapter(vehicle_id):
             return jsonify({'success': False, 'error': f'Không tìm thấy adapter cho xe {vehicle_id}'}), 404
         return jsonify({'success': True, 'data': adapter.to_dict()})
     except Exception as exc:
-        return jsonify({'success': False, 'error': str(exc)}), 500
+        return _internal_error(exc)
 
 
 @app.route('/api/ai/models/charging_time/predict', methods=['POST'])
+@_retired_route
 def ai_model_predict_charging_time():
     """Predict charging duration using global model + per-vehicle adapter calibration."""
     try:
@@ -5921,10 +6030,11 @@ def ai_model_predict_charging_time():
             }
         })
     except Exception as exc:
-        return jsonify({'success': False, 'error': str(exc)}), 500
+        return _internal_error(exc)
 
 
 @app.route('/api/ai/models/charging_time/training-readiness/<vehicle_id>', methods=['GET'])
+@_retired_route
 def ai_vehicle_training_readiness(vehicle_id):
     """Check data sufficiency and stage readiness for a vehicle."""
     try:
@@ -5951,7 +6061,7 @@ def ai_vehicle_training_readiness(vehicle_id):
             }
         })
     except Exception as exc:
-        return jsonify({'success': False, 'error': str(exc)}), 500
+        return _internal_error(exc)
 
 
 @app.route('/api/smart-charge/shadow-status', methods=['GET'])
@@ -5981,7 +6091,7 @@ def smart_charge_shadow_status():
         return jsonify({'success': True, 'data': evaluation})
     except Exception as exc:
         print(f"Failed to evaluate shadow promotion: {exc}")
-        return jsonify({'success': False, 'error': str(exc)}), 500
+        return _internal_error(exc)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -6033,11 +6143,7 @@ def web_sync_battery_state():
         })
         
     except Exception as e:
-        print(f'❌ Battery sync error: {e}')
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return _internal_error(e)
 
 
 @app.route('/api/telemetry', methods=['POST'])
@@ -6104,7 +6210,7 @@ def web_sync_trip_prediction():
         
     except Exception as e:
         print(f'❌ Trip prediction sync error: {e}')
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return _internal_error(e)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -6345,6 +6451,13 @@ _STANDARD_COLLECTIONS = {
 }
 
 
+_SYNC_PROFILE_FIELDS = frozenset({
+    'name', 'displayName', 'phone', 'phoneNumber', 'photoURL',
+    'dateOfBirth', 'updatedAt', 'lastLogin', 'lastLoginSource', 'source',
+    'syncedToWeb', 'lastWebSync',
+})
+
+
 @app.route('/api/web/sync/user', methods=['POST'])
 def sync_user():
     """Upsert user profile vào Firestore. Auth: Firebase token hoặc X-Admin-Key."""
@@ -6356,8 +6469,13 @@ def sync_user():
     if not _fs():
         return jsonify({'success': False, 'error': 'Firestore không khả dụng'}), 503
 
-    body = request.get_json() or {}
-    profile = dict(body.get('profile', body))
+    body = request.get_json(silent=True) or {}
+    raw_profile = body.get('profile', body)
+    if not isinstance(raw_profile, dict):
+        return jsonify({'success': False, 'error': 'profile phải là object'}), 400
+    # Task 125: same whitelist as /sync/full — a client must never write
+    # role, accountStatus, quota or onboarding flags into users/{uid}.
+    profile = {k: v for k, v in raw_profile.items() if k in _SYNC_PROFILE_FIELDS}
     profile['ownerUid'] = uid
     profile.setdefault('email', email)
     profile.setdefault('source', 'flutter_app')
@@ -6442,12 +6560,7 @@ def sync_full():
         if not isinstance(body['profile'], dict):
             return jsonify({'success': False, 'error': 'profile phải là object'}), 400
         raw_profile = dict(body['profile'])
-        allowed_profile_fields = {
-            'name', 'displayName', 'phone', 'phoneNumber', 'photoURL',
-            'dateOfBirth', 'updatedAt', 'lastLogin', 'lastLoginSource', 'source',
-            'syncedToWeb', 'lastWebSync'
-        }
-        profile = {k: v for k, v in raw_profile.items() if k in allowed_profile_fields}
+        profile = {k: v for k, v in raw_profile.items() if k in _SYNC_PROFILE_FIELDS}
         profile['ownerUid'] = uid
         profile.setdefault('email', email)
         profile['syncedAt'] = now_iso
@@ -6739,7 +6852,7 @@ def update_app_config():
             json.dump(cfg, f, ensure_ascii=False, indent=2)
         return jsonify({'success': True, 'data': cfg})
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return _internal_error(e)
 
 
 @app.route('/api/app/download', methods=['GET'])
@@ -6848,12 +6961,55 @@ def _register_smart_charge_cloud_first():
         repository,
         _verify_token,
         trust_verifier=verify_shelly_trust,
+        dev_admin_allowed=_dev_admin_allowed,
     ))
     app.extensions['smart_charge_service'] = service
     print(f'✅ Smart Charge Cloud-First provider: {provider.name}')
 
 
 _register_smart_charge_cloud_first()
+
+
+def _register_assistant():
+    """BatteryBot v2 (Task 124): Gemini via this API, knowledge, memory."""
+    from assistant.engine import AssistantEngine
+    from assistant.gemini import GeminiClient
+    from assistant.knowledge import KnowledgeBase
+    from assistant.memory import AssistantMemory
+    from assistant.quota import DailyQuota
+    from assistant.routes import create_assistant_blueprint
+    from shelly.azure_dispatch import configured_store
+
+    db = _firestore_db if _firebase_available else None
+    service = app.extensions.get('smart_charge_service')
+    repository = getattr(service, 'repository', None)
+
+    def live_reader(uid, vehicle_id):
+        return service.live(uid, vehicle_id)
+
+    def history_reader(uid, vehicle_id, limit):
+        items, _cursor = repository.history_page(uid, limit, None, None, vehicle_id)
+        return [item.to_dict() for item in items]
+
+    knowledge = KnowledgeBase(db)
+    memory = AssistantMemory(db)
+    try:
+        store = configured_store()
+    except Exception:
+        store = None
+    engine = AssistantEngine(
+        gemini=GeminiClient(), knowledge=knowledge, memory=memory,
+        live_reader=live_reader if service else None,
+        history_reader=history_reader if repository else None,
+    )
+    app.register_blueprint(create_assistant_blueprint(
+        engine=engine, memory=memory, quota=DailyQuota(store), knowledge=knowledge,
+        auth_resolver=_verify_token, require_admin=require_admin, db=db, audit=_audit,
+    ))
+    app.extensions['assistant_engine'] = engine
+
+
+_register_assistant()
 
 # Catalog routes receive narrow dependencies after auth and Firestore helpers
 # have been initialized. This keeps the catalog module independently testable.
@@ -6882,7 +7038,6 @@ if __name__ == '__main__':
     print('   SyncRd: GET /api/user/sync/overview')
     print('   UserAI: GET /api/user/ai/models, GET .../download, POST .../predict')
     print('   Migrate: POST /api/admin/migrate[?dry_run=true]')
-    print('   Legacy: POST /api/admin/migrate-legacy')
     print(f'   AI server URL: {AI_SERVER_URL}')
     print(f'   Consumption model: {_consumption_model_status}')
     print(f'🌐 http://localhost:5000\n')

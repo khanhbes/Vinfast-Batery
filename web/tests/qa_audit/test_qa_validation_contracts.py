@@ -24,11 +24,14 @@ class TestValidationAndContracts:
         from dataclasses import fields
         assert 'safety_policy_version' in {field.name for field in fields(ChargingSession)}
 
-    def test_web_h17_nan_and_infinity_in_predict_charging_time(self, client):
+    def test_web_h17_nan_and_infinity_in_predict_charging_time(self, client, monkeypatch):
         """
         WEB-H17: Test sending NaN or Infinity to /api/ai/predict-charging-time.
         Server should reject with 400 Bad Request or handle gracefully, not crash with unhandled 500.
+        The route requires a signed-in user since Task 125.
         """
+        import server
+        monkeypatch.setattr(server, "_verify_token", lambda: ("qa-user", "qa@test", "user"))
         resp = client.post(
             "/api/ai/predict-charging-time",
             json={

@@ -99,3 +99,18 @@ test('workspace fills available width and Shelly model label stays concise', () 
   assert.match(shelly, /<option value="S3PL-00112EU">Shelly Plug S Gen3<\/option>/);
   assert.match(shelly, /Mã model: S3PL-00112EU/);
 });
+
+test('published catalog entries expose the showroom and recreate a draft before media writes', () => {
+  const page = readFileSync(new URL('../src/pages/VehicleCatalog.tsx', import.meta.url), 'utf8');
+  const editor = readFileSync(new URL('../src/components/catalog/ShowroomEditor.tsx', import.meta.url), 'utf8');
+  // Detail drawer links straight to the showroom section of the editor.
+  assert.match(page, /<ShowroomSummary key=\{selected\.catalogId\}/);
+  assert.match(page, /setEditorFocus\('showroom'\)/);
+  assert.match(page, /showroomRef\.current\?\.scrollIntoView/);
+  // Publishing deletes the draft document; uploads must recreate it first.
+  assert.match(page, /useState\(initial\.status === 'draft'\)/);
+  assert.match(page, /if \(!\(await ensureDraft\(\)\)\) return;/);
+  assert.match(page, /ensureDraft=\{ensureDraft\}/);
+  assert.match(editor, /if \(!target \|\| !files\.length\) return;\s+if \(ensureDraft && !\(await ensureDraft\(\)\)\) return;/);
+  assert.match(editor, /if \(!local\) return;\s+if \(ensureDraft && !\(await ensureDraft\(\)\)\) return;/);
+});

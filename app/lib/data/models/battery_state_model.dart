@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/range_estimator.dart';
 import 'vehicle_model.dart';
 
 /// Model trạng thái pin đồng bộ với web dashboard
@@ -57,7 +58,7 @@ class BatteryStateModel {
       vehicleId: vehicle.vehicleId,
       percentage: vehicle.currentBattery.toDouble(),
       soh: vehicle.stateOfHealth,
-      estimatedRange: vehicle.currentBattery * vehicle.defaultEfficiency,
+      estimatedRange: estimateRangeKm(vehicle) ?? 0,
       temp: temp ?? 25.0, // Default temperature
       timestamp: DateTime.now(),
       source: 'app',

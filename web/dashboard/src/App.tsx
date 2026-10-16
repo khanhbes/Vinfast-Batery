@@ -12,6 +12,7 @@ const DataExplorer = lazy(() => import('@/pages/DataExplorer'));
 const VehicleCatalog = lazy(() => import('@/pages/VehicleCatalog'));
 const DeveloperHub = lazy(() => import('@/pages/DeveloperHub'));
 import ShellyGateway from '@/pages/ShellyGateway';
+import AssistantKnowledge from '@/pages/AssistantKnowledge';
 import { PageLoadBoundary, PageLoading } from '@/components/PageLoadBoundary';
 import Login from '@/pages/Login';
 import { Toaster } from '@/components/ui/sonner';
@@ -56,6 +57,7 @@ function AppContent({ user, loading, sessionRevision }: { user: User | null; loa
               <Route path="/data" element={<DevelopModeGate><DataExplorer /></DevelopModeGate>} />
               <Route path="/catalog" element={<VehicleCatalog />} />
               <Route path="/shelly" element={<ShellyGateway />} />
+              <Route path="/assistant" element={<AssistantKnowledge />} />
               <Route path="/ai" element={<DevelopModeGate><AiCenter /></DevelopModeGate>} />
               <Route path="/audit" element={<DevelopModeGate><AuditSystem /></DevelopModeGate>} />
               <Route path="/settings" element={<DevelopModeGate><Settings /></DevelopModeGate>} />
@@ -76,9 +78,21 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Remount the admin tree only when the account changes. The hourly ID
+    // token refresh used to bump the revision too, remounting every page and
+    // losing half-typed forms (Task 125).
+    let lastUid: string | null | undefined;
     const unsubscribe = onIdTokenChanged(auth, (user) => {
       setUser(user);
-      setSessionRevision(value => value + 1);
+      const uid = user?.uid ?? null;
+      // Signed out: drop the cached admin snapshot (profiles, emails).
+      if (!uid) {
+        try { window.sessionStorage.removeItem('vinfast-admin-snapshot-v2'); } catch { /* optional */ }
+      }
+      if (uid !== lastUid) {
+        lastUid = uid;
+        setSessionRevision(value => value + 1);
+      }
       setLoading(false);
     });
     return () => unsubscribe();

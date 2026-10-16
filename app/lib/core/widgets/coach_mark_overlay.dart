@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../services/guide_registry.dart';
 import '../theme/app_motion.dart';
+import '../theme/luxe_theme.dart';
 import '../theme/app_ui_colors.dart';
 import 'battery_bot_mascot.dart';
 
@@ -265,9 +266,14 @@ class _CoachMarkOverlayState extends State<CoachMarkOverlay>
                       child: FocusTraversalGroup(
                         child: Material(
                           key: const ValueKey('coach-tooltip'),
-                          color: ui.surface,
-                          borderRadius: BorderRadius.circular(20),
-                          elevation: 6,
+                          color: LuxeColors.sheet,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(22),
+                            side: const BorderSide(
+                              color: LuxeColors.hairlineStrong,
+                            ),
+                          ),
+                          elevation: 0,
                           clipBehavior: Clip.antiAlias,
                           child: SingleChildScrollView(
                             key: const ValueKey('coach-tooltip-scroll'),
@@ -492,17 +498,26 @@ class _SpotlightPainter extends CustomPainter {
       final spotlight = Path()..addRRect(rect);
       canvas.drawPath(
         Path.combine(PathOperation.difference, overlay, spotlight),
-        Paint()..color = const Color(0xA9000000),
+        Paint()..color = const Color(0xC2000000),
+      );
+      // Soft emerald halo, then a fine platinum-emerald rim.
+      canvas.drawRRect(
+        rect,
+        Paint()
+          ..color = accent.withValues(alpha: 0.35)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 6
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
       );
       canvas.drawRRect(
         rect,
         Paint()
           ..color = accent
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 2,
+          ..strokeWidth = 1.4,
       );
     } else {
-      canvas.drawPath(overlay, Paint()..color = const Color(0xA9000000));
+      canvas.drawPath(overlay, Paint()..color = const Color(0xC2000000));
     }
   }
 

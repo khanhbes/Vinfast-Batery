@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/services/guide_registry.dart';
-import '../../core/theme/app_ui_colors.dart';
+import '../../core/theme/luxe_theme.dart';
 import '../../core/widgets/battery_bot_mascot.dart';
+import '../../core/widgets/luxe_settings.dart';
 import '../../navigation/app_navigation.dart';
 import '../smart_charging/smart_charger_setup_hub_screen.dart';
-import 'battery_bot_screen.dart';
+import '../ai/assistant_sheet.dart';
 
+/// Luxe quick guide: a tour hero, expandable feature cards with numbered
+/// steps on a hairline rail, and a BatteryBot entry. Bilingual (vi/en).
 class GuideScreen extends StatefulWidget {
   const GuideScreen({super.key});
   @override
@@ -25,11 +29,16 @@ class _GuideScreenState extends State<GuideScreen> {
       AppNavigation.openTab(context, index);
       return;
     }
-    Navigator.of(context).pushReplacement<void, void>(
+    // One BatteryBot (Task 125): the main assistant sheet, which also has
+    // the on-device basic mode offline. push, not pushReplacement, so Back
+    // returns to the guide.
+    if (destination == GuideDestination.batteryBot) {
+      InteractiveAssistantSheet.show(context);
+      return;
+    }
+    Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (_) => destination == GuideDestination.shellySetup
-            ? const SmartChargerSetupHubScreen()
-            : const BatteryBotScreen(),
+        builder: (_) => const SmartChargerSetupHubScreen(),
       ),
     );
   }
@@ -37,101 +46,128 @@ class _GuideScreenState extends State<GuideScreen> {
   @override
   Widget build(BuildContext context) {
     final isEn = Localizations.localeOf(context).languageCode == 'en';
-    final ui = AppUiColors.of(context);
-    return Scaffold(
-      backgroundColor: ui.background,
-      body: SafeArea(
-        child: CustomScrollView(
-          physics: const BouncingScrollPhysics(),
-          slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              sliver: SliverToBoxAdapter(
-                child: Row(
-                  children: [
-                    IconButton(
-                      tooltip: isEn ? 'Back' : 'Quay lại',
-                      constraints: const BoxConstraints(
-                        minWidth: 48,
-                        minHeight: 48,
-                      ),
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.arrow_back_rounded),
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            isEn ? 'Quick guide' : 'Hướng dẫn nhanh',
-                            style: TextStyle(
-                              color: ui.text,
-                              fontSize: 22,
-                              fontWeight: FontWeight.w800,
+    return Theme(
+      data: LuxeTheme.of(context),
+      child: Scaffold(
+        backgroundColor: LuxeColors.background,
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            const LuxeBackdrop(),
+            SafeArea(
+              child: CustomScrollView(
+                physics: const BouncingScrollPhysics(),
+                slivers: [
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
+                    sliver: SliverToBoxAdapter(
+                      child: LuxeReveal(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Tooltip(
+                              message: isEn ? 'Back' : 'Quay lại',
+                              child: Material(
+                                type: MaterialType.transparency,
+                                shape: const CircleBorder(),
+                                clipBehavior: Clip.antiAlias,
+                                child: InkWell(
+                                  onTap: () => Navigator.of(context).pop(),
+                                  child: Container(
+                                    width: 48,
+                                    height: 48,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: LuxeColors.glass,
+                                      border: Border.all(
+                                        color: LuxeColors.hairline,
+                                      ),
+                                    ),
+                                    child: const Icon(
+                                      Icons.arrow_back_rounded,
+                                      size: 20,
+                                      color: LuxeColors.text,
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            isEn
-                                ? 'Learn the main actions, one step at a time.'
-                                : 'Tìm nhanh chức năng bạn cần, từng bước một.',
-                            style: TextStyle(color: ui.muted, fontSize: 13),
-                          ),
-                        ],
+                            const SizedBox(height: 18),
+                            Text(
+                              isEn ? 'GUIDE' : 'HƯỚNG DẪN',
+                              style: LuxeText.eyebrow,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              isEn ? 'Quick guide' : 'Hướng dẫn nhanh',
+                              style: LuxeText.title,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              isEn
+                                  ? 'Learn the main actions, one step at a time.'
+                                  : 'Tìm nhanh chức năng bạn cần, từng bước một.',
+                              style: LuxeText.caption,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 8),
-              sliver: SliverToBoxAdapter(
-                child: _TourBanner(isEn: isEn, onPressed: _replayTour),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
-              sliver: SliverToBoxAdapter(
-                child: Text(
-                  isEn ? 'Learn a feature' : 'Chọn chức năng để xem',
-                  style: TextStyle(
-                    color: ui.text,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
                   ),
-                ),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              sliver: SliverList.separated(
-                itemCount: GuideRegistry.items.length,
-                separatorBuilder: (_, _) =>
-                    Divider(height: 1, indent: 58, color: ui.border),
-                itemBuilder: (context, index) {
-                  final item = GuideRegistry.items[index];
-                  return _GuideSection(
-                    item: item,
-                    isEn: isEn,
-                    expanded: _expandedId == item.id,
-                    onToggle: () => setState(
-                      () =>
-                          _expandedId = _expandedId == item.id ? null : item.id,
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+                    sliver: SliverToBoxAdapter(
+                      child: LuxeReveal(
+                        index: 1,
+                        child: _TourBanner(isEn: isEn, onPressed: _replayTour),
+                      ),
                     ),
-                    onOpen: () => _open(item.destination),
-                  );
-                },
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-              sliver: SliverToBoxAdapter(
-                child: _BotEntry(
-                  isEn: isEn,
-                  onPressed: () => _open(GuideDestination.batteryBot),
-                ),
+                  ),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: LuxeSectionLabel(
+                        isEn ? 'Learn a feature' : 'Chọn chức năng để xem',
+                      ),
+                    ),
+                  ),
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    sliver: SliverList.separated(
+                      itemCount: GuideRegistry.items.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 10),
+                      itemBuilder: (context, index) {
+                        final item = GuideRegistry.items[index];
+                        return LuxeReveal(
+                          index: index < 6 ? index + 2 : 0,
+                          child: _GuideSection(
+                            item: item,
+                            isEn: isEn,
+                            expanded: _expandedId == item.id,
+                            onToggle: () {
+                              HapticFeedback.selectionClick();
+                              setState(
+                                () => _expandedId = _expandedId == item.id
+                                    ? null
+                                    : item.id,
+                              );
+                            },
+                            onOpen: () => _open(item.destination),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 32),
+                    sliver: SliverToBoxAdapter(
+                      child: _BotEntry(
+                        isEn: isEn,
+                        onPressed: () => _open(GuideDestination.batteryBot),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -146,53 +182,47 @@ class _TourBanner extends StatelessWidget {
   final bool isEn;
   final VoidCallback onPressed;
   @override
-  Widget build(BuildContext context) {
-    final ui = AppUiColors.of(context);
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
-      decoration: BoxDecoration(
-        color: ui.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: ui.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(Icons.explore_rounded, color: ui.primary, size: 25),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  isEn
-                      ? 'A 4-step tour of the main screens.'
-                      : 'Làm quen 4 bước với các màn hình chính.',
-                  style: TextStyle(
-                    color: ui.text,
-                    fontWeight: FontWeight.w600,
-                    height: 1.3,
-                  ),
+  Widget build(BuildContext context) => LuxeGlass(
+    selected: true,
+    radius: 24,
+    padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            const LuxeMedallion(
+              icon: Icons.explore_outlined,
+              accent: LuxeColors.emerald,
+              size: 46,
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                isEn
+                    ? 'A 4-step tour of the main screens.'
+                    : 'Làm quen 4 bước với các màn hình chính.',
+                style: const TextStyle(
+                  color: LuxeColors.text,
+                  fontSize: 15,
+                  height: 1.35,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          FilledButton(
-            onPressed: onPressed,
-            style: FilledButton.styleFrom(
-              minimumSize: const Size(48, 48),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             ),
-            child: Text(
-              isEn ? 'Start tour' : 'Bắt đầu hướng dẫn',
-              textAlign: TextAlign.center,
-            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        FilledButton(
+          onPressed: onPressed,
+          child: Text(
+            isEn ? 'Start tour' : 'Bắt đầu hướng dẫn',
+            textAlign: TextAlign.center,
           ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
 }
 
 class _GuideSection extends StatelessWidget {
@@ -208,140 +238,190 @@ class _GuideSection extends StatelessWidget {
   final bool expanded;
   final VoidCallback onToggle;
   final VoidCallback onOpen;
+
   @override
   Widget build(BuildContext context) {
-    final ui = AppUiColors.of(context);
     final lang = isEn ? 'en' : 'vi';
     final note = item.note(lang);
-    return Column(
-      children: [
-        Semantics(
-          button: true,
-          expanded: expanded,
-          label: '${item.title(lang)}. ${item.summary(lang)}',
-          child: InkWell(
-            onTap: onToggle,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 13),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: 44,
-                    height: 44,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: ui.primary.withValues(alpha: .10),
-                        borderRadius: BorderRadius.circular(13),
+    final steps = item.steps(lang);
+    final reduced = MediaQuery.disableAnimationsOf(context);
+    return LuxeGlass(
+      selected: expanded,
+      radius: 22,
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Semantics(
+            button: true,
+            expanded: expanded,
+            label: '${item.title(lang)}. ${item.summary(lang)}',
+            child: Material(
+              type: MaterialType.transparency,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(22),
+                onTap: onToggle,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 14, 12, 14),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      LuxeMedallion(
+                        icon: item.category.icon,
+                        accent: expanded ? LuxeColors.emerald : null,
+                        size: 42,
                       ),
-                      child: Icon(item.category.icon, color: ui.primary),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.title(lang),
-                          style: TextStyle(
-                            color: ui.text,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 15,
-                          ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.title(lang),
+                              style: const TextStyle(
+                                color: LuxeColors.text,
+                                fontWeight: FontWeight.w500,
+                                fontSize: 15.5,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              item.summary(lang),
+                              style: LuxeText.caption.copyWith(fontSize: 12.5),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 3),
-                        Text(
-                          item.summary(lang),
-                          style: TextStyle(
-                            color: ui.muted,
-                            height: 1.35,
-                            fontSize: 13,
+                      ),
+                      const SizedBox(width: 4),
+                      AnimatedRotation(
+                        turns: expanded ? 0.5 : 0,
+                        duration: reduced
+                            ? Duration.zero
+                            : const Duration(milliseconds: 260),
+                        child: const Icon(
+                          Icons.expand_more_rounded,
+                          color: LuxeColors.platinumMid,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          AnimatedSize(
+            duration: reduced
+                ? Duration.zero
+                : const Duration(milliseconds: 320),
+            curve: LuxeMotion.enter,
+            alignment: Alignment.topCenter,
+            child: !expanded
+                ? const SizedBox(width: double.infinity)
+                : Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (var i = 0; i < steps.length; i++)
+                          _Step(
+                            number: i + 1,
+                            text: steps[i],
+                            last: i == steps.length - 1,
+                          ),
+                        if (note != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4, left: 2),
+                            child: Text(
+                              note,
+                              style: LuxeText.caption.copyWith(fontSize: 12.5),
+                            ),
+                          ),
+                        const SizedBox(height: 14),
+                        FilledButton.icon(
+                          onPressed: onOpen,
+                          icon: const Icon(
+                            Icons.arrow_forward_rounded,
+                            size: 18,
+                          ),
+                          label: Text(
+                            item.destination.actionLabel(lang),
+                            textAlign: TextAlign.center,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    expanded ? Icons.expand_less : Icons.expand_more,
-                    color: ui.muted,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Numbered step on a hairline rail.
+class _Step extends StatelessWidget {
+  const _Step({required this.number, required this.text, required this.last});
+  final int number;
+  final String text;
+  final bool last;
+
+  @override
+  Widget build(BuildContext context) => IntrinsicHeight(
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          width: 28,
+          child: Column(
+            children: [
+              Container(
+                width: 24,
+                height: 24,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: LuxeColors.emerald.withValues(alpha: 0.12),
+                  border: Border.all(
+                    color: LuxeColors.emerald.withValues(alpha: 0.6),
                   ),
-                ],
+                ),
+                child: Text(
+                  '$number',
+                  style: const TextStyle(
+                    color: LuxeColors.emerald,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              if (!last)
+                Expanded(
+                  child: Container(
+                    width: 1,
+                    margin: const EdgeInsets.symmetric(vertical: 4),
+                    color: LuxeColors.hairlineStrong,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 2, bottom: 12),
+            child: Text(
+              text,
+              style: const TextStyle(
+                color: LuxeColors.text,
+                fontSize: 14,
+                height: 1.45,
               ),
             ),
           ),
         ),
-        AnimatedCrossFade(
-          duration: MediaQuery.disableAnimationsOf(context)
-              ? Duration.zero
-              : const Duration(milliseconds: 180),
-          crossFadeState: expanded
-              ? CrossFadeState.showSecond
-              : CrossFadeState.showFirst,
-          firstChild: const SizedBox(width: double.infinity, height: 0),
-          secondChild: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 4, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (var i = 0; i < item.steps(lang).length; i++)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${i + 1}.',
-                          style: TextStyle(
-                            color: ui.primary,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            item.steps(lang)[i],
-                            style: TextStyle(color: ui.text, height: 1.4),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                if (note != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      note,
-                      style: TextStyle(
-                        color: ui.muted,
-                        height: 1.4,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: onOpen,
-                    icon: const Icon(Icons.arrow_forward_rounded),
-                    label: Text(
-                      item.destination.actionLabel(lang),
-                      textAlign: TextAlign.center,
-                    ),
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size.fromHeight(48),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
       ],
-    );
-  }
+    ),
+  );
 }
 
 class _BotEntry extends StatelessWidget {
@@ -349,52 +429,50 @@ class _BotEntry extends StatelessWidget {
   final bool isEn;
   final VoidCallback onPressed;
   @override
-  Widget build(BuildContext context) {
-    final ui = AppUiColors.of(context);
-    return Material(
-      color: ui.surface,
-      borderRadius: BorderRadius.circular(18),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: onPressed,
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: [
-              const BatteryBotMascot(
-                size: BatteryBotSize.avatar,
-                mood: BatteryBotMood.happy,
-                customWidth: 48,
-                customHeight: 48,
-                enableFloating: false,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      isEn ? 'Ask BatteryBot' : 'Hỏi BatteryBot',
-                      style: TextStyle(
-                        color: ui.text,
-                        fontWeight: FontWeight.w700,
-                      ),
+  Widget build(BuildContext context) => Material(
+    type: MaterialType.transparency,
+    child: InkWell(
+      borderRadius: BorderRadius.circular(22),
+      onTap: onPressed,
+      child: LuxeGlass(
+        radius: 22,
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            const BatteryBotMascot(
+              size: BatteryBotSize.avatar,
+              mood: BatteryBotMood.happy,
+              customWidth: 48,
+              customHeight: 48,
+              enableFloating: false,
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isEn ? 'Ask BatteryBot' : 'Hỏi BatteryBot',
+                    style: const TextStyle(
+                      color: LuxeColors.text,
+                      fontWeight: FontWeight.w500,
+                      fontSize: 15,
                     ),
-                    const SizedBox(height: 3),
-                    Text(
-                      isEn
-                          ? 'Quick help, even offline.'
-                          : 'Hỏi nhanh, dùng được cả khi ngoại tuyến.',
-                      style: TextStyle(color: ui.muted, fontSize: 13),
-                    ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    isEn
+                        ? 'Quick help, even offline.'
+                        : 'Hỏi về app, xe, pin và sạc.',
+                    style: LuxeText.caption.copyWith(fontSize: 12.5),
+                  ),
+                ],
               ),
-              Icon(Icons.chevron_right, color: ui.muted),
-            ],
-          ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: LuxeColors.dim),
+          ],
         ),
       ),
-    );
-  }
+    ),
+  );
 }

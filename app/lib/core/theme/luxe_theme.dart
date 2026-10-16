@@ -1,12 +1,12 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../widgets/bootstrap_splash.dart';
 
-/// LUXE — the platinum + emerald language shared by the splash, Getting
-/// started and the first-run survey. Dark only: these screens continue the
-/// splash, then hand over to the app theme.
+/// LUXE — the platinum + emerald language of the whole app (Task 117: the
+/// app is dark only and every screen inherits [LuxeTheme.data]).
 abstract final class LuxeColors {
   static const background = BootstrapSplash.background;
   static const ambient = Color(0xFF16181B);
@@ -22,12 +22,29 @@ abstract final class LuxeColors {
 
   static const text = Color(0xFFF2F2F0);
   static const muted = Color(0xFF9A9EA5);
-  static const dim = Color(0xFF6B6F76);
+  // Raised in Task 121 so secondary text keeps ≥4.5:1 on every surface.
+  static const dim = Color(0xFF858990);
 
   static const emerald = Color(0xFF34D399);
   static const emeraldDeep = Color(0xFF10B981);
   static const emeraldGlow = Color(0x5534D399);
   static const danger = Color(0xFFF59E9E);
+
+  /// Champagne gold: estimated values and cautions (never verified state).
+  static const champagne = Color(0xFFE8C170);
+
+  /// Steel blue: neutral information.
+  static const steel = Color(0xFF9DB8E8);
+
+  /// Opaque surface steps (sheets, dialogs, raised wells).
+  static const surface = Color(0xFF0E0F11);
+  static const sheet = Color(0xFF121315);
+  static const raised = Color(0xFF17181B);
+  static const raisedHigh = Color(0xFF1D1F22);
+
+  /// Opaque hairlines for surfaces drawn without alpha blending.
+  static const rule = Color(0xFF222428);
+  static const ruleStrong = Color(0xFF33363B);
 
   static const platinumGradient = LinearGradient(
     begin: Alignment.topLeft,
@@ -39,8 +56,10 @@ abstract final class LuxeColors {
 
 /// Explicit styles: luxe screens never inherit the app's light/dark text.
 abstract final class LuxeText {
+  // Platinum, not emerald: emerald is reserved for verified states, and
+  // every section label in the app used it (Task 125).
   static const eyebrow = TextStyle(
-    color: LuxeColors.emerald,
+    color: LuxeColors.platinumMid,
     fontSize: 11.5,
     fontWeight: FontWeight.w600,
     letterSpacing: 2.2,
@@ -90,9 +109,14 @@ abstract final class LuxeTheme {
   /// screens use the platform face (Roboto on Android), like the splash.
   static ThemeData of(BuildContext context) => data();
 
-  /// Material theme for luxe screens: every stock control inherits the
-  /// platinum/emerald styling, so screen logic keeps plain Material widgets.
-  static ThemeData data() {
+  /// Material theme for the whole app (dark only since Task 117): every stock
+  /// control inherits the platinum/emerald styling, so screen logic keeps
+  /// plain Material widgets. Built once; ThemeData is immutable.
+  static ThemeData data() => _data;
+
+  static final ThemeData _data = _build();
+
+  static ThemeData _build() {
     final base = ThemeData(useMaterial3: true, brightness: Brightness.dark);
     const scheme = ColorScheme.dark(
       primary: LuxeColors.emerald,
@@ -217,9 +241,6 @@ abstract final class LuxeTheme {
           ),
         ),
       ),
-      iconButtonTheme: IconButtonThemeData(
-        style: IconButton.styleFrom(foregroundColor: LuxeColors.text),
-      ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: LuxeColors.glass,
@@ -269,10 +290,294 @@ abstract final class LuxeTheme {
         headerBackgroundColor: Color(0xFF17181B),
         headerForegroundColor: LuxeColors.text,
       ),
-      snackBarTheme: const SnackBarThemeData(
-        backgroundColor: Color(0xFF1D1F22),
-        contentTextStyle: TextStyle(color: LuxeColors.text),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: LuxeColors.raisedHigh,
+        contentTextStyle: const TextStyle(
+          color: LuxeColors.text,
+          fontSize: 14,
+          height: 1.4,
+        ),
+        actionTextColor: LuxeColors.emerald,
+        behavior: SnackBarBehavior.floating,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: const BorderSide(color: LuxeColors.hairlineStrong),
+        ),
       ),
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: LuxePageTransitionsBuilder(),
+          TargetPlatform.iOS: LuxePageTransitionsBuilder(),
+          TargetPlatform.fuchsia: LuxePageTransitionsBuilder(),
+          TargetPlatform.linux: LuxePageTransitionsBuilder(),
+          TargetPlatform.macOS: LuxePageTransitionsBuilder(),
+          TargetPlatform.windows: LuxePageTransitionsBuilder(),
+        },
+      ),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        foregroundColor: LuxeColors.text,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        centerTitle: false,
+        systemOverlayStyle: SystemUiOverlayStyle.light,
+        titleTextStyle: TextStyle(
+          color: LuxeColors.text,
+          fontSize: 19,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.2,
+        ),
+        iconTheme: IconThemeData(color: LuxeColors.text),
+      ),
+      cardTheme: CardThemeData(
+        color: LuxeColors.surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: LuxeColors.hairline),
+        ),
+      ),
+      listTileTheme: const ListTileThemeData(
+        iconColor: LuxeColors.platinum,
+        textColor: LuxeColors.text,
+        minTileHeight: 56,
+        titleTextStyle: TextStyle(
+          color: LuxeColors.text,
+          fontSize: 15.5,
+          fontWeight: FontWeight.w600,
+        ),
+        subtitleTextStyle: TextStyle(
+          color: LuxeColors.muted,
+          fontSize: 13,
+          height: 1.4,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(16)),
+        ),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: LuxeColors.sheet,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: const BorderSide(color: LuxeColors.hairline),
+        ),
+        titleTextStyle: const TextStyle(
+          color: LuxeColors.text,
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+        ),
+        contentTextStyle: const TextStyle(
+          color: LuxeColors.muted,
+          fontSize: 14,
+          height: 1.5,
+        ),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: LuxeColors.sheet,
+        modalBackgroundColor: LuxeColors.sheet,
+        surfaceTintColor: Colors.transparent,
+        modalBarrierColor: Color(0xB3000000),
+        elevation: 0,
+        modalElevation: 0,
+        dragHandleColor: LuxeColors.platinumLow,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          side: BorderSide(color: LuxeColors.hairline),
+        ),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          minimumSize: const Size(48, 52),
+          backgroundColor: LuxeColors.raised,
+          foregroundColor: LuxeColors.text,
+          disabledBackgroundColor: LuxeColors.glass,
+          disabledForegroundColor: LuxeColors.dim,
+          elevation: 0,
+          shape: const StadiumBorder(
+            side: BorderSide(color: LuxeColors.hairlineStrong),
+          ),
+          textStyle: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.2,
+          ),
+        ),
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(
+          foregroundColor: LuxeColors.text,
+          minimumSize: const Size(48, 48),
+          tapTargetSize: MaterialTapTargetSize.padded,
+        ),
+      ),
+      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+        backgroundColor: LuxeColors.platinum,
+        foregroundColor: Color(0xFF0B0C0E),
+        elevation: 0,
+        highlightElevation: 0,
+        shape: StadiumBorder(),
+      ),
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        backgroundColor: LuxeColors.background,
+        selectedItemColor: LuxeColors.emerald,
+        unselectedItemColor: LuxeColors.muted,
+        type: BottomNavigationBarType.fixed,
+        elevation: 0,
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.selected)
+              ? LuxeColors.platinumHi
+              : LuxeColors.platinumMid,
+        ),
+        trackColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.selected)
+              ? LuxeColors.emerald.withValues(alpha: 0.32)
+              : LuxeColors.raised,
+        ),
+        trackOutlineColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.selected)
+              ? LuxeColors.emerald.withValues(alpha: 0.7)
+              : LuxeColors.hairlineStrong,
+        ),
+      ),
+      checkboxTheme: CheckboxThemeData(
+        fillColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.selected)
+              ? LuxeColors.emerald
+              : Colors.transparent,
+        ),
+        checkColor: const WidgetStatePropertyAll(Color(0xFF04140D)),
+        side: const BorderSide(color: LuxeColors.platinumMid, width: 1.4),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      ),
+      radioTheme: RadioThemeData(
+        fillColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.selected)
+              ? LuxeColors.emerald
+              : LuxeColors.platinumMid,
+        ),
+      ),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(
+        color: LuxeColors.emerald,
+        linearTrackColor: Color(0x1FFFFFFF),
+        circularTrackColor: Color(0x14FFFFFF),
+        linearMinHeight: 3,
+      ),
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: ButtonStyle(
+          minimumSize: const WidgetStatePropertyAll(Size(48, 48)),
+          side: const WidgetStatePropertyAll(
+            BorderSide(color: LuxeColors.hairlineStrong),
+          ),
+          backgroundColor: WidgetStateProperty.resolveWith(
+            (s) => s.contains(WidgetState.selected)
+                ? LuxeColors.emerald.withValues(alpha: 0.16)
+                : Colors.transparent,
+          ),
+          foregroundColor: WidgetStateProperty.resolveWith(
+            (s) => s.contains(WidgetState.selected)
+                ? LuxeColors.text
+                : LuxeColors.muted,
+          ),
+          iconColor: const WidgetStatePropertyAll(LuxeColors.emerald),
+        ),
+      ),
+      tabBarTheme: const TabBarThemeData(
+        labelColor: LuxeColors.text,
+        unselectedLabelColor: LuxeColors.muted,
+        indicatorColor: LuxeColors.emerald,
+        dividerColor: LuxeColors.hairline,
+        indicatorSize: TabBarIndicatorSize.label,
+        labelStyle: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        unselectedLabelStyle: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: LuxeColors.raised,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        textStyle: const TextStyle(color: LuxeColors.text, fontSize: 14.5),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: LuxeColors.hairlineStrong),
+        ),
+      ),
+      tooltipTheme: TooltipThemeData(
+        decoration: BoxDecoration(
+          color: LuxeColors.raisedHigh,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: LuxeColors.hairlineStrong),
+        ),
+        textStyle: const TextStyle(color: LuxeColors.text, fontSize: 12.5),
+      ),
+      expansionTileTheme: const ExpansionTileThemeData(
+        iconColor: LuxeColors.emerald,
+        collapsedIconColor: LuxeColors.platinumMid,
+        textColor: LuxeColors.text,
+        collapsedTextColor: LuxeColors.text,
+        shape: Border(),
+        collapsedShape: Border(),
+      ),
+      textSelectionTheme: const TextSelectionThemeData(
+        cursorColor: LuxeColors.emerald,
+        selectionColor: Color(0x5534D399),
+        selectionHandleColor: LuxeColors.emerald,
+      ),
+      badgeTheme: const BadgeThemeData(
+        backgroundColor: LuxeColors.emerald,
+        textColor: Color(0xFF04140D),
+      ),
+    );
+  }
+}
+
+/// Route transition for every MaterialPageRoute: the incoming page fades and
+/// rises on the luxe curve while the page beneath recedes a touch, so pushes
+/// read as depth rather than a slide. Instant under reduced motion.
+class LuxePageTransitionsBuilder extends PageTransitionsBuilder {
+  const LuxePageTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) return child;
+    final enter = CurvedAnimation(
+      parent: animation,
+      curve: LuxeMotion.enter,
+      reverseCurve: LuxeMotion.exit,
+    );
+    final recede = CurvedAnimation(
+      parent: secondaryAnimation,
+      curve: LuxeMotion.enter,
+      reverseCurve: Curves.easeOutCubic,
+    );
+    return AnimatedBuilder(
+      animation: Listenable.merge([enter, recede]),
+      child: child,
+      builder: (context, child) {
+        final t = enter.value;
+        final r = recede.value;
+        return Opacity(
+          opacity: (t * (1 - 0.35 * r)).clamp(0.0, 1.0),
+          child: Transform.translate(
+            offset: Offset(0, 28 * (1 - t)),
+            child: Transform.scale(scale: 1 - 0.02 * r, child: child),
+          ),
+        );
+      },
     );
   }
 }

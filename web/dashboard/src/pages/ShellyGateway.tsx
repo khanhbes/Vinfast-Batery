@@ -95,8 +95,8 @@ export default function ShellyGateway() {
     cloudAuthKey: '',
     lanAddress: '',
     localPassword: '',
-    expiresHours: 720,
-    maxRedemptions: 2,
+    expiresHours: 24,
+    maxRedemptions: 1,
     note: '',
   };
   const [form, setForm] = useState(initialForm);
@@ -125,8 +125,10 @@ export default function ShellyGateway() {
       toast.error('Vui lòng nhập Mã thiết bị (Device ID)');
       return;
     }
-    if (!form.cloudAuthKey.trim() && !form.lanAddress.trim()) {
-      toast.error('Vui lòng nhập Cloud Auth Key hoặc IP LAN để kết nối');
+    // Redemption only links server_cloud devices: without a Cloud key the
+    // code could never be redeemed (Task 125).
+    if (!form.cloudAuthKey.trim()) {
+      toast.error('Vui lòng nhập Cloud Auth Key (bắt buộc để điều khiển qua máy chủ)');
       return;
     }
 
@@ -186,7 +188,13 @@ export default function ShellyGateway() {
 
   // Delete device
   const handleDeleteDevice = async (dev: any) => {
-    if (!confirm(`Xóa thiết bị "${dev.displayName || dev.deviceId}" khỏi danh sách? Các mã kết nối liên quan sẽ bị thu hồi.`)) {
+    const members = Number(dev.memberCount ?? 0);
+    const warning = members > 0
+      ? `
+
+Đang có ${members} tài khoản liên kết; họ sẽ mất quyền điều khiển ổ này.`
+      : '';
+    if (!confirm(`Xóa thiết bị "${dev.displayName || dev.deviceId}" khỏi danh sách? Các mã kết nối liên quan sẽ bị thu hồi.${warning}`)) {
       return;
     }
     try {
@@ -304,10 +312,8 @@ export default function ShellyGateway() {
                 onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
                 className="min-h-12 w-full rounded-xl border bg-background px-3.5 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
               >
+                {/* The app redeems only S3PL-00112EU (Task 125). */}
                 <option value="S3PL-00112EU">Shelly Plug S Gen3</option>
-                <option value="SNSW-001P16EU">Shelly Plus 1PM</option>
-                <option value="SPSW-001PE16EU">Shelly Pro 1PM</option>
-                <option value="CUSTOM">Khác / Tùy chỉnh</option>
               </select>
               <p className="mt-1 break-words text-xs text-muted-foreground">
                 {form.model === 'S3PL-00112EU'
@@ -520,10 +526,15 @@ export default function ShellyGateway() {
                         </span>
                       )}
                     </div>
-                    {dev.latestCode ? (
+                    {/* Only a code that can still be redeemed is copyable
+                        (expired/used/revoked codes were shown before). */}
+                    {dev.latestCode && dev.activeCodeEntry && !dev.activeCodeEntry.isRevoked
+                      && !dev.activeCodeEntry.isExpired && Number(dev.activeCodeEntry.redemptionCount ?? 0) < 1 ? (
                       <CodeBox code={dev.latestCode} />
                     ) : (
-                      <p className="text-xs text-amber-600 font-medium">Chưa có mã kết nối nào hoạt động</p>
+                      <p className="text-xs text-amber-600 font-medium">
+                        {dev.latestCode ? 'Mã gần nhất đã được dùng, hết hạn hoặc bị thu hồi — hãy tạo mã mới.' : 'Chưa có mã kết nối nào hoạt động'}
+                      </p>
                     )}
                   </div>
                 </div>

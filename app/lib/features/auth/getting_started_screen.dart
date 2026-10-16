@@ -130,7 +130,7 @@ const _pages = [
   _IntroPage(
     '02 · SẠC THÔNG MINH',
     'Sạc thông minh,',
-    'an toàn tuyệt đối',
+    'có bảo vệ an toàn',
     'Kết nối ổ cắm Shelly để hẹn giờ sạc. Rơ-le tự ngắt theo bộ đếm phần cứng, kể cả khi điện thoại mất mạng.',
   ),
   _IntroPage(

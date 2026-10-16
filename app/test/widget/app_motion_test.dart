@@ -41,10 +41,7 @@ void main() {
         home: MediaQuery(
           data: const MediaQueryData(disableAnimations: true),
           child: Column(
-            children: [
-              const Text('Ready').appFadeSlideIn(index: 99),
-              const Text('Badge').appScalePop(),
-            ],
+            children: [const Text('Ready').appFadeSlideIn(index: 99)],
           ),
         ),
       ),

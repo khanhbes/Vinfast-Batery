@@ -1,15 +1,17 @@
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/providers/app_providers.dart';
 import '../../core/services/api_service.dart';
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/luxe_theme.dart';
 import '../../core/theme/app_motion.dart';
 import '../../core/utils/app_error_formatter.dart';
+import '../../core/widgets/loading_skeleton.dart';
+import '../../core/widgets/luxe_kit.dart';
+import '../../core/widgets/luxe_settings.dart';
 import 'smart_charging_control_screen.dart';
 
 String _catalogLabel(String key, String fallback) =>
@@ -440,185 +442,93 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
       }
     });
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
+    return LuxeScaffold(
+      appBar: Navigator.canPop(context) ? const LuxeAppBar() : null,
       body: SafeArea(
+        top: !Navigator.canPop(context),
         child: CustomScrollView(
           physics: const BouncingScrollPhysics(),
           slivers: [
-            // Title
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Dự báo cho xe',
-                            style: TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 32,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          Text(
-                            'Kết quả dự kiến từ dữ liệu của xe',
-                            style: TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                child: LuxeReveal(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const LuxePageHeaderText(
+                        eyebrow: 'Trí tuệ nhân tạo',
+                        title: 'Dự báo cho xe',
+                        caption: 'Kết quả dự kiến từ dữ liệu của xe',
                       ),
-                    ),
-                    // Auto-sync indicator (pull-to-refresh để reload, không còn nút manual)
-                    _buildSyncIndicator(),
-                  ],
+                      const SizedBox(height: 12),
+                      // Auto-sync indicator (pull-to-refresh để reload).
+                      _buildSyncIndicator(),
+                    ],
+                  ),
                 ),
-              ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.1),
-            ),
-
-            // AI Assistant summary card
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                child: _buildAiAssistantCard(),
               ),
             ),
-
-            // Error state
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                child: LuxeReveal(index: 1, child: _buildAiAssistantCard()),
+              ),
+            ),
             if (_error != null)
-              SliverToBoxAdapter(
+              const SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppColors.errorBg,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppColors.error.withAlpha(51)),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.wifi_off_rounded,
-                          color: AppColors.error,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Chưa tải được dự báo',
-                                style: TextStyle(
-                                  color: AppColors.error,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 13,
-                                ),
-                              ),
-                              Text(
-                                'Kiểm tra kết nối rồi thử lại.',
-                                style: TextStyle(
-                                  color: AppColors.textSecondary,
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+                  padding: EdgeInsets.fromLTRB(20, 14, 20, 0),
+                  child: LuxeNotice(
+                    icon: Icons.wifi_off_rounded,
+                    color: LuxeColors.danger,
+                    message:
+                        'Chưa tải được dự báo. Kiểm tra kết nối rồi thử lại.',
                   ),
                 ),
               ),
-
-            // Cache indicator — hiển thị khi đang dùng dữ liệu cache
             if (_fromCache && _error == null)
-              SliverToBoxAdapter(
+              const SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.amber.withAlpha(30),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.amber.withAlpha(80)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.history_rounded,
-                          color: Colors.amber.shade400,
-                          size: 14,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Dữ liệu cache — đang kiểm tra server...',
-                          style: TextStyle(
-                            color: Colors.amber.shade300,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
+                  padding: EdgeInsets.fromLTRB(20, 12, 20, 0),
+                  child: LuxeNotice(
+                    icon: Icons.history_rounded,
+                    color: LuxeColors.champagne,
+                    message: 'Dữ liệu cache — đang kiểm tra server...',
                   ),
                 ),
               ),
-
-            // Loading skeletons
+            if (_models.isNotEmpty || _loading)
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 14),
+                  child: LuxeSectionLabel('Mô hình'),
+                ),
+              ),
             if (_loading)
-              SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (ctx, i) => Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                    child: Container(
-                      height: 90,
-                      decoration: BoxDecoration(
-                        color: AppColors.card,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: AppColors.glassBorder),
-                      ),
-                    ),
-                  ),
-                  childCount: 3,
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  child: LoadingSkeleton(layout: SkeletonLayout.list),
                 ),
               ),
-
-            // Real model cards
             if (!_loading)
               SliverList(
                 delegate: SliverChildBuilderDelegate((ctx, i) {
                   final m = _models[i];
+                  final card = _buildModelCard(
+                    context: context,
+                    model: m,
+                    onTap: m.key == 'charging_time'
+                        ? () => _navigateToChargingPredictor(context)
+                        : null,
+                  );
                   return Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                    child:
-                        _buildModelCard(
-                              context: context,
-                              model: m,
-                              onTap: m.key == 'charging_time'
-                                  ? () => _navigateToChargingPredictor(context)
-                                  : null,
-                            )
-                            .animate()
-                            .fadeIn(
-                              delay: Duration(milliseconds: i * 80),
-                              duration: 400.ms,
-                            )
-                            .slideY(begin: 0.1),
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                    child: i < 8 ? LuxeReveal(index: i + 2, child: card) : card,
                   );
                 }, childCount: _models.length),
               ),
-
             const SliverToBoxAdapter(child: SizedBox(height: 100)),
           ],
         ),
@@ -628,26 +538,27 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
 
   Widget _buildAiAssistantCard() {
     final loadedCount = _models.where((m) => m.isLoaded).length;
-    final totalCount = _models.isEmpty ? '...' : '${_models.length}';
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.glassBorder),
-      ),
+    final total = _models.length;
+    return LuxeGlass(
+      radius: 24,
+      padding: const EdgeInsets.all(18),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceVariant,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: const Icon(
-              Icons.psychology_rounded,
-              color: AppColors.primary,
-              size: 28,
+          LuxeRing(
+            value: total == 0 ? 0 : loadedCount / total,
+            size: 80,
+            stroke: 6,
+            semanticLabel: '$loadedCount trên $total mô hình đang hoạt động',
+            child: ExcludeSemantics(
+              child: Text(
+                total == 0 ? '…' : '$loadedCount/$total',
+                style: const TextStyle(
+                  color: LuxeColors.text,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w300,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
             ),
           ),
           const SizedBox(width: 16),
@@ -655,46 +566,25 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'TRỢ LÝ THÔNG MINH',
-                  style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 4),
+                const Text('TRỢ LÝ THÔNG MINH', style: LuxeText.eyebrow),
+                const SizedBox(height: 6),
                 Text(
                   _loading
                       ? 'Đang tải...'
-                      : '$loadedCount/${_models.length} mô hình đang hoạt động',
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 12,
-                  ),
+                      : '$loadedCount/$total mô hình đang hoạt động',
+                  style: LuxeText.item.copyWith(fontSize: 15),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${total == 0 ? '...' : '$total'} mô hình trong danh mục',
+                  style: LuxeText.caption.copyWith(fontSize: 12.5),
                 ),
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppColors.primaryContainer,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              '$totalCount MÔ HÌNH',
-              style: const TextStyle(
-                color: AppColors.primary,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
         ],
       ),
-    ).animate().fadeIn(delay: 100.ms, duration: 400.ms).slideY(begin: 0.1);
+    );
   }
 
   Widget _buildModelCard({
@@ -702,24 +592,13 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
     required _ModelInfo model,
     VoidCallback? onTap,
   }) {
-    // Map icon name to Flutter icon
-    IconData iconData;
-    switch (model.icon) {
-      case 'Timer':
-        iconData = Icons.timer_rounded;
-        break;
-      case 'Navigation':
-        iconData = Icons.navigation_rounded;
-        break;
-      case 'Cpu':
-        iconData = Icons.memory_rounded;
-        break;
-      case 'BatteryCharging':
-        iconData = Icons.battery_charging_full_rounded;
-        break;
-      default:
-        iconData = Icons.psychology_rounded;
-    }
+    final iconData = switch (model.icon) {
+      'Timer' => Icons.timer_rounded,
+      'Navigation' => Icons.navigation_rounded,
+      'Cpu' => Icons.memory_rounded,
+      'BatteryCharging' => Icons.battery_charging_full_rounded,
+      _ => Icons.psychology_rounded,
+    };
 
     final hasUsableModel =
         model.isLoaded ||
@@ -727,189 +606,114 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
         (model.activeVersion != null && model.lastError == null);
 
     final Color badgeColor = hasUsableModel
-        ? AppColors.success
+        ? LuxeColors.emerald
         : model.lastError != null
-        ? AppColors.error
-        : AppColors.textTertiary;
+        ? LuxeColors.danger
+        : LuxeColors.platinumMid;
 
     final String badgeText = hasUsableModel
-        ? 'ĐÃ TRIỂN KHAI'
+        ? 'Đã triển khai'
         : model.lastError != null
-        ? 'LỖI MODEL'
-        : 'CHƯA CÓ MODEL';
+        ? 'Lỗi model'
+        : 'Chưa có model';
 
-    // Format load time
     String? loadInfo;
     if (model.lastLoadAt != null) {
       try {
         final dt = DateTime.parse(model.lastLoadAt!).toLocal();
         loadInfo =
-            'Load: ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')} ${dt.day}/${dt.month}/${dt.year}';
+            'Load ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')} ${dt.day}/${dt.month}/${dt.year}';
       } catch (_) {
-        loadInfo = 'Load: ${model.lastLoadAt}';
+        loadInfo = 'Load ${model.lastLoadAt}';
       }
     }
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: model.isLoaded
-                ? AppColors.primary.withAlpha(51)
-                : AppColors.glassBorder,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: model.isLoaded
-                        ? AppColors.primaryContainer
-                        : AppColors.surfaceVariant,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Icon(iconData, color: AppColors.primary, size: 24),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        model.label,
-                        style: const TextStyle(
-                          color: AppColors.textPrimary,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        model.shortName.toUpperCase(),
-                        style: TextStyle(
-                          color: AppColors.textTertiary,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (model.activeVersion != null) ...[
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceVariant,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      model.activeVersion!,
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: badgeColor.withAlpha(26),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    badgeText,
-                    style: TextStyle(
-                      color: badgeColor,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-
-            // Load info row
-            if (loadInfo != null || model.featureCount != null) ...[
-              const SizedBox(height: 12),
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(22),
+        child: LuxeGlass(
+          selected: model.isLoaded,
+          radius: 22,
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Row(
                 children: [
-                  if (loadInfo != null) ...[
-                    Icon(Icons.bolt, color: AppColors.textTertiary, size: 14),
-                    const SizedBox(width: 4),
-                    Text(
-                      loadInfo,
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 11,
-                      ),
+                  LuxeMedallion(
+                    icon: iconData,
+                    accent: hasUsableModel ? LuxeColors.emerald : null,
+                    size: 44,
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          model.label,
+                          style: LuxeText.item.copyWith(fontSize: 15),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          model.shortName.toUpperCase(),
+                          style: LuxeText.label.copyWith(
+                            fontSize: 10.5,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                  if (model.featureCount != null) ...[
-                    const SizedBox(width: 12),
-                    Icon(
-                      Icons.settings_input_component,
-                      color: AppColors.textTertiary,
+                  ),
+                  if (onTap != null)
+                    const Icon(
+                      Icons.chevron_right_rounded,
+                      color: LuxeColors.dim,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  LuxeTag(badgeText, color: badgeColor),
+                  if (model.activeVersion != null)
+                    LuxeTag(model.activeVersion!),
+                  if (loadInfo != null)
+                    LuxeTag(loadInfo, color: LuxeColors.steel),
+                  if (model.featureCount != null)
+                    LuxeTag('Features ${model.featureCount}'),
+                ],
+              ),
+              if (model.lastError != null && !model.isLoaded) ...[
+                const SizedBox(height: 10),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.error_outline_rounded,
+                      color: LuxeColors.danger,
                       size: 14,
                     ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Features: ${model.featureCount}',
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 11,
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        AppErrorFormatter.format(model.lastError),
+                        style: const TextStyle(
+                          color: LuxeColors.danger,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
                   ],
-                  const Spacer(),
-                  if (onTap != null)
-                    Icon(
-                      Icons.chevron_right,
-                      color: AppColors.textTertiary,
-                      size: 20,
-                    ),
-                ],
-              ),
+                ),
+              ],
             ],
-
-            // Error
-            if (model.lastError != null && !model.isLoaded) ...[
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(
-                    Icons.error_outline_rounded,
-                    color: AppColors.error,
-                    size: 13,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      AppErrorFormatter.format(model.lastError),
-                      style: TextStyle(color: AppColors.error, fontSize: 11),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ],
+          ),
         ),
       ),
     );
@@ -928,37 +732,11 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
       final m = last.minute.toString().padLeft(2, '0');
       label = 'Cập nhật $h:$m';
     }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceVariant,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (_loading)
-            const SizedBox(
-              width: 12,
-              height: 12,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: AppColors.primary,
-              ),
-            )
-          else
-            Icon(Icons.cloud_done_rounded, color: AppColors.primary, size: 14),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
+    return LuxeTag(
+      label,
+      color: last == null && !_loading
+          ? LuxeColors.platinumMid
+          : LuxeColors.emerald,
     );
   }
 

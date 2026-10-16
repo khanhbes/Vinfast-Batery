@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
+import '../theme/luxe_theme.dart';
 import '../utils/error_mapper.dart';
 
 enum AppNoticeKind { success, error, warning, info }
@@ -260,7 +261,6 @@ class _NoticeOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     final media = MediaQuery.of(context);
     // Keep the navigation and safety controls below usable, even on a compact
     // device with large text/IME. Only the notice surface intercepts touches.
@@ -270,22 +270,19 @@ class _NoticeOverlay extends StatelessWidget {
                 media.viewInsets.bottom -
                 112)
             .clamp(80.0, 420.0);
+    // In-app failures use calm champagne. Rose remains reserved for
+    // emergency OFF and hardware danger controls, not routine notices.
     final (color, icon) = switch (kind) {
-      AppNoticeKind.success => (
-        const Color(0xFF15803D),
-        Icons.check_circle_rounded,
-      ),
-      // In-app failures use a calm amber accent. Red remains reserved for
-      // emergency OFF and hardware danger controls, not routine notices.
+      AppNoticeKind.success => (LuxeColors.emerald, Icons.check_rounded),
       AppNoticeKind.error => (
-        const Color(0xFFF59E0B),
+        LuxeColors.champagne,
         Icons.error_outline_rounded,
       ),
       AppNoticeKind.warning => (
-        const Color(0xFFB45309),
+        const Color(0xFFF0A46B),
         Icons.warning_amber_rounded,
       ),
-      AppNoticeKind.info => (colors.primary, Icons.info_rounded),
+      AppNoticeKind.info => (LuxeColors.steel, Icons.info_outline_rounded),
     };
     return Positioned(
       top: 0,
@@ -298,13 +295,13 @@ class _NoticeOverlay extends StatelessWidget {
           tween: Tween(begin: 0, end: 1),
           duration: MediaQuery.disableAnimationsOf(context)
               ? Duration.zero
-              : const Duration(milliseconds: 220),
-          curve: Curves.easeOutCubic,
+              : const Duration(milliseconds: 420),
+          curve: LuxeMotion.enter,
           builder: (context, value, child) => Opacity(
             opacity: value,
             child: Transform.translate(
-              offset: Offset(0, -10 * (1 - value)),
-              child: child,
+              offset: Offset(0, -14 * (1 - value)),
+              child: Transform.scale(scale: 0.97 + 0.03 * value, child: child),
             ),
           ),
           child: GestureDetector(
@@ -314,10 +311,7 @@ class _NoticeOverlay extends StatelessWidget {
               }
             },
             child: Material(
-              color: colors.surface,
-              elevation: 10,
-              shadowColor: Colors.black45,
-              borderRadius: BorderRadius.circular(16),
+              type: MaterialType.transparency,
               child: Semantics(
                 liveRegion: true,
                 child: Container(
@@ -325,11 +319,24 @@ class _NoticeOverlay extends StatelessWidget {
                     minHeight: 64,
                     maxHeight: noticeHeight,
                   ),
-                  padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border(left: BorderSide(color: color, width: 4)),
+                    color: const Color(0xF5141518),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: LuxeColors.hairlineStrong),
+                    boxShadow: [
+                      const BoxShadow(
+                        color: Color(0xB3000000),
+                        blurRadius: 28,
+                        offset: Offset(0, 10),
+                      ),
+                      BoxShadow(
+                        color: color.withValues(alpha: 0.10),
+                        blurRadius: 24,
+                        spreadRadius: -6,
+                      ),
+                    ],
                   ),
+                  padding: const EdgeInsets.fromLTRB(14, 8, 4, 8),
                   child: SingleChildScrollView(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -339,16 +346,27 @@ class _NoticeOverlay extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Padding(
-                              padding: const EdgeInsets.only(top: 12),
-                              child: Icon(icon, color: color),
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Container(
+                                width: 32,
+                                height: 32,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: color.withValues(alpha: 0.12),
+                                  border: Border.all(
+                                    color: color.withValues(alpha: 0.45),
+                                  ),
+                                ),
+                                child: Icon(icon, color: color, size: 17),
+                              ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Padding(
-                                padding: const EdgeInsets.only(top: 12),
+                                padding: const EdgeInsets.only(top: 13),
                                 child: Text(
                                   title,
-                                  style: Theme.of(context).textTheme.titleSmall,
+                                  style: LuxeText.item.copyWith(fontSize: 14.5),
                                 ),
                               ),
                             ),
@@ -359,16 +377,23 @@ class _NoticeOverlay extends StatelessWidget {
                                 minHeight: 48,
                               ),
                               onPressed: onDismiss,
-                              icon: const Icon(Icons.close_rounded),
+                              icon: const Icon(
+                                Icons.close_rounded,
+                                size: 19,
+                                color: LuxeColors.platinumMid,
+                              ),
                             ),
                           ],
                         ),
                         if (detail != null)
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(36, 4, 12, 8),
+                            padding: const EdgeInsets.fromLTRB(44, 0, 14, 8),
                             child: Text(
                               detail!,
-                              style: Theme.of(context).textTheme.bodyMedium,
+                              style: LuxeText.caption.copyWith(
+                                fontSize: 13.5,
+                                height: 1.45,
+                              ),
                             ),
                           ),
                         if (action != null)
@@ -377,6 +402,11 @@ class _NoticeOverlay extends StatelessWidget {
                             child: TextButton(
                               style: TextButton.styleFrom(
                                 minimumSize: const Size(48, 48),
+                                foregroundColor: LuxeColors.emerald,
+                                textStyle: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.6,
+                                ),
                               ),
                               onPressed: action,
                               child: Text(actionLabel),

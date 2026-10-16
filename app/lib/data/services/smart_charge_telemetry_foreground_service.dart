@@ -38,7 +38,7 @@ class SmartChargeTelemetryForegroundService {
     FlutterForegroundTask.init(
       androidNotificationOptions: AndroidNotificationOptions(
         channelId: 'smart_charge_monitoring_v1',
-        channelName: 'Theo dõi Smart Charge',
+        channelName: 'Theo dõi phiên sạc',
         channelDescription:
             'Hiển thị khi ứng dụng đang ghi dữ liệu sạc từ Shelly.',
         onlyAlertOnce: true,
@@ -62,7 +62,9 @@ class SmartChargeTelemetryForegroundService {
 
   static Future<void> start(SmartChargingSession session) async {
     if (!PlatformCapabilityAdapter.supportsContinuousForegroundService) {
-      debugPrint('[SmartChargeTelemetry] iOS uses backend timer and resume reconciliation');
+      debugPrint(
+        '[SmartChargeTelemetry] iOS uses backend timer and resume reconciliation',
+      );
       return;
     }
     initialize();
@@ -90,7 +92,7 @@ class SmartChargeTelemetryForegroundService {
     await FlutterForegroundTask.startService(
       serviceId: _serviceId,
       serviceTypes: const [ForegroundServiceTypes.connectedDevice],
-      notificationTitle: 'Đang theo dõi Smart Charge',
+      notificationTitle: 'Đang theo dõi phiên sạc',
       notificationText: 'Shelly đang sạc với timer an toàn trên thiết bị',
       notificationInitialRoute: _route,
       callback: smartChargeTelemetryStartCallback,
@@ -175,7 +177,10 @@ class _SmartChargeTelemetryTaskHandler extends TaskHandler {
       }
 
       final status = await charger.getStatus();
-      final meter = SmartChargeEnergyAccumulator.ingest(session, status.energyWh);
+      final meter = SmartChargeEnergyAccumulator.ingest(
+        session,
+        status.energyWh,
+      );
       final measured = session.copyWith(
         baselineEnergyWh: meter.baselineEnergyWh,
         lastMeterEnergyWh: meter.lastMeterEnergyWh,
@@ -185,8 +190,9 @@ class _SmartChargeTelemetryTaskHandler extends TaskHandler {
       final estimate = SmartChargeEnergyAccumulator.estimate(measured);
       final updated = measured.copyWith(
         estimatedSoc: estimate.soc,
-        estimatedStoredEnergyWh:
-            estimate.available ? estimate.storedEnergyWh : null,
+        estimatedStoredEnergyWh: estimate.available
+            ? estimate.storedEnergyWh
+            : null,
         socEstimateSource: estimate.available ? 'shelly_energy' : 'unavailable',
         socEstimateQuality: estimate.available
             ? (meter.energyQuality == 'good' ? 'live' : 'partial')
@@ -220,8 +226,8 @@ class _SmartChargeTelemetryTaskHandler extends TaskHandler {
       final minutes = (totalSeconds % 3600) ~/ 60;
       final timeStr = totalSeconds > 0
           ? (hours > 0
-              ? 'còn khoảng ${hours}g ${minutes.toString().padLeft(2, '0')}p'
-              : 'còn khoảng $minutes phút')
+                ? 'còn khoảng ${hours}g ${minutes.toString().padLeft(2, '0')}p'
+                : 'còn khoảng $minutes phút')
           : 'đang sạc';
 
       final socText = estimate.available ? '${estimate.soc!.round()}%' : '—';

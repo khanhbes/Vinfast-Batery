@@ -36,6 +36,7 @@ class _Server extends ServerSmartChargerService {
   int safetyCommands = 0;
   String? redeemedVehicle;
   bool failRedeem = false;
+  bool failStatus = false;
   @override
   Future<SmartChargerBinding?> getBinding({String? vehicleId}) async {
     scopes.add(vehicleId);
@@ -54,6 +55,9 @@ class _Server extends ServerSmartChargerService {
   @override
   Future<SmartChargerStatus> getStatus({String? vehicleId}) async {
     scopes.add(vehicleId);
+    if (failStatus) {
+      throw const SmartChargerException('QA timeout', code: 'timeout');
+    }
     return SmartChargerStatus(
       deviceId: 'qa-device',
       online: online,
@@ -205,6 +209,37 @@ void main() {
 
       expect(result.state, ShellyConnectionFlowState.connectionFailed);
       expect(result.errorMessage, isNotEmpty);
+      await coordinator.dispose();
+    },
+  );
+  test(
+    'first failed read after app start shows checking, not lost connection',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'smart_charger.connection_mode.v1': 'server_cloud',
+      });
+      final server = _Server()..failStatus = true;
+      final coordinator = ShellyConnectionCoordinator(
+        credentials: _Credentials(),
+        serverCharger: server,
+      );
+      coordinator.activateAccount('qa-account');
+      await coordinator.restore(vehicleId: 'qa-vehicle');
+      expect(coordinator.current.state, ShellyConnectionFlowState.verifying);
+      expect(coordinator.current.connectionLabel, contains('Đang kiểm tra'));
+      expect(coordinator.current.readyForControl, false);
+      coordinator.markServerUnavailable(
+        uid: 'qa-account',
+        vehicleId: 'qa-vehicle',
+      );
+      expect(coordinator.current.state, ShellyConnectionFlowState.verifying);
+      server.failStatus = false;
+      coordinator.updateCodeNotice(
+        await server.getStatus(vehicleId: 'qa-vehicle'),
+        uid: 'qa-account',
+        vehicleId: 'qa-vehicle',
+      );
+      expect(coordinator.current.state, ShellyConnectionFlowState.connected);
       await coordinator.dispose();
     },
   );

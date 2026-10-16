@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../../core/theme/app_ui_colors.dart';
 import '../../core/theme/cockpit_design_system.dart';
+import '../../core/theme/luxe_theme.dart';
+import '../../core/widgets/luxe_kit.dart';
 import '../../core/widgets/responsive_card_grid.dart';
 import '../../core/widgets/settings_reveal.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -156,8 +158,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
       _stats = _computeStats(fallbackRecords);
       _loading = false;
       _isServerOnline = false;
-      _errorMessage =
-          'Máy chủ ngoại tuyến. Đang dùng bộ đệm dữ liệu cục bộ.';
+      _errorMessage = 'Máy chủ ngoại tuyến. Đang dùng bộ đệm dữ liệu cục bộ.';
     });
   }
 
@@ -580,19 +581,23 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _ui.background,
+      backgroundColor: LuxeColors.background,
       appBar: AppBar(
-        toolbarHeight: 24 + MediaQuery.textScalerOf(context).scale(34),
-        backgroundColor: _ui.background,
+        toolbarHeight: 24 + MediaQuery.textScalerOf(context).scale(38),
+        backgroundColor: LuxeColors.background,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back_ios_new_rounded,
-            color: _ui.text,
-            size: 20,
+        leadingWidth: 68,
+        titleSpacing: 4,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 16),
+          child: Center(
+            child: LuxeCircleButton(
+              icon: Icons.arrow_back_rounded,
+              tooltip: 'Quay lại',
+              onPressed: () => Navigator.pop(context),
+            ),
           ),
-          onPressed: () => Navigator.pop(context),
         ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -601,10 +606,10 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
               'Developer AI Studio',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: _ui.text,
+              style: const TextStyle(
+                color: LuxeColors.text,
                 fontSize: 18,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w600,
               ),
             ),
             Text(
@@ -653,12 +658,12 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
                     child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.dataset_rounded, size: 16),
-                      SizedBox(width: 6),
-                      Text('Tập dữ liệu'),
-                    ],
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.dataset_rounded, size: 16),
+                        SizedBox(width: 6),
+                        Text('Tập dữ liệu'),
+                      ],
                     ),
                   ),
                 ),
@@ -666,12 +671,12 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
                     child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.model_training_rounded, size: 16),
-                      SizedBox(width: 6),
-                      Text('Huấn luyện AI'),
-                    ],
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.model_training_rounded, size: 16),
+                        SizedBox(width: 6),
+                        Text('Huấn luyện AI'),
+                      ],
                     ),
                   ),
                 ),

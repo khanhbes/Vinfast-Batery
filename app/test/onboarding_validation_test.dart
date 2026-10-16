@@ -18,29 +18,52 @@ void main() {
     });
 
     test('Invalid format returns error message', () {
-      expect(OnboardingService.validateDateOfBirth('20-05-1995'), contains('dd/mm/yyyy'));
-      expect(OnboardingService.validateDateOfBirth('1995/05/20'), contains('dd/mm/yyyy'));
-      expect(OnboardingService.validateDateOfBirth('not-a-date'), contains('dd/mm/yyyy'));
+      expect(
+        OnboardingService.validateDateOfBirth('20-05-1995'),
+        contains('dd/mm/yyyy'),
+      );
+      expect(
+        OnboardingService.validateDateOfBirth('1995/05/20'),
+        contains('dd/mm/yyyy'),
+      );
+      expect(
+        OnboardingService.validateDateOfBirth('not-a-date'),
+        contains('dd/mm/yyyy'),
+      );
     });
 
     test('Future date returns error', () {
       final tomorrow = DateTime.now().add(const Duration(days: 2));
       final tomorrowStr = DateFormat('yyyy-MM-dd').format(tomorrow);
-      expect(OnboardingService.validateDateOfBirth(tomorrowStr), contains('tương lai'));
+      expect(
+        OnboardingService.validateDateOfBirth(tomorrowStr),
+        contains('tương lai'),
+      );
       final tomorrowStrDmy = DateFormat('dd/MM/yyyy').format(tomorrow);
-      expect(OnboardingService.validateDateOfBirth(tomorrowStrDmy), contains('tương lai'));
+      expect(
+        OnboardingService.validateDateOfBirth(tomorrowStrDmy),
+        contains('tương lai'),
+      );
     });
 
     test('Age over 120 returns error', () {
-      expect(OnboardingService.validateDateOfBirth('1890-01-01'), contains('120'));
-      expect(OnboardingService.validateDateOfBirth('01/01/1890'), contains('120'));
+      expect(
+        OnboardingService.validateDateOfBirth('1890-01-01'),
+        contains('120'),
+      );
+      expect(
+        OnboardingService.validateDateOfBirth('01/01/1890'),
+        contains('120'),
+      );
     });
 
     test('Age under 16 returns error', () {
       final now = DateTime.now();
       final recent = DateTime(now.year - 15, now.month, now.day);
       expect(
-        OnboardingService.validateDateOfBirth(DateFormat('dd/MM/yyyy').format(recent)),
+        OnboardingService.validateDateOfBirth(
+          DateFormat('dd/MM/yyyy').format(recent),
+        ),
         contains('16'),
       );
     });
@@ -58,8 +81,14 @@ void main() {
     });
 
     test('Formats date conversions correctly', () {
-      expect(OnboardingService.toServerDateFormat('20/05/1995'), equals('1995-05-20'));
-      expect(OnboardingService.toDisplayDateFormat('1995-05-20'), equals('20/05/1995'));
+      expect(
+        OnboardingService.toServerDateFormat('20/05/1995'),
+        equals('1995-05-20'),
+      );
+      expect(
+        OnboardingService.toDisplayDateFormat('1995-05-20'),
+        equals('20/05/1995'),
+      );
     });
   });
 }

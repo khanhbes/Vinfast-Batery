@@ -5,7 +5,6 @@
     "secrets": {"value": {"entries": [
       {"name": "firebase", "value": "<base64-service-account-json>"},
       {"name": "ai-token", "value": "<independent-staging-token>"},
-      {"name": "admin-key", "value": "<independent-staging-admin-key>"},
       {"name": "vault-key", "value": "<preserve-existing-master-key>"}
     ]}},
     "variables": {"value": {
@@ -13,7 +12,6 @@
       "AZURE_STAGING_HARDWARE_DISABLED": {"secret": false, "value": "1"},
       "FIREBASE_CREDENTIALS_JSON": {"secret": true, "value": "firebase"},
       "AI_SERVER_INTERNAL_TOKEN": {"secret": true, "value": "ai-token"},
-      "DEV_ADMIN_KEY": {"secret": true, "value": "admin-key"},
       "SHELLY_PROFILE_MASTER_KEY": {"secret": true, "value": "vault-key"},
       "ADMIN_EMAILS": {"secret": false, "value": "<explicit-admin-email>"},
       "AI_SERVER_URL": {"secret": false, "value": "https://<internal-ai-fqdn>"},

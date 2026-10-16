@@ -8,12 +8,13 @@ void main() {
     'QA Audit — Responsive Viewports, Text Scaling & Dark Theme (CHK-51..54, CHK-56, APP-UX-H16)',
     () {
       testWidgets(
-        'CHK-56: Dark Luxury Cockpit theme background and surface colors match specifications',
+        'CHK-56: LUXE theme background and surface colors match specifications',
         (tester) async {
           final theme = AppTheme.darkTheme;
 
           expect(theme.scaffoldBackgroundColor, AppColors.background);
-          expect(AppColors.background, const Color(0xFF0A0C10));
+          // Task 117: legacy tokens resolve to the LUXE splash background.
+          expect(AppColors.background, const Color(0xFF050506));
           expect(AppColors.accentGreen, const Color(0xFF10B981));
         },
       );

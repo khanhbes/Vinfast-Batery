@@ -2,30 +2,21 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import '../../core/constants/beta_capabilities.dart';
-import '../../core/widgets/settings_reveal.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../../data/services/shelly_connection_coordinator.dart';
 import '../../data/services/push_notification_service.dart';
-import '../../data/models/shelly_connection_state.dart';
 
 import '../../core/theme/app_ui_colors.dart';
-import '../../core/theme/cockpit_design_system.dart';
+import '../../core/theme/luxe_theme.dart';
+import '../../core/widgets/luxe_settings.dart';
 import '../../core/providers/app_providers.dart';
-import '../../core/services/auth_service.dart';
 import '../../core/services/sync_service.dart';
 import '../../core/services/settings_service.dart';
 import '../../core/widgets/app_popup.dart';
-import '../auth/auth_gate.dart';
-import '../notifications/notification_center_screen.dart';
 import '../smart_charging/smart_charger_setup_hub_screen.dart';
-import 'profile_screen.dart';
-import 'vehicle_garage_screen.dart';
-import 'guide_screen.dart';
 import 'appearance_sheet.dart';
 import 'personal_ai_settings_screen.dart';
 import 'personal_ai_training_data_screen.dart';
@@ -46,12 +37,8 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _pushNotifications = false;
-  bool _autoSync = true;
   bool _isLoading = false;
-  String _userName = '...';
-  String _userEmail = '...';
   String _appVersion = '...';
-  bool _shellyConfigured = false;
   String _shellyLabel = 'Shelly chưa kết nối';
   bool _developerUnlocked = false;
   int _versionTapCount = 0;
@@ -67,10 +54,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
     _applyShellyState(ShellyConnectionCoordinator.shared.current);
     _settingsService.addListener(_onSettingsChanged);
+    PushNotificationService.instance.userChoice.addListener(_onPushChoice);
     _settingsService.initialize();
     _loadSettings();
     _loadAppVersion();
-    _loadUserProfile();
     _loadShellyState();
   }
 
@@ -85,10 +72,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void _applyShellyState(ShellyConnectionSnapshot snapshot) {
     if (mounted) {
       setState(() {
-        _shellyConfigured =
-            snapshot.isLinked ||
-            snapshot.state == ShellyConnectionFlowState.connected ||
-            snapshot.state == ShellyConnectionFlowState.verificationRequired;
         final metrics = snapshot.metricsLine;
         _shellyLabel = [
           snapshot.connectionLabel,
@@ -110,11 +93,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void dispose() {
     _shellySubscription?.cancel();
     _settingsService.removeListener(_onSettingsChanged);
+    PushNotificationService.instance.userChoice.removeListener(_onPushChoice);
     super.dispose();
   }
 
   void _onSettingsChanged() {
     if (mounted) setState(() {});
+  }
+
+  void _onPushChoice() {
+    final choice = PushNotificationService.instance.userChoice.value;
+    if (mounted && choice != null) setState(() => _pushNotifications = choice);
   }
 
   Future<void> _loadSettings() async {
@@ -125,7 +114,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _pushNotifications =
           (prefs.getBool('pushNotifications') ?? false) &&
           notificationPermission.isGranted;
-      _autoSync = prefs.getBool('autoSync') ?? true;
       _developerUnlocked = prefs.getBool('developerModeUnlocked') ?? false;
     });
   }
@@ -144,26 +132,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  /// PLAN #3 — Load user profile from Firestore
-  Future<void> _loadUserProfile() async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      final data = await AuthService().getCurrentUserData();
-      if (!mounted) return;
-      setState(() {
-        _userName = data?['name'] ?? user?.displayName ?? 'Người dùng';
-        _userEmail = data?['email'] ?? user?.email ?? '';
-      });
-    } catch (_) {}
-  }
-
   /// Show About dialog with app info
   void _showAboutDialog() {
     showAboutDialog(
       context: context,
-      applicationName: 'EV Battery',
+      applicationName: 'VinFast Battery',
       applicationVersion: _appVersion,
-      applicationLegalese: '© 2026 EV Battery. Hệ thống quản lý pin xe điện.',
+      applicationLegalese:
+          '© 2026 VinFast Battery. Quản lý pin và sạc xe máy điện.',
       applicationIcon: Container(
         padding: EdgeInsets.all(8),
         decoration: BoxDecoration(
@@ -190,401 +166,213 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Future<void> _saveSetting(String key, bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(key, value);
-  }
-
-  Future<void> _signOut() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppUiColors.of(context).surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(
-          'Đăng xuất',
-          style: TextStyle(color: AppUiColors.of(context).text),
-        ),
-        content: Text(
-          'Bạn có chắc chắn muốn đăng xuất?',
-          style: TextStyle(color: AppUiColors.of(context).muted),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(
-              'Hủy',
-              style: TextStyle(color: AppUiColors.of(context).muted),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppUiColors.of(context).danger,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            child: Text('Đăng xuất'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-
-    setState(() => _isLoading = true);
-    final result = await AuthService().signOut();
-    setState(() => _isLoading = false);
-    if (!mounted) return;
-
-    if (result['success'] == true) {
-      ref.read(selectedVehicleIdProvider.notifier).state = '';
-      ref.read(currentTabProvider.notifier).state = 0;
-
-      // FirebaseAuth.authStateChanges normally makes the root AuthGate show
-      // LoginScreen. Replace the complete navigator stack as well so logout
-      // is immediate even if a nested page is still transitioning, and the
-      // Back button can never return to account data.
-      Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
-        MaterialPageRoute<void>(builder: (_) => AuthGate()),
-        (_) => false,
-      );
-    } else {
-      AppPopup.showError(result['error'] ?? 'Đăng xuất thất bại');
-    }
-  }
-
   Future<void> _manualSync() async {
     setState(() => _isLoading = true);
     final result = await SyncService().performFullSync();
     setState(() => _isLoading = false);
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          result['success'] == true ? 'Đồng bộ thành công' : 'Đồng bộ thất bại',
-        ),
-        backgroundColor: result['success'] == true
-            ? AppUiColors.of(context).primary
-            : AppUiColors.of(context).danger,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
+    if (result['success'] == true) {
+      AppPopup.showSuccess('Đồng bộ thành công');
+    } else {
+      AppPopup.showError('Chưa đồng bộ được. Hãy kiểm tra mạng và thử lại.');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppUiColors.of(context).background,
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 680),
-            child: ListView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-              children: [
-                Text(
-                  'Cài đặt',
-                  style: TextStyle(
-                    color: AppUiColors.of(context).text,
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -.8,
-                  ),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  'Cấu hình phương tiện, AI cá nhân và tùy chọn ứng dụng',
-                  style: TextStyle(
-                    color: AppUiColors.of(context).muted,
-                    fontSize: 13,
-                  ),
-                ),
-                SizedBox(height: 20),
-                _buildProfileCard(),
-
-                SizedBox(height: 26),
-                CockpitSectionLabel('Xe và bộ sạc'),
-                _settingsGroup([
-                  CockpitSettingsRow(
-                    icon: Icons.electric_moped_rounded,
-                    title: 'Phương tiện',
-                    subtitle: _developerUnlocked
-                        ? 'Quản lý xe, dung lượng pin và xe đang chọn'
-                        : null,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => VehicleGarageScreen()),
-                    ),
-                  ),
-                  CockpitSettingsRow(
-                    icon: Icons.ev_station_rounded,
-                    title: 'Smart Charger',
-                    subtitle: _shellyConfigured
-                        ? _shellyLabel
-                        : (_developerUnlocked ? 'Shelly chưa kết nối' : null),
-                    onTap: _openShellySetup,
-                  ),
-                ]),
-
-                SizedBox(height: 26),
-                if (BetaCapabilities.advancedAi) ...[
-                  CockpitSectionLabel('Trí tuệ nhân tạo (AI)'),
-                  _settingsGroup([
-                    CockpitSettingsRow(
-                      icon: Icons.psychology_alt_rounded,
-                      title: 'AI cá nhân',
-                      subtitle: _developerUnlocked
-                          ? 'Mô hình riêng cho từng tài khoản và xe'
-                          : null,
-                      onTap: _openPersonalAi,
-                    ),
-                  ]),
-                ],
-
-                SizedBox(height: 26),
-                CockpitSectionLabel('Thông báo'),
-                _settingsGroup([
-                  CockpitSettingsRow(
-                    icon: Icons.notifications_outlined,
-                    title: 'Trung tâm thông báo',
-                    subtitle: _developerUnlocked
-                        ? 'Cảnh báo sạc, đồng bộ và nhắc nhở'
-                        : null,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => NotificationCenterScreen(),
-                      ),
-                    ),
-                  ),
-                  CockpitSettingsRow(
-                    icon: Icons.notifications_active_outlined,
-                    title: 'Thông báo đẩy',
-                    subtitle: _developerUnlocked
-                        ? 'Nhận cảnh báo quan trọng trên thiết bị'
-                        : null,
-                    trailing: _AnimatedToggle(
-                      value: _pushNotifications,
-                      onChanged: _setPushNotifications,
-                    ),
-                    onTap: () => _setPushNotifications(!_pushNotifications),
-                  ),
-                ]),
-
-                SizedBox(height: 26),
-                CockpitSectionLabel('Dữ liệu và quyền riêng tư'),
-                _settingsGroup([
-                  CockpitSettingsRow(
-                    icon: Icons.cloud_sync_outlined,
-                    title: 'Tự động đồng bộ',
-                    subtitle: _developerUnlocked
-                        ? 'Đồng bộ dữ liệu với web khi có mạng'
-                        : null,
-                    trailing: _AnimatedToggle(
-                      value: _autoSync,
-                      onChanged: _setAutoSync,
-                    ),
-                    onTap: () => _setAutoSync(!_autoSync),
-                  ),
-                  if (_developerUnlocked)
-                    CockpitSettingsRow(
-                      icon: Icons.sync_rounded,
-                      title: 'Đồng bộ ngay',
-                      subtitle: 'Đẩy dữ liệu hiện tại lên web dashboard',
-                      onTap: _isLoading ? null : _manualSync,
-                    ),
-                  CockpitSettingsRow(
-                    icon: Icons.download_outlined,
-                    title: 'Tải dữ liệu tài khoản',
-                    subtitle: _developerUnlocked
-                        ? 'Xuất toàn bộ dữ liệu người dùng'
-                        : null,
-                    availability: SettingsItemAvailability.comingSoon,
-                  ),
-                  CockpitSettingsRow(
-                    icon: Icons.shield_outlined,
-                    title: 'Quyền riêng tư và bảo mật',
-                    subtitle: _developerUnlocked
-                        ? 'Kiểm soát dữ liệu và quyền truy cập'
-                        : null,
-                    availability: SettingsItemAvailability.comingSoon,
-                  ),
-                ]),
-
-                SizedBox(height: 26),
-                CockpitSectionLabel('Ứng dụng'),
-                _settingsGroup([
-                  CockpitSettingsRow(
-                    icon: Icons.palette_outlined,
-                    title: 'Giao diện, ngôn ngữ và đơn vị',
-                    subtitle: _developerUnlocked ? _getAppearanceValue() : null,
-                    onTap: _showAppearanceSheet,
-                  ),
-                  CockpitSettingsRow(
-                    icon: Icons.fingerprint_rounded,
-                    title: 'Xác thực sinh trắc học',
-                    subtitle: _developerUnlocked
-                        ? 'Vân tay hoặc khuôn mặt khi mở ứng dụng'
-                        : null,
-                    availability: SettingsItemAvailability.comingSoon,
-                  ),
-                ]),
-
-                SizedBox(height: 26),
-                CockpitSectionLabel('Hỗ trợ'),
-                _settingsGroup([
-                  CockpitSettingsRow(
-                    icon: Icons.help_outline_rounded,
-                    title: 'Trợ giúp',
-                    subtitle: _developerUnlocked
-                        ? 'FAQ và hướng dẫn sử dụng'
-                        : null,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => GuideScreen()),
-                    ),
-                  ),
-                  CockpitSettingsRow(
-                    icon: Icons.info_outline_rounded,
-                    title: 'Giới thiệu',
-                    subtitle: _appVersion,
-                    onTap: _showAboutDialog,
-                  ),
-                ]),
-
-                if (BetaCapabilities.developerMode && _developerUnlocked) ...[
-                  SizedBox(height: 26),
-                  CockpitSectionLabel('Developer Mode'),
-                  _settingsGroup([
-                    CockpitSettingsRow(
-                      icon: Icons.auto_graph_rounded,
-                      title: 'Developer AI Studio',
-                      subtitle:
-                          'Xem & sửa tập dữ liệu, thâm nhập quá trình fine-tune',
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => DeveloperAiStudioScreen(),
-                        ),
-                      ),
-                    ),
-                    CockpitSettingsRow(
-                      icon: Icons.developer_mode_rounded,
-                      title: 'Chẩn đoán ứng dụng',
-                      subtitle: 'Thông tin build và trạng thái kết nối an toàn',
-                      onTap: _showDeveloperSheet,
-                    ),
-                    CockpitSettingsRow(
-                      icon: Icons.tune_rounded,
-                      title: 'Cấu hình nâng cao Shelly',
-                      subtitle:
-                          'Chế độ trực tiếp, quét subnet, token & API kỹ thuật',
-                      onTap: _openShellySetup,
-                    ),
-                    CockpitSettingsRow(
-                      icon: Icons.dataset_outlined,
-                      title: 'Dữ liệu fine-tune AI (Firestore)',
-                      subtitle: 'Xem mẫu học gốc của xe đang chọn',
-                      onTap: _openTrainingData,
-                    ),
-                  ]),
-                ],
-
-                SizedBox(height: 30),
-                _isLoading
-                    ? Center(child: CircularProgressIndicator())
-                    : _AnimatedSignOutButton(onTap: _signOut),
-                SizedBox(height: 22),
-                Semantics(
-                  button: true,
-                  label: BetaCapabilities.developerMode
-                      ? 'Phiên bản $_appVersion. Chạm bảy lần để mở Developer Mode'
-                      : 'Phiên bản $_appVersion',
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: BetaCapabilities.developerMode
-                        ? _handleVersionTap
-                        : null,
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                      child: Center(
-                        child: Text(
-                          'STABLE CHANNEL $_appVersion',
-                          style: TextStyle(
-                            color: AppUiColors.of(context).muted,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1.5,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+    final groups = <Widget>[
+      // Task 125: profile, vehicles, Shelly, notification centre, guide and
+      // sign-out live on the Settings tab; this page keeps system options
+      // only (one row per destination).
+      if (BetaCapabilities.advancedAi) ...[
+        const LuxeSectionLabel('Trí tuệ nhân tạo (AI)'),
+        LuxeSettingsGroup(
+          children: [
+            LuxeSettingsRow(
+              icon: Icons.psychology_alt_rounded,
+              title: 'AI cá nhân',
+              subtitle: _developerUnlocked
+                  ? 'Mô hình riêng cho từng tài khoản và xe'
+                  : null,
+              onTap: _openPersonalAi,
+            ),
+          ],
+        ),
+      ],
+      const LuxeSectionLabel('Thông báo'),
+      LuxeSettingsGroup(
+        children: [
+          LuxeSettingsRow(
+            icon: Icons.notifications_active_outlined,
+            title: 'Thông báo đẩy',
+            subtitle: 'Nhận cảnh báo quan trọng trên thiết bị',
+            trailing: LuxeSwitch(
+              value: _pushNotifications,
+              onChanged: _setPushNotifications,
+              semanticLabel: 'Thông báo đẩy',
             ),
           ),
+        ],
+      ),
+      const LuxeSectionLabel('Dữ liệu và quyền riêng tư'),
+      LuxeSettingsGroup(
+        children: [
+          // Data lives in Firestore/the API per account; there is no
+          // separate sync to switch off (the old toggle did nothing).
+          const LuxeSettingsRow(
+            key: ValueKey('settings-data-autosaved'),
+            icon: Icons.cloud_done_outlined,
+            title: 'Dữ liệu tự lưu theo tài khoản',
+            subtitle:
+                'Xe, lịch sử sạc và bộ nhớ BatteryBot lưu lên máy chủ khi có mạng',
+          ),
+          if (_developerUnlocked)
+            LuxeSettingsRow(
+              icon: Icons.sync_rounded,
+              title: 'Đồng bộ ngay',
+              subtitle: 'Đẩy dữ liệu hiện tại lên web dashboard',
+              onTap: _isLoading ? null : _manualSync,
+            ),
+        ],
+      ),
+      const LuxeSectionLabel('Ứng dụng'),
+      LuxeSettingsGroup(
+        children: [
+          LuxeSettingsRow(
+            icon: Icons.palette_outlined,
+            title: 'Giao diện và ngôn ngữ',
+            subtitle: _getAppearanceValue(),
+            onTap: _showAppearanceSheet,
+          ),
+        ],
+      ),
+      const LuxeSectionLabel('Hỗ trợ'),
+      LuxeSettingsGroup(
+        children: [
+          LuxeSettingsRow(
+            icon: Icons.info_outline_rounded,
+            title: 'Giới thiệu',
+            subtitle: _appVersion,
+            onTap: _showAboutDialog,
+          ),
+        ],
+      ),
+      if (BetaCapabilities.developerMode && _developerUnlocked) ...[
+        const LuxeSectionLabel('Developer Mode'),
+        LuxeSettingsGroup(
+          children: [
+            LuxeSettingsRow(
+              icon: Icons.auto_graph_rounded,
+              title: 'Developer AI Studio',
+              subtitle: 'Xem & sửa tập dữ liệu, thâm nhập quá trình fine-tune',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => DeveloperAiStudioScreen()),
+              ),
+            ),
+            LuxeSettingsRow(
+              icon: Icons.developer_mode_rounded,
+              title: 'Chẩn đoán ứng dụng',
+              subtitle: 'Thông tin build và trạng thái kết nối an toàn',
+              onTap: _showDeveloperSheet,
+            ),
+            LuxeSettingsRow(
+              icon: Icons.tune_rounded,
+              title: 'Cấu hình nâng cao Shelly',
+              subtitle: 'Chế độ trực tiếp, quét subnet, token & API kỹ thuật',
+              onTap: _openShellySetup,
+            ),
+            LuxeSettingsRow(
+              icon: Icons.dataset_outlined,
+              title: 'Dữ liệu fine-tune AI (Firestore)',
+              subtitle: 'Xem mẫu học gốc của xe đang chọn',
+              onTap: _openTrainingData,
+            ),
+          ],
+        ),
+      ],
+      const SizedBox(height: 30),
+      Semantics(
+        button: true,
+        label: BetaCapabilities.developerMode
+            ? 'Phiên bản $_appVersion. Chạm bảy lần để mở Developer Mode'
+            : 'Phiên bản $_appVersion',
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: BetaCapabilities.developerMode ? _handleVersionTap : null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Center(
+              child: Text(
+                '${BetaCapabilities.enabled ? 'BẢN BETA' : 'BẢN CHÍNH THỨC'} · $_appVersion',
+                style: LuxeText.label.copyWith(
+                  fontSize: 10.5,
+                  letterSpacing: 1.8,
+                  color: LuxeColors.dim,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ];
+    return Theme(
+      data: LuxeTheme.of(context),
+      child: Scaffold(
+        backgroundColor: LuxeColors.background,
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            const LuxeBackdrop(),
+            SafeArea(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 680),
+                  child: ListView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 60),
+                    children: [
+                      const LuxeReveal(
+                        child: LuxePageHeader(
+                          eyebrow: 'Hệ thống',
+                          title: 'Cài đặt hệ thống',
+                          caption: 'Thông báo đẩy, dữ liệu và giao diện',
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      for (var i = 0; i < groups.length; i++)
+                        LuxeReveal(
+                          index: i < 8 ? i ~/ 2 + 1 : 0,
+                          child: groups[i],
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _settingsGroup(List<Widget> rows) => SettingsReveal(
-    child: CockpitSurface(
-      color: AppUiColors.of(context).surface,
-      padding: EdgeInsets.all(4),
-      child: Column(
-        children: [
-          for (var index = 0; index < rows.length; index++) ...[
-            rows[index],
-            if (index != rows.length - 1)
-              Divider(height: 1, indent: 58, endIndent: 12),
-          ],
-        ],
-      ),
-    ),
-  );
-
   Future<void> _setPushNotifications(bool value) async {
-    if (value) {
-      final granted = await PushNotificationService.instance
-          .requestPermissionFromUser();
-      if (!granted) {
-        if (!mounted) return;
-        AppPopup.showWarning(
-          'Thông báo chưa được bật',
-          detail:
-              'Bạn có thể cho phép thông báo trong phần Cài đặt của thiết bị.',
-          action: () => openAppSettings(),
-          actionLabel: 'MỞ CÀI ĐẶT',
-          userInitiated: true,
-        );
-        setState(() => _pushNotifications = false);
-        await _saveSetting('pushNotifications', false);
-        return;
-      }
-      await _saveSetting('pushNotifications', true);
-      await PushNotificationService.instance.initialize();
-      await PushNotificationService.instance.syncCurrentUser();
-      if (mounted) setState(() => _pushNotifications = true);
-      return;
+    final enabled = await PushNotificationService.instance.setEnabledByUser(
+      value,
+    );
+    if (!mounted) return;
+    setState(() => _pushNotifications = enabled);
+    if (value && !enabled) {
+      AppPopup.showWarning(
+        'Thông báo chưa được bật',
+        detail:
+            'Bạn có thể cho phép thông báo trong phần Cài đặt của thiết bị.',
+        action: () => openAppSettings(),
+        actionLabel: 'MỞ CÀI ĐẶT',
+        userInitiated: true,
+      );
     }
-    await _saveSetting('pushNotifications', false);
-    try {
-      await PushNotificationService.instance.revokeCurrentUser();
-    } catch (_) {}
-    if (mounted) setState(() => _pushNotifications = false);
-  }
-
-  void _setAutoSync(bool value) {
-    setState(() => _autoSync = value);
-    _saveSetting('autoSync', value);
   }
 
   void _openPersonalAi() {
@@ -637,9 +425,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
-    backgroundColor: AppUiColors.of(context).surface,
-    shape: RoundedRectangleBorder(
+    backgroundColor: const Color(0xFF0C0D0F),
+    shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      side: BorderSide(color: LuxeColors.hairline),
     ),
     builder: (_) => AppearanceSheet(settings: _settingsService),
   );
@@ -647,7 +436,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _showDeveloperSheet() => showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
-    backgroundColor: AppUiColors.of(context).surface,
+    backgroundColor: const Color(0xFF0C0D0F),
     builder: (context) => SafeArea(
       child: Padding(
         padding: EdgeInsets.fromLTRB(20, 0, 20, 24),
@@ -663,8 +452,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
             SizedBox(height: 16),
             _diagnosticLine('Build', _appVersion),
-            _diagnosticLine('Smart Charger', _shellyLabel),
-            _diagnosticLine('Auto sync', _autoSync ? 'Bật' : 'Tắt'),
+            _diagnosticLine('Sạc thông minh', _shellyLabel),
             SizedBox(height: 12),
             Text(
               'Cloud key, mật khẩu LAN và token đăng nhập không được hiển thị.',
@@ -700,209 +488,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     ),
   );
 
-  // ── Profile Card — PLAN #3 ─────────────────────────────────────
-
-  Widget _buildProfileCard() {
-    final initials = _userName.isNotEmpty && _userName != '...'
-        ? _userName
-              .split(' ')
-              .map((w) => w.isNotEmpty ? w[0] : '')
-              .take(2)
-              .join()
-              .toUpperCase()
-        : '?';
-
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => ProfileScreen()),
-        ).then((_) {
-          _loadUserProfile(); // Refresh after returning
-        });
-      },
-      child: Container(
-        padding: EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppUiColors.of(context).surface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppUiColors.of(context).borderStrong),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppUiColors.of(context).primarySurface,
-                    AppUiColors.of(context).primary,
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Center(
-                child: Text(
-                  initials,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ),
-            SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _userName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: AppUiColors.of(context).text,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  SizedBox(height: 2),
-                  Text(
-                    _userEmail,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: AppUiColors.of(context).muted,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(
-              Icons.chevron_right_rounded,
-              color: AppUiColors.of(context).muted,
-              size: 22,
-            ),
-          ],
-        ),
-      ),
-    ).animate().fadeIn(duration: 500.ms).scale(begin: Offset(0.95, 0.95));
-  }
-
   String _getAppearanceValue() {
-    final themeMode = _settingsService.getThemeMode();
-    final language = _settingsService.getLanguage();
-
-    final themeText = switch (themeMode) {
-      AppThemeMode.system => 'Hệ thống',
-      AppThemeMode.light => 'Sáng',
-      AppThemeMode.dark => 'Tối',
-      AppThemeMode.amoled => 'AMOLED',
-    };
-
-    final langText = switch (language) {
+    final langText = switch (_settingsService.getLanguage()) {
       AppLanguage.system => 'Auto',
       AppLanguage.vietnamese => 'VN',
       AppLanguage.english => 'EN',
     };
-
-    return '$themeText • $langText';
-  }
-}
-
-// =============================================================================
-// Animated Widgets
-// =============================================================================
-
-class _AnimatedToggle extends StatelessWidget {
-  const _AnimatedToggle({required this.value, required this.onChanged});
-  final bool value;
-  final ValueChanged<bool> onChanged;
-  @override
-  Widget build(BuildContext context) => Switch.adaptive(
-    value: value,
-    onChanged: onChanged,
-    materialTapTargetSize: MaterialTapTargetSize.padded,
-  );
-}
-
-class _AnimatedSignOutButton extends StatefulWidget {
-  final VoidCallback onTap;
-
-  const _AnimatedSignOutButton({required this.onTap});
-
-  @override
-  State<_AnimatedSignOutButton> createState() => _AnimatedSignOutButtonState();
-}
-
-class _AnimatedSignOutButtonState extends State<_AnimatedSignOutButton>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: Duration(milliseconds: 150),
-      vsync: this,
-    );
-    _scaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 0.96,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => _controller.forward(),
-      onTapUp: (_) {
-        _controller.reverse();
-        widget.onTap();
-      },
-      onTapCancel: () => _controller.reverse(),
-      child: ScaleTransition(
-        scale: _scaleAnimation,
-        child: Container(
-          padding: EdgeInsets.symmetric(vertical: 16),
-          decoration: BoxDecoration(
-            color: Color(0xFF3D2828),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: AppUiColors.of(context).danger.withAlpha(77),
-            ),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.logout_rounded,
-                color: AppUiColors.of(context).danger.withAlpha(204),
-                size: 18,
-              ),
-              SizedBox(width: 8),
-              Text(
-                'Đăng xuất',
-                style: TextStyle(
-                  color: AppUiColors.of(context).danger.withAlpha(204),
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    ).animate().fadeIn(delay: 300.ms).slideY(begin: 0.2);
+    return 'Platinum • $langText';
   }
 }

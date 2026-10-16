@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vinfast_battery/core/services/settings_service.dart';
 import 'package:vinfast_battery/core/theme/app_theme.dart';
@@ -10,34 +9,34 @@ import 'package:vinfast_battery/features/ai/widgets/timed_charging_section_v2.da
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  GoogleFonts.config.allowRuntimeFetching = false;
 
-  test('Theme preferences preserve light, system, dark and AMOLED', () async {
+  test('LUXE renders dark for every stored theme preference', () async {
     SharedPreferences.setMockInitialValues({'app_theme_mode': 'light'});
     final settings = SettingsService();
     await settings.initialize();
-    expect(settings.getThemeModeValue(), ThemeMode.light);
+    expect(settings.getThemeModeValue(), ThemeMode.dark);
     for (final mode in AppThemeMode.values) {
       await settings.setThemeMode(mode);
       expect(
         (await SharedPreferences.getInstance()).getString('app_theme_mode'),
         mode.name,
       );
-      expect(settings.getThemeModeValue(), switch (mode) {
-        AppThemeMode.light => ThemeMode.light,
-        AppThemeMode.system => ThemeMode.system,
-        _ => ThemeMode.dark,
-      });
+      expect(settings.getThemeModeValue(), ThemeMode.dark);
     }
+    expect(AppTheme.darkTheme.brightness, Brightness.dark);
   });
 
-  for (final dark in [false, true]) {
-    testWidgets('Buttons have 48dp minimum in ${dark ? "dark" : "light"}', (
-      tester,
-    ) async {
+  for (final scale in [1.0, 2.0]) {
+    testWidgets('Buttons have 48dp minimum at text x$scale', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
-          theme: dark ? AppTheme.darkTheme : AppTheme.lightTheme,
+          theme: AppTheme.darkTheme,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(scale)),
+            child: child!,
+          ),
           home: Scaffold(
             body: Column(
               children: [

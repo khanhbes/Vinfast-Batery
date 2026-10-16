@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../../core/theme/cockpit_design_system.dart';
+import '../../../core/theme/luxe_theme.dart';
+import '../../../core/widgets/luxe_kit.dart';
 
 /// Modal bottom sheet to let the user adjust the current battery percentage
 /// when the vehicle or BMS is not automatically synchronizing telemetry.
@@ -19,11 +20,8 @@ class EditCurrentBatterySheet extends StatefulWidget {
     BuildContext context, {
     required double initialPercent,
     required ValueChanged<double> onSave,
-  }) => showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    barrierColor: Colors.black.withValues(alpha: .72),
+  }) => showLuxeSheet<void>(
+    context,
     builder: (_) =>
         EditCurrentBatterySheet(initialPercent: initialPercent, onSave: onSave),
   );
@@ -53,189 +51,123 @@ class _EditCurrentBatterySheetState extends State<EditCurrentBatterySheet> {
   @override
   Widget build(BuildContext context) {
     final rounded = _soc.round();
+    final accent = rounded < 20
+        ? LuxeColors.danger
+        : rounded < 40
+        ? LuxeColors.champagne
+        : LuxeColors.emerald;
 
-    return Container(
-      padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 16,
-        bottom: 24 + MediaQuery.of(context).viewInsets.bottom,
-      ),
-      decoration: BoxDecoration(
-        color: CockpitColors.shell,
-        borderRadius: const BorderRadius.vertical(
-          top: Radius.circular(CockpitRadius.sheet),
-        ),
-        border: Border.all(color: CockpitColors.border),
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        4,
+        20,
+        24 + MediaQuery.viewInsetsOf(context).bottom,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Drag handle
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: CockpitColors.dim,
-                borderRadius: BorderRadius.circular(2),
-              ),
+          LuxeSheetHeader(
+            eyebrow: 'Pin hiện tại',
+            title: 'Chỉnh mức pin hiện tại',
+            caption:
+                'Điều chỉnh mức pin thực tế nếu xe chưa đồng bộ với ứng dụng',
+            trailing: LuxeCircleButton(
+              icon: Icons.close_rounded,
+              tooltip: 'Đóng',
+              onPressed: () => Navigator.of(context).pop(),
             ),
           ),
-          const SizedBox(height: 16),
-
-          // Header
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    Icons.battery_charging_full_rounded,
-                    size: 22,
-                    color: CockpitColors.emerald,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Chỉnh mức pin hiện tại',
-                    style: TextStyle(
-                      color: CockpitColors.text,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
+          const SizedBox(height: 22),
+          Center(
+            child: LuxeRing(
+              value: _soc / 100,
+              size: 172,
+              stroke: 9,
+              color: accent,
+              duration: const Duration(milliseconds: 260),
+              semanticLabel: 'Mức pin $rounded phần trăm',
+              child: ExcludeSemantics(
+                child: Padding(
+                  padding: const EdgeInsets.all(26),
+                  child: FittedBox(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        LuxeMetalText(
+                          '$rounded',
+                          style: const TextStyle(
+                            fontSize: 52,
+                            fontWeight: FontWeight.w200,
+                            letterSpacing: -2,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                        const Text(
+                          '%',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w300,
+                            color: LuxeColors.muted,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
-              IconButton(
-                icon: const Icon(Icons.close_rounded, size: 20),
-                color: CockpitColors.muted,
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Điều chỉnh mức pin thực tế nếu xe chưa đồng bộ với ứng dụng',
-            style: TextStyle(color: CockpitColors.muted, fontSize: 12),
-          ),
-
-          const SizedBox(height: 24),
-
-          // Hero battery readout
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-            decoration: BoxDecoration(
-              color: CockpitColors.surface,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: CockpitColors.border),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Text(
-                  '$rounded',
-                  style: CockpitTypography.numbers(
-                    fontSize: 48,
-                    fontWeight: FontWeight.w800,
-                    color: CockpitColors.text,
-                  ),
                 ),
-                Text(
-                  '%',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w600,
-                    color: CockpitColors.muted,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
-
-          const SizedBox(height: 20),
-
-          // Slider with - / + steppers
+          const SizedBox(height: 18),
           Row(
             children: [
-              _SheetStepper(
+              LuxeCircleButton(
                 icon: Icons.remove_rounded,
+                tooltip: 'Giảm 1%',
                 onPressed: rounded > 0 ? () => _updateSoc(_soc - 1) : null,
               ),
               Expanded(
-                child: SliderTheme(
-                  data: SliderThemeData(
-                    activeTrackColor: CockpitColors.emerald,
-                    inactiveTrackColor: Colors.white.withValues(alpha: .10),
-                    thumbColor: CockpitColors.emerald,
-                    overlayColor: CockpitColors.emerald.withValues(alpha: .16),
-                    trackHeight: 6,
-                    thumbShape: const RoundSliderThumbShape(
-                      enabledThumbRadius: 9,
-                    ),
-                  ),
-                  child: Slider(
-                    value: _soc,
-                    min: 0,
-                    max: 100,
-                    divisions: 100,
-                    onChanged: _updateSoc,
-                  ),
+                child: Slider(
+                  value: _soc,
+                  min: 0,
+                  max: 100,
+                  divisions: 100,
+                  label: '$rounded%',
+                  onChanged: _updateSoc,
                 ),
               ),
-              _SheetStepper(
+              LuxeCircleButton(
                 icon: Icons.add_rounded,
+                tooltip: 'Tăng 1%',
                 onPressed: rounded < 100 ? () => _updateSoc(_soc + 1) : null,
               ),
             ],
           ),
-
-          const SizedBox(height: 16),
-
-          // Quick preset shortcuts
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [20, 35, 50, 75, 80].map((preset) {
-              final isSelected = rounded == preset;
-              return InkWell(
-                onTap: () => _updateSoc(preset.toDouble()),
-                borderRadius: BorderRadius.circular(10),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? CockpitColors.emerald.withValues(alpha: .15)
-                        : Colors.white.withValues(alpha: .04),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: isSelected
-                          ? CockpitColors.emerald
-                          : CockpitColors.border,
-                    ),
-                  ),
-                  child: Text(
-                    '$preset%',
-                    style: CockpitTypography.numbers(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: isSelected
-                          ? CockpitColors.emerald
-                          : CockpitColors.muted,
-                    ),
-                  ),
+          const SizedBox(height: 14),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final preset in const [20, 35, 50, 75, 80])
+                _PresetPill(
+                  label: '$preset%',
+                  selected: rounded == preset,
+                  onTap: () => _updateSoc(preset.toDouble()),
                 ),
-              );
-            }).toList(),
+            ],
           ),
-
-          const SizedBox(height: 24),
-
-          // Apply button
+          const SizedBox(height: 18),
+          const LuxeNotice(
+            icon: Icons.edit_note_rounded,
+            color: LuxeColors.champagne,
+            message:
+                'Mức pin bạn nhập là ước tính, dùng cho dự đoán sạc cho tới khi có dữ liệu đo thật.',
+          ),
+          const SizedBox(height: 20),
           FilledButton(
             onPressed: () {
               HapticFeedback.lightImpact();
@@ -243,17 +175,9 @@ class _EditCurrentBatterySheetState extends State<EditCurrentBatterySheet> {
               Navigator.of(context).pop();
             },
             style: FilledButton.styleFrom(
-              backgroundColor: CockpitColors.emerald,
-              foregroundColor: CockpitColors.background,
-              minimumSize: const Size.fromHeight(48),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(CockpitRadius.medium),
-              ),
+              minimumSize: const Size.fromHeight(54),
             ),
-            child: const Text(
-              'XÁC NHẬN MỨC PIN',
-              style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 0.8),
-            ),
+            child: const Text('Xác nhận mức pin'),
           ),
         ],
       ),
@@ -261,25 +185,53 @@ class _EditCurrentBatterySheetState extends State<EditCurrentBatterySheet> {
   }
 }
 
-class _SheetStepper extends StatelessWidget {
-  const _SheetStepper({required this.icon, required this.onPressed});
+class _PresetPill extends StatelessWidget {
+  const _PresetPill({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
 
-  final IconData icon;
-  final VoidCallback? onPressed;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    width: 36,
-    height: 36,
-    child: IconButton(
-      onPressed: onPressed,
-      icon: Icon(icon, size: 18),
-      style: IconButton.styleFrom(
-        backgroundColor: Colors.white.withValues(alpha: .06),
-        foregroundColor: onPressed != null
-            ? CockpitColors.text
-            : CockpitColors.dim.withValues(alpha: .3),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    selected: selected,
+    child: Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(99),
+        child: AnimatedContainer(
+          duration: luxeDuration(context, 220),
+          curve: LuxeMotion.enter,
+          constraints: const BoxConstraints(minHeight: 48, minWidth: 56),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(99),
+            color: selected
+                ? LuxeColors.emerald.withValues(alpha: 0.14)
+                : LuxeColors.glass,
+            border: Border.all(
+              color: selected
+                  ? LuxeColors.emerald.withValues(alpha: 0.7)
+                  : LuxeColors.hairline,
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? LuxeColors.text : LuxeColors.muted,
+              fontSize: 13.5,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ),
       ),
     ),
   );

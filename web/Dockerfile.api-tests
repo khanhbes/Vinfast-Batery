@@ -5,6 +5,7 @@ RUN pip install --no-cache-dir -r /qa-requirements.txt && pip check
 # Preserve repository-relative paths used by static/CLI contract tests.
 RUN mkdir -p /workspace/web && cp -a /app/. /workspace/web/
 COPY web/tests/ /workspace/web/tests/
+COPY web/gemini_relay/ /workspace/web/gemini_relay/
 COPY web/scripts/worker_fixture_smoke.py /workspace/web/scripts/worker_fixture_smoke.py
 COPY web/requirements-chat.txt web/Dockerfile.ai web/Dockerfile.worker-pilot /workspace/web/
 COPY web/docker-compose.yml web/.env.docker.example web/.env.laptop.example /workspace/web/

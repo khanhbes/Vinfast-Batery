@@ -22,6 +22,9 @@ class _DeferredController extends SmartChargingController {
     : super(vehicleId: vehicleId, currentSoc: 20, autoInitialize: false);
 
   final requests = <_HistoryRequest>[];
+
+  void emitSession(SmartChargingSession? session) =>
+      state = state.copyWith(session: session);
   final telemetryRequests = <Completer<List<SmartChargeTelemetryPoint>>>[];
 
   @override
@@ -102,6 +105,43 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
   }
+
+  testWidgets('history reloads when the running session ends', (tester) async {
+    await useLargeViewport(tester);
+    final controller = _DeferredController('vehicle-a');
+    addTearDown(controller.dispose);
+    await _mount(tester, controller);
+    controller.requests.single.result.complete(
+      SmartChargeHistoryPage(items: [_session('older')]),
+    );
+    await tester.pumpAndSettle();
+    final running = _session(
+      'live',
+    ).copyWith(state: ChargingSessionState.active);
+    controller.emitSession(running);
+    await tester.pump();
+    expect(controller.requests, hasLength(2));
+    controller.requests[1].result.complete(
+      SmartChargeHistoryPage(items: [_session('older')]),
+    );
+    await tester.pumpAndSettle();
+    // Timer cut / user stop: the finished session must appear without a
+    // manual pull-to-refresh (seen on the OnePlus run, Task 123).
+    controller.emitSession(
+      running.copyWith(state: ChargingSessionState.cancelled),
+    );
+    await tester.pump();
+    expect(controller.requests, hasLength(3));
+    controller.requests[2].result.complete(
+      SmartChargeHistoryPage(items: [_session('live'), _session('older')]),
+    );
+    await tester.pumpAndSettle();
+    expect(_row('live'), findsOneWidget);
+    // Unrelated state updates (telemetry, refresh) do not reload.
+    controller.emitSession(null);
+    await tester.pump();
+    expect(controller.requests, hasLength(3));
+  });
 
   testWidgets('initial pending is loading, first failure is not empty', (
     tester,

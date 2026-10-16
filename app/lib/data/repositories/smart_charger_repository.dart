@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -58,11 +59,15 @@ abstract interface class SmartChargerRepository {
   });
   Future<SmartChargingSession> rearm(Duration duration);
   Future<void> manualOff({String? vehicleId});
+
+  /// [targetSoc] is display/estimate context only; the device timer alone
+  /// switches the relay off.
   Future<SmartChargingSession> manualOn(
     Duration duration,
     String idempotencyKey, {
     required String vehicleId,
     required double currentSoc,
+    double? targetSoc,
   });
 }
 
@@ -405,6 +410,7 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
     String idempotencyKey, {
     required String vehicleId,
     required double currentSoc,
+    double? targetSoc,
   }) => service.manualOn(
     duration,
     idempotencyKey: idempotencyKey,
@@ -523,19 +529,23 @@ class ServerSmartChargerRepository implements SmartChargerRepository {
     );
   }
 
+  /// Server mode owns telemetry: every `/live` read already ingests the
+  /// Shelly meter server-side. Posting each poll again doubled the requests
+  /// and cleared the shared `/live` cache (Task 122).
   @override
   Future<void> recordStatusSample(
     SmartChargingSession session,
     SmartChargerStatus status,
-  ) => service.recordTelemetry(session.sessionId, status);
+  ) => Future.value();
 
+  /// The API owns the session row and the ChargeLog in server mode; a phone
+  /// copy bumped `revision` on the same document (Task 125).
   @override
   Future<void> saveActiveSession(SmartChargingSession session) =>
-      _chargeLogs?.saveActiveSession(session) ?? Future.value();
+      Future.value();
 
   @override
-  Future<void> flushPendingTelemetry(String sessionId) =>
-      _chargeLogs?.flushPendingTelemetry(sessionId) ?? Future.value();
+  Future<void> flushPendingTelemetry(String sessionId) => Future.value();
   @override
   Future<void> hideSession(String sessionId) => service.hideSession(sessionId);
   @override
@@ -560,6 +570,10 @@ class ServerSmartChargerRepository implements SmartChargerRepository {
       relayOffVerified: stopped == null || stopped.relayVerified,
       session: stopped,
       alreadyStopped: stopped == null,
+      offPendingReadback:
+          stopped != null &&
+          stopped.state == ChargingSessionState.stopping &&
+          stopped.lastError == offPendingReadbackCode,
     );
   }
 
@@ -580,11 +594,13 @@ class ServerSmartChargerRepository implements SmartChargerRepository {
     String idempotencyKey, {
     required String vehicleId,
     required double currentSoc,
+    double? targetSoc,
   }) => service.manualOn(
     duration,
     idempotencyKey: idempotencyKey,
     vehicleId: vehicleId,
     currentSoc: currentSoc,
+    targetSoc: targetSoc,
   );
 }
 
@@ -640,13 +656,19 @@ class SmartChargerRepositoryFactory {
     );
   }
 
+  /// One HTTP client for server mode: every create() used to open a new
+  /// client that nothing closed (Task 125).
+  static ServerSmartChargerService? _sharedServer;
+
   static Future<SmartChargerRepository> create() async {
     final mode = await currentMode();
     if (mode == SmartChargerConnectionMode.serverCloud) {
       final chargeLogs = ShellyChargeLogService();
-      await chargeLogs.flushAllPending();
+      // Server mode writes logs server-side; old Direct-mode leftovers are
+      // flushed in the background instead of delaying the Charge tab.
+      unawaited(chargeLogs.flushAllPending().catchError((_) => false));
       return ServerSmartChargerRepository(
-        ServerSmartChargerService(),
+        _sharedServer ??= ServerSmartChargerService(),
         chargeLogs: chargeLogs,
       );
     }

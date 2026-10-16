@@ -70,6 +70,7 @@ class _Server extends ServerSmartChargerService {
     required String vehicleId,
     required double currentSoc,
     String? expectedDeviceId,
+    double? targetSoc,
   }) async {
     timedCalls++;
     requestedTimer = duration;

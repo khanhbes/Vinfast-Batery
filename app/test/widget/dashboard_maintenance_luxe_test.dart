@@ -33,16 +33,19 @@ MaintenanceTaskModel task(int target, {bool done = false, ServiceType? type}) =>
 void main() {
   test('standard schedule proposes the next interval and skips open types', () {
     final first = VinFastServiceCatalog.presets.first;
-    final proposals = proposeSchedule(1240, [
-      task(2000, type: first.type),
-    ]);
+    final proposals = proposeSchedule(1240, [task(2000, type: first.type)]);
     expect(proposals.length, VinFastServiceCatalog.presets.length);
     final p = proposals.first;
     expect(p.targetOdo % first.suggestedOdoInterval, 0);
     expect(p.targetOdo, greaterThan(1240));
     expect(p.targetOdo - 1240, lessThanOrEqualTo(first.suggestedOdoInterval));
     expect(p.alreadyOpen, isTrue);
-    expect(proposals.skip(1).every((e) => !e.alreadyOpen || e.preset.type == first.type), isTrue);
+    expect(
+      proposals
+          .skip(1)
+          .every((e) => !e.alreadyOpen || e.preset.type == first.type),
+      isTrue,
+    );
   });
 
   test('charging week buckets only valid sessions into local days', () {
@@ -64,9 +67,9 @@ void main() {
   Widget host(Widget child, {double scale = 1, double width = 320}) =>
       MaterialApp(
         builder: (context, c) => MediaQuery(
-          data: MediaQuery.of(context).copyWith(
-            textScaler: TextScaler.linear(scale),
-          ),
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(scale)),
           child: c!,
         ),
         home: Scaffold(
@@ -113,7 +116,12 @@ void main() {
               const OdometerDrum(value: 12408),
               OdoTrack(
                 currentOdo: 1240,
-                tasks: [task(1000), task(1260), task(3000), task(900, done: true)],
+                tasks: [
+                  task(1000),
+                  task(1260),
+                  task(3000),
+                  task(900, done: true),
+                ],
               ),
               const LuxeVehicleHero(vehicle: null),
             ],

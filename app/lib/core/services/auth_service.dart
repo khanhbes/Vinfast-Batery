@@ -134,7 +134,10 @@ class AuthService {
 
       final user = userCredential.user;
       if (user == null) {
-        return {'success': false, 'error': 'Failed to create user'};
+        return {
+          'success': false,
+          'error': 'Chưa tạo được tài khoản. Hãy thử lại.',
+        };
       }
 
       // Server-side bootstrap continues in the background after Auth succeeds.
@@ -276,7 +279,10 @@ class AuthService {
 
       final user = userCredential.user;
       if (user == null) {
-        return {'success': false, 'error': 'Login failed'};
+        return {
+          'success': false,
+          'error': 'Đăng nhập chưa thành công. Hãy thử lại.',
+        };
       }
 
       // Lưu phiên ngay sau khi Firebase Auth xác thực thành công. Các bước
@@ -330,7 +336,6 @@ class AuthService {
       await _syncService.syncUserToWeb();
       await _syncService.syncAllVehiclesToWeb();
       await _session.markUserSynced();
-      _syncService.startAutoSync();
     } catch (error, stack) {
       debugPrint(
         '[AuthService] post-login sync deferred: ${error.runtimeType}',
@@ -380,9 +385,6 @@ class AuthService {
           '[AuthService] telemetry worker stop deferred (${error.runtimeType})',
         );
       }
-      // Dừng auto sync
-      _syncService.stopAutoSync();
-
       // Đánh dấu explicit sign out trước khi sign out Firebase
       await _session.markExplicitSignedOut();
 
@@ -432,7 +434,7 @@ class AuthService {
     try {
       final user = _auth.currentUser;
       if (user == null) {
-        return {'success': false, 'error': 'Not logged in'};
+        return {'success': false, 'error': 'Bạn cần đăng nhập lại.'};
       }
 
       await _ensureUserDoc(user);
@@ -470,7 +472,7 @@ class AuthService {
     try {
       final user = _auth.currentUser;
       if (user == null) {
-        return {'success': false, 'error': 'Not logged in'};
+        return {'success': false, 'error': 'Bạn cần đăng nhập lại.'};
       }
 
       // Kiểm tra ownership
@@ -479,12 +481,15 @@ class AuthService {
           .doc(vehicleId)
           .get();
       if (!vehicleDoc.exists) {
-        return {'success': false, 'error': 'Vehicle not found'};
+        return {'success': false, 'error': 'Không tìm thấy xe.'};
       }
 
       final vehicleData = vehicleDoc.data()!;
       if (vehicleData['ownerUid'] != user.uid) {
-        return {'success': false, 'error': 'Not authorized'};
+        return {
+          'success': false,
+          'error': 'Xe này không thuộc tài khoản của bạn.',
+        };
       }
 
       // Never archive a vehicle while its charger session is arming/active.
@@ -566,18 +571,23 @@ class AuthService {
       return {'success': true, 'message': 'Vehicle archived', 'archived': true};
     } on StateError catch (error) {
       if (error.message == 'vehicleNotAuthorized') {
-        return {'success': false, 'error': 'Not authorized'};
+        return {
+          'success': false,
+          'error': 'Xe này không thuộc tài khoản của bạn.',
+        };
       }
       return {'success': false, 'error': error.message};
     } catch (e) {
-      return {'success': false, 'error': 'Failed to delete vehicle: $e'};
+      return {'success': false, 'error': 'Chưa xóa được xe. Hãy thử lại.'};
     }
   }
 
   Future<Map<String, dynamic>> restoreVehicle(String vehicleId) async {
     try {
       final user = _auth.currentUser;
-      if (user == null) return {'success': false, 'error': 'Not logged in'};
+      if (user == null) {
+        return {'success': false, 'error': 'Bạn cần đăng nhập lại.'};
+      }
       final ref = _firestore.collection('Vehicles').doc(vehicleId);
       final userRef = _firestore.collection('users').doc(user.uid);
       try {
@@ -621,13 +631,19 @@ class AuthService {
           };
         }
         if (error.message == 'vehicleNotAuthorized') {
-          return {'success': false, 'error': 'Not authorized'};
+          return {
+            'success': false,
+            'error': 'Xe này không thuộc tài khoản của bạn.',
+          };
         }
         rethrow;
       }
       return {'success': true, 'message': 'Vehicle restored'};
     } catch (e) {
-      return {'success': false, 'error': 'Failed to restore vehicle: $e'};
+      return {
+        'success': false,
+        'error': 'Chưa khôi phục được xe. Hãy thử lại.',
+      };
     }
   }
 
@@ -639,7 +655,7 @@ class AuthService {
     try {
       final user = _auth.currentUser;
       if (user == null) {
-        return {'success': false, 'error': 'Not logged in'};
+        return {'success': false, 'error': 'Bạn cần đăng nhập lại.'};
       }
 
       const personalFields = {
@@ -666,7 +682,7 @@ class AuthService {
       }
       return ApiService().patch('/api/user/vehicles/$vehicleId', safeUpdates);
     } catch (e) {
-      return {'success': false, 'error': 'Failed to update vehicle: $e'};
+      return {'success': false, 'error': 'Chưa cập nhật được xe. Hãy thử lại.'};
     }
   }
 
@@ -806,7 +822,7 @@ class AuthService {
     try {
       final user = _auth.currentUser;
       if (user == null) {
-        return {'success': false, 'error': 'Not logged in'};
+        return {'success': false, 'error': 'Bạn cần đăng nhập lại.'};
       }
 
       // Re-authenticate

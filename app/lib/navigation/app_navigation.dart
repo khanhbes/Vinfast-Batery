@@ -8,8 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/providers/app_providers.dart';
 import '../core/services/assistant_context_coordinator.dart';
-import '../core/services/notification_center_service.dart';
-import '../core/theme/app_ui_colors.dart';
+import '../core/theme/luxe_theme.dart';
 import '../core/widgets/app_navigation_bar.dart';
 import '../core/widgets/app_popup.dart';
 import '../core/widgets/app_tab_stack.dart';
@@ -123,9 +122,9 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
       }
     });
     _screens = [
-      _RefreshableTab(child: OverviewScreen()), // Tab 0: Overview
-      // Charge and History own their refresh indicators. Wrapping them here
-      // created two simultaneous pull-to-refresh spinners.
+      // Overview, Charge and History own their refresh indicators. Wrapping
+      // them here created two simultaneous pull-to-refresh spinners.
+      OverviewScreen(), // Tab 0: Overview
       ChargeScreen(), // Tab 1: Charge
       _SelectedHistory(), // Tab 2: History
       _RefreshableTab(child: MoreScreen()), // Tab 3: More
@@ -224,15 +223,10 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
     SystemChrome.setSystemUIOverlayStyle(
       SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Theme.of(context).brightness == Brightness.dark
-            ? Brightness.light
-            : Brightness.dark,
-        systemNavigationBarColor: AppUiColors.of(context).surface,
-        systemNavigationBarIconBrightness:
-            Theme.of(context).brightness == Brightness.dark
-            ? Brightness.light
-            : Brightness.dark,
-        systemNavigationBarDividerColor: AppUiColors.of(context).border,
+        statusBarIconBrightness: Brightness.light,
+        systemNavigationBarColor: AppNavigationBar.railColor,
+        systemNavigationBarIconBrightness: Brightness.light,
+        systemNavigationBarDividerColor: AppNavigationBar.railColor,
       ),
     );
 
@@ -244,7 +238,7 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
         }
       },
       child: Scaffold(
-        backgroundColor: AppUiColors.of(context).background,
+        backgroundColor: LuxeColors.background,
         appBar: _buildUnifiedAppBar(context, currentIndex),
         body: Stack(
           children: [
@@ -252,10 +246,14 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
               onNotification: (scrollInfo) {
                 if (scrollInfo is UserScrollNotification) {
                   if (scrollInfo.direction == ScrollDirection.reverse) {
-                    ref.read(assistantContextCoordinatorProvider).setDocked(true);
+                    ref
+                        .read(assistantContextCoordinatorProvider)
+                        .setDocked(true);
                   } else if (scrollInfo.direction == ScrollDirection.forward ||
                       scrollInfo.metrics.pixels <= 20) {
-                    ref.read(assistantContextCoordinatorProvider).setDocked(false);
+                    ref
+                        .read(assistantContextCoordinatorProvider)
+                        .setDocked(false);
                   }
                 }
                 return false;
@@ -288,39 +286,73 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
     final tabTitles = ['Tổng quan', 'Sạc pin', 'Lịch sử', 'Cài đặt'];
     const energyMode = true;
 
+    final titleSwap = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : const Duration(milliseconds: 360);
+
     return AppBar(
-      backgroundColor: AppUiColors.of(context).surface,
+      backgroundColor: LuxeColors.background,
+      surfaceTintColor: Colors.transparent,
       elevation: 0,
-      title: FittedBox(
-        fit: BoxFit.scaleDown,
-        alignment: Alignment.centerLeft,
-        child: Text(
-          tabTitles[currentIndex],
-          maxLines: 1,
-          softWrap: false,
-          style: TextStyle(
-            color: AppUiColors.of(context).text,
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
+      scrolledUnderElevation: 0,
+      titleSpacing: 20,
+      // The title crossfades and rises with the tab, like the content below.
+      title: AnimatedSwitcher(
+        duration: titleSwap,
+        switchInCurve: LuxeMotion.enter,
+        switchOutCurve: LuxeMotion.exit,
+        layoutBuilder: (current, previous) => Stack(
+          alignment: Alignment.centerLeft,
+          children: [...previous, ?current],
+        ),
+        transitionBuilder: (child, animation) => FadeTransition(
+          opacity: animation,
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0, 0.25),
+              end: Offset.zero,
+            ).animate(animation),
+            child: child,
+          ),
+        ),
+        child: FittedBox(
+          key: ValueKey('shell-title-$currentIndex'),
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            tabTitles[currentIndex],
+            maxLines: 1,
+            softWrap: false,
+            style: const TextStyle(
+              color: LuxeColors.text,
+              fontSize: 21,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.4,
+            ),
           ),
         ),
       ),
       actions: [
         if (currentIndex == 0) ...[
-          IconButton(
+          _GlassAction(
             key: GuideRegistry.keyCustomizeDashboard,
             tooltip: 'Tùy chỉnh bố cục',
-            icon: const Icon(Icons.tune_rounded, size: 21),
-            color: AppUiColors.of(context).text,
-            onPressed: () => DashboardCustomizationSheet.show(context),
+            icon: Icons.tune_rounded,
+            onTap: () => DashboardCustomizationSheet.show(context),
           ),
+          const SizedBox(width: 6),
         ],
         VehicleSwitcher(key: GuideRegistry.keyVehicleSwitcher),
         // Notification bell with badge
-        StreamBuilder<int>(
-          stream: NotificationCenterService().watchUnreadCount(),
-          builder: (context, snapshot) {
-            final unreadCount = snapshot.data ?? 0;
+        // Shared provider (Task 125): the Notification Center invalidates it
+        // after read/delete, so the badge drops at once instead of a new
+        // one-shot stream on every app-bar rebuild.
+        Consumer(
+          builder: (context, ref, _) {
+            final uid = FirebaseAuth.instance.currentUser?.uid;
+            final unreadCount = uid == null
+                ? 0
+                : ref.watch(unreadCountProvider(uid)).valueOrNull ?? 0;
             return _NotificationBell(
               unreadCount: unreadCount,
               energyMode: energyMode,
@@ -328,7 +360,7 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
             );
           },
         ),
-        SizedBox(width: 8),
+        const SizedBox(width: 14),
       ],
     );
   }
@@ -372,14 +404,16 @@ class _SelectedHistory extends ConsumerWidget {
           vehicleId: id,
           currentSoc: (value?.currentBattery ?? 0).toDouble(),
         );
-        final state = ref.watch(smartChargingControllerProvider(args));
+        final history = ref.watch(
+          smartChargingControllerProvider(args).select((s) => s.history),
+        );
         final controller = ref.read(
           smartChargingControllerProvider(args).notifier,
         );
         return SmartChargeHistoryScreen(
           controller: controller,
           ownerUid: ref.watch(currentUidProvider),
-          initialItems: state.history,
+          initialItems: history,
           embedded: true,
           initialSessionId: pending?.sessionId,
           onStartCharging: () => AppNavigation.navigateToTab(context, 1),
@@ -406,15 +440,62 @@ class _RefreshableTab extends ConsumerWidget {
 
     return RefreshIndicator(
       onRefresh: () => refreshCoordinator.refreshAll(),
-      color: AppUiColors.of(context).primary,
-      backgroundColor: AppUiColors.of(context).surface,
+      color: LuxeColors.emerald,
+      backgroundColor: LuxeColors.raised,
       displacement: 60,
       child: child,
     );
   }
 }
 
-/// Notification bell icon with unread badge
+/// Round glass action in the shell bar (48dp target, hairline rim).
+class _GlassAction extends StatelessWidget {
+  const _GlassAction({
+    super.key,
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+    this.iconColor = LuxeColors.platinum,
+    this.badge,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  final Color iconColor;
+  final Widget? badge;
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+    message: tooltip,
+    child: Material(
+      type: MaterialType.transparency,
+      shape: const CircleBorder(),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Ink(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: LuxeColors.glass,
+            border: Border.all(color: LuxeColors.hairline),
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Icon(icon, size: 21, color: iconColor),
+              if (badge != null) Positioned(top: 7, right: 7, child: badge!),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/// Notification bell with an emerald unread badge that pops in once.
 class _NotificationBell extends StatelessWidget {
   final int unreadCount;
   final bool energyMode;
@@ -428,63 +509,47 @@ class _NotificationBell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pop = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : const Duration(milliseconds: 320);
     return Semantics(
       button: true,
       label: unreadCount > 0 ? 'Thông báo, $unreadCount chưa đọc' : 'Thông báo',
-      child: Tooltip(
-        message: unreadCount > 0
+      excludeSemantics: true,
+      onTap: onTap,
+      child: _GlassAction(
+        icon: unreadCount > 0
+            ? Icons.notifications_rounded
+            : Icons.notifications_none_rounded,
+        iconColor: unreadCount > 0 ? LuxeColors.text : LuxeColors.platinum,
+        tooltip: unreadCount > 0
             ? '$unreadCount thông báo mới'
             : 'Trung tâm thông báo',
-        child: Material(
-          color: AppUiColors.of(context).elevated,
-          borderRadius: BorderRadius.circular(16),
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(16),
-            child: SizedBox(
-              width: 48,
-              height: 48,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Icon(
-                    Icons.notifications_outlined,
-                    color: unreadCount > 0
-                        ? AppUiColors.of(context).primary
-                        : AppUiColors.of(context).muted,
-                    size: 22,
-                  ),
-                  if (unreadCount > 0)
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: Container(
-                        padding: EdgeInsets.all(2),
-                        decoration: BoxDecoration(
-                          color: AppUiColors.of(context).primary,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: AppUiColors.of(context).elevated,
-                            width: 1.5,
-                          ),
-                        ),
-                        constraints: BoxConstraints(
-                          minWidth: 16,
-                          minHeight: 16,
-                        ),
-                        child: Center(
-                          child: Text(
-                            unreadCount > 99 ? '99+' : unreadCount.toString(),
-                            style: TextStyle(
-                              color: AppUiColors.of(context).onPrimary,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
+        onTap: onTap,
+        badge: AnimatedScale(
+          duration: pop,
+          curve: Curves.easeOutBack,
+          scale: unreadCount > 0 ? 1 : 0,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 3),
+            constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+            decoration: BoxDecoration(
+              color: LuxeColors.emerald,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: LuxeColors.background, width: 1.5),
+              boxShadow: const [
+                BoxShadow(color: LuxeColors.emeraldGlow, blurRadius: 8),
+              ],
+            ),
+            child: Center(
+              child: Text(
+                unreadCount > 99 ? '99+' : '$unreadCount',
+                style: const TextStyle(
+                  color: Color(0xFF04140D),
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  height: 1.1,
+                ),
               ),
             ),
           ),

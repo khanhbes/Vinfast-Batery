@@ -10,7 +10,7 @@ WEB = ROOT / "web"
 FLAT = (
     "requirements-api.txt", "server.py", "auth_context.py", "deployment_policy.py",
     "telemetry_schema.py", "csv_security.py", "sync_writes.py", "request_limits.py",
-    "vehicle_catalog.py", "catalog_research_worker.py", "smart_charge_worker.py",
+    "vehicle_catalog.py", "vehicle_media.py", "catalog_research_worker.py", "smart_charge_worker.py",
     "smart_charge_worker_entry.py", "scripts/migrate_vehicle_catalog.py",
     "assets/vinfast_specs_fallback.json",
 )
@@ -38,6 +38,7 @@ def main():
     args = parser.parse_args()
     paths = [WEB / name for name in FLAT]
     paths += list((WEB / "shelly").rglob("*.py"))
+    paths += list((WEB / "assistant").rglob("*.py"))
     paths += list((WEB / "ai_server").rglob("*.py"))
     expected = {p.relative_to(WEB).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
                 for p in sorted(set(paths))}

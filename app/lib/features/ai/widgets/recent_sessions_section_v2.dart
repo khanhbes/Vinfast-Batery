@@ -121,7 +121,7 @@ class _SessionTile extends StatelessWidget {
       ChargingSessionState.completed => ('Hoàn thành', LuxeColors.emerald),
       ChargingSessionState.cancelled => ('Đã dừng', LuxeColors.platinumMid),
       ChargingSessionState.interrupted ||
-      ChargingSessionState.failed => ('Gián đoạn', const Color(0xFFFBBF24)),
+      ChargingSessionState.failed => ('Gián đoạn', LuxeColors.champagne),
       _ => ('Đang sạc', LuxeColors.emerald),
     };
 

@@ -106,7 +106,7 @@ class ChargingProgressCard extends StatelessWidget {
                     'Bảo vệ an toàn phần cứng:',
                     'Kích hoạt (Watchdog 60s)',
                     uiColors,
-                    valueColor: Colors.green,
+                    valueColor: Color(0xFF34D399),
                   ),
                   const SizedBox(height: 16),
                   SizedBox(
@@ -178,7 +178,7 @@ class ChargingProgressCard extends StatelessWidget {
     final status = data['status'] as String? ?? 'charging';
 
     final isCharging = status == 'charging';
-    final accentColor = isCharging ? const Color(0xFF00E676) : uiColors.primary;
+    final accentColor = isCharging ? const Color(0xFF34D399) : uiColors.primary;
 
     return InkWell(
       onTap: () => _showFullDetails(
@@ -259,7 +259,7 @@ class ChargingProgressCard extends StatelessWidget {
                       fontSize: 10.5,
                       fontWeight: FontWeight.w600,
                       color: isCharging
-                          ? const Color(0xFF00B050)
+                          ? const Color(0xFF10B981)
                           : uiColors.primary,
                     ),
                   ),
@@ -330,7 +330,7 @@ class ChargingProgressCard extends StatelessWidget {
                     label: 'Công suất',
                     value: '${powerW.toStringAsFixed(0)} W',
                     icon: Icons.flash_on_rounded,
-                    color: Colors.amber.shade700,
+                    color: Color(0xFFE8C170),
                   ),
                 ),
                 const SizedBox(width: 6),
@@ -341,7 +341,7 @@ class ChargingProgressCard extends StatelessWidget {
                     value: '${amps.toStringAsFixed(1)} A',
                     subValue: 'An toàn ≤12A',
                     icon: Icons.power_rounded,
-                    color: Colors.blue,
+                    color: Color(0xFF9DB8E8),
                   ),
                 ),
                 const SizedBox(width: 6),
@@ -365,7 +365,7 @@ class ChargingProgressCard extends StatelessWidget {
                 Icon(
                   Icons.security_rounded,
                   size: 13,
-                  color: Colors.green.shade700,
+                  color: Color(0xFF34D399),
                 ),
                 const SizedBox(width: 5),
                 Expanded(
@@ -431,7 +431,7 @@ class ChargingProgressCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 8.5,
                 fontWeight: FontWeight.w500,
-                color: Colors.green.shade700,
+                color: Color(0xFF34D399),
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,

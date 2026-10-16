@@ -10,6 +10,8 @@
 !web/tests/
 !web/tests/**/
 !web/tests/**/*.py
+!web/gemini_relay/
+!web/gemini_relay/*.py
 !web/scripts/
 !web/scripts/worker_fixture_smoke.py
 !deploy/

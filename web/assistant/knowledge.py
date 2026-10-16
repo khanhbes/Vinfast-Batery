@@ -1,0 +1,170 @@
+"""App knowledge for BatteryBot: built-in entries + admin edits (Firestore).
+
+Retrieval is a small keyword ranker over accent-folded text; the top entries
+go into the prompt. Admin documents in ``assistantKnowledge`` override a
+built-in entry with the same id or add new ones (enabled=false hides one).
+"""
+from __future__ import annotations
+
+import re
+import threading
+import time
+import unicodedata
+
+BUILTIN: list[dict] = [
+    {"id": "tabs", "title": "Các tab chính của app",
+     "keywords": ["tab", "màn hình", "menu", "điều hướng", "ở đâu"],
+     "body": "App có 4 tab dưới cùng: Tổng quan (pin, quãng đường ước tính, lối tắt), Sạc pin (Sạc AI và Sạc hẹn giờ, trạng thái Shelly), Lịch sử (các phiên sạc, điện năng, chi phí theo tháng) và Cài đặt (xe, Shelly, thông báo, thành tựu, bảo dưỡng, trợ giúp). Nút BatteryBot nổi ở góc phải dưới."},
+    {"id": "overview", "title": "Tổng quan",
+     "keywords": ["tổng quan", "pin hiện tại", "quãng đường", "km", "odo", "sức khỏe pin", "soh"],
+     "body": "Tổng quan hiển thị xe đang chọn, % pin đã nhập, quãng đường ước tính, ODO, hiệu suất km/1% pin và sức khỏe pin. Quãng đường = (pin − 5% dự trữ) × km/1% × SoH; đây là ước tính, không phải số đo BMS."},
+    {"id": "battery-input", "title": "Nhập mức pin",
+     "keywords": ["nhập pin", "mức pin", "sửa pin", "cập nhật pin", "núm bạc"],
+     "body": "App không đọc BMS của xe. Người dùng nhập mức pin theo đồng hồ xe: ở tab Sạc pin kéo núm bạc trên vòng số, hoặc nhờ BatteryBot cập nhật. Núm xanh là mức muốn sạc tới."},
+    {"id": "charge-ai", "title": "Sạc AI (dự đoán)",
+     "keywords": ["sạc ai", "dự đoán", "bao lâu", "thời gian sạc", "mục tiêu"],
+     "body": "Sạc AI ước tính thời gian sạc từ mức pin hiện tại tới mục tiêu, dựa trên dung lượng pin và công suất (đo thực tế khi đang sạc, trung bình các phiên gần đây, thông số xe, hoặc 400 W tiêu chuẩn). Trên 85% sạc chậm lại. Kết quả là ước tính hiển thị; có thể bấm 'Sạc hẹn giờ' để dùng thời lượng đó."},
+    {"id": "charge-timed", "title": "Sạc hẹn giờ",
+     "keywords": ["hẹn giờ", "timer", "30 phút", "1 giờ", "tự ngắt"],
+     "body": "Sạc hẹn giờ bật ổ Shelly kèm bộ đếm giờ nạp thẳng vào ổ (toggle_after); ổ tự ngắt khi hết giờ kể cả khi mất mạng. Tối đa 10 giờ. Bật sạc luôn cần vuốt để xác nhận và chỉ báo thành công sau khi đọc lại thấy relay bật và timer chạy."},
+    {"id": "charge-stop", "title": "Dừng sạc",
+     "keywords": ["dừng sạc", "tắt sạc", "ngắt", "stop"],
+     "body": "Dừng sạc bằng nút Dừng sạc ở tab Sạc pin, thẻ đang sạc, hoặc nhờ BatteryBot. Máy chủ gửi lệnh tắt và đọc lại; nếu Shelly Cloud báo chậm, phiên chuyển 'chờ xác nhận' và không gửi lại lệnh."},
+    {"id": "charge-locked", "title": "Vì sao nút sạc bị khóa",
+     "keywords": ["bị khóa", "không bật được", "khóa", "chưa sẵn sàng", "giám sát"],
+     "body": "Nút sạc khóa khi: chưa liên kết Shelly, Shelly ngoại tuyến, chưa qua kiểm tra an toàn không tải, máy chủ giám sát sạc chưa sẵn sàng (thường vài phút sau khi cập nhật), ổ đang bật, đang có phiên khác, hoặc số đo ngoài ngưỡng an toàn (điện áp 190–255 V, ≤12 A, ≤2500 W, ≤75 °C)."},
+    {"id": "safety", "title": "An toàn khi sạc",
+     "keywords": ["an toàn", "quá nhiệt", "12a", "2500w", "điện áp", "ngưỡng"],
+     "body": "Giới hạn an toàn: tối đa 12 A / 2500 W, điện áp 190–255 V, nhiệt độ ổ ≤75 °C. Máy chủ kiểm tra số đo trực tiếp trước mỗi lần bật; vượt ngưỡng sẽ không bật hoặc tự ngắt. Không để xe sạc không người trông ở nơi dễ cháy."},
+    {"id": "shelly-connect", "title": "Kết nối ổ Shelly",
+     "keywords": ["kết nối shelly", "liên kết", "mã kết nối", "6 ký tự", "shelly plug"],
+     "body": "Vào Cài đặt → Sạc thông minh Shelly. Nhập mã kết nối 6 ký tự do quản trị viên cấp (hạn 24 giờ, dùng một lần). Sau khi liên kết cần chạy kiểm tra an toàn không tải: rút mọi thiết bị khỏi ổ rồi làm theo hướng dẫn. Mỗi ổ dùng chung tối đa 2 tài khoản."},
+    {"id": "shelly-offline", "title": "Shelly mất kết nối",
+     "keywords": ["mất kết nối", "ngoại tuyến", "offline", "tạm mất", "không đọc được"],
+     "body": "Nếu app báo 'Tạm mất kết nối': kiểm tra ổ còn điện, đèn ổ, Wi-Fi nhà, và trong app Shelly chính hãng ổ có online không. Rút ra cắm lại để ổ khởi động lại và đồng bộ giờ. App tự đọc lại; trong lúc đó điều khiển bị khóa để an toàn."},
+    {"id": "history", "title": "Lịch sử sạc",
+     "keywords": ["lịch sử", "phiên sạc", "chi phí", "điện năng", "wh", "kwh", "báo cáo", "xuất"],
+     "body": "Tab Lịch sử hiển thị tổng kết tháng (điện nạp, chi phí, thời gian, số phiên) và từng phiên theo ngày; lọc theo xe, khoảng ngày, Sạc AI/Hẹn giờ. Chạm phiên để xem chi tiết. Có nút Xuất báo cáo. Chi phí dùng giá điện bạn đặt."},
+    {"id": "tariff", "title": "Giá điện",
+     "keywords": ["giá điện", "đồng/kwh", "tiền điện", "biểu giá"],
+     "body": "Giá điện (đồng/kWh) dùng để tính chi phí mỗi phiên sạc. Đặt trong phần thiết lập sạc hoặc nhờ BatteryBot đổi."},
+    {"id": "maintenance", "title": "Bảo dưỡng xe",
+     "keywords": ["bảo dưỡng", "bảo hành", "lịch hẹn", "nhắc", "odo"],
+     "body": "Cài đặt → Bảo dưỡng xe hiển thị lịch bảo dưỡng theo ODO theo khuyến nghị VinFast. BatteryBot có thể tạo, đổi ngày hoặc hủy lịch nhắc bảo dưỡng/bảo hành; ngày hết bảo hành do bạn cung cấp, không phải xác nhận của hãng."},
+    {"id": "achievements", "title": "Thành tựu",
+     "keywords": ["thành tựu", "huy hiệu", "hạng", "điểm"],
+     "body": "Thành tựu ghi nhận thói quen tốt: sạc đúng mức bảo vệ pin, dùng BatteryBot, duy trì bảo dưỡng... Mỗi thành tựu cho điểm và nâng hạng (Đồng, Bạc, Vàng...). Xem trong Cài đặt → Thành tựu."},
+    {"id": "garage", "title": "Xe của tôi / Gara",
+     "keywords": ["xe của tôi", "gara", "thêm xe", "đổi xe", "chọn xe", "phương tiện"],
+     "body": "Cài đặt → Xe của tôi để thêm xe, sửa thông tin (tên, biển số, ODO, dung lượng pin) và chọn xe đang dùng. Chọn xe nhanh bằng nút tên xe ở đầu màn hình. Mọi số liệu sạc, lịch sử, bảo dưỡng gắn theo xe đang chọn."},
+    {"id": "specs", "title": "Thông số xe & phòng trưng bày",
+     "keywords": ["thông số", "dung lượng pin", "công suất sạc", "phòng trưng bày", "360"],
+     "body": "Thông số xe lấy từ danh mục VinFast: dung lượng pin (Wh), công suất sạc, quãng đường công bố, hiệu suất. Ở Tổng quan chạm ảnh xe để mở phòng trưng bày 2.5D/360°."},
+    {"id": "trip", "title": "Lập hành trình",
+     "keywords": ["hành trình", "chuyến đi", "đi xa", "đủ pin", "lộ trình"],
+     "body": "Cài đặt → Lập hành trình ước tính quãng đường đi được với mức pin hiện tại và gợi ý có cần sạc trước chuyến đi."},
+    {"id": "battery-monitor", "title": "Theo dõi pin",
+     "keywords": ["theo dõi pin", "nhiệt độ pin", "xu hướng"],
+     "body": "Màn Theo dõi pin hiển thị mức pin, SoH, quãng đường ước tính, lịch sử 24 giờ và ước tính thời gian sạc tới 80%/100%."},
+    {"id": "notifications", "title": "Thông báo",
+     "keywords": ["thông báo", "push", "chuông", "nhắc"],
+     "body": "Chuông ở góc trên mở Trung tâm thông báo. App báo khi phiên sạc kết thúc ('Đã sạc xong theo hẹn giờ', 'Đã dừng sạc'), cảnh báo an toàn và nhắc bảo dưỡng. Bật/tắt trong Cài đặt → Thông báo đẩy (hoặc nhờ BatteryBot). Tắt thông báo đẩy thì điện thoại này cũng không nhận tín hiệu tức thì khi máy khác bật/tắt sạc; trạng thái vẫn cập nhật ở lần đọc kế tiếp."},
+    {"id": "language", "title": "Ngôn ngữ",
+     "keywords": ["ngôn ngữ", "tiếng anh", "english", "tiếng việt", "language"],
+     "body": "App hiện chỉ có tiếng Việt; chưa có bản tiếng Anh nên không có tùy chọn đổi ngôn ngữ."},
+    {"id": "multi-device", "title": "Dùng nhiều điện thoại",
+     "keywords": ["điện thoại khác", "nhiều máy", "đồng bộ", "đăng nhập máy khác"],
+     "body": "Đăng nhập cùng tài khoản trên nhiều điện thoại: dữ liệu xe, lịch sử và trạng thái sạc đồng bộ qua máy chủ. Khi một máy bật/tắt sạc, máy kia nhận tín hiệu và cập nhật trong vài giây; mất tín hiệu thì cập nhật ở lần đọc kế tiếp (tối đa 60 giây)."},
+    {"id": "battery-care", "title": "Mẹo giữ pin bền",
+     "keywords": ["giữ pin", "bền pin", "80%", "chai pin", "mẹo"],
+     "body": "Sạc tới 80% cho dùng hằng ngày giúp pin bền hơn; chỉ sạc 100% khi cần đi xa. Tránh để pin cạn dưới 10% lâu, tránh sạc ngay khi pin còn nóng sau khi chạy, đỗ xe nơi thoáng mát."},
+    {"id": "privacy", "title": "BatteryBot nhớ gì",
+     "keywords": ["nhớ gì", "quyền riêng tư", "xóa dữ liệu", "học", "bộ nhớ"],
+     "body": "BatteryBot ghi nhớ những điều bạn kể (ví dụ quãng đường đi làm) và thói quen sạc để trả lời sát hơn. Xem, xóa từng mục hoặc tắt học trong Cài đặt → Trợ lý AI → 'BatteryBot đang nhớ gì'. Câu hỏi được xử lý bởi Google Gemini qua máy chủ của app; bot không lưu toàn bộ cuộc trò chuyện lên máy chủ. Mỗi ngày có 50 lượt AI, hết lượt bot trả lời ở chế độ cơ bản."},
+    {"id": "bot-scope", "title": "BatteryBot làm được gì",
+     "keywords": ["bot làm được gì", "giúp gì", "trợ lý", "batterybot"],
+     "body": "BatteryBot trả lời về app, xe, pin, sạc và Shelly; đọc trạng thái sạc và lịch sử của bạn; mở đúng màn hình; bật sạc hẹn giờ (cần vuốt xác nhận), dừng sạc; cập nhật mức pin, ODO, xe đang chọn, mục tiêu sạc, giá điện; tạo/đổi/hủy lịch nhắc bảo dưỡng; bật/tắt thông báo đẩy. Thay đổi dữ liệu luôn có thẻ xác nhận."},
+]
+
+
+def fold(text: str) -> str:
+    text = unicodedata.normalize("NFD", (text or "").lower()).replace("đ", "d")
+    text = "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
+    return re.sub(r"[^a-z0-9%]+", " ", text).strip()
+
+
+def _tokens(text: str) -> set[str]:
+    return {token for token in fold(text).split() if len(token) > 1}
+
+
+class KnowledgeBase:
+    COLLECTION = "assistantKnowledge"
+
+    def __init__(self, db=None, *, ttl_seconds: float = 60):
+        self.db = db
+        self.ttl = ttl_seconds
+        self._cache: tuple[float, list[dict]] | None = None
+        self._lock = threading.Lock()
+
+    def entries(self) -> list[dict]:
+        with self._lock:
+            if self._cache and time.monotonic() - self._cache[0] <= self.ttl:
+                return self._cache[1]
+        merged = {entry["id"]: dict(entry, source="builtin") for entry in BUILTIN}
+        if self.db is not None:
+            try:
+                for snapshot in self.db.collection(self.COLLECTION).limit(200).stream():
+                    data = snapshot.to_dict() or {}
+                    if data.get("enabled") is False:
+                        merged.pop(snapshot.id, None)
+                        continue
+                    if not data.get("title") or not data.get("body"):
+                        continue
+                    merged[snapshot.id] = {
+                        "id": snapshot.id, "title": str(data["title"])[:120],
+                        "keywords": [str(k)[:60] for k in (data.get("keywords") or [])][:20],
+                        "body": str(data["body"])[:2000], "source": "admin",
+                    }
+            except Exception:
+                pass  # built-in knowledge still answers
+        values = list(merged.values())
+        with self._lock:
+            self._cache = (time.monotonic(), values)
+        return values
+
+    def admin_entries(self) -> list[dict]:
+        """Every entry for the dashboard, including hidden ones."""
+        merged = {entry["id"]: dict(entry, source="builtin", enabled=True) for entry in BUILTIN}
+        if self.db is not None:
+            for snapshot in self.db.collection(self.COLLECTION).limit(200).stream():
+                data = snapshot.to_dict() or {}
+                base = merged.get(snapshot.id, {})
+                merged[snapshot.id] = {
+                    "id": snapshot.id,
+                    "title": str(data.get("title") or base.get("title") or "")[:120],
+                    "keywords": [str(k)[:60] for k in (data.get("keywords") or base.get("keywords") or [])][:20],
+                    "body": str(data.get("body") or base.get("body") or "")[:2000],
+                    "source": "admin", "enabled": data.get("enabled") is not False,
+                }
+        return list(merged.values())
+
+    def invalidate(self) -> None:
+        with self._lock:
+            self._cache = None
+
+    def search(self, query: str, limit: int = 4) -> list[dict]:
+        words = _tokens(query)
+        folded = f" {fold(query)} "
+        scored = []
+        for entry in self.entries():
+            score = 0.0
+            for keyword in entry.get("keywords") or []:
+                key = fold(keyword)
+                if key and f" {key} " in folded:
+                    score += 3 + len(key.split())
+            score += 0.6 * len(words & _tokens(entry["title"]))
+            score += 0.15 * len(words & _tokens(entry["body"]))
+            if score > 0:
+                scored.append((score, entry))
+        scored.sort(key=lambda item: -item[0])
+        return [entry for _, entry in scored[:limit]]

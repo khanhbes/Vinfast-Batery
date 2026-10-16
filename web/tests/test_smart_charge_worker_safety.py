@@ -419,3 +419,58 @@ def test_non_transient_read_error_still_marks_session_unknown(setup):
     repo, provider, service, binding, session = start(setup)
     provider.get_status = Mock(side_effect=ProviderError("deviceOffline", "offline", True))
     assert service.current("qa-owner", "qa-vehicle").state == "unknown"
+
+
+def test_status_poll_during_on_cannot_finalize_the_arming_session(setup):
+    """Task 125: /live or the worker reading the pre-ON relay OFF while
+    manual_on is in flight must not end the session (and the lock)."""
+    repo, provider, service, binding = setup
+    repo.claim_worker_lease("qa-worker")
+    repo.publish_worker_heartbeat("qa-worker", healthy=True)
+    send_on = service._send_on
+    seen = []
+
+    def poll_then_send(*args, **kwargs):
+        current = repo.current_session("qa-owner")
+        seen.append(current.state)
+        service._reconcile_with_status("qa-owner", DeviceStatus(
+            online=True, relay=False, device_id=binding.device_id, voltage_v=230,
+        ), session=current)
+        return send_on(*args, **kwargs)
+
+    service._send_on = poll_then_send
+    session = service.manual_on("qa-owner", 300, "qa-op", "qa-vehicle", 20)
+    assert seen == ["arming"]
+    assert session.state == "active" and session.relay_verified
+    assert repo.get_session("qa-owner", session.session_id).state == "active"
+
+
+def test_stale_arming_session_is_still_recovered(setup):
+    repo, provider, service, binding = setup
+    repo.claim_worker_lease("qa-worker")
+    repo.publish_worker_heartbeat("qa-worker", healthy=True)
+    session = service.manual_on("qa-owner", 300, "qa-op", "qa-vehicle", 20)
+    session.state = "arming"
+    session.created_at = utcnow() - timedelta(seconds=120)
+    result = service._reconcile_with_status("qa-owner", DeviceStatus(
+        online=True, relay=False, device_id=binding.device_id, voltage_v=230,
+    ), session=session)
+    assert result.state not in {"arming", "starting", "active"}
+
+
+def test_commit_conflict_turns_relay_off_instead_of_500(setup):
+    repo, provider, service, binding = setup
+    repo.claim_worker_lease("qa-worker")
+    repo.publish_worker_heartbeat("qa-worker", healthy=True)
+    save = repo.save_session
+
+    def conflict(uid, session):
+        if session.state == "active":
+            raise RuntimeError("sessionAlreadyTerminal")
+        return save(uid, session)
+
+    repo.save_session = conflict
+    with pytest.raises(SmartChargeError) as error:
+        service.manual_on("qa-owner", 300, "qa-op", "qa-vehicle", 20)
+    assert error.value.code == "sessionChangedElsewhere" and error.value.status == 409
+    assert provider.status.relay is False

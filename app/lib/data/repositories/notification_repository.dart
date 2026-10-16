@@ -62,8 +62,10 @@ class NotificationRepository {
           .get();
 
       if (_uid != uid) throw StateError('Account changed');
+      // A swiped-away (archived) item must not come back on reload.
       return snapshot.docs
           .map((doc) => UserNotification.fromFirestore(doc))
+          .where((item) => item.status != NotificationStatus.archived)
           .toList();
     } catch (e) {
       final msg = e.toString();
@@ -84,6 +86,7 @@ class NotificationRepository {
         if (_uid != uid) throw StateError('Account changed');
         final list = snapshot.docs
             .map((doc) => UserNotification.fromFirestore(doc))
+            .where((item) => item.status != NotificationStatus.archived)
             .toList();
         list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
         return list.take(limit).toList();
@@ -103,7 +106,9 @@ class NotificationRepository {
     if (uid == null || uid.isEmpty) {
       return Stream.value(0).asBroadcastStream();
     }
-    return Stream.fromFuture(getUnreadCount(expectedUid: uid)).asBroadcastStream();
+    return Stream.fromFuture(
+      getUnreadCount(expectedUid: uid),
+    ).asBroadcastStream();
   }
 
   Future<int> getUnreadCount({bool force = false, String? expectedUid}) async {
@@ -119,16 +124,19 @@ class NotificationRepository {
       return _cachedUnread!;
     }
     try {
+      // Aggregation: one read per 1000 index entries instead of downloading
+      // up to 1000 documents for a badge (Task 125).
       final snapshot = await _notificationsRef
           .where('userId', isEqualTo: uid)
           .where('status', isEqualTo: 'unread')
-          .limit(1000)
+          .count()
           .get();
       if (_uid != uid) throw StateError('Account changed');
-      _cachedUnread = snapshot.size;
+      final count = snapshot.count ?? 0;
+      _cachedUnread = count;
       _cachedUnreadAt = now;
       _cachedUnreadUid = uid;
-      return snapshot.size;
+      return count;
     } catch (e) {
       debugPrint('[NotificationRepo] Unread count error (${e.runtimeType})');
       rethrow;
@@ -163,26 +171,29 @@ class NotificationRepository {
     if (uid == null) return false;
 
     try {
-      final snapshot = await _notificationsRef
-          .where('userId', isEqualTo: uid)
-          .get();
-      if (_uid != uid) return false;
-
-      final unread = snapshot.docs.where((d) {
-        final data = d.data() as Map<String, dynamic>?;
-        return data?['status'] == 'unread';
-      }).toList();
-
-      if (unread.isEmpty) return true;
-
-      final batch = _firestore.batch();
-      for (final doc in unread) {
-        batch.update(doc.reference, {
-          'status': 'read',
-          'readAt': Timestamp.now(),
-        });
+      // Only unread docs, in batches under Firestore's 500-write limit
+      // (it read the whole history and failed past 500 before Task 125).
+      for (var round = 0; round < 20; round++) {
+        final snapshot = await _notificationsRef
+            .where('userId', isEqualTo: uid)
+            .where('status', isEqualTo: 'unread')
+            .limit(450)
+            .get();
+        if (_uid != uid) return false;
+        if (snapshot.docs.isEmpty) break;
+        final batch = _firestore.batch();
+        for (final doc in snapshot.docs) {
+          batch.update(doc.reference, {
+            'status': 'read',
+            'readAt': Timestamp.now(),
+          });
+        }
+        await batch.commit();
+        if (snapshot.docs.length < 450) break;
       }
-      await batch.commit();
+      _cachedUnread = 0;
+      _cachedUnreadAt = DateTime.now();
+      _cachedUnreadUid = uid;
       return true;
     } catch (e) {
       debugPrint('[NotificationRepo] Mark all read error: $e');
@@ -208,6 +219,7 @@ class NotificationRepository {
   Future<bool> delete(String notificationId) async {
     try {
       await _notificationsRef.doc(notificationId).delete();
+      invalidateUnread();
       return true;
     } catch (e) {
       debugPrint('[NotificationRepo] Delete error: $e');
@@ -244,12 +256,18 @@ class NotificationRepository {
     Map<String, dynamic>? payload,
     String? actionTarget,
     String? imageUrl,
+    String? dedupeKey,
   }) async {
     final uid = _uid;
     if (uid == null) return null;
 
     try {
-      final docRef = _notificationsRef.doc();
+      // Same event seen by several phones / recreated controllers writes one
+      // document; an already-read copy is never reset to unread (Task 125).
+      final docRef = dedupeKey == null
+          ? _notificationsRef.doc()
+          : _notificationsRef.doc('${uid}_$dedupeKey');
+      if (dedupeKey != null && (await docRef.get()).exists) return null;
       final notification = UserNotification(
         id: docRef.id,
         userId: uid,

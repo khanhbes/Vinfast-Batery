@@ -101,7 +101,7 @@ abstract class AppLocalizations {
   /// No description provided for @appTitle.
   ///
   /// In vi, this message translates to:
-  /// **'EV Battery'**
+  /// **'VinFast Battery'**
   String get appTitle;
 
   /// No description provided for @appTagline.

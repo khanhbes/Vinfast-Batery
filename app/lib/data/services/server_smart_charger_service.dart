@@ -381,18 +381,18 @@ class ServerSmartChargerService {
     return ShellyConnectionProfile.fromJson(profileData);
   }
 
+  /// Fresh relay/meter readback in ONE request (Task 122): `/live` already
+  /// carries the status and the binding, so the old `/status` + `/device`
+  /// pair (two sequential round trips) is no longer needed.
   Future<SmartChargerStatus> getStatus({String? vehicleId}) async {
-    final raw = await _request(
-      'GET',
-      '/api/smart-charging/status${vehicleId == null || vehicleId.isEmpty ? '' : '?vehicleId=${Uri.encodeQueryComponent(vehicleId)}'}',
+    final live = await getLive(vehicleId: vehicleId);
+    final status = SmartChargerStatus.fromJson(
+      Map<String, dynamic>.from(live['status'] as Map? ?? const {}),
     );
-    final status = SmartChargerStatus.fromJson(raw);
-    SmartChargerBinding? selected;
-    try {
-      selected = await getBinding(vehicleId: vehicleId);
-    } on SmartChargerException {
-      // Telemetry remains useful even if binding metadata refresh fails.
-    }
+    final rawBinding = live['binding'];
+    final selected = rawBinding is Map
+        ? SmartChargerBinding.fromJson(Map<String, dynamic>.from(rawBinding))
+        : null;
     return SmartChargerStatus(
       online: status.online,
       relay: status.relay,
@@ -419,10 +419,16 @@ class ServerSmartChargerService {
   static final Map<String, Future<Map<String, dynamic>>> _liveInFlight = {};
   static final Map<String, (DateTime, Map<String, dynamic>)> _liveRecent = {};
   static const liveShareWindow = Duration(seconds: 4);
+  static int _liveGeneration = 0;
 
-  /// Drop the shared result after a command so the next read is fresh.
+  /// Drop the shared result after a command so the next read is fresh. Reads
+  /// already in flight belong to the old generation: they still answer their
+  /// own caller but are never joined or cached afterwards (Task 122), so a
+  /// pre-command relay state cannot overwrite the post-command one.
   static void forgetLive() {
+    _liveGeneration++;
     _liveRecent.clear();
+    _liveInFlight.clear();
   }
 
   /// [shared] lets periodic display polls reuse a result from the last few
@@ -448,12 +454,18 @@ class ServerSmartChargerService {
       final pending = _liveInFlight[key];
       if (pending != null) return pending;
     }
+    final generation = _liveGeneration;
     final request =
         _request(
           'GET',
           '/api/smart-charging/live${vehicleId == null || vehicleId.isEmpty ? '' : '?vehicleId=${Uri.encodeQueryComponent(vehicleId)}'}',
         ).then((data) {
-          _liveRecent[key] = (DateTime.now(), Map<String, dynamic>.from(data));
+          if (generation == _liveGeneration) {
+            _liveRecent[key] = (
+              DateTime.now(),
+              Map<String, dynamic>.from(data),
+            );
+          }
           return data;
         });
     _liveInFlight[key] = request;
@@ -661,6 +673,7 @@ class ServerSmartChargerService {
     required String vehicleId,
     required double currentSoc,
     String? expectedDeviceId,
+    double? targetSoc,
   }) async => SmartChargingSession.fromJson(
     await _request(
       'POST',
@@ -670,6 +683,7 @@ class ServerSmartChargerService {
         'vehicleId': vehicleId,
         'currentSoc': currentSoc,
         'expectedDeviceId': ?expectedDeviceId,
+        'targetSoc': ?targetSoc,
       },
       headers: {'Idempotency-Key': idempotencyKey},
       timeout: controlTimeout,

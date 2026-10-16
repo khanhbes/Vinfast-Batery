@@ -47,8 +47,8 @@ class GlassContainer extends StatelessWidget {
         (uiColors.dark
             ? LinearGradient(
                 colors: [
-                  const Color(0xFF1E293B).withValues(alpha: 0.65),
-                  const Color(0xFF0F172A).withValues(alpha: 0.75),
+                  const Color(0xFF17181B).withValues(alpha: 0.65),
+                  const Color(0xFF0E0F11).withValues(alpha: 0.75),
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -190,7 +190,7 @@ class ChatbotGlassTheme {
 
     return BoxDecoration(
       color: uiColors.dark
-          ? const Color(0xFF131D2E).withValues(alpha: 0.88)
+          ? const Color(0xFF121315).withValues(alpha: 0.88)
           : Colors.white.withValues(alpha: 0.95),
       border: Border.all(
         color: uiColors.dark
@@ -228,7 +228,7 @@ class ChatbotGlassTheme {
 
     return BoxDecoration(
       color: uiColors.dark
-          ? const Color(0xFF161E2E).withValues(alpha: 0.88)
+          ? const Color(0xFF121315).withValues(alpha: 0.88)
           : Colors.white.withValues(alpha: 0.95),
       border: Border.all(color: borderCol, width: 1.0),
       borderRadius: BorderRadius.circular(16),

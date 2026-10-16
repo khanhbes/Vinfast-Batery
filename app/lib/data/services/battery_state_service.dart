@@ -8,6 +8,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import '../models/battery_state_model.dart';
 import '../models/vehicle_model.dart';
+import 'range_estimator.dart';
 import '../../core/constants/app_constants.dart';
 
 /// Service xử lý trạng thái pin đồng bộ với web dashboard
@@ -49,67 +50,6 @@ class BatteryStateService {
     } catch (e) {
       if (kDebugMode) debugPrint('Failed to get current battery state: $e');
       rethrow;
-    }
-  }
-
-  /// Dự đoán SOC sử dụng AI model
-  static Future<Map<String, dynamic>> predictSOC({
-    required String vehicleId,
-    required double currentBattery,
-    required double temperature,
-    required double voltage,
-    required double current,
-    required double odometer,
-    required int timeOfDay,
-    required int dayOfWeek,
-    required double avgSpeed,
-    required double elevationGain,
-    required String weatherCondition,
-  }) async {
-    try {
-      // Gọi API SOC prediction
-      final url = Uri.parse('$_baseUrl/api/soc/predict');
-
-      final response = await http
-          .post(
-            url,
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'currentBattery': currentBattery,
-              'temperature': temperature,
-              'voltage': voltage,
-              'current': current,
-              'odometer': odometer,
-              'timeOfDay': timeOfDay,
-              'dayOfWeek': dayOfWeek,
-              'avgSpeed': avgSpeed,
-              'elevationGain': elevationGain,
-              'weatherCondition': weatherCondition,
-            }),
-          )
-          .timeout(_timeout);
-
-      if (response.statusCode != 200) {
-        throw Exception('SOC API call failed: ${response.statusCode}');
-      }
-
-      final data = jsonDecode(response.body);
-
-      if (!data['success']) {
-        throw Exception('SOC API returned error: ${data['error']}');
-      }
-
-      return data['data'];
-    } catch (e) {
-      if (kDebugMode) debugPrint('SOC prediction failed: $e');
-
-      // Fallback prediction
-      return _generateFallbackSOCPrediction(
-        currentBattery: currentBattery,
-        temperature: temperature,
-        avgSpeed: avgSpeed,
-        weatherCondition: weatherCondition,
-      );
     }
   }
 
@@ -176,7 +116,9 @@ class BatteryStateService {
             'lastUpdated': FieldValue.serverTimestamp(),
           });
 
-      if (kDebugMode) debugPrint('Battery state updated for vehicle: $vehicleId');
+      if (kDebugMode) {
+        debugPrint('Battery state updated for vehicle: $vehicleId');
+      }
     } catch (e) {
       if (kDebugMode) debugPrint('Failed to update battery state: $e');
     }
@@ -243,9 +185,13 @@ class BatteryStateService {
           )
           .timeout(_timeout);
 
-      if (kDebugMode) debugPrint('Battery state synced to web dashboard: $vehicleId');
+      if (kDebugMode) {
+        debugPrint('Battery state synced to web dashboard: $vehicleId');
+      }
     } catch (e) {
-      if (kDebugMode) debugPrint('Failed to sync battery state to web dashboard: $e');
+      if (kDebugMode) {
+        debugPrint('Failed to sync battery state to web dashboard: $e');
+      }
     }
   }
 
@@ -256,7 +202,9 @@ class BatteryStateService {
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) {
-        if (kDebugMode) debugPrint('Skip battery state save: not authenticated');
+        if (kDebugMode) {
+          debugPrint('Skip battery state save: not authenticated');
+        }
         return;
       }
       final payload = <String, dynamic>{
@@ -270,7 +218,9 @@ class BatteryStateService {
           )
           .set(payload);
     } catch (e) {
-      if (kDebugMode) debugPrint('Failed to save battery state to Firestore: $e');
+      if (kDebugMode) {
+        debugPrint('Failed to save battery state to Firestore: $e');
+      }
     }
   }
 
@@ -325,13 +275,13 @@ class BatteryStateService {
           .doc(vehicleId)
           .get();
 
-      if (!vehicleDoc.exists) return currentBattery * 1.2;
+      if (!vehicleDoc.exists) return 0;
 
       final vehicle = VehicleModel.fromFirestore(vehicleDoc);
-      return currentBattery * vehicle.defaultEfficiency;
+      return estimateRangeKm(vehicle, socOverride: currentBattery) ?? 0;
     } catch (e) {
       if (kDebugMode) debugPrint('Failed to calculate estimated range: $e');
-      return currentBattery * 1.2;
+      return 0;
     }
   }
 
@@ -369,75 +319,6 @@ class BatteryStateService {
     }
 
     return {'trend': trend, 'rate': rate};
-  }
-
-  /// Generate fallback SOC prediction
-  static Map<String, dynamic> _generateFallbackSOCPrediction({
-    required double currentBattery,
-    required double temperature,
-    required double avgSpeed,
-    required String weatherCondition,
-  }) {
-    // Generate 24-hour time series
-    final timeSeries = <double>[];
-    var soc = currentBattery;
-
-    for (int i = 0; i < 24; i++) {
-      // Base consumption rate
-      double consumptionRate = 0.5;
-
-      // Adjust for speed
-      consumptionRate += (avgSpeed / 100) * 0.3;
-
-      // Adjust for temperature
-      if (temperature > 35) {
-        consumptionRate += 0.2;
-      } else if (temperature < 10) {
-        consumptionRate += 0.3;
-      }
-
-      // Adjust for weather
-      if (weatherCondition.toLowerCase().contains('rain')) {
-        consumptionRate += 0.3;
-      }
-
-      soc = (soc - consumptionRate).clamp(0.0, 100.0);
-      timeSeries.add(soc);
-    }
-
-    return {
-      'predictedSOC': timeSeries.last,
-      'confidence': 75.0,
-      'timeSeries': timeSeries,
-      'batteryHealth': 85.0,
-      'recommendations': _generateRecommendations(currentBattery, temperature),
-      'timestamp': DateTime.now().toIso8601String(),
-      'modelVersion': 'fallback-1.0',
-    };
-  }
-
-  /// Generate recommendations
-  static List<String> _generateRecommendations(
-    double currentBattery,
-    double temperature,
-  ) {
-    final recommendations = <String>[];
-
-    if (currentBattery < 20) {
-      recommendations.add('Pin yếu, nên sạc sớm');
-    }
-
-    if (temperature > 35) {
-      recommendations.add('Nhiệt độ cao, nên đỗ xe trong bóng mát');
-    } else if (temperature < 10) {
-      recommendations.add('Nhiệt độ thấp, hiệu suất pin giảm');
-    }
-
-    if (currentBattery > 80) {
-      recommendations.add('Pin đầy, có thể sử dụng cho các chuyến đi dài');
-    }
-
-    return recommendations;
   }
 
   /// Test API connection

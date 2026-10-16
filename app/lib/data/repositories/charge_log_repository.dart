@@ -207,6 +207,9 @@ class ChargeLogRepository {
         whereValue: vehicleId,
         orderByField: 'startTime',
         descending: true,
+        // Newest 200 logs: stats/lists never need a vehicle's whole history
+        // (Task 125, Firestore Spark quota).
+        limit: 200,
         additionalWhere: {'ownerUid': uid},
       );
       return docs

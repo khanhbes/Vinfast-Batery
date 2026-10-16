@@ -1,7 +1,7 @@
 targetScope = 'resourceGroup'
 @allowed(['vinfast-api', 'vinfast-ai'])
 param appName string
-param location string = 'southeastasia'
+param location string = 'eastasia'
 param environmentId string
 param registryServer string
 param pullIdentityId string
@@ -41,7 +41,10 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
           { type: 'Readiness', httpGet: { path: isApi ? '/api/ready' : health, port: port }, periodSeconds: 10, timeoutSeconds: 5, failureThreshold: 3 }
         ]
       }]
-      scale: { minReplicas: 0, maxReplicas: 1, rules: [{ name: 'http', http: { metadata: { concurrentRequests: '10' } } }] }
+      // Task 122: keep one warm replica (no ~20 s cold start before Shelly control).
+      // API stays warm (Task 123); the legacy AI service scales to zero and
+      // wakes on its internal HTTP traffic (Task 125, matches production).
+      scale: { minReplicas: isApi ? 1 : 0, maxReplicas: 1, rules: [{ name: 'http', http: { metadata: { concurrentRequests: '10' } } }] }
       volumes: [{ name: 'runtime', storageType: 'AzureFile', storageName: 'runtimefiles' }]
     }
   }

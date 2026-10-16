@@ -12,6 +12,10 @@ param workerScope string
 param firebase string
 @secure()
 param vaultKey string
+// Task 123: Shelly dispatch gate in Azure Table (same account/table as the
+// API). Empty keeps the legacy Firestore gate; API and worker must match.
+param dispatchTableAccount string = ''
+param pullIdentityClientId string = ''
 
 // Reconciliation worker for the vault_cloud provider. It never arms a relay by
 // itself: it renews the fenced lease/heartbeat the API requires before ON,
@@ -36,13 +40,18 @@ resource worker 'Microsoft.App/containerApps@2024-03-01' = {
         name: 'worker-control'
         image: image
         resources: { cpu: json('0.25'), memory: '0.5Gi' }
-        env: [
+        env: concat([
           { name: 'SHELLY_PROVIDER', value: 'vault_cloud' }
           { name: 'SMART_CHARGE_WORKER_SCOPE', value: workerScope }
           { name: 'SMART_CHARGE_WORKER_POLL_SECONDS', value: '60' }
           { name: 'FIREBASE_CREDENTIALS_JSON', secretRef: 'firebase' }
           { name: 'SHELLY_PROFILE_MASTER_KEY', secretRef: 'vault-key' }
-        ]
+        ], empty(dispatchTableAccount) ? [] : [
+          { name: 'SHELLY_DISPATCH_TABLE_ACCOUNT', value: dispatchTableAccount }
+          { name: 'SHELLY_DISPATCH_TABLE', value: 'shellyDispatch' }
+          { name: 'SHELLY_CONTROL_STATE', value: 'table' }
+          { name: 'AZURE_CLIENT_ID', value: pullIdentityClientId }
+        ])
       }]
       scale: { minReplicas: 1, maxReplicas: 1 }
     }

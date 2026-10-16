@@ -106,7 +106,7 @@ class NotificationService {
         await androidPlugin.createNotificationChannel(
           const AndroidNotificationChannel(
             channelSmartCharge,
-            'Cảnh báo Smart Charge',
+            'Cảnh báo sạc thông minh',
             description: 'Trạng thái relay, timer và cảnh báo an toàn Shelly',
             importance: Importance.high,
             enableVibration: true,
@@ -221,7 +221,7 @@ class NotificationService {
   AndroidNotificationDetails _smartChargeDetails() =>
       const AndroidNotificationDetails(
         channelSmartCharge,
-        'Cảnh báo Smart Charge',
+        'Cảnh báo sạc thông minh',
         channelDescription:
             'Trạng thái relay, timer và cảnh báo an toàn Shelly',
         importance: Importance.high,
@@ -241,14 +241,25 @@ class NotificationService {
     required String sessionId,
     String? vehicleId,
     bool interrupted = false,
+    bool userStopped = false,
   }) async {
     await initialize();
+    final String title;
+    final String body;
+    if (userStopped) {
+      title = 'Đã dừng sạc';
+      body = 'Shelly đã xác nhận tắt theo yêu cầu của bạn.';
+    } else if (interrupted) {
+      title = 'Phiên Smart Charge đã bị ngắt';
+      body = 'Relay đã tắt trước giờ dự kiến. Mở Smart Charge để kiểm tra.';
+    } else {
+      title = 'Đã sạc xong theo hẹn giờ';
+      body = 'Shelly đã tự ngắt đúng giờ và được đọc lại xác nhận.';
+    }
     await _plugin.show(
       idSmartChargeState,
-      interrupted ? 'Phiên Smart Charge đã bị ngắt' : 'Đã xác nhận Shelly OFF',
-      interrupted
-          ? 'Relay đã tắt trước giờ dự kiến. Mở Smart Charge để kiểm tra.'
-          : 'App đã đọc lại thiết bị và xác nhận nguồn sạc đã ngắt.',
+      title,
+      body,
       NotificationDetails(android: _smartChargeDetails(), iOS: _iosDetails()),
       payload: _smartChargeSessionPayload(vehicleId, sessionId),
     );
@@ -262,7 +273,7 @@ class NotificationService {
     await initialize();
     await _plugin.show(
       idSmartChargeUnsafe,
-      'Cảnh báo an toàn Smart Charge',
+      'Cảnh báo an toàn khi sạc',
       message,
       NotificationDetails(android: _smartChargeDetails(), iOS: _iosDetails()),
       payload: _smartChargeSessionPayload(vehicleId, sessionId),
@@ -279,140 +290,20 @@ class NotificationService {
 
   // ── Charge Notifications ──
 
-  /// Thông báo pin đã đạt mục tiêu sạc
-  Future<void> notifyChargeTarget(int currentPercent, int targetPercent) async {
-    await initialize();
-    await _plugin.show(
-      idChargeTarget,
-      '🎯 Đã đạt mục tiêu sạc $targetPercent%!',
-      'Pin hiện tại: $currentPercent%. Bạn có thể rút sạc.',
-      NotificationDetails(
-        iOS: _iosDetails(),
-        android: AndroidNotificationDetails(
-          channelCharge,
-          'Sạc pin',
-          importance: Importance.high,
-          priority: Priority.high,
-          icon: '@mipmap/ic_launcher',
-        ),
-      ),
-    );
-  }
-
-  /// Thông báo pin đã sạc đến 80%
-  Future<void> notifyCharge80(int currentPercent) async {
-    await initialize();
-    await _plugin.show(
-      idCharge80,
-      '🔋 Pin đã sạc $currentPercent%',
-      'Pin đã đạt 80% — Bạn có thể rút sạc để bảo vệ tuổi thọ pin.',
-      NotificationDetails(
-        iOS: _iosDetails(),
-        android: AndroidNotificationDetails(
-          channelCharge,
-          'Sạc pin',
-          importance: Importance.high,
-          priority: Priority.high,
-          icon: '@mipmap/ic_launcher',
-        ),
-      ),
-    );
-  }
-
-  /// Thông báo pin đã sạc đầy 100%
-  Future<void> notifyCharge100() async {
-    await initialize();
-    await _plugin.show(
-      idCharge100,
-      '⚡ Pin đã sạc đầy 100%!',
-      'Hãy rút sạc ngay để tránh sạc quá mức, bảo vệ tuổi thọ pin.',
-      NotificationDetails(
-        iOS: _iosDetails(),
-        android: AndroidNotificationDetails(
-          channelCharge,
-          'Sạc pin',
-          importance: Importance.high,
-          priority: Priority.high,
-          icon: '@mipmap/ic_launcher',
-        ),
-      ),
-    );
-  }
-
-  /// Thông báo nhắc người dùng xác nhận mức pin thực tế sau khi sạc xong để fine-tune AI
-  Future<void> showChargeCompleteSocConfirm({
-    required String sessionId,
-    double? estimatedSoc,
-  }) async {
-    await initialize();
-    final socText = estimatedSoc != null
-        ? ' (ước tính ~${estimatedSoc.toStringAsFixed(0)}%)'
-        : '';
-    await _plugin.show(
-      1012,
-      '⚡ Phiên sạc hoàn tất$socText',
-      'Nhấn để xác nhận mức pin thực tế trên xe để AI học chuẩn xác hơn.',
-      NotificationDetails(
-        iOS: _iosDetails(),
-        android: AndroidNotificationDetails(
-          channelSmartCharge,
-          'Smart Charge Alerts',
-          importance: Importance.high,
-          priority: Priority.high,
-          icon: '@mipmap/ic_launcher',
-        ),
-      ),
-      payload: 'confirm_soc:$sessionId',
-    );
-  }
-
-  /// Notification ongoing khi đang sạc
-  Future<void> showChargingOngoing(int currentPercent, String elapsed) async {
-    await initialize();
-    await _plugin.show(
-      idChargeOngoing,
-      '🔌 Đang sạc... $currentPercent%',
-      'Thời gian: $elapsed',
-      NotificationDetails(
-        iOS: _iosDetails(presentSound: false),
-        android: AndroidNotificationDetails(
-          channelCharge,
-          'Sạc pin',
-          importance: Importance.low,
-          priority: Priority.low,
-          ongoing: true,
-          autoCancel: false,
-          icon: '@mipmap/ic_launcher',
-        ),
-      ),
-    );
-  }
-
-  /// Notification ongoing khi đang chạy
-  Future<void> showTripOngoing(double distance, int battery) async {
-    await initialize();
-    await _plugin.show(
-      idTripOngoing,
-      '🛵 Đang di chuyển...',
-      'Quãng đường: ${distance.toStringAsFixed(1)} km — Pin: $battery%',
-      NotificationDetails(
-        iOS: _iosDetails(presentSound: false),
-        android: AndroidNotificationDetails(
-          channelTrip,
-          'Hành trình',
-          importance: Importance.low,
-          priority: Priority.low,
-          ongoing: true,
-          autoCancel: false,
-          icon: '@mipmap/ic_launcher',
-        ),
-      ),
-    );
-  }
-
   // ── Scheduled Notifications ──
 
   static const int idChargeReminder = 210;
+
+  /// One reminder id per vehicle, stable across restarts (String.hashCode is
+  /// not): one vehicle ending no longer cancels another's reminder (Task 125).
+  static int chargeReminderIdFor(String? vehicleId) {
+    if (vehicleId == null || vehicleId.isEmpty) return idChargeReminder;
+    var hash = 0;
+    for (final unit in vehicleId.codeUnits) {
+      hash = (hash * 31 + unit) & 0x7fffffff;
+    }
+    return 2100 + hash % 800;
+  }
 
   /// Date reminders are intentionally inexact; no permission prompt here.
   Future<bool> scheduleAccountReminder(
@@ -494,7 +385,7 @@ class NotificationService {
     );
 
     await _plugin.zonedSchedule(
-      idChargeReminder,
+      chargeReminderIdFor(vehicleId),
       'Shelly dự kiến đã tự ngắt',
       'Mốc ~$targetPercent% đã tới. Mở app để đọc lại relay và xác nhận nguồn đã OFF.',
       scheduledDate,
@@ -502,7 +393,7 @@ class NotificationService {
         iOS: _iosDetails(),
         android: AndroidNotificationDetails(
           channelSmartCharge,
-          'Cảnh báo Smart Charge',
+          'Cảnh báo sạc thông minh',
           importance: Importance.high,
           priority: Priority.high,
           icon: '@mipmap/ic_launcher',
@@ -532,9 +423,11 @@ class NotificationService {
   }
 
   /// Cancel scheduled charging reminder
-  Future<void> cancelChargeReminder() async {
+  Future<void> cancelChargeReminder({String? vehicleId}) async {
     await initialize();
-    await _plugin.cancel(idChargeReminder);
+    await _plugin.cancel(chargeReminderIdFor(vehicleId));
+    // Reminders scheduled by builds before Task 125 used one shared id.
+    if (vehicleId != null) await _plugin.cancel(idChargeReminder);
   }
 
   // ── Maintenance Notifications ──

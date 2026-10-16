@@ -26,6 +26,8 @@ class ActiveChargingCardV2 extends StatefulWidget {
     this.estimatedSoc,
     this.isStopping = false,
     this.isStarting = false,
+    this.estimateNote,
+    this.stopAwaitingReadback = false,
   });
 
   final double currentPercent;
@@ -42,6 +44,13 @@ class ActiveChargingCardV2 extends StatefulWidget {
   final double? estimatedSoc;
   final bool isStopping;
   final bool isStarting;
+
+  /// "Đạt mục tiêu ~X · khoảng HH:mm" from the live SOC and measured power
+  /// (Task 122); null until real measurements exist.
+  final String? estimateNote;
+
+  /// OFF was accepted; waiting for Shelly Cloud to report it.
+  final bool stopAwaitingReadback;
 
   @override
   State<ActiveChargingCardV2> createState() => _ActiveChargingCardV2State();
@@ -113,9 +122,11 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
     final target = widget.targetPercent.round().clamp(0, 100);
     final transitional = widget.isStopping || widget.isStarting;
     final statusColor = transitional
-        ? const Color(0xFFFBBF24)
+        ? LuxeColors.champagne
         : LuxeColors.emerald;
-    final statusText = widget.isStopping
+    final statusText = widget.stopAwaitingReadback
+        ? 'ĐÃ GỬI LỆNH TẮT · CHỜ XÁC NHẬN'
+        : widget.isStopping
         ? 'ĐANG TẮT...'
         : widget.isStarting
         ? 'ĐANG XÁC NHẬN...'
@@ -153,6 +164,7 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
               ),
               const SizedBox(width: 10),
               Expanded(
+                flex: 3,
                 child: Text(
                   statusText,
                   style: TextStyle(
@@ -163,12 +175,16 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
                   ),
                 ),
               ),
-              _Chip(
-                icon: widget.timerVerified
-                    ? Icons.verified_user_rounded
-                    : Icons.info_outline_rounded,
-                label: widget.timerVerified ? 'Timer Shelly' : 'Ước tính',
-                accent: widget.timerVerified,
+              const SizedBox(width: 8),
+              Flexible(
+                flex: 2,
+                child: _Chip(
+                  icon: widget.timerVerified
+                      ? Icons.verified_user_rounded
+                      : Icons.info_outline_rounded,
+                  label: widget.timerVerified ? 'Hẹn giờ Shelly' : 'Ước tính',
+                  accent: widget.timerVerified,
+                ),
               ),
             ],
           ),
@@ -251,9 +267,14 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
                   color: LuxeColors.platinumMid,
                 ),
                 const SizedBox(width: 6),
-                Text(
-                  'Nhiệt độ ổ cắm ${widget.temperatureC!.toStringAsFixed(0)}°C',
-                  style: const TextStyle(color: LuxeColors.muted, fontSize: 12),
+                Expanded(
+                  child: Text(
+                    'Nhiệt độ ổ cắm ${widget.temperatureC!.toStringAsFixed(0)}°C',
+                    style: const TextStyle(
+                      color: LuxeColors.muted,
+                      fontSize: 12,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -325,9 +346,22 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
       ),
       const SizedBox(height: 2),
       Text(
-        'Còn lại · dừng lúc ${widget.completionTime}',
+        'Shelly tự ngắt sau · lúc ${widget.completionTime}',
         style: const TextStyle(color: LuxeColors.dim, fontSize: 11.5),
       ),
+      if (widget.estimateNote != null) ...[
+        const SizedBox(height: 6),
+        Text(
+          widget.estimateNote!,
+          key: const ValueKey('session-estimate-note'),
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: LuxeColors.emerald,
+            fontSize: 12,
+            height: 1.35,
+          ),
+        ),
+      ],
     ],
   );
 }
@@ -359,12 +393,16 @@ class _Chip extends StatelessWidget {
           color: accent ? LuxeColors.emerald : LuxeColors.muted,
         ),
         const SizedBox(width: 5),
-        Text(
-          label,
-          style: TextStyle(
-            color: accent ? LuxeColors.emerald : LuxeColors.muted,
-            fontSize: 11.5,
-            fontWeight: FontWeight.w600,
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: accent ? LuxeColors.emerald : LuxeColors.muted,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       ],

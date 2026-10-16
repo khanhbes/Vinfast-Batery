@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import '../../../data/models/vehicle_model.dart';
 import '../../../data/models/smart_charger_binding.dart';
+import '../../../data/models/smart_charger_capabilities.dart';
 import '../../../data/models/smart_charging_session.dart';
 import '../../../data/repositories/smart_charger_repository.dart';
 import '../../../data/services/server_smart_charger_service.dart';
@@ -12,6 +14,7 @@ import '../../../core/utils/battery_bot_faq.dart';
 import 'local_chat_engine.dart';
 import '../../achievements/models/achievement.dart';
 import '../../achievements/services/achievement_signals.dart';
+import '../../../data/services/smart_charger_service.dart';
 
 class AppChatToolGateway implements ChatToolGateway {
   AppChatToolGateway({
@@ -226,7 +229,7 @@ class AppChatToolGateway implements ChatToolGateway {
             ? ' Hẹn giờ còn ${(st.timerRemaining!.inSeconds / 60).ceil()} phút.'
             : '';
         return LocalChatReply(
-          'Shelly ${st.relay ? 'đang bật' : 'đã tắt'} theo readback máy chủ vừa đọc. '
+          'Shelly ${st.relay ? 'đang bật' : 'đã tắt'} theo lần đọc mới nhất từ máy chủ. '
           'Công suất ${st.powerW.toStringAsFixed(1)} W · Điện áp ${st.voltageV.toStringAsFixed(1)} V · '
           'Dòng ${st.currentA.toStringAsFixed(2)} A.$timer',
         );
@@ -336,12 +339,22 @@ class AppChatToolGateway implements ChatToolGateway {
       };
     }
     final repo = _server;
-    final binding = await _backendRead(
+    // Binding and live status are independent reads: fetch them together
+    // (Task 122) instead of one round trip after the other.
+    final bindingRead = _backendRead(
       owner,
       vehicle.vehicleId,
       generation,
       () => repo.binding(vehicleId: vehicle.vehicleId),
     );
+    final liveRead = _backendRead(
+      owner,
+      vehicle.vehicleId,
+      generation,
+      () => repo.live(vehicleId: vehicle.vehicleId),
+    );
+    liveRead.ignore();
+    final binding = await bindingRead;
     _guard(owner, vehicle.vehicleId, generation);
     if (binding == null ||
         binding.mode != SmartChargerConnectionMode.serverCloud) {
@@ -351,12 +364,7 @@ class AppChatToolGateway implements ChatToolGateway {
             'Hãy kết nối Shelly qua máy chủ trước khi điều khiển trong chat. Mở Cài đặt → Sạc thông minh Shelly và nhập mã kết nối 6 ký tự do quản trị viên cấp.',
       };
     }
-    final live = await _backendRead(
-      owner,
-      vehicle.vehicleId,
-      generation,
-      () => repo.live(vehicleId: vehicle.vehicleId),
-    );
+    final live = await liveRead;
     _guard(owner, vehicle.vehicleId, generation);
     _connections.updateServerSnapshot(
       uid: owner,
@@ -375,12 +383,14 @@ class AppChatToolGateway implements ChatToolGateway {
     if (tool == 'stop_charging') {
       final session = live.session;
       if (session == null) {
-        final caps = await _backendRead(
-          owner,
-          vehicle.vehicleId,
-          generation,
-          () => repo.capabilities(vehicleId: vehicle.vehicleId),
-        );
+        final caps =
+            live.capabilities ??
+            await _backendRead<SmartChargerCapabilities>(
+              owner,
+              vehicle.vehicleId,
+              generation,
+              () => repo.capabilities(vehicleId: vehicle.vehicleId),
+            );
         _guard(owner, vehicle.vehicleId, generation);
         _connections.updateServerSnapshot(
           uid: owner,
@@ -440,12 +450,14 @@ class AppChatToolGateway implements ChatToolGateway {
             'Chọn thời lượng từ 1 phút đến 10 giờ và cập nhật mức pin trước khi bật sạc.',
       };
     }
-    final caps = await _backendRead(
-      owner,
-      vehicle.vehicleId,
-      generation,
-      () => repo.capabilities(vehicleId: vehicle.vehicleId),
-    );
+    final caps =
+        live.capabilities ??
+        await _backendRead<SmartChargerCapabilities>(
+          owner,
+          vehicle.vehicleId,
+          generation,
+          () => repo.capabilities(vehicleId: vehicle.vehicleId),
+        );
     _guard(owner, vehicle.vehicleId, generation);
     _connections.updateServerSnapshot(
       uid: owner,
@@ -472,7 +484,7 @@ class AppChatToolGateway implements ChatToolGateway {
       'description': '${vehicle.displayName} · ${binding.displayName}',
       'estimatedTime': '${seconds ~/ 60} phút',
       'safetyNote':
-          'Chỉ báo bật thành công sau readback ON và timer. Không tự gửi lại ON khi mất phản hồi.',
+          'Chỉ báo bật thành công sau khi đọc lại thấy ổ đã bật và hẹn giờ đang chạy. Không tự gửi lại lệnh bật khi mất phản hồi.',
       'deviceId': binding.deviceId,
       'durationSeconds': seconds,
       'currentSoc': vehicle.currentBattery,
@@ -545,237 +557,163 @@ class AppChatToolGateway implements ChatToolGateway {
       );
     }
     final repo = _server;
-    final binding = await _backendRead(
-      owner,
-      vehicle.vehicleId,
-      generation,
-      () => repo.binding(vehicleId: vehicle.vehicleId),
-    );
-    _guard(owner, vehicle.vehicleId, generation);
-    if (binding?.deviceId != evidence['deviceId'] ||
-        binding?.mode != SmartChargerConnectionMode.serverCloud) {
-      return _result(
-        false,
-        'Liên kết đã thay đổi. Hãy tạo yêu cầu mới.',
-        'expired',
-      );
-    }
-    final live = await _backendRead(
-      owner,
-      vehicle.vehicleId,
-      generation,
-      () => repo.live(vehicleId: vehicle.vehicleId),
-    );
-    _guard(owner, vehicle.vehicleId, generation);
-    _connections.updateServerSnapshot(
+    // Task 123 (user-approved): no binding + /live round trip before the
+    // command. The proposal was built from fresh reads seconds ago, and the
+    // server re-checks everything itself before any relay change: expected
+    // device, ownership, relay OFF, active session, staging lock, worker and
+    // the live safety thresholds. A refusal before the command (409/403/404)
+    // is reported plainly; anything after it stays "unknown", never retried.
+    final deviceId = evidence['deviceId'] as String;
+    final binding = _currentBinding(deviceId);
+    // Snapshot before markUnknown() clears the shared view during the command.
+    final cachedStatus = _connections.current.status;
+    final cachedCapabilities = _connections.current.capabilities;
+    void markUnknown() => _connections.markControlUnknown(
       uid: owner,
       vehicleId: vehicle.vehicleId,
-      binding: binding!,
-      status: live.status,
+      deviceId: deviceId,
     );
-    if (!live.status.online ||
-        !sameShellyDevice(
-          live.status.deviceId,
-          evidence['deviceId'] as String?,
-        )) {
-      return _result(
-        false,
-        'Chưa xác minh được thiết bị. Hãy đọc lại trong Sạc pin.',
-        'unknown',
-      );
-    }
-    if (tool == 'start_timed_charging') {
-      final caps = await _backendRead(
-        owner,
-        vehicle.vehicleId,
-        generation,
-        () => repo.capabilities(vehicleId: vehicle.vehicleId),
-      );
-      _guard(owner, vehicle.vehicleId, generation);
+    void publish(bool relayOn, {Duration? timerRemaining}) {
+      final status = cachedStatus;
+      if (binding == null ||
+          status == null ||
+          !sameShellyDevice(status.deviceId, deviceId)) {
+        // Nothing cached to update in place: show "checking" until the next
+        // shared read instead of guessing a relay state.
+        markUnknown();
+        return;
+      }
       _connections.updateServerSnapshot(
         uid: owner,
         vehicleId: vehicle.vehicleId,
         binding: binding,
-        status: live.status,
-        capabilities: caps,
+        status: status.withVerifiedRelay(
+          relayOn,
+          timerRemaining: timerRemaining,
+        ),
+        capabilities: cachedCapabilities,
+        controlResolved: true,
       );
-      if (!caps.readyForControl ||
-          !caps.canManualOn ||
-          !caps.supportsDeviceTimer ||
-          live.status.relay ||
-          live.session != null) {
-        return _result(
-          false,
-          caps.controlBlockedMessage ?? 'Thiết bị đang được sử dụng.',
-          'blocked',
-        );
-      }
-      _connections.markControlUnknown(
-        uid: owner,
-        vehicleId: vehicle.vehicleId,
-        deviceId: binding.deviceId,
-      );
-      final session = await repo.service.manualOn(
-        Duration(seconds: evidence['durationSeconds'] as int),
-        idempotencyKey: operationId,
-        vehicleId: vehicle.vehicleId,
-        currentSoc: (evidence['currentSoc'] as num).toDouble(),
-        expectedDeviceId: binding.deviceId,
-      );
-      _guard(owner, vehicle.vehicleId, generation);
-      final readback = await _backendRead(
-        owner,
-        vehicle.vehicleId,
-        generation,
-        () => repo.live(vehicleId: vehicle.vehicleId),
-      );
-      _guard(owner, vehicle.vehicleId, generation);
-      final ok =
-          sameShellyDevice(readback.status.deviceId, binding.deviceId) &&
-          readback.status.online &&
-          readback.status.relay &&
-          (readback.status.timerRemaining?.inSeconds ?? 0) > 0 &&
-          readback.session?.sessionId == session.sessionId &&
-          readback.session?.vehicleId == vehicle.vehicleId &&
-          sameShellyDevice(readback.session?.deviceId, binding.deviceId) &&
-          readback.session?.state == ChargingSessionState.active &&
-          readback.session?.relayVerified == true &&
-          readback.session?.timerVerified == true &&
-          readback.session!.version >= session.version;
-      if (ok) {
-        _connections.updateServerSnapshot(
-          uid: owner,
+    }
+
+    if (tool == 'start_timed_charging') {
+      markUnknown();
+      final SmartChargingSession session;
+      try {
+        session = await repo.service.manualOn(
+          Duration(seconds: evidence['durationSeconds'] as int),
+          idempotencyKey: operationId,
           vehicleId: vehicle.vehicleId,
-          binding: binding,
-          status: readback.status,
-          capabilities: caps,
-          controlResolved: true,
+          currentSoc: (evidence['currentSoc'] as num).toDouble(),
+          expectedDeviceId: deviceId,
+        );
+      } on SmartChargerException catch (error) {
+        _guard(owner, vehicle.vehicleId, generation);
+        final refused = _refusedBeforeCommand(error);
+        if (refused == null) rethrow;
+        return refused;
+      }
+      _guard(owner, vehicle.vehicleId, generation);
+      // The server answers only after its own Shelly readback of relay ON +
+      // armed timer on this device (it never retries ON).
+      final ok =
+          sameShellyDevice(session.deviceId, deviceId) &&
+          session.vehicleId == vehicle.vehicleId &&
+          session.state == ChargingSessionState.active &&
+          session.relayVerified &&
+          session.timerVerified;
+      if (ok) {
+        publish(
+          true,
+          timerRemaining: Duration(seconds: evidence['durationSeconds'] as int),
         );
         // Explore achievement: a confirmed, verified ON through BatteryBot.
         AchievementSignals.instance.emit(AchievementEvents.botCharge);
       } else {
-        _connections.markControlUnknown(
-          uid: owner,
-          vehicleId: vehicle.vehicleId,
-          deviceId: binding.deviceId,
-        );
+        markUnknown();
       }
       return _result(
         ok,
         ok
-            ? 'Đã xác minh Shelly bật và timer đang hoạt động.'
-            : 'Chưa xác minh được ON/timer. Mở Sạc pin để đọc lại hoặc dừng sạc; không gửi lại ON.',
+            ? 'Đã xác minh ổ Shelly đang bật và hẹn giờ đang chạy.'
+            : 'Chưa xác minh được ổ đã bật và hẹn giờ. Mở Sạc pin để đọc lại hoặc dừng sạc; không gửi lại lệnh bật.',
         ok ? 'verified' : 'unknown',
       );
     }
     if (tool == 'stop_charging') {
-      if (evidence['bindingOnlyStop'] == true) {
-        final caps = await _backendRead(
-          owner,
-          vehicle.vehicleId,
-          generation,
-          () => repo.capabilities(vehicleId: vehicle.vehicleId),
-        );
+      markUnknown();
+      final SmartChargingSession? stopped;
+      try {
+        stopped = evidence['bindingOnlyStop'] == true
+            ? await repo.service.off(
+                vehicleId: vehicle.vehicleId,
+                expectedDeviceId: deviceId,
+                operationId: operationId,
+              )
+            : await repo.service.stop(
+                evidence['sessionId'] as String,
+                expectedVersion: evidence['version'] as int,
+                idempotencyKey: operationId,
+              );
+      } on SmartChargerException catch (error) {
         _guard(owner, vehicle.vehicleId, generation);
-        if (!caps.canManualOff) {
+        if (error.statusCode == 404 && evidence['bindingOnlyStop'] != true) {
+          // The session ended (usually the device timer) before the
+          // confirmation: no OFF was needed. One read (rare path) restores
+          // the shared view instead of leaving it "checking".
+          try {
+            final live = await _backendRead(
+              owner,
+              vehicle.vehicleId,
+              generation,
+              () => repo.live(vehicleId: vehicle.vehicleId),
+            );
+            _guard(owner, vehicle.vehicleId, generation);
+            if (binding != null &&
+                sameShellyDevice(live.status.deviceId, deviceId)) {
+              _connections.updateServerSnapshot(
+                uid: owner,
+                vehicleId: vehicle.vehicleId,
+                binding: binding,
+                status: live.status,
+                capabilities: live.capabilities ?? cachedCapabilities,
+                controlResolved: true,
+              );
+            }
+          } on SmartChargerException {
+            // Shown as "checking" until the next shared read.
+          }
           return _result(
             false,
-            'Máy chủ chưa cho phép dừng bộ sạc này.',
-            'blocked',
+            'Phiên sạc đã kết thúc trước khi bạn xác nhận (thường do Shelly tự ngắt theo hẹn giờ); không cần gửi lệnh dừng.',
+            'expired',
           );
         }
-        _connections.markControlUnknown(
-          uid: owner,
-          vehicleId: vehicle.vehicleId,
-          deviceId: binding.deviceId,
-        );
-        final stopped = await repo.service.off(
-          vehicleId: vehicle.vehicleId,
-          expectedDeviceId: binding.deviceId,
-          operationId: operationId,
-        );
-        _guard(owner, vehicle.vehicleId, generation);
-        final readback = await _backendRead(
-          owner,
-          vehicle.vehicleId,
-          generation,
-          () => repo.live(vehicleId: vehicle.vehicleId),
-        );
-        _guard(owner, vehicle.vehicleId, generation);
-        final ok =
-            (stopped == null || stopped.relayVerified) &&
-            readback.status.online &&
-            !readback.status.relay &&
-            sameShellyDevice(readback.status.deviceId, binding.deviceId);
-        if (ok) {
-          _connections.updateServerSnapshot(
-            uid: owner,
-            vehicleId: vehicle.vehicleId,
-            binding: binding,
-            status: readback.status,
-            controlResolved: true,
-          );
-        } else {
-          _connections.markControlUnknown(
-            uid: owner,
-            vehicleId: vehicle.vehicleId,
-            deviceId: binding.deviceId,
-          );
-        }
-        return _result(
-          ok,
-          ok
-              ? 'Đã đọc lại và xác minh Shelly OFF.'
-              : 'Chưa xác minh được OFF. Mở Sạc pin để xử lý an toàn.',
-          ok ? 'verified' : 'unknown',
-        );
+        final refused = _refusedBeforeCommand(error);
+        if (refused == null) rethrow;
+        return refused;
       }
-      if (live.session?.sessionId != evidence['sessionId'] ||
-          live.session?.deviceId != evidence['deviceId'] ||
-          live.session?.version != evidence['version']) {
+      _guard(owner, vehicle.vehicleId, generation);
+      if (stopped?.state == ChargingSessionState.stopping &&
+          stopped?.lastError == offPendingReadbackCode) {
+        // OFF was accepted; Shelly Cloud has not reported it yet. The server
+        // finishes the stop on readback; resending OFF is never needed.
+        markUnknown();
         return _result(
           false,
-          'Phiên đã thay đổi. Hãy đọc lại và xác nhận yêu cầu mới.',
-          'expired',
+          'Đã gửi lệnh tắt; đang chờ Shelly Cloud báo về. Không gửi lại lệnh — Sạc pin sẽ cập nhật khi có xác nhận.',
+          'pending',
         );
       }
-      _connections.markControlUnknown(
-        uid: owner,
-        vehicleId: vehicle.vehicleId,
-        deviceId: binding.deviceId,
-      );
-      final stopped = await repo.service.stop(
-        evidence['sessionId'] as String,
-        expectedVersion: evidence['version'] as int,
-        idempotencyKey: operationId,
-      );
-      _guard(owner, vehicle.vehicleId, generation);
-      final readback = await _backendRead(
-        owner,
-        vehicle.vehicleId,
-        generation,
-        () => repo.live(vehicleId: vehicle.vehicleId),
-      );
-      _guard(owner, vehicle.vehicleId, generation);
       final ok =
-          (stopped == null || stopped.relayVerified) &&
-          readback.status.online &&
-          !readback.status.relay &&
-          sameShellyDevice(readback.status.deviceId, binding.deviceId);
+          stopped == null ||
+          (stopped.state.isTerminal &&
+              stopped.relayVerified &&
+              sameShellyDevice(stopped.deviceId, deviceId));
       if (ok) {
-        _connections.updateServerSnapshot(
-          uid: owner,
-          vehicleId: vehicle.vehicleId,
-          binding: binding,
-          status: readback.status,
-          controlResolved: true,
-        );
+        publish(false);
       } else {
-        _connections.markControlUnknown(
-          uid: owner,
-          vehicleId: vehicle.vehicleId,
-          deviceId: binding.deviceId,
-        );
+        markUnknown();
       }
       return _result(
         ok,
@@ -786,5 +724,37 @@ class AppChatToolGateway implements ChatToolGateway {
       );
     }
     return _result(false, 'Hành động không được hỗ trợ.', 'unsupported');
+  }
+
+  /// The binding already shown for this account/vehicle, if it is the same
+  /// device the proposal was built for.
+  SmartChargerBinding? _currentBinding(String deviceId) {
+    final binding = _connections.current.serverBinding;
+    if (binding == null ||
+        binding.mode != SmartChargerConnectionMode.serverCloud ||
+        !sameShellyDevice(binding.deviceId, deviceId)) {
+      return null;
+    }
+    return binding;
+  }
+
+  /// Server refusals raised before any relay command (binding changed,
+  /// relay already on, staging lock, safety evidence, ...). Null = the
+  /// outcome is unknown and must stay unknown.
+  Map<String, dynamic>? _refusedBeforeCommand(SmartChargerException error) {
+    final status = error.statusCode;
+    if (status == null || error.commandMayHaveReachedDevice) return null;
+    if (status != 403 && status != 404 && status != 409) return null;
+    return _result(
+      false,
+      error.message.isNotEmpty
+          ? error.message
+          : 'Máy chủ chưa cho phép thao tác này.',
+      status == 409 &&
+              (error.code == 'bindingChanged' ||
+                  error.code == 'versionConflict')
+          ? 'expired'
+          : 'blocked',
+    );
   }
 }

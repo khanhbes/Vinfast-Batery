@@ -13,6 +13,7 @@ import '../../core/widgets/app_popup.dart';
 import '../../core/widgets/debug_error_sheet.dart';
 import '../../data/models/shelly_connection_state.dart';
 import '../../data/models/smart_charging_session.dart';
+import '../../data/services/charge_estimator.dart';
 import '../../data/services/shelly_connection_coordinator.dart';
 import '../auth/auth_providers.dart';
 import '../achievements/achievements_screen.dart';
@@ -27,6 +28,7 @@ import 'smart_charge_history_screen.dart';
 import 'widgets/active_charging_card_v2.dart';
 import 'widgets/ai_charge_button.dart';
 import 'widgets/charge_mode_switcher_v2.dart';
+import 'widgets/command_progress_strip.dart';
 import 'widgets/edit_current_battery_sheet.dart';
 import 'widgets/luxe_soc_dial.dart';
 import 'widgets/prediction_card_v2.dart';
@@ -87,6 +89,19 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
   }
 
   @override
+  void didUpdateWidget(covariant SmartChargingControlScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // One controller per vehicle (Task 122): a new battery reading updates
+    // the existing controller instead of creating a second polling instance.
+    if (oldWidget.currentSoc != widget.currentSoc &&
+        oldWidget.vehicleId == widget.vehicleId) {
+      ref
+          .read(smartChargingControllerProvider(args).notifier)
+          .syncCurrentSoc(widget.currentSoc);
+    }
+  }
+
+  @override
   void dispose() {
     _connectionEvents?.cancel();
     WidgetsBinding.instance.removeObserver(this);
@@ -138,7 +153,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
           builder: (_) => const SmartChargerSetupHubScreen(),
         ),
       )
-      .then((_) => controller.refresh());
+      .then((_) => controller.refresh(force: true));
 
   @override
   Widget build(BuildContext context) {
@@ -177,7 +192,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
         appBar: widget.embedded
             ? null
             : AppBar(
-                title: const Text('Smart Charge'),
+                title: const Text('Sạc pin'),
                 backgroundColor: LuxeColors.background,
               ),
         body: Stack(
@@ -188,7 +203,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
               child: RefreshIndicator(
                 color: LuxeColors.emerald,
                 backgroundColor: const Color(0xFF17181B),
-                onRefresh: controller.refresh,
+                onRefresh: () => controller.refresh(force: true),
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(16, 10, 16, 40),
                   children: [
@@ -204,6 +219,10 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                       ),
                     ),
                     const SizedBox(height: 16),
+                    if (_commandKind(state) case final kind?) ...[
+                      CommandProgressStrip(kind: kind),
+                      const SizedBox(height: 12),
+                    ],
                     AnimatedSwitcher(
                       duration: reduced
                           ? Duration.zero
@@ -370,6 +389,26 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
       (draft.currentSoc.ceil() + 1).clamp(1, 99).toDouble(),
       100.0,
     );
+    // Task 122: a display-only forecast never energizes on its own, but it
+    // can pre-fill the verified timed start (slide-to-confirm, device timer).
+    final timedReady =
+        _sharedConnectionReady(connection) &&
+        state.capabilities.readyForControl &&
+        state.capabilities.canManualOn &&
+        !busy &&
+        state.phase != SmartChargingViewPhase.stopping;
+    final forecastDuration = preview == null
+        ? null
+        : Duration(
+            minutes: preview.predictedMinutes.clamp(
+              1,
+              ChargeEstimator.maxMinutes,
+            ),
+          );
+    final timedFromForecast =
+        preview != null && !canStart && preview.isDisplayOnly && timedReady;
+    final powerSource = controller.lastEstimatePowerSource;
+    final powerW = controller.lastEstimatePowerW;
     final String label;
     final String? note;
     if (preview == null) {
@@ -378,10 +417,17 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     } else if (canStart) {
       label = 'SẠC THEO AI';
       note = null;
+    } else if (timedFromForecast) {
+      label =
+          'SẠC HẸN GIỜ ${formatChargeDuration(forecastDuration!).toUpperCase()}';
+      note = powerSource == null || powerW == null
+          ? 'Ước tính tham khảo · Shelly tự ngắt theo hẹn giờ'
+          : 'Ước tính theo ${powerSource.label} (~${powerW.round()} W) · '
+                'Shelly tự ngắt theo hẹn giờ';
     } else {
       label = 'DỰ ĐOÁN LẠI';
       note = preview.isDisplayOnly
-          ? 'Dự đoán tham khảo · Dùng Sạc hẹn giờ'
+          ? 'Dự đoán tham khảo · Kết nối Shelly để sạc hẹn giờ theo dự đoán'
           : (preview.aiChargeEligible || preview.isPhysicsFallback)
           ? 'Hoàn tất cài đặt ổ sạc'
           : 'Chưa khả dụng';
@@ -479,9 +525,20 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                 ? controller.createPreview
                 : canStart
                 ? () => _aiStart(state, controller)
+                : timedFromForecast
+                ? () => _startTimedCharge(state, controller, forecastDuration!)
                 : controller.createPreview,
           ),
         ),
+        if (timedFromForecast)
+          Center(
+            child: TextButton.icon(
+              key: const ValueKey('re-forecast-button'),
+              onPressed: busy ? null : controller.createPreview,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: const Text('Dự đoán lại'),
+            ),
+          ),
         if (note != null || full) ...[
           const SizedBox(height: 10),
           Text(
@@ -490,7 +547,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                 : note!,
             textAlign: TextAlign.center,
             style: const TextStyle(
-              color: Color(0xFFFBBF24),
+              color: LuxeColors.champagne,
               fontSize: 12.5,
               height: 1.4,
             ),
@@ -537,21 +594,43 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     );
   }
 
+  RelayCommandKind? _commandKind(SmartChargingUiState state) =>
+      switch (state.phase) {
+        SmartChargingViewPhase.starting => RelayCommandKind.on,
+        SmartChargingViewPhase.stopping =>
+          state.session?.lastError == offPendingReadbackCode
+              ? RelayCommandKind.offAwaitingReadback
+              : RelayCommandKind.off,
+        _ => null,
+      };
+
   Widget _buildActiveCharging(
     SmartChargingUiState state,
     SmartChargingController controller,
   ) {
     final session = state.session;
     final status = state.chargerStatus;
+    // Count the hardware timer down between polls (Task 125).
     final remaining =
-        status?.timerRemaining ??
+        status?.timerRemainingAt(state.now) ??
         (session != null ? session.remaining(state.now) : Duration.zero);
     final startSoc =
         session?.startSoc.round() ?? state.draft.currentSoc.round();
     final targetSoc =
         session?.targetSoc.round() ?? state.draft.targetSoc.round();
     final estimatedSoc = session?.estimatedSoc ?? startSoc.toDouble();
-    final stopAt = session?.effectiveStopAt ?? state.now;
+    // "Stops at" follows the same source as the countdown: the hardware
+    // timer when Shelly reports it, otherwise the session plan (Task 122).
+    final timer = status?.timerRemainingAt(state.now);
+    final stopAt = timer != null && timer > Duration.zero
+        ? state.now.add(timer)
+        : session?.effectiveStopAt ?? state.now;
+    final estimate = state.remainingEstimate;
+    final estimateNote = estimate == null || targetSoc <= estimatedSoc.round()
+        ? null
+        : 'Đạt $targetSoc% sau ~${formatChargeDuration(estimate.duration)} '
+              '· khoảng ${formatClock(estimate.finishAt)} '
+              '(${estimate.powerW.round()} W đo thực tế)';
 
     return ActiveChargingCardV2(
       key: const ValueKey('active-session-v2'),
@@ -569,6 +648,10 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
       estimatedSoc: estimatedSoc,
       isStopping: state.phase == SmartChargingViewPhase.stopping,
       isStarting: state.phase == SmartChargingViewPhase.starting,
+      estimateNote: estimateNote,
+      stopAwaitingReadback:
+          state.phase == SmartChargingViewPhase.stopping &&
+          session?.lastError == offPendingReadbackCode,
       onStop: () => _stopWithConfirmation(state, controller),
     );
   }
@@ -704,7 +787,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
   ) async {
     final session = state.session;
     final remaining =
-        state.chargerStatus?.timerRemaining ??
+        state.chargerStatus?.timerRemainingAt(state.now) ??
         session?.remaining(state.now) ??
         Duration.zero;
     final decision = await showStopChargingConfirmationSheet(
@@ -760,13 +843,30 @@ class _LuxeChargeHeaderState extends State<_LuxeChargeHeader>
     duration: const Duration(milliseconds: 2200),
   );
 
+  // The dot breathes only while the relay is verified ON (Task 125).
+  void _syncPulse() {
+    final charging = widget.state.chargerStatus?.relay == true;
+    if (MediaQuery.disableAnimationsOf(context) || !charging) {
+      _pulse
+        ..stop()
+        ..value = 0;
+    } else if (!_pulse.isAnimating) {
+      _pulse.repeat();
+    }
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (MediaQuery.disableAnimationsOf(context)) {
-      _pulse.stop();
-    } else if (!_pulse.isAnimating) {
-      _pulse.repeat();
+    _syncPulse();
+  }
+
+  @override
+  void didUpdateWidget(covariant _LuxeChargeHeader oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.state.chargerStatus?.relay !=
+        widget.state.chargerStatus?.relay) {
+      _syncPulse();
     }
   }
 
@@ -784,7 +884,7 @@ class _LuxeChargeHeaderState extends State<_LuxeChargeHeader>
     final connected =
         connection?.state == ShellyConnectionFlowState.connected &&
         connection?.controlUncertain != true;
-    final dotColor = connected ? LuxeColors.emerald : const Color(0xFFFBBF24);
+    final dotColor = connected ? LuxeColors.emerald : LuxeColors.champagne;
     final statusText = connection?.connectionLabel ?? 'Chưa kết nối Shelly';
     final now = DateFormat('HH:mm').format(widget.state.now.toLocal());
 
@@ -853,6 +953,10 @@ class _LuxeChargeHeaderState extends State<_LuxeChargeHeader>
                 },
                 borderRadius: BorderRadius.circular(99),
                 child: Container(
+                  // 48 dp touch target (Task 125); the pill stays visually
+                  // compact through its padding.
+                  constraints: const BoxConstraints(minHeight: 48),
+                  alignment: Alignment.center,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
                     vertical: 7,
@@ -860,9 +964,9 @@ class _LuxeChargeHeaderState extends State<_LuxeChargeHeader>
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(99),
                     border: Border.all(
-                      color: const Color(0xFFFBBF24).withValues(alpha: 0.5),
+                      color: LuxeColors.champagne.withValues(alpha: 0.5),
                     ),
-                    color: const Color(0x14FBBF24),
+                    color: LuxeColors.champagne.withValues(alpha: 0.08),
                   ),
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
@@ -870,13 +974,13 @@ class _LuxeChargeHeaderState extends State<_LuxeChargeHeader>
                       Icon(
                         Icons.tune_rounded,
                         size: 14,
-                        color: Color(0xFFFBBF24),
+                        color: LuxeColors.champagne,
                       ),
                       SizedBox(width: 6),
                       Text(
                         'Thiết lập',
                         style: TextStyle(
-                          color: Color(0xFFFBBF24),
+                          color: LuxeColors.champagne,
                           fontSize: 12.5,
                           fontWeight: FontWeight.w600,
                         ),
@@ -1048,11 +1152,11 @@ class _TargetPresets extends StatelessWidget {
 
 String _time(DateTime value) => DateFormat('HH:mm').format(value.toLocal());
 String _duration(int minutes) =>
-    minutes < 60 ? '$minutes phút' : '${minutes ~/ 60} giờ';
+    formatChargeDuration(Duration(minutes: math.max(0, minutes)));
 
 /// Compact ETA for the dial pill: "≈ 1g10" / "≈ 45 phút".
 String _shortDuration(int minutes) {
   final m = math.max(0, minutes);
   if (m < 60) return '≈ $m phút';
-  return '≈ ${m ~/ 60}g${(m % 60).toString().padLeft(2, '0')}';
+  return '≈ ${formatChargeDurationShort(Duration(minutes: m))}';
 }

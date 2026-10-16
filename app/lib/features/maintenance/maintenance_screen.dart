@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../core/widgets/vehicle_picker_sheet.dart';
+import '../../core/widgets/empty_state.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -115,31 +117,29 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
     );
   }
 
+  // Same pattern as the Charge tab: a way forward, not a dead end (Task 125).
   Widget _buildSelectVehiclePlaceholder() {
-    return const Center(
-      child: Padding(
-        padding: EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.two_wheeler_rounded, size: 40, color: _Lx.textTertiary),
-            SizedBox(height: 14),
-            Text('Chưa chọn xe', style: LuxeText.title),
-            SizedBox(height: 6),
-            Text(
-              'Vào Garage để chọn 1 xe trước khi xem lịch bảo dưỡng.',
-              textAlign: TextAlign.center,
-              style: LuxeText.body,
-            ),
-          ],
-        ),
-      ),
+    return EmptyState(
+      icon: Icons.two_wheeler_rounded,
+      title: 'Chưa chọn xe',
+      message: 'Chọn xe để xem lịch bảo dưỡng theo ODO.',
+      actionLabel: 'Chọn xe ngay',
+      onAction: () => VehiclePickerSheet.show(context, ref),
     );
   }
 
+  // Cached per vehicle: a filter-chip setState used to re-subscribe (and
+  // flash the loading state) on every tap (Task 125).
+  String? _tasksVehicleId;
+  Stream<List<MaintenanceTaskModel>>? _tasks;
+
   Widget _buildBody(String vehicleId) {
+    if (_tasksVehicleId != vehicleId || _tasks == null) {
+      _tasksVehicleId = vehicleId;
+      _tasks = MaintenanceRepository.watchMaintenanceTasks(vehicleId);
+    }
     return StreamBuilder<List<MaintenanceTaskModel>>(
-      stream: MaintenanceRepository.watchMaintenanceTasks(vehicleId),
+      stream: _tasks,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting &&
             !snapshot.hasData) {
@@ -247,7 +247,7 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
             const Text(
               'Chưa có số ODO của xe. Cập nhật ODO trong hồ sơ xe để các mốc được tính chính xác.',
               style: TextStyle(
-                color: Color(0xFFFBBF24),
+                color: LuxeColors.champagne,
                 fontSize: 12.5,
                 height: 1.4,
               ),
@@ -693,7 +693,7 @@ abstract final class _Lx {
   static const glassBorder = LuxeColors.hairline;
   static const primary = LuxeColors.emerald;
   static const success = LuxeColors.emerald;
-  static const warning = Color(0xFFFBBF24);
+  static const warning = LuxeColors.champagne;
   static const error = LuxeColors.danger;
   static const textPrimary = LuxeColors.text;
   static const textSecondary = LuxeColors.muted;
@@ -1112,7 +1112,7 @@ class _ServiceTypeMeta {
       case ServiceType.seatLock:
         return const _ServiceTypeMeta(
           Icons.lock_rounded,
-          Color(0xFFFBBF24),
+          LuxeColors.champagne,
           'Khoá yên',
         );
 

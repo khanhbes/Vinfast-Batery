@@ -50,7 +50,7 @@ class SmartChargeReportService {
     }
     await Share.shareXFiles(
       [XFile(file.path)],
-      subject: 'Báo cáo Smart Charge',
+      subject: 'Báo cáo sạc thông minh',
       text:
           'Báo cáo ${DateFormat('dd/MM/yyyy').format(request.from)} – ${DateFormat('dd/MM/yyyy').format(request.to.subtract(const Duration(days: 1)))}',
     );
@@ -113,7 +113,9 @@ class SmartChargeReportService {
     SmartChargeHistorySummary summary,
   ) async {
     final document = pw.Document();
-    final regular = await _bundledFont('assets/fonts/VinFastUnicode-Regular.ttf');
+    final regular = await _bundledFont(
+      'assets/fonts/VinFastUnicode-Regular.ttf',
+    );
     final bold = await _bundledFont('assets/fonts/VinFastUnicode-Bold.ttf');
     final theme = regular == null
         ? null

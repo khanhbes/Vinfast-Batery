@@ -37,13 +37,15 @@ class ShellyQrParser {
       try {
         final map = jsonDecode(text);
         if (map is Map<String, dynamic>) {
-          final id = map['id']?.toString() ??
+          final id =
+              map['id']?.toString() ??
               map['deviceId']?.toString() ??
               map['device_id']?.toString();
           if (id != null && id.isNotEmpty) {
             return ShellyQrParseResult(
               deviceId: id.trim(),
-              cloudHost: map['cloud_host']?.toString() ?? map['server']?.toString(),
+              cloudHost:
+                  map['cloud_host']?.toString() ?? map['server']?.toString(),
               model: map['model']?.toString() ?? map['type']?.toString(),
               lanAddress: map['ip']?.toString() ?? map['lan']?.toString(),
               rawText: text,
@@ -57,9 +59,10 @@ class ShellyQrParser {
     if (text.startsWith('http://') || text.startsWith('https://')) {
       try {
         final uri = Uri.parse(text);
-        
+
         // Query param id or device_id: e.g. https://shelly-api-eu.shelly.cloud/?id=shellyplugs3-c049ef87b64c
-        final qId = uri.queryParameters['id'] ??
+        final qId =
+            uri.queryParameters['id'] ??
             uri.queryParameters['device_id'] ??
             uri.queryParameters['deviceId'];
         if (qId != null && qId.isNotEmpty) {
@@ -93,10 +96,7 @@ class ShellyQrParser {
 
     // 3. Check for standard Shelly device ID patterns:
     // e.g. "shellyplugs3-c049ef87b64c", "shellyplus1-xxxxxxxxxxxx", "shellyplugus-xxxxxx"
-    final deviceIdRegex = RegExp(
-      r'(shelly[a-z0-9_-]+)',
-      caseSensitive: false,
-    );
+    final deviceIdRegex = RegExp(r'(shelly[a-z0-9_-]+)', caseSensitive: false);
     final match = deviceIdRegex.firstMatch(text);
     if (match != null) {
       final id = match.group(1)!.trim();
@@ -108,9 +108,14 @@ class ShellyQrParser {
     }
 
     // 4. Check for MAC address format (common on device labels: "C0:49:EF:87:B6:4C" or "c049ef87b64c")
-    final macFormattedRegex = RegExp(r'^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$');
+    final macFormattedRegex = RegExp(
+      r'^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$',
+    );
     if (macFormattedRegex.hasMatch(text)) {
-      final cleanMac = text.replaceAll(':', '').replaceAll('-', '').toLowerCase();
+      final cleanMac = text
+          .replaceAll(':', '')
+          .replaceAll('-', '')
+          .toLowerCase();
       return ShellyQrParseResult(
         deviceId: 'shellyplugs3-$cleanMac',
         model: 'Shelly Plug S Gen3',

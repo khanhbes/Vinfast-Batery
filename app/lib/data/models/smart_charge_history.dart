@@ -21,12 +21,17 @@ class SmartChargeStopResult {
     this.session,
     this.alreadyStopped = false,
     this.historySyncPending = false,
+    this.offPendingReadback = false,
   });
 
   final bool relayOffVerified;
   final SmartChargingSession? session;
   final bool alreadyStopped;
   final bool historySyncPending;
+
+  /// OFF was accepted but Shelly Cloud has not reported it yet (Task 122).
+  /// The server finishes the manual stop on readback; never resend OFF.
+  final bool offPendingReadback;
 }
 
 class SmartChargeHistoryPage {
