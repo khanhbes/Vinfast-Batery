@@ -57,13 +57,17 @@ class GlobalChargingPill extends ConsumerWidget {
         );
         final state = ref.watch(smartChargingControllerProvider(args));
         if (state.hasActiveSession) {
+          // The Charge tab already shows this session in full; the pill on
+          // top of it hid the Shelly card (Task 127).
+          if (ref.watch(currentTabProvider) == 1) {
+            return const SizedBox.shrink();
+          }
           return _pill(
             context,
             ref,
             vehicleId,
             state.session?.targetSoc,
-            state.chargerStatus?.timerRemainingAt(state.now) ??
-                state.session?.remaining(state.now),
+            state.displayRemaining,
             value.vehicleName,
             synced: false,
           );
@@ -131,7 +135,7 @@ class GlobalChargingPill extends ConsumerWidget {
       semanticLabel: 'Phiên sạc xe $vehicleName đang diễn ra. $label.',
       label: label,
       detail: targetSoc != null && targetSoc > 0
-          ? 'mục tiêu ~${targetSoc.round()}%'
+          ? '→ ~${targetSoc.round()}%'
           : null,
       stale: stale,
       onTap: () {
@@ -255,10 +259,12 @@ class _LuxeChargingPillState extends State<_LuxeChargingPill>
   @override
   Widget build(BuildContext context) {
     final accent = widget.stale ? LuxeColors.champagne : LuxeColors.emerald;
+    // Bottom-left above the navigation bar, clear of the BatteryBot button:
+    // at the top it covered page headers and cards (Task 127).
     return Align(
-      alignment: Alignment.topCenter,
+      alignment: Alignment.bottomLeft,
       child: Padding(
-        padding: const EdgeInsets.only(top: 8, left: 16, right: 16),
+        padding: const EdgeInsets.only(bottom: 14, left: 16, right: 104),
         child: TweenAnimationBuilder<double>(
           tween: Tween(begin: 0, end: 1),
           duration: luxeDuration(context, 520),
@@ -266,7 +272,7 @@ class _LuxeChargingPillState extends State<_LuxeChargingPill>
           builder: (context, t, child) => Opacity(
             opacity: t,
             child: Transform.translate(
-              offset: Offset(0, -12 * (1 - t)),
+              offset: Offset(0, 12 * (1 - t)),
               child: child,
             ),
           ),
@@ -334,27 +340,29 @@ class _LuxeChargingPillState extends State<_LuxeChargingPill>
                             },
                           ),
                           const SizedBox(width: 10),
-                          Flexible(
-                            child: Text(
-                              widget.label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: LuxeColors.text,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 1.1,
-                                fontFeatures: [FontFeature.tabularFigures()],
-                              ),
+                          Text(
+                            widget.label,
+                            maxLines: 1,
+                            softWrap: false,
+                            style: const TextStyle(
+                              color: LuxeColors.text,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 1.1,
+                              fontFeatures: [FontFeature.tabularFigures()],
                             ),
                           ),
                           if (widget.detail != null) ...[
                             const SizedBox(width: 8),
-                            Text(
-                              widget.detail!,
-                              style: const TextStyle(
-                                color: LuxeColors.muted,
-                                fontSize: 12,
+                            Flexible(
+                              child: Text(
+                                widget.detail!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: LuxeColors.muted,
+                                  fontSize: 12,
+                                ),
                               ),
                             ),
                           ],

@@ -22,9 +22,11 @@ from .models import (
     utcnow,
 )
 from .providers import ProviderError
+from . import charge_model
 from .charging_fusion import fuse_charging_eta
 from .personalization import evaluate_training, update_profile
 from .personal_model_registry import PersonalModelRegistry
+from .learning import VehicleLearningMixin
 
 
 class SmartChargeError(RuntimeError):
@@ -53,6 +55,19 @@ MEMBERSHIP_CACHE_SECONDS = 60
 # A relay seen OFF this close to (or after) the planned stop is a normal
 # timer completion; earlier than that it was switched off before the plan.
 PLANNED_STOP_TOLERANCE_SECONDS = 20
+# Target charging (Task 126): energy delivered during this lead (worker poll
+# half-interval + Cloud OFF latency) counts as already delivered, so the
+# outlet switches off within a fraction of 1 % of the target.
+TARGET_LEAD_SECONDS = 20
+# Ride-through (Task 126): a failed READ while a verified charge runs is a
+# connection gap, not an unknown relay. The Shelly keeps its own ceiling timer,
+# so the charge stays bounded; cutting it on reconnect (old recovery_off) lost
+# real charges after Wi-Fi/Cloud blips. Identity/auth errors still escalate.
+LINK_RIDE_THROUGH_CODES = TRANSIENT_READ_CODES | frozenset(
+    {"deviceOffline", "providerRejected", "malformedProviderResponse", "cloudQueueBusy"})
+LINK_ALERT_SECONDS = 300
+PROGRESS_PUSH_SECONDS = 120
+CONFIRMATION_WINDOW_DAYS = 7
 
 
 class _StageTimer:
@@ -78,9 +93,9 @@ def _parallel(jobs: dict) -> dict:
 CAPABILITIES_CACHE_SECONDS = 30
 
 
-class SmartChargeService:
+class SmartChargeService(VehicleLearningMixin):
     def __init__(self, repository, provider, predictor, sleeper=time.sleep, clock=utcnow,
-                 model_registry=None, push_notifier=None):
+                 model_registry=None, push_notifier=None, progress_notifier=None):
         self.repository = repository
         self.provider = provider
         self.predictor = predictor
@@ -103,6 +118,9 @@ class SmartChargeService:
         self._last_checkpoint_at: dict[str, datetime] = {}
         self._membership_cache: dict[tuple[str, str], tuple[datetime, bool]] = {}
         self.push_notifier = push_notifier
+        # Task 126: worker-only "charging now" progress pushes (app closed).
+        self.progress_notifier = progress_notifier
+        self._last_progress_push: dict[str, datetime] = {}
 
     def _code_refresh_required(self, uid: str, device_id: str) -> bool:
         """Display hint for /live: cached 60 s (two Firestore reads per poll
@@ -147,10 +165,20 @@ class SmartChargeService:
                 state=session.state,
                 target_percent=getattr(session, 'target_soc', None),
             )
+            # Task 126: why it ended + the estimate, for the right text and
+            # the "type the real %" prompt.
+            extra = dict(
+                stop_reason=session.stop_reason,
+                estimated_soc=session.estimated_soc,
+                energy_wh=session.energy_used_wh,
+            )
 
             def deliver():
                 try:
-                    notifier(uid, **kwargs)
+                    try:
+                        notifier(uid, **kwargs, **extra)
+                    except TypeError:
+                        notifier(uid, **kwargs)  # notifiers without the extras
                 except Exception:
                     # Notification delivery must never roll back durable charging state.
                     pass
@@ -272,6 +300,11 @@ class SmartChargeService:
                 "Xe chưa có dung lượng pin đã được xác minh; hãy cập nhật catalog hoặc dùng Sạc hẹn giờ.",
                 409,
             )
+        if self.predictor is None:
+            preview = self._charge_model_preview(uid, vehicle_id, trusted_payload, current, target)
+            self.repository.save_preview(uid, preview)
+            self.repository.append_audit(uid, "preview_created", preview_id=preview.preview_id)
+            return preview
         result = self.predictor(trusted_payload)
         global_seconds = int(round(float(
             result.get("predictedDurationSeconds")
@@ -329,6 +362,101 @@ class SmartChargeService:
         self.repository.save_preview(uid, preview)
         self.repository.append_audit(uid, "preview_created", preview_id=preview.preview_id)
         return preview
+
+    def estimate_charge(self, uid: str, vehicle_id: str, current: float, target: float,
+                        history_power_w: float | None = None) -> dict:
+        """Read-only charge estimate for BatteryBot (Task 126): same model as
+        the preview, nothing stored, no permission to switch ON."""
+        vehicle = self._owned_vehicle(uid, vehicle_id)
+        if not 0 <= current < target <= 100:
+            raise SmartChargeError("invalidSoc", "Mức muốn sạc phải cao hơn pin hiện tại và tối đa 100%")
+        payload = self._prediction_payload({"historyPowerW": history_power_w}, vehicle)
+        preview = self._charge_model_preview(uid, vehicle_id, payload, current, target)
+        return {
+            "fromSoc": current, "toSoc": target,
+            "minutes": preview.predicted_minutes,
+            "lowMinutes": round((preview.estimate_low_seconds or 0) / 60),
+            "highMinutes": round((preview.estimate_high_seconds or 0) / 60),
+            "powerW": preview.charge_power_w, "powerSource": preview.power_source,
+            "whPerPct": preview.wh_per_pct, "learnedSamples": preview.learned_samples,
+            "socMae": preview.soc_mae, "source": preview.model_source,
+            "safetyCeilingMinutes": round((preview.device_timer_seconds or 0) / 60),
+        }
+
+    def learned_profile(self, uid: str, vehicle_id: str) -> charge_model.LearnedProfile | None:
+        """Learned charge values; ``None`` when the owner turned learning off."""
+        profile = self.repository.get_personal_profile(uid, vehicle_id)
+        if profile is not None and not profile.consent_enabled:
+            return None
+        return charge_model.LearnedProfile.from_dict(profile.learned if profile else None)
+
+    def _charge_model_preview(self, uid: str, vehicle_id: str, payload: dict,
+                              current: float, target: float) -> ChargePreview:
+        """Task 126 preview: one physics model + what this vehicle taught it."""
+        learned = self.learned_profile(uid, vehicle_id)
+        params = charge_model.params_for(
+            capacity_wh=_optional_float(payload.get("estimatedCapacityWh")),
+            soh_pct=_optional_float(payload.get("stateOfHealth")),
+            learned=learned,
+            live_power_w=_optional_float(payload.get("livePowerW")),
+            spec_power_w=_optional_float(payload.get("historyPowerW")),
+        )
+        if params is None:
+            raise SmartChargeError("capacityUnavailable",
+                                   "Xe chưa có dung lượng pin đã được xác minh.", 409)
+        estimate = charge_model.estimate(params, current, target)
+        seconds = estimate.seconds
+        if seconds <= 0 or seconds > self.max_minutes * 60:
+            raise SmartChargeError("unsafeDuration",
+                                   "Thời gian dự kiến phải lớn hơn 0 và không vượt quá 10 giờ")
+        device_timer = charge_model.ceiling_seconds(seconds, self.max_minutes)
+        samples = params.samples
+        stage = "personalized" if samples >= 3 else ("calibrating" if samples >= 1 else "base")
+        if params.soc_mae is not None and samples >= 2:
+            confidence = max(50.0, min(95.0, 95.0 - params.soc_mae * 5))
+        else:
+            confidence = 60.0
+        warnings = []
+        if params.power_source == "default":
+            warnings.append("Chưa đo được công suất sạc của xe; thời gian là ước tính thô cho tới lần sạc đầu.")
+        if params.source == "vehicle":
+            warnings.append("Chưa có lần sạc nào được xác nhận %; nhập % trên đồng hồ xe sau khi sạc để tăng độ chính xác.")
+        now = self.clock()
+        version = learned.version if learned else 0
+        return ChargePreview(
+            preview_id=secrets.token_urlsafe(24),
+            vehicle_id=vehicle_id,
+            current_soc=current,
+            target_soc=target,
+            predicted_minutes=max(1, int(round(seconds / 60))),
+            predicted_duration_seconds=seconds,
+            predicted_stop_at=now + timedelta(seconds=seconds),
+            model_source="personal_physics" if params.source == "personal" else "physics",
+            model_key="charge_model",
+            model_version=f"cm1-v{version}",
+            runtime_health="loaded",
+            confidence=confidence,
+            warnings=warnings,
+            fallback_reason=None,
+            analyzed_at=now,
+            ai_charge_eligible=True,
+            expires_at=now + timedelta(minutes=10),
+            eta_candidates=[EtaCandidate("physics", seconds, 1.0, confidence / 100)],
+            fusion_reason="charge_model",
+            profile_version=f"profile-v{version}" if version else None,
+            adapter_version=None,
+            effective_capacity_wh=round(params.wh_per_pct * 100 * charge_model.DEFAULT_EFFICIENCY, 1),
+            personalization_stage=stage,
+            stop_mode="target",
+            estimate_low_seconds=estimate.low_seconds,
+            estimate_high_seconds=estimate.high_seconds,
+            wh_per_pct=round(params.wh_per_pct, 3),
+            charge_power_w=round(params.power_w, 1),
+            power_source=params.power_source,
+            soc_mae=params.soc_mae,
+            learned_samples=samples,
+            device_timer_seconds=device_timer,
+        )
 
     def _require_ready_to_energize(self, binding: DeviceBinding, status, *,
                                    live_context_verified: bool = False,
@@ -463,9 +591,235 @@ class SmartChargeService:
 
     def _relay_off_outcome(self, session: ChargingSession, now) -> tuple[str, str]:
         """Timer completion vs. an OFF that came before the plan."""
-        if now >= session.effective_stop_at - timedelta(seconds=PLANNED_STOP_TOLERANCE_SECONDS):
+        near_timer = now >= session.effective_stop_at - timedelta(seconds=PLANNED_STOP_TOLERANCE_SECONDS)
+        if session.stop_mode == "target":
+            # The device timer is only the safety ceiling of a target charge:
+            # reaching it means the target was not seen in time.
+            return ("interrupted", "ceiling_timer") if near_timer else ("interrupted", "relay_off")
+        if near_timer:
             return "completed", "planned_timer"
         return "interrupted", "relay_off"
+
+    def _target_outcome(self, uid: str, session: ChargingSession, status, now) -> str | None:
+        """Why a target charge should end now, or ``None`` to keep charging."""
+        power = max(0.0, float(status.power_w or 0))
+        if (session.target_energy_wh is not None
+                and charge_model.target_reached(session.energy_used_wh, session.target_energy_wh,
+                                                power, TARGET_LEAD_SECONDS)):
+            return "target_reached"
+        if power < charge_model.IDLE_POWER_W:
+            if session.idle_since is None:
+                session.idle_since = now
+                # Persist at once: the next poll may run in another process.
+                self._checkpoint_session(uid, session, force=True)
+            idle = (now - session.idle_since).total_seconds()
+            charged_for = (now - session.created_at).total_seconds()
+            if idle >= charge_model.IDLE_CUTOFF_SECONDS and charged_for >= charge_model.IDLE_CUTOFF_SECONDS:
+                # The scooter charger stopped drawing power: full, or never
+                # plugged in. Keeping the outlet on serves nothing.
+                return "charger_idle"
+        elif session.idle_since is not None:
+            session.idle_since = None
+        return None
+
+    def _full_outcome(self, uid: str, session: ChargingSession, status, now) -> str | None:
+        """``battery_full`` once the charger's near-full power tail held long
+        enough (any stop mode). Abrupt drops to ~0 W (scooter unplugged) are
+        not a full battery: the tail must follow a taper or still trickle."""
+        if (now - session.created_at).total_seconds() < charge_model.FULL_MIN_CHARGE_SECONDS:
+            return None
+        power = max(0.0, float(status.power_w or 0))
+        peak = max(float(session.peak_power_w or 0), power)
+        since, full = charge_model.full_tail_update(session.tail_since, peak_w=peak,
+                                                    power_w=power, now=now)
+        if since != session.tail_since:
+            session.tail_since = since
+            session.tail_entry_w = power if since is not None else None
+            # Persist at once: the next poll may run in another process.
+            self._checkpoint_session(uid, session, force=True)
+        if not full:
+            return None
+        return "battery_full" if self._tail_follows_taper(session, peak) else None
+
+    @staticmethod
+    def _tail_follows_taper(session: ChargingSession, peak: float) -> bool:
+        if (session.tail_entry_w or 0) >= 5:
+            return True
+        since = session.tail_since.timestamp() if session.tail_since else None
+        for item in reversed(session.telemetry_samples[-90:]):
+            t = _optional_float(item.get("t"))
+            p = _optional_float(item.get("p")) or 0.0
+            if since is not None and t is not None and t >= since:
+                continue
+            if charge_model.FULL_TAIL_W <= p <= peak * 0.7:
+                return True
+        return False
+
+    def _remaining_seconds(self, session: ChargingSession, status) -> int | None:
+        """Target charge: energy left at the measured power (same model as the
+        preview). Timed charge: the Shelly timer."""
+        if session.stop_mode == "target" and session.model_wh_per_pct and session.estimated_soc is not None:
+            power = float(status.power_w or 0)
+            if power < charge_model.IDLE_POWER_W:
+                power = float(session.average_power_w or 0)
+            if power <= 0:
+                return None
+            params = charge_model.ChargeParams(wh_per_pct=session.model_wh_per_pct, power_w=power)
+            return charge_model.estimate(params, session.estimated_soc, session.target_soc).seconds
+        remaining = int(status.timer_remaining or 0)
+        return remaining if remaining > 0 else None
+
+    def _maybe_push_progress(self, uid: str, session: ChargingSession, status, now) -> None:
+        """Every ~2 min from the worker only: the phone keeps its "charging
+        now" notification fresh even when Android has killed the app."""
+        notifier = self.progress_notifier
+        if notifier is None or getattr(self, "_worker_lease_guard", None) is None:
+            return
+        last = self._last_progress_push.get(session.session_id)
+        if last is not None and (now - last).total_seconds() < PROGRESS_PUSH_SECONDS:
+            return
+        self._last_progress_push[session.session_id] = now
+        from .push_notifications import progress_payload
+        if status is None:
+            payload = progress_payload(session, None, None)
+            payload["link"] = "lost"
+        else:
+            payload = progress_payload(session, status, self._remaining_seconds(session, status))
+
+        def deliver():
+            try:
+                notifier(uid, payload=payload)
+            except Exception:
+                pass  # a display hint only; the cutoff never depends on it
+
+        threading.Thread(target=deliver, name="smart-charge-progress", daemon=True).start()
+
+    def _record_live_sample(self, session: ChargingSession, status, now) -> None:
+        """Server-mode curve: one compact sample per minute (Task 126).
+
+        The app does not post telemetry in server mode, so these samples are
+        the only charging curve: coverage, average power and taper learning.
+        """
+        samples = session.telemetry_samples
+        last_t = _optional_float(samples[-1].get("t")) if samples else None
+        if last_t is not None and now.timestamp() - last_t < 55:
+            return
+        power = max(0.0, float(status.power_w or 0))
+        elapsed = max(0, int((now - session.created_at).total_seconds()))
+        session.telemetry_samples = [*samples[-599:], {
+            "t": int(now.timestamp()),
+            "elapsed_s": elapsed,
+            "v": float(status.voltage_v or 0),
+            "a": float(status.current_a or 0),
+            "p": power,
+            "e_wh": float(status.energy_wh or 0),
+            "wh": round(session.energy_used_wh, 2),
+            "temp_shelly": status.temperature_c,
+            "est_soc": session.estimated_soc,
+            "relay": True,
+            "transport": "server_cloud",
+        }]
+        count = len(session.telemetry_samples)
+        session.telemetry_coverage = min(1.0, count / max(1, math.ceil(elapsed / 60)))
+        charging = [item for item in session.telemetry_samples
+                    if float(item.get("p") or 0) >= charge_model.IDLE_POWER_W]
+        if charging:
+            session.average_power_w = sum(float(item["p"]) for item in charging) / len(charging)
+        session.peak_power_w = max(session.peak_power_w or 0, power)
+        if status.voltage_v:
+            session.average_voltage_v = _running_average(session.average_voltage_v, float(status.voltage_v), count)
+        if status.temperature_c is not None:
+            session.shelly_temperature_c = float(status.temperature_c)
+
+    def note_read_failure(self, uid: str, session: ChargingSession, code: str) -> ChargingSession:
+        """A status read failed for [session]: ride through or escalate."""
+        if session.state == "active" and code in LINK_RIDE_THROUGH_CODES:
+            return self._note_link_lost(uid, session, code)
+        if code in TRANSIENT_READ_CODES:
+            return session
+        return self.mark_session_unknown(uid, session, code)
+
+    def _note_link_lost(self, uid: str, session: ChargingSession, code: str) -> ChargingSession:
+        now = self.clock()
+        changed = False
+        if session.link_lost_since is None:
+            session.link_lost_since = now
+            session.link_gap_count += 1
+            session.link_alert_sent = False
+            changed = True
+        if session.last_link_error != code:
+            session.last_link_error = code
+            changed = True
+        lost_for = (now - session.link_lost_since).total_seconds()
+        alert = not session.link_alert_sent and lost_for >= LINK_ALERT_SECONDS
+        if alert:
+            session.link_alert_sent = True
+            changed = True
+        if changed:
+            self._checkpoint_session(uid, session, force=True)
+        if alert:
+            self._push_link_event(uid, session, "lost", lost_for)
+        # Keep the "charging now" notification alive with the gap shown.
+        self._maybe_push_progress(uid, session, None, now)
+        return session
+
+    def _note_link_ok(self, uid: str, session: ChargingSession, now) -> None:
+        if session.link_lost_since is None:
+            return
+        gap = max(0.0, (now - session.link_lost_since).total_seconds())
+        session.link_gap_seconds += gap
+        alerted = session.link_alert_sent
+        session.link_lost_since = None
+        session.link_alert_sent = False
+        self._checkpoint_session(uid, session, force=True)
+        self.repository.append_audit(uid, "smart_charge_link_restored", session_id=session.session_id,
+                                     gap_seconds=int(gap), code=session.last_link_error)
+        if alerted:
+            self._push_link_event(uid, session, "restored", gap)
+
+    def _push_link_event(self, uid: str, session: ChargingSession, state: str, seconds: float) -> None:
+        notifier = self.progress_notifier
+        if notifier is None:
+            return
+        payload = {
+            "event": "smart_charge_link", "state": state,
+            "sessionId": str(session.session_id), "vehicleId": str(session.vehicle_id or ""),
+            "seconds": str(int(seconds)),
+            "ceilingAt": session.effective_stop_at.isoformat(),
+        }
+
+        def deliver():
+            try:
+                notifier(uid, payload=payload)
+            except Exception:
+                pass
+
+        threading.Thread(target=deliver, name="smart-charge-link", daemon=True).start()
+
+    def _link_lost_live(self, session: ChargingSession, binding) -> dict:
+        """Last verified readings while Shelly is unreachable (marked stale)."""
+        now = self.clock()
+        last = session.telemetry_samples[-1] if session.telemetry_samples else {}
+        remaining = max(0, int((session.effective_stop_at - now).total_seconds()))
+        status = {
+            "online": False, "relay": True, "stale": True,
+            "power_w": float(last.get("p") or 0), "voltage_v": float(last.get("v") or 0),
+            "current_a": float(last.get("a") or 0), "temperature_c": last.get("temp_shelly"),
+            "energy_wh": float(last.get("e_wh") or 0), "timer_remaining": remaining,
+            "device_id": binding.device_id, "error": session.last_link_error,
+        }
+        since = session.link_lost_since or now
+        return {
+            "status": status,
+            "session": session.to_dict(),
+            "active": True,
+            "capabilities": None,
+            "binding": {"deviceId": binding.device_id, "connectionMode": binding.connection_mode,
+                        "provider": binding.provider, "displayName": binding.display_name},
+            "link": {"state": "lost", "since": since.isoformat(),
+                     "seconds": int((now - since).total_seconds()),
+                     "ceilingAt": session.effective_stop_at.isoformat()},
+        }
 
     def mark_session_unknown(self, uid: str, session: ChargingSession, code: str) -> ChargingSession:
         if session.state not in NONTERMINAL_SESSION_STATES:
@@ -554,6 +908,11 @@ class SmartChargeService:
         # preview. Reconstructing it from rounded minutes caused the device
         # timer to drift from the ETA shown to the user.
         duration = int(preview.predicted_duration_seconds or 0)
+        target_mode = preview.stop_mode == "target" and bool(preview.wh_per_pct)
+        if target_mode:
+            # The server cuts at the target; the Shelly timer is the ceiling
+            # that still switches off if the server is unreachable.
+            duration = int(preview.device_timer_seconds or charge_model.ceiling_seconds(duration, self.max_minutes))
         if duration <= 0 or duration > self.max_minutes * 60:
             raise SmartChargeError(
                 "unsafeDuration",
@@ -575,7 +934,7 @@ class SmartChargeService:
             predicted_duration_seconds=preview.predicted_duration_seconds,
             prediction_source=preview.model_source,
             prediction_confidence=preview.confidence,
-            strategy="ai_target",
+            strategy="target_soc" if target_mode else "ai_target",
             model_key=preview.model_key,
             model_version=preview.model_version,
             runtime_health=preview.runtime_health,
@@ -584,8 +943,10 @@ class SmartChargeService:
             prediction_analyzed_at=preview.analyzed_at,
             created_at=now,
             updated_at=now,
-            ai_stop_at=preview.predicted_stop_at,
-            effective_stop_at=preview.predicted_stop_at,
+            ai_stop_at=(now + timedelta(seconds=preview.predicted_duration_seconds)
+                        if target_mode else preview.predicted_stop_at),
+            effective_stop_at=(now + timedelta(seconds=duration)
+                               if target_mode else preview.predicted_stop_at),
             absolute_safety_stop_at=now + timedelta(minutes=self.max_minutes),
             idempotency_key=idempotency_key,
             baseline_energy_wh=status.energy_wh,
@@ -610,7 +971,14 @@ class SmartChargeService:
             nominal_capacity_wh=_optional_float(vehicle.get("nominalCapacityWh")),
             state_of_health=_optional_float(vehicle.get("stateOfHealth")),
             safety_policy_version=self.safety_policy.version,
+            stop_mode="target" if target_mode else "timer",
+            model_wh_per_pct=preview.wh_per_pct if target_mode else None,
+            target_energy_wh=(round(preview.wh_per_pct * max(0.0, preview.target_soc - preview.current_soc), 2)
+                              if target_mode else None),
+            hardware_timeout_seconds=duration,
         )
+        if target_mode:
+            session.average_power_w = preview.charge_power_w
         if not self.repository.claim_device_session(uid, session.device_id, session.session_id):
             raise SmartChargeError("activeSessionConflict", "Shelly đang được dùng bởi một phiên khác", 409)
         self.repository.save_session(uid, session)
@@ -702,6 +1070,12 @@ class SmartChargeService:
             session = (self._reconcile_with_status(uid, status, vehicle_id, session=mine[0])
                        if mine else None)
         except ProviderError as exc:
+            running = next((s for s in self.repository.active_sessions(uid)
+                            if (not vehicle_id or s.vehicle_id == vehicle_id)
+                            and s.device_id == binding.device_id and s.state == "active"), None)
+            if running is not None and exc.code in LINK_RIDE_THROUGH_CODES:
+                self.note_read_failure(uid, running, exc.code)
+                return self._link_lost_live(running, binding)
             raise self._provider_error(exc) from exc
         try:
             # Light readiness only: no extra live Cloud check inside a poll that
@@ -761,6 +1135,9 @@ class SmartChargeService:
             final_energy = status.energy_wh
         if final_energy is not None:
             self._ingest_energy(session, final_energy)
+        if session.end_soc_source == "taper_full":
+            # The charger's full tail is the measurement; energy maths is not.
+            session.estimated_soc = 100.0
         session.state = state
         session.stop_reason = stop_reason
         if user_stop_reason is not None:
@@ -924,9 +1301,13 @@ class SmartChargeService:
     def personal_profile(self, uid: str, vehicle_id: str) -> PersonalChargingProfile:
         vehicle = self._owned_vehicle(uid, vehicle_id)
         profile = self.repository.get_personal_profile(uid, vehicle_id)
+        # No stored profile = learning on by default (Task 126): confirming a
+        # battery reading is the opt-in, the switch can still turn it off.
         return profile or PersonalChargingProfile(
             owner_uid=uid,
             vehicle_id=vehicle_id,
+            consent_enabled=True,
+            consent_source="default",
             nominal_capacity_wh=_optional_float(vehicle.get("nominalCapacityWh")),
             state_of_health=_optional_float(vehicle.get("stateOfHealth")),
         )
@@ -937,6 +1318,7 @@ class SmartChargeService:
         self._owned_vehicle(uid, vehicle_id)
         profile = self.personal_profile(uid, vehicle_id)
         profile.consent_enabled = bool(enabled)
+        profile.consent_source = "user"
         profile.updated_at = self.clock()
         if not enabled:
             profile.active = False
@@ -991,35 +1373,70 @@ class SmartChargeService:
         self.repository.append_audit(uid, "smart_charge_history_hidden", session_id=session_id)
         return hidden
 
-    def confirm_actual_soc(self, uid: str, session_id: str, actual_soc: float) -> ChargingSession:
-        if not 0 <= actual_soc <= 100:
-            raise SmartChargeError("invalidSoc", "SOC thực tế phải từ 0–100%")
+    def confirm_actual_soc(self, uid: str, session_id: str, actual_soc: float,
+                           odo_km: float | None = None) -> ChargingSession:
+        """Record the % the user read on the scooter and learn from it."""
+        if not math.isfinite(actual_soc) or not 0 <= actual_soc <= 100:
+            raise SmartChargeError("invalidSoc", "% pin thực tế phải từ 0 đến 100")
         session = self.repository.get_session_or_charge_log(uid, session_id)
         if session is None:
             raise SmartChargeError("sessionNotFound", "Không tìm thấy phiên sạc", 404)
+        if session.state in NONTERMINAL_SESSION_STATES:
+            raise SmartChargeError("sessionNotFinished",
+                                   "Phiên sạc chưa kết thúc; hãy nhập % sau khi sạc xong.", 409)
+        now = self.clock()
+        ended = session.stopped_at or session.updated_at
+        if (now - ended).total_seconds() > CONFIRMATION_WINDOW_DAYS * 86400:
+            raise SmartChargeError("confirmationExpired",
+                                   "Chỉ nhập được % thực tế trong 7 ngày sau khi sạc.", 409)
+        if actual_soc < session.start_soc - 5:
+            raise SmartChargeError("invalidSoc", "% sau khi sạc không thể thấp hơn % lúc bắt đầu.")
+        estimated = session.estimated_soc
         session.actual_end_soc = float(actual_soc)
+        session.soc_error = round(float(estimated) - float(actual_soc), 1) if estimated is not None else None
+        if odo_km is not None and math.isfinite(odo_km) and 0 <= odo_km <= 500000:
+            session.end_odo_km = float(odo_km)
         gain = session.actual_end_soc - session.start_soc
         if gain > 0 and session.energy_used_wh > 0:
             session.wh_per_soc_percent = round(session.energy_used_wh / gain, 2)
-        decision = evaluate_training(session)
-        session.training_eligible = decision.eligible
-        session.training_state = "pending" if decision.eligible else "skipped"
-        session.training_reason = decision.reason
-        session.updated_at = self.clock()
+        session.end_soc_source = "user"
+        decision = self._learn_from_confirmation(uid, session)
+        session.training_eligible = decision == "queued"
+        session.training_state = "queued" if decision == "queued" else "skipped"
+        session.training_reason = decision
+        session.updated_at = now
         session.version += 1
         self.repository.save_session(uid, session)
         self.repository.upsert_charge_log(uid, session)
-        self._update_personal_calibration(uid, session, decision)
-        try:
-            from ai_server.dataset_manager import upsert_session_record
-            session_dict = session.to_dict() if hasattr(session, 'to_dict') else dict(session)
-            session_dict['vehicleId'] = session.vehicle_id
-            session_dict['userId'] = uid
-            upsert_session_record(session_dict, actual_soc=actual_soc)
-        except Exception as exc:
-            import logging
-            logging.getLogger('SmartChargeService').warning('Could not record into dataset file: %s', exc)
+        self.repository.append_audit(uid, "actual_soc_confirmed", session_id=session.session_id,
+                                     decision=decision)
+        if session.end_odo_km is not None and session.vehicle_id:
+            try:
+                self.add_battery_reading(uid, session.vehicle_id, {
+                    "soc": session.actual_end_soc, "odoKm": session.end_odo_km,
+                    "source": "charge_end", "sessionId": session.session_id,
+                    "at": ended.isoformat()}, with_status=False)
+            except Exception:
+                pass  # the reading is optional; the confirmation is saved
         return session
+
+    def _learn_from_confirmation(self, uid: str, session: ChargingSession) -> str:
+        """Queue the owner's reading for the next training (Task 127)."""
+        decision = self.queue_charge_label(uid, session, label_source="user")
+        if decision == "queued":
+            sample_wh = charge_model.wh_per_pct_sample(session.energy_used_wh, session.start_soc,
+                                                       float(session.actual_end_soc or 0))
+            self.repository.save_training_sample(uid, session, {
+                "state": "queued",
+                "trainingDecision": decision,
+                "eligibleForTargetTraining": True,
+                "socGain": float(session.actual_end_soc or 0) - session.start_soc,
+                "energyWh": session.energy_used_wh,
+                "whPerPct": sample_wh,
+                "socError": session.soc_error,
+                "telemetryCoverage": session.telemetry_coverage,
+            })
+        return decision
 
 
     def ingest_personal_session(self, uid: str, session_id: str) -> dict:
@@ -1256,6 +1673,14 @@ class SmartChargeService:
                 session.last_meter_energy_wh = reading
                 session.baseline_energy_wh = reading
                 session.energy_quality = "meter_reset"
+        if session.model_wh_per_pct:
+            session.estimated_stored_energy_wh = session.energy_used_wh * charge_model.DEFAULT_EFFICIENCY
+            params = charge_model.ChargeParams(wh_per_pct=session.model_wh_per_pct, power_w=1)
+            session.estimated_soc = charge_model.soc_after(params, session.start_soc, session.energy_used_wh)
+            session.soc_estimate_source = "shelly_energy"
+            session.soc_estimate_quality = "live" if session.energy_quality == "good" else "partial"
+            session.soc_estimation_version = 3
+            return
         capacity = session.effective_capacity_wh or session.nominal_capacity_wh
         if capacity is None or capacity <= 0:
             session.estimated_soc = None
@@ -1291,16 +1716,24 @@ class SmartChargeService:
         if status.voltage_v and not p.cutoff_voltage_min_v <= status.voltage_v <= p.cutoff_voltage_max_v:
             violations.append(("unsafe_voltage", status.voltage_v, "Điện áp ngoài ngưỡng an toàn"))
         safety_key = (uid, binding.device_id)
-        count = self._unsafe_samples.get(safety_key, 0) + 1 if violations else 0
-        self._unsafe_samples[safety_key] = count
         # Attach safety events to the session using this physical relay. An
         # account may have multiple vehicles charging concurrently.
+        session = None
+        if sessions is not None:
+            session = next((s for s in sessions if s.device_id == binding.device_id), None)
+        elif violations:
+            session = self.repository.current_session(uid, device_id=binding.device_id)
+        # The bad-sample streak lives on the session too (Task 126): the API
+        # replicas and the worker each saw only their own in-memory count.
+        stored = session.unsafe_samples if session is not None else 0
+        count = max(self._unsafe_samples.get(safety_key, 0), stored) + 1 if violations else 0
+        self._unsafe_samples[safety_key] = count
+        if session is not None and session.unsafe_samples != count:
+            session.unsafe_samples = count
+            if not violations:
+                self.repository.save_session(uid, session)
         if not violations:
             return
-        if sessions is None:
-            session = self.repository.current_session(uid, device_id=binding.device_id)
-        else:
-            session = next((s for s in sessions if s.device_id == binding.device_id), None)
         if not session:
             return
         kind, value, message = violations[0]
@@ -1461,9 +1894,7 @@ class SmartChargeService:
         try:
             status = self.provider.get_status(binding)
         except ProviderError as error:
-            if error.code in TRANSIENT_READ_CODES:
-                return session
-            return self.mark_session_unknown(uid, session, error.code)
+            return self.note_read_failure(uid, session, error.code)
         return self._reconcile_with_status(uid, status, vehicle_id, session=session)
 
     def recover(self, uid: str, vehicle_id: str | None = None) -> ChargingSession | None:
@@ -1477,9 +1908,7 @@ class SmartChargeService:
         try:
             status = self.provider.get_status(binding)
         except ProviderError as error:
-            if error.code in TRANSIENT_READ_CODES:
-                return session
-            return self.mark_session_unknown(uid, session, error.code)
+            return self.note_read_failure(uid, session, error.code)
         self._apply_safety(uid, binding, status)
         return self._reconcile_with_status(uid, status, vehicle_id, session=session)
 
@@ -1519,6 +1948,7 @@ class SmartChargeService:
             # Measured before updated_at moves: how long an accepted OFF has
             # been waiting for Cloud status to catch up.
             pending_off_age = (now - session.updated_at).total_seconds()
+            self._note_link_ok(uid, session, now)
             self._ingest_energy(session, status.energy_wh)
             session.updated_at = now
             if now >= session.absolute_safety_stop_at or now >= session.effective_stop_at:
@@ -1534,8 +1964,35 @@ class SmartChargeService:
             if status.timer_remaining <= 0:
                 session.last_error = "timerNotArmed"
                 return self._backup_stop_session(uid, session, state="failed", stop_reason="command_failed")
-            else:
-                self._checkpoint_session(uid, session)
+            self._record_live_sample(session, status, now)
+            if session.state == "active":
+                full = self._full_outcome(uid, session, status, now)
+                outcome = (self._target_outcome(uid, session, status, now)
+                           if session.stop_mode == "target" else None)
+                if outcome in (None, "charger_idle") and full:
+                    outcome = full
+                elif (outcome == "charger_idle" and session.tail_since is not None
+                      and self._tail_follows_taper(session, float(session.peak_power_w or 0))):
+                    # The charger stopped after its near-full tail: full.
+                    outcome = "battery_full"
+                if outcome is not None:
+                    self._last_progress_push.pop(session.session_id, None)
+                    if outcome == "battery_full":
+                        # The charger's own near-full tail: the battery is at
+                        # 100 %, a label the model can learn from (Task 127).
+                        session.estimated_soc = 100.0
+                        session.end_soc_source = "taper_full"
+                        session.full_detected_at = now
+                    stopped = self._backup_stop_session(uid, session, state="completed", stop_reason=outcome)
+                    if outcome == "battery_full" and stopped.state == "completed":
+                        try:
+                            self.queue_charge_label(uid, stopped, label_source="taper_full")
+                        except Exception:
+                            pass  # learning never affects the verified OFF
+                    return stopped
+            if session.state == "active":
+                self._maybe_push_progress(uid, session, status, now)
+            self._checkpoint_session(uid, session)
             return session
         if session.state == "stopping":
             # Only stop() moves a session to "stopping": relay OFF here is the
@@ -1544,6 +2001,7 @@ class SmartChargeService:
                 session.last_error = None
             return self._finalize_session(uid, session, state="cancelled",
                                           stop_reason="manual", status=status)
+        self._note_link_ok(uid, session, now)
         state, stop_reason = self._relay_off_outcome(session, now)
         return self._finalize_session(uid, session, state=state,
                                       stop_reason=stop_reason, status=status)

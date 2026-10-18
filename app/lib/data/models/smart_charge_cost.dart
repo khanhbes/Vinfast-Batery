@@ -26,6 +26,7 @@ class SmartChargePreferences {
     this.tariffVndPerKwh,
     this.chargePowerW = 400.0,
     required this.updatedAt,
+    this.targetSocByVehicle = const {},
   });
 
   factory SmartChargePreferences.empty([DateTime? now]) =>
@@ -38,6 +39,19 @@ class SmartChargePreferences {
   final double? chargePowerW;
   final DateTime updatedAt;
 
+  /// Last charge target per vehicle, per account: the same on every phone
+  /// (QA 130: 85 % on the OnePlus, 100 % on the Xiaomi).
+  final Map<String, double> targetSocByVehicle;
+
+  static Map<String, double> targetsFrom(Object? raw) => {
+    if (raw is Map)
+      for (final entry in raw.entries)
+        if (entry.value is num &&
+            (entry.value as num) > 0 &&
+            (entry.value as num) <= 100)
+          '${entry.key}': (entry.value as num).toDouble(),
+  };
+
   bool get hasTariff => tariffVndPerKwh != null && tariffVndPerKwh! > 0;
   bool get hasChargePower => chargePowerW != null && chargePowerW! > 0;
 
@@ -48,6 +62,7 @@ class SmartChargePreferences {
     bool clearTariff = false,
     bool clearChargePower = false,
     DateTime? updatedAt,
+    Map<String, double>? targetSocByVehicle,
   }) => SmartChargePreferences(
     ownerUid: ownerUid ?? this.ownerUid,
     tariffVndPerKwh: clearTariff
@@ -55,6 +70,7 @@ class SmartChargePreferences {
         : tariffVndPerKwh ?? this.tariffVndPerKwh,
     chargePowerW: clearChargePower ? null : chargePowerW ?? this.chargePowerW,
     updatedAt: updatedAt ?? this.updatedAt,
+    targetSocByVehicle: targetSocByVehicle ?? this.targetSocByVehicle,
   );
 
   factory SmartChargePreferences.fromJson(Map<String, dynamic> json) =>
@@ -65,6 +81,7 @@ class SmartChargePreferences {
         updatedAt:
             DateTime.tryParse(json['updatedAt']?.toString() ?? '') ??
             DateTime.fromMillisecondsSinceEpoch(0),
+        targetSocByVehicle: targetsFrom(json['targetSocByVehicle']),
       );
 
   Map<String, dynamic> toJson() => {
@@ -72,6 +89,7 @@ class SmartChargePreferences {
     if (tariffVndPerKwh != null) 'tariffVndPerKwh': tariffVndPerKwh,
     if (chargePowerW != null) 'chargePowerW': chargePowerW,
     'updatedAt': updatedAt.toUtc().toIso8601String(),
+    if (targetSocByVehicle.isNotEmpty) 'targetSocByVehicle': targetSocByVehicle,
   };
 }
 
@@ -148,14 +166,17 @@ class SmartChargeHistoryQuery {
     if (to != null && !started.isBefore(to!)) return false;
     return switch (status) {
       SmartChargeHistorySessionFilter.all => true,
+      // The outcome, as in the list label (QA 129).
       SmartChargeHistorySessionFilter.completed =>
-        session.state == ChargingSessionState.completed &&
-            session.energyQuality != 'partial',
+        session.state == ChargingSessionState.completed,
       SmartChargeHistorySessionFilter.stoppedEarly =>
         session.state == ChargingSessionState.interrupted ||
             session.state == ChargingSessionState.cancelled,
+      // Telemetry coverage is a training metric, not missing user data:
+      // server sessions had 0 coverage and all looked "partial" (Task 126).
       SmartChargeHistorySessionFilter.partial =>
-        session.energyQuality == 'partial' || session.telemetryCoverage < .70,
+        session.energyQuality == 'partial' ||
+            session.energyQuality == 'meter_reset',
     };
   }
 }
@@ -174,10 +195,15 @@ class SmartChargeHistorySummary {
     required this.totalDuration,
     required this.completedSessions,
     required this.daily,
+    this.pricedSessions = 0,
   });
 
   final double totalGridEnergyWh;
   final double totalCostVnd;
+
+  /// Sessions that carry a cost (a tariff was set). Zero means "no price
+  /// yet", not "free" (QA 129: the month showed "0 đ").
+  final int pricedSessions;
   final Duration totalDuration;
   final int completedSessions;
   final List<SmartChargeDailyEnergy> daily;
@@ -196,10 +222,12 @@ class SmartChargeHistorySummary {
     var energy = 0.0;
     var cost = 0.0;
     var seconds = 0;
+    var priced = 0;
     final buckets = <DateTime, (double, double)>{};
     for (final session in terminal) {
       energy += max(0, session.energyUsedWh);
       cost += max(0, session.estimatedCostVnd ?? 0);
+      if ((session.estimatedCostVnd ?? 0) > 0) priced++;
       seconds += max(
         0,
         (session.stoppedAt ?? session.updatedAt)
@@ -231,6 +259,7 @@ class SmartChargeHistorySummary {
       totalDuration: Duration(seconds: seconds),
       completedSessions: terminal.length,
       daily: daily,
+      pricedSessions: priced,
     );
   }
 }

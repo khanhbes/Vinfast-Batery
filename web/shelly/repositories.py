@@ -20,6 +20,7 @@ from .models import (
     SmartChargeSafetyEvent,
     NONTERMINAL_SESSION_STATES,
 )
+from . import history_quality
 from .profile_vault import ProfileVaultError, ShellyProfileVault
 
 
@@ -68,6 +69,9 @@ class SmartChargeRepository:
         self._worker_lease: dict = {}
         self._worker_lease_epochs: dict[str, int] = {}
         self._session_write_snapshots: dict[tuple[str, str], dict] = {}
+        # Task 127 learning data (owner + vehicle scoped).
+        self._trip_samples: dict[tuple[str, str], dict[str, dict]] = {}
+        self._battery_readings: dict[tuple[str, str], dict[str, dict]] = {}
 
     @staticmethod
     def _valid_worker_lease(data: dict, now: datetime) -> bool:
@@ -267,7 +271,7 @@ class SmartChargeRepository:
                 lease = dict(entity.get("lease") or {})
             elif self.db:
                 snapshot = self.db.collection("smartChargeWorkerHealth").document(self.worker_scope).get()
-                data = snapshot.to_dict() or {} if snapshot.exists else {}
+                data = (snapshot.to_dict() or {}) if snapshot.exists else {}
                 lease = self.db.collection("smartChargeWorkerLeases").document(self.worker_scope).get().to_dict() or {}
             else:
                 with self._lock:
@@ -344,7 +348,7 @@ class SmartChargeRepository:
             return None
         if self.db:
             snapshot = self.db.collection("Vehicles").document(vehicle_id).get()
-            data = snapshot.to_dict() or {} if snapshot.exists else {}
+            data = (snapshot.to_dict() or {}) if snapshot.exists else {}
             if (data.get("ownerUid") != uid or data.get("isDeleted") is True or
                     data.get("isArchived") is True or data.get("archivedAt") is not None):
                 return None
@@ -435,7 +439,7 @@ class SmartChargeRepository:
             @firestore.transactional
             def claim(txn):
                 snapshot = ref.get(transaction=txn)
-                data = snapshot.to_dict() or {} if snapshot.exists else {}
+                data = (snapshot.to_dict() or {}) if snapshot.exists else {}
                 members = self._membership_uids(data)
                 if len(members) > 2:
                     return False
@@ -543,7 +547,7 @@ class SmartChargeRepository:
         key = self._device_owner_doc_id(device_id)
         if self.db:
             snapshot = self.db.collection("shellyDeviceLocks").document(key).get()
-            data = snapshot.to_dict() or {} if snapshot.exists else {}
+            data = (snapshot.to_dict() or {}) if snapshot.exists else {}
             owner, session_id = data.get("ownerUid"), data.get("sessionId")
         else:
             with self._lock:
@@ -580,7 +584,7 @@ class SmartChargeRepository:
             def release(txn):
                 snapshot = ref.get(transaction=txn)
                 lock = lock_ref.get(transaction=txn)
-                data = snapshot.to_dict() or {} if snapshot.exists else {}
+                data = (snapshot.to_dict() or {}) if snapshot.exists else {}
                 members = self._membership_uids(data)
                 if uid not in members or lock.exists:
                     return False
@@ -619,7 +623,7 @@ class SmartChargeRepository:
         @firestore.transactional
         def change(txn):
             snapshot = ref.get(transaction=txn)
-            data = snapshot.to_dict() or {} if snapshot.exists else {}
+            data = (snapshot.to_dict() or {}) if snapshot.exists else {}
             updated, result = action(data, datetime.now(timezone.utc))
             if updated != data:
                 txn.set(ref, updated)
@@ -1482,7 +1486,7 @@ class SmartChargeRepository:
                 members_snapshot = member_ref.get(transaction=txn)
                 if uid not in self._membership_uids(members_snapshot.to_dict() or {}):
                     return False
-                data = snapshot.to_dict() or {} if snapshot.exists else {}
+                data = (snapshot.to_dict() or {}) if snapshot.exists else {}
                 same_operation = data.get("ownerUid") == uid and data.get("sessionId") == session_id
                 # Legacy expiresAt is deliberately ignored. Taking over an
                 # expired unknown ON would permit a second energizing command.
@@ -1541,7 +1545,7 @@ class SmartChargeRepository:
                 @firestore.transactional
                 def release(txn):
                     snapshot = ref.get(transaction=txn)
-                    data = snapshot.to_dict() or {} if snapshot.exists else {}
+                    data = (snapshot.to_dict() or {}) if snapshot.exists else {}
                     if data.get("ownerUid") == uid and data.get("sessionId") == session_id:
                         txn.delete(ref)
 
@@ -1660,6 +1664,16 @@ class SmartChargeRepository:
             "userStopReason": session.user_stop_reason,
             "personalAiTrainingState": session.training_state,
             "personalAiTrainingReason": session.training_reason,
+            # Task 126 target charging + learning labels.
+            "strategy": session.strategy,
+            "stopMode": session.stop_mode,
+            "targetEnergyWh": session.target_energy_wh,
+            "modelWhPerPct": session.model_wh_per_pct,
+            "estimatedEndSoc": session.estimated_soc,
+            "socError": session.soc_error,
+            "endOdoKm": session.end_odo_km,
+            "linkGapCount": session.link_gap_count,
+            "linkGapSeconds": round(session.link_gap_seconds, 1),
             "isDeleted": False,
             "updatedAt": datetime.now(timezone.utc),
         }
@@ -1667,7 +1681,12 @@ class SmartChargeRepository:
         # Server Cloud owns telemetry, therefore it also advances the vehicle
         # snapshot after a durable terminal log. Never move it backwards over
         # a newer confirmed/user reading.
-        if session.state in ("completed", "cancelled", "interrupted", "failed"):
+        # A junk session (no real charge, nothing confirmed — e.g. a no-load
+        # ON/OFF test) must not become the vehicle's battery reading: it
+        # relabelled the owner's typed 79 % as "Ước tính sau phiên sạc"
+        # (QA 130).
+        if (session.state in ("completed", "cancelled", "interrupted", "failed")
+                and not session_is_junk(session)):
             soc = session.actual_end_soc if session.actual_end_soc is not None else session.estimated_soc
             observed_at = session.stopped_at or session.updated_at
             if soc is not None and session.vehicle_id:
@@ -1676,7 +1695,7 @@ class SmartChargeRepository:
                     current = vehicle.get().to_dict() or {}
                     existing_at = _date(current.get("batteryDataUpdatedAt"))
                     if current.get("ownerUid") == uid and (existing_at is None or existing_at <= observed_at):
-                        vehicle.set({
+                        snapshot = {
                             "currentBattery": round(soc),
                             "lastBatteryPercent": round(soc),
                             "hasBatteryData": True,
@@ -1684,7 +1703,17 @@ class SmartChargeRepository:
                             "batteryDataSessionId": session.session_id,
                             "batteryDataUpdatedAt": observed_at,
                             "updatedAt": datetime.now(timezone.utc),
-                        }, merge=True)
+                        }
+                        # The ODO typed with the confirmed % only ever moves
+                        # the odometer forward (Task 126).
+                        odo = session.end_odo_km
+                        try:
+                            existing_odo = float(current.get("currentOdo") or 0)
+                        except (TypeError, ValueError):
+                            existing_odo = 0.0
+                        if odo is not None and odo >= existing_odo:
+                            snapshot["currentOdo"] = odo
+                        vehicle.set(snapshot, merge=True)
                 except Exception:
                     # The ChargeLog is canonical; a later reconciliation can
                     # retry the denormalized vehicle snapshot safely.
@@ -1903,7 +1932,9 @@ class SmartChargeRepository:
                     self._sessions.setdefault(uid, {})[session.session_id] = session
                     self._idempotency[(uid, session.idempotency_key)] = session.session_id
         values = [item for item in values if item.hidden_at is None]
-        return sorted(values, key=lambda item: item.created_at, reverse=True)[:limit]
+        # Legacy rows carry naive timestamps (Task 127: sorting them with
+        # aware ones raised TypeError on real data).
+        return sorted(values, key=lambda item: _aware(item.created_at), reverse=True)[:limit]
 
     def _charge_log_history(self, uid: str, limit: int = 100) -> list[ChargingSession]:
         if not self.db:
@@ -1946,8 +1977,14 @@ class SmartChargeRepository:
         cursor: datetime | None = None,
         strategy: str | None = None,
         vehicle_id: str | None = None,
+        include_hidden: bool = False,
     ) -> tuple[list[ChargingSession], str | None]:
         limit = min(50, max(1, int(limit)))
+        # Junk logs (no energy, no confirmed reading) are skipped, so read a
+        # few pages ahead to still fill one page (Task 126).
+        fetch = min(100, (limit + 1) * 3)
+        scanned_full = False
+        scanned_last: datetime | None = None
         if self.db:
             # Query the canonical ChargeLogs collection. Runtime session
             # documents are retained as a compatibility fallback below.
@@ -1964,7 +2001,7 @@ class SmartChargeRepository:
                 query = query.where("vehicleId", "==", vehicle_id)
             if cursor is not None:
                 query = query.where("startTime", "<", cursor)
-            query = query.where("isDeleted", "==", False).limit(limit + 1)
+            query = query.where("isDeleted", "==", False).limit(fetch)
             from_charge_logs = True
             try:
                 snapshots = list(query.stream())
@@ -1981,13 +2018,20 @@ class SmartChargeRepository:
                     query = query.where("vehicle_id", "==", vehicle_id)
                 if cursor is not None:
                     query = query.where("created_at", "<", cursor)
-                snapshots = list(query.limit(limit + 1).stream())
+                snapshots = list(query.limit(fetch).stream())
+            scanned_full = len(snapshots) >= fetch
             values = []
             skipped = 0
             for item in snapshots:
                 try:
                     raw = item.to_dict() or {}
+                    if from_charge_logs:
+                        scanned_last = _date(raw.get("startTime")) or scanned_last
+                    else:
+                        scanned_last = _date(raw.get("created_at")) or scanned_last
                     if raw.get("isDeleted") is True:
+                        continue
+                    if not include_hidden and from_charge_logs and not history_quality.is_visible(raw):
                         continue
                     values.append(
                         _session_from_charge_log(raw, item.id, uid)
@@ -2012,7 +2056,7 @@ class SmartChargeRepository:
                         legacy_query = legacy_query.where("vehicle_id", "==", vehicle_id)
                     if cursor is not None:
                         legacy_query = legacy_query.where("created_at", "<", cursor)
-                    for item in legacy_query.limit(limit + 1).stream():
+                    for item in legacy_query.limit(fetch).stream():
                         try:
                             values.append(_session(item.to_dict() or {}))
                         except (KeyError, TypeError, ValueError):
@@ -2035,14 +2079,21 @@ class SmartChargeRepository:
                 values = [item for item in values if item.created_at < cursor]
             with self._lock:
                 self._last_history_skipped = 0
-        values = [item for item in values if item.hidden_at is None]
+        if not include_hidden:
+            values = [item for item in values
+                      if item.hidden_at is None and not session_is_junk(item)]
         if strategy:
             values = [item for item in values if item.strategy == strategy]
         if vehicle_id:
             values = [item for item in values if item.vehicle_id == vehicle_id]
-        has_more = len(values) > limit
         page = values[:limit]
-        next_cursor = page[-1].created_at.isoformat() if has_more and page else None
+        if len(values) > limit and page:
+            next_cursor = page[-1].created_at.isoformat()
+        elif scanned_full and scanned_last is not None:
+            # The scan window was full of junk: continue after it.
+            next_cursor = scanned_last.isoformat()
+        else:
+            next_cursor = None
         return page, next_cursor
 
     def save_consent(self, state: str, uid: str, expires_at: datetime) -> None:
@@ -2146,6 +2197,115 @@ class SmartChargeRepository:
         # retryable instead of being mistaken for a processed session.
         with self._lock:
             self._processed_training_sessions.add((uid, session.vehicle_id, session.session_id))
+
+    # -- Task 127: rides and battery/ODO readings ---------------------------
+    def save_trip_samples(self, uid: str, vehicle_id: str, samples: list[dict]) -> int:
+        """Upsert rides keyed by their id (re-importing a file is a no-op)."""
+        now = datetime.now(timezone.utc)
+        rows = []
+        for sample in samples:
+            value = {**sample, "ownerUid": uid, "vehicleId": vehicle_id,
+                     "createdAt": sample.get("createdAt") or now.isoformat()}
+            rows.append(value)
+        with self._lock:
+            bucket = self._trip_samples.setdefault((uid, vehicle_id), {})
+            fresh = [row for row in rows if row["id"] not in bucket]
+            for row in rows:
+                bucket.setdefault(row["id"], row)
+        if self.db:
+            collection = self.db.collection("users").document(uid).collection("tripSamples")
+            # Count new rides against Firestore, not this process's cache
+            # (a re-import after a restart is all duplicates).
+            try:
+                existing = {snapshot.id for snapshot in
+                            self.db.get_all([collection.document(row["id"]) for row in rows])
+                            if snapshot.exists}
+                fresh = [row for row in rows if row["id"] not in existing]
+            except Exception:
+                pass
+            for start in range(0, len(rows), 400):
+                batch = self.db.batch()
+                for row in rows[start:start + 400]:
+                    batch.set(collection.document(row["id"]), row, merge=True)
+                batch.commit()
+        return len(fresh)
+
+    def trip_samples(self, uid: str, vehicle_id: str, limit: int = 1000) -> list[dict]:
+        with self._lock:
+            cached = list(self._trip_samples.get((uid, vehicle_id), {}).values())
+        if not self.db:
+            return [item for item in cached if not item.get("excluded")][-limit:]
+        try:
+            snapshots = (self.db.collection("users").document(uid).collection("tripSamples")
+                         .where("vehicleId", "==", vehicle_id).limit(limit).stream())
+            values = [snapshot.to_dict() or {} for snapshot in snapshots]
+        except Exception:
+            return [item for item in cached if not item.get("excluded")][-limit:]
+        values = [item for item in values
+                  if item.get("ownerUid") == uid and item.get("vehicleId") == vehicle_id
+                  and not item.get("excluded")]
+        with self._lock:
+            self._trip_samples[(uid, vehicle_id)] = {str(item.get("id")): item for item in values}
+        return sorted(values, key=lambda item: str(item.get("at") or item.get("createdAt") or ""))
+
+    def update_vehicle_fields(self, uid: str, vehicle_id: str, fields: dict) -> None:
+        """Latest battery/ODO reading on the owner's vehicle (owner checked
+        by the caller through vehicle_for_owner)."""
+        if self.db and fields:
+            self.db.collection("Vehicles").document(vehicle_id).set(fields, merge=True)
+
+    def add_battery_reading(self, uid: str, vehicle_id: str, reading: dict) -> dict:
+        value = {**reading, "ownerUid": uid, "vehicleId": vehicle_id}
+        with self._lock:
+            self._battery_readings.setdefault((uid, vehicle_id), {})[value["id"]] = value
+        if self.db:
+            (self.db.collection("users").document(uid).collection("batteryReadings")
+             .document(value["id"]).set(value))
+        return value
+
+    def battery_readings(self, uid: str, vehicle_id: str, limit: int = 20) -> list[dict]:
+        """Newest first, voided readings excluded."""
+        with self._lock:
+            cached = list(self._battery_readings.get((uid, vehicle_id), {}).values())
+        values = cached
+        if self.db and not cached:
+            try:
+                snapshots = (self.db.collection("users").document(uid).collection("batteryReadings")
+                             .where("vehicleId", "==", vehicle_id)
+                             .order_by("at", direction="DESCENDING").limit(limit).stream())
+                values = [snapshot.to_dict() or {} for snapshot in snapshots]
+                with self._lock:
+                    bucket = self._battery_readings.setdefault((uid, vehicle_id), {})
+                    for item in values:
+                        bucket.setdefault(str(item.get("id")), item)
+            except Exception:
+                values = cached
+        values = [item for item in values if item.get("ownerUid") == uid and not item.get("voidedAt")]
+        return sorted(values, key=lambda item: str(item.get("at") or ""), reverse=True)[:limit]
+
+    def void_battery_reading(self, uid: str, vehicle_id: str, reading_id: str) -> bool:
+        """Undo = soft void (the reading and its ride stop counting)."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock:
+            item = self._battery_readings.get((uid, vehicle_id), {}).get(reading_id)
+            if item is not None:
+                item["voidedAt"] = now
+            ride = self._trip_samples.get((uid, vehicle_id), {}).get(f"seg_{reading_id}")
+            if ride is not None:
+                ride["excluded"] = True
+        if self.db:
+            root = self.db.collection("users").document(uid)
+            ref = root.collection("batteryReadings").document(reading_id)
+            snapshot = ref.get()
+            data = (snapshot.to_dict() or {}) if snapshot.exists else {}
+            if data.get("ownerUid") != uid or data.get("vehicleId") != vehicle_id:
+                return item is not None
+            ref.set({"voidedAt": now}, merge=True)
+            ride_ref = root.collection("tripSamples").document(f"seg_{reading_id}")
+            if ride_ref.get().exists:
+                ride_ref.set({"excluded": True}, merge=True)
+            return True
+        return item is not None
 
     def training_samples(self, uid: str, vehicle_id: str) -> list[dict]:
         """Return immutable, owner/vehicle-scoped samples for candidate validation."""
@@ -2429,7 +2589,35 @@ def _session(data: dict) -> ChargingSession:
                            if isinstance(item, dict)][-600:],
         hidden_at=_date(data.get("hidden_at")),
         safety_policy_version=str(data.get("safety_policy_version") or "v4-default"),
+        stop_mode=str(data.get("stop_mode") or "timer"),
+        model_wh_per_pct=_opt_float(data.get("model_wh_per_pct")),
+        target_energy_wh=_opt_float(data.get("target_energy_wh")),
+        idle_since=_date(data.get("idle_since")),
+        unsafe_samples=int(data.get("unsafe_samples") or 0),
+        soc_error=_opt_float(data.get("soc_error")),
+        end_odo_km=_opt_float(data.get("end_odo_km")),
+        link_lost_since=_date(data.get("link_lost_since")),
+        link_gap_count=int(data.get("link_gap_count") or 0),
+        link_gap_seconds=float(data.get("link_gap_seconds") or 0),
+        link_alert_sent=bool(data.get("link_alert_sent")),
+        last_link_error=data.get("last_link_error"),
+        tail_since=_date(data.get("tail_since")),
+        tail_entry_w=_opt_float(data.get("tail_entry_w")),
+        full_detected_at=_date(data.get("full_detected_at")),
+        end_soc_source=str(data.get("end_soc_source") or "estimate"),
     )
+
+
+def _aware(value: datetime) -> datetime:
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+def _opt_float(value) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
 
 
 def _preview(data: dict) -> ChargePreview:
@@ -2472,7 +2660,23 @@ def _preview(data: dict) -> ChargePreview:
         personalization_stage=str(value("personalization_stage", "personalizationStage") or "base"),
         guardrail_clamped=bool(value("guardrail_clamped", "guardrailClamped", False)),
         guardrail_warnings=list(value("guardrail_warnings", "guardrailWarnings", []) or []),
+        stop_mode=str(value("stop_mode", "stopMode") or "timer"),
+        estimate_low_seconds=value("estimate_low_seconds", "estimateLowSeconds"),
+        estimate_high_seconds=value("estimate_high_seconds", "estimateHighSeconds"),
+        wh_per_pct=_opt_float(value("wh_per_pct", "whPerPct")),
+        charge_power_w=_opt_float(value("charge_power_w", "chargePowerW")),
+        power_source=value("power_source", "powerSource"),
+        soc_mae=_opt_float(value("soc_mae", "socMae")),
+        learned_samples=int(value("learned_samples", "learnedSamples", 0) or 0),
+        device_timer_seconds=value("device_timer_seconds", "deviceTimerSeconds"),
     )
+
+
+def session_is_junk(session: ChargingSession) -> bool:
+    """Runtime-session twin of ``history_quality.classify`` (Task 126)."""
+    if session.state in NONTERMINAL_SESSION_STATES or session.actual_end_soc is not None:
+        return False
+    return float(session.energy_used_wh or 0) < history_quality.JUNK_MAX_ENERGY_WH
 
 
 def _session_from_charge_log(data: dict, document_id: str, uid: str) -> ChargingSession:
@@ -2488,6 +2692,23 @@ def _session_from_charge_log(data: dict, document_id: str, uid: str) -> Charging
         normalized.setdefault("owner_uid", uid)
         normalized.setdefault("vehicle_id", data.get("vehicleId"))
         normalized.setdefault("session_id", data.get("sessionId") or document_id)
+        # Older logs kept the user's reading and ODO only at the top level.
+        if normalized.get("actual_end_soc") is None:
+            normalized["actual_end_soc"] = history_quality.confirmed_end_soc(data)
+        normalized.setdefault("end_odo_km", data.get("endOdoKm"))
+        # Older embedded sessions carry naive local times and, after a later
+        # rewrite, 0 Wh while the summary kept the measured energy.
+        start_time, end_time = _date(data.get("startTime")), _date(data.get("endTime"))
+        embedded_created = _date(normalized.get("created_at"))
+        if start_time is not None and start_time.tzinfo and (
+                embedded_created is None or embedded_created.tzinfo is None):
+            normalized["created_at"] = start_time
+            normalized["started_at"] = start_time
+            if end_time is not None and end_time.tzinfo:
+                normalized["stopped_at"] = end_time
+        summary_energy = history_quality.energy_wh(data)
+        if summary_energy and not _opt_float(normalized.get("energy_used_wh")):
+            normalized["energy_used_wh"] = summary_energy
         try:
             return _session(normalized)
         except (KeyError, TypeError, ValueError):
@@ -2546,7 +2767,12 @@ def _session_from_charge_log(data: dict, document_id: str, uid: str) -> Charging
         fusion_reason=str(data.get("etaFusionReason") or "global_ai_only"),
         profile_version=data.get("personalProfileVersion"),
         adapter_version=data.get("personalAdapterVersion"),
-        actual_end_soc=data.get("actualEndSoc"),
+        actual_end_soc=history_quality.confirmed_end_soc(data),
+        stop_mode=str(data.get("stopMode") or "timer"),
+        target_energy_wh=_opt_float(data.get("targetEnergyWh")),
+        model_wh_per_pct=_opt_float(data.get("modelWhPerPct")),
+        soc_error=_opt_float(data.get("socError")),
+        end_odo_km=_opt_float(data.get("endOdoKm")),
         training_eligible=bool(data.get("trainingEligible")),
         telemetry_coverage=float(data.get("telemetryCoverage") or 0),
         owner_uid=uid,
@@ -2595,6 +2821,11 @@ def _profile(uid: str, vehicle_id: str, data: dict) -> PersonalChargingProfile:
         last_training_error=quality.get("lastTrainingError"),
         last_trained_at=_date(data.get("lastTrainedAt")),
         updated_at=_date(data.get("updatedAt")) or datetime.now(timezone.utc),
+        learned=dict(data.get("learned") or {}),
+        consent_source=str(data.get("consentSource") or "user"),
+        trip_model=dict(data.get("tripModel") or {}),
+        trip_trained_ids=[str(item) for item in (data.get("tripTrainedIds") or [])],
+        training_reports=dict(data.get("trainingReports") or {}),
     )
 
 

@@ -90,7 +90,7 @@ void main() {
       expect(coordinator.bubbleMood, equals(BatteryBotMood.greeting));
     });
 
-    test('Charging tab hint triggers when currentTab == 1', () {
+    test('Charging tab shows no tip over the dial (QA 129)', () {
       final normalVehicle = VehicleModel(
         vehicleId: 'test_veh_3',
         vehicleName: 'VinFast Klara S',
@@ -105,10 +105,10 @@ void main() {
         now: afternoonTime,
       );
 
-      expect(triggered, isTrue);
-      expect(coordinator.isBubbleVisible, isTrue);
-      expect(coordinator.bubbleText, contains('80-90%'));
-      expect(coordinator.bubbleMood, equals(BatteryBotMood.charging));
+      // QA 129: no tip bubble over the Charge tab's % dial (the "80% ·
+      // Khuyên dùng" chip already says it).
+      expect(triggered, isFalse);
+      expect(coordinator.isBubbleVisible, isFalse);
     });
   });
 }

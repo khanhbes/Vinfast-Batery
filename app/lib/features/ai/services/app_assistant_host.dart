@@ -4,14 +4,17 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants/beta_capabilities.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/services/session_service.dart';
 import '../../../core/widgets/app_popup.dart';
 import '../../../data/models/vehicle_model.dart';
 import '../../../data/services/push_notification_service.dart';
 import '../../../data/services/range_estimator.dart';
+import '../../../data/services/server_smart_charger_service.dart';
 import '../../../data/services/shelly_connection_coordinator.dart';
 import '../../../data/services/smart_charge_preferences_service.dart';
+import '../../../data/services/trip_energy_model.dart';
 import '../../achievements/achievements_screen.dart';
 import '../../battery_monitor/battery_monitor_screen.dart';
 import '../../maintenance/maintenance_screen.dart';
@@ -22,6 +25,7 @@ import '../../smart_charging/shelly_connect_screen.dart';
 import '../../trip_planner/trip_planner_screen.dart';
 import '../controllers/smart_charging_controller.dart';
 import 'hybrid_assistant_engine.dart';
+import 'learning_flow.dart';
 
 /// BatteryBot v2 actions executed with the same providers/repositories the
 /// screens use (Task 124). Charging and reminders do not pass through here:
@@ -169,6 +173,61 @@ class AppAssistantActionHost implements AssistantActionHost {
   }
 
   @override
+  Future<bool> prepare(String name, Map<String, dynamic> args) async {
+    final vehicle = _vehicle;
+    final navigator = _navigator;
+    if (vehicle == null || navigator == null) return false;
+    navigator.popUntil((route) => route.isFirst);
+    if (name == 'prepare_target_charging') {
+      final percent = (args['percent'] as num?)?.toDouble();
+      if (percent == null || percent < 1 || percent > 100) return false;
+      ref.read(pendingChargeTargetSocProvider.notifier).state = (
+        vehicleId: vehicle.vehicleId,
+        targetSoc: percent,
+      );
+      ref.read(currentTabProvider.notifier).state = 1;
+      return true;
+    }
+    if (name == 'plan_trip' && BetaCapabilities.tripPlanner) {
+      TripSpeed speed(Object? value) => switch (value) {
+        'slow' => TripSpeed.slow,
+        'fast' => TripSpeed.fast,
+        _ => TripSpeed.normal,
+      };
+      TripWeather weather(Object? value) => switch (value) {
+        'rain' => TripWeather.rain,
+        'hot' => TripWeather.hot,
+        'cold' => TripWeather.cold,
+        _ => TripWeather.dry,
+      };
+      unawaited(
+        navigator.push(
+          MaterialPageRoute<void>(
+            builder: (_) => TripPlannerScreen(
+              vehicle: vehicle,
+              initialDestination: args['destination']?.toString(),
+              initialDistanceKm: (args['distance_km'] as num?)?.toDouble(),
+              initialConditions: TripConditions(
+                speed: speed(args['speed']),
+                riders: (args['riders'] as num?)?.toInt() == 2 ? 2 : 1,
+                cargoKg: ((args['cargo_kg'] as num?)?.toDouble() ?? 0).clamp(
+                  0,
+                  40,
+                ),
+                weather: weather(args['weather']),
+                hilly: args['hilly'] == true,
+                roundTrip: args['round_trip'] == true,
+              ),
+            ),
+          ),
+        ),
+      );
+      return true;
+    }
+    return false;
+  }
+
+  @override
   Future<AssistantUndo?> apply(String name, Map<String, dynamic> args) async {
     final vehicle = _vehicle;
     switch (name) {
@@ -183,13 +242,17 @@ class AppAssistantActionHost implements AssistantActionHost {
           'lastBatteryPercent': percent,
           'hasBatteryData': true,
         });
-        return AssistantUndo(
-          'mức pin về $previous%',
-          () => _writeVehicle(vehicle.vehicleId, {
+        final reading = await _logReading(
+          vehicle.vehicleId,
+          soc: percent.toDouble(),
+        );
+        return AssistantUndo('mức pin về $previous%', () async {
+          await _writeVehicle(vehicle.vehicleId, {
             'currentBattery': previous,
             'lastBatteryPercent': previous,
-          }),
-        );
+          });
+          await _voidReading(vehicle.vehicleId, reading);
+        });
       case 'update_odometer':
         if (vehicle == null) {
           throw const AssistantActionError('Bạn hãy chọn xe trước.');
@@ -205,10 +268,14 @@ class AppAssistantActionHost implements AssistantActionHost {
           'currentOdo': km,
           'hasOdoData': true,
         });
-        return AssistantUndo(
-          'ODO về $previous km',
-          () => _writeVehicle(vehicle.vehicleId, {'currentOdo': previous}),
+        final reading = await _logReading(
+          vehicle.vehicleId,
+          odoKm: km.toDouble(),
         );
+        return AssistantUndo('ODO về $previous km', () async {
+          await _writeVehicle(vehicle.vehicleId, {'currentOdo': previous});
+          await _voidReading(vehicle.vehicleId, reading);
+        });
       case 'select_vehicle':
         final wanted = args['vehicle_name']?.toString().toLowerCase() ?? '';
         final vehicles = ref.read(allVehiclesProvider).valueOrNull ?? const [];
@@ -292,6 +359,44 @@ class AppAssistantActionHost implements AssistantActionHost {
               );
     }
     throw const AssistantActionError('Cài đặt này chưa được hỗ trợ.');
+  }
+
+  /// Task 127: a battery/ODO update from chat is also a learning reading
+  /// (two readings without a charge between become a ride). Best effort.
+  Future<String?> _logReading(
+    String vehicleId, {
+    double? soc,
+    double? odoKm,
+  }) async {
+    ServerSmartChargerService? api;
+    try {
+      api = ServerSmartChargerService();
+      final result = await api.addBatteryReading(
+        vehicleId,
+        soc: soc,
+        odoKm: odoKm,
+        source: 'chat',
+      );
+      unawaited(TrainingReadiness.check(result.status));
+      return result.readingId.isEmpty ? null : result.readingId;
+    } on Object {
+      return null;
+    } finally {
+      api?.close();
+    }
+  }
+
+  Future<void> _voidReading(String vehicleId, String? readingId) async {
+    if (readingId == null) return;
+    ServerSmartChargerService? api;
+    try {
+      api = ServerSmartChargerService();
+      await api.voidBatteryReading(vehicleId, readingId);
+    } on Object {
+      // The vehicle value is already restored; the reading stays harmless.
+    } finally {
+      api?.close();
+    }
   }
 
   Future<void> _writeVehicle(

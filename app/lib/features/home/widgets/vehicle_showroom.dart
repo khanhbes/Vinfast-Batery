@@ -12,6 +12,9 @@ import '../../../data/models/vehicle_showroom.dart';
 ///
 /// * Any colour: a 2.5D view — drag tilts the vehicle in perspective and it
 ///   springs back; a mirrored reflection sits on the pedestal.
+/// * One photo + [orbit] (Task 127): horizontal drag turns the vehicle all the
+///   way round in perspective; past 90° the mirrored photo stands in for the
+///   far side (cross-faded at the edge). It settles facing front or back.
 /// * Colours with ≥ [VehicleShowroomData.spinMinAngles] angles: a 360°
 ///   turntable — horizontal drag steps through the frames with inertia.
 ///   Frames are pre-cached (progress ring) before the spin is enabled.
@@ -27,6 +30,7 @@ class VehicleShowroomView extends StatefulWidget {
     this.zoomable = false,
     this.reflection = true,
     this.showHint = true,
+    this.orbit = false,
   });
 
   final ShowroomColor? color;
@@ -35,6 +39,9 @@ class VehicleShowroomView extends StatefulWidget {
   final bool zoomable;
   final bool reflection;
   final bool showHint;
+
+  /// One-photo turntable (2.5D) instead of the spring-back tilt.
+  final bool orbit;
 
   @override
   State<VehicleShowroomView> createState() => VehicleShowroomViewState();
@@ -51,6 +58,11 @@ class VehicleShowroomViewState extends State<VehicleShowroomView>
     vsync: this,
     duration: const Duration(milliseconds: 520),
   );
+
+  /// Orbit angle in degrees (unbounded; 0 = the photo as shot).
+  late final AnimationController _orbit = AnimationController.unbounded(
+    vsync: this,
+  );
   Offset _tilt = Offset.zero;
   Offset _tiltFrom = Offset.zero;
   double _zoom = 1;
@@ -63,6 +75,15 @@ class VehicleShowroomViewState extends State<VehicleShowroomView>
   List<ShowroomImage> get _angles => widget.color?.angles ?? const [];
   bool get _spinCapable => widget.color?.canSpin == true;
   bool get spinReady => _spinCapable && _loaded >= _angles.length;
+  bool get _orbitMode =>
+      widget.orbit && widget.interactive && !_spinCapable && _angles.isNotEmpty;
+
+  /// Orbit angle wrapped to (-180, 180].
+  @visibleForTesting
+  double get orbitDegrees {
+    final value = (_orbit.value % 360 + 360) % 360;
+    return value > 180 ? value - 360 : value;
+  }
 
   /// Index of the frame currently shown (skips frames that failed to load).
   int get frameIndex {
@@ -106,6 +127,7 @@ class VehicleShowroomViewState extends State<VehicleShowroomView>
     _generation++;
     _spin.dispose();
     _tiltBack.dispose();
+    _orbit.dispose();
     super.dispose();
   }
 
@@ -138,6 +160,7 @@ class VehicleShowroomViewState extends State<VehicleShowroomView>
 
   void _onScaleStart(ScaleStartDetails d) {
     _spin.stop();
+    _orbit.stop();
     _tiltBack.stop();
     _zoomStart = _zoom;
     if (!_interacted) setState(() => _interacted = true);
@@ -153,6 +176,15 @@ class VehicleShowroomViewState extends State<VehicleShowroomView>
       // One full turn per ~1.4 widths of travel.
       final perFrame = (width * 1.4) / _angles.length;
       setState(() => _spin.value -= delta.dx / perFrame);
+    } else if (_orbitMode) {
+      // ~half a turn per width of travel; slight vertical tilt as well.
+      setState(() {
+        _orbit.value += delta.dx / width * 200;
+        _tilt = Offset(
+          0,
+          (_tilt.dy + delta.dy / width * 0.6).clamp(-0.12, 0.12),
+        );
+      });
     } else {
       setState(() {
         _tilt = Offset(
@@ -179,12 +211,81 @@ class VehicleShowroomViewState extends State<VehicleShowroomView>
       }
       return;
     }
+    if (_orbitMode) {
+      // Coast a little, then settle facing front or back.
+      final degreesPerSecond = d.velocity.pixelsPerSecond.dx / width * 200;
+      final landing = _orbit.value + degreesPerSecond * 0.35;
+      final target = (landing / 180).roundToDouble() * 180;
+      if (reduced) {
+        _orbit.value = target;
+      } else {
+        if ((target - _orbit.value).abs() > 1) HapticFeedback.selectionClick();
+        _orbit.animateTo(
+          target,
+          duration: const Duration(milliseconds: 620),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    }
     _tiltFrom = _tilt;
     if (reduced) {
       setState(() => _tilt = Offset.zero);
     } else {
       _tiltBack.forward(from: 0);
     }
+  }
+
+  void _orbitBy(double degrees) {
+    _orbit.stop();
+    final target = ((_orbit.value + degrees) / 45).roundToDouble() * 45;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      setState(() => _orbit.value = target);
+    } else {
+      _orbit.animateTo(
+        target,
+        duration: const Duration(milliseconds: 360),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
+  /// The photo turned to [orbitDegrees]: near-side photo up to 90°, the
+  /// mirrored photo beyond, cross-faded over the last 18° before the edge.
+  Widget _orbitSubject(Widget Function() photo) {
+    final phi = orbitDegrees;
+    final back = phi.abs() > 90;
+    final psi = back ? phi - 180 * phi.sign : phi; // -90..90 on that side
+    final edge = ((psi.abs() - 72) / 18).clamp(0.0, 1.0);
+    Widget face(bool mirrored, double degrees, double opacity) {
+      Widget child = photo();
+      if (mirrored) {
+        child = Transform(
+          alignment: Alignment.center,
+          transform: Matrix4.diagonal3Values(-1, 1, 1),
+          child: child,
+        );
+      }
+      return Opacity(
+        opacity: opacity,
+        child: Transform(
+          alignment: Alignment.center,
+          transform: Matrix4.identity()
+            ..setEntry(3, 2, 0.0012)
+            ..rotateY(degrees * 0.62 * math.pi / 180),
+          child: child,
+        ),
+      );
+    }
+
+    final otherPsi = psi - 180 * (psi == 0 ? 1 : psi.sign);
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        if (edge > 0)
+          face(!back, otherPsi.clamp(-90, 90).toDouble(), edge / 2),
+        face(back, psi, 1 - edge / 2),
+      ],
+    );
   }
 
   @override
@@ -194,17 +295,30 @@ class VehicleShowroomViewState extends State<VehicleShowroomView>
     return LayoutBuilder(
       builder: (context, box) {
         final width = box.maxWidth.isFinite ? box.maxWidth : 360.0;
-        Widget subject = AnimatedBuilder(
-          animation: _spin,
-          builder: (context, _) {
-            final image = hasPhoto ? angles[spinReady ? frameIndex : 0] : null;
-            return _StageImage(
-              image: image,
-              fallback: widget.fallback,
-              reflection: widget.reflection,
-            );
-          },
-        );
+        Widget subject = _orbitMode
+            ? AnimatedBuilder(
+                animation: _orbit,
+                builder: (context, _) => _orbitSubject(
+                  () => _StageImage(
+                    image: angles.first,
+                    fallback: widget.fallback,
+                    reflection: widget.reflection,
+                  ),
+                ),
+              )
+            : AnimatedBuilder(
+                animation: _spin,
+                builder: (context, _) {
+                  final image = hasPhoto
+                      ? angles[spinReady ? frameIndex : 0]
+                      : null;
+                  return _StageImage(
+                    image: image,
+                    fallback: widget.fallback,
+                    reflection: widget.reflection,
+                  );
+                },
+              );
         subject = Transform(
           alignment: Alignment.center,
           transform: Matrix4.identity()
@@ -240,6 +354,18 @@ class VehicleShowroomViewState extends State<VehicleShowroomView>
                 top: 12,
                 child: _AngleDial(index: frameIndex, total: angles.length),
               ),
+            if (_orbitMode)
+              Positioned(
+                right: 12,
+                top: 12,
+                child: AnimatedBuilder(
+                  animation: _orbit,
+                  builder: (context, _) => _AngleDial(
+                    index: ((orbitDegrees + 360) % 360 / 30).round() % 12,
+                    total: 12,
+                  ),
+                ),
+              ),
             if (widget.interactive && widget.showHint && hasPhoto)
               Positioned(
                 left: 12,
@@ -255,6 +381,8 @@ class VehicleShowroomViewState extends State<VehicleShowroomView>
                             ? 'Kéo để xoay 360°'
                             : (_spinCapable
                                   ? 'Đang chuẩn bị 360°…'
+                                  : _orbitMode
+                                  ? 'Kéo ngang để xoay quanh xe'
                                   : 'Kéo để ngắm xe'),
                       ),
                     ),
@@ -268,9 +396,19 @@ class VehicleShowroomViewState extends State<VehicleShowroomView>
         return Semantics(
           label: spinReady
               ? 'Xe màu ${widget.color!.name}, góc ${frameIndex + 1} trên $n. Kéo ngang để xoay.'
+              : _orbitMode
+              ? 'Ảnh xe màu ${widget.color!.name}, xoay ${orbitDegrees.round()} độ. Kéo ngang để xoay quanh xe.'
               : 'Ảnh xe màu ${widget.color!.name}. Kéo để nghiêng.',
-          onIncrease: spinReady ? () => setState(() => _rotateBy(1)) : null,
-          onDecrease: spinReady ? () => setState(() => _rotateBy(-1)) : null,
+          onIncrease: spinReady
+              ? () => setState(() => _rotateBy(1))
+              : _orbitMode
+              ? () => _orbitBy(45)
+              : null,
+          onDecrease: spinReady
+              ? () => setState(() => _rotateBy(-1))
+              : _orbitMode
+              ? () => _orbitBy(-45)
+              : null,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onScaleStart: _onScaleStart,
@@ -290,7 +428,9 @@ class VehicleShowroomViewState extends State<VehicleShowroomView>
 /// Resolves catalog image URLs. Disk-cached in the app (photos stay
 /// available offline); tests swap it for an in-memory provider.
 ImageProvider Function(String url) showroomImageProvider = (url) =>
-    CachedNetworkImageProvider(url);
+    url.startsWith('asset:')
+    ? AssetImage(url.substring(6))
+    : CachedNetworkImageProvider(url);
 
 /// Photo (or fallback art) with a mirrored reflection fading into the floor.
 class _StageImage extends StatelessWidget {
@@ -319,35 +459,44 @@ class _StageImage extends StatelessWidget {
       errorBuilder: (_, _, _) => fallback,
     );
     if (!reflection) return photo();
-    return Column(
-      children: [
-        Expanded(flex: 6, child: photo()),
-        Expanded(
-          child: IgnorePointer(
-            child: ExcludeSemantics(
-              child: ShaderMask(
-                blendMode: BlendMode.dstIn,
-                shaderCallback: (b) => const LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Color(0x38FFFFFF), Color(0x00FFFFFF)],
-                ).createShader(b),
-                child: Transform(
-                  alignment: Alignment.topCenter,
-                  transform: Matrix4.diagonal3Values(1, -1, 1),
-                  child: ClipRect(
-                    child: Align(
-                      alignment: Alignment.bottomCenter,
-                      heightFactor: 0.22,
-                      child: AspectRatio(aspectRatio: 1.6, child: photo()),
+    // The reflection is the same photo at the same size, flipped under it
+    // and cropped to the strip below (Task 127: the old fixed 1.6 aspect box
+    // shrank a square photo into a tiny upside-down scooter).
+    return LayoutBuilder(
+      builder: (context, box) {
+        final mainHeight = box.maxHeight * 6 / 7;
+        return Column(
+          children: [
+            SizedBox(height: mainHeight, child: photo()),
+            Expanded(
+              child: IgnorePointer(
+                child: ExcludeSemantics(
+                  child: ShaderMask(
+                    blendMode: BlendMode.dstIn,
+                    shaderCallback: (b) => const LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Color(0x38FFFFFF), Color(0x00FFFFFF)],
+                    ).createShader(b),
+                    child: ClipRect(
+                      child: OverflowBox(
+                        alignment: Alignment.topCenter,
+                        minHeight: mainHeight,
+                        maxHeight: mainHeight,
+                        child: Transform(
+                          alignment: Alignment.center,
+                          transform: Matrix4.diagonal3Values(1, -1, 1),
+                          child: photo(),
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-        ),
-      ],
+          ],
+        );
+      },
     );
   }
 }

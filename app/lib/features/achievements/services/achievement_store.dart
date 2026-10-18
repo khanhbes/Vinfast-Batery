@@ -13,6 +13,7 @@ class AchievementLedgerData {
     Map<String, DateTime>? unlocked,
     Set<String>? events,
     this.lastSync,
+    this.lastFullSync,
     this.remoteRestored = false,
   }) : sessions = sessions ?? {},
        unlocked = unlocked ?? {},
@@ -22,6 +23,10 @@ class AchievementLedgerData {
   final Map<String, DateTime> unlocked;
   final Set<String> events;
   DateTime? lastSync;
+
+  /// Last walk through the whole server history (prunes hidden/junk
+  /// sessions and refreshes corrected energy, QA 129).
+  DateTime? lastFullSync;
   bool remoteRestored;
 
   Map<String, Object?> toJson() => {
@@ -33,6 +38,7 @@ class AchievementLedgerData {
     },
     'events': events.toList(),
     'lastSync': lastSync?.toUtc().toIso8601String(),
+    'lastFullSync': lastFullSync?.toUtc().toIso8601String(),
     'remoteRestored': remoteRestored,
   };
 
@@ -56,6 +62,7 @@ class AchievementLedgerData {
       unlocked: unlocked,
       events: {for (final e in (j['events'] as List? ?? const [])) '$e'},
       lastSync: DateTime.tryParse('${j['lastSync']}'),
+      lastFullSync: DateTime.tryParse('${j['lastFullSync']}'),
       remoteRestored: j['remoteRestored'] == true,
     );
   }

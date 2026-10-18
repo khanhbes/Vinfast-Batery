@@ -18,6 +18,8 @@
   <key>UIBackgroundModes</key><array><string>location</string><string>fetch</string><string>remote-notification</string></array>
   <key>NSLocationWhenInUseUsageDescription</key><string>VinFast Battery dùng vị trí để ghi lại hành trình của bạn.</string>
   <key>NSLocationAlwaysAndWhenInUseUsageDescription</key><string>Cho phép VinFast Battery tiếp tục ghi hành trình khi màn hình bị khóa.</string>
+  <key>NSCameraUsageDescription</key><string>VinFast Battery chụp đồng hồ xe để tự đọc % pin và ODO ngay trên máy.</string>
+  <key>NSPhotoLibraryUsageDescription</key><string>VinFast Battery đọc % pin và ODO từ ảnh đồng hồ xe bạn chọn.</string>
   <key>NSLocalNetworkUsageDescription</key><string>VinFast Battery cần mạng cục bộ để tìm và điều khiển Shelly Plug trong nhà.</string>
   <key>NSBonjourServices</key><array><string>_shelly._tcp</string></array>
   <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>

@@ -7,9 +7,12 @@ void main() {
     () {
       if (BetaCapabilities.enabled) {
         expect(BetaCapabilities.advancedAi, isFalse);
-        expect(BetaCapabilities.tripPlanner, isFalse);
         expect(BetaCapabilities.developerMode, isFalse);
       }
     },
   );
+
+  test('the trip planner ships in beta (Task 126)', () {
+    expect(BetaCapabilities.tripPlanner, isTrue);
+  });
 }

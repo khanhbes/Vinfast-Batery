@@ -28,6 +28,8 @@ class ActiveChargingCardV2 extends StatefulWidget {
     this.isStarting = false,
     this.estimateNote,
     this.stopAwaitingReadback = false,
+    this.countdownLabel = 'Shelly tự ngắt sau · lúc',
+    this.socCaption,
   });
 
   final double currentPercent;
@@ -51,6 +53,13 @@ class ActiveChargingCardV2 extends StatefulWidget {
 
   /// OFF was accepted; waiting for Shelly Cloud to report it.
   final bool stopAwaitingReadback;
+
+  /// What the countdown counts to (target charge vs. device timer).
+  final String countdownLabel;
+
+  /// Under the % (default "ước tính · mục tiêu X%"); a timed charge has no
+  /// target (QA 130 showed "mục tiêu 100%" for 30 minutes).
+  final String? socCaption;
 
   @override
   State<ActiveChargingCardV2> createState() => _ActiveChargingCardV2State();
@@ -212,11 +221,18 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
                           ),
                         ),
                       ),
-                      Padding(
-                        padding: EdgeInsets.all(size * 0.2),
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: _centre(current, target),
+                      // Only the short centre lines live inside the dial; they
+                      // wrap instead of shrinking everything (Task 127).
+                      Center(
+                        child: SizedBox.square(
+                          dimension: size * 0.64,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: SizedBox(
+                              width: size * 0.64,
+                              child: _centre(current, target),
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -225,7 +241,22 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
               );
             },
           ),
-          const SizedBox(height: 10),
+          if (widget.estimateNote != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              widget.estimateNote!,
+              key: const ValueKey('session-estimate-note'),
+              textAlign: TextAlign.center,
+              // Estimates are champagne; emerald only marks what was
+              // verified (the relay status above) — LUXE rule, QA 129.
+              style: const TextStyle(
+                color: LuxeColors.champagne,
+                fontSize: 13.5,
+                height: 1.4,
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
           LayoutBuilder(
             builder: (context, c) {
               final cells = [
@@ -300,68 +331,65 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
   Widget _centre(int current, int target) => Column(
     mainAxisSize: MainAxisSize.min,
     children: [
-      Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.baseline,
-        textBaseline: TextBaseline.alphabetic,
-        children: [
-          LuxeMetalText(
-            '$current',
+      FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            LuxeMetalText(
+              '$current',
+              style: const TextStyle(
+                fontSize: 56,
+                height: 1.0,
+                fontWeight: FontWeight.w200,
+                letterSpacing: -1.5,
+                fontFeatures: [ui.FontFeature.tabularFigures()],
+              ),
+            ),
+            const Text(
+              '%',
+              style: TextStyle(
+                color: LuxeColors.champagne,
+                fontSize: 20,
+                fontWeight: FontWeight.w300,
+              ),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 2),
+      Text(
+        widget.socCaption ?? 'ước tính · mục tiêu $target%',
+        textAlign: TextAlign.center,
+        style: const TextStyle(color: LuxeColors.muted, fontSize: 13),
+      ),
+      const SizedBox(height: 12),
+      FittedBox(
+        fit: BoxFit.scaleDown,
+        child: AnimatedBuilder(
+          animation: _flow,
+          builder: (context, _) => Text(
+            _clock(_left),
+            key: const ValueKey('session-countdown'),
             style: const TextStyle(
-              fontSize: 56,
-              height: 1.0,
-              fontWeight: FontWeight.w200,
-              letterSpacing: -1.5,
+              color: LuxeColors.text,
+              fontSize: 24,
+              fontWeight: FontWeight.w300,
+              letterSpacing: 1.2,
               fontFeatures: [ui.FontFeature.tabularFigures()],
             ),
-          ),
-          const Text(
-            '%',
-            style: TextStyle(
-              color: LuxeColors.emerald,
-              fontSize: 18,
-              fontWeight: FontWeight.w300,
-            ),
-          ),
-        ],
-      ),
-      Text(
-        'ước tính · mục tiêu $target%',
-        style: const TextStyle(color: LuxeColors.muted, fontSize: 11.5),
-      ),
-      const SizedBox(height: 14),
-      AnimatedBuilder(
-        animation: _flow,
-        builder: (context, _) => Text(
-          _clock(_left),
-          key: const ValueKey('session-countdown'),
-          style: const TextStyle(
-            color: LuxeColors.text,
-            fontSize: 20,
-            fontWeight: FontWeight.w300,
-            letterSpacing: 1.2,
-            fontFeatures: [ui.FontFeature.tabularFigures()],
           ),
         ),
       ),
       const SizedBox(height: 2),
       Text(
-        'Shelly tự ngắt sau · lúc ${widget.completionTime}',
-        style: const TextStyle(color: LuxeColors.dim, fontSize: 11.5),
+        '${widget.countdownLabel} ${widget.completionTime}',
+        key: const ValueKey('session-countdown-label'),
+        textAlign: TextAlign.center,
+        style: const TextStyle(color: LuxeColors.muted, fontSize: 13),
       ),
-      if (widget.estimateNote != null) ...[
-        const SizedBox(height: 6),
-        Text(
-          widget.estimateNote!,
-          key: const ValueKey('session-estimate-note'),
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: LuxeColors.emerald,
-            fontSize: 12,
-            height: 1.35,
-          ),
-        ),
-      ],
     ],
   );
 }

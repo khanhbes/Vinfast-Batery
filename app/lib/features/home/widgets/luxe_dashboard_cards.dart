@@ -5,7 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/theme/luxe_theme.dart';
+import '../../../core/utils/number_text.dart';
 import '../../../data/models/vehicle_model.dart';
+import '../../../data/services/range_estimator.dart';
+import '../../../data/services/trip_energy_model.dart';
 
 /// Tinted glass orb for accented dashboard actions. Neutral icon wells use
 /// the metal [LuxeMedallion] from `core/widgets/luxe_settings.dart`.
@@ -91,10 +94,14 @@ class LuxeQuickActions extends StatelessWidget {
     required this.onBatteryMonitor,
     this.onTrip,
     this.tripKey,
+    this.onReadDashboard,
   });
 
   /// Null hides the tile (trip planner off in the beta, Task 125).
   final VoidCallback? onTrip;
+
+  /// Task 127: "% pin & ODO" from a dashboard photo or typed (full width).
+  final VoidCallback? onReadDashboard;
   final VoidCallback onMaintenance;
   final VoidCallback onBatteryMonitor;
   final Key? tripKey;
@@ -107,7 +114,7 @@ class LuxeQuickActions extends StatelessWidget {
     // Emerald stays for verified states only (Task 125).
     final items = <(IconData, String, Color, VoidCallback, Key?)>[
       if (trip != null)
-        (Icons.route_rounded, 'Lộ trình sạc', LuxeColors.steel, trip, tripKey),
+        (Icons.route_rounded, 'Lộ trình', LuxeColors.steel, trip, tripKey),
       (
         Icons.build_rounded,
         'Bảo dưỡng xe',
@@ -180,6 +187,60 @@ class LuxeQuickActions extends StatelessWidget {
               ),
             ),
         ];
+        final read = onReadDashboard;
+        final reading = read == null
+            ? null
+            : LuxePressable(
+                key: const ValueKey('quick-read-dashboard'),
+                onTap: read,
+                semanticsLabel: 'Cập nhật phần trăm pin và ODO',
+                child: LuxeGlass(
+                  radius: 20,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                  child: const ExcludeSemantics(
+                    child: Row(
+                      children: [
+                        LuxeOrb(
+                          icon: Icons.photo_camera_outlined,
+                          color: LuxeColors.steel,
+                          size: 40,
+                        ),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Cập nhật % pin & ODO',
+                                style: TextStyle(
+                                  color: LuxeColors.text,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                'Chụp đồng hồ xe hoặc nhập tay',
+                                style: TextStyle(
+                                  color: LuxeColors.muted,
+                                  fontSize: 12.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          color: LuxeColors.dim,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
         if (stacked) {
           return Column(
             children: [
@@ -187,10 +248,11 @@ class LuxeQuickActions extends StatelessWidget {
                 if (i > 0) const SizedBox(height: 8),
                 tiles[i],
               ],
+              if (reading != null) ...[const SizedBox(height: 8), reading],
             ],
           );
         }
-        return IntrinsicHeight(
+        final row = IntrinsicHeight(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -201,6 +263,11 @@ class LuxeQuickActions extends StatelessWidget {
             ],
           ),
         );
+        if (reading == null) return row;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [row, const SizedBox(height: 8), reading],
+        );
       },
     );
   }
@@ -208,22 +275,25 @@ class LuxeQuickActions extends StatelessWidget {
 
 /// ODO · efficiency · SoH (the battery itself lives in the hero).
 class LuxeStatsStrip extends StatelessWidget {
-  const LuxeStatsStrip({super.key, required this.vehicle});
+  const LuxeStatsStrip({super.key, required this.vehicle, this.learned});
   final VehicleModel? vehicle;
+
+  /// Trained trip model: the km/% every other screen uses (QA 129).
+  final TripModelParams? learned;
 
   @override
   Widget build(BuildContext context) {
     final v = vehicle;
-    final effOk =
-        v != null &&
-        v.hasEfficiencyData &&
-        v.defaultEfficiency.isFinite &&
-        v.defaultEfficiency > 0;
+    final perPct = v == null ? null : kmPerPctFor(v, learned);
     final cells = [
-      (Icons.speed_rounded, v == null ? '—' : _group(v.currentOdo), 'km ODO'),
+      (
+        Icons.speed_rounded,
+        v == null ? '—' : groupThousands(v.currentOdo),
+        'km ODO',
+      ),
       (
         Icons.route_rounded,
-        effOk ? v.defaultEfficiency.toStringAsFixed(2) : '—',
+        perPct == null ? '—' : perPct.toStringAsFixed(2),
         'km / 1% pin',
       ),
       (
@@ -276,15 +346,6 @@ class LuxeStatsStrip extends StatelessWidget {
     );
   }
 
-  static String _group(int km) {
-    final s = km.toString();
-    final b = StringBuffer();
-    for (var i = 0; i < s.length; i++) {
-      if (i > 0 && (s.length - i) % 3 == 0) b.write('.');
-      b.write(s[i]);
-    }
-    return b.toString();
-  }
 }
 
 /// Battery health: SoH on a platinum ring, tap for cell details.
@@ -302,7 +363,7 @@ class LuxeBatteryHealthCard extends StatelessWidget {
     final has = soh != null && soh!.isFinite;
     final value = has ? soh!.clamp(0.0, 100.0) : 0.0;
     final verdict = !has
-        ? 'Cần thêm dữ liệu xe để đánh giá'
+        ? 'Chưa có số SoH'
         : value >= 90
         ? 'Pin rất khỏe'
         : value >= 80
@@ -310,10 +371,12 @@ class LuxeBatteryHealthCard extends StatelessWidget {
         : value >= 70
         ? 'Pin đã hao mòn, nên theo dõi'
         : 'Pin xuống cấp, nên kiểm tra';
+    // The app cannot measure SoH (no BMS link): the number is what the owner
+    // entered, and the card says so (QA 129: "Pin rất khỏe" read as a test).
     return LuxePressable(
       onTap: onTap,
       semanticsLabel:
-          'Sức khỏe pin ${has ? '${value.round()} phần trăm' : 'chưa có dữ liệu'}. Mở chi tiết cell pin',
+          'Sức khỏe pin ${has ? '${value.round()} phần trăm theo số bạn nhập' : 'chưa có dữ liệu'}. Mở chi tiết pin',
       child: LuxeGlass(
         padding: const EdgeInsets.all(16),
         child: ExcludeSemantics(
@@ -358,12 +421,19 @@ class LuxeBatteryHealthCard extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
+                    const SizedBox(height: 2),
+                    Text(
+                      has
+                          ? 'Theo số bạn nhập · app không đo được SoH'
+                          : 'Nhập SoH trong Xe của tôi nếu bạn biết',
+                      style: LuxeText.caption,
+                    ),
                     const SizedBox(height: 6),
                     const Row(
                       children: [
                         Flexible(
                           child: Text(
-                            'Chi tiết cell pin',
+                            'Chi tiết pin',
                             style: TextStyle(
                               color: LuxeColors.emerald,
                               fontSize: 13,
@@ -478,17 +548,15 @@ class LuxeDataHint extends StatelessWidget {
 
 /// Configured km per 1% (not a measured efficiency or a driving score).
 class LuxeEfficiencyNote extends StatelessWidget {
-  const LuxeEfficiencyNote({super.key, required this.vehicle});
+  const LuxeEfficiencyNote({super.key, required this.vehicle, this.learned});
   final VehicleModel? vehicle;
+  final TripModelParams? learned;
 
   @override
   Widget build(BuildContext context) {
     final v = vehicle;
-    final valid =
-        v != null &&
-        v.hasEfficiencyData &&
-        v.defaultEfficiency.isFinite &&
-        v.defaultEfficiency > 0;
+    final perPct = v == null ? null : kmPerPctFor(v, learned);
+    final fromRides = learned != null && learned!.source == TripKmSource.model;
     return LuxeGlass(
       padding: const EdgeInsets.all(16),
       child: Row(
@@ -500,8 +568,10 @@ class LuxeEfficiencyNote extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Thông số quãng đường cơ sở',
+                Text(
+                  fromRides
+                      ? 'Hiệu suất học từ chuyến đi'
+                      : 'Thông số quãng đường cơ sở',
                   style: TextStyle(
                     color: LuxeColors.text,
                     fontSize: 15,
@@ -510,8 +580,8 @@ class LuxeEfficiencyNote extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  valid
-                      ? '${v.defaultEfficiency.toStringAsFixed(2)} km / 1% pin'
+                  perPct != null
+                      ? '${perPct.toStringAsFixed(2)} km / 1% pin'
                       : 'Chưa có dữ liệu cấu hình',
                   style: const TextStyle(
                     color: LuxeColors.platinum,
@@ -520,8 +590,10 @@ class LuxeEfficiencyNote extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 6),
-                const Text(
-                  'Thông số cấu hình dùng để ước tính quãng đường. Không phải hiệu suất đo thực tế hay điểm đánh giá lái xe.',
+                Text(
+                  fromRides
+                      ? 'Trung bình trên ${learned!.samples} chuyến thật của bạn; mọi màn ước tính quãng đường dùng cùng số này.'
+                      : 'Thông số dòng xe dùng để ước tính quãng đường. Không phải hiệu suất đo thực tế hay điểm đánh giá lái xe.',
                   style: LuxeText.caption,
                 ),
               ],

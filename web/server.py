@@ -459,6 +459,26 @@ def _internal_error(exc: BaseException):
 _QUIET_PATHS = frozenset({'/api/health', '/api/ready'})
 
 
+_ERROR_CODE_RE = re.compile(r'^[A-Za-z0-9_.:-]{1,64}$')
+
+
+def _error_code(response) -> str | None:
+    """The envelope's machine code of an error response (never free text,
+    so no user data reaches the log)."""
+    if response.status_code < 400 or response.direct_passthrough:
+        return None
+    try:
+        body = response.get_json(silent=True)
+    except Exception:
+        return None
+    if not isinstance(body, dict):
+        return None
+    error = body.get('error')
+    code = body.get('code') or (error.get('code') if isinstance(error, dict) else None)
+    code = str(code or '')
+    return code if _ERROR_CODE_RE.match(code) else None
+
+
 def _log_request(response) -> None:
     """One JSON line per API request (Task 125: production had no access log).
     The route template, not the concrete path, so ids never reach logs."""
@@ -471,6 +491,10 @@ def _log_request(response) -> None:
         'status': response.status_code,
         'ms': int((time.perf_counter() - started) * 1000) if started else None,
     }
+    code = _error_code(response)
+    if code:
+        # Why it failed (QA 129: five 503s on /live had no cause in the log).
+        entry['code'] = code
     try:
         print('[access] ' + json.dumps(entry, separators=(',', ':')), flush=True)
     except Exception:
@@ -2492,7 +2516,7 @@ def revoke_mobile_push_token(device_id):
 
 
 def send_smart_charge_push(uid, *, session_id, vehicle_id=None, state, target_percent=None, route='smart_charge',
-                           silent=False):
+                           silent=False, stop_reason=None, estimated_soc=None, energy_wh=None):
     """Send one durable Smart Charge event, deduplicated by eventKey.
     ``silent`` = data-only refresh signal for the account's other phones."""
     if silent:
@@ -2503,6 +2527,7 @@ def send_smart_charge_push(uid, *, session_id, vehicle_id=None, state, target_pe
     from shelly.push_notifications import send_terminal_push
     return send_terminal_push(uid, session_id=session_id, vehicle_id=vehicle_id,
         state=state, target_percent=target_percent, route=route,
+        stop_reason=stop_reason, estimated_soc=estimated_soc, energy_wh=energy_wh,
         db=_firestore_db if _firebase_available else None, messaging=_firebase_messaging,
         local_tokens=_local_push_tokens, local_deliveries=_local_push_deliveries)
 
@@ -2995,6 +3020,7 @@ def _build_training_dataset(vehicle_id: str):
         _fs().collection('ChargeLogs')
         .where('vehicleId', '==', vehicle_id)
         .where('isDeleted', '==', False)
+        .limit(500)
         .stream()
     )
     if not charge_docs:
@@ -3042,9 +3068,14 @@ def _build_training_dataset(vehicle_id: str):
         if sid:
             samples_by_session.setdefault(sid, []).append(x)
 
+    from shelly import history_quality
+
     records = []
     for d in charge_docs:
         c = d.to_dict() or {}
+        # Hidden and junk logs never train a model (Task 126).
+        if not history_quality.is_visible(c):
+            continue
         start = _to_dt(c.get('startTime'))
         end = _to_dt(c.get('endTime'))
         if not start or not end:
@@ -6950,10 +6981,13 @@ def _register_smart_charge_cloud_first():
             'aiChargeEligible': source == 'ai_model',
         }
 
+    # Task 126: previews use shelly.charge_model (physics + what this
+    # vehicle learned from confirmed battery readings). The legacy global AI
+    # predictor above stays only for the admin model lab.
     service = SmartChargeService(
         repository,
         provider,
-        predictor,
+        None,
         push_notifier=send_smart_charge_push,
     )
     app.register_blueprint(create_blueprint(
@@ -6997,10 +7031,23 @@ def _register_assistant():
         store = configured_store()
     except Exception:
         store = None
+    def charge_estimator(uid, vehicle_id, current, target, history_power_w):
+        return service.estimate_charge(uid, vehicle_id, current, target, history_power_w)
+
+    def trip_params_reader(uid, vehicle_id):
+        params = service.current_trip_params(uid, vehicle_id)
+        return params.to_dict() if params else None
+
+    from assistant.routing import OsmRouter
+
     engine = AssistantEngine(
         gemini=GeminiClient(), knowledge=knowledge, memory=memory,
         live_reader=live_reader if service else None,
         history_reader=history_reader if repository else None,
+        # Task 126: trip estimates (OpenStreetMap) and learned charge times.
+        router=OsmRouter(),
+        charge_estimator=charge_estimator if service else None,
+        trip_params_reader=trip_params_reader if service else None,
     )
     app.register_blueprint(create_assistant_blueprint(
         engine=engine, memory=memory, quota=DailyQuota(store), knowledge=knowledge,

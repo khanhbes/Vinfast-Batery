@@ -11,7 +11,7 @@ from .profile_vault import ShellyProfileVault
 from .providers.vault_cloud import VaultCloudControlProvider
 from .repositories import SmartChargeRepository
 from .service import SmartChargeService
-from .push_notifications import send_terminal_push
+from .push_notifications import send_progress_push, send_terminal_push
 
 
 class WorkerConfigurationError(RuntimeError):
@@ -74,8 +74,10 @@ def create_worker_service():
         notifier = partial(send_terminal_push, db=db, messaging=messaging, firebase_app=app)
         def prediction_disabled(_):
             raise RuntimeError("workerPredictionDisabled")
+        progress = partial(send_progress_push, db=db, messaging=messaging, firebase_app=app)
         service = SmartChargeService(repository, VaultCloudControlProvider(repository),
-                                     prediction_disabled, push_notifier=notifier)
+                                     prediction_disabled, push_notifier=notifier,
+                                     progress_notifier=progress)
         return service, partial(firebase_admin.delete_app, app)
     except Exception:
         if app is not None:

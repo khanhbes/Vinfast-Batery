@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/luxe_theme.dart';
+import '../../../core/utils/number_text.dart';
 import '../../../data/models/maintenance_task_model.dart';
 
 /// Colour per urgency, shared by the track, chips and cards.
@@ -147,7 +148,7 @@ class OdoTrack extends StatelessWidget {
         ? 'Chưa có mốc nào đang mở'
         : next.isEmpty
         ? '${open.length} mốc đã đến hạn'
-        : 'Mốc kế tiếp: ${next.first.title} · còn ${_km(next.first.targetOdo - currentOdo)} km';
+        : 'Mốc kế tiếp: ${next.first.title} · còn ${groupThousands(next.first.targetOdo - currentOdo)} km';
     return Semantics(
       label: label,
       excludeSemantics: true,
@@ -176,16 +177,6 @@ class OdoTrack extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  static String _km(int km) {
-    final s = km.toString();
-    final b = StringBuffer();
-    for (var i = 0; i < s.length; i++) {
-      if (i > 0 && (s.length - i) % 3 == 0) b.write('.');
-      b.write(s[i]);
-    }
-    return b.toString();
   }
 }
 

@@ -1,23 +1,52 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../core/services/sync_service.dart';
+import '../../core/providers/app_providers.dart';
 import '../../core/theme/luxe_theme.dart';
 import '../../core/widgets/luxe_kit.dart';
 import '../../core/widgets/luxe_settings.dart';
-import '../../data/models/trip_prediction_model.dart';
 import '../../data/models/vehicle_model.dart';
-import '../../data/services/trip_prediction_service.dart';
+import '../../core/utils/app_error_formatter.dart';
+import '../../core/widgets/app_popup.dart';
+import '../../data/services/charge_estimator.dart';
+import '../../data/services/server_smart_charger_service.dart';
+import '../../data/services/shelly_charge_log_service.dart';
+import '../../data/services/trip_energy_model.dart';
 import '../../data/services/trip_route_service.dart';
+import '../ai/services/learning_flow.dart';
+import '../ai/widgets/battery_reading_sheet.dart';
+import '../ai/widgets/edit_current_battery_sheet.dart';
 
+/// Trip battery planner (Task 126): where to, under which conditions, and
+/// whether the battery is enough — with a concrete alternative when it is
+/// not. Everything is an on-phone estimate; routing uses OpenStreetMap.
 class TripPlannerScreen extends ConsumerStatefulWidget {
+  const TripPlannerScreen({
+    super.key,
+    required this.vehicle,
+    this.initialDestination,
+    this.initialDistanceKm,
+    this.initialConditions,
+    this.learningService,
+  });
+
   final VehicleModel vehicle;
 
-  const TripPlannerScreen({super.key, required this.vehicle});
+  /// Server learning API (Task 127); injectable for tests.
+  final ServerSmartChargerService? learningService;
+
+  /// BatteryBot prefill: a place name to search, or a distance in km.
+  final String? initialDestination;
+  final double? initialDistanceKm;
+  final TripConditions? initialConditions;
 
   @override
   ConsumerState<TripPlannerScreen> createState() => _TripPlannerScreenState();
@@ -25,50 +54,413 @@ class TripPlannerScreen extends ConsumerStatefulWidget {
 
 class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
   final _mapController = MapController();
-  final _payloadController = TextEditingController(text: '75');
+  final _distanceController = TextEditingController();
 
   LatLng? _origin;
+  String _originName = '';
   LatLng? _destination;
   String _destinationName = '';
-  PlannedRoute? _route;
-  TripPredictionModel? _prediction;
-  List<TripPredictionModel> _history = const [];
-
-  bool _locating = true;
+  List<PlannedRoute> _routes = const [];
+  int _routeIndex = 0;
+  bool _locating = false;
   bool _routing = false;
-  bool _predicting = false;
-  bool _showConditions = false;
-  String _weather = 'sunny';
-  String _drivingStyle = 'normal';
-  double _temperature = 30;
-  double _elevation = 0;
+  late TripConditions _conditions;
+  late double _soc;
+  bool _socKnown = false;
+  double? _personalKmPerPct;
+  int _personalPairs = 0;
+  double? _historyPowerW;
+  TripPlan? _plan;
+  List<_SavedPlan> _saved = const [];
+
+  /// Task 127: the trip model trained on this vehicle's rides (server).
+  TripModelParams? _trainedModel;
+
+  /// Learned charge model (server), so "charge first" matches the Charge tab.
+  double? _learnedWhPerPct;
+  double? _learnedPowerW;
+  _ActiveTrip? _activeTrip;
+  bool _savingTrip = false;
+
+  PlannedRoute? get _route => _routes.isEmpty
+      ? null
+      : _routes[_routeIndex.clamp(0, _routes.length - 1)];
+
+  double? get _catalogKmPerPct => widget.vehicle.hasEfficiencyData
+      ? TripEnergyModel.catalogKmPerPct(
+          widget.vehicle.defaultEfficiency,
+          widget.vehicle.hasSohData ? widget.vehicle.stateOfHealth : null,
+        )
+      : null;
+
+  double? get _manualKm {
+    final value = double.tryParse(
+      _distanceController.text.trim().replaceAll(',', '.'),
+    );
+    return value != null && value > 0 && value <= 1000 ? value : null;
+  }
+
+  double? get _distanceKm => _route?.distanceKm ?? _manualKm;
 
   @override
   void initState() {
     super.initState();
-    _locate();
-    _loadHistory();
+    _conditions = widget.initialConditions ?? const TripConditions();
+    _soc = widget.vehicle.currentBattery.toDouble().clamp(0, 100);
+    _socKnown = widget.vehicle.hasBatteryData;
+    if (widget.initialDistanceKm != null) {
+      _distanceController.text = widget.initialDistanceKm!.toStringAsFixed(1);
+    }
+    unawaited(_loadLearning());
+    unawaited(_loadTrainedModel());
+    unawaited(_loadSaved());
+    unawaited(_loadActiveTrip());
+    final query = widget.initialDestination?.trim();
+    if (query != null && query.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _pickPlace(origin: false, initialQuery: query);
+      });
+    }
   }
 
   @override
   void dispose() {
-    _payloadController.dispose();
+    _distanceController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadHistory() async {
-    final rows = await TripPredictionService.getPredictionHistory(
-      vehicleId: widget.vehicle.vehicleId,
-      limit: 3,
-    );
-    if (mounted) setState(() => _history = rows);
+  // ── data ────────────────────────────────────────────────────────────────
+
+  /// km per 1 % from this vehicle's ODO + confirmed % pairs, and the power
+  /// of its recent charges (for "charge first" time).
+  Future<void> _loadLearning() async {
+    try {
+      final sessions = (await ShellyChargeLogService().loadTerminalSessions(
+        limit: 40,
+      )).where((s) => s.vehicleId == widget.vehicle.vehicleId).toList();
+      final learned = TripEnergyModel.learnKmPerPct(
+        TripChargeReading.fromSessions(sessions),
+        catalog: _catalogKmPerPct,
+      );
+      final power = ChargeEstimator.medianChargingPower([
+        for (final s in sessions.take(10))
+          if (s.averagePowerW != null) s.averagePowerW!,
+      ], minSamples: 1);
+      if (!mounted) return;
+      setState(() {
+        _personalKmPerPct = learned.kmPerPct;
+        _personalPairs = learned.pairs;
+        _historyPowerW = power;
+      });
+      _recompute();
+    } on Object {
+      // Offline or no history: the catalog value still works.
+    }
   }
+
+  /// The trained trip model, if the owner has trained one (Task 127).
+  Future<void> _loadTrainedModel() async {
+    ServerSmartChargerService? api;
+    try {
+      api = widget.learningService ?? ServerSmartChargerService();
+      final status = await api.learningStatus(widget.vehicle.vehicleId);
+      if (!mounted) return;
+      final charge = status?.charge.raw ?? const <String, dynamic>{};
+      final params = status?.tripParams;
+      setState(() {
+        _learnedWhPerPct = (charge['whPerPct'] as num?)?.toDouble();
+        _learnedPowerW = (charge['powerW'] as num?)?.toDouble();
+        if (params != null && params.source == TripKmSource.model) {
+          _trainedModel = params;
+        }
+      });
+      _recompute();
+    } on Object {
+      // Offline: the ODO / catalog value still works.
+    } finally {
+      if (widget.learningService == null) api?.close();
+    }
+  }
+
+  // ── trip recording (Task 127) ───────────────────────────────────────────
+
+  String get _activeKey => 'trip_active_v1_${widget.vehicle.vehicleId}';
+
+  Future<void> _loadActiveTrip() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final trip = _ActiveTrip.tryParse(prefs.getString(_activeKey));
+      if (mounted && trip != null) setState(() => _activeTrip = trip);
+    } on Object {
+      // No recording in progress.
+    }
+  }
+
+  Future<void> _storeActiveTrip(_ActiveTrip? trip) async {
+    setState(() => _activeTrip = trip);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (trip == null) {
+        await prefs.remove(_activeKey);
+      } else {
+        await prefs.setString(_activeKey, trip.encode());
+      }
+    } on Object {
+      // Kept in memory for this screen.
+    }
+  }
+
+  Future<void> _startTrip() async {
+    final plan = _plan;
+    final input = await BatteryReadingSheet.show(
+      context,
+      eyebrow: 'Lúc xuất phát',
+      title: '% pin và ODO trên đồng hồ',
+      initialSoc: _socKnown ? _soc : null,
+      currentOdoKm: widget.vehicle.currentOdo > 0
+          ? widget.vehicle.currentOdo.toDouble()
+          : null,
+      requireSoc: true,
+    );
+    if (input == null || !mounted || input.soc == null) return;
+    final trip = _ActiveTrip(
+      id: 'trip_${DateTime.now().microsecondsSinceEpoch}',
+      startedAt: DateTime.now(),
+      startSoc: input.soc!,
+      startOdoKm: input.odoKm,
+      plannedKm: plan?.distanceKm ?? _distanceKm,
+      predictedUsePct: plan?.usePct,
+      riders: _conditions.riders,
+      cargoKg: _conditions.cargoKg,
+      rain: _conditions.weather == TripWeather.rain,
+      to: _destinationName,
+    );
+    setState(() {
+      _soc = input.soc!;
+      _socKnown = true;
+    });
+    _recompute();
+    await _storeActiveTrip(trip);
+    unawaited(
+      _postReading(soc: input.soc, odoKm: input.odoKm, source: 'trip_start'),
+    );
+    AppPopup.showSuccess(
+      'Đang ghi chuyến đi',
+      detail: 'Khi tới nơi, bấm "Đã đến nơi" và nhập % pin trên đồng hồ.',
+    );
+  }
+
+  Future<void> _postReading({
+    double? soc,
+    double? odoKm,
+    required String source,
+  }) async {
+    ServerSmartChargerService? api;
+    try {
+      api = widget.learningService ?? ServerSmartChargerService();
+      await api.addBatteryReading(
+        widget.vehicle.vehicleId,
+        soc: soc,
+        odoKm: odoKm,
+        source: source,
+      );
+    } on Object {
+      // The ride sample below is what teaches the model.
+    } finally {
+      if (widget.learningService == null) api?.close();
+    }
+  }
+
+  Future<void> _finishTrip() async {
+    final trip = _activeTrip;
+    if (trip == null) return;
+    final input = await BatteryReadingSheet.show(
+      context,
+      eyebrow: 'Khi đến nơi',
+      title: '% pin và ODO trên đồng hồ',
+      currentOdoKm: trip.startOdoKm,
+      requireSoc: true,
+    );
+    if (input == null || !mounted || input.soc == null) return;
+    final odoKm = input.odoKm;
+    final startOdo = trip.startOdoKm;
+    final distance = odoKm != null && startOdo != null && odoKm > startOdo
+        ? odoKm - startOdo
+        : trip.plannedKm;
+    if (distance == null || distance <= 0) {
+      AppPopup.showInfo(
+        'Cần quãng đường',
+        detail:
+            'Nhập ODO lúc xuất phát và khi đến nơi để app biết đã đi bao xa.',
+      );
+      return;
+    }
+    final minutes = DateTime.now().difference(trip.startedAt).inSeconds / 60;
+    final used = trip.startSoc - input.soc!;
+    setState(() => _savingTrip = true);
+    ServerSmartChargerService? api;
+    try {
+      api = widget.learningService ?? ServerSmartChargerService();
+      final result = await api.addTripSamples(widget.vehicle.vehicleId, [
+        {
+          'clientId': trip.id,
+          'at': trip.startedAt.toUtc().toIso8601String(),
+          'distanceKm': double.parse(distance.toStringAsFixed(2)),
+          'startSoc': trip.startSoc,
+          'endSoc': input.soc,
+          if (minutes >= 1 && minutes <= 1440)
+            'durationMin': double.parse(minutes.toStringAsFixed(1)),
+          'payloadKg': TripEnergyModel.payloadKg(
+            TripConditions(riders: trip.riders, cargoKg: trip.cargoKg),
+          ),
+          'riders': trip.riders,
+          'cargoKg': trip.cargoKg,
+          'weather': trip.rain ? 'rain' : 'dry',
+          'predictedUsePct': ?trip.predictedUsePct,
+        },
+      ], source: 'trip');
+      await _postReading(soc: input.soc, odoKm: odoKm, source: 'trip_end');
+      await _storeActiveTrip(null);
+      if (!mounted) return;
+      setState(() {
+        _soc = input.soc!;
+        _socKnown = true;
+      });
+      _recompute();
+      final predicted = trip.predictedUsePct;
+      AppPopup.showSuccess(
+        result.added > 0
+            ? 'Đã lưu chuyến ${distance.toStringAsFixed(1)} km'
+            : 'Chuyến này đã được lưu trước đó',
+        detail:
+            'Thực tế dùng ${used.round()}%'
+            '${predicted == null ? '' : ' · dự đoán ~${predicted.round()}%'}. '
+            'AI sẽ học từ chuyến này khi bạn bấm Huấn luyện.',
+      );
+      await TrainingReadiness.check(result.status);
+    } catch (error) {
+      AppPopup.showError(
+        'Chưa lưu được chuyến đi',
+        detail: AppErrorFormatter.format(error),
+      );
+    } finally {
+      if (widget.learningService == null) api?.close();
+      if (mounted) setState(() => _savingTrip = false);
+    }
+  }
+
+  Widget _tripRecorder() {
+    final trip = _activeTrip;
+    if (trip == null) {
+      if (_plan == null) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        child: OutlinedButton.icon(
+          key: const ValueKey('trip-record-start'),
+          onPressed: _startTrip,
+          icon: const Icon(Icons.fiber_manual_record_outlined),
+          label: const Text('Bắt đầu đi & ghi chuyến để AI học'),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size.fromHeight(50),
+          ),
+        ),
+      );
+    }
+    final started = TimeOfDay.fromDateTime(trip.startedAt).format(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: LuxeGlass(
+        key: const ValueKey('trip-recording'),
+        radius: 22,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('ĐANG GHI CHUYẾN ĐI', style: LuxeText.eyebrow),
+            const SizedBox(height: 6),
+            Text(
+              'Xuất phát $started ở ${trip.startSoc.round()}%'
+              '${trip.to.isEmpty ? '' : ' · tới ${trip.to.split(',').first}'}',
+              style: LuxeText.item.copyWith(fontSize: 15),
+            ),
+            const SizedBox(height: 12),
+            if (_savingTrip)
+              const LinearProgressIndicator(minHeight: 2)
+            else
+              Wrap(
+                spacing: 10,
+                runSpacing: 8,
+                children: [
+                  FilledButton.icon(
+                    key: const ValueKey('trip-record-finish'),
+                    onPressed: _finishTrip,
+                    icon: const Icon(Icons.flag_rounded),
+                    label: const Text('Đã đến nơi'),
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(48, 48),
+                    ),
+                  ),
+                  TextButton(
+                    key: const ValueKey('trip-record-cancel'),
+                    onPressed: () => _storeActiveTrip(null),
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(48, 48),
+                    ),
+                    child: const Text('Hủy ghi'),
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String get _savedKey => 'trip_plans_v1_${widget.vehicle.vehicleId}';
+
+  Future<void> _loadSaved() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final rows = prefs.getStringList(_savedKey) ?? const [];
+      if (!mounted) return;
+      setState(
+        () => _saved = [for (final row in rows) ?_SavedPlan.tryParse(row)],
+      );
+    } on Object {
+      // A corrupt local list only hides "recent plans".
+    }
+  }
+
+  Future<void> _remember(TripPlan plan) async {
+    final item = _SavedPlan(
+      to: _destinationName.isEmpty
+          ? '${plan.distanceKm.toStringAsFixed(1)} km'
+          : _destinationName,
+      distanceKm: plan.distanceKm,
+      usePct: plan.usePct,
+      verdict: plan.verdict,
+      at: DateTime.now(),
+    );
+    final next = [
+      item,
+      ..._saved.where((s) => s.to != item.to),
+    ].take(5).toList();
+    setState(() => _saved = next);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_savedKey, [for (final s in next) s.encode()]);
+    } on Object {
+      // Recent plans are a convenience only.
+    }
+  }
+
+  // ── places & routes ─────────────────────────────────────────────────────
 
   Future<void> _locate() async {
     setState(() => _locating = true);
     try {
       if (!await Geolocator.isLocationServiceEnabled()) {
-        throw Exception('Hãy bật dịch vụ vị trí');
+        throw const _TripMessage('Hãy bật dịch vụ vị trí.');
       }
       var permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
@@ -76,7 +468,9 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
       }
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
-        throw Exception('Ứng dụng cần quyền vị trí để lập tuyến');
+        throw const _TripMessage(
+          'Không có quyền vị trí. Bạn vẫn có thể gõ điểm đi.',
+        );
       }
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
@@ -84,164 +478,162 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
           timeLimit: Duration(seconds: 15),
         ),
       );
-      final point = LatLng(position.latitude, position.longitude);
       if (!mounted) return;
       setState(() {
-        _origin = point;
+        _origin = LatLng(position.latitude, position.longitude);
+        _originName = 'Vị trí của tôi';
         _locating = false;
       });
-      _mapController.move(point, 15);
-    } catch (e) {
+      _mapController.move(_origin!, 14);
+      await _calculateRoute();
+    } on _TripMessage catch (message) {
       if (!mounted) return;
       setState(() => _locating = false);
-      _message(
-        'Chưa thể lấy vị trí. Kiểm tra quyền vị trí hoặc nhập điểm đi.',
-        error: true,
-      );
+      _notice(message.text);
+    } on Object {
+      if (!mounted) return;
+      setState(() => _locating = false);
+      _notice('Chưa lấy được vị trí. Hãy gõ điểm đi.');
     }
   }
 
-  Future<void> _selectDestination(PlaceSuggestion place) async {
+  Future<void> _pickPlace({required bool origin, String? initialQuery}) async {
+    final place = await showLuxeSheet<PlaceSuggestion>(
+      context,
+      builder: (_) => _PlaceSearchSheet(
+        title: origin ? 'Chọn điểm đi' : 'Chọn điểm đến',
+        initialQuery: initialQuery,
+      ),
+    );
+    if (place == null || !mounted) return;
     setState(() {
-      _destination = place.point;
-      _destinationName = place.name;
-      _prediction = null;
-      _routing = true;
+      if (origin) {
+        _origin = place.point;
+        _originName = place.name;
+      } else {
+        _destination = place.point;
+        _destinationName = place.name;
+      }
     });
     await _calculateRoute();
   }
 
   Future<void> _selectPoint(LatLng point) async {
-    await _selectDestination(
-      PlaceSuggestion(
-        name:
-            '${point.latitude.toStringAsFixed(5)}, ${point.longitude.toStringAsFixed(5)}',
-        point: point,
-      ),
-    );
+    setState(() {
+      _destination = point;
+      _destinationName =
+          '${point.latitude.toStringAsFixed(4)}, ${point.longitude.toStringAsFixed(4)}';
+    });
+    await _calculateRoute();
   }
 
   Future<void> _calculateRoute() async {
     final start = _origin;
     final end = _destination;
-    if (start == null || end == null) return;
+    if (start == null || end == null) {
+      if (end != null) _mapController.move(end, 13);
+      return;
+    }
+    setState(() => _routing = true);
     try {
-      final route = await TripRouteService.route(start, end);
+      final routes = await TripRouteService.routes(start, end);
       if (!mounted) return;
       setState(() {
-        _route = route;
+        _routes = routes;
+        _routeIndex = 0;
         _routing = false;
+        _distanceController.clear();
       });
       _mapController.fitCamera(
         CameraFit.bounds(
           bounds: LatLngBounds.fromPoints([start, end]),
-          padding: const EdgeInsets.fromLTRB(36, 96, 36, 54),
+          padding: const EdgeInsets.fromLTRB(36, 72, 36, 54),
         ),
       );
-    } catch (e) {
+      _recompute(remember: true);
+    } on Object {
       if (!mounted) return;
       setState(() => _routing = false);
-      _message(
-        'Chưa thể lập lộ trình. Kiểm tra điểm đi, điểm đến và kết nối mạng.',
-        error: true,
+      _notice(
+        'Chưa tính được tuyến đường. Kiểm tra mạng, hoặc nhập quãng đường bằng tay.',
       );
     }
   }
 
-  Future<void> _searchDestination() async {
-    final place = await showLuxeSheet<PlaceSuggestion>(
-      context,
-      builder: (_) => const _PlaceSearchSheet(),
-    );
-    if (place != null) await _selectDestination(place);
-  }
+  // ── model ───────────────────────────────────────────────────────────────
 
-  ({double avg, double max, double avgAcc, double maxAcc, double minAcc})
-  get _drivingValues {
-    switch (_drivingStyle) {
-      case 'eco':
-        return (avg: 25, max: 42, avgAcc: -0.05, maxAcc: 1.2, minAcc: -1.4);
-      case 'sport':
-        return (avg: 42, max: 70, avgAcc: 0.12, maxAcc: 3.5, minAcc: -4.0);
-      default:
-        return (avg: 32, max: 55, avgAcc: 0, maxAcc: 2.2, minAcc: -2.5);
-    }
-  }
-
-  Future<void> _predict() async {
-    final route = _route;
-    if (route == null) {
-      _message('Hãy chọn điểm đến trước', error: true);
+  void _recompute({bool remember = false}) {
+    final distance = _distanceKm;
+    final personal = _personalKmPerPct;
+    final catalog = _catalogKmPerPct;
+    final trained = _trainedModel;
+    final base = personal ?? catalog;
+    if (distance == null || (base == null && trained == null) || !_socKnown) {
+      if (_plan != null) setState(() => _plan = null);
       return;
     }
-    final payload = double.tryParse(_payloadController.text);
-    if (payload == null || payload < 20 || payload > 300) {
-      _message('Tải trọng phải từ 20 đến 300 kg', error: true);
-      return;
-    }
-    setState(() => _predicting = true);
-    try {
-      final driving = _drivingValues;
-      final weatherCode = _weather == 'rain'
-          ? 0.0
-          : _weather == 'cloudy'
-          ? 0.5
-          : 1.0;
-      final prediction = await TripPredictionService.predictTrip(
-        vehicleId: widget.vehicle.vehicleId,
-        from: 'Vị trí hiện tại',
-        to: _destinationName,
-        distance: route.distanceKm,
-        vehicle: widget.vehicle,
-        weather: weatherCode,
-        temperature: _temperature,
-        riderWeight: payload,
-        durationMin: route.durationMin,
-        averageSpeedKmh: driving.avg,
-        maxSpeedKmh: driving.max,
-        averageAcceleration: driving.avgAcc,
-        maxAcceleration: driving.maxAcc,
-        minAcceleration: driving.minAcc,
-        elevationChangeM: _elevation,
-      );
-      await SyncService().syncTripPredictionToWeb(prediction.id);
-      if (!mounted) return;
-      setState(() {
-        _prediction = prediction;
-        _predicting = false;
-      });
-      await _loadHistory();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _predicting = false);
-      _message(
-        'Chưa thể dự đoán lúc này. Kiểm tra kết nối rồi thử lại.',
-        error: true,
-      );
-    }
+    final alternatives = [
+      for (var i = 0; i < _routes.length; i++)
+        if (i != _routeIndex) _routes[i].distanceKm,
+    ];
+    final plan = TripEnergyModel.plan(
+      distanceKm: distance,
+      currentSoc: _soc,
+      kmPerPct: base,
+      source: personal != null ? TripKmSource.personal : TripKmSource.catalog,
+      model: trained,
+      conditions: _conditions,
+      durationMin: _route?.durationMin,
+      alternativeKm: alternatives,
+    );
+    setState(() => _plan = plan);
+    if (remember) unawaited(_remember(plan));
   }
 
-  void _message(String text, {bool error = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(
-              error ? Icons.error_outline_rounded : Icons.check_rounded,
-              size: 18,
-              color: error ? LuxeColors.champagne : LuxeColors.emerald,
-            ),
-            const SizedBox(width: 10),
-            Expanded(child: Text(text)),
-          ],
-        ),
-      ),
-    );
+  void _setConditions(TripConditions next) {
+    HapticFeedback.selectionClick();
+    setState(() => _conditions = next);
+    _recompute();
   }
+
+  Duration? _chargeTime(double target) {
+    final capacity = widget.vehicle.batteryCapacityWh;
+    final whPerPct = _learnedWhPerPct;
+    if ((capacity <= 0 && whPerPct == null) || target <= _soc) return null;
+    final learnedPower = _learnedPowerW;
+    final power = ChargeEstimator.pickPower(
+      recentSessionPowers: [?learnedPower ?? _historyPowerW],
+    );
+    return ChargeEstimator.estimate(
+      currentSoc: _soc,
+      targetSoc: target,
+      capacityWh: capacity > 0
+          ? capacity
+          : whPerPct! * 100 * ChargeEstimator.efficiency,
+      powerW: power.watts,
+      powerSource: power.source,
+      whPerPercent: whPerPct,
+    )?.duration;
+  }
+
+  void _chargeFirst(double target) {
+    ref.read(pendingChargeTargetSocProvider.notifier).state = (
+      vehicleId: widget.vehicle.vehicleId,
+      targetSoc: target,
+    );
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    ref.read(currentTabProvider.notifier).state = 1;
+  }
+
+  void _notice(String text) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  }
+
+  // ── UI ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    final center = _origin ?? const LatLng(10.8231, 106.6297);
+    final center = _destination ?? _origin ?? const LatLng(21.0285, 105.8542);
     return LuxeScaffold(
       appBar: Navigator.canPop(context) ? const LuxeAppBar() : null,
       body: SafeArea(
@@ -250,24 +642,18 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
           physics: const BouncingScrollPhysics(),
           slivers: [
             SliverToBoxAdapter(child: _header()),
+            SliverToBoxAdapter(child: LuxeReveal(index: 1, child: _places())),
             SliverToBoxAdapter(
-              child: LuxeReveal(index: 1, child: _map(center)),
+              child: LuxeReveal(index: 2, child: _map(center)),
             ),
+            if (_routes.length > 1) SliverToBoxAdapter(child: _routeChoices()),
+            SliverToBoxAdapter(child: _manualDistance()),
             SliverToBoxAdapter(
-              child: LuxeReveal(index: 2, child: _routeSummary()),
+              child: LuxeReveal(index: 3, child: _conditionsCard()),
             ),
-            SliverToBoxAdapter(
-              child: LuxeReveal(index: 3, child: _conditions()),
-            ),
-            SliverToBoxAdapter(child: LuxeReveal(index: 4, child: _action())),
-            if (_prediction != null)
-              SliverToBoxAdapter(
-                child: LuxeReveal(
-                  key: ValueKey(_prediction!.id),
-                  child: _result(_prediction!),
-                ),
-              ),
-            if (_history.isNotEmpty) SliverToBoxAdapter(child: _recent()),
+            SliverToBoxAdapter(child: _resultOrHint()),
+            SliverToBoxAdapter(child: _tripRecorder()),
+            if (_saved.isNotEmpty) SliverToBoxAdapter(child: _recent()),
             const SliverToBoxAdapter(child: SizedBox(height: 110)),
           ],
         ),
@@ -276,7 +662,7 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
   }
 
   Widget _header() => Padding(
-    padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
+    padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
     child: LuxeReveal(
       child: Row(
         children: [
@@ -284,26 +670,82 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('HÀNH TRÌNH', style: LuxeText.eyebrow),
+                Text('LỘ TRÌNH', style: LuxeText.eyebrow),
                 SizedBox(height: 6),
-                Text('Lập kế hoạch chuyến đi', style: LuxeText.title),
+                Text('Đi được tới đâu?', style: LuxeText.title),
                 SizedBox(height: 4),
                 Text(
-                  'Tuyến đường thật · dự đoán bằng AI',
+                  'Ước tính pin hao theo tuyến đường và điều kiện bạn chọn',
                   style: LuxeText.caption,
                 ),
               ],
             ),
           ),
           const SizedBox(width: 12),
-          _BatteryBadge(value: widget.vehicle.currentBattery),
+          _BatteryBadge(
+            value: _soc.round(),
+            known: _socKnown,
+            onTap: () => EditCurrentBatterySheet.show(
+              context,
+              initialPercent: _soc,
+              onSave: (value) {
+                setState(() {
+                  _soc = value;
+                  _socKnown = true;
+                });
+                _recompute();
+              },
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _places() => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 16),
+    child: LuxeGlass(
+      radius: 22,
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        children: [
+          _PlaceRow(
+            key: const ValueKey('trip-origin'),
+            icon: Icons.trip_origin_rounded,
+            label: 'Điểm đi',
+            value: _originName,
+            placeholder: 'Gõ điểm đi',
+            onTap: () => _pickPlace(origin: true),
+            trailing: IconButton(
+              tooltip: 'Vị trí của tôi',
+              onPressed: _locating ? null : _locate,
+              icon: _locating
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(
+                      Icons.my_location_rounded,
+                      color: LuxeColors.platinum,
+                    ),
+            ),
+          ),
+          const Divider(height: 1, indent: 52),
+          _PlaceRow(
+            key: const ValueKey('trip-destination'),
+            icon: Icons.flag_rounded,
+            label: 'Điểm đến',
+            value: _destinationName,
+            placeholder: 'Bạn muốn đi đâu?',
+            onTap: () => _pickPlace(origin: false),
+          ),
         ],
       ),
     ),
   );
 
   Widget _map(LatLng center) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 16),
+    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
     child: DecoratedBox(
       position: DecorationPosition.foreground,
       decoration: BoxDecoration(
@@ -313,14 +755,14 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(26),
         child: SizedBox(
-          height: 320,
+          height: 260,
           child: Stack(
             children: [
               FlutterMap(
                 mapController: _mapController,
                 options: MapOptions(
                   initialCenter: center,
-                  initialZoom: 14,
+                  initialZoom: 12,
                   backgroundColor: LuxeColors.surface,
                   onLongPress: (_, point) {
                     HapticFeedback.mediumImpact();
@@ -331,8 +773,7 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
                   TileLayer(
                     urlTemplate:
                         'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'com.vinfast.vinfast_battery',
-                    // Night tiles so the map sits inside the LUXE palette.
+                    userAgentPackageName: 'com.bes.vinbatery',
                     tileBuilder: darkModeTileBuilder,
                   ),
                   if (_route != null)
@@ -340,13 +781,13 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
                       polylines: [
                         Polyline(
                           points: _route!.geometry,
-                          strokeWidth: 12,
-                          color: LuxeColors.emerald.withValues(alpha: 0.18),
+                          strokeWidth: 10,
+                          color: LuxeColors.platinum.withValues(alpha: 0.18),
                         ),
                         Polyline(
                           points: _route!.geometry,
                           strokeWidth: 4,
-                          color: LuxeColors.emerald,
+                          color: LuxeColors.platinumHi,
                           borderStrokeWidth: 1,
                           borderColor: const Color(0x66000000),
                         ),
@@ -372,95 +813,6 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
                   ),
                 ],
               ),
-              // Soft vignette so map edges melt into the glass frame.
-              const IgnorePointer(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: RadialGradient(
-                      radius: 1.1,
-                      colors: [Color(0x00000000), Color(0x66050506)],
-                      stops: [0.65, 1.0],
-                    ),
-                  ),
-                  child: SizedBox.expand(),
-                ),
-              ),
-              Positioned(
-                left: 12,
-                right: 12,
-                top: 12,
-                child: Material(
-                  type: MaterialType.transparency,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(99),
-                    onTap: _searchDestination,
-                    child: Ink(
-                      decoration: BoxDecoration(
-                        color: const Color(0xEB121315),
-                        borderRadius: BorderRadius.circular(99),
-                        border: Border.all(color: LuxeColors.hairlineStrong),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 13,
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.search_rounded,
-                            color: LuxeColors.emerald,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              _destinationName.isEmpty
-                                  ? 'Bạn muốn đi đâu?'
-                                  : _destinationName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: _destinationName.isEmpty
-                                    ? LuxeColors.muted
-                                    : LuxeColors.text,
-                                fontWeight: FontWeight.w500,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
-                          const Icon(
-                            Icons.chevron_right_rounded,
-                            color: LuxeColors.dim,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              Positioned(
-                right: 12,
-                bottom: 12,
-                child: Material(
-                  color: const Color(0xEB121315),
-                  shape: const CircleBorder(
-                    side: BorderSide(color: LuxeColors.hairlineStrong),
-                  ),
-                  child: IconButton(
-                    tooltip: 'Vị trí của tôi',
-                    onPressed: _locating ? null : _locate,
-                    icon: _locating
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(
-                            Icons.my_location_rounded,
-                            color: LuxeColors.emerald,
-                          ),
-                  ),
-                ),
-              ),
               if (_routing)
                 const Positioned.fill(
                   child: ColoredBox(
@@ -468,7 +820,24 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
                     child: Center(child: CircularProgressIndicator()),
                   ),
                 ),
-              const Positioned(left: 12, bottom: 16, child: _MapHint()),
+              const Positioned(left: 12, top: 12, child: _MapHint()),
+              // Required credit for OpenStreetMap data and tiles.
+              Positioned(
+                right: 8,
+                bottom: 6,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  color: const Color(0xCC121315),
+                  child: const Text(
+                    '© OpenStreetMap',
+                    textScaler: TextScaler.noScaling,
+                    style: TextStyle(color: LuxeColors.muted, fontSize: 10),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -476,277 +845,186 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
     ),
   );
 
-  Widget _routeSummary() {
-    final route = _route;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-      child: Row(
-        children: [
-          Expanded(
-            child: _Metric(
-              label: 'Quãng đường',
-              icon: Icons.straighten_rounded,
-              value: route == null
-                  ? '—'
-                  : '${route.distanceKm.toStringAsFixed(1)} km',
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _Metric(
-              label: 'Thời gian',
-              icon: Icons.schedule_rounded,
-              value: route == null ? '—' : '${route.durationMin.round()} phút',
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _Metric(
-              label: 'Pin hiện tại',
-              icon: Icons.battery_charging_full_rounded,
-              value: '${widget.vehicle.currentBattery}%',
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _conditions() => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-    child: LuxeGlass(
-      radius: 22,
-      padding: const EdgeInsets.fromLTRB(14, 4, 10, 4),
-      child: Column(
-        children: [
-          InkWell(
-            onTap: () => setState(() => _showConditions = !_showConditions),
-            borderRadius: BorderRadius.circular(16),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 56),
-              child: Row(
-                children: [
-                  const LuxeMedallion(icon: Icons.tune_rounded, size: 36),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text(
-                      'Điều kiện chuyến đi',
-                      style: TextStyle(
-                        color: LuxeColors.text,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 15,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    '${_temperature.round()}° · ${_payloadController.text} kg',
-                    style: LuxeText.caption.copyWith(fontSize: 12),
-                  ),
-                  AnimatedRotation(
-                    turns: _showConditions ? .5 : 0,
-                    duration: luxeDuration(context, 260),
-                    curve: LuxeMotion.enter,
-                    child: const Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      color: LuxeColors.platinumMid,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          AnimatedSize(
-            duration: luxeDuration(context, 320),
-            curve: LuxeMotion.enter,
-            alignment: Alignment.topCenter,
-            child: _showConditions
-                ? _conditionBody()
-                : const SizedBox(width: double.infinity),
-          ),
-        ],
-      ),
-    ),
-  );
-
-  Widget _conditionBody() => Padding(
-    padding: const EdgeInsets.fromLTRB(2, 6, 4, 14),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+  Widget _routeChoices() => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+    child: Wrap(
+      spacing: 8,
+      runSpacing: 8,
       children: [
-        const _SectionLabel('Phong cách lái'),
-        const SizedBox(height: 8),
-        LuxeSegmented<String>(
-          segments: const [
-            ('eco', 'Êm'),
-            ('normal', 'Thường'),
-            ('sport', 'Nhanh'),
-          ],
-          selected: _drivingStyle,
-          onChanged: (v) => setState(() => _drivingStyle = v),
-        ),
-        const SizedBox(height: 16),
-        const _SectionLabel('Thời tiết'),
-        const SizedBox(height: 8),
-        LuxeSegmented<String>(
-          segments: const [
-            ('sunny', 'Nắng'),
-            ('cloudy', 'Mây'),
-            ('rain', 'Mưa'),
-          ],
-          selected: _weather,
-          onChanged: (v) => setState(() => _weather = v),
-        ),
-        const SizedBox(height: 12),
-        _SliderLine(
-          icon: Icons.thermostat_rounded,
-          label: 'Nhiệt độ',
-          value: _temperature,
-          min: 0,
-          max: 45,
-          suffix: '°C',
-          onChanged: (v) => setState(() => _temperature = v),
-        ),
-        _SliderLine(
-          icon: Icons.terrain_rounded,
-          label: 'Chênh cao',
-          value: _elevation,
-          min: -100,
-          max: 300,
-          suffix: ' m',
-          onChanged: (v) => setState(() => _elevation = v),
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: _payloadController,
-          keyboardType: TextInputType.number,
-          onChanged: (_) => setState(() {}),
-          style: const TextStyle(color: LuxeColors.text),
-          decoration: const InputDecoration(
-            labelText: 'Tổng tải trọng (người + hành lý)',
-            suffixText: 'kg',
-            prefixIcon: Icon(Icons.scale_rounded, size: 20),
+        for (var i = 0; i < _routes.length; i++)
+          ChoiceChip(
+            key: ValueKey('trip-route-$i'),
+            materialTapTargetSize: MaterialTapTargetSize.padded,
+            selected: i == _routeIndex,
+            label: Text(
+              '${i == 0 ? 'Nhanh nhất' : 'Tuyến ${i + 1}'} · '
+              '${_routes[i].distanceKm.toStringAsFixed(1)} km · '
+              '${_routes[i].durationMin.round()} phút',
+            ),
+            onSelected: (_) {
+              setState(() => _routeIndex = i);
+              _recompute();
+            },
           ),
-        ),
       ],
     ),
   );
 
-  Widget _action() => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
-    child: FilledButton.icon(
-      onPressed: _route == null || _predicting ? null : _predict,
-      style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
-      icon: _predicting
-          ? const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Color(0xFF0B0C0E),
+  Widget _manualDistance() => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+    child: _route != null
+        ? Row(
+            children: [
+              Expanded(
+                child: _Metric(
+                  label: 'Quãng đường',
+                  icon: Icons.straighten_rounded,
+                  value: '${_route!.distanceKm.toStringAsFixed(1)} km',
+                ),
               ),
-            )
-          : const Icon(Icons.auto_awesome_rounded),
-      label: Text(
-        _predicting ? 'AI đang tính toán...' : 'Dự đoán pin tiêu thụ',
+              const SizedBox(width: 8),
+              Expanded(
+                child: _Metric(
+                  label: 'Thời gian (ô tô)',
+                  icon: Icons.schedule_rounded,
+                  value: '${_route!.durationMin.round()} phút',
+                ),
+              ),
+            ],
+          )
+        : TextField(
+            key: const ValueKey('trip-manual-km'),
+            controller: _distanceController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            onChanged: (_) => _recompute(),
+            style: const TextStyle(color: LuxeColors.text),
+            decoration: const InputDecoration(
+              labelText: 'Hoặc nhập quãng đường',
+              suffixText: 'km',
+              prefixIcon: Icon(Icons.straighten_rounded, size: 20),
+            ),
+          ),
+  );
+
+  Widget _conditionsCard() => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+    child: LuxeGlass(
+      radius: 22,
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _SectionLabel('Tốc độ'),
+          const SizedBox(height: 8),
+          LuxeSegmented<TripSpeed>(
+            segments: const [
+              (TripSpeed.slow, 'Chậm'),
+              (TripSpeed.normal, 'Vừa'),
+              (TripSpeed.fast, 'Nhanh'),
+            ],
+            selected: _conditions.speed == TripSpeed.auto
+                ? TripSpeed.normal
+                : _conditions.speed,
+            onChanged: (v) => _setConditions(_conditions.copyWith(speed: v)),
+          ),
+          const SizedBox(height: 14),
+          const _SectionLabel('Thời tiết'),
+          const SizedBox(height: 8),
+          LuxeSegmented<TripWeather>(
+            segments: const [
+              (TripWeather.dry, 'Khô ráo'),
+              (TripWeather.rain, 'Mưa'),
+              (TripWeather.hot, 'Nóng'),
+              (TripWeather.cold, 'Lạnh'),
+            ],
+            selected: _conditions.weather,
+            onChanged: (v) => _setConditions(_conditions.copyWith(weather: v)),
+          ),
+          const SizedBox(height: 14),
+          const _SectionLabel('Người & hàng'),
+          const SizedBox(height: 8),
+          LuxeSegmented<int>(
+            segments: const [(1, '1 người'), (2, '2 người')],
+            selected: _conditions.riders,
+            onChanged: (v) => _setConditions(_conditions.copyWith(riders: v)),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Hàng mang theo: ${_conditions.cargoKg.round()} kg',
+            style: LuxeText.caption,
+          ),
+          Slider(
+            value: _conditions.cargoKg,
+            max: 40,
+            divisions: 8,
+            label: '${_conditions.cargoKg.round()} kg',
+            semanticFormatterCallback: (v) => '${v.round()} ki-lô-gam',
+            onChanged: (v) => _setConditions(_conditions.copyWith(cargoKg: v)),
+          ),
+          _ToggleRow(
+            title: 'Đường dốc nhiều',
+            value: _conditions.hilly,
+            onChanged: (v) => _setConditions(_conditions.copyWith(hilly: v)),
+          ),
+          _ToggleRow(
+            title: 'Đi rồi về (khứ hồi)',
+            value: _conditions.roundTrip,
+            onChanged: (v) =>
+                _setConditions(_conditions.copyWith(roundTrip: v)),
+          ),
+        ],
       ),
     ),
   );
 
-  Widget _result(TripPredictionModel p) {
-    final color = p.isSafe ? LuxeColors.emerald : LuxeColors.champagne;
+  Widget _resultOrHint() {
+    final plan = _plan;
+    if (plan != null) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+        child: LuxeReveal(
+          key: ValueKey(
+            '${plan.distanceKm}-${plan.usePct.toStringAsFixed(2)}-${_soc.round()}',
+          ),
+          child: _TripResultCard(
+            plan: plan,
+            startSoc: _soc,
+            personalPairs: _personalPairs,
+            chargeTime: _chargeTime,
+            onChargeFirst: _chargeFirst,
+            // The owner's rides cost least around 15-21 km/h average.
+            onEco: () =>
+                _setConditions(_conditions.copyWith(speed: TripSpeed.normal)),
+            onShorterRoute: (km) {
+              final index = _routes.indexWhere(
+                (r) => (r.distanceKm - km).abs() < 0.06,
+              );
+              if (index >= 0) {
+                setState(() => _routeIndex = index);
+                _recompute();
+              }
+            },
+          ),
+        ),
+      );
+    }
+    final String message;
+    if (!_socKnown) {
+      message = 'Chạm vào vòng pin ở trên để nhập mức pin hiện tại của xe.';
+    } else if (_catalogKmPerPct == null && _personalKmPerPct == null) {
+      message =
+          'Xe chưa có định mức km cho mỗi 1 % pin. Hãy chọn đúng dòng xe trong Xe của tôi.';
+    } else {
+      message =
+          'Chọn điểm đi và điểm đến, hoặc nhập quãng đường, để xem pin có đủ không.';
+    }
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
-      child: LuxeGlass(
-        selected: p.isSafe,
-        radius: 24,
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'AI ƯỚC TÍNH HAO HỤT',
-                        style: LuxeText.eyebrow,
-                      ),
-                      const SizedBox(height: 6),
-                      LuxeCountUp(
-                        value: p.consumption.isFinite ? p.consumption : 0,
-                        decimals: 1,
-                        suffix: '%',
-                        style: TextStyle(
-                          color: color,
-                          fontSize: 44,
-                          height: 1,
-                          fontWeight: FontWeight.w200,
-                          letterSpacing: -1.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      'Còn lại',
-                      style: LuxeText.label.copyWith(fontSize: 11),
-                    ),
-                    Text(
-                      '${p.endBattery.toStringAsFixed(0)}%',
-                      style: const TextStyle(
-                        color: LuxeColors.text,
-                        fontSize: 24,
-                        fontWeight: FontWeight.w300,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            _TripEnergyBar(
-              start: widget.vehicle.currentBattery.toDouble(),
-              end: p.endBattery,
-              color: color,
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Icon(
-                  p.isSafe
-                      ? Icons.check_circle_rounded
-                      : Icons.warning_amber_rounded,
-                  color: color,
-                  size: 18,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    p.safetyText,
-                    style: TextStyle(
-                      color: color,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13.5,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            if (p.reasoningText?.isNotEmpty == true) ...[
-              const SizedBox(height: 8),
-              Text(
-                p.reasoningText!,
-                style: LuxeText.caption.copyWith(fontSize: 12.5),
-              ),
-            ],
-          ],
-        ),
+      child: LuxeNotice(
+        key: const ValueKey('trip-hint'),
+        icon: Icons.route_rounded,
+        color: LuxeColors.steel,
+        message: message,
       ),
     );
   }
@@ -756,18 +1034,15 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const LuxeSectionLabel('Dự đoán gần đây'),
+        const LuxeSectionLabel('Kế hoạch gần đây'),
         LuxeSettingsGroup(
           children: [
-            for (final item in _history)
+            for (final item in _saved)
               Padding(
                 padding: const EdgeInsets.fromLTRB(14, 12, 16, 12),
                 child: Row(
                   children: [
-                    const LuxeMedallion(
-                      icon: Icons.route_rounded,
-                      accent: LuxeColors.emerald,
-                    ),
+                    const LuxeMedallion(icon: Icons.route_rounded),
                     const SizedBox(width: 16),
                     Expanded(
                       child: Column(
@@ -777,24 +1052,21 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
                             item.to,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: LuxeColors.text,
-                              fontWeight: FontWeight.w500,
-                              fontSize: 14,
-                            ),
+                            style: LuxeText.item.copyWith(fontSize: 14),
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            '${item.distance.toStringAsFixed(1)} km · ${item.duration} phút',
+                            '${item.distanceKm.toStringAsFixed(1)} km · '
+                            '${_verdictShort(item.verdict)}',
                             style: LuxeText.caption.copyWith(fontSize: 12),
                           ),
                         ],
                       ),
                     ),
                     Text(
-                      '-${item.consumption.toStringAsFixed(1)}%',
+                      '~${item.usePct.round()}%',
                       style: const TextStyle(
-                        color: LuxeColors.emerald,
+                        color: LuxeColors.platinum,
                         fontWeight: FontWeight.w600,
                         fontFeatures: [FontFeature.tabularFigures()],
                       ),
@@ -809,7 +1081,429 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
   );
 }
 
-/// Battery journey bar: the full track, the share the trip will use (glowing
+String _verdictShort(TripVerdict verdict) => switch (verdict) {
+  TripVerdict.comfortable => 'đủ pin',
+  TripVerdict.tight => 'sát',
+  TripVerdict.insufficient => 'không đủ',
+};
+
+Color _verdictColor(TripVerdict verdict) => switch (verdict) {
+  TripVerdict.comfortable => LuxeColors.steel,
+  TripVerdict.tight => LuxeColors.champagne,
+  TripVerdict.insufficient => LuxeColors.danger,
+};
+
+class _TripResultCard extends StatelessWidget {
+  const _TripResultCard({
+    required this.plan,
+    required this.startSoc,
+    required this.personalPairs,
+    required this.chargeTime,
+    required this.onChargeFirst,
+    required this.onEco,
+    required this.onShorterRoute,
+  });
+
+  final TripPlan plan;
+  final double startSoc;
+  final int personalPairs;
+  final Duration? Function(double target) chargeTime;
+  final ValueChanged<double> onChargeFirst;
+  final VoidCallback onEco;
+  final ValueChanged<double> onShorterRoute;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _verdictColor(plan.verdict);
+    final arrival = plan.arrivalSoc.clamp(0, 100).toDouble();
+    return LuxeGlass(
+      key: const ValueKey('trip-result'),
+      radius: 24,
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(
+                plan.verdict == TripVerdict.comfortable
+                    ? Icons.check_circle_outline_rounded
+                    : Icons.warning_amber_rounded,
+                color: color,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  plan.verdictLabel,
+                  key: const ValueKey('trip-verdict'),
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 18,
+            runSpacing: 10,
+            crossAxisAlignment: WrapCrossAlignment.end,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('HAO KHOẢNG', style: LuxeText.eyebrow),
+                  const SizedBox(height: 4),
+                  LuxeMetalText(
+                    '${plan.usePct.round()}%',
+                    style: const TextStyle(
+                      fontSize: 40,
+                      height: 1,
+                      fontWeight: FontWeight.w200,
+                    ),
+                  ),
+                  Text(
+                    '${plan.useLowPct.round()}–${plan.useHighPct.round()}% '
+                    'tùy đường',
+                    style: LuxeText.caption.copyWith(fontSize: 12),
+                  ),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    plan.arrivalSoc < 0
+                        ? 'HẾT PIN TRƯỚC KHI TỚI'
+                        : 'KHI TỚI NƠI',
+                    style: LuxeText.eyebrow,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    plan.arrivalSoc < 0 ? '0%' : '~${arrival.round()}%',
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w300,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _TripEnergyBar(start: startSoc, end: arrival, color: color),
+          const SizedBox(height: 12),
+          Text(switch (plan.source) {
+            TripKmSource.model =>
+              // Say why this differs from the Overview average (QA 129:
+              // 1.36 here vs 1.21 there read as two models).
+              'Mô hình đã huấn luyện từ ${plan.modelSamples} chuyến của bạn. '
+                  'Ở điều kiện này (~${plan.avgSpeedKmh.round()} km/h, '
+                  '${plan.payloadKg.round()} kg): '
+                  '~${(plan.kmPerPct / (TripEnergyModel.refToMean * plan.factor)).toStringAsFixed(2)} km cho 1%; '
+                  'trung bình các chuyến của bạn: '
+                  '${plan.kmPerPct.toStringAsFixed(2)} km cho 1% (số ở Tổng quan).',
+            TripKmSource.personal =>
+              'Dựa trên $personalPairs lần sạc có ODO của xe bạn '
+                  '(~${plan.kmPerPct.toStringAsFixed(2)} km cho 1 %).',
+            TripKmSource.catalog =>
+              'Theo định mức dòng xe (~${plan.kmPerPct.toStringAsFixed(2)} km cho 1 %). '
+                  'Ghi chuyến đi hoặc nhập ODO để AI học theo xe của bạn.',
+          }, style: LuxeText.caption.copyWith(fontSize: 12)),
+          if (plan.suggestions.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            const Divider(height: 1),
+            const SizedBox(height: 10),
+            const Text('GỢI Ý', style: LuxeText.eyebrow),
+            for (final suggestion in plan.suggestions)
+              _SuggestionRow(
+                suggestion: suggestion,
+                chargeTime: chargeTime,
+                onChargeFirst: onChargeFirst,
+                onEco: onEco,
+                onShorterRoute: onShorterRoute,
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SuggestionRow extends StatelessWidget {
+  const _SuggestionRow({
+    required this.suggestion,
+    required this.chargeTime,
+    required this.onChargeFirst,
+    required this.onEco,
+    required this.onShorterRoute,
+  });
+
+  final TripSuggestion suggestion;
+  final Duration? Function(double target) chargeTime;
+  final ValueChanged<double> onChargeFirst;
+  final VoidCallback onEco;
+  final ValueChanged<double> onShorterRoute;
+
+  @override
+  Widget build(BuildContext context) {
+    final (
+      IconData icon,
+      String text,
+      String? action,
+      VoidCallback? onTap,
+    ) = switch (suggestion.kind) {
+      TripSuggestionKind.chargeFirst => () {
+        final target = suggestion.targetSoc!;
+        final time = chargeTime(target);
+        return (
+          Icons.bolt_rounded,
+          'Sạc lên ${target.round()}% trước khi đi'
+              '${time == null ? '' : ' (~${formatChargeDuration(time)})'}.',
+          'Sạc đến ${target.round()}%',
+          () => onChargeFirst(target),
+        );
+      }(),
+      TripSuggestionKind.chargeOnTheWay => (
+        Icons.ev_station_rounded,
+        'Quãng đường vượt quá một lần sạc đầy: cần sạc giữa đường khoảng '
+            '${suggestion.stops} lần.',
+        null,
+        null,
+      ),
+      TripSuggestionKind.chargeAtDestination => (
+        Icons.home_work_outlined,
+        'Đủ pin để tới nơi; hãy sạc ở điểm đến trước khi quay về.',
+        null,
+        null,
+      ),
+      TripSuggestionKind.rideEco => (
+        Icons.eco_outlined,
+        'Chạy chậm lại tiết kiệm khoảng ${suggestion.savedPct!.round()}% pin.',
+        'Áp dụng',
+        onEco,
+      ),
+      TripSuggestionKind.shorterRoute => (
+        Icons.alt_route_rounded,
+        'Tuyến ${suggestion.distanceKm!.toStringAsFixed(1)} km ngắn hơn, '
+            'tiết kiệm ~${suggestion.savedPct!.round()}% pin.',
+        'Chọn tuyến này',
+        () => onShorterRoute(suggestion.distanceKm!),
+      ),
+    };
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, size: 18, color: LuxeColors.platinumMid),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  text,
+                  style: const TextStyle(
+                    color: LuxeColors.text,
+                    fontSize: 13.5,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (action != null && onTap != null)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                key: ValueKey('trip-suggestion-${suggestion.wire}'),
+                style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+                onPressed: onTap,
+                child: Text(action),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TripMessage implements Exception {
+  const _TripMessage(this.text);
+  final String text;
+}
+
+/// A ride being recorded from the planner (Task 127), kept on the phone
+/// until the owner reads the dashboard at the destination.
+class _ActiveTrip {
+  const _ActiveTrip({
+    required this.id,
+    required this.startedAt,
+    required this.startSoc,
+    this.startOdoKm,
+    this.plannedKm,
+    this.predictedUsePct,
+    this.riders = 1,
+    this.cargoKg = 0,
+    this.rain = false,
+    this.to = '',
+  });
+
+  final String id;
+  final DateTime startedAt;
+  final double startSoc;
+  final double? startOdoKm;
+  final double? plannedKm;
+  final double? predictedUsePct;
+  final int riders;
+  final double cargoKg;
+  final bool rain;
+  final String to;
+
+  String encode() => jsonEncode({
+    'id': id,
+    'startedAt': startedAt.toIso8601String(),
+    'startSoc': startSoc,
+    'startOdoKm': startOdoKm,
+    'plannedKm': plannedKm,
+    'predictedUsePct': predictedUsePct,
+    'riders': riders,
+    'cargoKg': cargoKg,
+    'rain': rain,
+    'to': to,
+  });
+
+  static _ActiveTrip? tryParse(String? raw) {
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final data = jsonDecode(raw) as Map<String, dynamic>;
+      final started = DateTime.parse(data['startedAt'] as String);
+      // A recording older than a day was forgotten.
+      if (DateTime.now().difference(started) > const Duration(days: 1)) {
+        return null;
+      }
+      double? number(Object? value) => (value as num?)?.toDouble();
+      return _ActiveTrip(
+        id: data['id'] as String,
+        startedAt: started,
+        startSoc: number(data['startSoc'])!,
+        startOdoKm: number(data['startOdoKm']),
+        plannedKm: number(data['plannedKm']),
+        predictedUsePct: number(data['predictedUsePct']),
+        riders: (data['riders'] as num?)?.toInt() ?? 1,
+        cargoKg: number(data['cargoKg']) ?? 0,
+        rain: data['rain'] == true,
+        to: data['to'] as String? ?? '',
+      );
+    } on Object {
+      return null;
+    }
+  }
+}
+
+class _SavedPlan {
+  const _SavedPlan({
+    required this.to,
+    required this.distanceKm,
+    required this.usePct,
+    required this.verdict,
+    required this.at,
+  });
+
+  final String to;
+  final double distanceKm;
+  final double usePct;
+  final TripVerdict verdict;
+  final DateTime at;
+
+  String encode() => jsonEncode({
+    'to': to,
+    'km': distanceKm,
+    'use': usePct,
+    'verdict': verdict.name,
+    'at': at.toIso8601String(),
+  });
+
+  static _SavedPlan? tryParse(String raw) {
+    try {
+      final data = jsonDecode(raw) as Map<String, dynamic>;
+      return _SavedPlan(
+        to: data['to'] as String,
+        distanceKm: (data['km'] as num).toDouble(),
+        usePct: (data['use'] as num).toDouble(),
+        verdict: TripVerdict.values.byName(data['verdict'] as String),
+        at: DateTime.parse(data['at'] as String),
+      );
+    } on Object {
+      return null;
+    }
+  }
+}
+
+class _PlaceRow extends StatelessWidget {
+  const _PlaceRow({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.placeholder,
+    required this.onTap,
+    this.trailing,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final String placeholder;
+  final VoidCallback onTap;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    onTap: onTap,
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 56),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 6, 6, 6),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: LuxeColors.platinumMid),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: LuxeText.label.copyWith(fontSize: 11)),
+                  const SizedBox(height: 2),
+                  Text(
+                    value.isEmpty ? placeholder : value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: value.isEmpty ? LuxeColors.muted : LuxeColors.text,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            ?trailing,
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// Battery journey bar: the full track, the share the trip will use (hatched
 /// band from start to arrival) and the arrival level; fills once.
 class _TripEnergyBar extends StatelessWidget {
   const _TripEnergyBar({
@@ -849,8 +1543,9 @@ class _TripEnergyBar extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            spacing: 12,
             children: [
               Text(
                 'Tới nơi ${end.toStringAsFixed(0)}%',
@@ -890,7 +1585,6 @@ class _EnergyBarPainter extends CustomPainter {
       const Radius.circular(4),
     );
     canvas.drawRRect(track, Paint()..color = const Color(0x1AFFFFFF));
-    // Remaining at arrival.
     final arrive = size.width * end * t;
     if (arrive > 0) {
       canvas.drawRRect(
@@ -901,7 +1595,6 @@ class _EnergyBarPainter extends CustomPainter {
           ).createShader(Rect.fromLTWH(0, y, arrive, h)),
       );
     }
-    // Energy the trip uses: a hatched champagne band.
     final from = size.width * end;
     final to = size.width * (end + (start - end) * t);
     if (to > from) {
@@ -920,15 +1613,7 @@ class _EnergyBarPainter extends CustomPainter {
       }
       canvas.restore();
     }
-    // Arrival marker.
     final cx = size.width * end * t;
-    canvas.drawCircle(
-      Offset(cx, size.height / 2),
-      7,
-      Paint()
-        ..color = color.withValues(alpha: 0.3)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
-    );
     canvas.drawCircle(
       Offset(cx, size.height / 2),
       4,
@@ -942,16 +1627,28 @@ class _EnergyBarPainter extends CustomPainter {
 }
 
 class _PlaceSearchSheet extends StatefulWidget {
-  const _PlaceSearchSheet();
+  const _PlaceSearchSheet({required this.title, this.initialQuery});
+  final String title;
+  final String? initialQuery;
   @override
   State<_PlaceSearchSheet> createState() => _PlaceSearchSheetState();
 }
 
 class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
-  final _controller = TextEditingController();
+  late final _controller = TextEditingController(text: widget.initialQuery);
   List<PlaceSuggestion> _results = const [];
   bool _loading = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    if ((widget.initialQuery ?? '').trim().length >= 3) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _search();
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -971,9 +1668,10 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
         setState(() {
           _results = rows;
           _loading = false;
+          if (rows.isEmpty) _error = 'Không thấy địa điểm phù hợp.';
         });
       }
-    } catch (e) {
+    } on Object {
       if (mounted) {
         setState(() {
           _loading = false;
@@ -997,11 +1695,11 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const LuxeSheetHeader(eyebrow: 'Hành trình', title: 'Chọn điểm đến'),
+          LuxeSheetHeader(eyebrow: 'Hành trình', title: widget.title),
           const SizedBox(height: 14),
           TextField(
             controller: _controller,
-            autofocus: true,
+            autofocus: widget.initialQuery == null,
             onSubmitted: (_) => _search(),
             style: const TextStyle(color: LuxeColors.text),
             decoration: InputDecoration(
@@ -1012,7 +1710,7 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
                 onPressed: _search,
                 icon: const Icon(
                   Icons.arrow_forward_rounded,
-                  color: LuxeColors.emerald,
+                  color: LuxeColors.platinum,
                 ),
               ),
             ),
@@ -1025,61 +1723,60 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
               message: _error!,
               icon: Icons.error_outline_rounded,
               color: LuxeColors.champagne,
-            )
-          else
-            Expanded(
-              child: ListView.builder(
-                itemCount: _results.length,
-                itemBuilder: (_, i) => LuxeReveal(
-                  index: i,
-                  child: Material(
-                    type: MaterialType.transparency,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(16),
-                      onTap: () => Navigator.pop(context, _results[i]),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 10,
-                          horizontal: 4,
-                        ),
-                        child: Row(
-                          children: [
-                            const LuxeMedallion(
-                              icon: Icons.location_on_outlined,
-                              accent: LuxeColors.emerald,
-                              size: 38,
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Text(
-                                _results[i].name,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: LuxeColors.text,
-                                  fontSize: 13.5,
-                                  height: 1.35,
+            ),
+          Expanded(
+            child: _results.isEmpty && !_loading && _error == null
+                ? const Center(
+                    child: Text(
+                      'Tìm địa điểm, hoặc nhấn giữ trên bản đồ để chọn điểm đến.',
+                      textAlign: TextAlign.center,
+                      style: LuxeText.body,
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: _results.length,
+                    itemBuilder: (_, i) => Material(
+                      type: MaterialType.transparency,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(16),
+                        onTap: () => Navigator.pop(context, _results[i]),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 10,
+                            horizontal: 4,
+                          ),
+                          child: Row(
+                            children: [
+                              const LuxeMedallion(
+                                icon: Icons.location_on_outlined,
+                                size: 38,
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Text(
+                                  _results[i].name,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: LuxeColors.text,
+                                    fontSize: 13.5,
+                                    height: 1.35,
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ),
-            ),
-          if (_results.isEmpty && !_loading && _error == null)
-            const Expanded(
-              child: Center(
-                child: Text(
-                  'Tìm địa điểm hoặc nhấn giữ trên bản đồ để chọn nhanh.',
-                  textAlign: TextAlign.center,
-                  style: LuxeText.body,
-                ),
-              ),
-            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Dữ liệu địa điểm © OpenStreetMap contributors',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: LuxeColors.dim, fontSize: 11),
+          ),
         ],
       ),
     ),
@@ -1087,26 +1784,44 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
 }
 
 class _BatteryBadge extends StatelessWidget {
+  const _BatteryBadge({
+    required this.value,
+    required this.known,
+    required this.onTap,
+  });
   final int value;
-  const _BatteryBadge({required this.value});
+  final bool known;
+  final VoidCallback onTap;
   @override
-  Widget build(BuildContext context) => LuxeRing(
-    value: value / 100,
-    size: 58,
-    stroke: 5,
-    color: value < 20
-        ? LuxeColors.danger
-        : value < 40
-        ? LuxeColors.champagne
-        : LuxeColors.emerald,
-    semanticLabel: 'Pin hiện tại $value phần trăm',
-    child: ExcludeSemantics(
-      child: Text(
-        '$value%',
-        style: const TextStyle(
-          color: LuxeColors.text,
-          fontWeight: FontWeight.w600,
-          fontSize: 12.5,
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: known
+        ? 'Pin hiện tại $value phần trăm, chạm để sửa'
+        : 'Chưa có mức pin, chạm để nhập',
+    child: InkWell(
+      key: const ValueKey('trip-battery'),
+      customBorder: const CircleBorder(),
+      onTap: onTap,
+      child: LuxeRing(
+        value: known ? value / 100 : 0,
+        size: 58,
+        stroke: 5,
+        color: !known
+            ? LuxeColors.platinumLow
+            : value < 20
+            ? LuxeColors.danger
+            : value < 40
+            ? LuxeColors.champagne
+            : LuxeColors.platinum,
+        child: ExcludeSemantics(
+          child: Text(
+            known ? '$value%' : 'Nhập',
+            style: const TextStyle(
+              color: LuxeColors.text,
+              fontWeight: FontWeight.w600,
+              fontSize: 12.5,
+            ),
+          ),
         ),
       ),
     ),
@@ -1121,9 +1836,9 @@ class _MapPin extends StatelessWidget {
       ? Container(
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: LuxeColors.emerald.withValues(alpha: 0.18),
+            color: LuxeColors.platinum.withValues(alpha: 0.18),
             border: Border.all(
-              color: LuxeColors.emerald.withValues(alpha: 0.5),
+              color: LuxeColors.platinum.withValues(alpha: 0.5),
             ),
           ),
           child: Center(
@@ -1132,11 +1847,8 @@ class _MapPin extends StatelessWidget {
               height: 14,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: LuxeColors.emerald,
-                border: Border.all(color: LuxeColors.platinumHi, width: 2),
-                boxShadow: const [
-                  BoxShadow(color: LuxeColors.emeraldGlow, blurRadius: 10),
-                ],
+                color: LuxeColors.platinumHi,
+                border: Border.all(color: const Color(0xFF0B0C0E), width: 2),
               ),
             ),
           ),
@@ -1171,7 +1883,7 @@ class _MapHint extends StatelessWidget {
       border: Border.all(color: LuxeColors.hairline),
     ),
     child: const Text(
-      'Nhấn giữ để chọn điểm',
+      'Nhấn giữ để chọn điểm đến',
       style: TextStyle(
         color: LuxeColors.muted,
         fontSize: 10.5,
@@ -1229,51 +1941,25 @@ class _SectionLabel extends StatelessWidget {
   );
 }
 
-class _SliderLine extends StatelessWidget {
-  final IconData icon;
-  final String label, suffix;
-  final double value, min, max;
-  final ValueChanged<double> onChanged;
-  const _SliderLine({
-    required this.icon,
-    required this.label,
+class _ToggleRow extends StatelessWidget {
+  const _ToggleRow({
+    required this.title,
     required this.value,
-    required this.min,
-    required this.max,
-    required this.suffix,
     required this.onChanged,
   });
+
+  final String title;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
   @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Icon(icon, color: LuxeColors.platinumMid, size: 18),
-      const SizedBox(width: 8),
-      SizedBox(
-        width: 74,
-        child: Text(label, style: LuxeText.caption.copyWith(fontSize: 12)),
-      ),
-      Expanded(
-        child: Slider(
-          value: value,
-          min: min,
-          max: max,
-          label: '${value.round()}$suffix',
-          onChanged: onChanged,
-        ),
-      ),
-      SizedBox(
-        width: 52,
-        child: Text(
-          '${value.round()}$suffix',
-          textAlign: TextAlign.right,
-          style: const TextStyle(
-            color: LuxeColors.text,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            fontFeatures: [FontFeature.tabularFigures()],
-          ),
-        ),
-      ),
-    ],
+  Widget build(BuildContext context) => ConstrainedBox(
+    constraints: const BoxConstraints(minHeight: 48),
+    child: Row(
+      children: [
+        Expanded(child: Text(title, style: LuxeText.body)),
+        LuxeSwitch(value: value, semanticLabel: title, onChanged: onChanged),
+      ],
+    ),
   );
 }

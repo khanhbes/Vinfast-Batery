@@ -1,0 +1,21 @@
+/// Number text shared by every screen (QA 129).
+///
+/// The app writes decimals with a dot ("1.21 km / 1% pin", "1.5 kWh"), so a
+/// dot cannot also group thousands: "4.804 km ODO" next to "1.20" read as two
+/// different kinds of number. Thousands use a narrow no-break space instead
+/// ("4 804 km", "12 500 đ"), which no one reads as a decimal.
+const String thousandsSeparator = ' ';
+
+String groupThousands(num value) {
+  final negative = value < 0;
+  final digits = value.abs().round().toString();
+  final out = StringBuffer();
+  for (var i = 0; i < digits.length; i++) {
+    if (i > 0 && (digits.length - i) % 3 == 0) out.write(thousandsSeparator);
+    out.write(digits[i]);
+  }
+  return negative ? '-$out' : out.toString();
+}
+
+/// Whole đồng with grouped thousands, e.g. "12 500 đ".
+String formatVnd(num value) => '${groupThousands(value)} đ';

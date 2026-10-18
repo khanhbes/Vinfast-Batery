@@ -80,6 +80,16 @@ List<SmartChargeTelemetryPoint> _points(DateTime start) => [
     ),
 ];
 
+/// The page's own scroller (a CustomScrollView), not a nested one inside a
+/// row that is disposed once scrolled away (QA 128: chips no longer add a
+/// horizontal scroller that used to come first).
+Finder _vertical() => find
+    .descendant(
+      of: find.byType(CustomScrollView).first,
+      matching: find.byType(Scrollable),
+    )
+    .first;
+
 void main() {
   setUpAll(() => initializeDateFormatting('vi'));
   setUp(() => SharedPreferences.setMockInitialValues({}));
@@ -138,7 +148,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       expect(find.text('ĐANG SẠC'), findsOneWidget);
-      final list = find.byType(Scrollable).first;
+      final list = _vertical();
       Future<void> reach(Finder f) async {
         await tester.scrollUntilVisible(f, 200, scrollable: list);
         await tester.pumpAndSettle();
@@ -146,10 +156,12 @@ void main() {
         expect(tester.takeException(), isNull);
       }
 
+      // Newest first: the timed session (b, +5 min) sits above a; reach in
+      // display order since scrollUntilVisible only scrolls one way.
       await reach(find.text('HÔM NAY'));
-      await reach(find.byKey(const ValueKey('history-session-a')));
       await reach(find.text('Sạc hẹn giờ'));
       await reach(find.text('Đã dừng'));
+      await reach(find.byKey(const ValueKey('history-session-a')));
       if (sameMonth) {
         await reach(find.text('HÔM QUA'));
         await reach(find.byKey(const ValueKey('history-session-c')));
@@ -162,6 +174,47 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
   }
+
+  testWidgets('an active filter is always visible and one tap clears it', (
+    tester,
+  ) async {
+    await phone(tester);
+    final controller = _Controller([
+      _session('ai', today),
+      _session(
+        'timer',
+        today.add(const Duration(minutes: 5)),
+        strategy: ChargingStrategy.manualTimed,
+      ),
+    ]);
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      host(SmartChargeHistoryScreen(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+    final list = _vertical();
+    expect(find.byKey(const ValueKey('history-active-filter')), findsNothing);
+    final timerChip = find.text('Hẹn giờ');
+    await tester.ensureVisible(timerChip);
+    await tester.tap(timerChip);
+    await tester.pumpAndSettle();
+    // Task 127: a chip scrolled out of view made a whole month look empty.
+    expect(find.byKey(const ValueKey('history-active-filter')), findsOneWidget);
+    expect(find.textContaining('Đang lọc: Hẹn giờ'), findsOneWidget);
+    expect(find.byKey(const ValueKey('history-session-ai')), findsNothing);
+    final clear = find.byKey(const ValueKey('history-clear-filter'));
+    await tester.ensureVisible(clear);
+    await tester.tap(clear);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('history-active-filter')), findsNothing);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('history-session-ai')),
+      200,
+      scrollable: list,
+    );
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets('empty history animates once and offers the charge tab', (
     tester,
@@ -180,6 +233,12 @@ void main() {
     );
     // pumpAndSettle returning proves the illustration does not loop forever.
     await tester.pumpAndSettle();
+    // Wrapped filter chips push the empty state lower (QA 128).
+    await tester.scrollUntilVisible(
+      find.byType(HistoryEmptyArt),
+      200,
+      scrollable: _vertical(),
+    );
     expect(find.byType(HistoryEmptyArt), findsOneWidget);
     expect(find.text('Chưa có phiên Smart Charge hoàn tất'), findsOneWidget);
     // A vertical drag that starts on the summary card (which listens for

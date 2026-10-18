@@ -74,9 +74,12 @@ class _FloatingBatteryBotState extends ConsumerState<FloatingBatteryBot>
 
     final screenSize = MediaQuery.of(context).size;
     final isDocked = coordinator.isDocked;
-    final effectiveRight = isDocked ? -10.0 : _right;
-    final effectiveOpacity = isDocked ? 0.65 : 1.0;
-    final effectiveScale = isDocked ? 0.80 : 1.0;
+    // Docked while the user scrolls down: tucked into the edge so it stops
+    // covering cards and chips ("Cập nhật % pin & ODO", "100% Đầy pin" —
+    // QA 129); about a third stays visible to tap or drag back.
+    final effectiveRight = isDocked ? -40.0 : _right;
+    final effectiveOpacity = isDocked ? 0.55 : 1.0;
+    final effectiveScale = isDocked ? 0.72 : 1.0;
     final showBubble = isBubbleVisible && !isDocked && bubbleText != null;
 
     return AnimatedPositioned(

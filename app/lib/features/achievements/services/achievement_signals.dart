@@ -19,4 +19,17 @@ class AchievementSignals extends ChangeNotifier {
     _pending.clear();
     return out;
   }
+
+  final _hidden = <String>{};
+
+  /// The owner hid a session from History: it must leave the ledger too.
+  void sessionHidden(String sessionId) {
+    if (_hidden.add(sessionId)) notifyListeners();
+  }
+
+  Set<String> drainHidden() {
+    final out = {..._hidden};
+    _hidden.clear();
+    return out;
+  }
 }

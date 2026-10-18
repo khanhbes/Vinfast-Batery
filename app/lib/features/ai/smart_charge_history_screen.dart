@@ -11,15 +11,19 @@ import 'package:intl/intl.dart';
 import '../../core/services/app_error_reporter.dart';
 import '../../core/theme/luxe_theme.dart';
 import '../../core/utils/app_error_formatter.dart';
+import '../../core/utils/number_text.dart';
+import '../../data/services/charge_estimator.dart';
 import '../../core/widgets/adaptive_detail_rows.dart';
 import '../../core/widgets/app_popup.dart';
+import '../../core/widgets/luxe_kit.dart';
 import '../../core/widgets/responsive_card_grid.dart';
 import '../../data/models/smart_charge_cost.dart';
 import '../../data/models/smart_charge_history.dart';
 import '../../data/models/smart_charging_session.dart';
 import '../auth/auth_providers.dart';
 import 'controllers/smart_charging_controller.dart';
-import 'widgets/confirm_session_soc_dialog.dart';
+import 'services/learning_flow.dart';
+import 'widgets/confirm_actual_soc_sheet.dart';
 import 'widgets/history_luxe_widgets.dart';
 import 'widgets/session_soc_summary.dart';
 
@@ -542,10 +546,13 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
                 children: [
                   Expanded(
                     child: HistoryKpi(
-                      label: 'Chi phí',
-                      value: summary.totalCostVnd <= 0
-                          ? '0 đ'
-                          : '${NumberFormat.compact(locale: 'vi').format(summary.totalCostVnd)} đ',
+                      label: summary.pricedSessions == 0 &&
+                              summary.completedSessions > 0
+                          ? 'Chưa đặt giá điện'
+                          : 'Chi phí',
+                      value: summary.pricedSessions == 0
+                          ? '—'
+                          : formatVnd(summary.totalCostVnd),
                     ),
                   ),
                   const _KpiDivider(),
@@ -598,17 +605,65 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
       buckets[slot] += byDay[days[i]] ?? 0;
       if (days[i] == today) todayIndex = slot;
     }
+    // Days that have happened: the current month is not "31 ngày" on the
+    // 18th (QA 129).
+    final elapsed = days.where((day) => !day.isAfter(today)).length;
+    final counted = elapsed > 0 ? elapsed : days.length;
     final caption = weekly
-        ? 'điện nạp · ${buckets.length} tuần'
-        : 'điện nạp · ${days.length} ngày';
+        ? 'điện nạp · ${(counted / 7).ceil()} tuần'
+        : 'điện nạp · $counted ngày';
     return (buckets: buckets, today: todayIndex, caption: caption);
   }
 
   // ─────────────── Filters ───────────────
 
+  /// "Sạc AI · Dừng sớm"-style summary of the active filters, or null.
+  String? get _activeFilterLabel {
+    final parts = <String>[
+      if (_filter == ChargingStrategy.aiTarget) 'Sạc AI',
+      if (_filter == ChargingStrategy.manualTimed) 'Hẹn giờ',
+      if (_filter != null &&
+          _filter != ChargingStrategy.aiTarget &&
+          _filter != ChargingStrategy.manualTimed)
+        'Một chế độ sạc',
+      if (_statusFilter == SmartChargeHistorySessionFilter.completed)
+        'Hoàn thành',
+      if (_statusFilter == SmartChargeHistorySessionFilter.stoppedEarly)
+        'Dừng sớm',
+      if (_statusFilter == SmartChargeHistorySessionFilter.partial)
+        'Thiếu số đo',
+    ];
+    return parts.isEmpty ? null : parts.join(' · ');
+  }
+
   Widget _filters() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
+      if (_activeFilterLabel != null)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+          child: LuxeNotice(
+            key: const ValueKey('history-active-filter'),
+            icon: Icons.filter_alt_rounded,
+            color: LuxeColors.champagne,
+            message:
+                'Đang lọc: $_activeFilterLabel. Các phiên khác đang bị ẩn.',
+            action: TextButton(
+              key: const ValueKey('history-clear-filter'),
+              onPressed: () {
+                HapticFeedback.selectionClick();
+                setState(() {
+                  _filter = null;
+                  _statusFilter = SmartChargeHistorySessionFilter.all;
+                  _visibleCount = 20;
+                });
+                _load(reset: true, clearItems: true);
+              },
+              style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+              child: const Text('Bỏ lọc'),
+            ),
+          ),
+        ),
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: HistoryScopeToggle(
@@ -622,10 +677,13 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
         ),
       ),
       const SizedBox(height: 10),
-      SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
+      // Wrapped, not a horizontal scroller: chips beyond the right edge hid
+      // an active filter (QA 128).
+      Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Row(
+        child: Wrap(
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             HistoryChip(
               icon: Icons.date_range_rounded,
@@ -678,7 +736,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
               dot: historyAmber,
             ),
             _chip(
-              'Một phần',
+              'Thiếu số đo',
               _statusFilter == SmartChargeHistorySessionFilter.partial,
               () => _setStatus(SmartChargeHistorySessionFilter.partial),
               dot: LuxeColors.platinumMid,
@@ -1135,7 +1193,7 @@ class _HistoryHeader extends StatelessWidget {
             Text('Lịch sử sạc', style: LuxeText.title),
             SizedBox(height: 4),
             Text(
-              'Phiên sạc, điện năng và chi phí đã đo.',
+              'Phiên sạc, điện năng đã đo và chi phí ước tính.',
               style: LuxeText.caption,
             ),
           ],
@@ -1469,7 +1527,7 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
       ChargingSessionState.stopping => 'Đang dừng sạc',
       ChargingSessionState.completed =>
         _session.energyQuality == 'partial'
-            ? 'Hoàn tất · một phần'
+            ? 'Đã hoàn tất · thiếu một phần số đo'
             : 'Đã hoàn tất',
       ChargingSessionState.cancelled => 'Đã dừng',
       ChargingSessionState.interrupted => 'Bị gián đoạn',
@@ -1496,7 +1554,7 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
               children: [
                 HistoryStatusPill(label: stateLabel, color: statusColor),
                 Text(
-                  historyDuration(historySessionDuration(_session)),
+                  formatChargeDuration(historySessionDuration(_session)),
                   style: LuxeText.label,
                 ),
               ],
@@ -1539,7 +1597,11 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
       FilledButton.icon(
         onPressed: terminal ? _confirmSoc : null,
         icon: const Icon(Icons.battery_saver_rounded, size: 20),
-        label: const Text('Xác nhận SoC thực tế khi kết thúc'),
+        label: Text(
+          _session.actualEndSoc == null
+              ? 'Nhập % trên đồng hồ xe'
+              : 'Sửa % đã nhập (${_session.actualEndSoc!.round()}%)',
+        ),
       ),
       const SizedBox(height: 10),
       OutlinedButton.icon(
@@ -1590,7 +1652,7 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
       (
         icon: Icons.timer_outlined,
         title: 'Thời gian sạc',
-        value: historyDuration(historySessionDuration(_session)),
+        value: formatChargeDuration(historySessionDuration(_session)),
         highlight: false,
       ),
       (
@@ -2060,33 +2122,42 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
     final contextGeneration = _contextGeneration;
     final controller = widget.controller;
     final session = _session;
-    final value = await showDialog<double>(
-      context: context,
-      builder: (_) => const ConfirmSessionSocDialog(),
+    final reading = await ConfirmActualSocSheet.show(
+      context,
+      estimatedSoc: session.estimatedSoc,
+      startSoc: session.startSoc,
     );
-    if (value == null || !mounted || contextGeneration != _contextGeneration) {
+    if (reading == null ||
+        !mounted ||
+        contextGeneration != _contextGeneration) {
       return;
     }
     try {
-      final summary = await controller.confirmActualEndSoc(session, value);
+      final summary = await controller.confirmActualEndSoc(
+        session,
+        reading.soc,
+        odoKm: reading.odoKm,
+      );
       if (mounted && contextGeneration == _contextGeneration) {
         setState(() {
-          _session = _session.copyWith(actualEndSoc: value);
+          _session = _session.copyWith(
+            actualEndSoc: reading.soc,
+            endOdoKm: reading.odoKm,
+          );
           _summary = summary;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Đã xác nhận SOC thực tế: ${value.toStringAsFixed(0)}%',
-            ),
-            behavior: SnackBarBehavior.floating,
-          ),
+        AppPopup.showSuccess(
+          'Đã lưu ${reading.soc.toStringAsFixed(0)}%',
+          detail: 'Đã thêm vào dữ liệu học; app báo khi đủ để huấn luyện.',
         );
+        unawaited(TrainingReadiness.refresh(session.vehicleId));
       }
     } catch (error) {
       if (mounted && contextGeneration == _contextGeneration) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppErrorFormatter.format(error))),
+        AppPopup.showError(
+          'Chưa lưu được % pin',
+          detail: AppErrorFormatter.format(error),
+          userInitiated: true,
         );
       }
     }

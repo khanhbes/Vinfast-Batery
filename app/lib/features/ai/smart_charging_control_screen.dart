@@ -7,8 +7,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import '../../core/providers/app_state_providers.dart';
+import '../../core/providers/app_providers.dart';
 import '../../core/theme/luxe_theme.dart';
+import '../../core/widgets/luxe_connection_notice.dart';
+import '../../core/utils/app_error_formatter.dart';
 import '../../core/widgets/app_popup.dart';
 import '../../core/widgets/debug_error_sheet.dart';
 import '../../data/models/shelly_connection_state.dart';
@@ -20,6 +22,7 @@ import '../achievements/achievements_screen.dart';
 import '../achievements/controllers/achievements_controller.dart';
 import '../achievements/models/achievement.dart';
 import '../achievements/services/achievement_signals.dart';
+import 'services/learning_flow.dart';
 import '../achievements/widgets/achievement_unlock_ceremony.dart';
 import '../achievements/widgets/achievements_teaser_card.dart';
 import '../smart_charging/smart_charger_setup_hub_screen.dart';
@@ -29,6 +32,7 @@ import 'widgets/active_charging_card_v2.dart';
 import 'widgets/ai_charge_button.dart';
 import 'widgets/charge_mode_switcher_v2.dart';
 import 'widgets/command_progress_strip.dart';
+import 'widgets/confirm_actual_soc_sheet.dart';
 import 'widgets/edit_current_battery_sheet.dart';
 import 'widgets/luxe_soc_dial.dart';
 import 'widgets/prediction_card_v2.dart';
@@ -64,6 +68,11 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
   bool _aiMode = true;
   bool _initialNoticesScheduled = false;
 
+  /// A relay command that just succeeded: shown as "đã xác minh" for a
+  /// moment so the end of the wait is as clear as its start (QA 130).
+  RelayCommandKind? _verified;
+  Timer? _verifiedTimer;
+
   StreamSubscription<ShellyConnectionSnapshot>? _connectionEvents;
 
   @override
@@ -80,12 +89,23 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      _consumeChargeTarget(ref.read(pendingChargeTargetSocProvider));
       final achievements = ref.read(achievementsControllerProvider.notifier);
       achievements.ingest(
         ref.read(smartChargingControllerProvider(args)).history,
       );
       achievements.sync();
     });
+  }
+
+  /// Target from the trip planner / BatteryBot: pre-fill only (Task 126).
+  void _consumeChargeTarget(({String vehicleId, double targetSoc})? pending) {
+    if (pending == null || pending.vehicleId != widget.vehicleId) return;
+    ref.read(pendingChargeTargetSocProvider.notifier).state = null;
+    ref
+        .read(smartChargingControllerProvider(args).notifier)
+        .updateDraft(targetSoc: pending.targetSoc.clamp(1, 100).toDouble());
+    if (!_aiMode) setState(() => _aiMode = true);
   }
 
   @override
@@ -104,6 +124,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
   @override
   void dispose() {
     _connectionEvents?.cancel();
+    _verifiedTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -163,6 +184,10 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     // Outgoing animated children keep the mode they were built with.
     final aiMode = _aiMode;
 
+    ref.listen<({String vehicleId, double targetSoc})?>(
+      pendingChargeTargetSocProvider,
+      (_, next) => _consumeChargeTarget(next),
+    );
     ref.listen<SmartChargingUiState>(
       smartChargingControllerProvider(args),
       (previous, next) => _showStateNotices(previous, next),
@@ -215,14 +240,50 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                           state: state,
                           connection: snapshot.data,
                           onSetup: () => _openSetup(controller),
+                          settling: _verified != null,
                         ),
                       ),
                     ),
                     const SizedBox(height: 16),
-                    if (_commandKind(state) case final kind?) ...[
-                      CommandProgressStrip(kind: kind),
+                    // A failed read when no charge runs: one notice with
+                    // retry, the same as the app bar strip (QA 130).
+                    if (state.gatewayError != null &&
+                        !state.hasActiveSession &&
+                        _commandKind(state) == null) ...[
+                      LuxeConnectionNotice(
+                        key: const ValueKey('charge-connection-notice'),
+                        issue: _issueFor(state),
+                        lastGoodAt:
+                            state.connectionState.lastSuccessfulStatusAt ??
+                            state.statusSyncedAt,
+                        onRetry: () => controller.refresh(force: true),
+                      ),
                       const SizedBox(height: 12),
                     ],
+                    AnimatedSwitcher(
+                      duration: reduced
+                          ? Duration.zero
+                          : const Duration(milliseconds: 280),
+                      switchInCurve: LuxeMotion.enter,
+                      child: switch ((_commandKind(state), _verified)) {
+                        (final kind?, _) => Padding(
+                          key: const ValueKey('command-in-flight'),
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: CommandProgressStrip(kind: kind),
+                        ),
+                        (null, final done?) => Padding(
+                          key: const ValueKey('command-verified'),
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: CommandProgressStrip(
+                            kind: done,
+                            verified: true,
+                          ),
+                        ),
+                        _ => const SizedBox.shrink(
+                          key: ValueKey('command-idle'),
+                        ),
+                      },
+                    ),
                     AnimatedSwitcher(
                       duration: reduced
                           ? Duration.zero
@@ -412,10 +473,17 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     final String label;
     final String? note;
     if (preview == null) {
-      label = 'DỰ ĐOÁN VỚI AI';
+      label = 'DỰ ĐOÁN THỜI GIAN SẠC';
       note = null;
+    } else if (canStart && preview.isTargetMode) {
+      label = 'SẠC ĐẾN ${currentTarget.round()}%';
+      final ceiling = preview.safetyCeilingAt;
+      note = ceiling == null
+          ? 'Máy chủ tự ngắt khi ước tính đạt ${currentTarget.round()}%'
+          : 'Máy chủ tự ngắt khi ước tính đạt ${currentTarget.round()}% · '
+                'Shelly tự tắt muộn nhất ${formatClock(ceiling)}';
     } else if (canStart) {
-      label = 'SẠC THEO AI';
+      label = 'SẠC THEO DỰ ĐOÁN';
       note = null;
     } else if (timedFromForecast) {
       label =
@@ -433,10 +501,18 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
           : 'Chưa khả dụng';
     }
 
+    final pending = controller.pendingActualSoc;
     return Column(
       key: const ValueKey('ai-mode-v2'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (pending != null) ...[
+          _PendingActualSocCard(
+            session: pending,
+            onTap: () => _askActualSoc(pending),
+          ),
+          const SizedBox(height: 14),
+        ],
         LuxeReveal(
           index: 2,
           child: LuxeGlass(
@@ -506,6 +582,11 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                       toSoc: currentTarget.round(),
                       personalizationLabel: preview.personalizationLabel,
                       warnings: preview.warnings,
+                      rangeLabel: _rangeLabel(preview),
+                      stopLine: preview.isTargetMode
+                          ? 'Đạt ~${currentTarget.round()}% lúc '
+                                '${_time(preview.effectiveStopAt)} · máy chủ tự ngắt'
+                          : null,
                     ),
                   ),
                 ),
@@ -594,6 +675,58 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     );
   }
 
+  void _maybeFlashVerified(
+    SmartChargingUiState? previous,
+    SmartChargingUiState next,
+  ) {
+    final was = previous?.phase;
+    final ok = next.actionError == null;
+    RelayCommandKind? done;
+    if (was == SmartChargingViewPhase.starting &&
+        next.phase != SmartChargingViewPhase.starting &&
+        ok &&
+        next.hasActiveSession) {
+      done = RelayCommandKind.on;
+    } else if (was == SmartChargingViewPhase.stopping &&
+        next.phase != SmartChargingViewPhase.stopping &&
+        ok &&
+        !next.hasActiveSession) {
+      done = RelayCommandKind.off;
+    }
+    if (done == null || !mounted) return;
+    setState(() => _verified = done);
+    _verifiedTimer?.cancel();
+    _verifiedTimer = Timer(const Duration(milliseconds: 1800), () {
+      if (mounted) setState(() => _verified = null);
+    });
+  }
+
+  /// Estimated % when a timed charge ends, from the learned Wh per 1 % and
+  /// charging power (same model as the Charge tab); current % if unknown.
+  int _timedEndSoc(SmartChargingUiState state, Duration duration) {
+    final current = state.draft.currentSoc;
+    final learned = ref
+        .read(learnedModelsProvider(widget.vehicleId))
+        .valueOrNull;
+    final capacity = state.draft.estimatedCapacityWh;
+    final whPerPct =
+        learned?.whPerPct ??
+        (capacity > 0 ? capacity / 100 / ChargeEstimator.efficiency : null);
+    final powerW = learned?.powerW ?? state.preferences?.chargePowerW;
+    if (whPerPct == null || whPerPct <= 0 || powerW == null || powerW <= 0) {
+      return current.round();
+    }
+    final gained = powerW * duration.inSeconds / 3600 / whPerPct;
+    return math.min(100.0, current + gained).round();
+  }
+
+  ConnectionIssue _issueFor(SmartChargingUiState state) {
+    final link = state.connectionState;
+    if (!link.internetAvailable) return ConnectionIssue.internet;
+    if (!link.shellyReachable) return ConnectionIssue.charger;
+    return ConnectionIssue.server;
+  }
+
   RelayCommandKind? _commandKind(SmartChargingUiState state) =>
       switch (state.phase) {
         SmartChargingViewPhase.starting => RelayCommandKind.on,
@@ -610,10 +743,11 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
   ) {
     final session = state.session;
     final status = state.chargerStatus;
-    // Count the hardware timer down between polls (Task 125).
-    final remaining =
-        status?.timerRemainingAt(state.now) ??
-        (session != null ? session.remaining(state.now) : Duration.zero);
+    final estimate = state.remainingEstimate;
+    final targetMode = session?.isTargetMode == true;
+    // Count the hardware timer down between polls (Task 125). A target
+    // charge ends at the estimate; its Shelly timer is only the ceiling.
+    final remaining = state.displayRemaining ?? Duration.zero;
     final startSoc =
         session?.startSoc.round() ?? state.draft.currentSoc.round();
     final targetSoc =
@@ -622,22 +756,39 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     // "Stops at" follows the same source as the countdown: the hardware
     // timer when Shelly reports it, otherwise the session plan (Task 122).
     final timer = status?.timerRemainingAt(state.now);
-    final stopAt = timer != null && timer > Duration.zero
+    final stopAt = targetMode
+        ? state.now.add(remaining)
+        : timer != null && timer > Duration.zero
         ? state.now.add(timer)
         : session?.effectiveStopAt ?? state.now;
-    final estimate = state.remainingEstimate;
-    final estimateNote = estimate == null || targetSoc <= estimatedSoc.round()
-        ? null
-        : 'Đạt $targetSoc% sau ~${formatChargeDuration(estimate.duration)} '
-              '· khoảng ${formatClock(estimate.finishAt)} '
-              '(${estimate.powerW.round()} W đo thực tế)';
+    final ceilingAt = timer != null && timer > Duration.zero
+        ? state.now.add(timer)
+        : session?.effectiveStopAt;
+    final String? estimateNote;
+    if (targetMode) {
+      estimateNote =
+          'Máy chủ tự ngắt khi ước tính đạt $targetSoc%'
+          '${ceilingAt == null ? '' : ' · Shelly tự tắt muộn nhất ${formatClock(ceilingAt)}'}';
+    } else {
+      estimateNote = estimate == null || targetSoc <= estimatedSoc.round()
+          ? null
+          : 'Đạt $targetSoc% sau ~${formatChargeDuration(estimate.duration)} '
+                '· khoảng ${formatClock(estimate.finishAt)} '
+                '(${estimate.powerW.round()} W đo thực tế)';
+    }
 
-    return ActiveChargingCardV2(
+    final card = ActiveChargingCardV2(
       key: const ValueKey('active-session-v2'),
       currentPercent: estimatedSoc,
       targetPercent: targetSoc.toDouble(),
       remaining: remaining,
       completionTime: _time(stopAt),
+      countdownLabel: targetMode
+          ? (estimate == null
+                ? 'Đạt $targetSoc% theo kế hoạch · khoảng'
+                : 'Đạt $targetSoc% sau · khoảng')
+          : 'Shelly tự ngắt sau · lúc',
+      socCaption: targetMode ? null : 'ước tính · sạc hẹn giờ',
       sessionEnergyWh: session?.energyUsedWh ?? 0,
       powerW: status?.powerW ?? 0,
       voltageV: status?.voltageV ?? 0,
@@ -654,12 +805,91 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
           session?.lastError == offPendingReadbackCode,
       onStop: () => _stopWithConfirmation(state, controller),
     );
+    final lost = state.linkLostSince;
+    if (lost == null) return card;
+    final minutes = state.now.difference(lost).inMinutes;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        LuxeConnectionNotice(
+          key: const ValueKey('charge-link-lost'),
+          issue: ConnectionIssue.chargerWhileCharging,
+          title:
+              'Tạm mất liên lạc với ổ sạc${minutes >= 1 ? ' · $minutes phút' : ''}',
+          detail:
+              'Xe vẫn sạc theo hẹn giờ trên ổ, ổ tự tắt muộn nhất '
+              '${formatClock(ceilingAt ?? session?.effectiveStopAt ?? state.now)}. '
+              'Nếu kéo dài, kiểm tra Wi-Fi nhà và đèn trên ổ.',
+          lastGoodAt: lost,
+          onRetry: () => controller.refresh(force: true),
+        ),
+        const SizedBox(height: 12),
+        card,
+      ],
+    );
+  }
+
+  /// A charge this screen watched just ended: ask for the scooter's % while
+  /// the user is still next to it (Task 126).
+  void _maybeAskActualSoc(
+    SmartChargingUiState? previous,
+    SmartChargingUiState next,
+  ) {
+    final running = previous?.session;
+    if (running == null || running.state.isTerminal) return;
+    SmartChargingSession? ended;
+    if (next.session?.sessionId == running.sessionId) {
+      ended = next.session;
+    } else {
+      for (final item in next.history) {
+        if (item.sessionId == running.sessionId) ended = item;
+      }
+    }
+    if (ended == null || !ended.state.isTerminal) return;
+    final controller = ref.read(smartChargingControllerProvider(args).notifier);
+    if (!controller.shouldAskActualSoc(ended)) return;
+    controller.markActualSocAsked(ended.sessionId);
+    final session = ended;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_askActualSoc(session));
+    });
+  }
+
+  Future<void> _askActualSoc(SmartChargingSession session) async {
+    final controller = ref.read(smartChargingControllerProvider(args).notifier);
+    controller.markActualSocAsked(session.sessionId);
+    final reading = await ConfirmActualSocSheet.show(
+      context,
+      estimatedSoc: session.estimatedSoc,
+      startSoc: session.startSoc,
+    );
+    if (reading == null || !mounted) return;
+    try {
+      await controller.confirmActualEndSoc(
+        session,
+        reading.soc,
+        odoKm: reading.odoKm,
+      );
+      AppPopup.showSuccess(
+        'Đã lưu ${reading.soc.round()}%',
+        detail: 'Đã thêm vào dữ liệu học; app báo khi đủ để huấn luyện.',
+      );
+      unawaited(TrainingReadiness.refresh(session.vehicleId));
+    } catch (error) {
+      AppPopup.showError(
+        'Chưa lưu được % pin',
+        detail: AppErrorFormatter.format(error),
+        userInitiated: true,
+      );
+    }
   }
 
   void _showStateNotices(
     SmartChargingUiState? previous,
     SmartChargingUiState next,
   ) {
+    _maybeAskActualSoc(previous, next);
+    _maybeFlashVerified(previous, next);
     // Background refresh/sync failures belong in the non-blocking connection
     // status strip. Only explicit action errors and urgent safety warnings
     // surface above content.
@@ -713,11 +943,15 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     SmartChargingController controller,
     Duration duration,
   ) async {
-    final stopAt = state.now.add(duration);
+    // state.now only ticks during a session; the sheet needs the wall
+    // clock (QA 128: "Tự ngắt lúc 02:53" shown at 02:40 for 30 minutes).
+    final stopAt = DateTime.now().add(duration);
     final confirmed = await StartChargeConfirmationSheet.show(
       context,
       currentSoc: state.draft.currentSoc.round(),
-      targetSoc: state.draft.targetSoc.round(),
+      // A timed charge has no target: show where the battery should be when
+      // the timer ends (QA 130 showed "79% → 100%" for 30 minutes).
+      targetSoc: _timedEndSoc(state, duration),
       estimatedMinutes: duration.inMinutes,
       stopTime: _time(stopAt),
       isAiMode: false,
@@ -752,6 +986,15 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
       connection.status?.online == true &&
       connection.status?.relay == false;
 
+  /// "1 giờ 50 – 2 giờ 20" when the server sent an uncertainty band.
+  String? _rangeLabel(SmartChargingPlanPreview preview) {
+    final low = preview.estimateLowSeconds;
+    final high = preview.estimateHighSeconds;
+    if (low == null || high == null || high <= low) return null;
+    return '${formatChargeDuration(Duration(seconds: low))} – '
+        '${formatChargeDuration(Duration(seconds: high))}';
+  }
+
   Future<void> _aiStart(
     SmartChargingUiState state,
     SmartChargingController controller,
@@ -759,6 +1002,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     final preview = state.preview;
     if (preview == null) return;
 
+    final ceiling = preview.isTargetMode ? preview.safetyCeilingAt : null;
     final confirmed = await StartChargeConfirmationSheet.show(
       context,
       currentSoc: state.draft.currentSoc.round(),
@@ -767,6 +1011,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
       stopTime: _time(preview.effectiveStopAt),
       isAiMode: true,
       personalizationLabel: preview.personalizationLabel,
+      safetyCeiling: ceiling == null ? null : formatClock(ceiling),
     );
 
     if (confirmed != true) return;
@@ -774,7 +1019,10 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     if (ok) {
       AppPopup.showSuccess(
         'Đang sạc',
-        detail: 'Tự động tắt lúc ${_time(preview.effectiveStopAt)}',
+        detail: preview.isTargetMode
+            ? 'Tự ngắt khi đạt ~${state.draft.targetSoc.round()}% '
+                  '(dự kiến ${_time(preview.effectiveStopAt)})'
+            : 'Tự động tắt lúc ${_time(preview.effectiveStopAt)}',
       );
     } else {
       AppPopup.showError('Không thể bật sạc', userInitiated: true);
@@ -786,16 +1034,16 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     SmartChargingController controller,
   ) async {
     final session = state.session;
-    final remaining =
-        state.chargerStatus?.timerRemainingAt(state.now) ??
-        session?.remaining(state.now) ??
-        Duration.zero;
+    // The card's own countdown (QA 129: in target mode this showed the
+    // Shelly ceiling, ~×1.5 + 20 min, instead of the time to the target).
+    final remaining = state.displayRemaining ?? Duration.zero;
     final decision = await showStopChargingConfirmationSheet(
       context,
       currentSoc:
           session?.estimatedSoc ?? session?.startSoc ?? state.draft.currentSoc,
       targetSoc: session?.targetSoc ?? state.draft.targetSoc,
       remaining: remaining,
+      targetMode: session?.isTargetMode == true,
     );
     if (decision != null) await _off(controller, reason: decision.reason);
   }
@@ -827,8 +1075,13 @@ class _LuxeChargeHeader extends StatefulWidget {
     required this.state,
     required this.onSetup,
     this.connection,
+    this.settling = false,
   });
   final SmartChargingUiState state;
+
+  /// A command just finished: readiness is being re-read, not a setup
+  /// problem (QA 130: "Thiết lập" flashed right after a verified OFF).
+  final bool settling;
   final VoidCallback onSetup;
   final ShellyConnectionSnapshot? connection;
 
@@ -886,8 +1139,6 @@ class _LuxeChargeHeaderState extends State<_LuxeChargeHeader>
         connection?.controlUncertain != true;
     final dotColor = connected ? LuxeColors.emerald : LuxeColors.champagne;
     final statusText = connection?.connectionLabel ?? 'Chưa kết nối Shelly';
-    final now = DateFormat('HH:mm').format(widget.state.now.toLocal());
-
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
       decoration: BoxDecoration(
@@ -942,7 +1193,14 @@ class _LuxeChargeHeaderState extends State<_LuxeChargeHeader>
               ],
             ),
           ),
-          if (!widget.state.capabilities.readyForControl) ...[
+          // While a session runs, "not ready for another ON" is expected,
+          // not a setup problem (QA 128).
+          // Not for a transient outage either: the connection notice below
+          // offers "Thử lại", which is what helps then (QA 130).
+          if (!widget.state.capabilities.readyForControl &&
+              !widget.state.hasActiveSession &&
+              widget.state.gatewayError == null &&
+              !widget.settling) ...[
             const SizedBox(width: 6),
             Material(
               type: MaterialType.transparency,
@@ -991,16 +1249,8 @@ class _LuxeChargeHeaderState extends State<_LuxeChargeHeader>
               ),
             ),
           ],
-          const SizedBox(width: 8),
-          Text(
-            now,
-            style: const TextStyle(
-              color: LuxeColors.platinumMid,
-              fontSize: 12.5,
-              fontWeight: FontWeight.w500,
-              fontFeatures: [FontFeature.tabularFigures()],
-            ),
-          ),
+          // The read time is in the metrics line; a second, unlabeled
+          // clock here froze while idle (02:23 next to a 02:31 read, QA 128).
           const SizedBox(width: 4),
         ],
       ),
@@ -1159,4 +1409,68 @@ String _shortDuration(int minutes) {
   final m = math.max(0, minutes);
   if (m < 60) return '≈ $m phút';
   return '≈ ${formatChargeDurationShort(Duration(minutes: m))}';
+}
+
+/// "Lần sạc lúc 21:40 chưa có % thực tế" — one tap opens the sheet.
+class _PendingActualSocCard extends StatelessWidget {
+  const _PendingActualSocCard({required this.session, required this.onTap});
+
+  final SmartChargingSession session;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ended = session.stoppedAt ?? session.updatedAt;
+    final estimate = session.estimatedSoc?.round();
+    return Semantics(
+      button: true,
+      label: 'Nhập phần trăm pin thực tế của lần sạc lúc ${formatClock(ended)}',
+      child: LuxeGlass(
+        key: const ValueKey('pending-actual-soc'),
+        padding: EdgeInsets.zero,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(22),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 64),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.speed_rounded,
+                    color: LuxeColors.champagne,
+                    size: 22,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Lần sạc lúc ${formatClock(ended)} chưa có % thực tế',
+                          style: LuxeText.item,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          estimate == null
+                              ? 'Nhập số trên đồng hồ xe để app học.'
+                              : 'Ước tính ~$estimate%. Nhập số trên đồng hồ xe để app học.',
+                          style: LuxeText.caption,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: LuxeColors.muted,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

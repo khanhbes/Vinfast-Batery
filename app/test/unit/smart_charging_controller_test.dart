@@ -111,6 +111,21 @@ void main() {
     },
   );
 
+  test('a failed read retries in 5 s instead of the 60 s idle poll', () async {
+    // QA 129: one transient 503 blocked control for a whole idle minute.
+    final service = FakeSmartChargerService()..current = session();
+    final controller = build(service);
+    await controller.initialize();
+    service.offline = true;
+    await controller.refresh();
+    expect(controller.state.chargerStatus, isNull);
+    service.offline = false;
+    await Future<void>.delayed(const Duration(milliseconds: 5300));
+    expect(controller.state.chargerStatus?.online, true);
+    expect(controller.state.gatewayError, isNull);
+    controller.dispose();
+  });
+
   test('unexpected polling error stays inside Smart Charge UI', () async {
     final service = FakeSmartChargerService()..unexpectedFailure = true;
     final controller = build(service);

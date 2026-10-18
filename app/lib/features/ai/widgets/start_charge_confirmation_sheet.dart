@@ -18,6 +18,7 @@ class StartChargeConfirmationSheet extends StatefulWidget {
     required this.stopTime,
     required this.isAiMode,
     this.personalizationLabel,
+    this.safetyCeiling,
   });
 
   final int currentSoc;
@@ -26,6 +27,9 @@ class StartChargeConfirmationSheet extends StatefulWidget {
   final String stopTime;
   final bool isAiMode;
   final String? personalizationLabel;
+
+  /// Set for a target charge: latest Shelly timer cut, "HH:MM".
+  final String? safetyCeiling;
 
   /// Show as a modal bottom sheet and return true if confirmed.
   static Future<bool?> show(
@@ -36,6 +40,7 @@ class StartChargeConfirmationSheet extends StatefulWidget {
     required String stopTime,
     required bool isAiMode,
     String? personalizationLabel,
+    String? safetyCeiling,
   }) => showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
@@ -48,6 +53,7 @@ class StartChargeConfirmationSheet extends StatefulWidget {
       stopTime: stopTime,
       isAiMode: isAiMode,
       personalizationLabel: personalizationLabel,
+      safetyCeiling: safetyCeiling,
     ),
   );
 
@@ -59,6 +65,9 @@ class StartChargeConfirmationSheet extends StatefulWidget {
 class _StartChargeConfirmationSheetState
     extends State<StartChargeConfirmationSheet> {
   bool _acknowledged = false;
+
+  /// Task 126 target charge: the server cuts at the %, Shelly at the ceiling.
+  bool get _targetMode => widget.safetyCeiling != null;
 
   String _formatDuration(int totalMinutes) {
     final h = totalMinutes ~/ 60;
@@ -87,7 +96,11 @@ class _StartChargeConfirmationSheetState
                       const Text('Xác nhận bắt đầu sạc', style: LuxeText.item),
                       const SizedBox(height: 2),
                       Text(
-                        widget.isAiMode ? 'Sạc theo AI' : 'Sạc hẹn giờ',
+                        _targetMode
+                            ? 'Sạc đến ${widget.targetSoc}% · tự ngắt'
+                            : widget.isAiMode
+                            ? 'Sạc theo dự đoán'
+                            : 'Sạc hẹn giờ',
                         style: LuxeText.caption,
                       ),
                     ],
@@ -102,7 +115,8 @@ class _StartChargeConfirmationSheetState
             child: _SocJourney(
               from: widget.currentSoc,
               to: widget.targetSoc,
-              label: 'Mục tiêu',
+              label: widget.isAiMode ? 'Mục tiêu' : 'Ước tính khi tự ngắt',
+              approximate: !widget.isAiMode,
             ),
           ),
           const SizedBox(height: 18),
@@ -121,10 +135,19 @@ class _StartChargeConfirmationSheetState
                   const Divider(height: 1),
                   LuxeInfoRow(
                     icon: Icons.power_settings_new_rounded,
-                    label: 'Tự ngắt lúc',
-                    value: widget.stopTime,
-                    valueColor: LuxeColors.emerald,
+                    label: _targetMode ? 'Tự ngắt khi đạt' : 'Tự ngắt lúc',
+                    value: _targetMode
+                        ? '~${widget.targetSoc}% (dự kiến ${widget.stopTime})'
+                        : widget.stopTime,
                   ),
+                  if (_targetMode) ...[
+                    const Divider(height: 1),
+                    LuxeInfoRow(
+                      icon: Icons.shield_outlined,
+                      label: 'Giới hạn an toàn',
+                      value: 'Shelly tự tắt muộn nhất ${widget.safetyCeiling}',
+                    ),
+                  ],
                   if (widget.personalizationLabel != null) ...[
                     const Divider(height: 1),
                     Padding(
@@ -169,8 +192,10 @@ class _StartChargeConfirmationSheetState
             child: LuxeSlideToConfirm(
               key: const ValueKey('start-charge-slider'),
               enabled: _acknowledged,
-              label: widget.isAiMode
-                  ? 'Vuốt để sạc theo AI'
+              label: _targetMode
+                  ? 'Vuốt để sạc đến ${widget.targetSoc}%'
+                  : widget.isAiMode
+                  ? 'Vuốt để sạc theo dự đoán'
                   : 'Vuốt để bắt đầu sạc',
               lockedLabel: 'Đánh dấu ô phía trên để mở khóa',
               onConfirmed: () => Navigator.pop(context, true),
@@ -339,10 +364,14 @@ class _SocJourney extends StatelessWidget {
     required this.from,
     required this.to,
     required this.label,
+    this.approximate = false,
   });
   final int from;
   final int to;
   final String label;
+
+  /// An estimate (timed charge): written "~X%".
+  final bool approximate;
 
   @override
   Widget build(BuildContext context) => Semantics(
@@ -377,7 +406,7 @@ class _SocJourney extends StatelessWidget {
                 ),
               ),
               LuxeMetalText(
-                '$to%',
+                '${approximate ? '~' : ''}$to%',
                 style: const TextStyle(
                   fontSize: 44,
                   height: 1.05,

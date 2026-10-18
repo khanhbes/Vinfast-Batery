@@ -8,6 +8,7 @@ import '../services/api_service.dart';
 import '../services/connection_coordinator.dart';
 import '../services/onboarding_service.dart';
 import '../theme/luxe_theme.dart';
+import 'luxe_connection_notice.dart';
 
 enum _ApiProbeState { checking, ready, unavailable, dependencyUnavailable }
 
@@ -35,6 +36,7 @@ class _InternetNoticeState extends State<InternetConnectionNotice>
   ChargingConnectionState _status = const ChargingConnectionState();
   _ApiProbeState _apiState = _ApiProbeState.checking;
   Timer? _retryTimer;
+  DateTime? _nextProbeAt;
   int _failureCount = 0;
   int _retryIndex = 0;
   bool _probing = false;
@@ -142,6 +144,7 @@ class _InternetNoticeState extends State<InternetConnectionNotice>
     _retryTimer?.cancel();
     final delay = _retryDelays[_retryIndex.clamp(0, _retryDelays.length - 1)];
     if (_retryIndex < _retryDelays.length - 1) _retryIndex++;
+    _nextProbeAt = DateTime.now().add(delay);
     _retryTimer = Timer(delay, () => unawaited(_probeApi()));
   }
 
@@ -161,69 +164,38 @@ class _InternetNoticeState extends State<InternetConnectionNotice>
 
   @override
   Widget build(BuildContext context) {
-    final String? message = switch (_apiState) {
-      _ApiProbeState.checking || _ApiProbeState.ready => null,
-      _ApiProbeState.unavailable => 'Không kết nối được máy chủ ứng dụng.',
-      _ApiProbeState.dependencyUnavailable =>
-        'Máy chủ đang khởi động. Một số dữ liệu có thể chưa cập nhật.',
-    };
-    final connectionMessage = !_status.internetAvailable
-        ? 'Mất kết nối Internet. Dữ liệu gần nhất vẫn được giữ.'
-        : message;
-    final internetMessage = widget.onboardingPending
-        ? 'Đang chờ đồng bộ thông tin xe. Chức năng cần xe sẽ dùng được sau khi đồng bộ.'
-        : connectionMessage;
-    if (internetMessage == null) return widget.child;
+    // Same notice as the Charge tab (QA 130): icon, wording, retry button
+    // and the countdown to the next automatic probe.
+    final (ConnectionIssue, String)? problem = widget.onboardingPending
+        ? (ConnectionIssue.server, 'Đang chờ đồng bộ thông tin xe')
+        : !_status.internetAvailable
+        ? (ConnectionIssue.internet, 'Mất kết nối Internet')
+        : switch (_apiState) {
+            _ApiProbeState.checking || _ApiProbeState.ready => null,
+            _ApiProbeState.unavailable => (
+              ConnectionIssue.server,
+              'Chưa liên lạc được máy chủ',
+            ),
+            _ApiProbeState.dependencyUnavailable => (
+              ConnectionIssue.server,
+              'Máy chủ đang khởi động',
+            ),
+          };
+    if (problem == null) return widget.child;
 
     return Column(
       children: [
         Material(
           color: LuxeColors.sheet,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(
-                  color: LuxeColors.champagne.withValues(alpha: 0.35),
-                ),
-              ),
-            ),
-            child: SafeArea(
-              bottom: false,
-              child: Semantics(
-                liveRegion: true,
-                label: internetMessage,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.cloud_off_rounded,
-                        size: 17,
-                        color: LuxeColors.champagne,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          internetMessage,
-                          style: const TextStyle(
-                            color: LuxeColors.text,
-                            fontSize: 12.5,
-                            height: 1.35,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: _retrying ? null : _retry,
-                        style: TextButton.styleFrom(
-                          foregroundColor: LuxeColors.emerald,
-                        ),
-                        child: Text(_retrying ? 'Đang thử lại' : 'Thử lại'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+          child: SafeArea(
+            bottom: false,
+            child: LuxeConnectionNotice(
+              compact: true,
+              issue: problem.$1,
+              title: problem.$2,
+              autoRetry: false,
+              nextRetryAt: _retrying ? null : _nextProbeAt,
+              onRetry: _retry,
             ),
           ),
         ),

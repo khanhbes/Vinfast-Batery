@@ -36,6 +36,11 @@ class VehicleModel {
   final bool hasEfficiencyData;
   final bool hasOdoData;
 
+  /// When and how the battery % was last set (server-owned, read only):
+  /// `user_confirmed`, `smart_charge_estimated`, `reading_<source>`.
+  final DateTime? batteryDataUpdatedAt;
+  final String? batteryDataSource;
+
   VehicleModel({
     required this.vehicleId,
     this.vehicleName = '',
@@ -65,7 +70,16 @@ class VehicleModel {
     this.hasSohData = true,
     this.hasEfficiencyData = true,
     this.hasOdoData = true,
+    this.batteryDataUpdatedAt,
+    this.batteryDataSource,
   });
+
+  static DateTime? _asDate(dynamic value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    if (value is String) return DateTime.tryParse(value);
+    return null;
+  }
 
   /// Convert Firestore document to model
   /// Catalog identifier used by both new global entries and legacy VinFast
@@ -102,9 +116,16 @@ class VehicleModel {
   /// Approved catalog photos (colours/angles) from the catalog snapshot.
   VehicleShowroomData? get showroom {
     final snapshot = catalogSnapshot;
-    if (snapshot == null) return null;
-    return VehicleShowroomData.fromMedia(snapshot['media']) ??
-        VehicleShowroomData.fromMedia({'heroUrl': snapshot['imageUrl']});
+    final catalog = snapshot == null
+        ? null
+        : VehicleShowroomData.fromMedia(snapshot['media']) ??
+              VehicleShowroomData.fromMedia({'heroUrl': snapshot['imageUrl']});
+    // Task 127: the owner's Feliz render ships with the app.
+    return BundledShowroom.withBundled(
+      catalog,
+      modelId: vinfastModelId,
+      name: modelName,
+    );
   }
 
   /// URL ảnh xe từ catalog media hoặc snapshot
@@ -213,6 +234,10 @@ class VehicleModel {
       archivedAt: data['archivedAt'] is Timestamp
           ? (data['archivedAt'] as Timestamp).toDate()
           : null,
+      batteryDataUpdatedAt: _asDate(
+        data['batteryDataUpdatedAt'] ?? data['lastReadingAt'],
+      ),
+      batteryDataSource: data['batteryDataSource'] as String?,
     );
   }
 
@@ -340,6 +365,8 @@ class VehicleModel {
     bool? hasSohData,
     bool? hasEfficiencyData,
     bool? hasOdoData,
+    DateTime? batteryDataUpdatedAt,
+    String? batteryDataSource,
   }) {
     return VehicleModel(
       vehicleId: vehicleId ?? this.vehicleId,
@@ -371,6 +398,8 @@ class VehicleModel {
       hasSohData: hasSohData ?? this.hasSohData,
       hasEfficiencyData: hasEfficiencyData ?? this.hasEfficiencyData,
       hasOdoData: hasOdoData ?? this.hasOdoData,
+      batteryDataUpdatedAt: batteryDataUpdatedAt ?? this.batteryDataUpdatedAt,
+      batteryDataSource: batteryDataSource ?? this.batteryDataSource,
     );
   }
 }

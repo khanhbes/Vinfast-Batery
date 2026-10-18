@@ -1,0 +1,28 @@
+{
+  "command": [
+    "C:\\Users\\khanh\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin\\docker.exe",
+    "run",
+    "--rm",
+    "--network",
+    "none",
+    "--memory",
+    "512m",
+    "--cpus",
+    "0.5",
+    "--cap-drop",
+    "ALL",
+    "vinfast-worker-qa:task141",
+    "python",
+    "scripts/worker_fixture_smoke.py",
+    "--hold-seconds",
+    "3"
+  ],
+  "cwd": ".",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\ai-141-worker-smoke-20261016.log",
+  "processId": 8220,
+  "timeoutSeconds": 300,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 10.39
+}

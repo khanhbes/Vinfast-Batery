@@ -58,6 +58,14 @@ class _Local implements LocalChatEngine {
 }
 
 class _Host implements AssistantActionHost {
+  final List<(String, Map<String, dynamic>)> prepared = [];
+
+  @override
+  Future<bool> prepare(String name, Map<String, dynamic> args) async {
+    prepared.add((name, args));
+    return true;
+  }
+
   final navigated = <String>[];
   final applied = <String>[];
   int battery = 40;
@@ -130,6 +138,44 @@ void main() {
     final reply = await engine.reply('mở bảo dưỡng');
     expect(reply.action, isNull);
     expect(host.navigated, ['maintenance']);
+  });
+
+  test(
+    'target charging is prepared on the Charge tab, never started',
+    () async {
+      final engine = build([
+        const AssistantTurn(
+          reply: 'Mình mở tab Sạc với mục tiêu 80%',
+          actions: [
+            AssistantAction('prepare_target_charging', {'percent': 80}),
+          ],
+        ),
+      ]);
+      final reply = await engine.reply('sạc đến 80%');
+      expect(reply.action, isNull); // no relay proposal, no card to confirm
+      expect(local.asked, isEmpty);
+      expect(host.prepared.single.$1, 'prepare_target_charging');
+      expect(host.prepared.single.$2['percent'], 80);
+    },
+  );
+
+  test('trip estimate card comes back with the answer', () async {
+    final engine = build([
+      const AssistantTurn(
+        reply: 'Không đủ pin, bạn nên sạc lên 80% trước.',
+        actions: [
+          AssistantAction('plan_trip', {'destination': 'Nội Bài'}),
+        ],
+        card: {
+          'cardType': 'trip_plan',
+          'data': {'usePct': 40},
+        },
+      ),
+    ]);
+    final reply = await engine.reply('đi Nội Bài được không');
+    expect(host.prepared.single.$1, 'plan_trip');
+    expect(reply.card?['cardType'], 'trip_plan');
+    expect(reply.text, startsWith('Không đủ pin'));
   });
 
   test('charging goes through the on-device verified proposal', () async {

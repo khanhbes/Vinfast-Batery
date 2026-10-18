@@ -1,0 +1,23 @@
+{
+  "description": "Task 126 junk-history vectors shared by pytest and flutter test.",
+  "vectors": [
+    {"name": "relay test without load", "log": {"source": "shelly_smart_charging", "sessionState": "interrupted", "energyWh": 0.0}, "expect": "junk", "reason": "below_min_energy"},
+    {"name": "tiny top-off", "log": {"source": "shelly_smart_charging", "sessionState": "cancelled", "energyWh": 13.17}, "expect": "junk", "reason": "below_min_energy"},
+    {"name": "missing meter data", "log": {"source": "shelly_smart_charging", "sessionState": "completed"}, "expect": "junk", "reason": "no_energy_data"},
+    {"name": "full charge", "log": {"source": "shelly_smart_charging", "sessionState": "completed", "energyWh": 1623.3}, "expect": "standard", "reason": "energy"},
+    {"name": "cancelled after real energy", "log": {"source": "shelly_smart_charging", "sessionState": "cancelled", "gridEnergyWh": 1555.97}, "expect": "standard", "reason": "energy"},
+    {"name": "failed after real energy", "log": {"source": "shelly_smart_charging", "sessionState": "failed", "energyWh": 891.3}, "expect": "standard", "reason": "energy"},
+    {"name": "user confirmed with no meter", "log": {"source": "shelly_smart_charging", "sessionState": "completed", "energyWh": 0, "confirmedEndSoc": 81}, "expect": "standard", "reason": "user_confirmed"},
+    {"name": "embedded session energy", "log": {"source": "shelly_smart_charging", "smartChargingSession": {"state": "completed", "energy_used_wh": 420.0}}, "expect": "standard", "reason": "energy"},
+    {"name": "active session never junk", "log": {"source": "shelly_smart_charging", "sessionState": "active", "energyWh": 0}, "expect": "active", "reason": "in_progress"},
+    {"name": "manual log kept", "log": {"source": "manual", "energyWh": 0}, "expect": "standard", "reason": "manual"},
+    {"name": "boundary 30 Wh is standard", "log": {"source": "shelly_smart_charging", "sessionState": "completed", "energyWh": 30.0}, "expect": "standard", "reason": "energy"}
+  ],
+  "hidden": [
+    {"log": {"isDeleted": true}, "hidden": true},
+    {"log": {"hiddenByUserAt": "2026-10-16T00:00:00Z"}, "hidden": true},
+    {"log": {"hiddenAt": "2026-10-16T00:00:00Z", "hiddenBy": "system"}, "hidden": true},
+    {"log": {"isArchived": true}, "hidden": true},
+    {"log": {"isDeleted": false, "energyWh": 100}, "hidden": false}
+  ]
+}

@@ -16,6 +16,7 @@ import '../../core/services/session_service.dart';
 import '../../core/utils/app_error_formatter.dart';
 import '../../data/models/vehicle_model.dart';
 import 'widgets/range_prediction_card.dart';
+import '../../data/services/range_estimator.dart';
 import 'widgets/recent_charging_chart.dart';
 import '../smart_charging/smart_charger_setup_hub_screen.dart';
 import '../trip_planner/trip_planner_wrapper.dart';
@@ -23,6 +24,7 @@ import '../maintenance/maintenance_screen.dart';
 import '../../core/widgets/debug_error_sheet.dart';
 import '../../core/widgets/luxe_kit.dart';
 import '../battery_monitor/battery_monitor_screen.dart';
+import '../ai/services/learning_flow.dart';
 
 // =============================================================================
 // Home Screen V4 — Modern Dashboard Design
@@ -90,6 +92,12 @@ class HomeScreen extends ConsumerWidget {
       if (currentId.isNotEmpty && next.hasValue && next.value == null) {
         ref.read(selectedVehicleIdProvider.notifier).state = '';
         SessionService().setSelectedVehicleId(null);
+      }
+      // Task 127: once per app run, tell the owner when collected data is
+      // enough to train (never trains by itself).
+      final loaded = next.valueOrNull;
+      if (loaded != null && loaded.vehicleId == currentId) {
+        TrainingReadiness.refreshOnce(currentId);
       }
     });
 
@@ -164,7 +172,13 @@ class HomeScreen extends ConsumerWidget {
                               key: GuideRegistry.keyBatterySummary,
                               child: vehicleAsync.when(
                                 data: (vehicle) => LuxeReveal(
-                                  child: LuxeVehicleHero(vehicle: vehicle),
+                                  child: LuxeVehicleHero(
+                                    vehicle: vehicle,
+                                    learned: ref
+                                        .watch(learnedModelsProvider(vehicleId))
+                                        .valueOrNull
+                                        ?.trip,
+                                  ),
                                 ),
                                 loading: () => const _LuxeSkeleton(height: 330),
                                 error: (e, _) => _InlineErrorBanner(
@@ -212,6 +226,11 @@ class HomeScreen extends ConsumerWidget {
     required BuildContext context,
     required WidgetRef ref,
   }) {
+    // One learned km/% for the hero, stats, range card and note (QA 129).
+    final learned = ref
+        .watch(learnedModelsProvider(vehicleId))
+        .valueOrNull
+        ?.trip;
     switch (id) {
       case DashboardWidgetId.quickActions:
         return SliverToBoxAdapter(
@@ -238,6 +257,19 @@ class HomeScreen extends ConsumerWidget {
                     builder: (_) => const BatteryMonitorScreen(),
                   ),
                 ),
+                onReadDashboard: vehicleId.isEmpty
+                    ? null
+                    : () {
+                        final vehicle = vehicleAsync.valueOrNull;
+                        BatteryReadingFlow.run(
+                          context,
+                          vehicleId: vehicleId,
+                          currentSoc: vehicle?.hasBatteryData == true
+                              ? vehicle!.currentBattery.toDouble()
+                              : null,
+                          currentOdoKm: vehicle?.currentOdo.toDouble(),
+                        );
+                      },
               ),
             ),
           ),
@@ -250,7 +282,10 @@ class HomeScreen extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
             child: vehicleAsync.when(
               data: (vehicle) =>
-                  LuxeReveal(index: 2, child: LuxeStatsStrip(vehicle: vehicle)),
+                  LuxeReveal(
+                index: 2,
+                child: LuxeStatsStrip(vehicle: vehicle, learned: learned),
+              ),
               loading: () => const _LuxeSkeleton(height: 96),
               error: (_, _) => const LuxeStatsStrip(vehicle: null),
             ),
@@ -265,10 +300,8 @@ class HomeScreen extends ConsumerWidget {
             child: vehicleAsync.when(
               data: (vehicle) => vehicle == null
                   ? const SizedBox.shrink()
-                  : vehicle.hasBatteryData &&
-                        vehicle.hasSohData &&
-                        vehicle.hasEfficiencyData
-                  ? RangePredictionCard(vehicle: vehicle)
+                  : estimateRange(vehicle, learned: learned) != null
+                  ? RangePredictionCard(vehicle: vehicle, learned: learned)
                   : const LuxeDataHint(
                       message: 'Cần thêm dữ liệu pin để dự đoán quãng đường',
                     ),
@@ -334,7 +367,8 @@ class HomeScreen extends ConsumerWidget {
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
             child: vehicleAsync.when(
-              data: (vehicle) => LuxeEfficiencyNote(vehicle: vehicle),
+              data: (vehicle) =>
+                  LuxeEfficiencyNote(vehicle: vehicle, learned: learned),
               loading: () => const SizedBox.shrink(),
               error: (_, _) => const SizedBox.shrink(),
             ),

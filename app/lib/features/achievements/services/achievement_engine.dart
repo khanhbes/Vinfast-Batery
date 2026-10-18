@@ -13,9 +13,13 @@ class LedgerSession {
     required this.energyWh,
     required this.startedAt,
     this.stoppedAt,
+    this.vehicleId = '',
   });
 
   final String id;
+
+  /// Empty for entries saved before QA 129 (filled by the next full sync).
+  final String vehicleId;
   final String state;
   final bool ai;
   final double startSoc;
@@ -40,6 +44,7 @@ class LedgerSession {
       // Only a real stop time: updatedAt can move days later (e.g. when the
       // end level is confirmed) and would fake very long sessions.
       stoppedAt: s.stoppedAt,
+      vehicleId: s.vehicleId,
     );
   }
 
@@ -52,6 +57,7 @@ class LedgerSession {
     'e': energyWh,
     'b': startedAt.toUtc().toIso8601String(),
     'x': stoppedAt?.toUtc().toIso8601String(),
+    if (vehicleId.isNotEmpty) 'vid': vehicleId,
   };
 
   static LedgerSession? fromJson(Map<String, Object?> j) {
@@ -66,6 +72,7 @@ class LedgerSession {
       energyWh: (j['e'] as num?)?.toDouble() ?? 0,
       startedAt: started,
       stoppedAt: j['x'] == null ? null : DateTime.tryParse('${j['x']}'),
+      vehicleId: j['vid'] is String ? j['vid']! as String : '',
     );
   }
 
@@ -79,7 +86,11 @@ class LedgerSession {
 
   /// A session counts once it really delivered energy (anti-gaming: a
   /// quick ON/OFF or a no-load test is not a charge).
-  bool get valid => energyWh >= 20;
+  /// Same floor as the server's history (`JUNK_MAX_ENERGY_WH`, 30 Wh): the
+  /// Overview week and History must count the same sessions (QA 129).
+  bool get valid => energyWh >= minValidEnergyWh;
+
+  static const double minValidEnergyWh = 30;
 }
 
 /// Everything the catalog can measure.

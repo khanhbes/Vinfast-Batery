@@ -732,9 +732,54 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None, de
     @authenticated
     def actual_soc(uid, session_id):
         body = request.get_json(silent=True) or {}
-        return execute(lambda: ok(service.confirm_actual_soc(
-            uid, session_id, float(body.get("actualSoc")),
-        ).to_dict()))
+        try:
+            actual = float(body.get("actualSoc"))
+            odo = body.get("odoKm")
+            odo = float(odo) if odo not in (None, "") else None
+        except (TypeError, ValueError):
+            return jsonify({"success": False, "error": {
+                "code": "invalidSoc", "userMessage": "% pin thực tế không hợp lệ."}}), 400
+        def action():
+            session = service.confirm_actual_soc(uid, session_id, actual, odo)
+            value = session.to_dict()
+            try:
+                value["training"] = service.learning_status(uid, session.vehicle_id)
+            except Exception:
+                value["training"] = None
+            return ok(value)
+        return execute(action)
+
+    # -- Task 127: collected data and owner-triggered training ------------
+    @bp.get("/api/learning/<vehicle_id>/status")
+    @authenticated
+    def learning_status(uid, vehicle_id):
+        return execute(lambda: ok(service.learning_status(uid, vehicle_id)))
+
+    @bp.post("/api/learning/<vehicle_id>/train")
+    @authenticated
+    def learning_train(uid, vehicle_id):
+        body = request.get_json(silent=True) or {}
+        return execute(lambda: ok(service.train_model(
+            uid, vehicle_id, str(body.get("model") or ""), str(body.get("mode") or "finetune"))))
+
+    @bp.post("/api/learning/<vehicle_id>/readings")
+    @authenticated
+    def learning_add_reading(uid, vehicle_id):
+        return execute(lambda: ok(service.add_battery_reading(
+            uid, vehicle_id, request.get_json(silent=True) or {})))
+
+    @bp.delete("/api/learning/<vehicle_id>/readings/<reading_id>")
+    @authenticated
+    def learning_void_reading(uid, vehicle_id, reading_id):
+        return execute(lambda: ok(service.void_battery_reading(uid, vehicle_id, reading_id)))
+
+    @bp.post("/api/learning/<vehicle_id>/trips")
+    @authenticated
+    def learning_add_trips(uid, vehicle_id):
+        body = request.get_json(silent=True) or {}
+        source = "csv" if body.get("source") == "csv" else "trip"
+        rows = body.get("trips") if isinstance(body.get("trips"), list) else [body.get("trip")]
+        return execute(lambda: ok(service.add_trip_samples(uid, vehicle_id, rows, source=source)))
 
     @bp.get("/api/smart-charging/sessions/<session_id>/telemetry")
     @authenticated
@@ -786,36 +831,14 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None, de
     @authenticated
     def get_training_samples(uid):
         vehicle_id = str(request.args.get("vehicleId") or "").strip()
+        # Only the caller's own samples (Task 126). The old fallback served
+        # the shared global dataset, i.e. other accounts' sessions.
         samples = []
         if vehicle_id:
             try:
                 samples = repository.training_samples(uid, vehicle_id)
             except Exception as ex:
-                print(f"Error reading personal training samples from repo: {ex}")
-        if not samples:
-            try:
-                from ai_server.dataset_manager import load_dataset
-                records = load_dataset()
-                samples = [
-                    {
-                        "sessionId": r.get("session_id"),
-                        "vehicleId": r.get("vehicle_id", vehicle_id),
-                        "startSoc": r.get("start_soc"),
-                        "targetSoc": r.get("target_soc", 100.0),
-                        "actualSoc": r.get("actual_end_soc", 100.0),
-                        "durationSeconds": r.get("duration_seconds"),
-                        "gridEnergyWh": r.get("energy_wh"),
-                        "ambientTemp": r.get("ambient_temp_c"),
-                        "trainingExcluded": r.get("training_excluded", False),
-                        "eligibleForTargetTraining": r.get("training_eligible", True),
-                        "developerNote": r.get("developer_note", ""),
-                        "updatedAt": r.get("updated_at") or r.get("confirmed_at") or r.get("created_at"),
-                    }
-                    for r in records
-                    if not vehicle_id or r.get("vehicle_id") == vehicle_id
-                ]
-            except Exception as ex:
-                print(f"Error falling back to dataset_manager: {ex}")
+                print(f"training samples read failed: {type(ex).__name__}")
         return ok({"items": samples})
 
     @bp.get("/api/smart-charging/developer/training-access")

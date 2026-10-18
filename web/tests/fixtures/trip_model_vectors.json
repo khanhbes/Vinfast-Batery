@@ -1,0 +1,323 @@
+{
+  "description": "Task 126-127 trip-model vectors shared by pytest and flutter test (rounded to 0.1). Shape fitted on the owner's 77 rides.",
+  "plans": [
+    {
+      "name": "short city ride",
+      "input": {
+        "distance_km": 12,
+        "current_soc": 60,
+        "km_per_pct": 0.9,
+        "km_per_pct_source": "catalog",
+        "conditions": {}
+      },
+      "expect": {
+        "distanceKm": 12.0,
+        "usePct": 11.9,
+        "useLowPct": 8.9,
+        "useHighPct": 14.9,
+        "arrivalSoc": 48.1,
+        "arrivalLowSoc": 45.1,
+        "verdict": "comfortable",
+        "kmPerPct": 0.9,
+        "kmPerPctSource": "catalog",
+        "factor": 1.014,
+        "startNeededSoc": 34.9,
+        "avgSpeedKmh": 21.0,
+        "payloadKg": 65,
+        "suggestions": []
+      }
+    },
+    {
+      "name": "long ride needs a charge first",
+      "input": {
+        "distance_km": 45,
+        "current_soc": 50,
+        "km_per_pct": 0.9,
+        "km_per_pct_source": "catalog",
+        "conditions": {}
+      },
+      "expect": {
+        "distanceKm": 45.0,
+        "usePct": 44.7,
+        "useLowPct": 33.5,
+        "useHighPct": 55.9,
+        "arrivalSoc": 5.3,
+        "arrivalLowSoc": -5.9,
+        "verdict": "insufficient",
+        "kmPerPct": 0.9,
+        "kmPerPctSource": "catalog",
+        "factor": 1.014,
+        "startNeededSoc": 75.9,
+        "avgSpeedKmh": 21.0,
+        "payloadKg": 65,
+        "suggestions": [
+          {
+            "kind": "charge_first",
+            "targetSoc": 80
+          }
+        ]
+      }
+    },
+    {
+      "name": "round trip with a passenger in the rain",
+      "input": {
+        "distance_km": 20,
+        "current_soc": 80,
+        "km_per_pct": 1.0,
+        "km_per_pct_source": "personal",
+        "conditions": {
+          "riders": 2,
+          "weather": "rain",
+          "round_trip": true
+        }
+      },
+      "expect": {
+        "distanceKm": 20.0,
+        "usePct": 44.5,
+        "useLowPct": 36.5,
+        "useHighPct": 52.5,
+        "arrivalSoc": 35.5,
+        "arrivalLowSoc": 27.5,
+        "verdict": "comfortable",
+        "kmPerPct": 1.0,
+        "kmPerPctSource": "odo",
+        "factor": 1.262,
+        "startNeededSoc": 72.5,
+        "avgSpeedKmh": 21.0,
+        "payloadKg": 127,
+        "suggestions": []
+      }
+    },
+    {
+      "name": "beyond one full charge",
+      "input": {
+        "distance_km": 120,
+        "current_soc": 100,
+        "km_per_pct": 0.9,
+        "km_per_pct_source": "catalog",
+        "conditions": {}
+      },
+      "expect": {
+        "distanceKm": 120.0,
+        "usePct": 119.2,
+        "useLowPct": 89.4,
+        "useHighPct": 149.0,
+        "arrivalSoc": -19.2,
+        "arrivalLowSoc": -49.0,
+        "verdict": "insufficient",
+        "kmPerPct": 0.9,
+        "kmPerPctSource": "catalog",
+        "factor": 1.014,
+        "startNeededSoc": 100.0,
+        "avgSpeedKmh": 21.0,
+        "payloadKg": 65,
+        "suggestions": [
+          {
+            "kind": "charge_on_the_way",
+            "stops": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "fast, hilly, cargo",
+      "input": {
+        "distance_km": 25,
+        "current_soc": 70,
+        "km_per_pct": 0.95,
+        "km_per_pct_source": "personal",
+        "conditions": {
+          "speed": "fast",
+          "hilly": true,
+          "cargo_kg": 20
+        }
+      },
+      "expect": {
+        "distanceKm": 25.0,
+        "usePct": 32.8,
+        "useLowPct": 26.9,
+        "useHighPct": 38.7,
+        "arrivalSoc": 37.2,
+        "arrivalLowSoc": 31.3,
+        "verdict": "comfortable",
+        "kmPerPct": 0.95,
+        "kmPerPctSource": "odo",
+        "factor": 1.414,
+        "startNeededSoc": 58.7,
+        "avgSpeedKmh": 28.0,
+        "payloadKg": 85,
+        "suggestions": []
+      }
+    },
+    {
+      "name": "auto speed from route",
+      "input": {
+        "distance_km": 30,
+        "current_soc": 90,
+        "km_per_pct": 0.9,
+        "km_per_pct_source": "catalog",
+        "duration_min": 40,
+        "conditions": {
+          "speed": "auto"
+        }
+      },
+      "expect": {
+        "distanceKm": 30.0,
+        "usePct": 43.3,
+        "useLowPct": 32.5,
+        "useHighPct": 54.1,
+        "arrivalSoc": 46.7,
+        "arrivalLowSoc": 35.9,
+        "verdict": "comfortable",
+        "kmPerPct": 0.9,
+        "kmPerPctSource": "catalog",
+        "factor": 1.473,
+        "startNeededSoc": 74.1,
+        "avgSpeedKmh": 33.8,
+        "payloadKg": 65,
+        "suggestions": []
+      }
+    },
+    {
+      "name": "shorter alternative",
+      "input": {
+        "distance_km": 40,
+        "current_soc": 55,
+        "km_per_pct": 0.9,
+        "km_per_pct_source": "catalog",
+        "alternative_km": [
+          36.2,
+          41
+        ],
+        "conditions": {}
+      },
+      "expect": {
+        "distanceKm": 40.0,
+        "usePct": 39.7,
+        "useLowPct": 29.8,
+        "useHighPct": 49.7,
+        "arrivalSoc": 15.3,
+        "arrivalLowSoc": 5.3,
+        "verdict": "tight",
+        "kmPerPct": 0.9,
+        "kmPerPctSource": "catalog",
+        "factor": 1.014,
+        "startNeededSoc": 69.7,
+        "avgSpeedKmh": 21.0,
+        "payloadKg": 65,
+        "suggestions": [
+          {
+            "kind": "charge_first",
+            "targetSoc": 70
+          },
+          {
+            "kind": "shorter_route",
+            "distanceKm": 36.2,
+            "savedPct": 3.8
+          }
+        ]
+      }
+    },
+    {
+      "name": "owner trained model, two riders, rain",
+      "input": {
+        "distance_km": 14,
+        "current_soc": 45,
+        "model": {
+          "refPctPerKm": 0.72743,
+          "speed": 0.012417,
+          "speed2": 0.0018093,
+          "loadPer10Kg": 0.03108,
+          "rain": 0.05583,
+          "source": "model",
+          "samples": 77,
+          "spread": 0.186,
+          "mae": 0.69
+        },
+        "conditions": {
+          "riders": 2,
+          "weather": "rain"
+        }
+      },
+      "expect": {
+        "distanceKm": 14.0,
+        "usePct": 12.9,
+        "useLowPct": 10.5,
+        "useHighPct": 15.3,
+        "arrivalSoc": 32.1,
+        "arrivalLowSoc": 29.7,
+        "verdict": "comfortable",
+        "kmPerPct": 1.212,
+        "kmPerPctSource": "model",
+        "factor": 1.263,
+        "startNeededSoc": 35.3,
+        "avgSpeedKmh": 21.0,
+        "payloadKg": 127,
+        "suggestions": []
+      }
+    },
+    {
+      "name": "highway pace costs more",
+      "input": {
+        "distance_km": 35,
+        "current_soc": 60,
+        "km_per_pct": 1.2,
+        "km_per_pct_source": "catalog",
+        "duration_min": 50,
+        "conditions": {
+          "speed": "auto"
+        }
+      },
+      "expect": {
+        "distanceKm": 35.0,
+        "usePct": 34.8,
+        "useLowPct": 26.1,
+        "useHighPct": 43.5,
+        "arrivalSoc": 25.2,
+        "arrivalLowSoc": 16.5,
+        "verdict": "tight",
+        "kmPerPct": 1.2,
+        "kmPerPctSource": "catalog",
+        "factor": 1.354,
+        "startNeededSoc": 63.5,
+        "avgSpeedKmh": 31.5,
+        "payloadKg": 65,
+        "suggestions": [
+          {
+            "kind": "charge_first",
+            "targetSoc": 65
+          },
+          {
+            "kind": "ride_eco",
+            "savedPct": 8.7
+          }
+        ]
+      }
+    }
+  ],
+  "learning": {
+    "sessions": [
+      {
+        "endedAt": "2026-09-01",
+        "startSoc": 20,
+        "actualEndSoc": 90,
+        "odoKm": 1000
+      },
+      {
+        "endedAt": "2026-09-04",
+        "startSoc": 30,
+        "actualEndSoc": 85,
+        "odoKm": 1054
+      },
+      {
+        "endedAt": "2026-09-07",
+        "startSoc": 25,
+        "actualEndSoc": 80,
+        "odoKm": 1111
+      }
+    ],
+    "catalog": 0.9,
+    "kmPerPct": 0.925,
+    "pairs": 2
+  }
+}

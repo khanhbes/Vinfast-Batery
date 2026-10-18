@@ -85,6 +85,16 @@ class PersonalChargingProfile:
     last_training_error: str | None = None
     last_trained_at: datetime | None = None
     updated_at: datetime = field(default_factory=utcnow)
+    # Task 126 charge model (shelly.charge_model.LearnedProfile.to_dict()).
+    learned: dict[str, Any] = field(default_factory=dict)
+    # "user" once the owner toggled Personal AI; "default" when learning was
+    # enabled by confirming a battery reading without visiting the toggle.
+    consent_source: str = "user"
+    # Task 127 trip model (assistant.trip_model.TripModelParams.to_dict()),
+    # the ride ids it was trained on and the last training report.
+    trip_model: dict[str, Any] = field(default_factory=dict)
+    trip_trained_ids: list[str] = field(default_factory=list)
+    training_reports: dict[str, Any] = field(default_factory=dict)
 
     @property
     def personalization_stage(self) -> str:
@@ -127,7 +137,14 @@ class PersonalChargingProfile:
             },
             "lastTrainedAt": iso(self.last_trained_at),
             "updatedAt": iso(self.updated_at),
+            "learned": self.learned,
+            "consentSource": self.consent_source,
+            "tripModel": self.trip_model,
+            "tripTrainedIds": self.trip_trained_ids[-2000:],
+            "trainingReports": self.training_reports,
         }
+        if public:
+            value.pop("tripTrainedIds")
         if not public:
             value["ownerUid"] = self.owner_uid
         return value
@@ -241,6 +258,17 @@ class ChargePreview:
     personalization_stage: str = "base"
     guardrail_clamped: bool = False
     guardrail_warnings: list[str] = field(default_factory=list)
+    # Task 126: "target" = server cuts at the target, Shelly timer is only a
+    # ceiling; "timer" = legacy, the device timer is the planned stop.
+    stop_mode: str = "timer"
+    estimate_low_seconds: int | None = None
+    estimate_high_seconds: int | None = None
+    wh_per_pct: float | None = None
+    charge_power_w: float | None = None
+    power_source: str | None = None
+    soc_mae: float | None = None
+    learned_samples: int = 0
+    device_timer_seconds: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -274,6 +302,15 @@ class ChargePreview:
                 "clamped": self.guardrail_clamped,
                 "warnings": self.guardrail_warnings,
             },
+            "stopMode": self.stop_mode,
+            "estimateLowSeconds": self.estimate_low_seconds,
+            "estimateHighSeconds": self.estimate_high_seconds,
+            "whPerPct": self.wh_per_pct,
+            "chargePowerW": self.charge_power_w,
+            "powerSource": self.power_source,
+            "socMae": self.soc_mae,
+            "learnedSamples": self.learned_samples,
+            "deviceTimerSeconds": self.device_timer_seconds,
         }
 
 
@@ -355,6 +392,26 @@ class ChargingSession:
     # separate explicit destructive operation.
     hidden_at: datetime | None = None
     safety_policy_version: str = "v2.0"
+    # Task 126 target charging.
+    stop_mode: str = "timer"
+    model_wh_per_pct: float | None = None
+    target_energy_wh: float | None = None
+    idle_since: datetime | None = None
+    unsafe_samples: int = 0
+    soc_error: float | None = None
+    end_odo_km: float | None = None
+    # Task 126 ride-through: Shelly unreachable while a verified charge runs.
+    link_lost_since: datetime | None = None
+    link_gap_count: int = 0
+    link_gap_seconds: float = 0.0
+    link_alert_sent: bool = False
+    last_link_error: str | None = None
+    # Task 127 full-battery tail (power fell from ~400 W to ~30-20 W).
+    tail_since: datetime | None = None
+    tail_entry_w: float | None = None
+    full_detected_at: datetime | None = None
+    # Where the end % came from: estimate | taper_full | user.
+    end_soc_source: str = "estimate"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -435,4 +492,20 @@ class ChargingSession:
             "telemetry_samples": self.telemetry_samples,
             "hidden_at": iso(self.hidden_at),
             "safety_policy_version": self.safety_policy_version,
+            "stop_mode": self.stop_mode,
+            "model_wh_per_pct": self.model_wh_per_pct,
+            "target_energy_wh": self.target_energy_wh,
+            "idle_since": iso(self.idle_since),
+            "unsafe_samples": self.unsafe_samples,
+            "soc_error": self.soc_error,
+            "end_odo_km": self.end_odo_km,
+            "link_lost_since": iso(self.link_lost_since),
+            "link_gap_count": self.link_gap_count,
+            "link_gap_seconds": round(self.link_gap_seconds, 1),
+            "link_alert_sent": self.link_alert_sent,
+            "last_link_error": self.last_link_error,
+            "tail_since": iso(self.tail_since),
+            "tail_entry_w": self.tail_entry_w,
+            "full_detected_at": iso(self.full_detected_at),
+            "end_soc_source": self.end_soc_source,
         }

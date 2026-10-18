@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 import 'dart:convert';
 import 'dart:io';
 
@@ -17,6 +18,7 @@ import '../../core/services/firebase_bootstrap_coordinator.dart';
 import '../repositories/vehicle_spec_repository.dart';
 import '../repositories/notification_repository.dart';
 import 'notification_service.dart';
+import 'charge_progress_notification.dart';
 import '../../core/services/smart_charge_remote_events.dart';
 
 /// FCM/APNs token lifecycle. Push token documents are server-only; the app
@@ -175,6 +177,8 @@ class PushNotificationService {
     }
     // Another phone / the server changed Smart Charge: refresh, never jump.
     SmartChargeRemoteEvents.instance.addFromPush(message.data);
+    // Progress while no live monitor runs; a final state clears it.
+    unawaited(ChargeProgressNotification.handlePush(message.data));
     // A message received while the app is open is not a tap: deep links run
     // only from onMessageOpenedApp/getInitialMessage. Navigating here moved
     // the user to History mid-command on every session push (Task 123).
@@ -318,6 +322,10 @@ class PushNotificationService {
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // Data-only pushes are reconciled by the foreground app; iOS displays
-  // notification payloads through APNs while the app is suspended.
+  // Data-only pushes are otherwise reconciled by the foreground app; iOS
+  // displays notification payloads through APNs while suspended. Task 126:
+  // the worker's progress pushes keep the "charging now" notification fresh
+  // while Android has killed the app.
+  DartPluginRegistrant.ensureInitialized();
+  await ChargeProgressNotification.handlePush(message.data);
 }

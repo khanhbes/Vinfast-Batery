@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/luxe_theme.dart';
 import '../../achievements/controllers/achievements_controller.dart';
 import '../../achievements/services/achievement_engine.dart';
+import '../../../core/providers/vehicle_providers.dart';
 
 /// Last 7 days of real charging, from the on-device session ledger (the
 /// same one the achievements use — no extra reads, no placeholder data).
@@ -24,8 +25,14 @@ class RecentChargingChart extends ConsumerWidget {
     final sessions = ref.watch(
       achievementsControllerProvider.select((s) => s.sessions),
     );
+    // The ledger is per account; the Overview is per vehicle (QA 129).
+    final vehicleId = ref.watch(selectedVehicleIdProvider);
     return RecentChargingPanel(
-      sessions: sessions,
+      sessions: [
+        for (final s in sessions)
+          if (vehicleId.isEmpty || s.vehicleId.isEmpty || s.vehicleId == vehicleId)
+            s,
+      ],
       onViewHistory: onViewHistory,
       now: now,
     );

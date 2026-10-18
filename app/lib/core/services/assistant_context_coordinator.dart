@@ -12,10 +12,30 @@ class AssistantContextCoordinator extends ChangeNotifier {
   AssistantContextCoordinator({
     this.cooldownDuration = const Duration(minutes: 15),
     this.bubbleDisplayDuration = const Duration(seconds: 6),
-  });
+    this.idleDockAfter = const Duration(seconds: 6),
+  }) {
+    _scheduleIdleDock();
+  }
 
   final Duration cooldownDuration;
   final Duration bubbleDisplayDuration;
+
+  /// The bot tucks into the edge after this long at rest, so it stops
+  /// covering cards (QA 130: "sức khỏe pin" sat under it on the Overview).
+  /// Scrolling up, a bubble or a tap brings it back.
+  final Duration idleDockAfter;
+  Timer? _idleDockTimer;
+
+  void _scheduleIdleDock() {
+    _idleDockTimer?.cancel();
+    _idleDockTimer = Timer(idleDockAfter, () {
+      if (_isBubbleVisible) {
+        _scheduleIdleDock();
+      } else {
+        setDocked(true);
+      }
+    });
+  }
 
   bool _isBubbleVisible = false;
   bool _isDocked = false;
@@ -34,6 +54,11 @@ class AssistantContextCoordinator extends ChangeNotifier {
 
   /// Cập nhật trạng thái neo thu nhỏ (Auto-docking) khi người dùng cuộn trang
   void setDocked(bool docked) {
+    if (docked) {
+      _idleDockTimer?.cancel();
+    } else {
+      _scheduleIdleDock();
+    }
     if (_isDocked != docked) {
       _isDocked = docked;
       notifyListeners();
@@ -52,6 +77,10 @@ class AssistantContextCoordinator extends ChangeNotifier {
     _bubbleMood = mood;
     _quickActionChips = chips;
     _isBubbleVisible = true;
+    // A bubble needs the full button to speak from; it tucks in again
+    // after the bubble and a pause.
+    _isDocked = false;
+    _scheduleIdleDock();
     notifyListeners();
 
     _bubbleTimer = Timer(duration ?? bubbleDisplayDuration, () {
@@ -116,22 +145,8 @@ class AssistantContextCoordinator extends ChangeNotifier {
       }
     }
 
-    // 3. Gợi ý tại tab Sạc pin (currentTab == 1)
-    if (currentTab == 1) {
-      if (_canTrigger('tab_charge_hint', currentTime)) {
-        _recordTrigger('tab_charge_hint', currentTime);
-        showBubble(
-          'Mẹo: Bạn có thể cài đặt mức pin mục tiêu 80-90% để bảo vệ tuổi thọ pin lâu nhất!',
-          mood: BatteryBotMood.charging,
-          chips: const [
-            'Làm sao dừng sạc?',
-            'Vì sao nút sạc bị khóa?',
-            'Kết nối Shelly',
-          ],
-        );
-        return true;
-      }
-    }
+    // No tip bubble on the Charge tab: it covered the % dial and repeated
+    // the "80% · Bảo vệ pin · Khuyên dùng" chip right below it (QA 129).
 
     return false;
   }
@@ -149,6 +164,7 @@ class AssistantContextCoordinator extends ChangeNotifier {
   @override
   void dispose() {
     _bubbleTimer?.cancel();
+    _idleDockTimer?.cancel();
     super.dispose();
   }
 }

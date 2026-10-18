@@ -280,6 +280,33 @@ class NotificationService {
     );
   }
 
+  static const int idTrainingReady = 1013;
+  static const String channelLearning = 'ai_learning_v1';
+
+  /// Task 127: enough new data for the owner to train a personal model.
+  Future<void> showTrainingReady({
+    required String vehicleId,
+    required String message,
+  }) async {
+    await initialize();
+    if (!await _hasNotificationPermission()) return;
+    await _plugin.show(
+      idTrainingReady,
+      'Đủ dữ liệu để huấn luyện AI',
+      message,
+      NotificationDetails(
+        android: const AndroidNotificationDetails(
+          channelLearning,
+          'AI cá nhân',
+          channelDescription: 'Báo khi đủ dữ liệu để huấn luyện mô hình riêng',
+          icon: '@mipmap/ic_launcher',
+        ),
+        iOS: _iosDetails(presentSound: false),
+      ),
+      payload: 'learning/${Uri.encodeComponent(vehicleId)}',
+    );
+  }
+
   String _smartChargeSessionPayload(String? vehicleId, String sessionId) {
     final safeSession = Uri.encodeComponent(sessionId);
     final safeVehicle = vehicleId == null || vehicleId.isEmpty

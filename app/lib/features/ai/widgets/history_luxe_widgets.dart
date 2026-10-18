@@ -4,6 +4,9 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/utils/number_text.dart';
+import '../../../data/services/charge_estimator.dart';
+
 import '../../../core/theme/luxe_theme.dart';
 import '../../../data/models/smart_charging_session.dart';
 
@@ -22,19 +25,23 @@ String historyDuration(Duration value) {
       : '${hours}g ${minutes.toString().padLeft(2, '0')}p';
 }
 
-String historyCost(double? vnd) =>
-    vnd == null ? '—' : '${NumberFormat.decimalPattern('vi_VN').format(vnd)} đ';
+String historyCost(double? vnd) => vnd == null ? '—' : formatVnd(vnd);
 
 String historyStrategy(SmartChargingSession session) =>
     session.strategy == ChargingStrategy.manualTimed
     ? 'Sạc hẹn giờ'
-    : 'Sạc theo AI';
+    : session.isTargetMode
+    ? 'Sạc đến ${session.targetSoc.round()}%'
+    : 'Sạc theo dự đoán';
 
 /// Status label and colour for one session (list node, pill and detail).
+///
+/// The outcome only: a target charge that reached its target is
+/// "Hoàn thành" even when a few meter readings are missing (QA 129: it said
+/// "Một phần" while the Charge tab and BatteryBot said "Hoàn thành"). Missing
+/// readings are a separate note in the detail sheet and the "Thiếu số đo"
+/// filter.
 (String, Color) historyStatus(SmartChargingSession session) {
-  if (session.energyQuality == 'partial') {
-    return ('Một phần', LuxeColors.platinumMid);
-  }
   return switch (session.state) {
     ChargingSessionState.completed => ('Hoàn thành', LuxeColors.emerald),
     ChargingSessionState.cancelled => ('Đã dừng', historyAmber),
@@ -578,7 +585,7 @@ class HistoryTimelineTile extends StatelessWidget {
     final started = (session.startedAt ?? session.createdAt).toLocal();
     final meta = [
       DateFormat('HH:mm').format(started),
-      historyDuration(historySessionDuration(session)),
+      formatChargeDuration(historySessionDuration(session)),
       if (session.estimatedCostVnd != null)
         historyCost(session.estimatedCostVnd),
     ].join('  ·  ');
@@ -672,10 +679,7 @@ class HistoryTimelineTile extends StatelessWidget {
                             spacing: 8,
                             runSpacing: 6,
                             children: [
-                              Text(
-                                '${session.startSoc.round()}% → ${session.targetSoc.round()}%',
-                                style: _socStyle,
-                              ),
+                              Text(_socSpanLabel(session), style: _socStyle),
                               HistoryStatusPill(
                                 label: statusText,
                                 color: statusColor,
@@ -685,7 +689,10 @@ class HistoryTimelineTile extends StatelessWidget {
                           const SizedBox(height: 8),
                           HistorySocTrack(
                             start: session.startSoc,
-                            end: session.targetSoc,
+                            end:
+                                session.actualEndSoc ??
+                                session.estimatedSoc ??
+                                session.targetSoc,
                             color: statusColor,
                             showLabel: false,
                           ),
@@ -742,6 +749,19 @@ class _RailPainter extends CustomPainter {
   @override
   bool shouldRepaint(_RailPainter old) =>
       old.color != color || old.top != top || old.bottom != bottom;
+}
+
+/// "22% → 81%" with the owner's reading, "32% → ~79%" with the estimate,
+/// else the target (Task 128: the list showed the target as the end %).
+String _socSpanLabel(SmartChargingSession session) {
+  final start = '${session.startSoc.round()}%';
+  final actual = session.actualEndSoc;
+  if (actual != null) return '$start → ${actual.round()}%';
+  final estimate = session.estimatedSoc;
+  if (estimate != null && session.state.isTerminal) {
+    return '$start → ~${estimate.round()}%';
+  }
+  return '$start · mục tiêu ${session.targetSoc.round()}%';
 }
 
 /// Slim 0–100 % track with the session's start → end span lit.
@@ -921,7 +941,7 @@ class HistoryActiveCard extends StatelessWidget {
                     ),
                     Flexible(
                       child: Text(
-                        'còn ${historyDuration(session.remaining())}',
+                        'còn ${formatChargeDuration(session.remaining())}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: LuxeText.label.copyWith(color: LuxeColors.text),

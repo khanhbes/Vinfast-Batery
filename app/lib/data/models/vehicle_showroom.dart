@@ -110,6 +110,55 @@ class ShowroomColor {
   };
 }
 
+/// Photos bundled with the app (Task 127), for models whose catalog has no
+/// photo set yet. `asset:` URLs resolve to [AssetImage].
+abstract final class BundledShowroom {
+  static const String felizMintAsset = 'assets/vehicles/feliz_mint.webp';
+
+  static const ShowroomColor felizMint = ShowroomColor(
+    id: 'bundled-feliz-mint',
+    name: 'Xanh bạc hà',
+    swatch: Color(0xFFC3D3C6),
+    angles: [
+      ShowroomImage(
+        thumbnailUrl: 'asset:$felizMintAsset',
+        mediumUrl: 'asset:$felizMintAsset',
+        heroUrl: 'asset:$felizMintAsset',
+        credit: 'Ảnh render VinFast Feliz do chủ xe cung cấp',
+        backgroundRemoved: true,
+      ),
+    ],
+  );
+
+  static bool isFeliz({String? modelId, String? name}) =>
+      (modelId ?? '').toLowerCase().contains('feliz') ||
+      (name ?? '').toLowerCase().contains('feliz');
+
+  /// [catalog] plus the bundled colour; the bundled photo becomes the
+  /// default when the catalog has no 360° set to show instead.
+  static VehicleShowroomData? withBundled(
+    VehicleShowroomData? catalog, {
+    String? modelId,
+    String? name,
+  }) {
+    if (!isFeliz(modelId: modelId, name: name)) return catalog;
+    if (catalog == null) {
+      return VehicleShowroomData(
+        colors: const [felizMint],
+        defaultColorId: felizMint.id,
+      );
+    }
+    if (catalog.colors.any((c) => c.id == felizMint.id)) return catalog;
+    final colors = [...catalog.colors, felizMint]
+        .take(VehicleShowroomData.maxColors + 1)
+        .toList();
+    return VehicleShowroomData(
+      colors: colors,
+      defaultColorId: catalog.anyCanSpin ? catalog.defaultColorId : felizMint.id,
+    );
+  }
+}
+
 /// Catalog showroom for one vehicle model. Built from `media.showroom`, or —
 /// for catalogs that only have the older single 2D/3D image — a single
 /// "Ảnh chính" colour with one angle so every screen uses one code path.

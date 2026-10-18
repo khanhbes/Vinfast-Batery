@@ -110,7 +110,10 @@ class _SessionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isAi = session.strategy != ChargingStrategy.manualTimed;
-    final endSoc = session.estimatedSoc ?? session.targetSoc;
+    // The owner's reading wins over the estimate (QA 128: 17/10 showed the
+    // 80 % estimate although 79 % was confirmed); estimates carry a "~".
+    final confirmed = session.actualEndSoc;
+    final endSoc = confirmed ?? session.estimatedSoc ?? session.targetSoc;
     final duration = (session.stoppedAt ?? session.updatedAt).difference(
       session.startedAt ?? session.createdAt,
     );
@@ -175,7 +178,7 @@ class _SessionTile extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          '${endSoc.toStringAsFixed(0)}%',
+                          '${confirmed == null ? '~' : ''}${endSoc.toStringAsFixed(0)}%',
                           style: const TextStyle(
                             color: LuxeColors.emerald,
                             fontSize: 15,

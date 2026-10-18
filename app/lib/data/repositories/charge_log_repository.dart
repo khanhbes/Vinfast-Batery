@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/utils/firestore_safe_query.dart';
 import '../../core/services/api_service.dart';
+import '../services/charge_history_quality.dart';
 import '../models/charge_log_model.dart';
 import '../models/vehicle_model.dart';
 
@@ -216,10 +217,8 @@ class ChargeLogRepository {
           .where((doc) {
             final data =
                 (doc.data() as Map<String, dynamic>?) ?? <String, dynamic>{};
-            return data['isDeleted'] != true &&
-                data['isArchived'] != true &&
-                data['archivedAt'] == null &&
-                data['hiddenByUserAt'] == null;
+            // Hidden and junk Shelly logs never count as a charge (Task 126).
+            return ChargeHistoryQuality.isVisible(data);
           })
           .map((doc) => ChargeLogModel.fromFirestore(doc))
           .toList();

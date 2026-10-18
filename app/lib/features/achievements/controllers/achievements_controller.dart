@@ -141,6 +141,18 @@ class AchievementsController extends StateNotifier<AchievementsState> {
     for (final event in AchievementSignals.instance.drain()) {
       unawaited(recordEvent(event));
     }
+    final hidden = AchievementSignals.instance.drainHidden();
+    if (hidden.isNotEmpty) unawaited(forgetSessions(hidden));
+  }
+
+  /// Sessions hidden from History leave the ledger (and the Overview week).
+  Future<void> forgetSessions(Iterable<String> ids) async {
+    await load();
+    var changed = false;
+    for (final id in ids) {
+      changed = _data.sessions.remove(id) != null || changed;
+    }
+    if (changed) await _commit();
   }
 
   @override
@@ -156,6 +168,7 @@ class AchievementsController extends StateNotifier<AchievementsState> {
   final DateTime Function() _clock;
 
   static const syncInterval = Duration(hours: 6);
+  static const fullSyncInterval = Duration(hours: 24);
   static const _maxPages = 10;
 
   AchievementLedgerData _data = AchievementLedgerData();
@@ -233,19 +246,38 @@ class AchievementsController extends StateNotifier<AchievementsState> {
     }
     _syncInFlight = true;
     if (mounted) state = state.copyWith(syncing: true);
+    // Once a day walk the whole history: entries the server no longer lists
+    // (hidden, junk) leave the ledger and corrected energy is refreshed
+    // (QA 129). Otherwise stop at the first known session.
+    final lastFull = _data.lastFullSync;
+    final full =
+        force ||
+        lastFull == null ||
+        _clock().difference(lastFull) >= fullSyncInterval;
     try {
       String? cursor;
+      final seen = <String>{};
+      var reachedEnd = false;
       for (var i = 0; i < _maxPages; i++) {
         final result = await page(cursor: cursor);
         var reachedKnown = false;
         for (final s in result.items) {
           final entry = LedgerSession.fromSession(s);
           if (entry == null) continue;
+          seen.add(entry.id);
           if (_data.sessions.containsKey(entry.id)) reachedKnown = true;
           _data.sessions[entry.id] = entry;
         }
         cursor = result.nextCursor;
-        if (reachedKnown || cursor == null || result.items.isEmpty) break;
+        if (cursor == null || result.items.isEmpty) {
+          reachedEnd = true;
+          break;
+        }
+        if (reachedKnown && !full) break;
+      }
+      if (full && reachedEnd) {
+        _data.sessions.removeWhere((id, _) => !seen.contains(id));
+        _data.lastFullSync = _clock();
       }
       _data.lastSync = _clock();
       await _commit();

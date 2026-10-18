@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/theme/luxe_theme.dart';
 
@@ -40,7 +41,11 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
     vsync: this,
     duration: const Duration(milliseconds: 750),
   );
-  int _selectedMinutes = 120;
+  /// The owner's last choice, kept when the section is rebuilt after a
+  /// charge ends and across app starts (QA 130: 30 phút reset to 2 giờ).
+  static int? _lastSelectedMinutes;
+  static const _prefsKey = 'timed_charge_minutes';
+  int _selectedMinutes = _lastSelectedMinutes ?? 120;
   bool _pressed = false;
   bool _submitting = false;
 
@@ -59,6 +64,26 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    if (_lastSelectedMinutes == null) _restoreSelection();
+  }
+
+  Future<void> _restoreSelection() async {
+    try {
+      final saved = (await SharedPreferences.getInstance()).getInt(_prefsKey);
+      if (saved == null || !_presets.any((p) => p.minutes == saved)) return;
+      _lastSelectedMinutes = saved;
+      if (mounted) setState(() => _selectedMinutes = saved);
+    } on Object {
+      // A remembered choice is a convenience only.
+    }
+  }
+
+  void _select(int minutes) {
+    _lastSelectedMinutes = minutes;
+    setState(() => _selectedMinutes = minutes);
+    SharedPreferences.getInstance()
+        .then((prefs) => prefs.setInt(_prefsKey, minutes))
+        .ignore();
   }
 
   @override
@@ -185,7 +210,7 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
                             label: preset.label,
                             selected: _selectedMinutes == preset.minutes,
                             onTap: () {
-                              setState(() => _selectedMinutes = preset.minutes);
+                              _select(preset.minutes);
                               HapticFeedback.selectionClick();
                             },
                           ),

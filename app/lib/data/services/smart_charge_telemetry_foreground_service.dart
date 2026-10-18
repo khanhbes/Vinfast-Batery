@@ -230,7 +230,7 @@ class _SmartChargeTelemetryTaskHandler extends TaskHandler {
                 : 'còn khoảng $minutes phút')
           : 'đang sạc';
 
-      final socText = estimate.available ? '${estimate.soc!.round()}%' : '—';
+      final socText = estimate.available ? '~${estimate.soc!.round()}%' : '—';
 
       await FlutterForegroundTask.updateService(
         notificationTitle: 'Đang sạc $socText · $power W',

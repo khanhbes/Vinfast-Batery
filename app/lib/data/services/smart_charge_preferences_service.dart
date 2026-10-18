@@ -43,6 +43,9 @@ class SmartChargePreferencesService {
         updatedAt: updatedAt is Timestamp
             ? updatedAt.toDate()
             : DateTime.tryParse(updatedAt?.toString() ?? '') ?? DateTime.now(),
+        targetSocByVehicle: SmartChargePreferences.targetsFrom(
+          data['targetSocByVehicle'],
+        ),
       );
       await _writeCache(value);
       return value;
@@ -119,6 +122,32 @@ class SmartChargePreferencesService {
         }, SetOptions(merge: true));
     await _writeCache(value);
     return value;
+  }
+
+  /// The vehicle's charge target for the account (merged per vehicle).
+  Future<void> saveTargetSoc(String vehicleId, double targetSoc) async {
+    final uid = _firebaseAuth?.currentUser?.uid;
+    final firestore = _firebaseFirestore;
+    if (uid == null || firestore == null || vehicleId.isEmpty) return;
+    if (!targetSoc.isFinite || targetSoc <= 0 || targetSoc > 100) return;
+    final value = targetSoc.roundToDouble();
+    await firestore
+        .collection('users')
+        .doc(uid)
+        .collection('smartChargePreferences')
+        .doc('current')
+        .set({
+          'ownerUid': uid,
+          'targetSocByVehicle': {vehicleId: value},
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+    final cached = await _readCache(uid);
+    await _writeCache(
+      cached.copyWith(
+        ownerUid: uid,
+        targetSocByVehicle: {...cached.targetSocByVehicle, vehicleId: value},
+      ),
+    );
   }
 
   Future<SmartChargePreferences> _readCache(String? uid) async {

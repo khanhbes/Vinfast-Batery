@@ -48,7 +48,7 @@ void main() {
     expect(find.text('90%'), findsOneWidget);
     expect(find.text('100%'), findsWidgets);
     expect(find.byKey(const ValueKey('create-plan-button')), findsOneWidget);
-    expect(find.text('DỰ ĐOÁN VỚI AI'), findsOneWidget);
+    expect(find.text('DỰ ĐOÁN THỜI GIAN SẠC'), findsOneWidget);
   });
 
   testWidgets('fits 320dp width without overflow', (tester) async {
@@ -161,7 +161,7 @@ void main() {
     expect(find.textContaining('Dự kiến dừng lúc'), findsOneWidget);
     // One duration wording on every surface (Task 122).
     expect(find.text('1 giờ'), findsOneWidget);
-    expect(find.text('SẠC THEO AI'), findsOneWidget);
+    expect(find.text('SẠC THEO DỰ ĐOÁN'), findsOneWidget);
   });
 
   testWidgets('requires estimated SOC acknowledgement before start', (
@@ -405,7 +405,8 @@ void main() {
     await tester.pumpWidget(app(controller));
     await tester.scrollUntilVisible(find.text('Lịch sử gần đây'), 300);
     expect(find.text('20%'), findsWidgets);
-    expect(find.text('25%'), findsOneWidget);
+    // Not confirmed by the owner: the estimate carries a "~" (QA 128).
+    expect(find.text('~25%'), findsOneWidget);
     expect(find.text('Hoàn thành'), findsOneWidget);
   });
 }

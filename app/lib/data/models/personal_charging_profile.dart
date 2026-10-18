@@ -76,8 +76,8 @@ class PersonalChargingProfile {
 
   String get friendlyStageLabel => switch (personalizationStage) {
     'personalized' => 'Đã cá nhân hóa cho xe này',
-    'calibrating' => 'AI đang học thói quen sạc',
-    _ => 'AI đang làm quen với xe của bạn',
+    'calibrating' => 'Đang học cách sạc của xe',
+    _ => 'Chờ lần nhập % đầu tiên',
   };
 
   factory PersonalChargingProfile.fromJson(

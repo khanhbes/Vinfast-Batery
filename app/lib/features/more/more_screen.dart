@@ -35,6 +35,7 @@ import '../settings/vehicle_garage_screen.dart';
 import '../smart_charging/smart_charger_setup_hub_screen.dart';
 import '../trip_planner/trip_planner_wrapper.dart';
 import '../settings/assistant_memory_screen.dart';
+import '../settings/personal_ai_settings_screen.dart';
 
 /// Tab Cài đặt (luxe): profile card ringed by the achievement rank, a 2×2
 /// grid of live tiles (vehicle, Shelly, achievements, maintenance) and quiet
@@ -251,6 +252,23 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                 index: 2,
                 child: LuxeSettingsGroup(
                   children: [
+                    // Task 127: the owner trains the charge and trip models
+                    // here (was hidden behind the advanced-AI beta flag).
+                    LuxeSettingsRow(
+                      key: const ValueKey('more-personal-ai'),
+                      icon: Icons.model_training_rounded,
+                      title: 'AI cá nhân',
+                      subtitle:
+                          'Dữ liệu đã thu thập, nút Huấn luyện và kết quả mô hình sạc/lộ trình',
+                      onTap: () {
+                        final vehicleId = ref.read(selectedVehicleIdProvider);
+                        if (vehicleId.isEmpty) {
+                          AppPopup.showWarning('Hãy chọn xe trước');
+                          return;
+                        }
+                        _push(PersonalAiSettingsScreen(vehicleId: vehicleId));
+                      },
+                    ),
                     LuxeSettingsRow(
                       key: const ValueKey('more-assistant-memory'),
                       icon: Icons.auto_awesome_rounded,
@@ -276,7 +294,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                     if (BetaCapabilities.tripPlanner)
                       LuxeSettingsRow(
                         icon: Icons.alt_route_rounded,
-                        title: 'Lập hành trình',
+                        title: 'Lộ trình',
                         subtitle: 'Chọn điểm đến và ước tính pin cần dùng',
                         onTap: () => _push(const TripPlannerWrapper()),
                       ),

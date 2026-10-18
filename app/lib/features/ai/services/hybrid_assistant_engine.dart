@@ -24,6 +24,12 @@ abstract interface class AssistantActionHost {
   /// Opens a screen immediately (navigation needs no confirmation).
   Future<bool> navigate(String screen, {String? sessionId});
 
+  /// Task 126: opens a screen pre-filled for the user to finish, never
+  /// energizing anything: `plan_trip` (Lộ trình) and
+  /// `prepare_target_charging` (Charge tab with the target set; the user
+  /// still slides to start).
+  Future<bool> prepare(String name, Map<String, dynamic> args);
+
   /// Applies a confirmed data/setting change. Returns how to undo it, or
   /// throws [AssistantActionError] with a user-facing reason.
   Future<AssistantUndo?> apply(String name, Map<String, dynamic> args);
@@ -77,6 +83,7 @@ class HybridAssistantEngine implements LocalChatEngine {
     'edit_reminder',
     'cancel_reminder',
   };
+  static const _prepare = {'plan_trip', 'prepare_target_charging'};
   static const _oneTap = {
     'update_battery_level',
     'update_odometer',
@@ -119,8 +126,13 @@ class HybridAssistantEngine implements LocalChatEngine {
     if (turn.memoryChanged) onMemoryChanged?.call();
     _remember('user', message);
     _remember('assistant', turn.reply);
-    if (turn.actions.isEmpty) return LocalChatReply(turn.reply);
-    return _act(turn.actions.first, turn.reply, uid);
+    if (turn.actions.isEmpty) {
+      return LocalChatReply(turn.reply, card: turn.card);
+    }
+    final acted = await _act(turn.actions.first, turn.reply, uid);
+    return turn.card == null || acted.card != null
+        ? acted
+        : LocalChatReply(acted.text, card: turn.card, action: acted.action);
   }
 
   Future<LocalChatReply> _basic(
@@ -155,6 +167,16 @@ class HybridAssistantEngine implements LocalChatEngine {
         opened
             ? reply
             : 'Mình chưa mở được màn hình đó. Bạn tìm trong Cài đặt nhé.',
+      );
+    }
+    if (_prepare.contains(name)) {
+      final opened = await host.prepare(name, args);
+      return LocalChatReply(
+        opened
+            ? reply
+            : name == 'plan_trip'
+            ? 'Mình chưa mở được Lộ trình. Bạn hãy chọn xe trước nhé.'
+            : 'Mình chưa mở được tab Sạc. Bạn hãy chọn xe trước nhé.',
       );
     }
     if (_riskyLocal.contains(name)) {

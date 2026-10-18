@@ -53,9 +53,10 @@ abstract final class ChargeEstimator {
   /// Wall-to-battery efficiency of the on-board charger.
   static const double efficiency = 0.9;
 
-  /// Above this SOC the BMS balances cells and power tapers.
-  static const double cvStartSoc = 85;
-  static const double cvPowerFactor = 0.55;
+  /// Above this SOC the charger slows down (Task 126 defaults, the same as
+  /// web/shelly/charge_model.py; the server learns per-vehicle values).
+  static const double cvStartSoc = 95;
+  static const double cvPowerFactor = 0.75;
 
   /// Typical VinFast scooter home charger, used only without any data.
   static const double standardPowerW = 400;
@@ -103,6 +104,39 @@ abstract final class ChargeEstimator {
     return (watts: standardPowerW, source: ChargePowerSource.standard);
   }
 
+  /// Seconds to deliver [from] -> [to] % at [powerW] wall power, with a
+  /// slower tail above [taperStart] (Task 126). Twin of
+  /// `charge_model.estimate` on the server; both are checked against
+  /// web/tests/fixtures/charge_model_vectors.json.
+  static int wallSeconds({
+    required double whPerPct,
+    required double powerW,
+    required double from,
+    required double to,
+    double taperStart = cvStartSoc,
+    double taperRatio = cvPowerFactor,
+  }) {
+    final start = from.clamp(0, 100).toDouble();
+    final target = to.clamp(0, 100).toDouble();
+    final taper = taperStart.clamp(0, 100).toDouble();
+    final fast = math.max(0.0, math.min(target, taper) - start);
+    final slow = math.max(0.0, target - math.max(start, taper));
+    final ratio = taperRatio.clamp(0.2, 1.0).toDouble();
+    final hours = fast * whPerPct / powerW + slow * whPerPct / (powerW * ratio);
+    return math.max(0, (hours * 3600).round());
+  }
+
+  /// Battery % after [energyWh] at the wall, from the learned Wh per %.
+  static double socAfter({
+    required double whPerPct,
+    required double startSoc,
+    required double energyWh,
+  }) {
+    final start = startSoc.clamp(0, 100).toDouble();
+    if (whPerPct <= 0) return start;
+    return (start + math.max(0.0, energyWh) / whPerPct).clamp(start, 100.0);
+  }
+
   /// Time from [currentSoc] to [targetSoc]; null when it cannot be known
   /// (no capacity, nothing to charge or invalid input).
   static ChargeEstimate? estimate({
@@ -112,6 +146,9 @@ abstract final class ChargeEstimator {
     required double powerW,
     required ChargePowerSource powerSource,
     DateTime? now,
+
+    /// Learned wall Wh per 1 % (server profile); overrides [capacityWh].
+    double? whPerPercent,
   }) {
     if (!currentSoc.isFinite ||
         !targetSoc.isFinite ||
@@ -124,21 +161,27 @@ abstract final class ChargeEstimator {
     final from = currentSoc.clamp(0, 100).toDouble();
     final to = targetSoc.clamp(0, 100).toDouble();
     if (to <= from) return null;
-    final effective = powerW * efficiency;
-    final ccEnd = math.min(to, cvStartSoc);
-    final ccWh = ccEnd > from ? capacityWh * (ccEnd - from) / 100 : 0.0;
-    final cvFrom = math.max(from, cvStartSoc);
-    final cvWh = to > cvFrom ? capacityWh * (to - cvFrom) / 100 : 0.0;
-    final ccMinutes = ccWh / effective * 60;
-    final cvMinutes = cvWh / (effective * cvPowerFactor) * 60;
-    final minutes = (ccMinutes + cvMinutes).ceil().clamp(1, maxMinutes);
+    final whPerPct = whPerPercent ?? capacityWh / 100 / efficiency;
+    final seconds = wallSeconds(
+      whPerPct: whPerPct,
+      powerW: powerW,
+      from: from,
+      to: to,
+    );
+    final cvSeconds = wallSeconds(
+      whPerPct: whPerPct,
+      powerW: powerW,
+      from: math.max(from, cvStartSoc),
+      to: to,
+    );
+    final minutes = (seconds / 60).ceil().clamp(1, maxMinutes);
     return ChargeEstimate(
       minutes: minutes,
-      requiredWh: ccWh + cvWh,
+      requiredWh: whPerPct * (to - from) * efficiency,
       powerW: powerW,
       powerSource: powerSource,
       finishAt: (now ?? DateTime.now()).add(Duration(minutes: minutes)),
-      cvMinutes: cvMinutes.ceil(),
+      cvMinutes: (cvSeconds / 60).ceil(),
     );
   }
 }

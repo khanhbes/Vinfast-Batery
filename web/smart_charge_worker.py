@@ -11,9 +11,12 @@ import hashlib
 import uuid
 
 from shelly.models import utcnow, NONTERMINAL_SESSION_STATES
-from shelly.service import TRANSIENT_READ_CODES
 from shelly.providers import ProviderError
 from shelly.personal_model_registry import PersonalModelRegistry, validate_candidate
+
+
+TARGET_POLL_SECONDS = 30
+_FATAL_ERROR_PREFIXES = ("workerLease", "workerScope", "controlStateStore")
 
 
 def reconcile_once(service, uid: str, *, lease_guard=None):
@@ -27,11 +30,24 @@ def reconcile_once(service, uid: str, *, lease_guard=None):
     for session in sessions:
         if lease_guard is not None:
             lease_guard()
-        binding = service.session_binding(uid, session)
-        if not binding:
-            reconciled.append(service.mark_session_unknown(uid, session, "bindingChanged"))
-            continue
-        reconciled.append(_reconcile_session(service, uid, session, binding, lease_guard=lease_guard))
+        try:
+            binding = service.session_binding(uid, session)
+            if not binding:
+                reconciled.append(service.mark_session_unknown(uid, session, "bindingChanged"))
+                continue
+            reconciled.append(_reconcile_session(service, uid, session, binding, lease_guard=lease_guard))
+        except Exception as error:
+            # Losing the worker lease (or stopping) must end this cycle at once:
+            # a stale worker may not keep sending commands.
+            if (type(error).__name__ == "WorkerStopping"
+                    or str(error).startswith(_FATAL_ERROR_PREFIXES)):
+                raise
+            # One broken session must not skip the others or mark the whole
+            # worker unhealthy (which blocks every new ON). It is retried on
+            # the next cycle; a relay that could not be verified OFF stays
+            # leased and nonterminal (Task 126).
+            print(f"[smart-charge-worker] session reconcile failed: {type(error).__name__}")
+            reconciled.append(session)
     # Legacy callers expect one session; all sessions were still processed.
     return reconciled[0] if reconciled else None
 
@@ -42,16 +58,15 @@ def _reconcile_session(service, uid: str, session, binding, *, lease_guard=None)
     except ProviderError as error:
         if lease_guard is not None:
             lease_guard()
-        # A busy/rate-limited Cloud read is retried next cycle; it must not turn
-        # a verified session into "unknown" (which triggers recovery_off).
-        if error.code in TRANSIENT_READ_CODES:
-            return session
-        return service.mark_session_unknown(uid, session, error.code)
+        # A busy Cloud or an unreachable Shelly during a verified charge is a
+        # connection gap (Task 126): keep the session, the device timer still
+        # bounds it, and continue when the readings come back.
+        return service.note_read_failure(uid, session, error.code)
     if lease_guard is not None:
         lease_guard()
     if not service._status_matches_device(status, session.device_id):
         return service.mark_session_unknown(uid, session, "deviceUnverified")
-    service._apply_safety(uid, binding, status)
+    service._apply_safety(uid, binding, status, [session])
     # Reuse the service terminal path so the last meter reading, lease release,
     # vehicle SOC projection and post-commit notification stay identical for
     # manual stop, app polling, restart recovery and this worker.
@@ -68,6 +83,10 @@ def run_forever(service, user_ids=None, interval_seconds: int = 60, *, sleeper=t
     ``user_ids`` callback remains supported for tests and local deployments.
     """
     interval_seconds = max(15, min(60, int(interval_seconds)))
+    # Target charges are checked twice as often: the cutoff happens here when
+    # the app is closed (Task 126).
+    target_interval = min(interval_seconds, TARGET_POLL_SECONDS)
+    fast = False
     backoff = interval_seconds
     worker_id = str(uuid.uuid4())
     lease_deadline = None
@@ -123,6 +142,8 @@ def run_forever(service, user_ids=None, interval_seconds: int = 60, *, sleeper=t
                                  .limit(100))
                         owners = set()
                         snapshots = list(query.stream())
+                        fast = any((item.to_dict() or {}).get("stop_mode") == "target"
+                                   for item in snapshots)
                         if len(snapshots) >= 100:
                             raise RuntimeError("workerScanCapacityReached")
                         for snapshot in snapshots:
@@ -147,11 +168,14 @@ def run_forever(service, user_ids=None, interval_seconds: int = 60, *, sleeper=t
                     service.repository.publish_worker_heartbeat(worker_id, healthy=False, now=service.clock())
                 except Exception:
                     pass  # Never overwrite another worker's heartbeat.
-                print(f"[smart-charge-worker] transient error: {type(error).__name__}")
+                # The machine code too (QA 129: 9 RuntimeErrors with no cause).
+                code = getattr(error, "code", None) or str(error)
+                detail = f" code={code}" if isinstance(code, str) and code.isidentifier() else ""
+                print(f"[smart-charge-worker] transient error: {type(error).__name__}{detail}")
                 wait(min(60, backoff))
                 backoff = min(60, backoff * 2)
                 continue
-            wait(interval_seconds)
+            wait(target_interval if fast else interval_seconds)
     finally:
         service._worker_lease_guard = previous_guard
         service.provider.worker_lease_guard = previous_provider_guard

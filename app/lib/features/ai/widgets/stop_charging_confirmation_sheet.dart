@@ -18,6 +18,7 @@ Future<StopChargingDecision?> showStopChargingConfirmationSheet(
   required double currentSoc,
   required double targetSoc,
   required Duration remaining,
+  bool targetMode = false,
 }) => showModalBottomSheet<StopChargingDecision>(
   context: context,
   isScrollControlled: true,
@@ -27,6 +28,7 @@ Future<StopChargingDecision?> showStopChargingConfirmationSheet(
     currentSoc: currentSoc,
     targetSoc: targetSoc,
     remaining: remaining,
+    targetMode: targetMode,
   ),
 );
 
@@ -35,11 +37,17 @@ class _StopChargingConfirmationSheet extends StatefulWidget {
     required this.currentSoc,
     required this.targetSoc,
     required this.remaining,
+    this.targetMode = false,
   });
 
+  /// Estimated (no BMS): always shown with "~" (QA 129).
   final double currentSoc;
   final double targetSoc;
+
+  /// Same value as the charging card: time to the target in target mode,
+  /// the Shelly timer otherwise (QA 129: the sheet showed the ceiling).
   final Duration remaining;
+  final bool targetMode;
 
   @override
   State<_StopChargingConfirmationSheet> createState() =>
@@ -82,20 +90,22 @@ class _StopChargingConfirmationSheetState
                 const SizedBox(height: 4),
                 LuxeInfoRow(
                   icon: Icons.battery_5_bar_rounded,
-                  label: 'Pin hiện tại',
-                  value: '${widget.currentSoc.round()}%',
+                  label: 'Pin hiện tại (ước tính)',
+                  value: '~${widget.currentSoc.round()}%',
                 ),
                 const Divider(height: 1),
-                LuxeInfoRow(
-                  icon: Icons.flag_outlined,
-                  label: 'Mục tiêu',
-                  value: '${widget.targetSoc.round()}%',
-                  valueColor: LuxeColors.emerald,
-                ),
-                const Divider(height: 1),
+                // A timed charge has no target (QA 130).
+                if (widget.targetMode) ...[
+                  LuxeInfoRow(
+                    icon: Icons.flag_outlined,
+                    label: 'Mục tiêu',
+                    value: '${widget.targetSoc.round()}%',
+                  ),
+                  const Divider(height: 1),
+                ],
                 LuxeInfoRow(
                   icon: Icons.timer_outlined,
-                  label: 'Còn lại',
+                  label: widget.targetMode ? 'Còn tới mục tiêu' : 'Shelly tự ngắt sau',
                   value: _duration(widget.remaining),
                 ),
               ],

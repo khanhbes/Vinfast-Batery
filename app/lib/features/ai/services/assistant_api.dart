@@ -14,12 +14,16 @@ class AssistantTurn {
     required this.actions,
     this.memoryChanged = false,
     this.remainingToday,
+    this.card,
   });
 
   final String reply;
   final List<AssistantAction> actions;
   final bool memoryChanged;
   final int? remainingToday;
+
+  /// Rich result card from a server tool (Task 126: `trip_plan`).
+  final Map<String, dynamic>? card;
 }
 
 class AssistantAction {
@@ -66,17 +70,28 @@ class AssistantApi {
   AssistantApi({
     http.Client? client,
     Future<String?> Function()? tokenResolver,
+    Future<String?> Function()? refreshedTokenResolver,
     this.timeout = const Duration(seconds: 35),
   }) : _client = client ?? http.Client(),
-       _tokenResolver = tokenResolver ?? _firebaseToken;
+       _tokenResolver = tokenResolver ?? _firebaseToken,
+       _refreshedTokenResolver =
+           refreshedTokenResolver ??
+           (tokenResolver == null ? _refreshedFirebaseToken : null);
 
   final http.Client _client;
   final Future<String?> Function() _tokenResolver;
+
+  /// Forces a new ID token after a 401 (expired token, QA 129).
+  final Future<String?> Function()? _refreshedTokenResolver;
   final Duration timeout;
 
   static Future<String?> _firebaseToken() async => Firebase.apps.isEmpty
       ? null
       : FirebaseAuth.instance.currentUser?.getIdToken();
+
+  static Future<String?> _refreshedFirebaseToken() async => Firebase.apps.isEmpty
+      ? null
+      : FirebaseAuth.instance.currentUser?.getIdToken(true);
 
   void close() => _client.close();
 
@@ -96,20 +111,34 @@ class AssistantApi {
       throw const AssistantUnavailable('auth');
     }
     if (token == null) throw const AssistantUnavailable('auth');
-    final request = http.Request(method, uri)
-      ..headers.addAll({
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      });
-    if (body != null) request.body = jsonEncode(body);
-    final http.Response response;
-    try {
-      response = await http.Response.fromStream(
-        await _client.send(request).timeout(timeout),
-      ).timeout(timeout);
-    } on Object {
-      throw const AssistantUnavailable('network');
+    Future<http.Response> send(String bearer) async {
+      final request = http.Request(method, uri)
+        ..headers.addAll({
+          'Authorization': 'Bearer $bearer',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        });
+      if (body != null) request.body = jsonEncode(body);
+      try {
+        return await http.Response.fromStream(
+          await _client.send(request).timeout(timeout),
+        ).timeout(timeout);
+      } on Object {
+        throw const AssistantUnavailable('network');
+      }
+    }
+
+    var response = await send(token);
+    final refresh = _refreshedTokenResolver;
+    if (response.statusCode == 401 && refresh != null) {
+      // Rejected before any work: safe to repeat once with a fresh token.
+      String? fresh;
+      try {
+        fresh = await refresh().timeout(const Duration(seconds: 12));
+      } on Object {
+        fresh = null;
+      }
+      if (fresh != null && fresh != token) response = await send(fresh);
     }
     Map<String, dynamic> decoded;
     try {
@@ -159,6 +188,9 @@ class AssistantApi {
       actions: actions,
       memoryChanged: data['memoryChanged'] == true,
       remainingToday: (data['remainingToday'] as num?)?.toInt(),
+      card: data['card'] is Map
+          ? Map<String, dynamic>.from(data['card'] as Map)
+          : null,
     );
   }
 

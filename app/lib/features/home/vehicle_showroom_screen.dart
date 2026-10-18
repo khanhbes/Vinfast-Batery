@@ -107,7 +107,7 @@ class _VehicleShowroomScreenState extends State<VehicleShowroomScreen> {
                           ? null
                           : color.canSpin
                           ? 'Kéo ngang để xoay 360° · chụm hai ngón để phóng to'
-                          : 'Kéo để ngắm xe · chụm hai ngón để phóng to',
+                          : 'Kéo ngang để xoay quanh xe (2.5D từ một ảnh, mặt kia là ảnh lật) · chụm hai ngón để phóng to',
                     ),
                   ),
                   const SizedBox(height: 14),
@@ -124,6 +124,7 @@ class _VehicleShowroomScreenState extends State<VehicleShowroomScreen> {
                           key: ValueKey(color?.id ?? 'none'),
                           color: color,
                           zoomable: true,
+                          orbit: true,
                           fallback: fallback,
                         ),
                       ),

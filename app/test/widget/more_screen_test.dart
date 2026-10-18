@@ -35,7 +35,7 @@ void main() {
     expect(find.text('Xe của tôi'), findsOneWidget);
     expect(find.text('Sạc thông minh Shelly'), findsOneWidget);
     expect(
-      find.text('Lập hành trình'),
+      find.text('Lộ trình'),
       BetaCapabilities.tripPlanner ? findsOneWidget : findsNothing,
     );
     expect(

@@ -11,6 +11,7 @@ import 'battery_status_card.dart';
 import 'breathing_bot_avatar.dart';
 import 'charging_progress_card.dart';
 import 'streaming_text_widget.dart';
+import 'trip_plan_chat_card.dart';
 import 'trip_summary_card.dart';
 
 class ChatMessageBubble extends StatelessWidget {
@@ -90,8 +91,13 @@ class ChatMessageBubble extends StatelessWidget {
     String timeStr,
     double screenWidth,
   ) {
+    // One announcement: the label used to sit on top of the same text, so
+    // TalkBack read the message twice (QA 129).
     return Semantics(
-      label: 'Tin nhắn của bạn: ${message.content}',
+      container: true,
+      excludeSemantics: true,
+      label:
+          'Tin nhắn của bạn${message.isQueued ? ', chờ mạng' : ' lúc $timeStr'}: ${message.content}',
       child: Padding(
         padding: const EdgeInsets.fromLTRB(48, 8, 16, 8),
         child: Column(
@@ -175,8 +181,12 @@ class ChatMessageBubble extends StatelessWidget {
     // Luxe: BatteryBot answers as open text (no bubble) under a small
     // signature line; cards and actions sit flush with the text.
     const dim = Color(0xFF858990);
+    // Only a heading: the rendered answer below is read as text (the raw
+    // content here read "**" markdown and the answer twice, QA 129), and
+    // its cards and buttons stay reachable.
     return Semantics(
-      label: 'BatteryBot trả lời: ${message.content}',
+      container: true,
+      label: 'BatteryBot trả lời lúc $timeStr',
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
         child: Column(
@@ -357,6 +367,13 @@ class ChatMessageBubble extends StatelessWidget {
         'durationMinutes',
       ],
       'local_prediction' => ['durationSeconds'],
+      'trip_plan' => [
+        'usePct',
+        'useLowPct',
+        'useHighPct',
+        'arrivalSoc',
+        'distanceKm',
+      ],
       _ => <String>[],
     };
     if (requiredFields.any(
@@ -419,6 +436,8 @@ class ChatMessageBubble extends StatelessWidget {
           title: title.isNotEmpty ? title : 'Tiến độ Sạc Thông Minh',
           data: data,
         );
+      case 'trip_plan':
+        return TripPlanChatCard(title: title, data: data);
       case 'trip_summary':
         return TripSummaryCard(
           title: title.isNotEmpty ? title : 'Tóm tắt Chuyến đi & Hiệu suất',

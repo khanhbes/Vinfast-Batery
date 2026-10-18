@@ -415,9 +415,18 @@ def test_transient_cloud_read_error_never_cuts_a_verified_session(setup, code):
     assert provider.get_status(binding).relay is True
 
 
-def test_non_transient_read_error_still_marks_session_unknown(setup):
+def test_offline_during_a_verified_charge_rides_through(setup):
+    """Task 126: a Wi-Fi/Cloud drop keeps the session (the device timer still
+    bounds it); turning it "unknown" made the next good read cut the charge."""
     repo, provider, service, binding, session = start(setup)
     provider.get_status = Mock(side_effect=ProviderError("deviceOffline", "offline", True))
+    current = service.current("qa-owner", "qa-vehicle")
+    assert current.state == "active" and current.link_lost_since is not None
+
+
+def test_non_transient_read_error_still_marks_session_unknown(setup):
+    repo, provider, service, binding, session = start(setup)
+    provider.get_status = Mock(side_effect=ProviderError("needsReauthentication", "auth", False))
     assert service.current("qa-owner", "qa-vehicle").state == "unknown"
 
 

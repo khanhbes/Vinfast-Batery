@@ -50,6 +50,8 @@ class HistoryRetentionV4Tests(unittest.TestCase):
         repo.publish_worker_heartbeat("qa-worker", healthy=True)
         preview = service.create_preview("owner", {"vehicleId": "vehicle-a", "currentSoc": 20, "targetSoc": 80})
         session = service.start("owner", preview.preview_id, "history-key")
+        # A real charge (>= 30 Wh): zero-energy sessions are junk (Task 126).
+        provider.status.energy_wh += 400
         provider.status.relay = False
         service.current("owner", vehicle_id="vehicle-a")
         page, _ = repo.history_page("owner")

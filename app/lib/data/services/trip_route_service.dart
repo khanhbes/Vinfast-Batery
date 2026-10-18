@@ -24,7 +24,8 @@ class PlannedRoute {
 
 class TripRouteService {
   static const _headers = {
-    'User-Agent': 'VinFastBattery/1.0 (trip-planner)',
+    // Nominatim policy: identify the application (QA 129).
+    'User-Agent': 'VinFastBattery/1.3 (Android app com.bes.vinbatery; trip planner)',
     'Accept-Language': 'vi,en;q=0.8',
   };
 
@@ -56,7 +57,12 @@ class TripRouteService {
     }).toList();
   }
 
-  static Future<PlannedRoute> route(LatLng start, LatLng end) async {
+  static Future<PlannedRoute> route(LatLng start, LatLng end) async =>
+      (await routes(start, end)).first;
+
+  /// The fastest route first, then up to two alternatives (Task 126: a
+  /// shorter one can save battery).
+  static Future<List<PlannedRoute>> routes(LatLng start, LatLng end) async {
     final path =
         '/route/v1/driving/'
         '${start.longitude},${start.latitude};${end.longitude},${end.latitude}';
@@ -64,6 +70,7 @@ class TripRouteService {
       'overview': 'full',
       'geometries': 'geojson',
       'steps': 'false',
+      'alternatives': 'true',
     });
     final response = await http
         .get(uri, headers: _headers)
@@ -72,15 +79,21 @@ class TripRouteService {
       throw Exception('Không thể tính tuyến đường (${response.statusCode})');
     }
     final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final routes = body['routes'] as List<dynamic>? ?? const [];
-    if (routes.isEmpty) throw Exception('Không tìm thấy tuyến đường phù hợp');
-    final first = routes.first as Map<String, dynamic>;
+    final rows = body['routes'] as List<dynamic>? ?? const [];
+    if (rows.isEmpty) throw Exception('Không tìm thấy tuyến đường phù hợp');
+    return [
+      for (final raw in rows.take(3))
+        _parse(Map<String, dynamic>.from(raw as Map)),
+    ];
+  }
+
+  static PlannedRoute _parse(Map<String, dynamic> row) {
     final coordinates =
-        ((first['geometry'] as Map<String, dynamic>)['coordinates'] as List)
+        ((row['geometry'] as Map<String, dynamic>)['coordinates'] as List)
             .cast<List<dynamic>>();
     return PlannedRoute(
-      distanceKm: (first['distance'] as num).toDouble() / 1000,
-      durationMin: (first['duration'] as num).toDouble() / 60,
+      distanceKm: (row['distance'] as num).toDouble() / 1000,
+      durationMin: (row['duration'] as num).toDouble() / 60,
       geometry: coordinates
           .map(
             (p) => LatLng((p[1] as num).toDouble(), (p[0] as num).toDouble()),

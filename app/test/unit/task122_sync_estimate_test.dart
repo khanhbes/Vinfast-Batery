@@ -94,7 +94,7 @@ void main() {
       expect(standard.watts, ChargeEstimator.standardPowerW);
     });
 
-    test('top-up above 85 % is slower than the same span below it', () {
+    test('top-up above 95 % is slower than the same span below it', () {
       final low = ChargeEstimator.estimate(
         currentSoc: 40,
         targetSoc: 50,

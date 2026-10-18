@@ -7,6 +7,7 @@ import 'core/theme/app_theme.dart';
 import 'core/widgets/app_popup.dart';
 import 'data/services/notification_service.dart';
 import 'data/services/push_notification_service.dart';
+import 'features/ai/services/learning_flow.dart';
 import 'features/auth/auth_gate.dart';
 import 'navigation/app_navigation.dart';
 import 'core/providers/app_providers.dart';
@@ -42,6 +43,16 @@ class _VinFastBatteryAppState extends State<VinFastBatteryApp> {
   }
 
   void _openNotification(String payload) {
+    if (payload.startsWith('learning/')) {
+      // Task 127: "enough data to train" opens AI cá nhân for that vehicle.
+      final vehicleId = Uri.decodeComponent(payload.substring(9));
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final context = AppPopup.navigatorKey.currentContext;
+        if (context == null || vehicleId.isEmpty) return;
+        TrainingReadiness.openSettings(context, vehicleId);
+      });
+      return;
+    }
     if (!payload.startsWith('smart_charge/')) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final context = AppPopup.navigatorKey.currentContext;
@@ -50,6 +61,11 @@ class _VinFastBatteryAppState extends State<VinFastBatteryApp> {
       // V4 payload: smart_charge/session/<vehicleId>/<sessionId>. Legacy
       // payloads without a vehicle never guess a default vehicle; they open
       // the history tab and let the user choose the correct context.
+      if (parts.length >= 2 && parts[1].startsWith('current')) {
+        // Ongoing-charge notification: the Charge tab (Task 126).
+        AppNavigation.navigateToTab(context, 1);
+        return;
+      }
       if (parts.length >= 4 && parts[1] == 'session') {
         final vehicleId = Uri.decodeComponent(parts[2]);
         final sessionId = Uri.decodeComponent(parts.sublist(3).join('/'));

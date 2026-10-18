@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_ui_colors.dart';
 import '../../core/theme/cockpit_design_system.dart';
 import '../../core/theme/luxe_theme.dart';
+import '../../core/utils/number_text.dart';
 import '../../core/widgets/luxe_kit.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/app_providers.dart';
@@ -583,7 +584,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
         value == null ? 'Đã xóa giá điện' : 'Đã lưu giá điện',
         detail: value == null
             ? 'Chi phí sẽ không được ước tính.'
-            : '${NumberFormat.decimalPattern('vi_VN').format(value)} đ/kWh · áp dụng cho phiên mới',
+            : '${groupThousands(value)} đ/kWh · áp dụng cho phiên mới',
       );
     } catch (error) {
       AppPopup.showError('Không thể lưu giá điện', detail: _userMessage(error));
@@ -1208,7 +1209,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            '${NumberFormat.decimalPattern('vi_VN').format(int.tryParse(tariff.text) ?? 2800)} đ/kWh',
+                            '${groupThousands(int.tryParse(tariff.text) ?? 2800)} đ/kWh',
                             style: CockpitTypography.numbers(
                               fontSize: 16,
                               fontWeight: FontWeight.w800,

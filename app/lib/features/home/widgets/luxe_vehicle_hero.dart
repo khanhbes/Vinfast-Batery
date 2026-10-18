@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../../../data/services/range_estimator.dart';
+import '../../../data/services/trip_energy_model.dart';
 
 import '../../../core/theme/luxe_theme.dart';
 import '../../../data/models/vehicle_model.dart';
@@ -14,8 +15,11 @@ import 'vehicle_showroom.dart';
 /// admin has provided one, otherwise a platinum line-art scooter whose
 /// battery glows with the charge), the name, plate and the battery reading.
 class LuxeVehicleHero extends StatefulWidget {
-  const LuxeVehicleHero({super.key, required this.vehicle});
+  const LuxeVehicleHero({super.key, required this.vehicle, this.learned});
   final VehicleModel? vehicle;
+
+  /// The owner's trained trip model: same km/% as every other screen.
+  final TripModelParams? learned;
 
   @override
   State<LuxeVehicleHero> createState() => _LuxeVehicleHeroState();
@@ -71,7 +75,7 @@ class _LuxeVehicleHeroState extends State<LuxeVehicleHero>
     // without battery data used to show the model defaults "100% · ~120 km"
     // (Task 125). One field, the same the Charge tab and BatteryBot write.
     final percent = v?.hasBatteryData == true ? v?.currentBattery : null;
-    final estimate = v == null || percent == null ? null : estimateRangeKm(v);
+    final estimate = v == null || percent == null ? null : estimateRangeKm(v, learned: widget.learned);
     final range = estimate?.round();
     final showroom = v?.showroom;
 
@@ -91,8 +95,13 @@ class _LuxeVehicleHeroState extends State<LuxeVehicleHero>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // The model name only above a nickname: without one,
+                      // "VINFAST FELIZ / VinFast Feliz" repeated (QA 130).
                       Text(
-                        (model ?? 'VINFAST').toUpperCase(),
+                        (name != model && model != null
+                                ? model
+                                : 'Xe của bạn')
+                            .toUpperCase(),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: LuxeText.eyebrow,
@@ -231,7 +240,7 @@ class _LuxeVehicleHeroState extends State<LuxeVehicleHero>
                       child: Text(
                         showroom?.anyCanSpin == true
                             ? 'Chạm để xem 360°'
-                            : 'Chạm để mở phòng trưng bày',
+                            : 'Chạm để xoay quanh xe',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: LuxeText.label.copyWith(fontSize: 11.5),

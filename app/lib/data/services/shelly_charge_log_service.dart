@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'charge_history_quality.dart';
 import 'server_smart_charger_service.dart';
 
 import '../models/smart_charge_history.dart';
@@ -248,7 +249,7 @@ class ShellyChargeLogService {
       'actualEndSocSource': 'user_confirmed',
       'actual_end_soc_source': 'user_confirmed',
       'endBatteryPercent': actualSoc.round(),
-      'training_eligible': true,
+      // Eligibility is decided by the server's learning checks (Task 126).
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
     final data = (await log.get()).data();
@@ -621,11 +622,8 @@ class ShellyChargeLogService {
     final documents =
         snapshot.docs.where((document) {
           final data = document.data();
-          if (data['isDeleted'] == true ||
-              data['isArchived'] == true ||
-              data['archivedAt'] != null ||
-              data['source'] != _source ||
-              data['hiddenByUserAt'] != null ||
+          if (data['source'] != _source ||
+              !ChargeHistoryQuality.isVisible(data) ||
               !_matchesStrategy(data, strategy)) {
             return false;
           }
@@ -675,19 +673,32 @@ class ShellyChargeLogService {
     var skipped = 0;
     for (final document in documents) {
       final documentData = document.data();
-      if (documentData['isDeleted'] == true ||
-          documentData['isArchived'] == true ||
-          documentData['archivedAt'] != null ||
-          documentData['hiddenByUserAt'] != null) {
-        skipped++;
-        continue;
-      }
+      // Hidden and junk logs (no energy, no confirmed %) stay out of the
+      // list but are never deleted (Task 126).
+      if (!ChargeHistoryQuality.isVisible(documentData)) continue;
       try {
         final data = documentData;
         final raw = data['smartChargingSession'];
-        final session = raw is Map
+        var session = raw is Map
             ? SmartChargingSession.fromJson(Map<String, dynamic>.from(raw))
             : _legacySessionFromChargeLog(data, document.id);
+        // Older logs kept the user's reading only at the top level.
+        final confirmed = ChargeHistoryQuality.confirmedEndSoc(data);
+        if (session.actualEndSoc == null && confirmed != null) {
+          session = session.copyWith(actualEndSoc: confirmed);
+        }
+        final odo = (data['endOdoKm'] as num?)?.toDouble();
+        if (session.endOdoKm == null && odo != null) {
+          session = session.copyWith(endOdoKm: odo);
+        }
+        // A later rewrite left 0 Wh in the embedded session while the
+        // summary kept the measured energy (Task 127, 12/09 showed 0 Wh).
+        final summaryEnergy = ChargeHistoryQuality.energyWh(data);
+        if (session.energyUsedWh <= 0 &&
+            summaryEnergy != null &&
+            summaryEnergy > 0) {
+          session = session.copyWith(energyUsedWh: summaryEnergy);
+        }
         sessions.add(session);
       } on Object {
         skipped++;
@@ -826,6 +837,14 @@ class ShellyChargeLogService {
       'personal_ai_training_state':
           data['personalAiTrainingState'] ?? 'pending',
       'personal_ai_training_reason': data['personalAiTrainingReason'],
+      // Task 126: confirmed %, why it ended and the target-charge fields.
+      'actual_end_soc': ChargeHistoryQuality.confirmedEndSoc(data),
+      'stop_reason': data['stopReason'],
+      'stop_mode': data['stopMode'],
+      'target_energy_wh': data['targetEnergyWh'],
+      'model_wh_per_pct': data['modelWhPerPct'],
+      'soc_error': data['socError'],
+      'end_odo_km': data['endOdoKm'],
     });
   }
 

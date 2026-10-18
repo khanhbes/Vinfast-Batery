@@ -156,6 +156,7 @@ void main() {
                   currentSoc: 64,
                   targetSoc: 85,
                   remaining: const Duration(minutes: 35),
+                  targetMode: true,
                 );
               },
               child: const Text('open'),
@@ -169,6 +170,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       expect(find.text('35 phút'), findsOneWidget);
+      // QA 129: the card's time to the target, and the % is an estimate.
+      expect(find.text('Còn tới mục tiêu'), findsOneWidget);
+      expect(find.text('~64%'), findsOneWidget);
       await tester.ensureVisible(find.text('Pin đã đủ'));
       await tester.tap(find.text('Pin đã đủ'));
       await tester.pump();

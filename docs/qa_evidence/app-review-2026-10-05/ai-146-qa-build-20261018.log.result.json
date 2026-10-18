@@ -1,0 +1,21 @@
+{
+  "command": [
+    "C:\\Users\\khanh\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin\\docker.exe",
+    "build",
+    "-f",
+    "web/Dockerfile.api-tests",
+    "--build-arg",
+    "API_IMAGE=vinfast-api-qa:task146",
+    "-t",
+    "vinfast-api-tests:task146",
+    "."
+  ],
+  "cwd": ".",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\ai-146-qa-build-20261018.log",
+  "processId": 20136,
+  "timeoutSeconds": 1500,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 91.61
+}

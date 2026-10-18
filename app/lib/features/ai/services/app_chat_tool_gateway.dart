@@ -14,6 +14,7 @@ import '../../../core/utils/battery_bot_faq.dart';
 import 'local_chat_engine.dart';
 import '../../achievements/models/achievement.dart';
 import '../../achievements/services/achievement_signals.dart';
+import '../../../data/services/charge_estimator.dart';
 import '../../../data/services/smart_charger_service.dart';
 
 class AppChatToolGateway implements ChatToolGateway {
@@ -482,7 +483,13 @@ class AppChatToolGateway implements ChatToolGateway {
       'allowed': true,
       'title': 'Xác nhận bật sạc theo thời gian',
       'description': '${vehicle.displayName} · ${binding.displayName}',
-      'estimatedTime': '${seconds ~/ 60} phút',
+      // When it would switch off if swiped now (QA 130: the card only said
+      // "30 phút"); the card carries no executable arguments, so the time is
+      // part of the evidence text. The Shelly timer owns the real cutoff.
+      'estimatedTime':
+          '${seconds ~/ 60} phút · tự ngắt lúc '
+          '${formatClock(DateTime.now().add(Duration(seconds: seconds)))} '
+          'nếu bật ngay',
       'safetyNote':
           'Chỉ báo bật thành công sau khi đọc lại thấy ổ đã bật và hẹn giờ đang chạy. Không tự gửi lại lệnh bật khi mất phản hồi.',
       'deviceId': binding.deviceId,

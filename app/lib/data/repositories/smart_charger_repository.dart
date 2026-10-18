@@ -40,10 +40,13 @@ abstract interface class SmartChargerRepository {
     String? after,
     int limit = 120,
   });
+
+  /// [odoKm] (Task 126) is the optional odometer read with the battery %.
   Future<SmartChargeEnergySummary> confirmActualEndSoc(
     SmartChargingSession session,
-    double soc,
-  );
+    double soc, {
+    double? odoKm,
+  });
   Future<void> recordStatusSample(
     SmartChargingSession session,
     SmartChargerStatus status,
@@ -76,9 +79,14 @@ class SmartChargerLiveSnapshot {
     required this.status,
     this.session,
     this.capabilities,
+    this.linkLostSince,
   });
   final SmartChargerStatus status;
   final SmartChargingSession? session;
+
+  /// Task 126: the server could not reach the Shelly while the charge is
+  /// running; [status] is then its last verified reading, not a live one.
+  final DateTime? linkLostSince;
 
   /// Readiness returned with /live (server-cached); null on older servers.
   final SmartChargerCapabilities? capabilities;
@@ -266,8 +274,9 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
   @override
   Future<SmartChargeEnergySummary> confirmActualEndSoc(
     SmartChargingSession session,
-    double soc,
-  ) {
+    double soc, {
+    double? odoKm,
+  }) {
     final logs = _chargeLogs;
     if (logs == null) throw StateError('Charge log service is unavailable.');
     return logs.confirmActualEndSoc(session, soc);
@@ -454,7 +463,11 @@ class ServerSmartChargerRepository implements SmartChargerRepository {
     );
     final rawSession = data['session'];
     final rawCapabilities = data['capabilities'];
+    final link = data['link'];
     return SmartChargerLiveSnapshot(
+      linkLostSince: link is Map && link['state'] == 'lost'
+          ? DateTime.tryParse(link['since']?.toString() ?? '') ?? DateTime.now()
+          : null,
       status: status,
       session: rawSession is Map
           ? SmartChargingSession.fromJson(Map<String, dynamic>.from(rawSession))
@@ -467,9 +480,24 @@ class ServerSmartChargerRepository implements SmartChargerRepository {
     );
   }
 
+  /// Task 126: the server prediction (physics + what this vehicle learned)
+  /// arms a target charge that the server switches off. Without the server
+  /// the local estimate is display-only and offers a timed charge instead.
   @override
-  Future<SmartChargingPlanPreview> preview(SmartChargingPlanDraft draft) =>
-      _predictor.predict(draft);
+  Future<SmartChargingPlanPreview> preview(SmartChargingPlanDraft draft) async {
+    try {
+      return await service.createPreview(draft);
+    } on SmartChargerException catch (error) {
+      if (error.code == 'capacityUnavailable' ||
+          error.code == 'invalidSoc' ||
+          error.code == 'unsafeDuration' ||
+          error.code == 'vehicleForbidden') {
+        rethrow;
+      }
+      return _predictor.predict(draft);
+    }
+  }
+
   @override
   Future<SmartChargingSession> start(
     SmartChargingPlanPreview preview,
@@ -518,9 +546,14 @@ class ServerSmartChargerRepository implements SmartChargerRepository {
   @override
   Future<SmartChargeEnergySummary> confirmActualEndSoc(
     SmartChargingSession session,
-    double soc,
-  ) async {
-    final updated = await service.confirmActualSoc(session.sessionId, soc);
+    double soc, {
+    double? odoKm,
+  }) async {
+    final updated = await service.confirmActualSoc(
+      session.sessionId,
+      soc,
+      odoKm: odoKm,
+    );
     final points = await service.telemetry(session.sessionId);
     return SmartChargeEnergySummary.calculate(
       session: updated,

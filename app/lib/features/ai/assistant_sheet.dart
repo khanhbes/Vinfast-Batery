@@ -11,10 +11,12 @@ import '../../core/services/assistant_context_coordinator.dart';
 import '../../core/theme/app_ui_colors.dart';
 import '../../core/theme/luxe_theme.dart';
 import '../../core/utils/battery_bot_faq.dart';
+import '../../core/widgets/app_popup.dart';
 import '../../core/widgets/battery_bot_mascot.dart';
 import '../settings/assistant_memory_screen.dart';
 import '../smart_charging/shelly_connect_screen.dart';
 import '../../data/services/shelly_connection_coordinator.dart';
+import 'dashboard_scan_screen.dart';
 import 'models/chat_message.dart';
 import 'models/chat_session.dart';
 import 'models/function_call_action.dart';
@@ -27,14 +29,22 @@ import 'services/chat_history_storage.dart';
 import 'services/suggestion_service.dart';
 import 'services/voice_input_service.dart';
 import 'widgets/animated_voice_waveform.dart';
+import 'widgets/battery_reading_sheet.dart';
 import 'widgets/chat_message_bubble.dart';
 import 'widgets/quick_reply_chips.dart';
 
 /// Bottom Sheet trò chuyện cùng trợ lý ảo BatteryBot với AI Streaming & Lịch sử
 class InteractiveAssistantSheet extends ConsumerStatefulWidget {
-  const InteractiveAssistantSheet({super.key, this.initialQuery});
+  const InteractiveAssistantSheet({
+    super.key,
+    this.initialQuery,
+    this.dashboardReader,
+  });
 
   final String? initialQuery;
+
+  /// Dashboard photo reader (Task 127); injectable for tests.
+  final DashboardReadFn? dashboardReader;
 
   static Future<void> show(BuildContext context, {String? initialQuery}) {
     return showModalBottomSheet<void>(
@@ -710,6 +720,56 @@ class _InteractiveAssistantSheetState
 
   bool _looksSensitive(String text) => BatteryBotLocalEngine.isSensitive(text);
 
+  bool _readingDashboard = false;
+
+  /// Task 127: read the dashboard on the phone and put the numbers in the
+  /// input for the owner to check and send; BatteryBot then offers the
+  /// one-tap "cập nhật pin / ODO" cards. Nothing is sent automatically.
+  Future<void> _readDashboardPhoto() async {
+    setState(() => _readingDashboard = true);
+    try {
+      final injected = widget.dashboardReader;
+      final vehicle = ref.read(vehicleContextProvider).vehicle;
+      final scan = injected != null
+          ? injected(camera: true)
+          : scanDashboard(
+              context,
+              lastOdoKm: vehicle?.hasOdoData == true
+                  ? vehicle!.currentOdo.toDouble()
+                  : null,
+            );
+      final reading = await scan;
+      if (!mounted || reading == null) return;
+      if (reading.isEmpty) {
+        AppPopup.showInfo(
+          'Chưa đọc được số nào',
+          detail: 'Quét gần, thẳng, tránh lóa hoặc gõ số trên đồng hồ.',
+        );
+        return;
+      }
+      final odo = reading.odoKm;
+      final parts = [
+        if (reading.soc != null) 'pin ${reading.soc}%',
+        if (odo != null)
+          'ODO ${odo == odo.roundToDouble() ? odo.round() : odo.toStringAsFixed(1)} km',
+      ];
+      _inputController.text =
+          'Đồng hồ xe đang báo ${parts.join(', ')} (quét từ đồng hồ). Cập nhật giúp mình.';
+      _inputController.selection = TextSelection.collapsed(
+        offset: _inputController.text.length,
+      );
+    } on Object {
+      if (mounted) {
+        AppPopup.showInfo(
+          'Không đọc được ảnh',
+          detail: 'Hãy thử lại hoặc gõ số trên đồng hồ.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _readingDashboard = false);
+    }
+  }
+
   void _handleSend(String rawText) {
     final text = rawText.trim();
     if (text.isEmpty || _isTyping) return;
@@ -1314,19 +1374,36 @@ class _InteractiveAssistantSheetState
                                 ],
                               ),
                             )
-                          : ListView.builder(
-                              controller: _scrollController,
-                              padding: const EdgeInsets.fromLTRB(0, 8, 0, 12),
-                              itemCount:
-                                  _messages.length +
-                                  (_activeSuggestion != null ? 1 : 0),
-                              itemBuilder: (context, raw) {
-                                final banner = _activeSuggestion != null;
-                                if (banner && raw == 0) {
-                                  return _buildProactiveBanner(uiColors);
-                                }
-                                return _bubble(banner ? raw - 1 : raw);
-                              },
+                          // Soft top edge under the suggestion row: items
+                          // scrolling past it fade instead of being cut in
+                          // half mid-icon (QA 129).
+                          : ShaderMask(
+                              blendMode: BlendMode.dstIn,
+                              shaderCallback: (rect) => const LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [Colors.transparent, Colors.black],
+                                stops: [0, 0.06],
+                              ).createShader(rect),
+                              child: ListView.builder(
+                                controller: _scrollController,
+                                padding: const EdgeInsets.fromLTRB(
+                                  0,
+                                  16,
+                                  0,
+                                  12,
+                                ),
+                                itemCount:
+                                    _messages.length +
+                                    (_activeSuggestion != null ? 1 : 0),
+                                itemBuilder: (context, raw) {
+                                  final banner = _activeSuggestion != null;
+                                  if (banner && raw == 0) {
+                                    return _buildProactiveBanner(uiColors);
+                                  }
+                                  return _bubble(banner ? raw - 1 : raw);
+                                },
+                              ),
                             ),
                     ),
                     AnimatedSize(
@@ -1452,6 +1529,18 @@ class _InteractiveAssistantSheetState
                                       onSubmitted: _handleSend,
                                     ),
                             ),
+                            if (!_isListeningVoice)
+                              IconButton(
+                                key: const Key('assistant_photo_button'),
+                                tooltip: 'Quét đồng hồ xe để đọc % pin và ODO',
+                                icon: const Icon(
+                                  Icons.photo_camera_outlined,
+                                  color: LuxeColors.platinumMid,
+                                ),
+                                onPressed: _isTyping || _readingDashboard
+                                    ? null
+                                    : _readDashboardPhoto,
+                              ),
                             if (VoiceInputService.isSupported ||
                                 _isListeningVoice)
                               IconButton(

@@ -2,6 +2,7 @@ export 'app_state_providers.dart';
 export 'vehicle_context_provider.dart';
 export 'feature_availability_provider.dart';
 export 'vehicle_providers.dart';
+export 'learned_models_provider.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/charge_log_model.dart';
@@ -13,6 +14,11 @@ import '../services/session_service.dart';
 /// mutating the user's globally selected vehicle.
 final pendingSmartChargeTargetProvider =
     StateProvider<({String vehicleId, String sessionId})?>((ref) => null);
+
+/// "Charge to X % first" from the trip planner or BatteryBot (Task 126): the
+/// Charge tab pre-fills the target; starting still needs the slide.
+final pendingChargeTargetSocProvider =
+    StateProvider<({String vehicleId, double targetSoc})?>((ref) => null);
 
 // =============================================================================
 // Shared Providers for the app

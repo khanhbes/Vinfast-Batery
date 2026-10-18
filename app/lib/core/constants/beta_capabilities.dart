@@ -7,6 +7,7 @@ abstract final class BetaCapabilities {
   );
 
   static const bool advancedAi = !enabled;
-  static const bool tripPlanner = !enabled;
+  // Task 126: on-phone trip estimate with OpenStreetMap routing.
+  static const bool tripPlanner = true;
   static const bool developerMode = !enabled;
 }

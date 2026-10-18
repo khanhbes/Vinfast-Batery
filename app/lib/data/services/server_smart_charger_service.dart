@@ -11,6 +11,7 @@ import '../models/smart_charger_capabilities.dart';
 import '../models/smart_charger_status.dart';
 import '../models/smart_charging_session.dart';
 import '../models/personal_charging_profile.dart';
+import '../models/vehicle_learning_status.dart';
 import '../models/smart_charge_history.dart';
 import '../models/shelly_connection.dart';
 import 'smart_charger_service.dart';
@@ -136,11 +137,34 @@ class ServerSmartChargerService {
       });
     if (body != null) request.body = jsonEncode(body);
 
-    final response = await ShellyApiTransport.send(
+    var response = await ShellyApiTransport.send(
       _client,
       request,
       timeout: timeout,
     );
+    if (response.statusCode == 401 && method == 'GET' && !_closed) {
+      // An expired ID token: refresh it once and repeat the read (QA 129:
+      // AI cá nhân / BatteryBot data failed until the next app start).
+      // Commands are never re-sent here.
+      final fresh = await user
+          .getIdToken(true)
+          .timeout(const Duration(seconds: 12));
+      if (fresh != null &&
+          fresh != token &&
+          !_closed &&
+          _auth.currentUser?.uid == user.uid) {
+        final retry = http.Request(method, uri)
+          ..headers.addAll({
+            ...request.headers,
+            'Authorization': 'Bearer $fresh',
+          });
+        response = await ShellyApiTransport.send(
+          _client,
+          retry,
+          timeout: timeout,
+        );
+      }
+    }
     if (_closed ||
         _auth.currentUser?.uid != user.uid ||
         _requestValid?.call() == false) {
@@ -489,6 +513,8 @@ class ServerSmartChargerService {
         'estimatedCapacityWh': draft.estimatedCapacityWh,
         // Compatibility with the currently deployed predictor contract.
         'batteryCapacityWh': draft.estimatedCapacityWh,
+        if (draft.powerHintW != null) 'historyPowerW': draft.powerHintW,
+        if (draft.livePowerW != null) 'livePowerW': draft.livePowerW,
       },
     );
     final minutes = (data['predictedMinutes'] as num).round();
@@ -540,6 +566,15 @@ class ServerSmartChargerService {
                 .map((item) => item.toString())
                 .toList()
           : const [],
+      stopMode: data['stopMode']?.toString() ?? 'timer',
+      estimateLowSeconds: (data['estimateLowSeconds'] as num?)?.round(),
+      estimateHighSeconds: (data['estimateHighSeconds'] as num?)?.round(),
+      whPerPct: (data['whPerPct'] as num?)?.toDouble(),
+      chargePowerW: (data['chargePowerW'] as num?)?.toDouble(),
+      powerSource: data['powerSource']?.toString(),
+      socMae: (data['socMae'] as num?)?.toDouble(),
+      learnedSamples: (data['learnedSamples'] as num?)?.round() ?? 0,
+      deviceTimerSeconds: (data['deviceTimerSeconds'] as num?)?.round(),
     );
   }
 
@@ -813,14 +848,92 @@ class ServerSmartChargerService {
 
   Future<SmartChargingSession> confirmActualSoc(
     String sessionId,
-    double soc,
-  ) async => SmartChargingSession.fromJson(
+    double soc, {
+    double? odoKm,
+  }) async => SmartChargingSession.fromJson(
     await _request(
       'PATCH',
       '/api/smart-charging/sessions/$sessionId/actual-soc',
-      body: {'actualSoc': soc},
+      body: {'actualSoc': soc, 'odoKm': ?odoKm},
     ),
   );
+
+  // -- Task 127: collected learning data and owner-triggered training ------
+
+  Future<VehicleLearningStatus?> learningStatus(String vehicleId) async =>
+      VehicleLearningStatus.fromJson(
+        await _request(
+          'GET',
+          '/api/learning/${Uri.encodeComponent(vehicleId)}/status',
+        ),
+      );
+
+  /// [model] `charge` | `trip`; [mode] `finetune` | `retrain`.
+  Future<({TrainingReport? report, VehicleLearningStatus? status})> trainModel(
+    String vehicleId, {
+    required String model,
+    String mode = 'finetune',
+  }) async {
+    final data = await _request(
+      'POST',
+      '/api/learning/${Uri.encodeComponent(vehicleId)}/train',
+      body: {'model': model, 'mode': mode},
+      timeout: const Duration(seconds: 30),
+    );
+    return (
+      report: TrainingReport.fromJson(data['report']),
+      status: VehicleLearningStatus.fromJson(data['status']),
+    );
+  }
+
+  /// One battery % and/or ODO reading (typed, from chat or a dashboard
+  /// photo). Two readings with no charge between become a ride sample.
+  Future<BatteryReadingResult> addBatteryReading(
+    String vehicleId, {
+    double? soc,
+    double? odoKm,
+    required String source,
+    String? sessionId,
+  }) async => BatteryReadingResult.fromJson(
+    await _request(
+      'POST',
+      '/api/learning/${Uri.encodeComponent(vehicleId)}/readings',
+      body: {
+        'soc': ?soc,
+        'odoKm': ?odoKm,
+        'source': source,
+        'sessionId': ?sessionId,
+      },
+    ),
+  );
+
+  Future<void> voidBatteryReading(String vehicleId, String readingId) =>
+      _request(
+        'DELETE',
+        '/api/learning/${Uri.encodeComponent(vehicleId)}/readings/${Uri.encodeComponent(readingId)}',
+      );
+
+  /// Rides recorded in the trip planner or imported from a CSV file.
+  Future<({int added, int duplicates, int rejected, VehicleLearningStatus? status})>
+  addTripSamples(
+    String vehicleId,
+    List<Map<String, dynamic>> trips, {
+    required String source,
+  }) async {
+    final data = await _request(
+      'POST',
+      '/api/learning/${Uri.encodeComponent(vehicleId)}/trips',
+      body: {'source': source, 'trips': trips},
+      timeout: const Duration(seconds: 30),
+    );
+    int count(String key) => (data[key] as num?)?.toInt() ?? 0;
+    return (
+      added: count('added'),
+      duplicates: count('duplicates'),
+      rejected: count('rejected'),
+      status: VehicleLearningStatus.fromJson(data['training']),
+    );
+  }
 
   /// Lấy toàn bộ danh sách mẫu dữ liệu từ file dataset trên server
   Future<Map<String, dynamic>> getAiDataset({

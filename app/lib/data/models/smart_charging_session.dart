@@ -61,18 +61,49 @@ enum ChargingStopReason {
   overCurrent('over_current'),
   overPower('over_power'),
   telemetryStale('telemetry_stale'),
-  unexpectedRelayState('unexpected_relay_state');
+  unexpectedRelayState('unexpected_relay_state'),
+  // Task 126 target charging and the server's backup paths.
+  targetReached('target_reached'),
+  chargerIdle('charger_idle'),
+  // Task 127: the charger's near-full tail (~400 W → ~20–30 W).
+  batteryFull('battery_full'),
+  ceilingTimer('ceiling_timer'),
+  deadlineCutoff('deadline_cutoff'),
+  recoveryOff('recovery_off');
 
   const ChargingStopReason(this.wireValue);
   final String wireValue;
 
+  /// Unknown reasons parse as null: a newer server must never make a whole
+  /// session (or history page) unreadable.
   static ChargingStopReason? fromJson(Object? value) {
     if (value == null) return null;
-    return values.firstWhere(
-      (item) => item.wireValue == value,
-      orElse: () => throw const FormatException('Invalid stop reason.'),
-    );
+    for (final item in values) {
+      if (item.wireValue == value) return item;
+    }
+    return null;
   }
+
+  /// Short Vietnamese label for history and notifications.
+  String get label => switch (this) {
+    targetReached => 'Đã đạt mức pin mục tiêu (ước tính)',
+    chargerIdle => 'Xe ngừng nhận điện (có thể pin đã đầy)',
+    batteryFull => 'Pin đầy (công suất sạc dưới 40 W suốt 5 phút)',
+    ceilingTimer => 'Ngắt theo giới hạn thời gian an toàn',
+    plannedTimer => 'Hết thời gian hẹn giờ',
+    manual => 'Bạn đã dừng sạc',
+    safetyCutoff ||
+    overTemperature ||
+    batteryOverTemperature ||
+    overVoltage ||
+    underVoltage ||
+    overCurrent ||
+    overPower => 'Ngắt vì vượt ngưỡng an toàn',
+    deadlineCutoff || absoluteSafety => 'Ngắt dự phòng khi hết giờ',
+    relayOff => 'Ổ cắm đã tắt trước kế hoạch',
+    commandFailed => 'Lệnh sạc chưa thực hiện được',
+    _ => 'Phiên sạc đã kết thúc',
+  };
 }
 
 enum UserStopReason {
@@ -99,6 +130,8 @@ class SmartChargingPlanDraft {
     this.timeMode = ChargingTimeMode.duration,
     this.chargingMode = 'standard',
     this.estimatedCapacityWh = 0,
+    this.powerHintW,
+    this.livePowerW,
   });
 
   final String vehicleId;
@@ -109,6 +142,26 @@ class SmartChargingPlanDraft {
   final ChargingTimeMode timeMode;
   final String chargingMode;
   final double estimatedCapacityWh;
+
+  /// Median wall power of recent charges (Task 126 server preview hint).
+  final double? powerHintW;
+
+  /// Median power measured right now while the relay is ON.
+  final double? livePowerW;
+
+  SmartChargingPlanDraft withPower({double? powerHintW, double? livePowerW}) =>
+      SmartChargingPlanDraft(
+        vehicleId: vehicleId,
+        currentSoc: currentSoc,
+        targetSoc: targetSoc,
+        hardDeadlineAt: hardDeadlineAt,
+        strategy: strategy,
+        timeMode: timeMode,
+        chargingMode: chargingMode,
+        estimatedCapacityWh: estimatedCapacityWh,
+        powerHintW: powerHintW,
+        livePowerW: livePowerW,
+      );
 
   String? validate({DateTime? now}) {
     final reference = now ?? DateTime.now();
@@ -161,6 +214,15 @@ class SmartChargingPlanPreview {
     this.personalizationStage = 'base',
     this.guardrailClamped = false,
     this.guardrailWarnings = const [],
+    this.stopMode = 'timer',
+    this.estimateLowSeconds,
+    this.estimateHighSeconds,
+    this.whPerPct,
+    this.chargePowerW,
+    this.powerSource,
+    this.socMae,
+    this.learnedSamples = 0,
+    this.deviceTimerSeconds,
   });
 
   final SmartChargingPlanDraft draft;
@@ -194,11 +256,49 @@ class SmartChargingPlanPreview {
   final bool guardrailClamped;
   final List<String> guardrailWarnings;
 
-  String get personalizationLabel => switch (personalizationStage) {
-    'personalized' => 'Đã cá nhân hóa cho xe này',
-    'calibrating' => 'AI đang học thói quen sạc',
-    _ => 'AI đang làm quen với xe của bạn',
-  };
+  /// Task 126: "target" = the server switches off at the target %, the Shelly
+  /// timer ([deviceTimerSeconds]) is only the safety ceiling.
+  final String stopMode;
+  final int? estimateLowSeconds;
+  final int? estimateHighSeconds;
+
+  /// Wall Wh per 1 % of battery the estimate used (learned or catalog).
+  final double? whPerPct;
+  final double? chargePowerW;
+
+  /// live | personal | vehicle | default
+  final String? powerSource;
+
+  /// Mean absolute SoC error (%) on this vehicle's confirmed charges.
+  final double? socMae;
+  final int learnedSamples;
+  final int? deviceTimerSeconds;
+
+  bool get isTargetMode => stopMode == 'target' && !isDisplayOnly;
+
+  /// Latest moment the Shelly timer switches off on its own.
+  DateTime? get safetyCeilingAt => deviceTimerSeconds == null
+      ? null
+      : (analyzedAt ?? DateTime.now()).add(
+          Duration(seconds: deviceTimerSeconds!),
+        );
+
+  String get personalizationLabel {
+    if (isTargetMode) {
+      if (learnedSamples <= 0) {
+        return 'Ước tính theo dung lượng xe · nhập % sau sạc để app học';
+      }
+      final error = socMae;
+      return error == null || learnedSamples < 2
+          ? 'Đã học từ $learnedSamples lần sạc của bạn'
+          : 'Học từ $learnedSamples lần sạc · sai số ~±${error.toStringAsFixed(error < 10 ? 1 : 0)}%';
+    }
+    return switch (personalizationStage) {
+      'personalized' => 'Đã cá nhân hóa cho xe này',
+      'calibrating' => 'Đang học thói quen sạc',
+      _ => 'Đang làm quen với xe của bạn',
+    };
+  }
 
   /// Present for server-generated previews. It prevents clients from changing
   /// the prediction between preview and Start.
@@ -456,6 +556,11 @@ class SmartChargingSession {
     this.whPerSocPercent,
     this.hardwareTimeoutSeconds,
     this.telemetrySamples = const [],
+    this.stopMode = 'timer',
+    this.targetEnergyWh,
+    this.modelWhPerPct,
+    this.socError,
+    this.endOdoKm,
   });
 
   final String sessionId;
@@ -539,6 +644,26 @@ class SmartChargingSession {
   final double? whPerSocPercent;
   final int? hardwareTimeoutSeconds;
   final List<Map<String, dynamic>> telemetrySamples;
+
+  /// Task 126: "target" = the server cuts at [targetSoc]; [effectiveStopAt]
+  /// is then only the Shelly safety ceiling, [aiStopAt] the estimate.
+  final String stopMode;
+  final double? targetEnergyWh;
+  final double? modelWhPerPct;
+
+  /// Estimated minus user-confirmed end % (positive = estimate was high).
+  final double? socError;
+  final double? endOdoKm;
+
+  bool get isTargetMode => stopMode == 'target';
+
+  /// Wall Wh still to deliver before the server cuts at the target.
+  double? get remainingTargetWh {
+    final target = targetEnergyWh;
+    if (target == null) return null;
+    final left = target - energyUsedWh;
+    return left > 0 ? left : 0;
+  }
 
   Duration remaining([DateTime? now]) {
     final value = effectiveStopAt.difference(now ?? DateTime.now());
@@ -687,6 +812,15 @@ class SmartChargingSession {
               .map((e) => Map<String, dynamic>.from(e))
               .toList() ??
           const [],
+      stopMode: (json['stop_mode'] ?? json['stopMode'])?.toString() ?? 'timer',
+      targetEnergyWh:
+          ((json['target_energy_wh'] ?? json['targetEnergyWh']) as num?)
+              ?.toDouble(),
+      modelWhPerPct:
+          ((json['model_wh_per_pct'] ?? json['modelWhPerPct']) as num?)
+              ?.toDouble(),
+      socError: ((json['soc_error'] ?? json['socError']) as num?)?.toDouble(),
+      endOdoKm: ((json['end_odo_km'] ?? json['endOdoKm']) as num?)?.toDouble(),
     );
   }
 
@@ -803,6 +937,11 @@ class SmartChargingSession {
     if (hardwareTimeoutSeconds != null)
       'hardware_timeout_seconds': hardwareTimeoutSeconds,
     'telemetry_samples': telemetrySamples,
+    'stop_mode': stopMode,
+    if (targetEnergyWh != null) 'target_energy_wh': targetEnergyWh,
+    if (modelWhPerPct != null) 'model_wh_per_pct': modelWhPerPct,
+    if (socError != null) 'soc_error': socError,
+    if (endOdoKm != null) 'end_odo_km': endOdoKm,
   };
 
   SmartChargingSession copyWith({
@@ -836,6 +975,8 @@ class SmartChargingSession {
     double? estimatedCostVnd,
     String? costQuality,
     double? actualEndSoc,
+    double? socError,
+    double? endOdoKm,
   }) => SmartChargingSession(
     sessionId: sessionId,
     vehicleId: vehicleId,
@@ -916,5 +1057,14 @@ class SmartChargingSession {
     userStopReason: userStopReason ?? this.userStopReason,
     trainingState: trainingState ?? this.trainingState,
     trainingReason: trainingReason ?? this.trainingReason,
+    // Kept through copies (these were silently dropped before Task 126).
+    whPerSocPercent: whPerSocPercent,
+    hardwareTimeoutSeconds: hardwareTimeoutSeconds,
+    telemetrySamples: telemetrySamples,
+    stopMode: stopMode,
+    targetEnergyWh: targetEnergyWh,
+    modelWhPerPct: modelWhPerPct,
+    socError: socError ?? this.socError,
+    endOdoKm: endOdoKm ?? this.endOdoKm,
   );
 }

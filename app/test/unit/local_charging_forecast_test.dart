@@ -49,8 +49,9 @@ class _Server extends ServerSmartChargerService {
   @override
   Future<SmartChargingSession> confirmActualSoc(
     String sessionId,
-    double soc,
-  ) async {
+    double soc, {
+    double? odoKm,
+  }) async {
     historyConfirmations++;
     throw const SmartChargerException('QA history offline', code: 'qaHistory');
   }
@@ -60,7 +61,9 @@ class _Server extends ServerSmartChargerService {
     SmartChargingPlanDraft draft,
   ) async {
     remotePredictions++;
-    throw StateError('Remote prediction called');
+    // Server unreachable: the repository must fall back to the local,
+    // display-only estimate (Task 126 asks the server first).
+    throw const SmartChargerException('QA offline', code: 'network');
   }
 
   @override
@@ -199,7 +202,7 @@ void main() {
   });
 
   test(
-    'server repository forecasts locally while timed control stays server-owned',
+    'server repository asks the server first and falls back to a display-only local estimate',
     () async {
       final service = _Server();
       final repository = ServerSmartChargerRepository(
@@ -207,8 +210,8 @@ void main() {
         predictor: local(),
       );
       final preview = await repository.preview(draft());
+      expect(service.remotePredictions, 1);
       expect(preview.isDisplayOnly, isTrue);
-      expect(service.remotePredictions, 0);
       await expectLater(
         repository.start(preview, 'qa-operation'),
         throwsA(
