@@ -105,7 +105,9 @@ class _StopChargingConfirmationSheetState
                 ],
                 LuxeInfoRow(
                   icon: Icons.timer_outlined,
-                  label: widget.targetMode ? 'Còn tới mục tiêu' : 'Shelly tự ngắt sau',
+                  label: widget.targetMode
+                      ? 'Còn tới mục tiêu'
+                      : 'Shelly tự ngắt sau',
                   value: _duration(widget.remaining),
                 ),
               ],

@@ -40,7 +40,9 @@ abstract final class TripCsvImport {
     if (lines.length < 2) {
       return (rows: const [], error: 'File không có chuyến đi nào.');
     }
-    final header = _split(lines.first).map((h) => h.trim().toLowerCase()).toList();
+    final header = _split(
+      lines.first,
+    ).map((h) => h.trim().toLowerCase()).toList();
     if (!_required.every(header.contains) ||
         !(header.contains('soc_delta') ||
             (header.contains('start_soc') && header.contains('end_soc')))) {

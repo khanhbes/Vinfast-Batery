@@ -10,7 +10,8 @@ import '../dashboard_scan_screen.dart';
 typedef BatteryReadingInput = ({double? soc, double? odoKm, String source});
 
 /// Reads the dashboard (live scan or photo); injectable for tests.
-typedef DashboardReadFn = Future<DashboardReading?> Function({required bool camera});
+typedef DashboardReadFn =
+    Future<DashboardReading?> Function({required bool camera});
 
 /// "% pin và ODO trên đồng hồ" (Task 127). The scooter has no BMS/Bluetooth,
 /// so the dashboard is the only ground truth: take a photo (read on the
@@ -99,8 +100,7 @@ class _BatteryReadingSheetState extends State<BatteryReadingSheet> {
     } on Object {
       if (mounted) {
         setState(
-          () => _readError =
-              'Không đọc được ảnh. Hãy thử lại hoặc nhập tay.',
+          () => _readError = 'Không đọc được ảnh. Hãy thử lại hoặc nhập tay.',
         );
       }
     } finally {
@@ -169,11 +169,9 @@ class _BatteryReadingSheetState extends State<BatteryReadingSheet> {
         ((soc != null && read.soc == soc.round()) ||
             (odo != null && read.odoKm == odo));
     HapticFeedback.lightImpact();
-    Navigator.of(context).pop((
-      soc: soc,
-      odoKm: odo,
-      source: fromPhoto ? 'photo' : 'manual',
-    ));
+    Navigator.of(
+      context,
+    ).pop((soc: soc, odoKm: odo, source: fromPhoto ? 'photo' : 'manual'));
   }
 
   @override
@@ -219,7 +217,9 @@ class _BatteryReadingSheetState extends State<BatteryReadingSheet> {
                 onPressed: _reading ? null : () => _readPhoto(false),
                 icon: const Icon(Icons.photo_library_outlined),
                 label: const Text('Chọn ảnh'),
-                style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(48, 48),
+                ),
               ),
             ],
           ),

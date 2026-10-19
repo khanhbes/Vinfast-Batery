@@ -7,10 +7,8 @@ import '../../core/widgets/luxe_kit.dart';
 import '../../core/widgets/luxe_settings.dart';
 import '../../data/models/vinfast_model_spec.dart';
 import '../../data/repositories/vehicle_spec_repository.dart';
-import '../../data/models/vehicle_showroom.dart';
-import '../home/vehicle_showroom_screen.dart';
+import '../../core/widgets/vehicle_photo.dart';
 import '../home/widgets/luxe_vehicle_hero.dart' show LuxeScooterArt;
-import '../home/widgets/vehicle_showroom.dart';
 
 /// Vehicle Spec Detail Screen — PLAN #5
 /// Shows detailed spec sheet and allows editing
@@ -30,12 +28,8 @@ class VehicleSpecDetailScreen extends StatefulWidget {
 }
 
 class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
-  late final VehicleShowroomData? _showroom = () {
-    final snapshot = widget.vehicleData['catalogSnapshot'];
-    return snapshot is Map
-        ? VehicleShowroomData.fromMedia(snapshot['media'])
-        : null;
-  }();
+  /// The same photo as the overview and garage (QA 131).
+  late final String? _photo = VehicleImages.forVehicleMap(widget.vehicleData);
   bool _isEditing = false;
   bool _isSaving = false;
   VinFastModelSpec? _spec;
@@ -179,71 +173,20 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
                 child: _buildHeaderCard(modelName, soh),
               ),
             ),
-            if (_showroom != null) ...[
+            if (_photo != null) ...[
               const SizedBox(height: 14),
               LuxeReveal(
                 index: 1,
-                child: Semantics(
-                  button: true,
-                  label: 'Mở phòng trưng bày xe $modelName',
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => VehicleShowroomScreen.open(
-                      context,
-                      title: modelName,
-                      showroom: _showroom,
-                      figures: [
-                        if (_batteryCapCtrl.text.isNotEmpty)
-                          ('Dung lượng pin', '${_batteryCapCtrl.text} Wh'),
-                        if (_batteryTypeCtrl.text.isNotEmpty)
-                          ('Loại pin', _batteryTypeCtrl.text),
-                        if (_sohCtrl.text.isNotEmpty)
-                          ('Sức khỏe pin', '${_sohCtrl.text}%'),
-                      ],
-                    ),
-                    child: LuxeGlass(
-                      radius: 26,
-                      padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
-                      child: Column(
-                        children: [
-                          AspectRatio(
-                            aspectRatio: 1.7,
-                            child: VehicleShowroomView(
-                              color: _showroom.defaultColor,
-                              interactive: false,
-                              fallback: const LuxeScooterArt(level: 0.6),
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 6),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  _showroom.anyCanSpin
-                                      ? Icons.threesixty_rounded
-                                      : Icons.view_in_ar_rounded,
-                                  size: 15,
-                                  color: LuxeColors.platinumMid,
-                                ),
-                                const SizedBox(width: 6),
-                                Flexible(
-                                  child: Text(
-                                    _showroom.colors.length > 1
-                                        ? 'Chạm để xem · ${_showroom.colors.length} màu'
-                                        : 'Chạm để mở phòng trưng bày',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: LuxeText.label.copyWith(
-                                      fontSize: 11.5,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+                child: LuxeGlass(
+                  radius: 26,
+                  padding: const EdgeInsets.fromLTRB(10, 12, 10, 6),
+                  child: AspectRatio(
+                    aspectRatio: 1.5,
+                    child: VehiclePhoto(
+                      url: _photo,
+                      reflection: true,
+                      semanticLabel: 'Ảnh xe $modelName',
+                      fallback: const LuxeScooterArt(level: 0.6),
                     ),
                   ),
                 ),

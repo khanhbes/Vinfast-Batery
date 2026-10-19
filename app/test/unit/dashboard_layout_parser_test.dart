@@ -62,7 +62,9 @@ void main() {
     final r = DashboardLayoutParser.parse(
       feliz(percent: '', odoLabel: false, kmLabel: false, speedLabel: false),
     );
-    expect(r.soc, isNull, reason: 'no % next to any number');
+    // No % read: the battery falls back to the largest plain number.
+    expect(r.soc, 68);
+    expect(r.socConfident, isFalse);
     expect(r.socCandidates, isNot(contains(31)));
     expect(r.odoCandidates, isNot(contains(31)));
     expect(r.odoCandidates, isNot(contains(0)));
@@ -82,11 +84,28 @@ void main() {
     expect(r.odoKm, isNull);
   });
 
+  test('only the speed and the battery: speed is never the battery', () {
+    final r = DashboardLayoutParser.parse([
+      const OcrToken('68', Rect.fromLTWH(410, 880, 120, 70)),
+      const OcrToken('00', Rect.fromLTWH(645, 935, 250, 175)),
+    ]);
+    expect(r.soc, 68);
+  });
+
+  test('a lone 4-digit number counts as the ODO without labels', () {
+    final r = DashboardLayoutParser.parse(
+      feliz(odoLabel: false, kmLabel: false),
+    );
+    expect(r.odoKm, 4818);
+    expect(r.odoConfident, isTrue);
+  });
+
   test('an unlabelled 2-digit number is not an ODO', () {
     final r = DashboardLayoutParser.parse([
       const OcrToken('42', Rect.fromLTWH(100, 100, 60, 40)),
     ]);
-    expect(r.isEmpty, isTrue);
+    expect(r.odoKm, isNull);
+    expect(r.socConfident, isFalse);
   });
 
   group('frames vote', () {

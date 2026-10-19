@@ -189,7 +189,9 @@ class _CommandProgressStripState extends State<CommandProgressStrip> {
                       Text(
                         title,
                         style: TextStyle(
-                          color: verified ? LuxeColors.emerald : LuxeColors.text,
+                          color: verified
+                              ? LuxeColors.emerald
+                              : LuxeColors.text,
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
                         ),

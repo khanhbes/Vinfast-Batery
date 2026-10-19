@@ -409,6 +409,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       if (!_disposed) unawaited(_refreshStatus(fresh: true));
     });
   }
+
   int _burstStep = 0;
   bool _refreshQueued = false;
   bool _queuedFresh = false;

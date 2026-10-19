@@ -1,116 +1,52 @@
-# BatteryBot AI Copilot — Technical Specification
+# BatteryBot — Đặc tả hiện hành (v2)
 
-> **Đặc tả Kỹ thuật Hệ thống Trợ lý Ảo Thông minh BatteryBot**: Mô tả kiến trúc UI/UX, cơ chế ngữ cảnh proactive, mô hình hybrid AI và quy chuẩn an toàn khi thực thi tác vụ trên hệ sinh thái VinFast Battery.
+> Gộp ngày 19/10/2026 (QA 131) từ `BATTERYBOT_ASSISTANT.md` (bản thiết kế Qwen/RAG cũ) và `AI_CHATBOT_PERSONALIZATION.md` (Gemini/SSE + ai_server chat, Tasks 93–105). Hai thiết kế cũ đã không còn chạy; mã chatbot cũ trong `web/ai_server` (chat_engine, chat_tools, chat_memory, behavior_analyzer, suggestion_engine, chat_schemas, chat_guardrails, personality_adapter) và các route proxy `/api/chat/*`, `/api/behavior/*` đã gỡ. Lịch sử chi tiết nằm trong git và `PROJECT_STATUS.md` (Tasks 93–105, 124).
 
----
-
-## 1. Tổng Quan & Kiến Trúc Hybrid Brain
-
-BatteryBot được thiết kế theo mô hình **Hybrid Brain (Trí tuệ Lai)** nhằm cân bằng tối ưu giữa tốc độ phản xạ tức thì trên thiết bị và chiều sâu tri thức của mô hình ngôn ngữ lớn:
+## 1. Luồng chính
 
 ```text
-                                       ┌──────────────────────────────────────────────┐
-                                       │              CLIENT LAYER (Flutter)          │
-                                       │  - Floating BatteryBot Mascot (Draggable)    │
-                                       │  - Context Engine (SoC, ODO, Screen, Time)   │
-                                       │  - Proactive Speech Bubble Manager           │
-                                       │  - Glassmorphic Interactive Sheet (~60% UI)  │
-                                       └──────────────────────┬───────────────────────┘
-                                                              │
-                                            HTTPS / SSE Stream│ (Bearer Auth Token)
-                                                              ▼
-                                       ┌──────────────────────────────────────────────┐
-                                       │            BACKEND COPILOT SERVICE           │
-                                       │         (web/ai_server/chat_copilot.py)      │
-                                       │  - Open LLM (Qwen 2.5-7B / Llama 3.1-8B)     │
-                                       │  - RAG Engine (Specs, Shelly Hardware, FAQs) │
-                                       │  - Tool / Function Calling Engine            │
-                                       └──────────────────────┬───────────────────────┘
-                                                              │
-                                            Internal RPC / API│
-                                                              ▼
-                                       ┌──────────────────────────────────────────────┐
-                                       │       SAFETY GUARD & ACTION DISPATCHER       │
-                                       │  - Smart Charger Gateway (Port 8002)         │
-                                       │  - Human-in-the-Loop Action Confirmation     │
-                                       │  - Watchdog Giám sát 12A / 2500W             │
-                                       └──────────────────────────────────────────────┘
+App (BatteryBot sheet)
+  └─ HybridAssistantEngine
+       ├─ có mạng + còn lượt → POST /api/assistant/chat  (Flask, web/assistant/)
+       │      └─ Gemini (GEMINI_CHAT_MODEL) qua relay APIM Japan East (GEMINI_RELAY_URL, X-Relay-Token)
+       └─ mất mạng / hết lượt / lỗi → BatteryBotLocalEngine (FAQ + công cụ trên máy)
 ```
 
----
+- Gemini chặn Azure East Asia, nên API gọi qua relay APIM (`deploy/azure/gemini-relay-apim.bicep`); khóa Gemini chỉ nằm trong named value của APIM. `web/gemini_relay/` + `Dockerfile.gemini-relay` là relay dạng container, giữ để dùng khi có subscription khác.
+- Gemini 3 bắt buộc gửi lại `thoughtSignature` giữa các lượt.
+- Quota: 50 tin/ngày/tài khoản (Azure Table, `web/assistant/quota.py`).
 
-## 2. Đặc Tả Giao Diện & Tương Tác (UI/UX)
+## 2. Mã nguồn
 
-### 2.1. Floating Mascot & Bong Bóng Ngữ Cảnh (Proactive Bubble)
-- **Vị trí & Neo (Anchor)**:
-  - Nằm ở góc dưới bên phải màn hình (cách mép phải 16dp, mép dưới 96dp — nằm ngay trên Bottom Navigation Bar).
-  - **Draggable**: Cho phép người dùng kéo nhẹ sang góc đối diện nếu bị che nội dung, tự động hít vào mép màn hình gần nhất.
-- **Tự ẩn thông minh (Smart Hide)**:
-  - Khi cuộn nhanh xuống dưới (`ScrollDirection.reverse`) -> mascot tự động trượt thu nhỏ vào mép.
-  - Khi bàn phím ảo mở (`MediaQuery.viewInsets.bottom > 0`) -> tự ẩn để không che khuất form nhập liệu.
-- **Bong bóng thoại chủ động (Proactive Speech Bubble)**:
-  - Tự động xuất hiện kèm hiệu ứng nảy nhẹ khi Context Engine phát hiện sự kiện đáng chú ý.
-  - Tự động mờ dần và biến mất sau **6 giây** nếu người dùng không chạm vào.
-  - Tần suất giới hạn: Tối đa 1 thông điệp chủ động trong mỗi chu kỳ **30 phút** để tránh làm phiền.
+| Phần | File |
+| --- | --- |
+| Route Flask | `web/assistant/routes.py` (`/api/assistant/chat`, bộ nhớ, cài đặt học) |
+| Prompt, công cụ, kiểm tra hành động | `web/assistant/engine.py` (`CLIENT_ACTIONS`, `SERVER_TOOLS`, `validate_action`, `describe_action`) |
+| Gemini REST / relay | `web/assistant/gemini.py` |
+| Kiến thức app | `web/assistant/knowledge.py` + Firestore `assistantKnowledge` (sửa ở dashboard `/assistant`) |
+| Bộ nhớ | `web/assistant/memory.py` → `users/{uid}/assistantMemory`, `assistant/settings.learningEnabled` |
+| Lộ trình | `web/assistant/trip_model.py` ↔ `app/lib/data/services/trip_energy_model.dart` (vector chung) |
+| App | `app/lib/features/ai/assistant_sheet.dart`, `services/hybrid_assistant_engine.dart`, `services/app_chat_tool_gateway.dart`, `widgets/action_confirmation_card.dart` |
 
-### 2.2. Interactive Assistant Sheet (Glassmorphic Drawer)
-- Chạm vào Mascot hoặc bóng bóng thoại sẽ mở một **Modal Bottom Sheet**:
-  - Chiều cao ban đầu: **60% chiều cao màn hình** (người dùng vừa tương tác với Bot, vừa quan sát được bối cảnh app phía trên).
-  - Có thể vuốt lên để mở rộng toàn màn hình (**95%**).
-- **Thành phần bên trong Sheet**:
-  - **Header**: Mascot cử động mini, tên xe đang kích hoạt và chỉ số SoC/SoH rút gọn.
-  - **Quick Action Chips**: Danh sách 3-4 phím tắt ngữ cảnh gợi ý theo trạng thái xe hiện tại.
-  - **Chat Message Stream**: Bong bóng tin nhắn người dùng và Bot, hỗ trợ Markdown và các Thẻ trực quan (Rich Action Cards).
-  - **Input Bar**: Ô nhập văn bản hỗ trợ micro nhận diện giọng nói và nút gửi.
+## 3. Công cụ
 
----
+- **Máy chủ tự chạy (chỉ đọc / ước tính):** `get_charger_status`, `get_charging_history`, `get_charging_habits`, `get_charging_summary`, `search_app_help`, `remember`, `forget`, `estimate_trip` (OSRM/Nominatim thật), `estimate_charge` (mô hình đã học của xe).
+- **Hành động trên app:** `navigate` chạy ngay; `prepare_target_charging`, `plan_trip` mở màn đã điền sẵn; pin/ODO/xe/mục tiêu/giá điện/nhắc lịch/`set_app_setting` (chỉ bật/tắt thông báo đẩy) là thẻ một chạm có "hoàn tác".
+- **Bật/tắt sạc:** `start_timed_charging`, `stop_charging` luôn đi qua `BatteryBotLocalEngine` + gateway đã xác minh. Bật cần thao tác xác nhận theo Cài đặt → Giao diện (mặc định vuốt; giữ 1 giây hoặc bấm 1 lần nếu chủ xe chọn — `ChargeConfirmControl`). Dừng là nút thường. Máy chủ từ chối (403/404/409) → báo rõ, không gửi lại ON.
 
-## 3. Context Engine: Ma Trận Đoán Ý Ngữ Cảnh
+## 4. Bộ nhớ và riêng tư
 
-Context Engine chạy liên tục trên client thông qua Riverpod state listeners (`vehicleProvider`, `batteryMonitorProvider`, `currentTabProvider`):
+- Chỉ lưu sự thật ngắn người dùng tự nói (không mật khẩu, số tài khoản); không lưu transcript. Màn "BatteryBot đang nhớ gì" cho xem/xóa; tắt học bằng `learningEnabled`.
+- Lịch sử chat và hành vi chỉ ở trên máy (`ChatApiService`, `SuggestionService`, `BehaviorSyncService` chạy `localOnly`).
 
-| Sự kiện / Ngữ cảnh | Điều kiện kích hoạt | Biểu cảm Mascot | Lời thoại bong bóng | Hành động đề xuất (Action Chips) |
-|---|---|---|---|---|
-| **Chào buổi sáng** | Mở app từ 06:00 đến 08:30 | `greeting` | *"Chào buổi sáng! Pin xe đang ở mức %d%%, sẵn sàng cho ngày mới rồi nhé!"* | `[Lộ trình hôm nay]` `[Kiểm tra trạm sạc]` |
-| **Cảnh báo pin thấp** | SoC xe < 20% khi mở app | `thinking` | *"Pin xe chỉ còn %d%% (~%d km). Bạn có muốn hẹn lịch sạc tối ưu không?"* | `[Bật sạc ngay]` `[Hẹn giờ đêm]` |
-| **Tại tab Smart Charger** | Đã kết nối Shelly nhưng relay đang OFF | `charging` | *"Bộ sạc thông minh đã sẵn sàng. Bạn muốn sạc đến mốc nào (khuyến nghị 80%)?"* | `[Sạc an toàn 80%]` `[Sạc đầy 100%]` |
-| **Sau chuyến đi dài** | Vừa kết thúc chuyến đi GPS > 20 km | `happy` | *"Chuyến đi vừa qua tiêu thụ %.1f Wh/km. Bạn có muốn lưu vào lịch sử học AI không?"* | `[Xem tiêu thụ Wh/km]` `[Bỏ qua]` |
-| **Nhắc bảo dưỡng** | ODO sắp chạm mốc 5.000 / 10.000 km | `idle` | *"Xe của bạn sắp tới kỳ bảo dưỡng xích và phanh (%d km). Cần đặt lịch nhắc không?"* | `[Xem danh mục bảo dưỡng]` `[Nhắc sau]` |
-| **Cảnh báo sự cố sạc** | Quá dòng (>12A) hoặc mất kết nối | `thinking` | *"Cảnh báo: Bộ sạc tự ngắt an toàn do dòng điện vượt ngưỡng. Chạm để xem chi tiết!"* | `[Chẩn đoán lỗi]` `[Cẩm nang an toàn]` |
+## 5. Giao diện
 
----
+- Nút BatteryBot nổi ở góc phải, tự thu vào mép sau 6 giây đứng yên, hiện lại khi cuộn lên, có bong bóng hoặc chạm (`AssistantContextCoordinator`). Chỉ chuyển động khi có hoạt động thật.
+- Gợi ý chủ động: luật trên máy, tối đa 1 bong bóng/30 phút và 5/ngày, bỏ qua thì ẩn 24 giờ.
+- Nút camera trong ô nhập: quét đồng hồ xe (`scanDashboard`) rồi điền "Đồng hồ xe đang báo …" để người dùng kiểm và gửi.
+- Thẻ xác nhận: champagne khi chờ, rose khi không thực hiện, emerald khi đã xác minh.
 
-## 4. Công Nghệ Trí Tuệ Nhân Tạo (Open LLM & RAG)
+## 6. Kiểm thử
 
-### 4.1. Lựa chọn Mô hình LLM Mở
-- **Model đề xuất**: **Qwen 2.5 (7B/14B Instruct)** hoặc **Llama 3.1 (8B Instruct)**.
-- **Tối ưu hóa**: Lượng tử hóa 4-bit (AWQ / GGUF) triển khai qua `vLLM` hoặc `Ollama` trên AI Service (`web/ai_server/`).
-- **Tốc độ phản hồi**: Thời gian sinh token đầu tiên (TTFT) < 600ms; truyền dữ liệu qua Server-Sent Events (SSE).
-
-### 4.2. RAG (Retrieval-Augmented Generation) & Knowledge Base
-Cơ sở tri thức nạp vào Vector Database (ChromaDB / FAISS) bao gồm:
-1. **Catalog xe VinFast**: Thông số kỹ thuật pin, dung lượng danh định Wh, dòng sạc khuyến nghị (từ `web/vehicle_catalog.py`).
-2. **Cẩm nang phần cứng sạc thông minh**: Hướng dẫn đấu nối Shelly Plug S Gen3, an toàn điện gia dụng 12A/2500W, cơ chế phục hồi IP (từ `SMART_CHARGE_SETUP_GUIDE.md` và `docs/specs/`).
-3. **Quy chuẩn Telemetry & Chẩn đoán**: Schema dữ liệu pin v1, mã lỗi phần cứng và cách khắc phục.
-
----
-
-## 5. Quy Chuẩn An Toàn: Human-in-the-Loop Action Execution
-
-Tuyệt đối tuân thủ tiêu chuẩn an toàn IoT: **Mô hình AI không bao giờ được phép trực tiếp gửi lệnh đóng relay sạc mà không có sự đồng ý của con người.**
-
-```text
-LLM đề xuất hành động ──► Tạo Action Confirmation Card trên Chat ──► Người dùng bấm "XÁC NHẬN"
-                                                                            │
-                                                                            ▼
-                                                            Backend thẩm định Lease & Safety
-                                                                            │
-                                                                            ▼
-                                                            Gửi lệnh bật sạc kèm Timer Watchdog
-```
-
-1. **Thẻ xác nhận hành động (Action Confirmation Card)**:
-   - Hiển thị rõ: Tên tác vụ (*"Bật sạc đến 80%"*), Công suất giới hạn (*12A / 2500W*), Thời gian tự ngắt dự kiến.
-   - Có 2 nút bấm vật lý: **`[ HỦY ]`** và **`[ XÁC NHẬN BẬT SẠC ]`**.
-2. **Xác thực Backend**:
-   - Khi người dùng bấm Xác nhận, request gửi lên endpoint `/api/smart-charging/execute` kèm chữ ký hành động và kiểm tra tính hợp lệ của phiên sạc trước khi đóng relay.
+- Backend: `web/tests/test_assistant.py`, `test_gemini_relay.py`, `test_qa129_fixes.py`.
+- App: `test/unit/hybrid_assistant_engine_test.dart`, `batterybot_local_engine_test.dart`, `chat_shelly_backend_integration_test.dart`, `chat_reminder_integration_test.dart`.

@@ -112,5 +112,4 @@ double? estimateRangeKm(
   VehicleModel vehicle, {
   double? socOverride,
   TripModelParams? learned,
-}) =>
-    estimateRange(vehicle, socOverride: socOverride, learned: learned)?.km;
+}) => estimateRange(vehicle, socOverride: socOverride, learned: learned)?.km;

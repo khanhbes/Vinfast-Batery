@@ -92,7 +92,9 @@ class _ConfirmActualSocSheetState extends State<ConfirmActualSocSheet> {
       final result = await scan;
       if (!mounted || result == null) return;
       setState(() {
-        if (result.soc != null) _soc = result.soc!.toDouble().clamp(_minimum, 100.0);
+        if (result.soc != null) {
+          _soc = result.soc!.toDouble().clamp(_minimum, 100.0);
+        }
         if (result.odoKm != null) {
           final km = result.odoKm!;
           _odo.text = km == km.roundToDouble()

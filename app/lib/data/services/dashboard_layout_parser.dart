@@ -67,7 +67,9 @@ abstract final class DashboardLayoutParser {
     if (numbers.isEmpty) return const DashboardLayoutReading();
 
     final heights = [for (final n in numbers) n.box.height]..sort();
-    final medianHeight = heights[heights.length ~/ 2];
+    // Lower median: with two numbers (battery + speed) the upper one would
+    // be the speed itself and never stand out.
+    final medianHeight = heights[(heights.length - 1) ~/ 2];
 
     bool isSpeed(_Item n) {
       if (n.inlineSpeed) return true;
@@ -85,7 +87,8 @@ abstract final class DashboardLayoutParser {
     bool isTemp(_Item n) {
       if (n.inlineTemp) return true;
       for (final label in tempLabels) {
-        if (_rightOf(label, n, maxGap: 1.2) && _sameRow(n, label)) return true;
+        // The "°" may be missing: "31" … "C" stand well apart.
+        if (_rightOf(label, n, maxGap: 2.0) && _sameRow(n, label)) return true;
       }
       return false;
     }
@@ -155,15 +158,50 @@ abstract final class DashboardLayoutParser {
     }
     odos.sort((a, b) => b.score.compareTo(a.score));
 
-    final soc = socs.isEmpty ? null : socs.first;
+    var soc = socs.isEmpty ? null : socs.first;
     final odo = odos.isEmpty ? null : odos.first;
+
+    // The small "%" is often not recognised on an LCD: then the battery is
+    // the largest remaining 1–3 digit number ≤ 100 that is not the speed,
+    // the temperature or the ODO. Weak on its own; frames still vote and
+    // the owner checks it before saving.
+    if (soc == null) {
+      final rest = [
+        for (final n in numbers)
+          if (n.box != odo?.box &&
+              !n.inlinePercent &&
+              !n.digits!.contains('.') &&
+              n.digits!.length <= 3 &&
+              !isSpeed(n) &&
+              !isTemp(n) &&
+              (int.tryParse(n.digits!) ?? 999) <= 100 &&
+              // Same digit size as the ODO when there is one (the Feliz
+              // prints both alike): drops stray strokes and small glyphs.
+              (odo == null ||
+                  (n.box.height >= 0.7 * odo.box.height &&
+                      n.box.height <= 1.45 * odo.box.height)))
+            n,
+      ]..sort((a, b) => b.box.height.compareTo(a.box.height));
+      if (rest.isNotEmpty) {
+        final n = rest.first;
+        soc = (value: int.parse(n.digits!), box: n.box, score: 0.5);
+      }
+    }
+
+    // A lone 3–6 digit number left after % / speed / °C is the ODO even
+    // without a readable "ODO"/"KM" label.
+    final lone =
+        odo != null &&
+        odos.length == 1 &&
+        odo.value >= 100 &&
+        odo.value == odo.value.roundToDouble();
     return DashboardLayoutReading(
       soc: soc?.value,
       odoKm: odo?.value,
       socBox: soc?.box,
       odoBox: odo?.box,
       socConfident: soc != null && soc.score >= 3,
-      odoConfident: odo != null && odo.anchored && odo.score >= 3,
+      odoConfident: odo != null && ((odo.anchored && odo.score >= 3) || lone),
       socCandidates: {for (final s in socs) s.value}.toList(),
       odoCandidates: {for (final o in odos) o.value}.take(4).toList(),
     );
@@ -272,7 +310,8 @@ class _Item {
 
   // Needs the D: a real "000" odometer must stay a number.
   static final _odoLabel = RegExp(r'^[O0Q]D[O0Q]$');
-  static final _speedLabel = RegExp(r'^K[MN]/?H$|^K[MN]/$');
+  // "KM/H" is read as KMH, KMIH, KMIM, KM/ …
+  static final _speedLabel = RegExp(r'^K[MN][/|I1L\]?[HM]$|^K[MN]/$');
   static final _kmLabel = RegExp(r'^K[MN]$');
   static final _tempLabel = RegExp(r'^°?[C€]$|^°$');
   static final _tempInline = RegExp(
@@ -290,8 +329,9 @@ class _Item {
     if (_speedLabel.hasMatch(compact)) {
       return _Item(box: token.box, isSpeedLabel: true);
     }
-    if (_kmLabel.hasMatch(compact))
+    if (_kmLabel.hasMatch(compact)) {
       return _Item(box: token.box, isKmLabel: true);
+    }
     if (_tempLabel.hasMatch(compact)) {
       return _Item(box: token.box, isTempLabel: true);
     }

@@ -30,7 +30,9 @@ class RecentChargingChart extends ConsumerWidget {
     return RecentChargingPanel(
       sessions: [
         for (final s in sessions)
-          if (vehicleId.isEmpty || s.vehicleId.isEmpty || s.vehicleId == vehicleId)
+          if (vehicleId.isEmpty ||
+              s.vehicleId.isEmpty ||
+              s.vehicleId == vehicleId)
             s,
       ],
       onViewHistory: onViewHistory,

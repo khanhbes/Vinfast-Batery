@@ -22,7 +22,7 @@ import '../../core/widgets/battery_bot_mascot.dart';
 import '../../data/models/vinfast_model_spec.dart';
 import '../../data/repositories/vehicle_spec_repository.dart';
 import '../smart_charging/smart_charger_setup_hub_screen.dart';
-import '../home/widgets/vehicle_showroom.dart' show showroomImageProvider;
+import '../../core/widgets/vehicle_photo.dart';
 
 /// Onboarding keeps the existing draft/validation contract in a calm step UI.
 class OnboardingChatScreen extends ConsumerStatefulWidget {
@@ -2458,7 +2458,7 @@ class OnboardingVehicleChoice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final image = spec.showroom?.primary.thumbnailUrl ?? spec.imageUrl?.trim();
+    final image = VehicleImages.forSpec(spec);
     final duration = AppMotion.durationFor(
       context,
       const Duration(milliseconds: 260),
@@ -2504,7 +2504,7 @@ class OnboardingVehicleChoice extends StatelessWidget {
                       ? fallback
                       : ExcludeSemantics(
                           child: Image(
-                            image: showroomImageProvider(image),
+                            image: vehicleImageProvider(image),
                             fit: BoxFit.contain,
                             errorBuilder: (_, _, _) => fallback,
                           ),

@@ -76,7 +76,10 @@ abstract final class TripEnergyModel {
     final v = speedKmh.clamp(minSpeedKmh, maxSpeedKmh) - refSpeedKmh;
     final load = (loadKg.clamp(40, 250) - riderKg) / 10;
     var value =
-        1 + params.speed * v + params.speed2 * v * v + params.loadPer10Kg * load;
+        1 +
+        params.speed * v +
+        params.speed2 * v * v +
+        params.loadPer10Kg * load;
     if (rain) value += params.rain;
     return value.clamp(0.6, 2.0).toDouble();
   }
@@ -212,7 +215,8 @@ abstract final class TripEnergyModel {
     if (alternativeKm.isNotEmpty) {
       final shortest = alternativeKm.reduce(math.min);
       if (shortest < distance - 0.5) {
-        final saved = (distance - shortest) * legs * params.refPctPerKm * factor;
+        final saved =
+            (distance - shortest) * legs * params.refPctPerKm * factor;
         suggestions.add(
           TripSuggestion.shorterRoute(_round1(shortest), _round1(saved)),
         );
@@ -271,7 +275,9 @@ class TripModelParams {
   static TripModelParams? fromJson(Object? raw) {
     if (raw is! Map) return null;
     double? number(Object? value) {
-      final parsed = value is num ? value.toDouble() : double.tryParse('$value');
+      final parsed = value is num
+          ? value.toDouble()
+          : double.tryParse('$value');
       return parsed != null && parsed.isFinite ? parsed : null;
     }
 
@@ -281,7 +287,8 @@ class TripModelParams {
       refPctPerKm: ref,
       speed: number(raw['speed']) ?? TripEnergyModel.priorSpeed,
       speed2: number(raw['speed2']) ?? TripEnergyModel.priorSpeed2,
-      loadPer10Kg: number(raw['loadPer10Kg']) ?? TripEnergyModel.priorLoadPer10Kg,
+      loadPer10Kg:
+          number(raw['loadPer10Kg']) ?? TripEnergyModel.priorLoadPer10Kg,
       rain: number(raw['rain']) ?? TripEnergyModel.priorRain,
       source: TripKmSource.model,
       samples: number(raw['samples'])?.toInt() ?? 0,

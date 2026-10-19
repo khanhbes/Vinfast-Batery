@@ -907,14 +907,18 @@ class ServerSmartChargerService {
     ),
   );
 
-  Future<void> voidBatteryReading(String vehicleId, String readingId) =>
-      _request(
-        'DELETE',
-        '/api/learning/${Uri.encodeComponent(vehicleId)}/readings/${Uri.encodeComponent(readingId)}',
-      );
+  Future<void> voidBatteryReading(
+    String vehicleId,
+    String readingId,
+  ) => _request(
+    'DELETE',
+    '/api/learning/${Uri.encodeComponent(vehicleId)}/readings/${Uri.encodeComponent(readingId)}',
+  );
 
   /// Rides recorded in the trip planner or imported from a CSV file.
-  Future<({int added, int duplicates, int rejected, VehicleLearningStatus? status})>
+  Future<
+    ({int added, int duplicates, int rejected, VehicleLearningStatus? status})
+  >
   addTripSamples(
     String vehicleId,
     List<Map<String, dynamic>> trips, {

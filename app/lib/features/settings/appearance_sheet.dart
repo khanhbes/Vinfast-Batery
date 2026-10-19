@@ -21,16 +21,13 @@ class AppearanceSheet extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('GIAO DIỆN', style: LuxeText.eyebrow),
+            Text('NGÔN NGỮ', style: LuxeText.eyebrow),
+            const SizedBox(height: 6),
+            Text('Ngôn ngữ', style: LuxeText.title.copyWith(fontSize: 22)),
             const SizedBox(height: 6),
             Text(
-              'Giao diện và ngôn ngữ',
-              style: LuxeText.title.copyWith(fontSize: 22),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'VinFast Battery dùng một giao diện tối Platinum duy nhất để '
-              'mọi màn hình đồng bộ và dễ đọc khi sạc ban đêm.',
+              'Kiểu Tổng quan, tab Sạc pin và cách bật sạc nằm ở '
+              'Cài đặt → Giao diện.',
               style: LuxeText.caption,
             ),
             const LuxeSectionLabel('Ngôn ngữ'),

@@ -165,7 +165,9 @@ String _when(DateTime at) {
   final hm =
       '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
   final sameDay =
-      local.year == now.year && local.month == now.month && local.day == now.day;
+      local.year == now.year &&
+      local.month == now.month &&
+      local.day == now.day;
   return sameDay ? hm : '$hm ${local.day}/${local.month}';
 }
 
@@ -310,12 +312,16 @@ class _EstimateCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final soc = vehicle.hasBatteryData ? vehicle.currentBattery.toDouble() : null;
+    final soc = vehicle.hasBatteryData
+        ? vehicle.currentBattery.toDouble()
+        : null;
     final range = estimateRange(vehicle, learned: learned.trip);
     final whPerPct = learned.whPerPct;
     final capacityWh = vehicle.batteryCapacityWh > 0
         ? vehicle.batteryCapacityWh
-        : (whPerPct == null ? 0.0 : whPerPct * 100 * ChargeEstimator.efficiency);
+        : (whPerPct == null
+              ? 0.0
+              : whPerPct * 100 * ChargeEstimator.efficiency);
     // Same inputs as the Charge tab's plan: learned Wh/% and charging power
     // (QA 129: here ~600 W catalog gave 1 h 6 min, the Charge tab 1 h 21).
     final learnedPower = learned.powerW;

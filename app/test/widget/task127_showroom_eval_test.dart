@@ -1,22 +1,8 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vinfast_battery/core/theme/luxe_theme.dart';
 import 'package:vinfast_battery/data/models/vehicle_learning_status.dart';
-import 'package:vinfast_battery/data/models/vehicle_showroom.dart';
-import 'package:vinfast_battery/features/home/widgets/vehicle_showroom.dart';
 import 'package:vinfast_battery/features/settings/widgets/training_result_sheet.dart';
-
-// 1×1 transparent PNG.
-final _png = Uint8List.fromList(const [
-  0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, //
-  0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-  0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00,
-  0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
-  0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49,
-  0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
-]);
 
 Map<String, dynamic> _tripReport({
   String decision = 'promoted',
@@ -68,8 +54,6 @@ Map<String, dynamic> _tripReport({
 };
 
 void main() {
-  setUp(() => showroomImageProvider = (_) => MemoryImage(_png));
-
   group('training verdict', () {
     test('a worse new model is kept out and says so', () {
       final report = TrainingReport.fromJson(
@@ -134,75 +118,4 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
-
-  test('the owner Feliz render ships with the app', () {
-    final only = BundledShowroom.withBundled(null, modelId: 'feliz')!;
-    expect(only.defaultColor.id, BundledShowroom.felizMint.id);
-    expect(only.primary.mediumUrl, startsWith('asset:'));
-    expect(BundledShowroom.withBundled(null, modelId: 'evo200'), isNull);
-    final spin = VehicleShowroomData(
-      colors: [
-        ShowroomColor(
-          id: 'do',
-          name: 'Đỏ',
-          swatch: const Color(0xFFC8102E),
-          angles: [
-            for (var i = 0; i < 12; i++)
-              ShowroomImage(
-                thumbnailUrl: 'https://x/$i.webp',
-                mediumUrl: 'https://x/$i.webp',
-                heroUrl: 'https://x/$i.webp',
-              ),
-          ],
-        ),
-      ],
-      defaultColorId: 'do',
-    );
-    final merged = BundledShowroom.withBundled(spin, name: 'VinFast Feliz')!;
-    expect(merged.colors.length, 2);
-    expect(merged.defaultColorId, 'do', reason: 'a real 360° set wins');
-  });
-
-  testWidgets('one photo turns round and settles front or back', (
-    tester,
-  ) async {
-    final key = GlobalKey<VehicleShowroomViewState>();
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: SizedBox(
-              width: 320,
-              height: 300,
-              child: VehicleShowroomView(
-                key: key,
-                color: BundledShowroom.felizMint,
-                orbit: true,
-                fallback: const SizedBox(),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.pump();
-    expect(find.text('Kéo ngang để xoay quanh xe'), findsOneWidget);
-    final stage = find.byType(VehicleShowroomView);
-    await tester.timedDrag(
-      stage,
-      const Offset(-200, 0),
-      const Duration(milliseconds: 600),
-    );
-    await tester.pumpAndSettle();
-    final settled = key.currentState!.orbitDegrees;
-    expect(settled.abs(), closeTo(180, 0.01), reason: 'a long drag turns it');
-    await tester.timedDrag(
-      stage,
-      const Offset(30, 0),
-      const Duration(milliseconds: 800),
-    );
-    await tester.pumpAndSettle();
-    expect(key.currentState!.orbitDegrees.abs() % 180, closeTo(0, 0.01));
-    expect(tester.takeException(), isNull);
-  });
 }

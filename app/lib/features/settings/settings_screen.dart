@@ -18,6 +18,8 @@ import '../../core/services/settings_service.dart';
 import '../../core/widgets/app_popup.dart';
 import '../smart_charging/smart_charger_setup_hub_screen.dart';
 import 'appearance_sheet.dart';
+import 'appearance_screen.dart';
+import '../../core/providers/appearance_provider.dart';
 import 'personal_ai_settings_screen.dart';
 import 'personal_ai_training_data_screen.dart';
 import 'developer_ai_studio_screen.dart';
@@ -240,8 +242,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       LuxeSettingsGroup(
         children: [
           LuxeSettingsRow(
+            key: const ValueKey('settings-appearance'),
             icon: Icons.palette_outlined,
-            title: 'Giao diện và ngôn ngữ',
+            title: 'Giao diện',
+            subtitle: AppearanceScreen.summary(ref.watch(appearanceProvider)),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const AppearanceScreen()),
+            ),
+          ),
+          LuxeSettingsRow(
+            icon: Icons.language_rounded,
+            title: 'Ngôn ngữ',
             subtitle: _getAppearanceValue(),
             onTap: _showAppearanceSheet,
           ),
@@ -489,11 +500,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   );
 
   String _getAppearanceValue() {
-    final langText = switch (_settingsService.getLanguage()) {
-      AppLanguage.system => 'Auto',
-      AppLanguage.vietnamese => 'VN',
-      AppLanguage.english => 'EN',
+    return switch (_settingsService.getLanguage()) {
+      AppLanguage.english => 'English',
+      _ => 'Tiếng Việt',
     };
-    return 'Platinum • $langText';
   }
 }

@@ -17,7 +17,7 @@ import '../../data/models/vinfast_model_spec.dart';
 import '../../data/repositories/vehicle_spec_repository.dart';
 import '../home/widgets/luxe_vehicle_hero.dart' show LuxeScooterArt;
 import 'vehicle_spec_detail_screen.dart';
-import '../home/widgets/vehicle_showroom.dart' show showroomImageProvider;
+import '../../core/widgets/vehicle_photo.dart';
 
 /// Vehicle Garage Screen — LUXE (Task 119)
 /// - List user vehicles (active / archived)
@@ -246,6 +246,7 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
     return _VehicleCard(
       heroTag: 'vehicle-hero-$id',
       model: (v['model'] ?? v['vehicleName'] ?? 'Xe không tên').toString(),
+      photoUrl: VehicleImages.forVehicleMap(v),
       year: v['year'] is num ? (v['year'] as num).toInt() : null,
       battery: num2(v['batteryCapacity']),
       soh: num2(v['stateOfHealth']),
@@ -289,6 +290,7 @@ class _VehicleCard extends StatelessWidget {
   final double? level;
   final String? licensePlate;
   final String? batteryType;
+  final String? photoUrl;
   final bool isSelected;
   final bool isArchived;
   final VoidCallback onTap;
@@ -305,6 +307,7 @@ class _VehicleCard extends StatelessWidget {
     required this.level,
     this.licensePlate,
     this.batteryType,
+    this.photoUrl,
     required this.isSelected,
     this.isArchived = false,
     required this.onTap,
@@ -385,9 +388,12 @@ class _VehicleCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     SizedBox(
-                      height: 96,
-                      child: LuxeScooterArt(
-                        level: (level ?? 0).clamp(0.0, 100.0) / 100,
+                      height: 112,
+                      child: VehiclePhoto(
+                        url: photoUrl,
+                        fallback: LuxeScooterArt(
+                          level: (level ?? 0).clamp(0.0, 100.0) / 100,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -1004,12 +1010,12 @@ class _CatalogVehicleImage extends StatelessWidget {
             )
           : const LuxeScooterArt(level: 0),
     );
-    final url = spec.showroom?.primary.thumbnailUrl ?? '';
+    final url = VehicleImages.forSpec(spec) ?? '';
     if (url.isEmpty) return fallback;
     return ClipRRect(
       borderRadius: BorderRadius.circular(14),
       child: Image(
-        image: showroomImageProvider(url),
+        image: vehicleImageProvider(url),
         width: 72,
         height: 52,
         fit: BoxFit.contain,

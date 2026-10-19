@@ -57,9 +57,9 @@ services:
     volumes:
       - models_data:/app/models
       - apk_data:/app/apk
-      # Consumption model is stored at repository root and mounted read-only
-      # so the API can load it at /app/ev_soc_pipeline.pkl.
-      - ../ev_soc_pipeline.pkl:/app/ev_soc_pipeline.pkl:ro
+      # Consumption model (registry copy) mounted read-only so the API can
+      # load it at /app/ev_soc_pipeline.pkl.
+      - ./models/soc/v_legacy-1.pkl:/app/ev_soc_pipeline.pkl:ro
     networks:
       - vinfast_net
     healthcheck:

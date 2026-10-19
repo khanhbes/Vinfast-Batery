@@ -1,10 +1,13 @@
 import 'dart:io';
+import 'dart:isolate';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'dashboard_layout_parser.dart';
+import 'seven_segment_reader.dart';
 
 /// Battery % and ODO read from a photo of the scooter's dashboard (Task 127).
 ///
@@ -223,10 +226,31 @@ class DashboardReader {
   }) async {
     final recognizer = TextRecognizer(script: TextRecognitionScript.latin);
     try {
+      // Seven-segment LCD first (QA 131): text recognition cannot read the
+      // Feliz digits; it stays the fallback for other dashboards.
+      final segments = await readSegments(path, lastOdoKm: lastOdoKm);
+      if (segments != null && segments.soc != null && segments.odoKm != null) {
+        return segments;
+      }
       final result = await recognizer.processImage(
         InputImage.fromFilePath(path),
       );
-      return DashboardOcr.readingOf(result, lastOdoKm: lastOdoKm);
+      final text = DashboardOcr.readingOf(result, lastOdoKm: lastOdoKm);
+      if (segments == null) return text;
+      return DashboardReading(
+        soc: segments.soc ?? text.soc,
+        odoKm: segments.odoKm ?? text.odoKm,
+        socCandidates: {
+          ...segments.socCandidates,
+          ...text.socCandidates,
+        }.toList(),
+        odoCandidates: {
+          ...segments.odoCandidates,
+          ...text.odoCandidates,
+        }.take(4).toList(),
+        odoFromLabel: segments.odoFromLabel || text.odoFromLabel,
+        rawText: text.rawText,
+      );
     } finally {
       await recognizer.close();
       if (delete) {
@@ -236,6 +260,54 @@ class DashboardReader {
           // Temporary file; the OS clears it anyway.
         }
       }
+    }
+  }
+
+  /// Seven-segment reading of a photo, tried upright and turned (the
+  /// photo's orientation may not be applied); null when nothing is read.
+  static Future<DashboardReading?> readSegments(
+    String path, {
+    double? lastOdoKm,
+  }) async {
+    try {
+      final bytes = await File(path).readAsBytes();
+      final codec = await ui.instantiateImageCodec(bytes, targetHeight: 1280);
+      final frame = await codec.getNextFrame();
+      final image = frame.image;
+      final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      final width = image.width, height = image.height;
+      image.dispose();
+      codec.dispose();
+      if (data == null) return null;
+      final rgba = data.buffer.asUint8List();
+      final layout = await Isolate.run(() {
+        final gray = GrayImage.fromRgba(rgba, width, height);
+        DashboardLayoutReading? best;
+        for (final turn in const [0, 90, 270, 180]) {
+          final reading = DashboardLayoutParser.parse(
+            SevenSegmentReader.read(gray.rotated(turn)),
+            lastOdoKm: lastOdoKm,
+          );
+          final score =
+              (reading.soc != null ? 1 : 0) + (reading.odoKm != null ? 1 : 0);
+          final bestScore = best == null
+              ? -1
+              : (best.soc != null ? 1 : 0) + (best.odoKm != null ? 1 : 0);
+          if (score > bestScore) best = reading;
+          if (score == 2) break;
+        }
+        return best;
+      });
+      if (layout == null || layout.isEmpty) return null;
+      return DashboardReading(
+        soc: layout.soc,
+        odoKm: layout.odoKm,
+        socCandidates: layout.socCandidates,
+        odoCandidates: layout.odoCandidates,
+        odoFromLabel: layout.odoConfident,
+      );
+    } on Object {
+      return null;
     }
   }
 }

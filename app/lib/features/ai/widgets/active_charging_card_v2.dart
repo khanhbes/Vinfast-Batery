@@ -4,6 +4,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/luxe_theme.dart';
+import '../../../core/widgets/seven_segment_text.dart';
+import '../../../data/models/app_appearance.dart';
 import 'luxe_soc_dial.dart';
 
 /// Live session: the dial in read-only charging mode (emerald fill with a
@@ -30,7 +32,12 @@ class ActiveChargingCardV2 extends StatefulWidget {
     this.stopAwaitingReadback = false,
     this.countdownLabel = 'Shelly tự ngắt sau · lúc',
     this.socCaption,
+    this.style = ChargeStyle.dial,
   });
+
+  /// The owner's Charge layout (QA 131): the centre visual changes; status,
+  /// meter readings and the stop button stay the same.
+  final ChargeStyle style;
 
   final double currentPercent;
   final double targetPercent;
@@ -198,49 +205,12 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
             ],
           ),
           const SizedBox(height: 8),
-          LayoutBuilder(
-            builder: (context, c) {
-              final size = math.min(c.maxWidth, 300.0);
-              return Center(
-                child: SizedBox.square(
-                  dimension: size,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      ExcludeSemantics(
-                        child: AnimatedBuilder(
-                          animation: Listenable.merge([_flow, _enter]),
-                          builder: (context, _) => CustomPaint(
-                            painter: LuxeDialPainter(
-                              current: current.toDouble(),
-                              target: target.toDouble(),
-                              enter: _enter.value,
-                              flow: _flow.value,
-                              charging: true,
-                            ),
-                          ),
-                        ),
-                      ),
-                      // Only the short centre lines live inside the dial; they
-                      // wrap instead of shrinking everything (Task 127).
-                      Center(
-                        child: SizedBox.square(
-                          dimension: size * 0.64,
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: SizedBox(
-                              width: size * 0.64,
-                              child: _centre(current, target),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
+          switch (widget.style) {
+            ChargeStyle.dial => _dial(current, target),
+            ChargeStyle.bar => _bar(current, target),
+            ChargeStyle.lcd => _lcd(current, target),
+            ChargeStyle.detail => _bar(current, target, compact: true),
+          },
           if (widget.estimateNote != null) ...[
             const SizedBox(height: 6),
             Text(
@@ -276,6 +246,15 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
                   label: 'Đã nạp',
                   value: _energy(widget.sessionEnergyWh),
                 ),
+                if (widget.style == ChargeStyle.detail) ...[
+                  _Metric(
+                    label: 'Nhiệt độ ổ cắm',
+                    value: widget.temperatureC == null
+                        ? '—'
+                        : '${widget.temperatureC!.toStringAsFixed(0)}°C',
+                  ),
+                  _Metric(label: 'Tự ngắt lúc', value: widget.completionTime),
+                ],
               ];
               final perRow = c.maxWidth < 300 ? 2 : 4;
               final w = (c.maxWidth - 8 * (perRow - 1)) / perRow;
@@ -288,7 +267,8 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
               );
             },
           ),
-          if (widget.temperatureC != null) ...[
+          if (widget.temperatureC != null &&
+              widget.style != ChargeStyle.detail) ...[
             const SizedBox(height: 10),
             Row(
               children: [
@@ -327,6 +307,253 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
       ),
     );
   }
+
+  Widget _dial(int current, int target) => LayoutBuilder(
+    builder: (context, c) {
+      final size = math.min(c.maxWidth, 300.0);
+      return Center(
+        child: SizedBox.square(
+          dimension: size,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              ExcludeSemantics(
+                child: AnimatedBuilder(
+                  animation: Listenable.merge([_flow, _enter]),
+                  builder: (context, _) => CustomPaint(
+                    painter: LuxeDialPainter(
+                      current: current.toDouble(),
+                      target: target.toDouble(),
+                      enter: _enter.value,
+                      flow: _flow.value,
+                      charging: true,
+                    ),
+                  ),
+                ),
+              ),
+              // Only the short centre lines live inside the dial; they
+              // wrap instead of shrinking everything (Task 127).
+              Center(
+                child: SizedBox.square(
+                  dimension: size * 0.64,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: SizedBox(
+                      width: size * 0.64,
+                      child: _centre(current, target),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+
+  /// Thanh ngang: big %, a horizontal bar to the target, the countdown.
+  Widget _bar(int current, int target, {bool compact = false}) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      const SizedBox(height: 4),
+      FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(
+              '$current%',
+              style: TextStyle(
+                color: LuxeColors.text,
+                fontSize: compact ? 44 : 60,
+                height: 1,
+                fontWeight: FontWeight.w200,
+                fontFeatures: const [ui.FontFeature.tabularFigures()],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              '→ $target%',
+              style: const TextStyle(color: LuxeColors.muted, fontSize: 18),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 2),
+      Text(
+        widget.socCaption ?? 'ước tính · mục tiêu $target%',
+        style: const TextStyle(color: LuxeColors.muted, fontSize: 13),
+      ),
+      const SizedBox(height: 12),
+      ExcludeSemantics(
+        child: SizedBox(
+          height: 16,
+          child: LayoutBuilder(
+            builder: (context, c) => Stack(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    color: LuxeColors.glassStrong,
+                  ),
+                ),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 600),
+                  curve: LuxeMotion.enter,
+                  width: c.maxWidth * current / 100,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    gradient: const LinearGradient(
+                      colors: [LuxeColors.emeraldDeep, LuxeColors.emerald],
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: (c.maxWidth * target / 100 - 1)
+                      .clamp(0, c.maxWidth - 2)
+                      .toDouble(),
+                  top: 0,
+                  bottom: 0,
+                  child: Container(width: 2, color: LuxeColors.platinumHi),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      const SizedBox(height: 14),
+      _countdown(),
+    ],
+  );
+
+  /// Đồng hồ LCD: seven-segment %, target, watts and the countdown.
+  Widget _lcd(int current, int target) => Container(
+    padding: const EdgeInsets.fromLTRB(14, 16, 14, 14),
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(22),
+      color: const Color(0xFF07080A),
+      border: Border.all(color: LuxeColors.platinumLow),
+    ),
+    child: Column(
+      children: [
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              SevenSegmentText(
+                '$current'.padLeft(2),
+                height: 72,
+                semanticsLabel: 'Pin ước tính $current%',
+              ),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(6, 0, 20, 6),
+                child: Text(
+                  '%',
+                  style: TextStyle(color: LuxeColors.platinum, fontSize: 20),
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'MỤC TIÊU',
+                    style: TextStyle(
+                      color: LuxeColors.platinumMid,
+                      fontSize: 10.5,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  SevenSegmentText(
+                    '$target',
+                    height: 30,
+                    color: LuxeColors.emerald,
+                    semanticsLabel: 'Mục tiêu $target%',
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      SevenSegmentText(
+                        '${widget.powerW.round()}',
+                        height: 22,
+                        color: LuxeColors.champagne,
+                        semanticsLabel: '${widget.powerW.round()} oát',
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.only(left: 4),
+                        child: Text(
+                          'W',
+                          style: TextStyle(
+                            color: LuxeColors.champagne,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        AnimatedBuilder(
+          animation: _flow,
+          builder: (context, _) {
+            final left = _left;
+            final text =
+                '${left.inHours}:${(left.inMinutes % 60).toString().padLeft(2, '0')}';
+            return FittedBox(
+              fit: BoxFit.scaleDown,
+              child: SevenSegmentText(
+                text,
+                key: const ValueKey('session-countdown'),
+                height: 34,
+                semanticsLabel: 'Còn ${_clock(left)}',
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '${widget.countdownLabel} ${widget.completionTime}',
+          key: const ValueKey('session-countdown-label'),
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: LuxeColors.muted, fontSize: 13),
+        ),
+      ],
+    ),
+  );
+
+  Widget _countdown() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      AnimatedBuilder(
+        animation: _flow,
+        builder: (context, _) => Text(
+          _clock(_left),
+          key: const ValueKey('session-countdown'),
+          style: const TextStyle(
+            color: LuxeColors.text,
+            fontSize: 24,
+            fontWeight: FontWeight.w300,
+            letterSpacing: 1.2,
+            fontFeatures: [ui.FontFeature.tabularFigures()],
+          ),
+        ),
+      ),
+      const SizedBox(height: 2),
+      Text(
+        '${widget.countdownLabel} ${widget.completionTime}',
+        key: const ValueKey('session-countdown-label'),
+        style: const TextStyle(color: LuxeColors.muted, fontSize: 13),
+      ),
+    ],
+  );
 
   Widget _centre(int current, int target) => Column(
     mainAxisSize: MainAxisSize.min,

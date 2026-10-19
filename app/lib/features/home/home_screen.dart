@@ -11,6 +11,9 @@ import '../../core/services/guide_registry.dart';
 import '../../core/theme/luxe_theme.dart';
 import 'widgets/luxe_dashboard_cards.dart';
 import 'widgets/luxe_vehicle_hero.dart';
+import 'widgets/dashboard_style_heroes.dart';
+import '../../core/providers/appearance_provider.dart';
+import '../../data/models/app_appearance.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/services/session_service.dart';
 import '../../core/utils/app_error_formatter.dart';
@@ -39,7 +42,14 @@ class HomeScreen extends ConsumerWidget {
     final vehicleAsync = ref.watch(vehicleProvider(vehicleId));
     final allVehiclesAsync = ref.watch(allVehiclesProvider);
     final prefService = ref.watch(dashboardPreferencesProvider);
-    final visibleWidgets = prefService.visibleWidgets;
+    // QA 131: the owner's Overview layout (Cài đặt → Giao diện). Tối giản
+    // keeps only the quick actions under the battery ring.
+    final dashboardStyle = ref.watch(appearanceProvider).dashboard;
+    final visibleWidgets = dashboardStyle == DashboardStyle.minimal
+        ? prefService.visibleWidgets
+              .where((id) => id == DashboardWidgetId.quickActions)
+              .toList()
+        : prefService.visibleWidgets;
 
     // ── Initial auto-select on frame if vehicleId is not yet selected ──
     final currentVehicles = allVehiclesAsync.valueOrNull;
@@ -171,15 +181,41 @@ class HomeScreen extends ConsumerWidget {
                             child: KeyedSubtree(
                               key: GuideRegistry.keyBatterySummary,
                               child: vehicleAsync.when(
-                                data: (vehicle) => LuxeReveal(
-                                  child: LuxeVehicleHero(
-                                    vehicle: vehicle,
-                                    learned: ref
-                                        .watch(learnedModelsProvider(vehicleId))
-                                        .valueOrNull
-                                        ?.trip,
-                                  ),
-                                ),
+                                data: (vehicle) {
+                                  final learned = ref
+                                      .watch(learnedModelsProvider(vehicleId))
+                                      .valueOrNull
+                                      ?.trip;
+                                  return LuxeReveal(
+                                    child: switch (dashboardStyle) {
+                                      DashboardStyle.luxe => LuxeVehicleHero(
+                                        vehicle: vehicle,
+                                        learned: learned,
+                                      ),
+                                      DashboardStyle.lcd => LcdClusterHero(
+                                        vehicle: vehicle,
+                                        learned: learned,
+                                      ),
+                                      DashboardStyle.compact =>
+                                        CompactMetricsHero(
+                                          vehicle: vehicle,
+                                          learned: learned,
+                                        ),
+                                      DashboardStyle.minimal => MinimalHero(
+                                        vehicle: vehicle,
+                                        learned: learned,
+                                        onCharge: () =>
+                                            ref
+                                                    .read(
+                                                      currentTabProvider
+                                                          .notifier,
+                                                    )
+                                                    .state =
+                                                1,
+                                      ),
+                                    },
+                                  );
+                                },
                                 loading: () => const _LuxeSkeleton(height: 330),
                                 error: (e, _) => _InlineErrorBanner(
                                   title: 'Không tải được thông tin xe',
@@ -281,8 +317,7 @@ class HomeScreen extends ConsumerWidget {
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
             child: vehicleAsync.when(
-              data: (vehicle) =>
-                  LuxeReveal(
+              data: (vehicle) => LuxeReveal(
                 index: 2,
                 child: LuxeStatsStrip(vehicle: vehicle, learned: learned),
               ),

@@ -1,2 +1,0 @@
-# Separate layer: chatbot updates must not reinstall the entire ML runtime.
-google-genai==2.27.0

@@ -7,13 +7,12 @@ import '../../../data/services/range_estimator.dart';
 import '../../../data/services/trip_energy_model.dart';
 
 import '../../../core/theme/luxe_theme.dart';
+import '../../../core/widgets/vehicle_photo.dart';
 import '../../../data/models/vehicle_model.dart';
-import '../vehicle_showroom_screen.dart';
-import 'vehicle_showroom.dart';
 
-/// Dashboard hero: the scooter on a lit stage (the catalog photo when the
-/// admin has provided one, otherwise a platinum line-art scooter whose
-/// battery glows with the charge), the name, plate and the battery reading.
+/// Dashboard hero: the scooter on a lit stage (the vehicle photo shared by
+/// every screen, otherwise a platinum line-art scooter whose battery glows
+/// with the charge), the name, plate and the battery reading.
 class LuxeVehicleHero extends StatefulWidget {
   const LuxeVehicleHero({super.key, required this.vehicle, this.learned});
   final VehicleModel? vehicle;
@@ -75,9 +74,11 @@ class _LuxeVehicleHeroState extends State<LuxeVehicleHero>
     // without battery data used to show the model defaults "100% · ~120 km"
     // (Task 125). One field, the same the Charge tab and BatteryBot write.
     final percent = v?.hasBatteryData == true ? v?.currentBattery : null;
-    final estimate = v == null || percent == null ? null : estimateRangeKm(v, learned: widget.learned);
+    final estimate = v == null || percent == null
+        ? null
+        : estimateRangeKm(v, learned: widget.learned);
     final range = estimate?.round();
-    final showroom = v?.showroom;
+    final photo = VehicleImages.forVehicle(v);
 
     return Semantics(
       container: true,
@@ -98,9 +99,7 @@ class _LuxeVehicleHeroState extends State<LuxeVehicleHero>
                       // The model name only above a nickname: without one,
                       // "VINFAST FELIZ / VinFast Feliz" repeated (QA 130).
                       Text(
-                        (name != model && model != null
-                                ? model
-                                : 'Xe của bạn')
+                        (name != model && model != null ? model : 'Xe của bạn')
                             .toUpperCase(),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -150,104 +149,47 @@ class _LuxeVehicleHeroState extends State<LuxeVehicleHero>
                 ),
               ],
             ),
-            Semantics(
-              button: true,
-              label: 'Mở phòng trưng bày xe',
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => VehicleShowroomScreen.open(
-                  context,
-                  title: name,
-                  eyebrow: model,
-                  showroom: showroom,
-                  batteryLevel: (percent ?? 0) / 100,
-                  figures: [
-                    if (v != null && v.batteryCapacityWh > 0)
-                      (
-                        'Dung lượng pin',
-                        '${(v.batteryCapacityWh / 1000).toStringAsFixed(1)} kWh',
+            SizedBox(
+              height: 176,
+              child: AnimatedBuilder(
+                animation: Listenable.merge([_float, _enter]),
+                builder: (context, _) {
+                  final t = _float.value;
+                  final e = Curves.easeOutCubic.transform(_enter.value);
+                  final bob = 3 * math.sin(t * 2 * math.pi);
+                  return Stack(
+                    alignment: Alignment.bottomCenter,
+                    children: [
+                      Positioned.fill(
+                        child: CustomPaint(
+                          painter: _StagePainter(
+                            glow: 0.85 + 0.15 * math.sin(t * 2 * math.pi),
+                          ),
+                        ),
                       ),
-                    if (range != null) ('Quãng đường ước tính', '~$range km'),
-                    if (percent != null) ('Pin hiện tại', '$percent%'),
-                  ],
-                ),
-                child: SizedBox(
-                  height: 176,
-                  child: AnimatedBuilder(
-                    animation: Listenable.merge([_float, _enter]),
-                    builder: (context, _) {
-                      final t = _float.value;
-                      final e = Curves.easeOutCubic.transform(_enter.value);
-                      final bob = 3 * math.sin(t * 2 * math.pi);
-                      return Stack(
-                        alignment: Alignment.bottomCenter,
-                        children: [
-                          Positioned.fill(
-                            child: CustomPaint(
-                              painter: _StagePainter(
-                                glow: 0.85 + 0.15 * math.sin(t * 2 * math.pi),
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 18,
+                        top: 6,
+                        child: Opacity(
+                          opacity: e,
+                          child: Transform.translate(
+                            offset: Offset(24 * (1 - e), bob),
+                            child: VehiclePhoto(
+                              url: photo,
+                              reflection: true,
+                              fallback: LuxeScooterArt(
+                                level: (percent ?? 0) / 100,
+                                spin: t,
                               ),
                             ),
                           ),
-                          Positioned(
-                            left: 0,
-                            right: 0,
-                            bottom: 18,
-                            top: 6,
-                            child: Opacity(
-                              opacity: e,
-                              child: Transform.translate(
-                                offset: Offset(24 * (1 - e), bob),
-                                child: showroom == null
-                                    ? LuxeScooterArt(
-                                        level: (percent ?? 0) / 100,
-                                        spin: t,
-                                      )
-                                    : VehicleShowroomView(
-                                        color: showroom.defaultColor,
-                                        interactive: false,
-                                        fallback: LuxeScooterArt(
-                                          level: (percent ?? 0) / 100,
-                                          spin: t,
-                                        ),
-                                      ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      showroom?.anyCanSpin == true
-                          ? Icons.threesixty_rounded
-                          : Icons.view_in_ar_rounded,
-                      size: 15,
-                      color: LuxeColors.platinumMid,
-                    ),
-                    const SizedBox(width: 5),
-                    Flexible(
-                      child: Text(
-                        showroom?.anyCanSpin == true
-                            ? 'Chạm để xem 360°'
-                            : 'Chạm để xoay quanh xe',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: LuxeText.label.copyWith(fontSize: 11.5),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  );
+                },
               ),
             ),
             const SizedBox(height: 6),

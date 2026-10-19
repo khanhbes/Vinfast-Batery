@@ -41,6 +41,7 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
     vsync: this,
     duration: const Duration(milliseconds: 750),
   );
+
   /// The owner's last choice, kept when the section is rebuilt after a
   /// charge ends and across app starts (QA 130: 30 phút reset to 2 giờ).
   static int? _lastSelectedMinutes;

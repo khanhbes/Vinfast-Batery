@@ -36,15 +36,10 @@ VinFast Battery là nền tảng quản lý pin xe máy điện (Feliz, Evo, Kla
                      │  - TelemetryPoints             │   │  - Range / Charging Time / SoC │
                      │  - AuditLogs, ChargeFeedback   │   │  - Personal AI & Drift Monitor │
                      └────────────────────────────────┘   └────────────────────────────────┘
-                                                                  ▲
-                                                                  │ Sync telemetry
-                                                                  ▼
-                                       ┌──────────────────────────────────────────────┐
-                                       │       SMART CHARGER GATEWAY (FastAPI)        │
-                                       │  - smart_charger_gateway/main.py (Port 8002) │
-                                       │  - Hardware Watchdog: Safe max 12A / 2500W   │
-                                       │  - Shelly Plug S Gen3 (Cloud / optional LAN) │
-                                       └──────────────────────────────────────────────┘
+
+  Sạc thông minh: server.py + smart_charge_worker.py (Azure) ──► Shelly Cloud ──► Shelly Plug S Gen3
+  (ngưỡng an toàn 12A / 2500W, readback, tự ngắt theo %/hẹn giờ). Gateway LAN cũ đã gỡ (QA 131).
+  BatteryBot: web/assistant/ ──► Gemini qua relay APIM (docs/specs/BATTERYBOT_ASSISTANT.md).
 ```
 
 ---
@@ -81,26 +76,17 @@ Vinfast-Batery/
 │   ├── vehicle_catalog.py            # Quản lý danh mục xe EV & thông số kỹ thuật pin
 │   ├── ai_server/                    # FastAPI AI Service (Entrypoint: Port 8001)
 │   │   ├── main.py                   # Prediction endpoints & Model Lifecycle API
-│   │   ├── chat_engine.py            # [AI Chatbot] Gemini API wrapper & prompt builder
-│   │   ├── chat_tools.py             # [AI Chatbot] Function calling tool definitions
-│   │   ├── chat_memory.py            # [AI Chatbot] Conversation context manager
-│   │   ├── behavior_analyzer.py      # [AI Chatbot] User behavior aggregation
-│   │   ├── suggestion_engine.py      # [AI Chatbot] Proactive suggestion rules
-│   │   ├── chat_schemas.py           # [AI Chatbot] Pydantic models for chat API
-│   │   ├── models/                   # TFLite & PKL model storage
 │   │   └── fine_tune.py              # Personal AI fine-tuning pipeline
 │   ├── dashboard/                    # React 18 + Vite + TypeScript Admin Dashboard
 │   │   ├── src/components/ai-center/ # Model lab, AI monitoring & evaluation
 │   │   └── src/pages/                # Dashboard, Vehicles, Telemetry, Gateway management
-│   ├── shelly/                       # Shelly Cloud & LAN integration utilities
-│   ├── cloudrun/                     # Manifests & contracts cho Google Cloud Run
+│   ├── assistant/                    # BatteryBot v2 (Gemini qua relay, kiến thức, bộ nhớ, quota)
+│   ├── shelly/                       # Shelly Cloud: phiên sạc, an toàn, học Wh/%
+│   ├── models/                       # Model registry (manifest + artifact)
 │   └── tests/                        # Toàn bộ backend test suites (Pytest)
 │
-├── smart_charger_gateway/            # IoT Hardware Gateway (FastAPI: Port 8002)
-│   ├── main.py                       # Gateway REST API & RPC handlers
-│   ├── shelly.py                     # Shelly Plug S Gen3 driver & power telemetry polling
-│   ├── safety_monitor.py             # Watchdog giám sát an toàn (ngắt khi >12A, quá nhiệt)
-│   └── tests/                        # Gateway unit & mock tests (Pytest)
+├── deploy/azure/                     # Bicep + script rollout (bằng chứng ghi vào docs/qa_evidence)
+├── tools/                            # Quality gate, kiểm tra image/container, dọn workspace
 │
 ├── docs/
 │   ├── specs/                        # Các đặc tả kỹ thuật chi tiết
@@ -109,8 +95,8 @@ Vinfast-Batery/
 │   │   ├── VEHICLE_CATALOG.md        # Danh mục xe và định mức pin
 │   │   ├── START_LAPTOP_SERVER.md    # Hướng dẫn chạy server local với Tailscale/Tunnel
 │   │   ├── IOS.md                    # Hướng dẫn build/test trên iOS
-│   │   └── AI_CHATBOT_PERSONALIZATION.md  # Đặc tả AI Chatbot cá nhân hóa & kế hoạch triển khai
-│   └── archive/                      # Kho lưu trữ các kế hoạch và audit cũ (được giữ để đối soát)
+│   │   └── BATTERYBOT_ASSISTANT.md   # BatteryBot v2 hiện hành (đã gộp đặc tả chatbot cũ)
+│   └── qa_evidence/                  # Chỉ bằng chứng rollout/gate deploy (QA cũ đã dọn 19/10/2026)
 │
 ├── AGENTS.md                         # (File này) Cẩm nang kiến trúc dành cho Agent
 ├── PROJECT_STATUS.md                 # Single Source of Truth: Tiến độ, Release Gates & Changelog
@@ -172,10 +158,10 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
 - **Task 127 (16/10/2026) — học do user bấm, pin đầy, số đọc:** mọi phiên (cả hẹn giờ) tắt `battery_full` khi sau đỉnh ≥ 150 W công suất < 40 W liên tục 5 phút và là đuôi sạc thật (không phải rút xe 420 → 0 W) → SoC 100 %, nhãn tự động. Dữ liệu chỉ **xếp hàng** (`learned.pending`, `users/{uid}/tripSamples`, `users/{uid}/batteryReadings`); ước tính đổi khi user bấm Huấn luyện ở AI cá nhân (`/api/learning/<vid>/status|train|readings|trips`, `web/shelly/learning.py`), luôn giữ bản cũ nếu kém hơn; app báo một lần khi đủ (sạc ≥ 3 mẫu mới, chuyến ≥ 10). Lộ trình v2: %/km theo tốc độ TB (chữ U), tải, mưa — hệ số fit từ 77 chuyến thật của chủ xe (`web/tests/fixtures/owner_rides_sample.csv`), nguồn `model|odo|catalog`. % pin/ODO: nhập tay, BatteryBot (ghi số đọc `chat`) hoặc ảnh đồng hồ đọc trên máy (`DashboardReader`, ML Kit; iOS ≥ 15.5); hai số đọc không có sạc ở giữa = một chuyến `odo_segment`.
 
 - **QA 129 (18/10/2026) — một nguồn số liệu:** km/% và quãng đường chỉ qua `estimateRange` (`range_estimator.dart`: mô hình chuyến đã học > catalog×SoH) với `learnedModelsProvider` (server `/api/learning/<vid>/status`; invalidate sau Huấn luyện); thời gian sạc ngoài tab Sạc dùng Wh/% + công suất đã học. Giám sát pin chỉ hiện dữ liệu thật (không nhiệt độ/cell/N/A, không ghi Firestore khi mở). Trạng thái phiên = kết quả, "thiếu số đo" là ý riêng. Máy chủ ghi Trung tâm thông báo cho mọi phiên kết thúc (`write_inbox_item`, id như app). Sổ cái Thành tựu theo xe, ngưỡng 30 Wh, đồng bộ toàn bộ mỗi 24 h. Số đọc pin cập nhật `batteryDataUpdatedAt`. Nhóm nghìn = khoảng trắng hẹp (`core/utils/number_text.dart`), thập phân dấu chấm.
-- **QA 131 (18/10/2026) — quét đồng hồ:** `scanDashboard()` (`features/ai/dashboard_scan_screen.dart`, gói `camera`) quét trực tiếp, `DashboardLayoutParser` đọc theo vị trí chữ (%, ODO/KM, loại tốc độ/°C, chữ số 7 đoạn, ghép "48 18", ODO cũ làm mốc), `DashboardScanVote` khóa khi 3/6 khung trùng; kết quả chỉ điền sẵn sheet, user vẫn bấm Lưu. Không chạy `flutter test integration_test`/`flutter run` trên điện thoại của user.
+- **QA 131 (18/10/2026) — quét đồng hồ:** `scanDashboard()` (`features/ai/dashboard_scan_screen.dart`, gói `camera`) quét trực tiếp, `DashboardLayoutParser` đọc theo vị trí chữ (%, ODO/KM, loại tốc độ/°C, chữ số 7 đoạn, ghép "48 18", ODO cũ làm mốc), `DashboardScanVote` khóa khi 3/6 khung trùng; kết quả chỉ điền sẵn sheet, user vẫn bấm Lưu. Số trên LCD đọc bằng `SevenSegmentReader` (Dart thuần, isolate; ML Kit chỉ dự phòng vì không đọc được chữ số 7 đoạn), fixture ảnh thật `test/fixtures/dashboard`. Giao diện (Cài đặt → Giao diện, `appearanceProvider`, lưu `users/{uid}/smartChargePreferences/appearance`): Tổng quan luxe/lcd/compact/minimal, Sạc dial/bar/lcd/detail, bật sạc slide/hold/tap (`ChargeConfirmControl`; tap là lựa chọn của chủ app 19/10/2026, mặc định vẫn vuốt, vẫn sau ô xác nhận). Ảnh xe: một nguồn `VehicleImages`/`VehiclePhoto` (`core/widgets/vehicle_photo.dart`; Feliz = `assets/vehicles/feliz_mint.webp`), đã bỏ trình xem 360°. Không chạy `flutter test integration_test`/`flutter run` trên điện thoại của user.
 
 ### 3.5.1. Xác nhận bật/tắt sạc (Task 115)
-- **Bật relay luôn cần "vuốt để sạc"** (`core/widgets/luxe_slide_to_confirm.dart`): sheet Bắt đầu (sau ô xác nhận "pin là ước tính") và thẻ BatteryBot cho tool `start_timed_charging` (`ActionConfirmationCard.energizingTool`). Một lần chạm không bao giờ bật relay; TalkBack kích hoạt bằng chạm đúp.
+- **Bật relay mặc định "vuốt để sạc"** (QA 131: user có thể đổi sang Giữ 1 giây hoặc Bấm 1 lần trong Cài đặt → Giao diện; mọi kiểu vẫn sau ô xác nhận/thẻ BatteryBot) (`core/widgets/luxe_slide_to_confirm.dart`): sheet Bắt đầu (sau ô xác nhận "pin là ước tính") và thẻ BatteryBot cho tool `start_timed_charging` (`ActionConfirmationCard.energizingTool`). Một lần chạm không bao giờ bật relay; TalkBack kích hoạt bằng chạm đúp.
 - **Tắt sạc là nút bấm thường** (không thêm thao tác cản trở OFF). Giao diện chỉ là bước xác nhận; repository vẫn kiểm tra backend tươi trước mọi lệnh.
 
 ### 3.6. Cơ Chế Kết Nối Shelly 3-Flow & Cấp Mã Admin (v1.1.6+)
@@ -211,21 +197,13 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Giữ `ValueKey`/`GuideRegistry` và cổng an toàn sạc.
   - Task 125: `LuxeText.eyebrow` là platinum (emerald chỉ cho trạng thái đã xác minh); mascot/avatar/nút bot nổi/chấm trạng thái chỉ chuyển động khi có hoạt động thật; thẻ xác nhận BatteryBot: champagne chờ, rose không thực hiện, emerald đã xác minh.
 
-### 3.7. AI Chatbot Cá Nhân Hóa & Behavior Learning
+### 3.7. BatteryBot (trợ lý AI)
 
-> **Quyết định kiến trúc hiện hành — 07/10/2026, Tasks 91–92:** AI/chatbot chuyển sang điện thoại; Azure giữ quản trị tài khoản/xe/Shelly, vault, membership, khóa operation và readback/worker an toàn. Các mô tả Gemini/SSE/hybrid bên dưới là kiến trúc legacy, không phải đường mặc định của app hiện tại. Provider chat/history/behavior dùng local-only; chatbot hiện là FAQ, chưa phải LLM. Forecast sạc mặc định không gọi AI server, không tự tải model khi bấm dự đoán, không tự upload mẫu huấn luyện. Kết quả local/physics là `isDisplayOnly=true`, không phải quyền ON; sạc hẹn giờ/Stop vẫn đi qua repository điều khiển đã xác minh. Thiếu model phải báo unavailable, không giả lập AI. Model mobile, fine-tune và native runtime còn chờ nghiệm thu; không xóa cloud AI hoặc bật ON Azure chỉ vì source đã đổi.
-
-- **Task 124 (15/10/2026) — BatteryBot v2 hiện hành:** app dùng `HybridAssistantEngine` → `POST /api/assistant/chat` (Flask, `web/assistant/`, Gemini `GEMINI_CHAT_MODEL` qua REST). **Gemini chặn Azure East Asia (Hồng Kông)** → API gọi qua relay APIM Consumption ở Japan East (`GEMINI_RELAY_URL`, secret `gemini-relay-token`, header `X-Relay-Token`; `deploy/azure/gemini-relay-apim.bicep`); khóa Gemini chỉ nằm trong named value của APIM. Subscription Student: chỉ 1 Container Apps environment, không tạo được App Service plan, vùng cho phép eastasia/japaneast/koreacentral/indonesiacentral/indiasouthcentral. Kiến thức: `assistant/knowledge.py` + Firestore `assistantKnowledge` (dashboard `/assistant`). Bộ nhớ: `users/{uid}/assistantMemory` + `assistant/settings.learningEnabled` (mặc định bật; màn "BatteryBot đang nhớ gì"); không lưu transcript. Quota 50 tin/ngày (Azure Table). Hành động: `navigate` chạy ngay; sạc/dừng/nhắc lịch luôn qua `BatteryBotLocalEngine` + gateway đã xác minh (vuốt để bật); pin/ODO/xe/mục tiêu/giá điện và `set_app_setting` (chỉ thông báo đẩy qua `PushNotificationService.setEnabledByUser`; app chỉ có tiếng Việt, tùy chọn English đã ẩn — Task 125) là thẻ một chạm + "hoàn tác". Mất mạng/hết lượt → chế độ cơ bản trên máy. Gemini 3 bắt buộc gửi lại `thoughtSignature`. Các gạch đầu dòng legacy bên dưới (SSE, `ai_server/chat_*`) không còn là đường mặc định.
-- **LLM Engine**: Google Gemini API (2.0 Flash / Pro), gọi qua backend proxy, API key chỉ lưu server-side.
-  - **Task 93 (07/10/2026) supersedes this legacy default:** production chat uses `LocalChatEngine` + FAQ knowledge + an allowlisted tool gateway. Mutation/relay tools require ephemeral user-confirmed proposals, current UID/vehicle and backend checks; no Direct Cloud fallback. Reminders use Secure Storage + `users/{uid}/reminders` and inexact local notifications; new Rules are emulator-tested, not production-deployed. Behavior learning is opt-in; ridge calibration is a standalone tested algorithm, not automatic fine-tuning. Qwen/llama.cpp native runtime, verified charging/range models and OnePlus runtime remain unimplemented/unverified; Azure staging ON/rearm remains locked. Read Task 93 and the updated spec before extending these interfaces.
-- **Behavior Learning**: Thu thập thói quen sạc, lịch sử chuyến đi, thời gian dùng app, tương tác chatbot, tùy chọn cài đặt → lưu hybrid (local Hive + Firestore `users/{uid}/behaviorProfile/current`).
-- **Personalized Prompt**: System prompt được inject behavior profile (giờ sạc ưa thích, quãng đường hàng ngày, chủ đề hay hỏi...) → câu trả lời khác biệt theo từng user.
-- **Function Calling**: 9 tools (get_battery_status, start_smart_charging, schedule_charging...). Các tool điều khiển phần cứng (bật/tắt sạc) **bắt buộc Human-in-the-Loop** qua Action Confirmation Card.
-- **SSE Streaming**: Response trả qua Server-Sent Events, hiển thị từng chữ trên Flutter.
-- **Chat History**: Hybrid local Hive + Firestore backup 30 ngày. Sliding window 20 messages cho context.
-- **Proactive Suggestions**: 8 rules chủ động gợi ý (pin thấp, nhắc bảo dưỡng, tips tiết kiệm pin...). Rate limit 1 bubble/30 phút, 5/ngày.
-- **Feedback Loop**: 👍/👎 trên mỗi câu trả lời → điều chỉnh response style và topic ranking.
-- **Đặc tả chi tiết**: Xem `docs/specs/AI_CHATBOT_PERSONALIZATION.md`.
+- **Hiện hành (Task 124, 15/10/2026):** app `HybridAssistantEngine` → `POST /api/assistant/chat` (Flask, `web/assistant/`, Gemini `GEMINI_CHAT_MODEL` qua REST). **Gemini chặn Azure East Asia (Hồng Kông)** → API gọi qua relay APIM Consumption ở Japan East (`GEMINI_RELAY_URL`, secret `gemini-relay-token`, header `X-Relay-Token`; `deploy/azure/gemini-relay-apim.bicep`); khóa Gemini chỉ nằm trong named value của APIM. Subscription Student: chỉ 1 Container Apps environment, không tạo được App Service plan, vùng cho phép eastasia/japaneast/koreacentral/indonesiacentral/indiasouthcentral.
+- Kiến thức: `assistant/knowledge.py` + Firestore `assistantKnowledge` (dashboard `/assistant`). Bộ nhớ: `users/{uid}/assistantMemory` + `assistant/settings.learningEnabled` (mặc định bật; màn "BatteryBot đang nhớ gì"); không lưu transcript. Quota 50 tin/ngày (Azure Table). Gemini 3 bắt buộc gửi lại `thoughtSignature`.
+- Hành động: `navigate` chạy ngay; sạc/dừng/nhắc lịch luôn qua `BatteryBotLocalEngine` + gateway đã xác minh (bật theo kiểu xác nhận đã chọn, mặc định vuốt); pin/ODO/xe/mục tiêu/giá điện và `set_app_setting` (chỉ thông báo đẩy) là thẻ một chạm + "hoàn tác". Mất mạng/hết lượt → chế độ cơ bản trên máy.
+- Lịch sử chat, hành vi, gợi ý chủ động chỉ trên máy (`localOnly`; 1 bong bóng/30 phút, 5/ngày). Dự đoán sạc trên máy luôn `isDisplayOnly`, không phải quyền ON. Thiếu model phải báo unavailable, không giả lập AI.
+- **Đã gỡ (QA 131, 19/10/2026):** chatbot Gemini/SSE cũ trong `web/ai_server` và proxy `/api/chat/*`, `/api/behavior/*` (app không còn gọi). Đặc tả: `docs/specs/BATTERYBOT_ASSISTANT.md`.
 
 ---
 
@@ -238,15 +216,11 @@ Trước khi hoàn tất bất kỳ task nào, chạy các lệnh kiểm thử l
 cd web
 python -m pytest tests -v
 
-# 2. Smart Charger Gateway (smart_charger_gateway/tests)
-cd ../smart_charger_gateway
-python -m pytest tests -v
-
-# 3. Flutter Mobile App (app/)
+# 2. Flutter Mobile App (app/)
 cd ../app
 flutter test
 
-# 4. Admin Dashboard (web/dashboard)
+# 3. Admin Dashboard (web/dashboard)
 cd ../web/dashboard
 npm run lint
 npm run build

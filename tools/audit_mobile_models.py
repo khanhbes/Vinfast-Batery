@@ -31,6 +31,6 @@ def audit(path):
 
 ROOT = Path(__file__).resolve().parents[1]
 if __name__ == '__main__':
-    artifacts = [ROOT / 'ev_soc_pipeline.pkl', ROOT / 'app/assets/models/ev_soc_pipeline.pkl',
+    artifacts = [ROOT / 'app/assets/models/ev_soc_pipeline.pkl',
                  ROOT / 'web/models/soc/v_legacy-1.pkl']
     print(json.dumps([audit(p) for p in artifacts if p.is_file()], ensure_ascii=False, indent=2))

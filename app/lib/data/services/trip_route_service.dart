@@ -25,7 +25,8 @@ class PlannedRoute {
 class TripRouteService {
   static const _headers = {
     // Nominatim policy: identify the application (QA 129).
-    'User-Agent': 'VinFastBattery/1.3 (Android app com.bes.vinbatery; trip planner)',
+    'User-Agent':
+        'VinFastBattery/1.3 (Android app com.bes.vinbatery; trip planner)',
     'Accept-Language': 'vi,en;q=0.8',
   };
 

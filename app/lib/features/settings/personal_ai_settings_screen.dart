@@ -133,7 +133,9 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
         // Objective numbers, not just "done" (Task 127).
         await TrainingResultSheet.show(
           context,
-          title: model == 'charge' ? 'Dự đoán & tự ngắt sạc' : 'Hao pin theo lộ trình',
+          title: model == 'charge'
+              ? 'Dự đoán & tự ngắt sạc'
+              : 'Hao pin theo lộ trình',
           report: report,
         );
         if (!mounted) return;
@@ -301,7 +303,9 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
                   title: 'Dự đoán & tự ngắt sạc',
                   status: status.charge,
                   unit: 'lần sạc',
-                  dataRows: ChargeSampleRow.listFrom(status.charge.raw['samples']),
+                  dataRows: ChargeSampleRow.listFrom(
+                    status.charge.raw['samples'],
+                  ),
                   pendingRows: ChargeSampleRow.listFrom(
                     status.charge.raw['pendingSamples'],
                   ),
@@ -339,7 +343,7 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
                     key: const ValueKey('learning-add-reading'),
                     icon: Icons.photo_camera_outlined,
                     title: 'Cập nhật % pin & ODO',
-                    subtitle: 'Chụp đồng hồ xe hoặc nhập tay',
+                    subtitle: 'Quét đồng hồ xe hoặc nhập tay',
                     onTap: _training == null ? _addReading : null,
                   ),
                   LuxeSettingsRow(
@@ -504,7 +508,9 @@ class _ModelCard extends StatelessWidget {
                 value: status.progress,
                 size: 76,
                 stroke: 6,
-                color: status.ready ? LuxeColors.champagne : LuxeColors.platinum,
+                color: status.ready
+                    ? LuxeColors.champagne
+                    : LuxeColors.platinum,
                 semanticLabel:
                     '${status.pending} trên ${status.required} $unit mới cần để huấn luyện',
                 child: ExcludeSemantics(
@@ -607,7 +613,9 @@ class _ModelCard extends StatelessWidget {
           if (dataRows.isNotEmpty || pendingRows.isNotEmpty) ...[
             const SizedBox(height: 4),
             Theme(
-              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              data: Theme.of(
+                context,
+              ).copyWith(dividerColor: Colors.transparent),
               child: ExpansionTile(
                 key: ValueKey('learned-data-$unit'),
                 tilePadding: EdgeInsets.zero,
@@ -617,7 +625,8 @@ class _ModelCard extends StatelessWidget {
                   style: LuxeText.item.copyWith(fontSize: 13.5),
                 ),
                 children: [
-                  for (final row in pendingRows) _sampleTile(row, pending: true),
+                  for (final row in pendingRows)
+                    _sampleTile(row, pending: true),
                   for (final row in dataRows.reversed) _sampleTile(row),
                 ],
               ),
@@ -636,7 +645,9 @@ class _ModelCard extends StatelessWidget {
                   onPressed: canTrain ? onTrain : null,
                   icon: const Icon(Icons.model_training_rounded),
                   label: const Text('Huấn luyện'),
-                  style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(48, 48),
+                  ),
                 ),
                 TextButton(
                   key: ValueKey('retrain-$unit'),

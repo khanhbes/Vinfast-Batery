@@ -17,7 +17,7 @@
 
 ## Tổng quan
 
-**VinFast Battery** là một hệ thống full-stack kết nối ứng dụng Flutter, backend AI, Firebase và IoT gateway để hỗ trợ người dùng xe máy điện quản lý pin chủ động hơn. Sản phẩm tập trung vào ba nhu cầu chính: hiểu rõ trạng thái pin, sạc đúng thời điểm và giảm rủi ro trong quá trình sạc.
+**VinFast Battery** là một hệ thống full-stack kết nối ứng dụng Flutter, backend AI trên Azure, Firebase và ổ cắm thông minh Shelly để hỗ trợ người dùng xe máy điện quản lý pin chủ động hơn. Sản phẩm tập trung vào ba nhu cầu chính: hiểu rõ trạng thái pin, sạc đúng thời điểm và giảm rủi ro trong quá trình sạc.
 
 Hệ thống được phát triển cho các dòng xe máy điện VinFast như Feliz, Evo, Klara, Vento và Theon, đồng thời có kiến trúc mở để bổ sung cấu hình xe và mô hình dự đoán mới.
 
@@ -66,9 +66,9 @@ flowchart LR
     APP -->|On-device inference| TFL[TFLite Models]
     API --> AI[FastAPI AI Service]
     API --> FB[(Firebase Auth & Firestore)]
-    API --> GW[Smart Charger Gateway]
-    GW --> RELAY[Shelly Smart Relay]
-    RELAY -->|Power telemetry| GW
+    API --> SC[Shelly Cloud]
+    SC --> RELAY[Shelly Plug S Gen3]
+    WK[Smart-charge worker] --> SC
     ADMIN[React Admin Dashboard] --> API
 ```
 
@@ -77,7 +77,7 @@ flowchart LR
 | Mobile | Flutter, Dart, Riverpod | Trải nghiệm người dùng và inference trên thiết bị |
 | API | Python, Flask | Xác thực, đồng bộ dữ liệu và điều phối nghiệp vụ |
 | AI service | FastAPI, scikit-learn, XGBoost, TFLite | Dự đoán, hiệu chỉnh và quản lý vòng đời mô hình |
-| IoT gateway | FastAPI, Shelly API | Điều khiển relay, telemetry và safety watchdog |
+| Sạc thông minh | Flask + worker, Shelly Cloud | Bật/tắt có xác minh, tự ngắt theo %/hẹn giờ, giám sát an toàn |
 | Admin | React, TypeScript, Vite | Quản trị dữ liệu và mô hình AI |
 | Cloud | Firebase Authentication, Firestore | Danh tính, lưu trữ và đồng bộ thời gian thực |
 
@@ -92,7 +92,6 @@ Vinfast-Batery/
 │   ├── models/                # Model registry and artifacts
 │   ├── shelly/                # Smart-charging integration
 │   └── server.py              # Unified Flask API
-├── smart_charger_gateway/     # Local IoT gateway
 ├── docs/images/               # README media
 ├── run.ps1                    # Windows development launcher
 └── SMART_CHARGE_SETUP_GUIDE.md
@@ -135,17 +134,7 @@ cp .env.docker.example .env
 docker compose up -d --build
 ```
 
-### IoT gateway
-
-```bash
-cd smart_charger_gateway
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-python main.py
-```
-
-Xem [SMART_CHARGE_SETUP_GUIDE.md](SMART_CHARGE_SETUP_GUIDE.md) để cấu hình relay và các lớp bảo vệ phần cứng.
+Xem [SMART_CHARGE_SETUP_GUIDE.md](SMART_CHARGE_SETUP_GUIDE.md) để cấu hình ổ Shelly và các lớp bảo vệ phần cứng.
 
 ## Kiểm thử
 
@@ -156,10 +145,6 @@ flutter test
 
 # Backend
 cd ../web
-python -m pytest tests -v
-
-# Gateway
-cd ../smart_charger_gateway
 python -m pytest tests -v
 
 # Admin dashboard

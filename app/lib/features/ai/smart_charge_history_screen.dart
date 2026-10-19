@@ -546,7 +546,8 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
                 children: [
                   Expanded(
                     child: HistoryKpi(
-                      label: summary.pricedSessions == 0 &&
+                      label:
+                          summary.pricedSessions == 0 &&
                               summary.completedSessions > 0
                           ? 'Chưa đặt giá điện'
                           : 'Chi phí',

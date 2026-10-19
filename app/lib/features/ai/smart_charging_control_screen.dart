@@ -35,6 +35,9 @@ import 'widgets/command_progress_strip.dart';
 import 'widgets/confirm_actual_soc_sheet.dart';
 import 'widgets/edit_current_battery_sheet.dart';
 import 'widgets/luxe_soc_dial.dart';
+import 'widgets/soc_range_input.dart';
+import '../../core/providers/appearance_provider.dart';
+import '../../data/models/app_appearance.dart';
 import 'widgets/prediction_card_v2.dart';
 import 'widgets/recent_sessions_section_v2.dart';
 import 'widgets/start_charge_confirmation_sheet.dart';
@@ -533,25 +536,51 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                   ),
                 ),
                 const SizedBox(height: 6),
-                LuxeSocDial(
-                  key: const ValueKey('target-battery-selector'),
-                  current: draft.currentSoc,
-                  target: currentTarget,
-                  enabled: !busy,
-                  etaLabel: preview == null
-                      ? null
-                      : _shortDuration(preview.predictedMinutes),
-                  onCurrentChanged: (value) =>
-                      controller.updateDraft(currentSoc: value),
-                  onTargetChanged: (value) =>
-                      controller.updateDraft(targetSoc: value),
-                  onEditCurrent: () => EditCurrentBatterySheet.show(
-                    context,
-                    initialPercent: draft.currentSoc,
-                    onSave: (value) =>
+                // QA 131: the owner's Charge layout (Cài đặt → Giao diện).
+                if (ref.watch(appearanceProvider).charge == ChargeStyle.dial)
+                  LuxeSocDial(
+                    key: const ValueKey('target-battery-selector'),
+                    current: draft.currentSoc,
+                    target: currentTarget,
+                    enabled: !busy,
+                    etaLabel: preview == null
+                        ? null
+                        : _shortDuration(preview.predictedMinutes),
+                    onCurrentChanged: (value) =>
                         controller.updateDraft(currentSoc: value),
+                    onTargetChanged: (value) =>
+                        controller.updateDraft(targetSoc: value),
+                    onEditCurrent: () => EditCurrentBatterySheet.show(
+                      context,
+                      initialPercent: draft.currentSoc,
+                      onSave: (value) =>
+                          controller.updateDraft(currentSoc: value),
+                    ),
+                  )
+                else
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 8, 4, 4),
+                    child: SocRangeInput(
+                      key: const ValueKey('target-battery-selector'),
+                      style: ref.watch(appearanceProvider).charge,
+                      current: draft.currentSoc,
+                      target: currentTarget,
+                      enabled: !busy,
+                      etaLabel: preview == null
+                          ? null
+                          : _shortDuration(preview.predictedMinutes),
+                      onCurrentChanged: (value) =>
+                          controller.updateDraft(currentSoc: value),
+                      onTargetChanged: (value) =>
+                          controller.updateDraft(targetSoc: value),
+                      onEditCurrent: () => EditCurrentBatterySheet.show(
+                        context,
+                        initialPercent: draft.currentSoc,
+                        onSave: (value) =>
+                            controller.updateDraft(currentSoc: value),
+                      ),
+                    ),
                   ),
-                ),
                 const SizedBox(height: 6),
                 _TargetPresets(
                   target: currentTarget,
@@ -779,6 +808,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
 
     final card = ActiveChargingCardV2(
       key: const ValueKey('active-session-v2'),
+      style: ref.watch(appearanceProvider).charge,
       currentPercent: estimatedSoc,
       targetPercent: targetSoc.toDouble(),
       remaining: remaining,

@@ -72,7 +72,9 @@ class ModelTrainingStatus {
   double get progress => required <= 0 ? 1 : (pending / required).clamp(0, 1);
 
   static ModelTrainingStatus fromJson(Object? raw) {
-    final data = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+    final data = raw is Map
+        ? Map<String, dynamic>.from(raw)
+        : <String, dynamic>{};
     final report = TrainingReport.fromJson(data['report']);
     final model = data['model'];
     return ModelTrainingStatus(
@@ -140,7 +142,13 @@ class TrainingReport {
 
 /// Error of one model on the test set (end % for charges, % used for rides).
 class ErrorStats {
-  const ErrorStats({required this.n, this.mae, this.bias, this.within1, this.within2});
+  const ErrorStats({
+    required this.n,
+    this.mae,
+    this.bias,
+    this.within1,
+    this.within2,
+  });
 
   final int n;
   final double? mae;
@@ -221,22 +229,26 @@ class ModelEvaluation {
       final actual = _num(item['actual']);
       if (actual == null) continue;
       final at = item['at']?.toString() ?? '';
-      final date = at.length >= 10 ? '${at.substring(8, 10)}/${at.substring(5, 7)}' : at;
-      rows.add(EvaluationRow(
-        label: trip
-            ? '$date · ${_num(item['km'])?.toStringAsFixed(1) ?? '?'} km'
-            : '$date · ${_num(item['startPct'])?.round() ?? '?'}%→',
-        actual: actual,
-        current: _num(item['current']),
-        next: _num(item['new']),
-        baseline: _num(item[trip ? 'flat' : 'base']),
-        tested: item['tested'] != false,
-        note: item['censored'] == true
-            ? 'kết thúc 100% (chỉ là cận trên)'
-            : item['labelSource'] == 'taper_full'
-            ? 'pin đầy tự nhận biết'
-            : null,
-      ));
+      final date = at.length >= 10
+          ? '${at.substring(8, 10)}/${at.substring(5, 7)}'
+          : at;
+      rows.add(
+        EvaluationRow(
+          label: trip
+              ? '$date · ${_num(item['km'])?.toStringAsFixed(1) ?? '?'} km'
+              : '$date · ${_num(item['startPct'])?.round() ?? '?'}%→',
+          actual: actual,
+          current: _num(item['current']),
+          next: _num(item['new']),
+          baseline: _num(item[trip ? 'flat' : 'base']),
+          tested: item['tested'] != false,
+          note: item['censored'] == true
+              ? 'kết thúc 100% (chỉ là cận trên)'
+              : item['labelSource'] == 'taper_full'
+              ? 'pin đầy tự nhận biết'
+              : null,
+        ),
+      );
     }
     return ModelEvaluation(
       method: raw['method']?.toString() ?? '',

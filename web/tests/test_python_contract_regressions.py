@@ -55,15 +55,6 @@ def test_model_training_registration_preserves_source_and_metadata(tmp_path):
     assert not list((tmp_path / "store").glob("tmp*.joblib"))
 
 
-def test_chat_confirmation_missing_session_is_rejected_without_execution():
-    from ai_server.chat_engine import ChatEngine
-
-    engine = ChatEngine()
-    result = engine.confirm_action("missing", "start_smart_charging", {}, session_id=None)
-    assert result["success"] is False
-    assert result["code"] == "actionInvalid"
-
-
 def test_shadow_status_uses_authenticated_account_repository(monkeypatch):
     import server
 

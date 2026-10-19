@@ -1,7 +1,6 @@
 **
 !web/
 !web/requirements-api-tests.txt
-!web/requirements-chat.txt
 !web/Dockerfile.ai
 !web/Dockerfile.worker-pilot
 !web/docker-compose.yml

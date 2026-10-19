@@ -89,7 +89,8 @@ class AssistantApi {
       ? null
       : FirebaseAuth.instance.currentUser?.getIdToken();
 
-  static Future<String?> _refreshedFirebaseToken() async => Firebase.apps.isEmpty
+  static Future<String?> _refreshedFirebaseToken() async =>
+      Firebase.apps.isEmpty
       ? null
       : FirebaseAuth.instance.currentUser?.getIdToken(true);
 

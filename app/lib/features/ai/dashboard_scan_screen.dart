@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/theme/luxe_theme.dart';
@@ -13,6 +15,7 @@ import '../../core/utils/number_text.dart';
 import '../../core/widgets/luxe_kit.dart';
 import '../../data/services/dashboard_layout_parser.dart';
 import '../../data/services/dashboard_reader.dart';
+import '../../data/services/seven_segment_reader.dart';
 
 /// Reads the dashboard the quickest way (QA 131): the live scanner, which
 /// can hand over to a gallery photo. `null` when the owner cancelled or
@@ -69,7 +72,7 @@ enum _CameraProblem { none, denied, unavailable }
 
 class _DashboardScanScreenState extends State<DashboardScanScreen>
     with WidgetsBindingObserver {
-  static const _frameGap = Duration(milliseconds: 280);
+  static const _frameGap = Duration(milliseconds: 150);
   static const _hintAfter = Duration(seconds: 8);
 
   CameraController? _controller;
@@ -86,16 +89,21 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
   String? _captureNote;
   DateTime _lastFrameAt = DateTime.fromMillisecondsSinceEpoch(0);
   int _frames = 0;
+
+  /// Frames in a row without segment digits: then text recognition gets a
+  /// turn (dashboards that are not seven-segment LCDs).
+  int _noSegments = 0;
   Size? _imageSize;
   Rect? _socBox;
   Rect? _odoBox;
   Timer? _hintTimer;
+  final _log = _ScanLog();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _start();
+    _log.open().whenComplete(_start);
   }
 
   @override
@@ -104,6 +112,10 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
     _hintTimer?.cancel();
     _stopCamera();
     _recognizer?.close();
+    _log.line(
+      'closed frames=$_frames soc=${_vote.socLocked} odo=${_vote.odoLocked}',
+    );
+    _log.close();
     super.dispose();
   }
 
@@ -134,9 +146,11 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
         if (mounted) setState(() => _problem = _CameraProblem.unavailable);
         return;
       }
+      // 1080p: seven-segment digits need pixels; one frame at a time keeps
+      // the preview smooth.
       final controller = CameraController(
         camera,
-        ResolutionPreset.high,
+        ResolutionPreset.veryHigh,
         enableAudio: false,
         imageFormatGroup: Platform.isIOS
             ? ImageFormatGroup.bgra8888
@@ -152,6 +166,11 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
         await controller.setFlashMode(FlashMode.torch).catchError((_) {});
       }
       await controller.startImageStream(_onFrame);
+      _log.line(
+        'camera ${camera.name} lens=${camera.lensDirection.name} '
+        'sensor=${camera.sensorOrientation} preview=${controller.value.previewSize} '
+        'prior=${widget.lastOdoKm}',
+      );
       setState(() {
         _controller = controller;
         _problem = _CameraProblem.none;
@@ -161,6 +180,7 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
         if (mounted && !_vote.bothLocked) setState(() => _showHint = true);
       });
     } on CameraException catch (e) {
+      _log.line('camera error ${e.code}');
       if (!mounted) return;
       setState(
         () =>
@@ -168,7 +188,8 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
             ? _CameraProblem.denied
             : _CameraProblem.unavailable,
       );
-    } on Object {
+    } on Object catch (e) {
+      _log.line('start failed ${e.runtimeType}');
       if (mounted) setState(() => _problem = _CameraProblem.unavailable);
     } finally {
       _starting = false;
@@ -195,44 +216,73 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
     if (_busy || _done || _capturing || !mounted) return;
     final now = DateTime.now();
     if (now.difference(_lastFrameAt) < _frameGap) return;
-    final input = _inputImage(image);
-    if (input == null) return;
-    _busy = true;
-    _lastFrameAt = now;
-    _process(input).whenComplete(() => _busy = false);
-  }
-
-  /// ML Kit wants one NV21 (Android) / BGRA (iOS) plane, upright rotation.
-  InputImage? _inputImage(CameraImage image) {
-    final camera = _camera;
-    final controller = _controller;
-    if (camera == null || controller == null) return null;
+    final degrees = _rotationDegrees();
     final format = InputImageFormatValue.fromRawValue(image.format.raw);
-    if (format == null || image.planes.length != 1) return null;
-    if (Platform.isAndroid && format != InputImageFormat.nv21) return null;
-    if (Platform.isIOS && format != InputImageFormat.bgra8888) return null;
-    InputImageRotation? rotation;
-    if (Platform.isIOS) {
-      rotation = InputImageRotationValue.fromRawValue(camera.sensorOrientation);
-    } else {
-      final device = switch (controller.value.deviceOrientation) {
-        DeviceOrientation.portraitUp => 0,
-        DeviceOrientation.landscapeLeft => 90,
-        DeviceOrientation.portraitDown => 180,
-        DeviceOrientation.landscapeRight => 270,
-      };
-      final degrees = camera.lensDirection == CameraLensDirection.front
-          ? (camera.sensorOrientation + device) % 360
-          : (camera.sensorOrientation - device + 360) % 360;
-      rotation = InputImageRotationValue.fromRawValue(degrees);
+    final ok =
+        degrees != null &&
+        image.planes.length == 1 &&
+        (Platform.isAndroid
+            ? format == InputImageFormat.nv21
+            : format == InputImageFormat.bgra8888);
+    if (!ok) {
+      _log.once(
+        'skip-format',
+        'frame skipped format=${image.format.raw} planes=${image.planes.length}',
+      );
+      return;
     }
-    if (rotation == null) return null;
-    final quarter =
-        rotation == InputImageRotation.rotation90deg ||
-        rotation == InputImageRotation.rotation270deg;
+    _log.sample(image, _frames);
+    final plane = image.planes.first;
+    final quarter = degrees == 90 || degrees == 270;
     _imageSize = quarter
         ? Size(image.height.toDouble(), image.width.toDouble())
         : Size(image.width.toDouble(), image.height.toDouble());
+    // The plane is only valid during this callback: copy what the isolate
+    // reads (Android: just the luminance rows).
+    final job = _FrameJob(
+      bytes: Platform.isAndroid
+          ? Uint8List.fromList(
+              plane.bytes.sublist(0, plane.bytesPerRow * image.height),
+            )
+          : Uint8List.fromList(plane.bytes),
+      width: image.width,
+      height: image.height,
+      bytesPerRow: plane.bytesPerRow,
+      rotation: degrees,
+      bgra: Platform.isIOS,
+    );
+    final text = _noSegments >= 4 && _noSegments % 2 == 0
+        ? _inputImage(image, degrees, format!)
+        : null;
+    _busy = true;
+    _lastFrameAt = now;
+    _process(job, text).whenComplete(() => _busy = false);
+  }
+
+  int? _rotationDegrees() {
+    final camera = _camera;
+    final controller = _controller;
+    if (camera == null || controller == null) return null;
+    if (Platform.isIOS) return camera.sensorOrientation;
+    final device = switch (controller.value.deviceOrientation) {
+      DeviceOrientation.portraitUp => 0,
+      DeviceOrientation.landscapeLeft => 90,
+      DeviceOrientation.portraitDown => 180,
+      DeviceOrientation.landscapeRight => 270,
+    };
+    return camera.lensDirection == CameraLensDirection.front
+        ? (camera.sensorOrientation + device) % 360
+        : (camera.sensorOrientation - device + 360) % 360;
+  }
+
+  /// ML Kit input (fallback for dashboards that are not seven-segment).
+  InputImage? _inputImage(
+    CameraImage image,
+    int degrees,
+    InputImageFormat format,
+  ) {
+    final rotation = InputImageRotationValue.fromRawValue(degrees);
+    if (rotation == null) return null;
     final plane = image.planes.first;
     return InputImage.fromBytes(
       bytes: plane.bytes,
@@ -245,29 +295,33 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
     );
   }
 
-  Future<void> _process(InputImage input) async {
+  Future<void> _process(_FrameJob job, InputImage? text) async {
+    final watch = Stopwatch()..start();
+    var tokens = await _FrameJob.segments(job);
+    final hasDigits = tokens.any((t) => RegExp(r'\d').hasMatch(t.text));
+    _noSegments = hasDigits ? 0 : _noSegments + 1;
     final recognizer = _recognizer;
-    if (recognizer == null) return;
-    final RecognizedText result;
-    try {
-      result = await recognizer.processImage(input);
-    } on Object {
-      return; // a dropped frame; the next one follows
+    if (!hasDigits && text != null && recognizer != null) {
+      try {
+        tokens = DashboardOcr.tokensOf(await recognizer.processImage(text));
+      } on Object catch (e) {
+        _log.line('ocr failed ${e.runtimeType}');
+      }
     }
     if (!mounted || _done) return;
-    final tokens = DashboardOcr.tokensOf(result);
     final reading = DashboardLayoutParser.parse(
       tokens,
       lastOdoKm: widget.lastOdoKm,
     );
     _frames++;
-    if (!kReleaseMode && _frames % 4 == 1) {
-      debugPrint(
-        '[dashboard-scan] frame $_frames soc=${reading.soc} '
-        'odo=${reading.odoKm}${reading.odoConfident ? '' : '?'} | '
-        '${tokens.map((t) => t.text).join(' ')}',
-      );
-    }
+    _log.line(
+      'frame $_frames ${watch.elapsedMilliseconds}ms '
+      '${hasDigits ? 'seg' : (text != null ? 'mlkit' : 'none')} '
+      'img=${_imageSize?.width.round()}x${_imageSize?.height.round()} '
+      'soc=${reading.soc}${reading.socConfident ? '' : '?'} '
+      'odo=${reading.odoKm}${reading.odoConfident ? '' : '?'} | '
+      '${tokens.map((t) => '${t.text}@${t.box.left.round()},${t.box.top.round()},${t.box.width.round()}x${t.box.height.round()}').join(' | ')}',
+    );
     final socBefore = _vote.socLocked;
     final odoBefore = _vote.odoLocked;
     _vote.add(reading);
@@ -327,10 +381,14 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
         await controller.stopImageStream();
       }
       final shot = await controller.takePicture();
+      await _log.keep(shot.path);
       final read = await DashboardReader.readFile(
         shot.path,
         lastOdoKm: widget.lastOdoKm,
         delete: true,
+      );
+      _log.line(
+        'still soc=${read.soc} odo=${read.odoKm} | ${read.rawText.replaceAll('\n', ' / ')}',
       );
       if (!mounted) return;
       final reading = DashboardReading(
@@ -937,4 +995,142 @@ class _FoundPainter extends CustomPainter {
       old.socLocked != socLocked ||
       old.odoLocked != odoLocked ||
       old.imageSize != imageSize;
+}
+
+/// Profile/debug builds only: what the scanner saw, written to the app's
+/// own files folder (`Android/data/<app>/files/ocr`) and pulled with adb
+/// while tuning (QA 131). Release builds write nothing.
+class _ScanLog {
+  IOSink? _sink;
+  String? _dir;
+  int _samples = 0;
+  final _onceKeys = <String>{};
+
+  bool get _enabled => !kReleaseMode && Platform.isAndroid;
+
+  Future<void> open() async {
+    if (!_enabled) return;
+    try {
+      final base = await getExternalStorageDirectory();
+      if (base == null) return;
+      final dir = Directory('${base.path}/ocr');
+      await dir.create(recursive: true);
+      _dir = dir.path;
+      final stamp = DateTime.now().millisecondsSinceEpoch;
+      _sink = File('${dir.path}/scan-$stamp.txt').openWrite();
+    } on Object {
+      _sink = null;
+    }
+  }
+
+  void line(String text) {
+    try {
+      _sink?.writeln('${DateTime.now().toIso8601String()} $text');
+    } on Object {
+      // Diagnostics never break the scan.
+    }
+  }
+
+  void once(String key, String text) {
+    if (_onceKeys.add(key)) line(text);
+  }
+
+  /// Every 15th frame (at most 5): the luminance plane as a PGM image.
+  void sample(CameraImage image, int frame) {
+    final dir = _dir;
+    if (dir == null || _samples >= 5 || frame % 15 != 0) return;
+    _samples++;
+    final plane = image.planes.first;
+    final w = image.width, h = image.height;
+    if (plane.bytes.length < w * h) return;
+    final header = 'P5\n$w $h\n255\n'.codeUnits;
+    final stamp = DateTime.now().millisecondsSinceEpoch;
+    File(
+      '$dir/frame-$stamp.pgm',
+    ).writeAsBytes([...header, ...plane.bytes.sublist(0, w * h)]).ignore();
+  }
+
+  /// Keeps a copy of a still capture before it is read and deleted.
+  Future<void> keep(String path) async {
+    final dir = _dir;
+    if (dir == null) return;
+    try {
+      await File(
+        path,
+      ).copy('$dir/still-${DateTime.now().millisecondsSinceEpoch}.jpg');
+    } on Object {
+      // Diagnostics only.
+    }
+  }
+
+  Future<void> close() async {
+    try {
+      await _sink?.flush();
+      await _sink?.close();
+    } on Object {
+      // Diagnostics only.
+    }
+    _sink = null;
+  }
+}
+
+/// One camera frame handed to the seven-segment reader in an isolate.
+class _FrameJob {
+  const _FrameJob({
+    required this.bytes,
+    required this.width,
+    required this.height,
+    required this.bytesPerRow,
+    required this.rotation,
+    required this.bgra,
+  });
+
+  final Uint8List bytes;
+  final int width;
+  final int height;
+  final int bytesPerRow;
+  final int rotation;
+  final bool bgra;
+
+  /// Tokens in upright full-frame coordinates (like ML Kit's).
+  static Future<List<OcrToken>> segments(_FrameJob job) async {
+    try {
+      return await Isolate.run(() => _read(job));
+    } on Object {
+      return const [];
+    }
+  }
+
+  static List<OcrToken> _read(_FrameJob job) {
+    final gray = job.bgra
+        ? GrayImage.fromBgra(
+            job.bytes,
+            width: job.width,
+            height: job.height,
+            bytesPerRow: job.bytesPerRow,
+            rotation: job.rotation,
+          )
+        : GrayImage.fromLuminance(
+            job.bytes,
+            width: job.width,
+            height: job.height,
+            bytesPerRow: job.bytesPerRow,
+            rotation: job.rotation,
+          );
+    final quarter = job.rotation == 90 || job.rotation == 270;
+    final fullHeight = quarter ? job.width : job.height;
+    final scale = fullHeight / gray.height;
+    return [
+      for (final t in SevenSegmentReader.read(gray))
+        OcrToken(
+          t.text,
+          Rect.fromLTRB(
+            t.box.left * scale,
+            t.box.top * scale,
+            t.box.right * scale,
+            t.box.bottom * scale,
+          ),
+        ),
+    ];
+  }
 }

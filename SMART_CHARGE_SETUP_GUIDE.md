@@ -103,8 +103,9 @@ Script chạy `pub get`, analyze và toàn bộ test **trước khi tăng versio
 ## Runtime hiện tại
 
 Môi trường development có thể vận hành trên laptop với Docker và tunnel tạm thời. Dùng `.\run.ps1 2` (hoặc mở `run.bat` chọn [2])
-ở root để build/khởi động stack local; không dùng URL laptop/tunnel cho release. `smart_charger_gateway/`
-là gateway legacy/diagnostic, không phải runtime dependency của app/web stack chính.
+ở root để build/khởi động stack local; không dùng URL laptop/tunnel cho release. Production chạy trên Azure
+(API + worker) và điều khiển ổ qua Shelly Cloud; gateway LAN cũ đã gỡ (QA 131).
+
 # AI cá nhân, ETA fusion và lịch sử realtime
 
 ## Bật AI cá nhân

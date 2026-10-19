@@ -95,6 +95,8 @@ def _load_consumption_model():
         os.path.join(root, 'ev_soc_pipeline.pkl'),
         os.path.join(root, '..', 'ev_soc_pipeline.pkl'),
         os.path.join(root, 'models', 'ev_soc_pipeline.pkl'),
+        # The repository copy (the old root duplicate was removed, QA 131).
+        os.path.join(root, 'models', 'soc', 'v_legacy-1.pkl'),
     ]
 
     for path in candidates:
@@ -4146,8 +4148,6 @@ def _ai_proxy_json(method, path, *, json_body=None, params=None):
         data = resp.json()
     except Exception:
         return jsonify({'success': False, 'error': f'invalid AI server response (HTTP {resp.status_code})'}), 502
-    if path.startswith(('/v1/chat/', '/v1/behavior/')) and resp.status_code >= 400:
-        return jsonify({'success': False, 'code': 'aiRequestFailed', 'userMessage': 'Chưa thực hiện được. Hãy thử lại.'}), resp.status_code
     return jsonify(data), resp.status_code
 
 
@@ -5154,221 +5154,6 @@ def soc_history():
 # ═══════════════════════════════════════════════════════════════
 # TRIP PREDICTION ENDPOINTS
 # ═══════════════════════════════════════════════════════════════
-# ═══════════════════════════════════════════════════════════════
-# AI CHATBOT PROXY ENDPOINTS (BatteryBot + Gemini)
-# ═══════════════════════════════════════════════════════════════
-
-@app.route('/api/chat/send', methods=['POST'])
-@require_auth
-@rate_limit(15, 60)
-def chat_send_proxy():
-    """Forward chat request to FastAPI AI service and stream SSE response back."""
-    if _http is None:
-        return jsonify({'success': False, 'code': 'chatUnavailable', 'userMessage': 'Trợ lý chưa sẵn sàng. Hãy thử lại.'}), 503
-
-    url = f'{AI_SERVER_URL}/v1/chat/send'
-    json_body = request.get_json(silent=True) or {}
-    if not isinstance(json_body, dict):
-        return jsonify({'success': False, 'code': 'invalidChatRequest', 'userMessage': 'Yêu cầu trò chuyện không hợp lệ.'}), 400
-    json_body['userId'] = request._uid
-    json_body.pop('model', None)
-    profile = json_body.get('behaviorProfile')
-    if isinstance(profile, dict):
-        profile['userId'] = request._uid
-    vehicle = json_body.get('vehicleContext')
-    if isinstance(vehicle, dict) and vehicle.get('vehicleId') and not _can_access_vehicle(vehicle['vehicleId']):
-        return jsonify({'success': False, 'code': 'vehicleUnavailable', 'userMessage': 'Hãy chọn xe thuộc tài khoản của bạn.'}), 403
-    if not isinstance(json_body.get('message'), str) or not 0 < len(json_body['message'].strip()) <= 4000:
-        return jsonify({'success': False, 'code': 'invalidMessage', 'userMessage': 'Tin nhắn phải từ 1 đến 4000 ký tự.'}), 400
-
-    try:
-        upstream = _http.post(
-            url,
-            json=json_body,
-            headers=_ai_headers({'Content-Type': 'application/json'}),
-            stream=True,
-            timeout=60,
-        )
-    except Exception as e:
-        return jsonify({'success': False, 'code': 'chatUnavailable', 'userMessage': 'Trợ lý chưa sẵn sàng. Hãy thử lại.'}), 502
-
-    if upstream.status_code != 200:
-        status = upstream.status_code if upstream.status_code in (400, 401, 403, 404, 429, 503) else 502
-        upstream.close()
-        return jsonify({'success': False, 'code': 'chatUnavailable', 'userMessage': 'Trợ lý chưa sẵn sàng. Hãy thử lại.'}), status
-
-    def generate():
-        try:
-            for chunk in upstream.iter_content(chunk_size=None):
-                if chunk:
-                    yield chunk
-        except Exception:
-            yield b'event: error\ndata: {"code":"streamInterrupted"}\n\n'
-        finally:
-            upstream.close()
-
-    return Response(
-        stream_with_context(generate()),
-        status=upstream.status_code,
-        content_type=upstream.headers.get('content-type', 'text/event-stream; charset=utf-8'),
-        headers={
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
-            'X-Accel-Buffering': 'no',
-        },
-    )
-
-
-@app.route('/api/chat/sessions', methods=['GET'])
-@require_auth
-def chat_sessions_proxy():
-    """Lấy danh sách các phiên trò chuyện."""
-    return _ai_proxy_json('GET', '/v1/chat/sessions', params={**request.args.to_dict(), 'userId': request._uid})
-
-
-@app.route('/api/chat/sessions/<session_id>', methods=['GET'])
-@require_auth
-def chat_session_detail_proxy(session_id):
-    """Lấy chi tiết tin nhắn trong một phiên."""
-    return _ai_proxy_json('GET', f'/v1/chat/sessions/{session_id}', params={'userId': request._uid})
-
-
-@app.route('/api/chat/sessions/<session_id>', methods=['DELETE'])
-@require_auth
-def chat_delete_session_proxy(session_id):
-    """Xóa một phiên trò chuyện."""
-    return _ai_proxy_json('DELETE', f'/v1/chat/sessions/{session_id}', params={'userId': request._uid})
-
-
-@app.route('/api/chat/feedback', methods=['POST'])
-@require_auth
-def chat_feedback_proxy():
-    """Gửi đánh giá tin nhắn (like/dislike)."""
-    body = request.get_json(silent=True) or {}
-    if not isinstance(body, dict):
-        return jsonify({'success': False, 'code': 'invalidChatRequest', 'userMessage': 'Yêu cầu trò chuyện không hợp lệ.'}), 400
-    body['userId'] = request._uid
-    return _ai_proxy_json('POST', '/v1/chat/feedback', json_body=body)
-
-
-# ── Behavior Learning Proxy & Sync (Phase 2) ──────────────────────
-@app.route('/api/behavior/sync', methods=['POST'])
-@require_auth
-def behavior_sync_proxy():
-    """Đồng bộ behavior profile từ Mobile vào AI Server và sao lưu Firestore."""
-    body = request.get_json(silent=True) or {}
-    if not isinstance(body, dict) or not isinstance(body.get('profile'), dict):
-        return jsonify({'success': False, 'code': 'invalidBehaviorProfile', 'userMessage': 'Chưa đồng bộ được tùy chọn trợ lý.'}), 400
-    user_id = request._uid
-    
-    # 1. Forward sang AI Server
-    try:
-        data, code = _ai_request_json(
-            'POST', '/v1/behavior/sync',
-            json_body={'userId': user_id, 'profile': {**body['profile'], 'userId': user_id}},
-        )
-    except Exception:
-        return jsonify({'success': False, 'code': 'behaviorUnavailable', 'userMessage': 'Chưa đồng bộ được tùy chọn trợ lý. Hãy thử lại.'}), 503
-    if code != 200 or not isinstance(data, dict) or data.get('success') is not True:
-        return jsonify({'success': False, 'code': 'behaviorUnavailable', 'userMessage': 'Chưa đồng bộ được tùy chọn trợ lý. Hãy thử lại.'}), 503
-    
-    # 2. Sao lưu Firestore nếu có kết nối
-    if code == 200 and _firestore_db and user_id != 'anonymous':
-        try:
-            profile_data = data.get('data') or data
-            profile_data['syncedAt'] = datetime.now(timezone.utc).isoformat()
-            _firestore_db.collection('users').document(user_id).collection('behaviorProfile').document('current').set(profile_data, merge=True)
-        except Exception as e:
-            print('Behavior backup unavailable')
-
-    return jsonify(data), code
-
-
-@app.route('/api/behavior/profile', methods=['GET'])
-@require_auth
-def behavior_get_profile_proxy():
-    """Lấy behavior profile hiện tại của người dùng."""
-    user_id = request._uid
-    vehicle_id = request.args.get('vehicleId')
-
-    # Nếu có trên Firestore, nạp trước
-    if _firestore_db and user_id != 'anonymous':
-        try:
-            doc = _firestore_db.collection('users').document(user_id).collection('behaviorProfile').document('current').get()
-            if doc.exists:
-                saved = doc.to_dict()
-                _ai_request_json(
-                    'POST',
-                    '/v1/behavior/sync',
-                    json_body={'userId': user_id, 'profile': saved},
-                )
-        except Exception as e:
-            print('Behavior restore unavailable')
-
-    return _ai_proxy_json(
-        'GET',
-        '/v1/behavior/profile',
-        params={'userId': user_id, 'vehicleId': vehicle_id} if vehicle_id else {'userId': user_id},
-    )
-
-
-@app.route('/api/chat/backup', methods=['POST'])
-@require_auth
-def chat_backup_proxy():
-    """Sao lưu lịch sử phiên chat lên Firestore với TTL 30 ngày."""
-    body = request.get_json(silent=True) or {}
-    if not isinstance(body, dict):
-        return jsonify({'success': False, 'code': 'invalidChatRequest', 'userMessage': 'Yêu cầu sao lưu không hợp lệ.'}), 400
-    user_id = request._uid
-    session_id = body.get('sessionId')
-
-    if not valid_document_id(session_id) or not isinstance(body.get('messages'), list) or len(body['messages']) > 200:
-        return jsonify({'success': False, 'code': 'invalidChatBackup', 'userMessage': 'Nội dung sao lưu không hợp lệ.'}), 400
-
-    if not _firestore_db or user_id == 'anonymous':
-        return jsonify({'success': False, 'code': 'backupUnavailable', 'userMessage': 'Lịch sử đang chờ sao lưu.'}), 503
-
-    try:
-        now = datetime.now(timezone.utc)
-        expires_at = now + timedelta(days=30)
-        backup_doc = {
-            'sessionId': session_id,
-            'userId': user_id,
-            'title': body.get('title', 'Cuộc trò chuyện'),
-            'messages': body.get('messages', []),
-            'backedUpAt': now.isoformat(),
-            'expiresAt': expires_at,
-        }
-        _firestore_db.collection('users').document(user_id).collection('chatHistory').document(session_id).set(backup_doc, merge=True)
-        return jsonify({'success': True, 'sessionId': session_id, 'expiresAt': expires_at.isoformat()}), 200
-    except Exception as e:
-        return jsonify({'success': False, 'code': 'backupFailed', 'userMessage': 'Lịch sử chưa sao lưu được. Hãy thử lại.'}), 503
-
-
-@app.route('/api/chat/history', methods=['GET'])
-@require_auth
-def chat_history_list_proxy():
-    """Lấy danh sách các phiên chat đã sao lưu trên Firestore."""
-    user_id = request._uid
-    
-    if not _firestore_db or user_id == 'anonymous':
-        return _ai_proxy_json('GET', '/v1/chat/sessions', params={**request.args.to_dict(), 'userId': request._uid})
-
-    try:
-        docs = (
-            _firestore_db.collection('users')
-            .document(user_id)
-            .collection('chatHistory')
-            .order_by('backedUpAt', direction='DESCENDING')
-            .limit(30)
-            .get()
-        )
-        sessions = [doc.to_dict() for doc in docs]
-        return jsonify({'success': True, 'data': sessions}), 200
-    except Exception as e:
-        return jsonify({'success': False, 'code': 'historyUnavailable', 'userMessage': 'Chưa tải được lịch sử trò chuyện.'}), 503
-
-
 @app.route('/api/trip/predict', methods=['POST'])
 @_retired_route
 def trip_predict():
@@ -6798,29 +6583,6 @@ def admin_migrate_collections():
 # ═══════════════════════════════════════════════════════════════
 # APP CONFIG & UPDATE ENDPOINT
 # ═══════════════════════════════════════════════════════════════
-
-# ═══════════════════════════════════════════════════════════════
-# Chatbot uses a single authenticated proxy boundary.
-@app.route('/api/chat/action/confirm', methods=['POST'])
-@require_auth
-def proxy_chat_action_confirm():
-    body = request.get_json(silent=True) or {}
-    if not isinstance(body, dict):
-        return jsonify({'success': False, 'code': 'invalidChatRequest', 'userMessage': 'Yêu cầu trò chuyện không hợp lệ.'}), 400
-    body['userId'] = request._uid
-    return _ai_proxy_json('POST', '/v1/chat/action/confirm', json_body=body)
-
-
-@app.route('/api/behavior/suggestions', methods=['GET'])
-@require_auth
-def proxy_behavior_get_suggestions():
-    params = {k: v for k, v in request.args.items() if k in (
-        'vehicleId', 'currentSoc', 'currentSoh', 'odoKm', 'chargingStatus')}
-    params['userId'] = request._uid
-    return _ai_proxy_json('GET', '/v1/behavior/suggestions', params=params)
-
-
-
 
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
 _APK_DIR = os.environ.get('APK_DIR', os.path.join(_APP_DIR, 'apk'))

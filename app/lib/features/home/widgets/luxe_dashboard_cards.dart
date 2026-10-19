@@ -223,7 +223,7 @@ class LuxeQuickActions extends StatelessWidget {
                               ),
                               SizedBox(height: 2),
                               Text(
-                                'Chụp đồng hồ xe hoặc nhập tay',
+                                'Quét đồng hồ xe hoặc nhập tay',
                                 style: TextStyle(
                                   color: LuxeColors.muted,
                                   fontSize: 12.5,
@@ -345,7 +345,6 @@ class LuxeStatsStrip extends StatelessWidget {
       ],
     );
   }
-
 }
 
 /// Battery health: SoH on a platinum ring, tap for cell details.

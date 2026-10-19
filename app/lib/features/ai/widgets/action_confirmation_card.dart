@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/luxe_theme.dart';
-import '../../../core/widgets/luxe_slide_to_confirm.dart';
+import '../../../core/widgets/charge_confirm_control.dart';
 import '../models/function_call_action.dart';
 
 /// BatteryBot proposal card (LUXE, Task 125): emerald only once the result
@@ -232,8 +232,8 @@ class ActionConfirmationCard extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  LuxeSlideToConfirm(
-                    key: const Key('action_card_confirm_slider'),
+                  ChargeConfirmControl(
+                    sliderKey: const Key('action_card_confirm_slider'),
                     label: 'Vuốt để bật sạc',
                     height: 54,
                     onConfirmed: onConfirm,

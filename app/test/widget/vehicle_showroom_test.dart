@@ -4,8 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vinfast_battery/data/models/vehicle_showroom.dart';
 import 'package:vinfast_battery/data/models/vinfast_model_spec.dart';
-import 'package:vinfast_battery/features/home/vehicle_showroom_screen.dart';
-import 'package:vinfast_battery/features/home/widgets/vehicle_showroom.dart';
+import 'package:vinfast_battery/core/widgets/vehicle_photo.dart';
 
 Map<String, dynamic> angle(int i, {String scheme = 'https'}) => {
   'thumbnailUrl': '$scheme://media.example.net/a$i/t.webp',
@@ -107,7 +106,7 @@ final _png = Uint8List.fromList(const [
 ]);
 
 void main() {
-  setUp(() => showroomImageProvider = (_) => MemoryImage(_png));
+  setUp(() => vehicleImageProvider = (_) => MemoryImage(_png));
   group('VehicleShowroomData', () {
     test('parses colours, default, spin threshold and round-trips', () {
       final data = VehicleShowroomData.fromMedia(media())!;
@@ -189,140 +188,72 @@ void main() {
         ),
       );
 
-  testWidgets('without images the stage shows the fallback art', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      host(
-        const VehicleShowroomView(color: null, fallback: Text('fallback-art')),
-      ),
-    );
-    expect(find.text('fallback-art'), findsOneWidget);
-    expect(find.text('Kéo để ngắm xe'), findsNothing);
-  });
+  group('one vehicle photo everywhere (QA 131)', () {
+    test('a Feliz always shows the bundled photo', () {
+      expect(
+        VehicleImages.resolve(name: 'VinFast Feliz S'),
+        VehicleImages.felizUrl,
+      );
+      expect(
+        VehicleImages.forVehicleMap({
+          'vinfastModelId': 'feliz-2024',
+          'catalogSnapshot': {
+            'media': {'heroUrl': 'https://media.example.net/other.webp'},
+          },
+        }),
+        VehicleImages.felizUrl,
+      );
+    });
 
-  testWidgets('360 waits for frames, then a drag turns the vehicle', (
-    tester,
-  ) async {
-    final color = VehicleShowroomData.fromMedia(media())!.defaultColor;
-    await tester.pumpWidget(
-      host(VehicleShowroomView(color: color, fallback: const Text('art'))),
-    );
-    final state = tester.state<VehicleShowroomViewState>(
-      find.byType(VehicleShowroomView),
-    );
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 300)),
-    );
-    await tester.pump();
-    expect(state.spinReady, isTrue);
-    final before = state.frameIndex;
-    await tester.drag(find.byType(VehicleShowroomView), const Offset(-160, 0));
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 2));
-    expect(tester.takeException(), isNull);
-    expect(state.frameIndex, isNot(before));
-    expect(state.frameIndex, inInclusiveRange(0, 11));
-  });
+    test('other models use their catalog photo, or none', () {
+      expect(
+        VehicleImages.forVehicleMap({
+          'model': 'VinFast Evo200',
+          'catalogSnapshot': {
+            'media': {'heroUrl': 'https://media.example.net/evo.webp'},
+          },
+        }),
+        'https://media.example.net/evo.webp',
+      );
+      expect(VehicleImages.forVehicleMap({'model': 'VinFast Klara'}), isNull);
+    });
 
-  testWidgets('broken frames fall back to the art instead of failing', (
-    tester,
-  ) async {
-    showroomImageProvider = (_) => MemoryImage(Uint8List.fromList([1, 2, 3]));
-    final color = VehicleShowroomData.fromMedia(media())!.defaultColor;
-    await tester.pumpWidget(
-      host(VehicleShowroomView(color: color, fallback: const Text('art'))),
-    );
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 300)),
-    );
-    await tester.pump();
-    await tester.pump();
-    expect(find.text('art'), findsWidgets);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('2.5D tilt springs back after the drag', (tester) async {
-    final color = VehicleShowroomData.fromMedia(media())!.colors[1];
-    await tester.pumpWidget(
-      host(VehicleShowroomView(color: color, fallback: const Text('art'))),
-    );
-    await tester.pump();
-    expect(find.text('Kéo để ngắm xe'), findsOneWidget);
-    await tester.drag(find.byType(VehicleShowroomView), const Offset(120, 0));
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 1));
-    final transform = tester.widget<Transform>(
-      find
-          .descendant(
-            of: find.byType(VehicleShowroomView),
-            matching: find.byType(Transform),
-          )
-          .first,
-    );
-    // Back to an upright pose (no residual Y rotation).
-    expect(transform.transform.entry(0, 2).abs(), lessThan(0.01));
-    expect(tester.takeException(), isNull);
-  });
-
-  for (final scale in [1.0, 2.0]) {
-    testWidgets('showroom screen swaps colours and fits 320dp at $scale', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(320, 900);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
+    testWidgets('no photo shows the fallback art', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
-          builder: (context, c) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: TextScaler.linear(scale)),
-            child: c!,
-          ),
-          home: VehicleShowroomScreen(
-            title: 'VinFast Evo200',
-            showroom: VehicleShowroomData.fromMedia(media()),
-            figures: const [
-              ('Dung lượng pin', '1.9 kWh'),
-              ('Pin hiện tại', '100%'),
-            ],
+        host(const VehiclePhoto(url: null, fallback: Text('fallback-art'))),
+      );
+      expect(find.text('fallback-art'), findsOneWidget);
+    });
+
+    testWidgets('a broken photo falls back to the art', (tester) async {
+      vehicleImageProvider = (_) => MemoryImage(Uint8List.fromList([1, 2, 3]));
+      await tester.pumpWidget(
+        host(
+          const VehiclePhoto(
+            url: 'https://media.example.net/x.webp',
+            reflection: true,
+            fallback: Text('art'),
           ),
         ),
       );
-      await tester.pump(const Duration(seconds: 1));
-      expect(tester.takeException(), isNull);
-      final list = find.byType(Scrollable).first;
-      await tester.scrollUntilVisible(
-        find.text('Đỏ tươi'),
-        200,
-        scrollable: list,
-      );
-      expect(find.text('Đỏ tươi'), findsOneWidget);
-      await tester.ensureVisible(find.bySemanticsLabel('Màu Trắng ngọc trai'));
-      await tester.pump();
-      await tester.tap(find.bySemanticsLabel('Màu Trắng ngọc trai'));
-      await tester.pump(const Duration(seconds: 1));
-      expect(find.text('Trắng ngọc trai'), findsOneWidget);
+      await tester.pumpAndSettle();
+      expect(find.text('art'), findsWidgets);
       expect(tester.takeException(), isNull);
     });
-  }
 
-  testWidgets('screen explains when a model has no official photos', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: VehicleShowroomScreen(title: 'VinFast Klara', showroom: null),
-      ),
-    );
-    await tester.pump(const Duration(seconds: 1));
-    await tester.scrollUntilVisible(
-      find.textContaining('chưa có ảnh chính thức'),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    expect(find.textContaining('chưa có ảnh chính thức'), findsOneWidget);
+    testWidgets('the photo renders with its reflection', (tester) async {
+      await tester.pumpWidget(
+        host(
+          const VehiclePhoto(
+            url: 'https://media.example.net/x.webp',
+            reflection: true,
+            fallback: Text('art'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(Image), findsNWidgets(2));
+      expect(find.text('art'), findsNothing);
+    });
   });
 }

@@ -1,5 +1,4 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'vehicle_showroom.dart';
 
 /// Model xe VinFast với thông tin mở rộng
 /// Bao gồm SoH, currentBattery, defaultEfficiency cho tính toán chai pin
@@ -111,21 +110,6 @@ class VehicleModel {
       return nickname!.trim();
     }
     return modelName;
-  }
-
-  /// Approved catalog photos (colours/angles) from the catalog snapshot.
-  VehicleShowroomData? get showroom {
-    final snapshot = catalogSnapshot;
-    final catalog = snapshot == null
-        ? null
-        : VehicleShowroomData.fromMedia(snapshot['media']) ??
-              VehicleShowroomData.fromMedia({'heroUrl': snapshot['imageUrl']});
-    // Task 127: the owner's Feliz render ships with the app.
-    return BundledShowroom.withBundled(
-      catalog,
-      modelId: vinfastModelId,
-      name: modelName,
-    );
   }
 
   /// URL ảnh xe từ catalog media hoặc snapshot
