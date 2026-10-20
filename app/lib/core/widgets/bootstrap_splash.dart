@@ -593,9 +593,12 @@ class _PlatinumMarkPainter extends CustomPainter {
       );
     }
 
-    // ── II. Hairline guide: the dial traced once round from the top ──
-    if (horizon > 0 && fill < 1) {
-      final fadeOut = (1 - fill) * (1 - 0.6 * horizonCentreFade);
+    // ── II. Hairline guide: the dial traced once round from the top. It
+    // gives way to the engraving (the P leaves a gap at 128°–180° that a
+    // full guide circle would still show) and to the metal. ──
+    if (horizon > 0 && fill < 1 && engrave < 1) {
+      final fadeOut =
+          (1 - fill) * (1 - 0.6 * horizonCentreFade) * (1 - engrave);
       canvas.drawArc(
         ring,
         -math.pi / 2,
@@ -640,12 +643,18 @@ class _PlatinumMarkPainter extends CustomPainter {
       canvas.restore();
     }
 
-    // ── IV-b. Brushed platinum body ──
+    // ── IV-b. Brushed platinum body, composed in one layer so it fades in
+    // as a single solid piece (separately faded parts read as overlapping
+    // ghosts on the device). ──
     if (fill > 0) {
+      canvas.saveLayer(
+        Rect.fromLTWH(-s * 0.3, -s * 0.3, s * 1.6, s * 1.6),
+        Paint()..color = Color.fromRGBO(0, 0, 0, fill),
+      );
       canvas.drawPath(
         mark.shift(const Offset(0, 6)),
         Paint()
-          ..color = Color.fromRGBO(0, 0, 0, 0.55 * fill)
+          ..color = const Color.fromRGBO(0, 0, 0, 0.55)
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12),
       );
       canvas.drawPath(
@@ -654,29 +663,24 @@ class _PlatinumMarkPainter extends CustomPainter {
           ..shader = ui.Gradient.linear(
             Offset(s * 0.10, s * 0.10),
             Offset(s * 0.86, s * 0.90),
-            [
-              _platinumHi.withValues(alpha: fill),
-              _platinum.withValues(alpha: fill),
-              _platinumMid.withValues(alpha: fill),
-              _platinum.withValues(alpha: fill),
-              _platinumLow.withValues(alpha: fill),
+            const [
+              _platinumHi,
+              _platinum,
+              _platinumMid,
+              _platinum,
+              _platinumLow,
             ],
             const [0.0, 0.30, 0.52, 0.66, 1.0],
           ),
       );
-      // Brushed grain: fine concentric lines across the dial.
       canvas.save();
       canvas.clipPath(mark);
+      // Brushed grain: fine concentric lines across the dial.
       final grain = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 0.6;
       for (var i = -3; i <= 3; i++) {
-        grain.color = Color.fromRGBO(
-          255,
-          255,
-          255,
-          (0.05 + 0.03 * (i % 2)) * fill,
-        );
+        grain.color = Color.fromRGBO(255, 255, 255, 0.05 + 0.03 * (i % 2));
         canvas.drawCircle(c, _r * u + i * w / 7, grain);
       }
       // The right side falls into shade so the metal reads as turned.
@@ -686,9 +690,31 @@ class _PlatinumMarkPainter extends CustomPainter {
           ..shader = ui.Gradient.linear(
             Offset(s * 0.40, 0),
             Offset(s * 0.85, 0),
-            [const Color(0x00000000), Color.fromRGBO(0, 0, 0, 0.16 * fill)],
+            const [Color(0x00000000), Color.fromRGBO(0, 0, 0, 0.16)],
           ),
       );
+      // ── IV-d. One soft specular glint across the metal only (an
+      // additive full-strength band blew the P out to white). ──
+      if (glint > 0 && glint < 1) {
+        final x = ui.lerpDouble(-0.4 * s, 1.4 * s, glint)!;
+        final band = s * 0.22;
+        final intensity = math.sin(glint * math.pi);
+        canvas.drawRect(
+          Rect.fromLTWH(0, 0, s, s),
+          Paint()
+            ..blendMode = BlendMode.plus
+            ..shader = ui.Gradient.linear(
+              Offset(x - band, 0),
+              Offset(x + band, s * 0.6),
+              [
+                const Color(0x00FFFFFF),
+                Color.fromRGBO(255, 255, 255, 0.42 * intensity),
+                const Color(0x00FFFFFF),
+              ],
+              const [0.0, 0.5, 1.0],
+            ),
+        );
+      }
       canvas.restore();
       // Bevel: a bright hairline along the top of the dial.
       canvas.drawArc(
@@ -697,7 +723,7 @@ class _PlatinumMarkPainter extends CustomPainter {
         130 * math.pi / 180,
         false,
         Paint()
-          ..color = Color.fromRGBO(255, 255, 255, 0.85 * fill)
+          ..color = const Color.fromRGBO(255, 255, 255, 0.85)
           ..strokeWidth = 1.2
           ..style = PaintingStyle.stroke
           ..strokeCap = StrokeCap.round,
@@ -706,7 +732,7 @@ class _PlatinumMarkPainter extends CustomPainter {
       canvas.drawCircle(
         knob,
         w / 2 + 9 * u,
-        Paint()..color = BootstrapSplash.background.withValues(alpha: fill),
+        Paint()..color = BootstrapSplash.background,
       );
       canvas.drawCircle(
         knob,
@@ -715,10 +741,7 @@ class _PlatinumMarkPainter extends CustomPainter {
           ..shader = ui.Gradient.linear(
             knob - Offset(w / 2, w / 2),
             knob + Offset(w / 2, w / 2),
-            [
-              _platinumHi.withValues(alpha: fill),
-              _platinumMid.withValues(alpha: fill),
-            ],
+            const [_platinumHi, _platinumMid],
           ),
       );
       // The emerald track's groove, set into the dial.
@@ -728,17 +751,18 @@ class _PlatinumMarkPainter extends CustomPainter {
         _knobAngle - _trackFrom,
         false,
         Paint()
-          ..color = const Color(0xFF0B1A14).withValues(alpha: fill)
+          ..color = const Color(0xFF0B1A14)
           ..strokeWidth = _track * u
           ..style = PaintingStyle.stroke
           ..strokeCap = StrokeCap.round,
       );
+      canvas.restore();
     }
 
-    // ── III. Engraving: one stroke up the stem and round the dial ──
-    if (engrave > 0) {
-      // The engraving gives way to the metal (no hairline left on the P).
-      final strokeAlpha = (1 - fill).clamp(0.0, 1.0);
+    // ── III. Engraving: one stroke up the stem and round the dial; it is
+    // gone by the time the metal is half in. ──
+    if (engrave > 0 && fill < 0.34) {
+      final strokeAlpha = (1 - 3 * fill).clamp(0.0, 1.0);
       final strokePaint = Paint()
         ..color = Color.fromRGBO(244, 245, 247, strokeAlpha)
         ..strokeWidth = 1.2
@@ -775,8 +799,9 @@ class _PlatinumMarkPainter extends CustomPainter {
       }
     }
 
-    // ── IV-c. The charge: emerald runs from the knob along the track ──
-    final charge = ((fill - 0.35) / 0.65).clamp(0.0, 1.0);
+    // ── IV-c. The charge: once the metal is nearly solid, emerald runs
+    // from the knob along the track. ──
+    final charge = ((fill - 0.55) / 0.45).clamp(0.0, 1.0);
     if (charge > 0) {
       final sweep =
           -(_knobAngle - _trackFrom) * Curves.easeInOut.transform(charge);
@@ -808,9 +833,9 @@ class _PlatinumMarkPainter extends CustomPainter {
           ..strokeCap = StrokeCap.round,
       );
     }
-    // The knob lights white once the metal is in.
-    if (fill > 0) {
-      final k = ((fill - 0.2) / 0.8).clamp(0.0, 1.0);
+    // The knob lights white with the charge.
+    final k = ((fill - 0.5) / 0.5).clamp(0.0, 1.0);
+    if (k > 0) {
       canvas.drawCircle(
         knob,
         _knobR * u * 1.9,
@@ -823,31 +848,6 @@ class _PlatinumMarkPainter extends CustomPainter {
         _knobR * u,
         Paint()..color = Colors.white.withValues(alpha: k),
       );
-    }
-
-    // ── IV-d. One specular glint travelling 10 o'clock → 4 o'clock ──
-    if (glint > 0 && glint < 1) {
-      canvas.save();
-      canvas.clipPath(mark);
-      final x = ui.lerpDouble(-0.4 * s, 1.4 * s, glint)!;
-      final band = s * 0.22;
-      final intensity = math.sin(glint * math.pi);
-      canvas.drawRect(
-        Rect.fromLTWH(0, 0, s, s),
-        Paint()
-          ..blendMode = BlendMode.plus
-          ..shader = ui.Gradient.linear(
-            Offset(x - band, 0),
-            Offset(x + band, s * 0.6),
-            [
-              const Color(0x00FFFFFF),
-              Color.fromRGBO(255, 255, 255, 0.85 * intensity),
-              const Color(0x00FFFFFF),
-            ],
-            const [0.0, 0.5, 1.0],
-          ),
-      );
-      canvas.restore();
     }
   }
 
