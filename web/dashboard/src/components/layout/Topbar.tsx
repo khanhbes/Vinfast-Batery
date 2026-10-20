@@ -12,7 +12,7 @@ export function Topbar({ userName, userEmail, onSignOut, scrolled = false }: {
   const { pathname } = useLocation();
   return <header className={cn('dashboard-topbar', scrolled && 'is-scrolled')}>
     <div className="min-w-0">
-      <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">VinFast BMS</p>
+      <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">Pinova</p>
       <p className="text-sm font-semibold">{titles[pathname] ?? 'Tổng quan'}</p>
     </div>
     <DropdownMenu>

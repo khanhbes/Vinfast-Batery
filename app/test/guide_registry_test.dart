@@ -12,7 +12,7 @@ void main() {
         GuideDestination.shellySetup.actionLabel('en'),
         'Start Shelly setup',
       );
-      expect(GuideDestination.batteryBot.actionLabel('vi'), 'Hỏi BatteryBot');
+      expect(GuideDestination.batteryBot.actionLabel('vi'), 'Hỏi Pinova Bot');
       for (final destination in GuideDestination.values) {
         expect(destination.actionLabel('en'), isNotEmpty);
       }

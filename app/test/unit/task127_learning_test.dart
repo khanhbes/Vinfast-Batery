@@ -51,7 +51,9 @@ Map<String, dynamic> _status({bool chargeReady = true, int trained = 2}) => {
 void main() {
   group('dashboard photo parser', () {
     test('reads % and a labelled ODO', () {
-      final r = DashboardReadingParser.parse('12:45\n85%\nODO 01234 km\n0 km/h');
+      final r = DashboardReadingParser.parse(
+        '12:45\n85%\nODO 01234 km\n0 km/h',
+      );
       expect(r.soc, 85);
       expect(r.odoKm, 1234);
       expect(r.odoFromLabel, isTrue);

@@ -25,7 +25,7 @@ void main() {
 
     // Ban đầu nút bot hiển thị nhưng không có bong bóng thoại
     expect(find.byType(FloatingBatteryBot), findsOneWidget);
-    expect(find.byTooltip('Mở BatteryBot'), findsOneWidget);
+    expect(find.byTooltip('Mở Pinova Bot'), findsOneWidget);
     expect(find.text('Bong bóng thoại test'), findsNothing);
 
     // Kích hoạt hiển thị bong bóng
@@ -39,7 +39,7 @@ void main() {
     final closeIcon = find.byIcon(Icons.close);
     expect(closeIcon, findsOneWidget);
     expect(
-      tester.getSize(find.byTooltip('Đóng gợi ý BatteryBot')).height,
+      tester.getSize(find.byTooltip('Đóng gợi ý Pinova Bot')).height,
       greaterThanOrEqualTo(48),
     );
     await tester.tap(closeIcon);

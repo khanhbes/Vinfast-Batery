@@ -452,7 +452,7 @@ class _BotEntry extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    isEn ? 'Ask BatteryBot' : 'Hỏi BatteryBot',
+                    isEn ? 'Ask Pinova Bot' : 'Hỏi Pinova Bot',
                     style: const TextStyle(
                       color: LuxeColors.text,
                       fontWeight: FontWeight.w500,

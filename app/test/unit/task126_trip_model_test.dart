@@ -57,10 +57,7 @@ void main() {
       expect(plan.verdict.name, expected['verdict']);
       expect(_r1(plan.startNeededSoc), expected['startNeededSoc']);
       expect(plan.source.wire, expected['kmPerPctSource']);
-      expect(
-        (plan.factor * 1000).roundToDouble() / 1000,
-        expected['factor'],
-      );
+      expect((plan.factor * 1000).roundToDouble() / 1000, expected['factor']);
       expect(_r1(plan.avgSpeedKmh), expected['avgSpeedKmh']);
       final suggestions = [
         for (final item in expected['suggestions'] as List)

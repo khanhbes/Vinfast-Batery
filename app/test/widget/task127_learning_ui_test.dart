@@ -73,7 +73,9 @@ class _LearningService implements ServerSmartChargerService {
   }
 
   @override
-  Future<({int added, int duplicates, int rejected, VehicleLearningStatus? status})>
+  Future<
+    ({int added, int duplicates, int rejected, VehicleLearningStatus? status})
+  >
   addTripSamples(
     String vehicleId,
     List<Map<String, dynamic>> trips, {
@@ -126,12 +128,8 @@ class _OpenerState extends State<_Opener> {
   );
 }
 
-Future<void> _scrollTo(WidgetTester tester, Finder target) =>
-    tester.scrollUntilVisible(
-      target,
-      150,
-      scrollable: find.byType(Scrollable).first,
-    );
+Future<void> _scrollTo(WidgetTester tester, Finder target) => tester
+    .scrollUntilVisible(target, 150, scrollable: find.byType(Scrollable).first);
 
 Future<void> _settle(WidgetTester tester) async {
   for (var i = 0; i < 20; i++) {
@@ -228,7 +226,10 @@ void main() {
       await _settle(tester);
       await tester.tap(find.byKey(const ValueKey('actual-soc-photo')));
       await _settle(tester);
-      expect(find.byKey(const ValueKey('actual-soc-photo-note')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('actual-soc-photo-note')),
+        findsOneWidget,
+      );
       final save = find.byKey(const ValueKey('actual-soc-save'));
       await tester.ensureVisible(save);
       await tester.tap(save);

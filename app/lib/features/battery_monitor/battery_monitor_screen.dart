@@ -151,7 +151,7 @@ String batterySourceLabel(String? source) {
   if (value == 'smart_charge_estimated') return 'Ước tính sau phiên sạc';
   if (value.startsWith('reading_')) {
     return switch (value.substring('reading_'.length)) {
-      'chat' => 'Nhập qua BatteryBot',
+      'chat' => 'Nhập qua Pinova Bot',
       'photo' || 'dashboard' || 'ocr' => 'Quét từ đồng hồ xe',
       _ => 'Bạn nhập',
     };

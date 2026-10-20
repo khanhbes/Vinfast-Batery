@@ -46,12 +46,17 @@ void main() {
       now = now.add(const Duration(seconds: 26));
       await tester.pump(const Duration(seconds: 1));
       expect(find.text('26 giây'), findsOneWidget);
-      expect(find.byKey(const ValueKey('command-progress-slow')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('command-progress-slow')),
+        findsOneWidget,
+      );
       expect(find.textContaining('không gửi lại lệnh bật'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('verified closes the wait with a check x$scale', (tester) async {
+    testWidgets('verified closes the wait with a check x$scale', (
+      tester,
+    ) async {
       await _pump(
         tester,
         const CommandProgressStrip(kind: RelayCommandKind.on, verified: true),
@@ -60,7 +65,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Đã bật sạc · đã xác minh'), findsOneWidget);
       expect(find.byIcon(Icons.check_rounded), findsWidgets);
-      expect(find.byKey(const ValueKey('command-progress-elapsed')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('command-progress-elapsed')),
+        findsNothing,
+      );
       expect(tester.takeException(), isNull);
     });
 
@@ -136,7 +144,10 @@ void main() {
         scale > 1.3 ? findsNothing : findsOneWidget,
         reason: 'icon-only button at large text',
       );
-      expect(find.byKey(const ValueKey('connection-notice-retry')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('connection-notice-retry')),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
     });
   }

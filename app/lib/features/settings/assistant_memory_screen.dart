@@ -79,9 +79,9 @@ class _AssistantMemoryScreenState extends State<AssistantMemoryScreen> {
   Future<void> _clearAll() async {
     final ok = await showLuxeConfirm(
       context,
-      title: 'Xóa mọi điều BatteryBot nhớ?',
+      title: 'Xóa mọi điều Pinova Bot nhớ?',
       message:
-          'BatteryBot sẽ quên mọi điều bạn đã kể. Lịch sử sạc và dữ liệu xe không bị ảnh hưởng.',
+          'Pinova Bot sẽ quên mọi điều bạn đã kể. Lịch sử sạc và dữ liệu xe không bị ảnh hưởng.',
       confirmLabel: 'Xóa hết',
     );
     if (ok == true) await _run(_api.forgetAll);
@@ -101,15 +101,15 @@ class _AssistantMemoryScreenState extends State<AssistantMemoryScreen> {
           children: [
             const LuxePageHeaderText(
               eyebrow: 'TRỢ LÝ AI',
-              title: 'BatteryBot đang nhớ gì',
+              title: 'Pinova Bot đang nhớ gì',
               caption:
-                  'Những điều bạn kể giúp BatteryBot trả lời sát với bạn hơn. Bạn xem, xóa hoặc tắt bất cứ lúc nào.',
+                  'Những điều bạn kể giúp Pinova Bot trả lời sát với bạn hơn. Bạn xem, xóa hoặc tắt bất cứ lúc nào.',
             ),
             const SizedBox(height: 12),
             const LuxeNotice(
               key: ValueKey('assistant-privacy-note'),
               message:
-                  'Câu hỏi và thông tin xe cần thiết được xử lý bởi Google Gemini qua máy chủ VinFast Battery. Không gửi mật khẩu hay mã truy cập; toàn bộ cuộc trò chuyện không được lưu trên máy chủ.',
+                  'Câu hỏi và thông tin xe cần thiết được xử lý bởi Google Gemini qua máy chủ Pinova. Không gửi mật khẩu hay mã truy cập; toàn bộ cuộc trò chuyện không được lưu trên máy chủ.',
               icon: Icons.shield_outlined,
             ),
             const SizedBox(height: 18),
@@ -130,7 +130,7 @@ class _AssistantMemoryScreenState extends State<AssistantMemoryScreen> {
                       ? 'Đang tải…'
                       : snapshot.learningEnabled
                       ? 'Đang bật · ghi nhớ điều hữu ích bạn kể'
-                      : 'Đang tắt · BatteryBot không ghi nhớ thêm',
+                      : 'Đang tắt · Pinova Bot không ghi nhớ thêm',
                   trailing: LuxeSwitch(
                     value: snapshot?.learningEnabled ?? true,
                     semanticLabel: 'Học từ cuộc trò chuyện',
@@ -149,7 +149,7 @@ class _AssistantMemoryScreenState extends State<AssistantMemoryScreen> {
               ],
             ),
             const SizedBox(height: 22),
-            const LuxeSectionLabel('Điều BatteryBot nhớ'),
+            const LuxeSectionLabel('Điều Pinova Bot nhớ'),
             if (snapshot == null && _busy)
               const Padding(
                 padding: EdgeInsets.all(24),
@@ -158,7 +158,7 @@ class _AssistantMemoryScreenState extends State<AssistantMemoryScreen> {
             else if (snapshot != null && snapshot.facts.isEmpty)
               LuxeGlass(
                 child: Text(
-                  'Chưa có gì. Hãy kể với BatteryBot, ví dụ "Mình đi làm 12 km mỗi ngày" hoặc "Mình hay sạc buổi tối".',
+                  'Chưa có gì. Hãy kể với Pinova Bot, ví dụ "Mình đi làm 12 km mỗi ngày" hoặc "Mình hay sạc buổi tối".',
                   style: LuxeText.body,
                 ),
               )

@@ -58,7 +58,7 @@ void main() {
       expect(find.textContaining('°C'), findsNothing);
       expect(find.textContaining('N/A'), findsNothing);
       expect(find.text('Good'), findsNothing);
-      expect(find.text('Nhập qua BatteryBot'), findsOneWidget);
+      expect(find.text('Nhập qua Pinova Bot'), findsOneWidget);
       // Same km/% as the Overview: (79 − 5) × 1.21 ≈ 90 km.
       await tester.scrollUntilVisible(
         find.byKey(const ValueKey('monitor-range-estimate')),

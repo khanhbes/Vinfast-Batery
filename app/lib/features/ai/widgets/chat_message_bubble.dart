@@ -52,8 +52,8 @@ class ChatMessageBubble extends StatelessWidget {
 
   void _shareMessage() {
     Share.share(
-      '${message.content}\n\n— BatteryBot · VinFast Battery',
-      subject: 'Chia sẻ từ VinFast Battery',
+      '${message.content}\n\n— Pinova Bot',
+      subject: 'Chia sẻ từ Pinova',
     );
   }
 
@@ -186,7 +186,7 @@ class ChatMessageBubble extends StatelessWidget {
     // its cards and buttons stay reachable.
     return Semantics(
       container: true,
-      label: 'BatteryBot trả lời lúc $timeStr',
+      label: 'Pinova Bot trả lời lúc $timeStr',
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
         child: Column(

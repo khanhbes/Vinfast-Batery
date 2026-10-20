@@ -31,7 +31,7 @@ abstract final class ChargeProgressNotification {
     final plugin = FlutterLocalNotificationsPlugin();
     await plugin.initialize(
       const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        android: AndroidInitializationSettings('@drawable/ic_stat_pinova'),
       ),
     );
     await plugin

@@ -302,7 +302,7 @@ class _GettingStartedScreenState extends State<GettingStartedScreen>
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
                   child: LuxeMetalText(
-                    'VINFAST BATTERY',
+                    'PINOVA',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w400,

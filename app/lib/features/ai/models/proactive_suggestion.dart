@@ -27,7 +27,7 @@ class ProactiveSuggestion {
   factory ProactiveSuggestion.fromJson(Map<String, dynamic> json) {
     return ProactiveSuggestion(
       ruleId: json['ruleId'] as String? ?? 'R000',
-      title: json['title'] as String? ?? 'Gợi ý từ BatteryBot',
+      title: json['title'] as String? ?? 'Gợi ý từ Pinova Bot',
       message: json['message'] as String? ?? '',
       priority: json['priority'] as String? ?? 'LOW',
       action: json['action'] as String?,

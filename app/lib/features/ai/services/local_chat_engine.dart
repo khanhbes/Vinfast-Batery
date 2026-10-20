@@ -33,7 +33,7 @@ abstract interface class ChatToolGateway {
 
 class AppKnowledgeRepository {
   static const outsideScope =
-      'Mình hỗ trợ các chức năng của VinFast Battery. Bạn muốn hỏi về xe, pin, sạc hay Shelly?';
+      'Mình hỗ trợ các chức năng của Pinova. Bạn muốn hỏi về xe, pin, sạc hay Shelly?';
   String answer(String question) {
     final text = BatteryBotFaq.normalize(question);
     if (RegExp(r'\b(bao hanh|bao duong|lich hen)\b').hasMatch(text)) {

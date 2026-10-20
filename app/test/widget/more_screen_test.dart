@@ -49,13 +49,13 @@ void main() {
     expect(find.text('Trung tâm thông báo'), findsOneWidget);
 
     // Sign out button & branding footer
-    expect(find.text('BatteryBot đang nhớ gì'), findsOneWidget);
+    expect(find.text('Pinova Bot đang nhớ gì'), findsOneWidget);
     await tester.scrollUntilVisible(
-      find.textContaining('VinFast Battery'),
+      find.textContaining('Pinova · Phiên bản'),
       300,
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.text('Đăng xuất tài khoản'), findsOneWidget);
-    expect(find.textContaining('VinFast Battery'), findsOneWidget);
+    expect(find.textContaining('Pinova · Phiên bản'), findsOneWidget);
   });
 }

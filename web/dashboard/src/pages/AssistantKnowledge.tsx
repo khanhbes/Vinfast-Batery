@@ -33,7 +33,7 @@ export default function AssistantKnowledge() {
       setEntries(res?.data?.entries || []);
       setStatus(res?.data?.assistant || null);
     } catch {
-      toast.error('Chưa tải được kiến thức BatteryBot.');
+      toast.error('Chưa tải được kiến thức Pinova Bot.');
     } finally {
       setLoading(false);
     }
@@ -62,7 +62,7 @@ export default function AssistantKnowledge() {
         title: draft.title.trim(), body: draft.body.trim(), enabled: true,
         keywords: draft.keywords.split(',').map((k) => k.trim()).filter(Boolean),
       });
-      toast.success('Đã lưu. BatteryBot dùng nội dung mới trong vòng 1 phút.');
+      toast.success('Đã lưu. Pinova Bot dùng nội dung mới trong vòng 1 phút.');
       setDraft(null);
       await load();
     } catch {
@@ -75,7 +75,7 @@ export default function AssistantKnowledge() {
   const hide = async (entry: Entry) => {
     try {
       await adminSaveAssistantKnowledge(entry.id, { title: entry.title, body: entry.body, enabled: false });
-      toast.success('Đã ẩn mục này khỏi BatteryBot.');
+      toast.success('Đã ẩn mục này khỏi Pinova Bot.');
       await load();
     } catch { toast.error('Chưa ẩn được.'); }
   };
@@ -93,7 +93,7 @@ export default function AssistantKnowledge() {
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-4">
           <div>
-            <CardTitle className="flex items-center gap-2"><Bot className="h-5 w-5 text-primary" /> Kiến thức BatteryBot</CardTitle>
+            <CardTitle className="flex items-center gap-2"><Bot className="h-5 w-5 text-primary" /> Kiến thức Pinova Bot</CardTitle>
             <CardDescription>
               Nội dung trợ lý dùng để trả lời về app, xe, sạc và Shelly. Mục có sẵn có thể sửa (tạo bản của admin) hoặc ẩn.
             </CardDescription>

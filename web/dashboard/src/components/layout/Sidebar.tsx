@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, BrainCircuit, History, Settings, ChevronLeft, ChevronRight, BatteryCharging, LogOut, Database, CarFront, Code2, Wrench, Plug, Bot } from 'lucide-react';
+import { LayoutDashboard, Users, BrainCircuit, History, Settings, ChevronLeft, ChevronRight, LogOut, Database, CarFront, Code2, Wrench, Plug, Bot } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { PinovaMark } from './PinovaMark';
 import { useDevelopMode } from '@/data/DevelopModeContext';
 
 const primaryItems = [
@@ -11,7 +12,7 @@ const primaryItems = [
   { icon: Users, label: 'Tài khoản', path: '/users' },
   { icon: CarFront, label: 'Danh mục xe', path: '/catalog' },
   { icon: Plug, label: 'Thiết bị Shelly', path: '/shelly' },
-  { icon: Bot, label: 'BatteryBot', path: '/assistant' },
+  { icon: Bot, label: 'Pinova Bot', path: '/assistant' },
 ];
 const developItems = [
   { icon: Wrench, label: 'Công cụ kỹ thuật', path: '/develop' },
@@ -32,8 +33,8 @@ export function Sidebar({ onSignOut }: { onSignOut: () => void }) {
     className={cn('dashboard-sidebar', collapsed && 'is-collapsed')}
   >
     <div className="sidebar-brand flex items-center gap-3 px-5 py-6">
-      <BatteryCharging className="h-9 w-9 shrink-0 text-primary" aria-hidden="true" />
-      {!collapsed && <span className="whitespace-nowrap font-bold tracking-tight">VinFast BMS</span>}
+      <PinovaMark tile className="h-9 w-9 shrink-0" />
+      {!collapsed && <span className="whitespace-nowrap font-bold tracking-tight">Pinova</span>}
     </div>
     <nav aria-label="Điều hướng chính" className="sidebar-nav">
       {primaryItems.map(({ icon: Icon, label, path }) => <NavLink

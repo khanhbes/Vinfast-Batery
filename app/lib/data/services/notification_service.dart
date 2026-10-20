@@ -61,7 +61,7 @@ class NotificationService {
 
     // ── 2. Local notification plugin init ──────────────────────────────
     const androidSettings = AndroidInitializationSettings(
-      '@mipmap/ic_launcher',
+      '@drawable/ic_stat_pinova',
     );
     const darwinSettings = DarwinInitializationSettings(
       requestAlertPermission: false,
@@ -155,7 +155,7 @@ class NotificationService {
       await androidPlugin?.createNotificationChannel(
         const AndroidNotificationChannel(
           channelBackgroundService,
-          'VinFast Battery',
+          'Pinova',
           description: 'Background service status',
           importance: Importance.low,
           playSound: false,
@@ -226,7 +226,7 @@ class NotificationService {
             'Trạng thái relay, timer và cảnh báo an toàn Shelly',
         importance: Importance.high,
         priority: Priority.high,
-        icon: '@mipmap/ic_launcher',
+        icon: '@drawable/ic_stat_pinova',
       );
 
   DarwinNotificationDetails _iosDetails({bool presentSound = true}) =>
@@ -299,7 +299,7 @@ class NotificationService {
           channelLearning,
           'AI cá nhân',
           channelDescription: 'Báo khi đủ dữ liệu để huấn luyện mô hình riêng',
-          icon: '@mipmap/ic_launcher',
+          icon: '@drawable/ic_stat_pinova',
         ),
         iOS: _iosDetails(presentSound: false),
       ),
@@ -359,7 +359,7 @@ class NotificationService {
         android: AndroidNotificationDetails(
           channelMaintenance,
           'Bảo dưỡng',
-          icon: '@mipmap/ic_launcher',
+          icon: '@drawable/ic_stat_pinova',
         ),
       ),
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
@@ -423,7 +423,7 @@ class NotificationService {
           'Cảnh báo sạc thông minh',
           importance: Importance.high,
           priority: Priority.high,
-          icon: '@mipmap/ic_launcher',
+          icon: '@drawable/ic_stat_pinova',
         ),
       ),
       androidScheduleMode: androidMode,
@@ -478,7 +478,7 @@ class NotificationService {
           'Bảo dưỡng',
           importance: Importance.high,
           priority: Priority.high,
-          icon: '@mipmap/ic_launcher',
+          icon: '@drawable/ic_stat_pinova',
         ),
       ),
       payload: 'maintenance_$taskId',

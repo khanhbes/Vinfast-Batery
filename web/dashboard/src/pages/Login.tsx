@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '@/firebase';
+import { PinovaMark } from '@/components/layout/PinovaMark';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { BatteryCharging, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
 
@@ -58,10 +59,10 @@ export default function Login() {
 
         <div className="page-enter relative z-10 w-full max-w-md">
           <div className="mb-8 text-center">
-            <div className="relative mx-auto mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 shadow-[0_0_30px_rgba(16,185,129,0.25)]">
-              <BatteryCharging className="h-8 w-8 text-emerald-400" />
+            <div className="relative mx-auto mb-4 inline-flex h-16 w-16 shadow-[0_0_30px_rgba(16,185,129,0.25)] rounded-2xl">
+              <PinovaMark tile className="h-16 w-16" />
             </div>
-            <h1 className="text-2xl font-bold text-slate-50">VinFast BMS</h1>
+            <h1 className="text-2xl font-bold text-slate-50">Pinova</h1>
             <p className="mt-2 text-sm text-slate-300">Battery operations and AI workspace</p>
           </div>
 

@@ -131,9 +131,12 @@ void main() {
 
   test('battery source is said in words', () {
     expect(batterySourceLabel('user_confirmed'), 'Bạn xác nhận sau khi sạc');
-    expect(batterySourceLabel('reading_chat'), 'Nhập qua BatteryBot');
+    expect(batterySourceLabel('reading_chat'), 'Nhập qua Pinova Bot');
     expect(batterySourceLabel('reading_photo'), 'Quét từ đồng hồ xe');
-    expect(batterySourceLabel('smart_charge_estimated'), 'Ước tính sau phiên sạc');
+    expect(
+      batterySourceLabel('smart_charge_estimated'),
+      'Ước tính sau phiên sạc',
+    );
     expect(batterySourceLabel(null), 'Bạn nhập');
   });
 

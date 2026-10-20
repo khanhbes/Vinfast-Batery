@@ -275,7 +275,7 @@ void main() {
       expect(label.maxLines, isNull);
       expect(find.text('Chưa có dữ liệu pin'), findsOneWidget);
       expect(find.textContaining('Pin 100%'), findsNothing);
-      expect(find.byTooltip('Đóng BatteryBot'), findsOneWidget);
+      expect(find.byTooltip('Đóng Pinova Bot'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     });

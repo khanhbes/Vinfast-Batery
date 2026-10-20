@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:vinfast_battery/core/utils/battery_bot_faq.dart';
 
 void main() {
-  group('BatteryBot Vietnamese FAQ', () {
+  group('Pinova Bot Vietnamese FAQ', () {
     test('folds all Vietnamese letters, case and combining marks', () {
       const groups = {
         'a': 'àáạảãâầấậẩẫăằắặẳẵ',

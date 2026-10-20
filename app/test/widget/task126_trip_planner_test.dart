@@ -24,8 +24,7 @@ class _RideService implements ServerSmartChargerService {
   final readings = <String>[];
 
   @override
-  Future<VehicleLearningStatus?> learningStatus(String vehicleId) async =>
-      null;
+  Future<VehicleLearningStatus?> learningStatus(String vehicleId) async => null;
 
   @override
   Future<BatteryReadingResult> addBatteryReading(
@@ -40,7 +39,9 @@ class _RideService implements ServerSmartChargerService {
   }
 
   @override
-  Future<({int added, int duplicates, int rejected, VehicleLearningStatus? status})>
+  Future<
+    ({int added, int duplicates, int rejected, VehicleLearningStatus? status})
+  >
   addTripSamples(
     String vehicleId,
     List<Map<String, dynamic>> trips, {
@@ -158,7 +159,10 @@ void main() {
       await tester.tap(finish);
       await tester.pumpAndSettle();
       await tester.enterText(find.byKey(const ValueKey('reading-soc')), '40');
-      await tester.enterText(find.byKey(const ValueKey('reading-odo')), '1211.5');
+      await tester.enterText(
+        find.byKey(const ValueKey('reading-odo')),
+        '1211.5',
+      );
       await tester.ensureVisible(save);
       await tester.tap(save);
       await tester.pumpAndSettle();

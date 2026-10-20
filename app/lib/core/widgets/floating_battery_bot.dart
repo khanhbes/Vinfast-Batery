@@ -163,7 +163,7 @@ class _FloatingBatteryBotState extends ConsumerState<FloatingBatteryBot>
                             ),
                             const SizedBox(width: 6),
                             IconButton(
-                              tooltip: 'Đóng gợi ý BatteryBot',
+                              tooltip: 'Đóng gợi ý Pinova Bot',
                               constraints: const BoxConstraints(
                                 minWidth: 48,
                                 minHeight: 48,
@@ -204,9 +204,9 @@ class _FloatingBatteryBotState extends ConsumerState<FloatingBatteryBot>
                     elevation: isDocked ? 2 : 6,
                     shadowColor: LuxeColors.emerald.withValues(alpha: 0.4),
                     child: Tooltip(
-                      message: 'Mở BatteryBot',
+                      message: 'Mở Pinova Bot',
                       child: Semantics(
-                        label: 'Mở BatteryBot',
+                        label: 'Mở Pinova Bot',
                         button: true,
                         child: InkWell(
                           customBorder: const CircleBorder(),

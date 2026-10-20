@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 class AppConstants {
   AppConstants._();
 
-  static const String appName = 'VinFast Battery';
+  static const String appName = 'Pinova';
 
   // Production URL is injected at build time. Never ship a laptop/Tailscale
   // endpoint as a release default. Debug builds may use the developer override

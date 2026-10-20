@@ -272,7 +272,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                     LuxeSettingsRow(
                       key: const ValueKey('more-assistant-memory'),
                       icon: Icons.auto_awesome_rounded,
-                      title: 'BatteryBot đang nhớ gì',
+                      title: 'Pinova Bot đang nhớ gì',
                       subtitle: 'Xem, xóa hoặc tắt học cá nhân của trợ lý',
                       onTap: () => _push(const AssistantMemoryScreen()),
                     ),

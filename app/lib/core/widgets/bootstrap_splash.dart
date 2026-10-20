@@ -6,10 +6,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 /// ============================================================================
-/// VINFAST BATTERY — V6 "PLATINUM" SPLASH
-/// One 5000ms timeline: Ambient → Horizon → Engrave → Platinum → Signature.
-/// A hairline horizon becomes the top edge of the V, two strokes engrave it,
-/// brushed platinum fills it and a single glint crosses before the wordmark.
+/// PINOVA — "PLATINUM" SPLASH (V6 timeline, Pinova mark since QA 133)
+/// One 5000ms timeline: Ambient → Guide → Engrave → Platinum → Signature.
+/// A hairline traces the dial, one stroke engraves the P up its stem and
+/// round the dial, brushed platinum fills it, the charge lights emerald and a
+/// single glint crosses before the wordmark.
 /// After the timeline the mark keeps a slow, subtle breath while AuthGate
 /// resolves startup, so a hold never looks frozen or needs a spinner.
 /// ============================================================================
@@ -63,6 +64,7 @@ const _platinum = Color(0xFFD6D8DB);
 const _platinumMid = Color(0xFF9EA2A8);
 const _platinumLow = Color(0xFF5E6268);
 const _silverText = Color(0xFF8E9298);
+const _emerald = Color(0xFF34D399);
 
 class _BootstrapSplashState extends State<BootstrapSplash>
     with TickerProviderStateMixin, WidgetsBindingObserver {
@@ -281,7 +283,7 @@ class _BootstrapSplashState extends State<BootstrapSplash>
     child: Scaffold(
       backgroundColor: BootstrapSplash.background,
       body: Semantics(
-        label: 'VinFast Battery, đang khởi động',
+        label: 'Pinova, đang khởi động',
         liveRegion: true,
         child: AnimatedBuilder(
           animation: Listenable.merge([_ctrl, _breath]),
@@ -408,7 +410,7 @@ class _BootstrapSplashState extends State<BootstrapSplash>
                 stops: [0.0, 0.55, 1.0],
               ).createShader(bounds),
               child: Text(
-                'VINFAST BATTERY',
+                'PINOVA',
                 textAlign: TextAlign.center,
                 maxLines: 1,
                 style: TextStyle(
@@ -485,29 +487,78 @@ class _PlatinumMarkPainter extends CustomPainter {
   final double glint;
   final double breath;
 
-  // Normalised V geometry inside the square mark area (width × width).
-  static const _topY = 0.26;
-  static const _outerL = Offset(0.12, _topY);
-  static const _innerL = Offset(0.34, _topY);
-  static const _innerR = Offset(0.66, _topY);
-  static const _outerR = Offset(0.88, _topY);
-  static const _innerTip = Offset(0.50, 0.55);
-  static const _tip = Offset(0.50, 0.82);
+  // Normalised Pinova "P" geometry inside the square mark area (width × width):
+  // a dial ring (the app's charge dial) on a stem, the last stretch of the
+  // ring lit emerald as the charge, a white knob at its end (QA 133).
+  static const _cx = 0.50;
+  static const _cy = 0.41;
+  static const _r = 0.215;
+  static const _t = 0.09; // stroke
+  static const _stemX = _cx - _r;
+  static const _stemBottom = 0.805;
+  static const _ringSweep = 310 * math.pi / 180; // 180° → 130° clockwise
+  static const _knobAngle = 130 * math.pi / 180;
+  static const _chargeFrom = 40 * math.pi / 180;
 
-  static Path markPath(double s) => Path()
-    ..moveTo(_outerL.dx * s, _outerL.dy * s)
-    ..lineTo(_innerL.dx * s, _innerL.dy * s)
-    ..lineTo(_innerTip.dx * s, _innerTip.dy * s)
-    ..lineTo(_innerR.dx * s, _innerR.dy * s)
-    ..lineTo(_outerR.dx * s, _outerR.dy * s)
-    ..lineTo(_tip.dx * s, _tip.dy * s)
-    ..close();
+  static Offset _onRing(double s, double angle) => Offset(
+    (_cx + _r * math.cos(angle)) * s,
+    (_cy + _r * math.sin(angle)) * s,
+  );
+
+  /// The P's centre line: stem from the foot up, then round the ring.
+  static Path spinePath(double s) => Path()
+    ..moveTo(_stemX * s, _stemBottom * s)
+    ..lineTo(_stemX * s, _cy * s)
+    ..arcTo(
+      Rect.fromCircle(center: Offset(_cx * s, _cy * s), radius: _r * s),
+      math.pi,
+      _ringSweep,
+      false,
+    );
+
+  /// The filled P (ring band + round end + stem), for fills and clips.
+  static Path markPath(double s) {
+    final c = Offset(_cx * s, _cy * s);
+    final r = _r * s, t = _t * s;
+    final band = Path()
+      ..arcTo(
+        Rect.fromCircle(center: c, radius: r + t / 2),
+        math.pi,
+        _ringSweep,
+        true,
+      )
+      ..arcTo(
+        Rect.fromCircle(center: c, radius: r - t / 2),
+        math.pi + _ringSweep,
+        -_ringSweep,
+        false,
+      )
+      ..close();
+    final cap = Path()
+      ..addOval(Rect.fromCircle(center: _onRing(s, _knobAngle), radius: t / 2));
+    final stem = Path()
+      ..addRRect(
+        RRect.fromLTRBR(
+          _stemX * s - t / 2,
+          c.dy - t / 2,
+          _stemX * s + t / 2,
+          _stemBottom * s + t / 2,
+          Radius.circular(t / 2),
+        ),
+      );
+    return Path.combine(
+      PathOperation.union,
+      Path.combine(PathOperation.union, band, cap),
+      stem,
+    );
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
     final s = size.width; // Mark occupies the top square; pedestal light below.
-    Offset p(Offset n) => Offset(n.dx * s, n.dy * s);
-    final topY = _topY * s;
+    final c = Offset(_cx * s, _cy * s);
+    final ring = Rect.fromCircle(center: c, radius: _r * s);
+    final t = _t * s;
 
     // ── Halo behind the mark: appears with the metal, breathes on hold ──
     final haloStrength =
@@ -524,74 +575,51 @@ class _PlatinumMarkPainter extends CustomPainter {
       );
     }
 
-    // ── I. Point of light on the future top edge ──
+    // ── I. Point of light at the top of the future dial ──
+    final top = Offset(c.dx, c.dy - _r * s);
     if (dot > 0 && horizon < 1) {
       final o = dot * (1 - horizon);
       canvas.drawCircle(
-        Offset(s / 2, topY),
+        top,
         6,
         Paint()
           ..color = Color.fromRGBO(255, 255, 255, 0.35 * o)
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
       );
       canvas.drawCircle(
-        Offset(s / 2, topY),
+        top,
         1.8 * dot,
         Paint()..color = Color.fromRGBO(255, 255, 255, o),
       );
     }
 
-    // ── II. Horizon hairline, tapered at both ends ──
+    // ── II. Hairline guide: the dial traced once round from the top ──
     if (horizon > 0 && fill < 1) {
-      final half = (_outerR.dx - 0.5) * s * horizon;
-      final left = Offset(s / 2 - half, topY);
-      final right = Offset(s / 2 + half, topY);
-      final fadeOut = 1 - fill;
-      // The centre span (between the inner corners) dissolves as the strokes
-      // start; the outer spans stay and become the V's top edges.
-      final centreAlpha = (1 - horizonCentreFade) * fadeOut;
-      final edgeAlpha = fadeOut;
-      final edge = Color.fromRGBO(240, 241, 243, edgeAlpha);
-      final centre = Color.fromRGBO(255, 255, 255, math.max(centreAlpha, 0.0));
-      // Stops 0.27–0.73 are the inner corners at full width; ends taper.
-      final shader = ui.Gradient.linear(
-        left,
-        right,
-        [
-          const Color(0x00FFFFFF),
-          edge,
-          edge,
-          centre,
-          centre,
-          edge,
-          edge,
-          const Color(0x00FFFFFF),
-        ],
-        const [0.0, 0.06, 0.27, 0.31, 0.69, 0.73, 0.94, 1.0],
-      );
-      canvas.drawLine(
-        left,
-        right,
+      final fadeOut = (1 - fill) * (1 - 0.6 * horizonCentreFade);
+      final guide = Paint()
+        ..color = Color.fromRGBO(240, 241, 243, 0.55 * fadeOut)
+        ..strokeWidth = 1.1
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round;
+      canvas.drawArc(ring, -math.pi / 2, 2 * math.pi * horizon, false, guide);
+      canvas.drawArc(
+        ring,
+        -math.pi / 2,
+        2 * math.pi * horizon,
+        false,
         Paint()
-          ..shader = shader
+          ..color = Color.fromRGBO(255, 255, 255, 0.22 * fadeOut)
           ..strokeWidth = 3
+          ..style = PaintingStyle.stroke
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5),
-      );
-      canvas.drawLine(
-        left,
-        right,
-        Paint()
-          ..shader = shader
-          ..strokeWidth = 1.1
-          ..strokeCap = StrokeCap.round,
       );
     }
 
     final mark = markPath(s);
 
-    // ── IV-a. Pedestal light: a soft elliptical sheen under the tip ──
+    // ── IV-a. Pedestal light: a soft elliptical sheen under the stem ──
     if (fill > 0) {
-      final centre = Offset(s / 2, _tip.dy * s + 14);
+      final centre = Offset(s / 2, _stemBottom * s + t / 2 + 14);
       canvas.save();
       canvas.translate(centre.dx, centre.dy);
       canvas.scale(1, 0.18);
@@ -615,8 +643,8 @@ class _PlatinumMarkPainter extends CustomPainter {
           ..color = Color.fromRGBO(0, 0, 0, 0.55 * fill)
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12),
       );
-      // Light from 10 o'clock: bright upper-left wing, deeper right wing,
-      // with a narrow band of reflection for a polished-metal read.
+      // Light from 10 o'clock: bright upper-left, deeper lower-right, with a
+      // narrow band of reflection for a polished-metal read.
       canvas.drawPath(
         mark,
         Paint()
@@ -633,40 +661,35 @@ class _PlatinumMarkPainter extends CustomPainter {
             const [0.0, 0.30, 0.52, 0.66, 1.0],
           ),
       );
-      // Bevel: bright top edges, darker lower edges.
-      final bevelHi = Path()
-        ..moveTo(_outerL.dx * s, _outerL.dy * s)
-        ..lineTo(_innerL.dx * s, _innerL.dy * s)
-        ..moveTo(_innerR.dx * s, _innerR.dy * s)
-        ..lineTo(_outerR.dx * s, _outerR.dy * s);
-      canvas.drawPath(
-        bevelHi,
+      // Bevel: a bright hairline along the top of the dial.
+      canvas.drawArc(
+        Rect.fromCircle(center: c, radius: _r * s + t / 2 - 0.6),
+        200 * math.pi / 180,
+        130 * math.pi / 180,
+        false,
         Paint()
           ..color = Color.fromRGBO(255, 255, 255, 0.85 * fill)
           ..strokeWidth = 1.2
           ..style = PaintingStyle.stroke
           ..strokeCap = StrokeCap.round,
       );
-      // Fold: the right wing sits in shade, so the V reads as two
-      // stamped planes meeting on the centre crease.
+      // The right side falls into shade so the metal reads as turned (a
+      // soft horizontal ramp: a hard edge showed as a seam on the dial).
       canvas.save();
       canvas.clipPath(mark);
       canvas.drawRect(
-        Rect.fromLTRB(s / 2, 0, s, s),
+        Rect.fromLTWH(0, 0, s, s),
         Paint()
           ..shader = ui.Gradient.linear(
-            Offset(s / 2, _topY * s),
-            Offset(s / 2, _tip.dy * s),
-            [
-              Color.fromRGBO(0, 0, 0, 0.16 * fill),
-              Color.fromRGBO(0, 0, 0, 0.05 * fill),
-            ],
+            Offset(s * 0.40, 0),
+            Offset(s * 0.85, 0),
+            [const Color(0x00000000), Color.fromRGBO(0, 0, 0, 0.16 * fill)],
           ),
       );
       canvas.restore();
     }
 
-    // ── III. Engraving strokes (symmetric) with leading sparks ──
+    // ── III. Engraving: one stroke runs up the stem and round the dial ──
     if (engrave > 0) {
       final strokeAlpha = 1 - 0.55 * fill;
       final strokePaint = Paint()
@@ -681,17 +704,13 @@ class _PlatinumMarkPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
-      final segments = [
-        (p(_outerL), p(_tip)),
-        (p(_outerR), p(_tip)),
-        (p(_innerL), p(_innerTip)),
-        (p(_innerR), p(_innerTip)),
-      ];
-      for (final (from, to) in segments) {
-        final head = Offset.lerp(from, to, engrave)!;
-        canvas.drawLine(from, head, glowPaint);
-        canvas.drawLine(from, head, strokePaint);
-        if (engrave < 1) {
+      for (final metric in spinePath(s).computeMetrics()) {
+        final length = metric.length * engrave;
+        final drawn = metric.extractPath(0, length);
+        canvas.drawPath(drawn, glowPaint);
+        canvas.drawPath(drawn, strokePaint);
+        final head = metric.getTangentForOffset(length)?.position;
+        if (engrave < 1 && head != null) {
           final spark = math.sin(engrave * math.pi);
           canvas.drawCircle(
             head,
@@ -707,7 +726,6 @@ class _PlatinumMarkPainter extends CustomPainter {
           );
         }
       }
-      // Top edges stay as hairlines once the horizon has faded.
       if (fill > 0) {
         canvas.drawPath(
           mark,
@@ -720,7 +738,44 @@ class _PlatinumMarkPainter extends CustomPainter {
       }
     }
 
-    // ── IV-c. One specular glint travelling 10 o'clock → 4 o'clock ──
+    // ── IV-c. The charge: the last stretch of the dial lights emerald ──
+    final charge = ((fill - 0.4) / 0.6).clamp(0.0, 1.0);
+    if (charge > 0) {
+      final sweep = (_knobAngle - _chargeFrom) * charge;
+      final start = _knobAngle - sweep;
+      canvas.drawArc(
+        ring,
+        start,
+        sweep,
+        false,
+        Paint()
+          ..color = _emerald.withValues(
+            alpha: 0.45 * charge * (0.85 + 0.15 * breath),
+          )
+          ..strokeWidth = t
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9),
+      );
+      canvas.drawArc(
+        ring,
+        start,
+        sweep,
+        false,
+        Paint()
+          ..color = _emerald.withValues(alpha: charge)
+          ..strokeWidth = t
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round,
+      );
+      canvas.drawCircle(
+        _onRing(s, _knobAngle),
+        t * 0.37,
+        Paint()..color = _platinumHi.withValues(alpha: charge),
+      );
+    }
+
+    // ── IV-d. One specular glint travelling 10 o'clock → 4 o'clock ──
     if (glint > 0 && glint < 1) {
       canvas.save();
       canvas.clipPath(mark);

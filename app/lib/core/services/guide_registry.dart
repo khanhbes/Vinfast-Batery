@@ -48,7 +48,7 @@ extension GuideDestinationExtension on GuideDestination {
       GuideDestination.shellySetup =>
         english ? 'Start Shelly setup' : 'Bắt đầu thiết lập Shelly',
       GuideDestination.batteryBot =>
-        english ? 'Ask BatteryBot' : 'Hỏi BatteryBot',
+        english ? 'Ask Pinova Bot' : 'Hỏi Pinova Bot',
     };
   }
 

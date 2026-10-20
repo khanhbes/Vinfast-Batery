@@ -232,8 +232,8 @@ class NotificationCenterService {
       type: NotificationType.system,
       title: forceUpdate ? 'Cập nhật bắt buộc' : 'Có phiên bản mới',
       message: latestBuild > 0
-          ? 'VinFast Battery $latestVersion+$latestBuild đã sẵn sàng để tải về.'
-          : 'VinFast Battery $latestVersion đã sẵn sàng để tải về.',
+          ? 'Pinova $latestVersion+$latestBuild đã sẵn sàng để tải về.'
+          : 'Pinova $latestVersion đã sẵn sàng để tải về.',
       payload: {
         'latestVersion': latestVersion,
         'latestBuild': latestBuild,

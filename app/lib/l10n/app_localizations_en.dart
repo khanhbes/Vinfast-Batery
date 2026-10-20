@@ -9,7 +9,7 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
-  String get appTitle => 'VinFast Battery';
+  String get appTitle => 'Pinova';
 
   @override
   String get appTagline => 'Electric Vehicle Battery Management';

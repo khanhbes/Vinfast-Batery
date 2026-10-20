@@ -794,7 +794,7 @@ final List<AchievementDef> achievementCatalog = [
   _def(
     'explore_bot',
     'Điều khiển bằng lời',
-    'Bật sạc qua BatteryBot và xác nhận.',
+    'Bật sạc qua Pinova Bot và xác nhận.',
     AchievementCategory.explore,
     _s,
     Icons.record_voice_over_rounded,

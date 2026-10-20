@@ -144,7 +144,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 const LuxeAuthEmblem(),
                 const SizedBox(height: 18),
                 const LuxeAuthHeading(
-                  eyebrow: 'VinFast Battery',
+                  eyebrow: 'Pinova',
                   title: 'Chào mừng trở lại',
                   caption: 'Đăng nhập để quản lý pin và sạc xe.',
                 ),

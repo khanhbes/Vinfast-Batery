@@ -50,7 +50,7 @@ class BackgroundServiceConfig {
         isForegroundMode: true,
         // Notification config cho Foreground Service
         notificationChannelId: 'vinfast_bg_channel',
-        initialNotificationTitle: 'VinFast Battery',
+        initialNotificationTitle: 'Pinova',
         initialNotificationContent: 'Đang chạy ngầm...',
         foregroundServiceNotificationId: 888,
         foregroundServiceTypes: [AndroidForegroundType.location],

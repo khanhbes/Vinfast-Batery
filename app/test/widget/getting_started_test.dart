@@ -115,7 +115,7 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  test('BatteryBot speech drops emoji and keeps the message', () {
+  test('Pinova Bot speech drops emoji and keeps the message', () {
     expect(
       OnboardingStepFrame.cleanSpeech('Quãng đường lý tưởng! 🛵⚡ Đẹp nhất. 🏆'),
       'Quãng đường lý tưởng! Đẹp nhất.',

@@ -85,7 +85,7 @@ void main() {
         id: 'user_1',
         role: ChatRole.user,
         content:
-            'Xin chào BatteryBot, tôi muốn kiểm tra tình trạng pin xe Feliz hôm nay.',
+            'Xin chào Pinova Bot, tôi muốn kiểm tra tình trạng pin xe Feliz hôm nay.',
         timestamp: DateTime(2026, 10, 2, 10, 0),
       );
 
@@ -97,7 +97,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.textContaining('Xin chào BatteryBot'), findsOneWidget);
+      expect(find.textContaining('Xin chào Pinova Bot'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 

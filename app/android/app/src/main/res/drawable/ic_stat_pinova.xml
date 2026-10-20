@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pinova notification glyph: white "P" (stem + dial ring), QA 133. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <path
+        android:pathData="M146,412L146,210A110,110 0,1 1,185.3 294.3"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="56"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000" />
+</vector>

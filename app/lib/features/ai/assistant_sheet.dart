@@ -1201,7 +1201,7 @@ class _InteractiveAssistantSheetState
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        'BatteryBot',
+                                        'Pinova Bot',
                                         style: TextStyle(
                                           fontSize: 19,
                                           fontWeight: FontWeight.w500,
@@ -1222,7 +1222,7 @@ class _InteractiveAssistantSheetState
                                 ),
                                 IconButton(
                                   key: const Key('assistant_close_button'),
-                                  tooltip: 'Đóng BatteryBot',
+                                  tooltip: 'Đóng Pinova Bot',
                                   style: _glassIcon,
                                   icon: const Icon(
                                     Icons.close_rounded,
@@ -1510,7 +1510,7 @@ class _InteractiveAssistantSheetState
                                       ),
                                       decoration: const InputDecoration(
                                         hintText:
-                                            'Hỏi BatteryBot về pin, sạc, xe...',
+                                            'Hỏi Pinova Bot về pin, sạc, xe...',
                                         hintMaxLines: 1,
                                         hintStyle: TextStyle(
                                           fontSize: 14,
@@ -1568,7 +1568,7 @@ class _InteractiveAssistantSheetState
                                 return IconButton(
                                   key: const Key('assistant_send_button'),
                                   tooltip: _isTyping
-                                      ? 'Đang chờ BatteryBot trả lời'
+                                      ? 'Đang chờ Pinova Bot trả lời'
                                       : 'Gửi tin nhắn',
                                   style: IconButton.styleFrom(
                                     fixedSize: const Size(48, 48),

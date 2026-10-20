@@ -6,7 +6,7 @@
 
 ## 1. Tổng Quan Hệ Sinh Thái & Topology
 
-VinFast Battery là nền tảng quản lý pin xe máy điện (Feliz, Evo, Klara, Vento, Theon...) tích hợp AI và sạc thông minh IoT.
+**Pinova** (trước là "VinFast Battery"; đổi tên 20/10/2026, QA 133) là nền tảng quản lý pin xe máy điện VinFast (Feliz, Evo, Klara, Vento, Theon...) tích hợp AI và sạc thông minh IoT. Trợ lý là **Pinova Bot** (mã vẫn tên `BatteryBot*`). Logo/nguồn ảnh: `app/brand/`; package Android `com.bes.vinbatery` giữ nguyên.
 
 ```text
                                        ┌──────────────────────────────────────────────┐

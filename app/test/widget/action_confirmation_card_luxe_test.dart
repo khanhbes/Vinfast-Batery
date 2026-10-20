@@ -5,20 +5,22 @@ import 'package:vinfast_battery/features/ai/widgets/action_confirmation_card.dar
 
 /// Task 125: LUXE card, 48 dp controls, fits 320 dp at text ×1/×2.
 void main() {
-  FunctionCallAction action(String tool, {String status = 'pending'}) =>
-      FunctionCallAction(
-        callId: 'c1',
-        toolName: tool,
-        args: const {},
-        status: status,
-        cardData: const ActionConfirmationCardData(
-          title: 'Xác nhận bật sạc theo thời gian',
-          description: 'VinFast Feliz · Shelly 1',
-          estimatedTime: '1 phút',
-          safetyNote:
-              'Chỉ báo bật thành công sau khi đọc lại thấy ổ đã bật và hẹn giờ đang chạy.',
-        ),
-      );
+  FunctionCallAction action(
+    String tool, {
+    String status = 'pending',
+  }) => FunctionCallAction(
+    callId: 'c1',
+    toolName: tool,
+    args: const {},
+    status: status,
+    cardData: const ActionConfirmationCardData(
+      title: 'Xác nhận bật sạc theo thời gian',
+      description: 'VinFast Feliz · Shelly 1',
+      estimatedTime: '1 phút',
+      safetyNote:
+          'Chỉ báo bật thành công sau khi đọc lại thấy ổ đã bật và hẹn giờ đang chạy.',
+    ),
+  );
 
   Future<void> pump(
     WidgetTester tester,

@@ -138,10 +138,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void _showAboutDialog() {
     showAboutDialog(
       context: context,
-      applicationName: 'VinFast Battery',
+      applicationName: 'Pinova',
       applicationVersion: _appVersion,
-      applicationLegalese:
-          '© 2026 VinFast Battery. Quản lý pin và sạc xe máy điện.',
+      applicationLegalese: '© 2026 Pinova. Quản lý pin và sạc xe máy điện.',
       applicationIcon: Container(
         padding: EdgeInsets.all(8),
         decoration: BoxDecoration(
@@ -227,7 +226,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             icon: Icons.cloud_done_outlined,
             title: 'Dữ liệu tự lưu theo tài khoản',
             subtitle:
-                'Xe, lịch sử sạc và bộ nhớ BatteryBot lưu lên máy chủ khi có mạng',
+                'Xe, lịch sử sạc và bộ nhớ Pinova Bot lưu lên máy chủ khi có mạng',
           ),
           if (_developerUnlocked)
             LuxeSettingsRow(

@@ -34,7 +34,7 @@ def create_assistant_blueprint(*, engine, memory, quota, knowledge, auth_resolve
             return jsonify({"success": True, "data": {**early, "remainingToday": left}})
         allowed, remaining = quota.take(uid)
         if not allowed:
-            return fail(429, "ASSISTANT_QUOTA", "Bạn đã dùng hết lượt trò chuyện hôm nay. BatteryBot chuyển sang chế độ cơ bản.")
+            return fail(429, "ASSISTANT_QUOTA", "Bạn đã dùng hết lượt trò chuyện hôm nay. Pinova Bot chuyển sang chế độ cơ bản.")
         try:
             result = engine.chat(uid, body.get("message"), body.get("history"), body.get("context"))
         except GeminiUnavailable as error:

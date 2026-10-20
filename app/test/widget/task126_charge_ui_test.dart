@@ -212,7 +212,7 @@ void main() {
   }
 
   for (final scale in [1.0, 2.0]) {
-    testWidgets('BatteryBot trip card at 320 dp x$scale', (tester) async {
+    testWidgets('Pinova Bot trip card at 320 dp x$scale', (tester) async {
       await tester.binding.setSurfaceSize(const Size(320, 640));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(

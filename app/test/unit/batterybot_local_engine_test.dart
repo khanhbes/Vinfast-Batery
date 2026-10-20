@@ -94,7 +94,7 @@ void main() {
     'Mình muốn ',
     'Cho mình ',
     'Vui lòng ',
-    'Này BatteryBot ',
+    'Này Pinova Bot ',
     'Giúp mình ',
   ];
   for (final entry in questions.entries) {

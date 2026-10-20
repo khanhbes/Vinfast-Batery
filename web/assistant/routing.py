@@ -13,7 +13,7 @@ from collections import OrderedDict
 
 import requests
 
-_HEADERS = {"User-Agent": "VinFastBattery/1.3 (app com.bes.vinbatery; BatteryBot trip estimate; server vinfast-api)",
+_HEADERS = {"User-Agent": "Pinova/1.3 (app com.bes.vinbatery; Pinova Bot trip estimate; server vinfast-api)",
             "Accept-Language": "vi,en;q=0.8"}
 _NOMINATIM = "https://nominatim.openstreetmap.org/search"
 _OSRM = "https://router.project-osrm.org/route/v1/driving/{a};{b}"

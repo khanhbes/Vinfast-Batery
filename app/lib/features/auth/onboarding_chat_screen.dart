@@ -102,7 +102,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
   final math.Random _random = math.Random();
   BatteryBotMood _botMood = BatteryBotMood.greeting;
   String _botSpeech =
-      'Chào bạn! Mình là BatteryBot ⚡. Hãy cùng mình thiết lập chiếc xe VinFast để tối ưu pin nhé!';
+      'Chào bạn! Mình là Pinova Bot ⚡. Hãy cùng mình thiết lập chiếc xe VinFast để tối ưu pin nhé!';
 
   @override
   void initState() {
@@ -178,7 +178,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
     if (step >= 0 && step < concise.length) return concise[step];
     switch (step) {
       case 0:
-        return 'Chào bạn, mình là BatteryBot — trợ lý pin và sạc của bạn. Cùng thiết lập chiếc xe VinFast để theo dõi pin nhé.';
+        return 'Chào bạn, mình là Pinova Bot — trợ lý pin và sạc của bạn. Cùng thiết lập chiếc xe VinFast để theo dõi pin nhé.';
       case 1:
         return 'Woa, xe VinFast à? Khẩu vị sang và chuẩn gu lắm nè! Bạn đang cưỡi chiến mã nào thế? Chọn ngay nha 🛵';
       case 2:
@@ -228,7 +228,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
       case 4:
         return 'Di chuyển quanh phố thường tầm 15-30km. Bạn kéo thanh trượt ước lượng nhé! 🛣️';
       case 5:
-        return 'Mẹo vàng từ BatteryBot: Sạc trong khoảng 20% - 80% là bí quyết giúp pin LFP bền bỉ suốt 10 năm đấy! ✨';
+        return 'Mẹo vàng từ Pinova Bot: Sạc trong khoảng 20% - 80% là bí quyết giúp pin LFP bền bỉ suốt 10 năm đấy! ✨';
       case 6:
         return 'Chưa có sẵn cục sạc Shelly ở đây? Đừng ngại bấm "Bỏ qua", bạn có thể ghép nối bất cứ lúc nào trong Cài đặt! 🔌';
       case 7:
@@ -2286,7 +2286,7 @@ class OnboardingStepFrame extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
       child: Semantics(
         container: true,
-        label: 'BatteryBot: $speech',
+        label: 'Pinova Bot: $speech',
         button: onBotTap != null,
         child: GestureDetector(
           onTap: onBotTap,

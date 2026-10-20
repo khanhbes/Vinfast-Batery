@@ -433,7 +433,7 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
               const Text('NHẮC LỊCH TỪ BATTERYBOT', style: LuxeText.eyebrow),
               const SizedBox(height: 4),
               const Text(
-                'Chỉ xem tại đây. Sửa hoặc hủy qua BatteryBot.',
+                'Chỉ xem tại đây. Sửa hoặc hủy qua Pinova Bot.',
                 style: LuxeText.caption,
               ),
               const SizedBox(height: 10),

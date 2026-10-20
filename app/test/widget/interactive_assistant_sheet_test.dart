@@ -22,7 +22,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     // Kiểm tra header và thông điệp chào mừng
-    expect(find.text('BatteryBot'), findsOneWidget);
+    expect(find.text('Pinova Bot'), findsOneWidget);
     expect(
       find.text(
         'Chào bạn, mình hỗ trợ về xe, pin, sạc và Shelly. Bạn muốn xem gì?',

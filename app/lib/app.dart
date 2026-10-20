@@ -96,7 +96,7 @@ class _VinFastBatteryAppState extends State<VinFastBatteryApp> {
         // LUXE is dark only (Task 117): one theme for every screen.
         final theme = AppTheme.darkTheme;
         return MaterialApp(
-          title: 'VinFast Battery',
+          title: 'Pinova',
           debugShowCheckedModeBanner: false,
           theme: theme,
           darkTheme: theme,

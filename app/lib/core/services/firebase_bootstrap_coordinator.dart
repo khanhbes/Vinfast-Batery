@@ -74,7 +74,7 @@ class FirebaseBootstrapCoordinator {
     if (actual.projectId != expected.projectId ||
         actual.appId != expected.appId) {
       throw StateError(
-        'Firebase default app does not match the VinFast Battery configuration.',
+        'Firebase default app does not match the Pinova configuration.',
       );
     }
   }

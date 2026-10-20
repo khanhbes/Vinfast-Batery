@@ -53,7 +53,7 @@ class _TypingIndicatorDotsState extends State<TypingIndicatorDots>
         widget.dotColor ?? Theme.of(context).colorScheme.primary;
 
     return Semantics(
-      label: 'BatteryBot đang soạn câu trả lời...',
+      label: 'Pinova Bot đang soạn câu trả lời...',
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
         child: Row(

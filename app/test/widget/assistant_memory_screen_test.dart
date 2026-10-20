@@ -60,7 +60,7 @@ void main() {
   for (final scale in [1.0, 2.0]) {
     testWidgets('memory screen fits 320dp at text x$scale', (tester) async {
       await _pump(tester, scale);
-      expect(find.text('BatteryBot đang nhớ gì'), findsOneWidget);
+      expect(find.text('Pinova Bot đang nhớ gì'), findsOneWidget);
       await tester.scrollUntilVisible(find.textContaining('3/50'), 200);
       expect(find.textContaining('3/50'), findsOneWidget);
       await tester.scrollUntilVisible(
