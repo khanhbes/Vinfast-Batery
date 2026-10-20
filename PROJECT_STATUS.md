@@ -12,6 +12,43 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
+## 134. Kế hoạch — Premium Pro / Ultra và thanh toán (20/10/2026) — Đã duyệt, chưa làm
+
+**Quyết định của chủ app (20/10):** làm **Pha 1 trước, chưa thu tiền** (hệ thống quyền + chặn tính năng + màn nâng cấp + admin tặng gói tay); chọn kênh thu tiền sau (Google Play Billing nếu lên Play; payOS/VNPay/MoMo nếu chỉ phát hành APK). Tester hiện tại như người mới (dùng thử 7 ngày). An toàn/lõi luôn miễn phí.
+
+| Tính năng | Free | Pro | Ultra |
+|---|---|---|---|
+| Bật/dừng sạc, hẹn giờ, an toàn, pin/ODO, quét đồng hồ | ✓ | ✓ | ✓ |
+| Pinova Bot (tin/ngày) | 10 | 30 | 100 |
+| Lịch sử sạc | 30 ngày | không giới hạn + CSV | không giới hạn + CSV |
+| Sạc đến % tự ngắt + thông báo tiến độ realtime | — | ✓ | ✓ |
+| Giao diện tùy chọn (Tổng quan, Sạc) | — | ✓ | ✓ |
+| Số xe | 1 | 2 | không giới hạn |
+| Widget màn hình chính (mới) | — | ✓ | ✓ |
+| AI cá nhân (Huấn luyện) | — | — | ✓ |
+| Dự đoán hao pin theo lộ trình | — | — | ✓ |
+| Thống kê chi phí điện nâng cao | — | — | ✓ |
+| Sạc giờ giá điện thấp (mới) | — | — | ✓ |
+| Chia sẻ xe & ổ sạc với người nhà (mới) | — | — | ✓ |
+| Báo cáo sức khỏe pin tháng (mới) | — | — | ✓ |
+
+**Giá:** Pro 29.000đ/tháng · 249.000đ/năm · 599.000đ trọn đời; Ultra 49.000đ/tháng · 449.000đ/năm · 999.000đ trọn đời; dùng thử 7 ngày (gói tháng/năm).
+
+**Pha 1 — Quyền & chặn tính năng (không thu tiền):**
+1. Backend: `web/billing/` — `entitlements.py` (`users/{uid}/entitlements/current`: `tier` free|pro|ultra, `status` active|trial|grace|expired, `expiresAt`, `source` admin|trial|play|payos…, `history`); chỉ Admin SDK ghi (rules `allow write: if false` — **cần deploy rules**). `features.py`: bảng quyền một nguồn (`FEATURES = {"assistant_daily": {free:10, pro:30, ultra:100}, "history_days": …, "max_vehicles": …, "target_charging": pro, "learning_train": ultra, "trip_estimate": ultra, "cost_advanced": ultra, "offpeak_schedule": ultra, "share_vehicle": ultra, "monthly_report": ultra, "appearance": pro, "widget": pro}`) + `require_feature()` decorator. Endpoints: `GET /api/billing/me` (tier, quyền, hạn), `POST /api/billing/trial` (7 ngày, một lần/tài khoản), admin `POST /api/admin/billing/grant|revoke` (audit).
+2. Thực thi phía máy chủ: quota Pinova Bot theo tier (`assistant/quota.py`), `/api/learning/<vid>/train` (ultra), `estimate_trip`/`plan_trip` (ultra), phiên `stop_mode=target` (pro), lịch sử > 30 ngày + CSV (pro), số xe (onboarding/add vehicle), chia sẻ/offpeak/báo cáo (ultra). Hết hạn → về Free, **không** chặn Dừng sạc/an toàn, phiên đang chạy chạy hết.
+3. App: `entitlementProvider` (stream Firestore + cache), `FeatureGate`/`PremiumBadge`, màn **Pinova Premium** (LUXE: so sánh 3 cột, chọn gói, dùng thử 7 ngày; nút mua "Sắp mở" ở Pha 1), Cài đặt → "Gói của bạn" (tier, hạn, khôi phục), các điểm chặn: Giao diện, sạc đến %, AI cá nhân, Lộ trình, thêm xe, lịch sử cũ, chat hết lượt → gợi ý nâng cấp.
+4. Dashboard: trang **Gói & doanh thu** (tìm user, cấp/gia hạn/thu hồi, lịch sử), thống kê tier.
+5. Test: pytest (bảng quyền, hết hạn, trial một lần, admin grant/audit, mỗi endpoint chặn đúng tier), rules emulator, Flutter widget 320 dp ×1/×2 cho paywall + gate.
+
+**Pha 2 — Tính năng mới (Ultra/Pro):**
+- **Sạc giờ giá điện thấp:** khung giờ rẻ (mặc định 22:00–04:00, sửa được) + mục tiêu %/thời lượng; worker hẹn bật đúng giờ qua đúng đường ON hiện có (safety test, CloudDispatchGate, toggle_after trần, readback); yêu cầu một lần xác nhận vuốt/giữ/bấm khi tạo lịch; huỷ bất kỳ lúc nào; thông báo khi bắt đầu/kết thúc.
+- **Chia sẻ xe & ổ sạc:** mời bằng email/mã 6 ký tự, vai trò Xem / Điều khiển; dựa trên membership máy chủ đã có; chủ xe thu hồi được; thông báo cho mọi thành viên.
+- **Báo cáo sức khỏe pin tháng:** job ngày 1 hằng tháng: số lần sạc, kWh, chi phí, km/% đã học, xu hướng SoH, phiên bất thường → màn báo cáo + thông báo đẩy.
+- **Widget Android:** % pin, quãng đường ước tính, trạng thái sạc (home_widget), cập nhật khi app đồng bộ/push.
+
+**Pha 3 — Thu tiền (khi chọn kênh):** Google Play Billing (`in_app_purchase`, xác minh `purchases.subscriptionsv2`, RTDN Pub/Sub → `/api/billing/play/rtdn`, acknowledge) **hoặc** payOS/VNPay (`/api/billing/<gw>/create`, webhook có chữ ký, idempotent). Điều khoản, chính sách hoàn tiền, quyền riêng tư; tài khoản thử sandbox.
+
 ## 133. Task Completion Log — Thương hiệu mới "Pinova" (tên, logo, icon, splash, Pinova Bot) (20/10/2026) — Automated verified, APK +192 build xong, chưa cài
 
 - **Lý do:** chuẩn bị chia sẻ qua Google Play; tên/logo "VinFast" là nhãn hiệu của hãng. User chọn **Pinova** (Pin + nova) trong 4 phương án (trang so sánh Artifact), đối tượng người Việt, đổi cả BatteryBot → **Pinova Bot**.
