@@ -304,7 +304,7 @@ class _StagePainter extends CustomPainter {
         ..shader = ui.Gradient.linear(
           Offset.zero,
           Offset(0, h),
-          const [Color(0xFF2A2D32), Color(0xFF1E2024), Color(0xFF15171A)],
+          const [Color(0xFF3B3F46), Color(0xFF2B2E33), Color(0xFF1C1E22)],
           const [0.0, 0.62, 1.0],
         ),
     );
@@ -315,10 +315,10 @@ class _StagePainter extends CustomPainter {
       Paint()
         ..shader = ui.Gradient.radial(
           spot,
-          w * 0.55,
+          w * 0.62,
           [
-            Color.fromRGBO(255, 255, 255, 0.16 * glow),
-            const Color.fromRGBO(255, 255, 255, 0.05),
+            Color.fromRGBO(255, 255, 255, 0.26 * glow),
+            const Color.fromRGBO(255, 255, 255, 0.09),
             const Color(0x00FFFFFF),
           ],
           const [0.0, 0.45, 1.0],
@@ -332,7 +332,7 @@ class _StagePainter extends CustomPainter {
         ..shader = ui.Gradient.linear(
           Offset(0, horizon - 10),
           Offset(0, horizon + 10),
-          const [Color(0x00FFFFFF), Color(0x14FFFFFF), Color(0x00FFFFFF)],
+          const [Color(0x00FFFFFF), Color(0x1FFFFFFF), Color(0x00FFFFFF)],
           const [0.0, 0.5, 1.0],
         ),
     );
@@ -375,7 +375,7 @@ class _StagePainter extends CustomPainter {
         ..shader = ui.Gradient.radial(
           Offset(w / 2, h * 0.45),
           w * 0.75,
-          const [Color(0x00000000), Color(0x59000000)],
+          const [Color(0x00000000), Color(0x40000000)],
           const [0.6, 1.0],
         ),
     );
