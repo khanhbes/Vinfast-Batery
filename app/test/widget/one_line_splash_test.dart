@@ -43,7 +43,7 @@ void main() {
     expect(find.text('technical message must not leak'), findsNothing);
     expect(find.byType(Image), findsNothing);
     expect(find.byType(LinearProgressIndicator), findsNothing);
-    final name = find.text('PINOVA');
+    final name = find.text('Pinova');
     final opacity = tester.widget<Opacity>(
       find.ancestor(of: name, matching: find.byType(Opacity)).first,
     );

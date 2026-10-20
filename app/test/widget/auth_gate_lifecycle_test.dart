@@ -36,8 +36,8 @@ void main() {
       );
 
       // Initial frame renders splash screen
-      expect(find.text('PINOVA'), findsOneWidget);
-      expect(find.text('Hiểu pin · Sạc thông minh'), findsOneWidget);
+      expect(find.text('Pinova'), findsOneWidget);
+      expect(find.text('Pin xe máy điện, hiểu rõ từng phần trăm'), findsOneWidget);
       // Splash exposes the real bootstrap message only; it must not show a
       // fabricated percentage while Firebase is still resolving.
       expect(find.byType(LinearProgressIndicator), findsNothing);

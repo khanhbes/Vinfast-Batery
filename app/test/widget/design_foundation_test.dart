@@ -79,7 +79,7 @@ void main() {
       ),
     );
     await tester.pump(const Duration(milliseconds: 1));
-    expect(find.text('PINOVA'), findsOneWidget);
+    expect(find.text('Pinova'), findsOneWidget);
     expect(find.byType(LinearProgressIndicator), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());

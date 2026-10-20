@@ -9,8 +9,9 @@ import 'package:flutter/services.dart';
 /// PINOVA — "PLATINUM" SPLASH (V6 timeline, Pinova mark since QA 133)
 /// One 5000ms timeline: Ambient → Guide → Engrave → Platinum → Signature.
 /// A hairline traces the dial, one stroke engraves the P up its stem and
-/// round the dial, brushed platinum fills it, the charge lights emerald and a
-/// single glint crosses before the wordmark.
+/// round the dial, brushed platinum fills it, the emerald charge runs from the
+/// knob along its track, the knob lights and a single glint crosses before
+/// the "Pinova" wordmark (the owner's artwork, 20/10/2026).
 /// After the timeline the mark keeps a slow, subtle breath while AuthGate
 /// resolves startup, so a hold never looks frozen or needs a spinner.
 /// ============================================================================
@@ -397,28 +398,29 @@ class _BootstrapSplashState extends State<BootstrapSplash>
     child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // APP NAME — brushed platinum with a settling letter-spacing.
+        // APP NAME — the owner's lockup: "Pin" in ivory, "ova" in emerald,
+        // with a settling letter-spacing.
         ExcludeSemantics(
           child: FittedBox(
             fit: BoxFit.scaleDown,
-            child: ShaderMask(
-              blendMode: BlendMode.srcIn,
-              shaderCallback: (bounds) => const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [_platinumHi, _platinum, _platinumMid],
-                stops: [0.0, 0.55, 1.0],
-              ).createShader(bounds),
-              child: Text(
-                'PINOVA',
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w300,
-                  letterSpacing: 17 * _tracking.value,
-                ),
+            child: Text.rich(
+              const TextSpan(
+                children: [
+                  TextSpan(text: 'Pin'),
+                  TextSpan(
+                    text: 'ova',
+                    style: TextStyle(color: _emerald),
+                  ),
+                ],
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              style: TextStyle(
+                color: const Color(0xFFF2F2F0),
+                fontSize: 34,
+                height: 1.1,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 2.2 * _tracking.value,
               ),
             ),
           ),
@@ -446,13 +448,13 @@ class _BootstrapSplashState extends State<BootstrapSplash>
           child: Opacity(
             opacity: _taglineOpacity.value,
             child: const Text(
-              'Hiểu pin · Sạc thông minh',
+              'Pin xe máy điện, hiểu rõ từng phần trăm',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: _silverText,
-                fontSize: 12,
+                fontSize: 13,
                 fontWeight: FontWeight.w400,
-                letterSpacing: 2.0,
+                letterSpacing: 0.4,
               ),
             ),
           ),
@@ -487,78 +489,76 @@ class _PlatinumMarkPainter extends CustomPainter {
   final double glint;
   final double breath;
 
-  // Normalised Pinova "P" geometry inside the square mark area (width × width):
-  // a dial ring (the app's charge dial) on a stem, the last stretch of the
-  // ring lit emerald as the charge, a white knob at its end (QA 133).
-  static const _cx = 0.50;
-  static const _cy = 0.41;
-  static const _r = 0.215;
-  static const _t = 0.09; // stroke
-  static const _stemX = _cx - _r;
-  static const _stemBottom = 0.805;
-  static const _ringSweep = 310 * math.pi / 180; // 180° → 130° clockwise
-  static const _knobAngle = 130 * math.pi / 180;
-  static const _chargeFrom = 40 * math.pi / 180;
+  // Pinova mark geometry (QA 133, the owner's artwork), in the 1024-unit
+  // space it was measured in: a dial ring (centre 512,422.5, centre-line
+  // radius 180, stroke 75) on a stem flush with its left edge (to y 780),
+  // an emerald track (58 wide) set into the ring from 128° to 38°, a white
+  // knob at 128° and a dark gap around the knob's cap. The mark box is
+  // x 294–729, y 205–818; it is fitted to 86 % of the painter's width-high.
+  static const _cx = 512.0;
+  static const _cy = 422.5;
+  static const _r = 180.0;
+  static const _w = 75.0;
+  static const _track = 58.0;
+  static const _knobR = 18.5;
+  static const _stemBottom = 780.0;
+  static const _ringSweep = 308 * math.pi / 180; // 180° → 128° clockwise
+  static const _knobAngle = 128 * math.pi / 180;
+  static const _trackFrom = 38 * math.pi / 180;
 
-  static Offset _onRing(double s, double angle) => Offset(
-    (_cx + _r * math.cos(angle)) * s,
-    (_cy + _r * math.sin(angle)) * s,
-  );
+  static double _u(double s) => 0.86 * s / 613;
+  static Offset _p(double s, double x, double y) =>
+      Offset(s / 2 + (x - 511.5) * _u(s), 0.05 * s + (y - 205) * _u(s));
+  static Offset _centre(double s) => _p(s, _cx, _cy);
+  static Rect _ring(double s, [double extra = 0]) =>
+      Rect.fromCircle(center: _centre(s), radius: _r * _u(s) + extra);
+  static Offset _onRing(double s, double angle) =>
+      _p(s, _cx + _r * math.cos(angle), _cy + _r * math.sin(angle));
 
-  /// The P's centre line: stem from the foot up, then round the ring.
+  /// The P's centre line: stem from the foot up, then round the dial.
   static Path spinePath(double s) => Path()
-    ..moveTo(_stemX * s, _stemBottom * s)
-    ..lineTo(_stemX * s, _cy * s)
-    ..arcTo(
-      Rect.fromCircle(center: Offset(_cx * s, _cy * s), radius: _r * s),
-      math.pi,
-      _ringSweep,
-      false,
-    );
+    ..moveTo(_p(s, _cx - _r, _stemBottom).dx, _p(s, _cx - _r, _stemBottom).dy)
+    ..lineTo(_p(s, _cx - _r, _cy).dx, _p(s, _cx - _r, _cy).dy)
+    ..arcTo(_ring(s), math.pi, _ringSweep, false);
 
-  /// The filled P (ring band + round end + stem), for fills and clips.
+  /// The filled P (ring band + stem + knob cap), for fills and clips.
   static Path markPath(double s) {
-    final c = Offset(_cx * s, _cy * s);
-    final r = _r * s, t = _t * s;
+    final u = _u(s);
+    final w = _w * u;
     final band = Path()
-      ..arcTo(
-        Rect.fromCircle(center: c, radius: r + t / 2),
-        math.pi,
-        _ringSweep,
-        true,
-      )
-      ..arcTo(
-        Rect.fromCircle(center: c, radius: r - t / 2),
-        math.pi + _ringSweep,
-        -_ringSweep,
-        false,
-      )
+      ..arcTo(_ring(s, w / 2), math.pi, _ringSweep, true)
+      ..arcTo(_ring(s, -w / 2), math.pi + _ringSweep, -_ringSweep, false)
       ..close();
     final cap = Path()
-      ..addOval(Rect.fromCircle(center: _onRing(s, _knobAngle), radius: t / 2));
+      ..addOval(Rect.fromCircle(center: _onRing(s, _knobAngle), radius: w / 2));
+    final top = _p(s, _cx - _r, _cy);
+    final foot = _p(s, _cx - _r, _stemBottom);
     final stem = Path()
       ..addRRect(
         RRect.fromLTRBR(
-          _stemX * s - t / 2,
-          c.dy - t / 2,
-          _stemX * s + t / 2,
-          _stemBottom * s + t / 2,
-          Radius.circular(t / 2),
+          top.dx - w / 2,
+          top.dy - w / 2,
+          top.dx + w / 2,
+          foot.dy + w / 2,
+          Radius.circular(w / 2),
         ),
       );
     return Path.combine(
       PathOperation.union,
-      Path.combine(PathOperation.union, band, cap),
-      stem,
+      Path.combine(PathOperation.union, band, stem),
+      cap,
     );
   }
 
   @override
   void paint(Canvas canvas, Size size) {
     final s = size.width; // Mark occupies the top square; pedestal light below.
-    final c = Offset(_cx * s, _cy * s);
-    final ring = Rect.fromCircle(center: c, radius: _r * s);
-    final t = _t * s;
+    final u = _u(s);
+    final w = _w * u;
+    final c = _centre(s);
+    final ring = _ring(s);
+    final knob = _onRing(s, _knobAngle);
+    final foot = _p(s, _cx - _r, _stemBottom);
 
     // ── Halo behind the mark: appears with the metal, breathes on hold ──
     final haloStrength =
@@ -576,7 +576,7 @@ class _PlatinumMarkPainter extends CustomPainter {
     }
 
     // ── I. Point of light at the top of the future dial ──
-    final top = Offset(c.dx, c.dy - _r * s);
+    final top = Offset(c.dx, c.dy - _r * u);
     if (dot > 0 && horizon < 1) {
       final o = dot * (1 - horizon);
       canvas.drawCircle(
@@ -596,12 +596,17 @@ class _PlatinumMarkPainter extends CustomPainter {
     // ── II. Hairline guide: the dial traced once round from the top ──
     if (horizon > 0 && fill < 1) {
       final fadeOut = (1 - fill) * (1 - 0.6 * horizonCentreFade);
-      final guide = Paint()
-        ..color = Color.fromRGBO(240, 241, 243, 0.55 * fadeOut)
-        ..strokeWidth = 1.1
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round;
-      canvas.drawArc(ring, -math.pi / 2, 2 * math.pi * horizon, false, guide);
+      canvas.drawArc(
+        ring,
+        -math.pi / 2,
+        2 * math.pi * horizon,
+        false,
+        Paint()
+          ..color = Color.fromRGBO(240, 241, 243, 0.55 * fadeOut)
+          ..strokeWidth = 1.1
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round,
+      );
       canvas.drawArc(
         ring,
         -math.pi / 2,
@@ -619,7 +624,7 @@ class _PlatinumMarkPainter extends CustomPainter {
 
     // ── IV-a. Pedestal light: a soft elliptical sheen under the stem ──
     if (fill > 0) {
-      final centre = Offset(s / 2, _stemBottom * s + t / 2 + 14);
+      final centre = Offset(s / 2, foot.dy + w / 2 + 14);
       canvas.save();
       canvas.translate(centre.dx, centre.dy);
       canvas.scale(1, 0.18);
@@ -643,14 +648,12 @@ class _PlatinumMarkPainter extends CustomPainter {
           ..color = Color.fromRGBO(0, 0, 0, 0.55 * fill)
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12),
       );
-      // Light from 10 o'clock: bright upper-left, deeper lower-right, with a
-      // narrow band of reflection for a polished-metal read.
       canvas.drawPath(
         mark,
         Paint()
           ..shader = ui.Gradient.linear(
-            Offset(s * 0.10, s * 0.18),
-            Offset(s * 0.86, s * 0.86),
+            Offset(s * 0.10, s * 0.10),
+            Offset(s * 0.86, s * 0.90),
             [
               _platinumHi.withValues(alpha: fill),
               _platinum.withValues(alpha: fill),
@@ -661,22 +664,22 @@ class _PlatinumMarkPainter extends CustomPainter {
             const [0.0, 0.30, 0.52, 0.66, 1.0],
           ),
       );
-      // Bevel: a bright hairline along the top of the dial.
-      canvas.drawArc(
-        Rect.fromCircle(center: c, radius: _r * s + t / 2 - 0.6),
-        200 * math.pi / 180,
-        130 * math.pi / 180,
-        false,
-        Paint()
-          ..color = Color.fromRGBO(255, 255, 255, 0.85 * fill)
-          ..strokeWidth = 1.2
-          ..style = PaintingStyle.stroke
-          ..strokeCap = StrokeCap.round,
-      );
-      // The right side falls into shade so the metal reads as turned (a
-      // soft horizontal ramp: a hard edge showed as a seam on the dial).
+      // Brushed grain: fine concentric lines across the dial.
       canvas.save();
       canvas.clipPath(mark);
+      final grain = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.6;
+      for (var i = -3; i <= 3; i++) {
+        grain.color = Color.fromRGBO(
+          255,
+          255,
+          255,
+          (0.05 + 0.03 * (i % 2)) * fill,
+        );
+        canvas.drawCircle(c, _r * u + i * w / 7, grain);
+      }
+      // The right side falls into shade so the metal reads as turned.
       canvas.drawRect(
         Rect.fromLTWH(0, 0, s, s),
         Paint()
@@ -687,11 +690,55 @@ class _PlatinumMarkPainter extends CustomPainter {
           ),
       );
       canvas.restore();
+      // Bevel: a bright hairline along the top of the dial.
+      canvas.drawArc(
+        _ring(s, w / 2 - 0.6),
+        200 * math.pi / 180,
+        130 * math.pi / 180,
+        false,
+        Paint()
+          ..color = Color.fromRGBO(255, 255, 255, 0.85 * fill)
+          ..strokeWidth = 1.2
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round,
+      );
+      // The knob's cap stands apart from the stem on a dark gap.
+      canvas.drawCircle(
+        knob,
+        w / 2 + 9 * u,
+        Paint()..color = BootstrapSplash.background.withValues(alpha: fill),
+      );
+      canvas.drawCircle(
+        knob,
+        w / 2,
+        Paint()
+          ..shader = ui.Gradient.linear(
+            knob - Offset(w / 2, w / 2),
+            knob + Offset(w / 2, w / 2),
+            [
+              _platinumHi.withValues(alpha: fill),
+              _platinumMid.withValues(alpha: fill),
+            ],
+          ),
+      );
+      // The emerald track's groove, set into the dial.
+      canvas.drawArc(
+        ring,
+        _trackFrom,
+        _knobAngle - _trackFrom,
+        false,
+        Paint()
+          ..color = const Color(0xFF0B1A14).withValues(alpha: fill)
+          ..strokeWidth = _track * u
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round,
+      );
     }
 
-    // ── III. Engraving: one stroke runs up the stem and round the dial ──
+    // ── III. Engraving: one stroke up the stem and round the dial ──
     if (engrave > 0) {
-      final strokeAlpha = 1 - 0.55 * fill;
+      // The engraving gives way to the metal (no hairline left on the P).
+      final strokeAlpha = (1 - fill).clamp(0.0, 1.0);
       final strokePaint = Paint()
         ..color = Color.fromRGBO(244, 245, 247, strokeAlpha)
         ..strokeWidth = 1.2
@@ -726,52 +773,55 @@ class _PlatinumMarkPainter extends CustomPainter {
           );
         }
       }
-      if (fill > 0) {
-        canvas.drawPath(
-          mark,
-          Paint()
-            ..color = Color.fromRGBO(255, 255, 255, 0.35 * fill)
-            ..strokeWidth = 0.8
-            ..style = PaintingStyle.stroke
-            ..strokeJoin = StrokeJoin.round,
-        );
-      }
     }
 
-    // ── IV-c. The charge: the last stretch of the dial lights emerald ──
-    final charge = ((fill - 0.4) / 0.6).clamp(0.0, 1.0);
+    // ── IV-c. The charge: emerald runs from the knob along the track ──
+    final charge = ((fill - 0.35) / 0.65).clamp(0.0, 1.0);
     if (charge > 0) {
-      final sweep = (_knobAngle - _chargeFrom) * charge;
-      final start = _knobAngle - sweep;
+      final sweep =
+          -(_knobAngle - _trackFrom) * Curves.easeInOut.transform(charge);
+      final glowAlpha = 0.55 * charge * (0.8 + 0.2 * breath);
       canvas.drawArc(
         ring,
-        start,
+        _knobAngle,
         sweep,
         false,
         Paint()
-          ..color = _emerald.withValues(
-            alpha: 0.45 * charge * (0.85 + 0.15 * breath),
-          )
-          ..strokeWidth = t
+          ..color = _emerald.withValues(alpha: glowAlpha)
+          ..strokeWidth = _track * u
           ..style = PaintingStyle.stroke
           ..strokeCap = StrokeCap.round
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9),
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10),
       );
       canvas.drawArc(
         ring,
-        start,
+        _knobAngle,
         sweep,
         false,
         Paint()
-          ..color = _emerald.withValues(alpha: charge)
-          ..strokeWidth = t
+          ..shader = ui.Gradient.linear(knob, _onRing(s, _trackFrom), [
+            _emerald,
+            const Color(0xFF5EEAB1),
+          ])
+          ..strokeWidth = _track * u
           ..style = PaintingStyle.stroke
           ..strokeCap = StrokeCap.round,
       );
+    }
+    // The knob lights white once the metal is in.
+    if (fill > 0) {
+      final k = ((fill - 0.2) / 0.8).clamp(0.0, 1.0);
       canvas.drawCircle(
-        _onRing(s, _knobAngle),
-        t * 0.37,
-        Paint()..color = _platinumHi.withValues(alpha: charge),
+        knob,
+        _knobR * u * 1.9,
+        Paint()
+          ..color = Color.fromRGBO(255, 255, 255, 0.35 * k)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
+      );
+      canvas.drawCircle(
+        knob,
+        _knobR * u,
+        Paint()..color = Colors.white.withValues(alpha: k),
       );
     }
 
