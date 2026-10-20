@@ -79,7 +79,7 @@ void main() {
       await tester.pump();
 
       expect(finished, isTrue);
-      final branding = find.text('Pinova');
+      final branding = find.byKey(const ValueKey('pinova-wordmark'));
       for (final opacity in tester.widgetList<Opacity>(
         find.ancestor(of: branding, matching: find.byType(Opacity)),
       )) {
@@ -111,7 +111,7 @@ void main() {
         expect(tester.takeException(), isNull);
       }
       expect(calls, 1);
-      expect(find.text('Pinova'), findsOneWidget);
+      expect(find.byKey(const ValueKey('pinova-wordmark')), findsOneWidget);
       expect(find.byType(CircularProgressIndicator), findsNothing);
       expect(find.byType(LinearProgressIndicator), findsNothing);
       await tester.pumpWidget(const SizedBox());
@@ -124,8 +124,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 3800));
 
       // Verify brand text is present in the widget tree
-      expect(find.text('Pinova'), findsOneWidget);
-      expect(find.text('Pin xe máy điện, hiểu rõ từng phần trăm'), findsOneWidget);
+      expect(find.byKey(const ValueKey('pinova-wordmark')), findsOneWidget);
     });
   });
 }

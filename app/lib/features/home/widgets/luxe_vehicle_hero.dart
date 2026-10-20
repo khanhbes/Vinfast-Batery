@@ -149,50 +149,58 @@ class _LuxeVehicleHeroState extends State<LuxeVehicleHero>
                 ),
               ],
             ),
-            SizedBox(
-              height: 176,
-              child: AnimatedBuilder(
-                animation: Listenable.merge([_float, _enter]),
-                builder: (context, _) {
-                  final t = _float.value;
-                  final e = Curves.easeOutCubic.transform(_enter.value);
-                  final bob = 3 * math.sin(t * 2 * math.pi);
-                  return Stack(
-                    alignment: Alignment.bottomCenter,
-                    children: [
-                      Positioned.fill(
-                        child: CustomPaint(
-                          painter: _StagePainter(
-                            glow: 0.85 + 0.15 * math.sin(t * 2 * math.pi),
+            const SizedBox(height: 10),
+            // A lit studio box (QA 133): a graphite cyclorama with a top
+            // spotlight, a floor and a contact shadow, so black wheels and
+            // dark paint keep their silhouette instead of sinking into the
+            // page's near-black.
+            ClipRRect(
+              borderRadius: BorderRadius.circular(22),
+              child: SizedBox(
+                height: 232,
+                child: AnimatedBuilder(
+                  animation: Listenable.merge([_float, _enter]),
+                  builder: (context, _) {
+                    final t = _float.value;
+                    final e = Curves.easeOutCubic.transform(_enter.value);
+                    final bob = 3 * math.sin(t * 2 * math.pi);
+                    return Stack(
+                      alignment: Alignment.bottomCenter,
+                      children: [
+                        Positioned.fill(
+                          child: CustomPaint(
+                            painter: _StagePainter(
+                              glow: 0.85 + 0.15 * math.sin(t * 2 * math.pi),
+                            ),
                           ),
                         ),
-                      ),
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 18,
-                        top: 6,
-                        child: Opacity(
-                          opacity: e,
-                          child: Transform.translate(
-                            offset: Offset(24 * (1 - e), bob),
-                            child: VehiclePhoto(
-                              url: photo,
-                              reflection: true,
-                              fallback: LuxeScooterArt(
-                                level: (percent ?? 0) / 100,
-                                spin: t,
+                        Positioned(
+                          left: 6,
+                          right: 6,
+                          bottom: 16,
+                          top: 10,
+                          child: Opacity(
+                            opacity: e,
+                            child: Transform.translate(
+                              offset: Offset(24 * (1 - e), bob),
+                              child: VehiclePhoto(
+                                url: photo,
+                                reflection: true,
+                                fallback: LuxeScooterArt(
+                                  level: (percent ?? 0) / 100,
+                                  spin: t,
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
-                  );
-                },
+                      ],
+                    );
+                  },
+                ),
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 12),
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -287,38 +295,88 @@ class _StagePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final c = Offset(size.width / 2, size.height * 0.55);
-    canvas.drawOval(
-      Rect.fromCenter(
-        center: c,
-        width: size.width * 0.95,
-        height: size.height * 1.1,
-      ),
+    final w = size.width, h = size.height;
+    final rect = Offset.zero & size;
+    // Cyclorama: graphite wall falling to a darker floor.
+    canvas.drawRect(
+      rect,
       Paint()
-        ..shader = ui.Gradient.radial(c, size.width * 0.5, [
-          Color.fromRGBO(255, 255, 255, 0.07 * glow),
-          const Color(0x00FFFFFF),
+        ..shader = ui.Gradient.linear(
+          Offset.zero,
+          Offset(0, h),
+          const [Color(0xFF2A2D32), Color(0xFF1E2024), Color(0xFF15171A)],
+          const [0.0, 0.62, 1.0],
+        ),
+    );
+    // Top spotlight behind the vehicle: the silhouette reads against it.
+    final spot = Offset(w / 2, h * 0.36);
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = ui.Gradient.radial(
+          spot,
+          w * 0.55,
+          [
+            Color.fromRGBO(255, 255, 255, 0.16 * glow),
+            const Color.fromRGBO(255, 255, 255, 0.05),
+            const Color(0x00FFFFFF),
+          ],
+          const [0.0, 0.45, 1.0],
+        ),
+    );
+    // Horizon where the wall meets the floor: a soft light band.
+    final horizon = h * 0.70;
+    canvas.drawRect(
+      Rect.fromLTWH(0, horizon - 10, w, 20),
+      Paint()
+        ..shader = ui.Gradient.linear(
+          Offset(0, horizon - 10),
+          Offset(0, horizon + 10),
+          const [Color(0x00FFFFFF), Color(0x14FFFFFF), Color(0x00FFFFFF)],
+          const [0.0, 0.5, 1.0],
+        ),
+    );
+    // Contact shadow under the wheels.
+    final base = Offset(w / 2, h - 20);
+    canvas.save();
+    canvas.translate(base.dx, base.dy);
+    canvas.scale(1, 0.16);
+    canvas.drawCircle(
+      Offset.zero,
+      w * 0.36,
+      Paint()
+        ..shader = ui.Gradient.radial(Offset.zero, w * 0.36, const [
+          Color(0x8C000000),
+          Color(0x00000000),
         ]),
     );
-    final base = Offset(size.width / 2, size.height - 14);
+    canvas.restore();
+    // The emerald floor line of the LUXE stage, kept faint.
     canvas.drawOval(
-      Rect.fromCenter(center: base, width: size.width * 0.72, height: 22),
-      Paint()
-        ..shader = ui.Gradient.radial(base, size.width * 0.36, [
-          LuxeColors.emerald.withValues(alpha: 0.22 * glow),
-          const Color(0x0034D399),
-        ]),
-    );
-    canvas.drawOval(
-      Rect.fromCenter(center: base, width: size.width * 0.6, height: 14),
+      Rect.fromCenter(center: base, width: w * 0.62, height: 12),
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1
         ..shader = ui.Gradient.linear(
-          base.translate(-size.width * 0.3, 0),
-          base.translate(size.width * 0.3, 0),
-          const [Color(0x00FFFFFF), Color(0x66FFFFFF), Color(0x00FFFFFF)],
+          base.translate(-w * 0.31, 0),
+          base.translate(w * 0.31, 0),
+          [
+            const Color(0x0034D399),
+            LuxeColors.emerald.withValues(alpha: 0.45 * glow),
+            const Color(0x0034D399),
+          ],
           const [0.0, 0.5, 1.0],
+        ),
+    );
+    // Edge vignette so the box sits inside the dark card.
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = ui.Gradient.radial(
+          Offset(w / 2, h * 0.45),
+          w * 0.75,
+          const [Color(0x00000000), Color(0x59000000)],
+          const [0.6, 1.0],
         ),
     );
   }

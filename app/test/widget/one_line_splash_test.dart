@@ -41,9 +41,10 @@ void main() {
     expect(calls, 1);
     expect(find.text('Đang kết nối…'), findsOneWidget);
     expect(find.text('technical message must not leak'), findsNothing);
-    expect(find.byType(Image), findsNothing);
+    // Only the owner's logo layers (QA 133), nothing else.
+    expect(find.byKey(const ValueKey('splash-logo-metal')), findsOneWidget);
     expect(find.byType(LinearProgressIndicator), findsNothing);
-    final name = find.text('Pinova');
+    final name = find.byKey(const ValueKey('pinova-wordmark'));
     final opacity = tester.widget<Opacity>(
       find.ancestor(of: name, matching: find.byType(Opacity)).first,
     );

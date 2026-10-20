@@ -5,13 +5,15 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'pinova_brand.dart';
+
 /// ============================================================================
 /// PINOVA — "PLATINUM" SPLASH (V6 timeline, Pinova mark since QA 133)
 /// One 5000ms timeline: Ambient → Guide → Engrave → Platinum → Signature.
 /// A hairline traces the dial, one stroke engraves the P up its stem and
-/// round the dial, brushed platinum fills it, the emerald charge runs from the
-/// knob along its track, the knob lights and a single glint crosses before
-/// the "Pinova" wordmark (the owner's artwork, 20/10/2026).
+/// round the dial, then the owner's metal logo (real artwork) fades in, its
+/// emerald charge runs from the knob along the track, a soft glint crosses
+/// and the drawn "PINOVA" wordmark settles (QA 133, 20/10/2026).
 /// After the timeline the mark keeps a slow, subtle breath while AuthGate
 /// resolves startup, so a hold never looks frozen or needs a spinner.
 /// ============================================================================
@@ -60,12 +62,7 @@ class BootstrapSplash extends StatefulWidget {
 }
 
 // ── Platinum palette ──
-const _platinumHi = Color(0xFFF7F7F5);
-const _platinum = Color(0xFFD6D8DB);
-const _platinumMid = Color(0xFF9EA2A8);
-const _platinumLow = Color(0xFF5E6268);
 const _silverText = Color(0xFF8E9298);
-const _emerald = Color(0xFF34D399);
 
 class _BootstrapSplashState extends State<BootstrapSplash>
     with TickerProviderStateMixin, WidgetsBindingObserver {
@@ -126,6 +123,12 @@ class _BootstrapSplashState extends State<BootstrapSplash>
     0.66,
     curve: Curves.easeOut,
   );
+  // The emerald charge runs along the real logo's track (1200 ms).
+  late final Animation<double> _charge = _interval(
+    0.60,
+    0.84,
+    curve: Curves.easeInOutCubic,
+  );
   late final Animation<double> _glint = _interval(
     0.64,
     0.78,
@@ -146,11 +149,6 @@ class _BootstrapSplashState extends State<BootstrapSplash>
     0.68,
     0.78,
     curve: Curves.easeInOutCubic,
-  );
-  late final Animation<double> _taglineOpacity = _interval(
-    0.70,
-    0.80,
-    curve: Curves.easeOut,
   );
 
   // Hold the final brand while AuthGate resolves startup. The route owner
@@ -338,21 +336,7 @@ class _BootstrapSplashState extends State<BootstrapSplash>
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          RepaintBoundary(
-                            child: CustomPaint(
-                              size: const Size(176, 186),
-                              painter: _PlatinumMarkPainter(
-                                ambient: _ambient.value,
-                                dot: _dot.value,
-                                horizon: _horizon.value,
-                                horizonCentreFade: _horizonCentreFade.value,
-                                engrave: _engrave.value,
-                                fill: _fill.value,
-                                glint: _glint.value,
-                                breath: _finished ? breath : 0.0,
-                              ),
-                            ),
-                          ),
+                          RepaintBoundary(child: _mark(breath)),
                           const SizedBox(height: 26),
                           _signature(),
                         ],
@@ -393,43 +377,118 @@ class _BootstrapSplashState extends State<BootstrapSplash>
     ),
   );
 
+  /// The real logo: the prelude painter underneath, then the metal art and
+  /// the emerald charge revealed along the track from the knob.
+  Widget _mark(double breath) {
+    const box = Size(176, 186);
+    final logo = _PlatinumMarkPainter.logoRect(box.width);
+    final fill = _fill.value;
+    final charge = _charge.value;
+    final glint = _glint.value;
+    return SizedBox.fromSize(
+      size: box,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(
+            child: CustomPaint(
+              painter: _PlatinumMarkPainter(
+                ambient: _ambient.value,
+                dot: _dot.value,
+                horizon: _horizon.value,
+                horizonCentreFade: _horizonCentreFade.value,
+                engrave: _engrave.value,
+                fill: fill,
+                glint: glint,
+                breath: _finished ? breath : 0.0,
+              ),
+            ),
+          ),
+          if (fill > 0)
+            Positioned.fromRect(
+              rect: logo,
+              child: Opacity(
+                opacity: fill,
+                child: Transform.scale(
+                  scale: 0.96 + 0.04 * fill,
+                  child: ShaderMask(
+                    blendMode: BlendMode.srcATop,
+                    shaderCallback: (bounds) {
+                      final x = -0.6 + 2.2 * glint;
+                      final on = glint > 0 && glint < 1;
+                      return LinearGradient(
+                        begin: Alignment(x - 0.5, -1),
+                        end: Alignment(x + 0.5, 1),
+                        colors: [
+                          const Color(0x00FFFFFF),
+                          Color.fromRGBO(
+                            255,
+                            255,
+                            255,
+                            on ? 0.38 * math.sin(glint * math.pi) : 0,
+                          ),
+                          const Color(0x00FFFFFF),
+                        ],
+                        stops: const [0.35, 0.5, 0.65],
+                      ).createShader(bounds);
+                    },
+                    child: Image.asset(
+                      PinovaLogoAssets.metal,
+                      key: const ValueKey('splash-logo-metal'),
+                      fit: BoxFit.contain,
+                      filterQuality: FilterQuality.medium,
+                      excludeFromSemantics: true,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          if (charge > 0)
+            Positioned.fromRect(
+              rect: logo,
+              child: Opacity(
+                opacity: (0.88 + 0.12 * (_finished ? breath : 1)).clamp(
+                  0.0,
+                  1.0,
+                ),
+                child: ClipPath(
+                  clipper: _ChargeSweepClipper(charge),
+                  child: Image.asset(
+                    PinovaLogoAssets.charge,
+                    key: const ValueKey('splash-logo-charge'),
+                    fit: BoxFit.contain,
+                    filterQuality: FilterQuality.medium,
+                    excludeFromSemantics: true,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _signature() => Opacity(
     opacity: _typoOpacity.value,
     child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // APP NAME — the owner's lockup: "Pin" in ivory, "ova" in emerald,
-        // with a settling letter-spacing.
-        ExcludeSemantics(
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text.rich(
-              const TextSpan(
-                children: [
-                  TextSpan(text: 'Pin'),
-                  TextSpan(
-                    text: 'ova',
-                    style: TextStyle(color: _emerald),
-                  ),
-                ],
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              style: TextStyle(
-                color: const Color(0xFFF2F2F0),
-                fontSize: 34,
-                height: 1.1,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 2.2 * _tracking.value,
-              ),
-            ),
+        // The drawn "PINOVA" wordmark; its tracking settles and the O's
+        // emerald arc fills with the charge.
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: PinovaWordmark(
+            key: const ValueKey('pinova-wordmark'),
+            height: 22,
+            tracking: 0.30 + _tracking.value,
+            charge: _charge.value,
           ),
         ),
-        const SizedBox(height: 14),
-        // Hairline divider opening from the centre.
+        const SizedBox(height: 18),
+        // Hairline opening from the centre.
         SizedBox(
           height: 1,
-          width: 44 * _divider.value,
+          width: 56 * _divider.value,
           child: const DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -442,26 +501,38 @@ class _BootstrapSplashState extends State<BootstrapSplash>
             ),
           ),
         ),
-        const SizedBox(height: 14),
-        // TAGLINE in muted silver.
-        ExcludeSemantics(
-          child: Opacity(
-            opacity: _taglineOpacity.value,
-            child: const Text(
-              'Pin xe máy điện, hiểu rõ từng phần trăm',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: _silverText,
-                fontSize: 13,
-                fontWeight: FontWeight.w400,
-                letterSpacing: 0.4,
-              ),
-            ),
-          ),
-        ),
       ],
     ),
   );
+}
+
+/// A wedge from the logo's dial centre, opening clockwise-back from just past
+/// the knob towards the track's far end: the charge runs knob → right.
+class _ChargeSweepClipper extends CustomClipper<Path> {
+  _ChargeSweepClipper(this.progress);
+
+  final double progress;
+
+  @override
+  Path getClip(Size size) {
+    final k = size.width / 1024;
+    final c = PinovaLogoAssets.ringCentre * k;
+    const start = PinovaLogoAssets.knobAngle + 0.45; // glow round the knob
+    const end = PinovaLogoAssets.trackEndAngle - 0.35; // and past the tip
+    final sweep = (end - start) * progress;
+    return Path()
+      ..moveTo(c.dx, c.dy)
+      ..arcTo(
+        Rect.fromCircle(center: c, radius: size.width),
+        start,
+        sweep,
+        false,
+      )
+      ..close();
+  }
+
+  @override
+  bool shouldReclip(_ChargeSweepClipper old) => old.progress != progress;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -489,76 +560,59 @@ class _PlatinumMarkPainter extends CustomPainter {
   final double glint;
   final double breath;
 
-  // Pinova mark geometry (QA 133, the owner's artwork), in the 1024-unit
-  // space it was measured in: a dial ring (centre 512,422.5, centre-line
-  // radius 180, stroke 75) on a stem flush with its left edge (to y 780),
-  // an emerald track (58 wide) set into the ring from 128° to 38°, a white
-  // knob at 128° and a dark gap around the knob's cap. The mark box is
-  // x 294–729, y 205–818; it is fitted to 86 % of the painter's width-high.
-  static const _cx = 512.0;
-  static const _cy = 422.5;
-  static const _r = 180.0;
-  static const _w = 75.0;
-  static const _track = 58.0;
-  static const _knobR = 18.5;
-  static const _stemBottom = 780.0;
-  static const _ringSweep = 308 * math.pi / 180; // 180° → 128° clockwise
-  static const _knobAngle = 128 * math.pi / 180;
-  static const _trackFrom = 38 * math.pi / 180;
+  // The prelude (point of light, dial guide, engraving) is drawn on the
+  // geometry of the owner's metal logo; the metal and its emerald charge are
+  // the real artwork (PinovaLogoAssets), laid over it by the splash.
 
-  static double _u(double s) => 0.86 * s / 613;
-  static Offset _p(double s, double x, double y) =>
-      Offset(s / 2 + (x - 511.5) * _u(s), 0.05 * s + (y - 205) * _u(s));
-  static Offset _centre(double s) => _p(s, _cx, _cy);
-  static Rect _ring(double s, [double extra = 0]) =>
-      Rect.fromCircle(center: _centre(s), radius: _r * _u(s) + extra);
-  static Offset _onRing(double s, double angle) =>
-      _p(s, _cx + _r * math.cos(angle), _cy + _r * math.sin(angle));
+  /// Where the logo art sits in the painter's box: its mark fitted to 86 %
+  /// of the width-high, top at 5 %.
+  static Rect logoRect(double s) {
+    final box = PinovaLogoAssets.markBox;
+    final l = 0.86 * s * 1024 / box.height;
+    return Rect.fromLTWH(
+      s / 2 - box.center.dx * l / 1024,
+      0.05 * s - box.top * l / 1024,
+      l,
+      l,
+    );
+  }
+
+  static Offset _p(double s, double x, double y) {
+    final r = logoRect(s);
+    return Offset(r.left + x * r.width / 1024, r.top + y * r.height / 1024);
+  }
+
+  static double _scale(double s) => logoRect(s).width / 1024;
 
   /// The P's centre line: stem from the foot up, then round the dial.
-  static Path spinePath(double s) => Path()
-    ..moveTo(_p(s, _cx - _r, _stemBottom).dx, _p(s, _cx - _r, _stemBottom).dy)
-    ..lineTo(_p(s, _cx - _r, _cy).dx, _p(s, _cx - _r, _cy).dy)
-    ..arcTo(_ring(s), math.pi, _ringSweep, false);
-
-  /// The filled P (ring band + stem + knob cap), for fills and clips.
-  static Path markPath(double s) {
-    final u = _u(s);
-    final w = _w * u;
-    final band = Path()
-      ..arcTo(_ring(s, w / 2), math.pi, _ringSweep, true)
-      ..arcTo(_ring(s, -w / 2), math.pi + _ringSweep, -_ringSweep, false)
-      ..close();
-    final cap = Path()
-      ..addOval(Rect.fromCircle(center: _onRing(s, _knobAngle), radius: w / 2));
-    final top = _p(s, _cx - _r, _cy);
-    final foot = _p(s, _cx - _r, _stemBottom);
-    final stem = Path()
-      ..addRRect(
-        RRect.fromLTRBR(
-          top.dx - w / 2,
-          top.dy - w / 2,
-          top.dx + w / 2,
-          foot.dy + w / 2,
-          Radius.circular(w / 2),
-        ),
+  static Path spinePath(double s) {
+    const c = PinovaLogoAssets.ringCentre;
+    const r = PinovaLogoAssets.ringRadius;
+    final foot = _p(s, c.dx - r, PinovaLogoAssets.stemFoot);
+    final joint = _p(s, c.dx - r, c.dy);
+    return Path()
+      ..moveTo(foot.dx, foot.dy)
+      ..lineTo(joint.dx, joint.dy)
+      ..arcTo(
+        Rect.fromCircle(center: _p(s, c.dx, c.dy), radius: r * _scale(s)),
+        math.pi,
+        2 * math.pi - (math.pi - PinovaLogoAssets.knobAngle),
+        false,
       );
-    return Path.combine(
-      PathOperation.union,
-      Path.combine(PathOperation.union, band, stem),
-      cap,
-    );
   }
 
   @override
   void paint(Canvas canvas, Size size) {
-    final s = size.width; // Mark occupies the top square; pedestal light below.
-    final u = _u(s);
-    final w = _w * u;
-    final c = _centre(s);
-    final ring = _ring(s);
-    final knob = _onRing(s, _knobAngle);
-    final foot = _p(s, _cx - _r, _stemBottom);
+    final s = size.width;
+    const rc = PinovaLogoAssets.ringCentre;
+    final c = _p(s, rc.dx, rc.dy);
+    final radius = PinovaLogoAssets.ringRadius * _scale(s);
+    final ring = Rect.fromCircle(center: c, radius: radius);
+    final foot = _p(
+      s,
+      rc.dx - PinovaLogoAssets.ringRadius,
+      PinovaLogoAssets.stemFoot,
+    );
 
     // ── Halo behind the mark: appears with the metal, breathes on hold ──
     final haloStrength =
@@ -576,7 +630,7 @@ class _PlatinumMarkPainter extends CustomPainter {
     }
 
     // ── I. Point of light at the top of the future dial ──
-    final top = Offset(c.dx, c.dy - _r * u);
+    final top = Offset(c.dx, c.dy - radius);
     if (dot > 0 && horizon < 1) {
       final o = dot * (1 - horizon);
       canvas.drawCircle(
@@ -593,9 +647,7 @@ class _PlatinumMarkPainter extends CustomPainter {
       );
     }
 
-    // ── II. Hairline guide: the dial traced once round from the top. It
-    // gives way to the engraving (the P leaves a gap at 128°–180° that a
-    // full guide circle would still show) and to the metal. ──
+    // ── II. Hairline guide round the dial; it yields to the engraving ──
     if (horizon > 0 && fill < 1 && engrave < 1) {
       final fadeOut =
           (1 - fill) * (1 - 0.6 * horizonCentreFade) * (1 - engrave);
@@ -623,11 +675,9 @@ class _PlatinumMarkPainter extends CustomPainter {
       );
     }
 
-    final mark = markPath(s);
-
-    // ── IV-a. Pedestal light: a soft elliptical sheen under the stem ──
+    // ── Pedestal light under the stem, with the metal ──
     if (fill > 0) {
-      final centre = Offset(s / 2, foot.dy + w / 2 + 14);
+      final centre = Offset(s / 2, foot.dy + 28);
       canvas.save();
       canvas.translate(centre.dx, centre.dy);
       canvas.scale(1, 0.18);
@@ -643,124 +693,8 @@ class _PlatinumMarkPainter extends CustomPainter {
       canvas.restore();
     }
 
-    // ── IV-b. Brushed platinum body, composed in one layer so it fades in
-    // as a single solid piece (separately faded parts read as overlapping
-    // ghosts on the device). ──
-    if (fill > 0) {
-      canvas.saveLayer(
-        Rect.fromLTWH(-s * 0.3, -s * 0.3, s * 1.6, s * 1.6),
-        Paint()..color = Color.fromRGBO(0, 0, 0, fill),
-      );
-      canvas.drawPath(
-        mark.shift(const Offset(0, 6)),
-        Paint()
-          ..color = const Color.fromRGBO(0, 0, 0, 0.55)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12),
-      );
-      canvas.drawPath(
-        mark,
-        Paint()
-          ..shader = ui.Gradient.linear(
-            Offset(s * 0.10, s * 0.10),
-            Offset(s * 0.86, s * 0.90),
-            const [
-              _platinumHi,
-              _platinum,
-              _platinumMid,
-              _platinum,
-              _platinumLow,
-            ],
-            const [0.0, 0.30, 0.52, 0.66, 1.0],
-          ),
-      );
-      canvas.save();
-      canvas.clipPath(mark);
-      // Brushed grain: fine concentric lines across the dial.
-      final grain = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 0.6;
-      for (var i = -3; i <= 3; i++) {
-        grain.color = Color.fromRGBO(255, 255, 255, 0.05 + 0.03 * (i % 2));
-        canvas.drawCircle(c, _r * u + i * w / 7, grain);
-      }
-      // The right side falls into shade so the metal reads as turned.
-      canvas.drawRect(
-        Rect.fromLTWH(0, 0, s, s),
-        Paint()
-          ..shader = ui.Gradient.linear(
-            Offset(s * 0.40, 0),
-            Offset(s * 0.85, 0),
-            const [Color(0x00000000), Color.fromRGBO(0, 0, 0, 0.16)],
-          ),
-      );
-      // ── IV-d. One soft specular glint across the metal only (an
-      // additive full-strength band blew the P out to white). ──
-      if (glint > 0 && glint < 1) {
-        final x = ui.lerpDouble(-0.4 * s, 1.4 * s, glint)!;
-        final band = s * 0.22;
-        final intensity = math.sin(glint * math.pi);
-        canvas.drawRect(
-          Rect.fromLTWH(0, 0, s, s),
-          Paint()
-            ..blendMode = BlendMode.plus
-            ..shader = ui.Gradient.linear(
-              Offset(x - band, 0),
-              Offset(x + band, s * 0.6),
-              [
-                const Color(0x00FFFFFF),
-                Color.fromRGBO(255, 255, 255, 0.42 * intensity),
-                const Color(0x00FFFFFF),
-              ],
-              const [0.0, 0.5, 1.0],
-            ),
-        );
-      }
-      canvas.restore();
-      // Bevel: a bright hairline along the top of the dial.
-      canvas.drawArc(
-        _ring(s, w / 2 - 0.6),
-        200 * math.pi / 180,
-        130 * math.pi / 180,
-        false,
-        Paint()
-          ..color = const Color.fromRGBO(255, 255, 255, 0.85)
-          ..strokeWidth = 1.2
-          ..style = PaintingStyle.stroke
-          ..strokeCap = StrokeCap.round,
-      );
-      // The knob's cap stands apart from the stem on a dark gap.
-      canvas.drawCircle(
-        knob,
-        w / 2 + 9 * u,
-        Paint()..color = BootstrapSplash.background,
-      );
-      canvas.drawCircle(
-        knob,
-        w / 2,
-        Paint()
-          ..shader = ui.Gradient.linear(
-            knob - Offset(w / 2, w / 2),
-            knob + Offset(w / 2, w / 2),
-            const [_platinumHi, _platinumMid],
-          ),
-      );
-      // The emerald track's groove, set into the dial.
-      canvas.drawArc(
-        ring,
-        _trackFrom,
-        _knobAngle - _trackFrom,
-        false,
-        Paint()
-          ..color = const Color(0xFF0B1A14)
-          ..strokeWidth = _track * u
-          ..style = PaintingStyle.stroke
-          ..strokeCap = StrokeCap.round,
-      );
-      canvas.restore();
-    }
-
     // ── III. Engraving: one stroke up the stem and round the dial; it is
-    // gone by the time the metal is half in. ──
+    // gone once the metal is a third in. ──
     if (engrave > 0 && fill < 0.34) {
       final strokeAlpha = (1 - 3 * fill).clamp(0.0, 1.0);
       final strokePaint = Paint()
@@ -797,57 +731,6 @@ class _PlatinumMarkPainter extends CustomPainter {
           );
         }
       }
-    }
-
-    // ── IV-c. The charge: once the metal is nearly solid, emerald runs
-    // from the knob along the track. ──
-    final charge = ((fill - 0.55) / 0.45).clamp(0.0, 1.0);
-    if (charge > 0) {
-      final sweep =
-          -(_knobAngle - _trackFrom) * Curves.easeInOut.transform(charge);
-      final glowAlpha = 0.55 * charge * (0.8 + 0.2 * breath);
-      canvas.drawArc(
-        ring,
-        _knobAngle,
-        sweep,
-        false,
-        Paint()
-          ..color = _emerald.withValues(alpha: glowAlpha)
-          ..strokeWidth = _track * u
-          ..style = PaintingStyle.stroke
-          ..strokeCap = StrokeCap.round
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10),
-      );
-      canvas.drawArc(
-        ring,
-        _knobAngle,
-        sweep,
-        false,
-        Paint()
-          ..shader = ui.Gradient.linear(knob, _onRing(s, _trackFrom), [
-            _emerald,
-            const Color(0xFF5EEAB1),
-          ])
-          ..strokeWidth = _track * u
-          ..style = PaintingStyle.stroke
-          ..strokeCap = StrokeCap.round,
-      );
-    }
-    // The knob lights white with the charge.
-    final k = ((fill - 0.5) / 0.5).clamp(0.0, 1.0);
-    if (k > 0) {
-      canvas.drawCircle(
-        knob,
-        _knobR * u * 1.9,
-        Paint()
-          ..color = Color.fromRGBO(255, 255, 255, 0.35 * k)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
-      );
-      canvas.drawCircle(
-        knob,
-        _knobR * u,
-        Paint()..color = Colors.white.withValues(alpha: k),
-      );
     }
   }
 
