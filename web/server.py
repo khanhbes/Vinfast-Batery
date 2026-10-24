@@ -1243,10 +1243,8 @@ def commit_mobile_onboarding():
             return jsonify({'success': False, 'error': f'{key} out of range', 'userMessage': 'Thông tin onboarding ngoài phạm vi cho phép.', 'code': 'invalidProfile', 'retryable': False}), 400
         validated_profile_numbers[key] = number
 
-    try:
-        max_vehicles = max(1, min(int(os.environ.get('MAX_VEHICLES_PER_ACCOUNT', '2')), 10))
-    except ValueError:
-        max_vehicles = 2
+    # QA 135: the plan decides (Free 1, Pro 2, Ultra 10).
+    max_vehicles = _plan_limit(request._uid, 'max_vehicles', 2)
     deterministic_vehicle_id = str(uuid.uuid5(
         uuid.NAMESPACE_URL,
         f'vinfast-battery:onboarding:{request._uid}:{operation_id}',
@@ -1423,13 +1421,8 @@ def user_add_vehicle():
     """Create a vehicle from one reviewed catalog configuration."""
     if not _fs():
         return jsonify({'success': False, 'error': 'Firestore unavailable'}), 503
-    try:
-        max_vehicles = max(
-            1,
-            min(int(os.environ.get('MAX_VEHICLES_PER_ACCOUNT', '2')), 10),
-        )
-    except ValueError:
-        max_vehicles = 2
+    # QA 135: the plan decides (Free 1, Pro 2, Ultra 10).
+    max_vehicles = _plan_limit(request._uid, 'max_vehicles', 2)
     result, status = create_user_vehicle(
         _fs(),
         request._uid,
@@ -6668,6 +6661,45 @@ def app_download():
 # ═══════════════════════════════════════════════════════════════
 # RUN
 # ═══════════════════════════════════════════════════════════════
+def _billing_user_lookup(query):
+    """Portal search: an email or a UID → the Firebase account."""
+    if _firebase_auth is None:
+        return {'uid': query, 'email': None, 'displayName': None}
+    try:
+        record = (_firebase_auth.get_user_by_email(query) if '@' in query
+                  else _firebase_auth.get_user(query))
+    except Exception:
+        return None
+    return {'uid': record.uid, 'email': record.email, 'displayName': record.display_name}
+
+
+def _register_billing():
+    """Pinova Premium (QA 135): plans, gates, promo codes."""
+    from billing.entitlements import EntitlementService
+    from billing.promos import PromoService
+    from billing.routes import create_billing_blueprint
+
+    db = _firestore_db if _firebase_available else None
+    entitlements = EntitlementService(db)
+    promos = PromoService(db)
+    app.register_blueprint(create_billing_blueprint(
+        entitlements=entitlements, promos=promos, auth_resolver=_verify_token,
+        require_admin=require_admin, audit=_audit, user_lookup=_billing_user_lookup,
+    ))
+    app.extensions['billing'] = entitlements
+
+
+_register_billing()
+
+
+def _plan_limit(uid, name, fallback):
+    billing = app.extensions.get('billing')
+    if billing is None:
+        return fallback
+    value = billing.limit(uid, name)
+    return fallback if value is None else value
+
+
 def _register_smart_charge_cloud_first():
     """Register modular Smart Charge API after AI/Firebase dependencies exist."""
     from shelly.crypto import verify_shelly_trust
@@ -6759,6 +6791,8 @@ def _register_smart_charge_cloud_first():
         trust_verifier=verify_shelly_trust,
         dev_admin_allowed=_dev_admin_allowed,
     ))
+    # QA 135: Premium gates (target charging, target edit, training).
+    service.entitlements = app.extensions.get('billing')
     app.extensions['smart_charge_service'] = service
     print(f'✅ Smart Charge Cloud-First provider: {provider.name}')
 
@@ -6779,6 +6813,7 @@ def _register_assistant():
     db = _firestore_db if _firebase_available else None
     service = app.extensions.get('smart_charge_service')
     repository = getattr(service, 'repository', None)
+    billing = app.extensions.get('billing')
 
     def live_reader(uid, vehicle_id):
         return service.live(uid, vehicle_id)
@@ -6810,9 +6845,13 @@ def _register_assistant():
         router=OsmRouter(),
         charge_estimator=charge_estimator if service else None,
         trip_params_reader=trip_params_reader if service else None,
+        entitlements=app.extensions.get('billing'),
     )
     app.register_blueprint(create_assistant_blueprint(
-        engine=engine, memory=memory, quota=DailyQuota(store), knowledge=knowledge,
+        engine=engine, memory=memory, knowledge=knowledge,
+        # QA 135: Free 10 / Pro 30 / Ultra 100 messages a day.
+        quota=DailyQuota(store, limit_for=(lambda uid: billing.limit(uid, 'assistant_daily'))
+                         if billing is not None else None),
         auth_resolver=_verify_token, require_admin=require_admin, db=db, audit=_audit,
     ))
     app.extensions['assistant_engine'] = engine

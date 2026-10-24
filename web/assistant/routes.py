@@ -30,7 +30,7 @@ def create_assistant_blueprint(*, engine, memory, quota, knowledge, auth_resolve
         # never cost a message from the daily quota (Task 125).
         early = engine.precheck(body.get("message"))
         if early:
-            left = max(0, quota.limit - quota.used_today(uid))
+            left = max(0, quota.limit_for(uid) - quota.used_today(uid))
             return jsonify({"success": True, "data": {**early, "remainingToday": left}})
         allowed, remaining = quota.take(uid)
         if not allowed:
@@ -55,7 +55,7 @@ def create_assistant_blueprint(*, engine, memory, quota, knowledge, auth_resolve
         facts = [{**item, "createdAt": item["createdAt"].isoformat() if hasattr(item.get("createdAt"), "isoformat")
                   else item.get("createdAt")} for item in memory.facts(uid)]
         return jsonify({"success": True, "data": {"settings": memory.settings(uid), "facts": facts,
-                                                  "usage": {"usedToday": quota.used_today(uid), "limit": quota.limit}}})
+                                                  "usage": {"usedToday": quota.used_today(uid), "limit": quota.limit_for(uid)}}})
 
     @bp.delete("/api/assistant/memory/<fact_id>")
     def delete_fact(fact_id):

@@ -332,7 +332,7 @@ def habits_from(sessions: list[dict]) -> dict:
 class AssistantEngine:
     def __init__(self, *, gemini: GeminiClient, knowledge: KnowledgeBase, memory: AssistantMemory,
                  live_reader=None, history_reader=None, clock=None, router=None, charge_estimator=None,
-                 trip_params_reader=None):
+                 trip_params_reader=None, entitlements=None):
         self.gemini = gemini
         self.knowledge = knowledge
         self.memory = memory
@@ -344,6 +344,17 @@ class AssistantEngine:
         self.charge_estimator = charge_estimator
         # Task 127: the vehicle's trained trip model (or ODO/catalog prior).
         self.trip_params_reader = trip_params_reader
+        # QA 135: Pinova Premium (billing.EntitlementService); None = all on.
+        self.entitlements = entitlements
+
+    def _premium_block(self, uid: str, feature: str) -> dict | None:
+        if self.entitlements is None or self.entitlements.allows(uid, feature):
+            return None
+        from billing.features import required_tier
+        tier = required_tier(feature)
+        return {"error": "premiumRequired", "requiredTier": tier,
+                "message": f"Tính năng này thuộc gói {'Ultra' if tier == 'ultra' else 'Pro'}; "
+                           "mời người dùng xem gói Premium (open_premium)."}
 
     # -- prompt -------------------------------------------------------------
     def system_prompt(self, uid: str, message: str, context: dict, facts: list[dict], learning: bool) -> str:
@@ -414,7 +425,7 @@ class AssistantEngine:
                     state["memoryChanged"] = True
                 return {"removed": removed}
             if name == "estimate_trip":
-                return self._estimate_trip(uid, args, context, state)
+                return self._premium_block(uid, "trip_estimate") or self._estimate_trip(uid, args, context, state)
             if name == "estimate_charge":
                 return self._estimate_charge(uid, args, context, state)
         except Exception as error:  # a tool failure becomes an honest answer

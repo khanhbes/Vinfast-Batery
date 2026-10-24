@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, BrainCircuit, History, Settings, ChevronLeft, ChevronRight, LogOut, Database, CarFront, Code2, Wrench, Plug, Bot } from 'lucide-react';
+import { LayoutDashboard, Users, BrainCircuit, History, Settings, ChevronLeft, ChevronRight, LogOut, Database, CarFront, Code2, Wrench, Plug, Bot, Crown } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ const primaryItems = [
   { icon: CarFront, label: 'Danh mục xe', path: '/catalog' },
   { icon: Plug, label: 'Thiết bị Shelly', path: '/shelly' },
   { icon: Bot, label: 'Pinova Bot', path: '/assistant' },
+  { icon: Crown, label: 'Gói & khuyến mãi', path: '/premium' },
 ];
 const developItems = [
   { icon: Wrench, label: 'Công cụ kỹ thuật', path: '/develop' },

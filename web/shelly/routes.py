@@ -105,6 +105,18 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None, de
     def ok(data=None, **extra):
         return jsonify({"success": True, "data": data, **extra})
 
+    def plan_window(uid, items, next_cursor=None):
+        """QA 135: Free keeps the last 30 days of history; older rows are
+        hidden (never deleted) and come back on Pro."""
+        billing = getattr(service, "entitlements", None)
+        days = billing.limit(uid, "history_days") if billing is not None else None
+        if not days:
+            return items, next_cursor, False
+        cutoff = utcnow() - timedelta(days=days)
+        kept = [item for item in items if not item.created_at or item.created_at >= cutoff]
+        limited = len(kept) < len(items)
+        return kept, (None if limited else next_cursor), limited
+
     def execute(action):
         try:
             return action()
@@ -621,7 +633,8 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None, de
         # limit*3 client-side approximation could hide valid records when a
         # user had many sessions on another vehicle.
         items, _ = repository.history_page(uid, limit, None, strategy, vehicle_id)
-        return ok([item.to_dict() for item in items])
+        items, _, limited = plan_window(uid, items)
+        return ok([item.to_dict() for item in items], limitedByPlan=limited)
 
     @bp.get("/api/smart-charging/history")
     @authenticated
@@ -638,8 +651,10 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None, de
         strategy = request.args.get("strategy") or None
         vehicle_id = request.args.get("vehicleId") or None
         items, next_cursor = repository.history_page(uid, limit, cursor, strategy, vehicle_id)
+        items, next_cursor, limited = plan_window(uid, items, next_cursor)
         return ok(
-            {"items": [item.to_dict() for item in items], "nextCursor": next_cursor},
+            {"items": [item.to_dict() for item in items], "nextCursor": next_cursor,
+             "limitedByPlan": limited},
             diagnostics={"skippedLegacyDocuments": repository.last_history_skipped},
         )
 

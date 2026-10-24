@@ -26,3 +26,6 @@
 !assistant/
 !assistant/**/
 !assistant/**/*.py
+!billing/
+!billing/**/
+!billing/**/*.py

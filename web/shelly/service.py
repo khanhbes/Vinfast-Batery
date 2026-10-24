@@ -121,6 +121,21 @@ class SmartChargeService(VehicleLearningMixin):
         # Task 126: worker-only "charging now" progress pushes (app closed).
         self.progress_notifier = progress_notifier
         self._last_progress_push: dict[str, datetime] = {}
+        # QA 135: Pinova Premium gates (billing.EntitlementService); None in
+        # tests and local tools means everything is allowed.
+        self.entitlements = None
+
+    def require_feature(self, uid: str, feature: str) -> None:
+        """Premium gate for something *new* (never for Stop or safety)."""
+        if self.entitlements is None or self.entitlements.allows(uid, feature):
+            return
+        from billing.features import required_tier
+        tier = required_tier(feature)
+        raise SmartChargeError(
+            "premiumRequired",
+            f"Tính năng này cần gói {'Ultra' if tier == 'ultra' else 'Pro'}.",
+            403,
+        )
 
     def _code_refresh_required(self, uid: str, device_id: str) -> bool:
         """Display hint for /live: cached 60 s (two Firestore reads per poll
@@ -890,6 +905,8 @@ class SmartChargeService(VehicleLearningMixin):
         active = self.repository.current_session(uid, device_id=binding.device_id)
         if active:
             raise SmartChargeError("activeSessionConflict", "Đang có một phiên sạc hoạt động", 409)
+        if preview.stop_mode == "target":
+            self.require_feature(uid, "target_charging")
         if not preview.ai_charge_eligible:
             raise SmartChargeError(
                 "aiPredictionUnavailable",

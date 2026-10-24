@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
-const titles: Record<string, string> = { '/': 'Tổng quan đội xe', '/users': 'Tài khoản', '/catalog': 'Danh mục xe', '/shelly': 'Thiết bị Shelly', '/assistant': 'Kiến thức BatteryBot', '/develop': 'Công cụ kỹ thuật', '/data': 'Dữ liệu ứng dụng', '/ai': 'Trung tâm AI', '/audit': 'Nhật ký quản trị', '/settings': 'Cài đặt' };
+const titles: Record<string, string> = { '/': 'Tổng quan đội xe', '/users': 'Tài khoản', '/catalog': 'Danh mục xe', '/shelly': 'Thiết bị Shelly', '/assistant': 'Kiến thức Pinova Bot', '/premium': 'Gói Premium & khuyến mãi', '/develop': 'Công cụ kỹ thuật', '/data': 'Dữ liệu ứng dụng', '/ai': 'Trung tâm AI', '/audit': 'Nhật ký quản trị', '/settings': 'Cài đặt' };
 
 export function Topbar({ userName, userEmail, onSignOut, scrolled = false }: {
   userName?: string | null; userEmail?: string | null; onSignOut: () => void; scrolled?: boolean;

@@ -226,3 +226,17 @@ export const adminSaveAssistantKnowledge = (id, data) =>
   apiFetch('/api/admin/assistant/knowledge/' + encodeURIComponent(id), { method: 'PUT', body: JSON.stringify(data) })
 export const adminDeleteAssistantKnowledge = (id) =>
   apiFetch('/api/admin/assistant/knowledge/' + encodeURIComponent(id), { method: 'DELETE' })
+
+// Pinova Premium (QA 135): plans and promo codes
+export const adminBillingStats = () => apiFetch('/api/admin/billing/stats', { silent: true })
+export const adminBillingUser = (q) =>
+  apiFetch('/api/admin/billing/user?q=' + encodeURIComponent(q), { silent: true })
+export const adminBillingGrant = (data) =>
+  apiFetch('/api/admin/billing/grant', { method: 'POST', body: JSON.stringify(data) })
+export const adminBillingRevoke = (uid) =>
+  apiFetch('/api/admin/billing/revoke', { method: 'POST', body: JSON.stringify({ uid }) })
+export const adminPromos = () => apiFetch('/api/admin/promos', { silent: true })
+export const adminCreatePromo = (data) =>
+  apiFetch('/api/admin/promos', { method: 'POST', body: JSON.stringify(data) })
+export const adminUpdatePromo = (code, data) =>
+  apiFetch('/api/admin/promos/' + encodeURIComponent(code), { method: 'PATCH', body: JSON.stringify(data) })

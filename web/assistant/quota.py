@@ -1,4 +1,5 @@
-"""Daily message quota per account (50/day by default, Task 124).
+"""Daily message quota per account (Task 124; per plan since QA 135:
+Free 10, Pro 30, Ultra 100 via ``limit_for``).
 
 Uses the East Asia table store when configured (atomic ETag counter), else a
 process-local counter (tests / local dev). Over the limit the phone falls
@@ -21,12 +22,23 @@ def _key(uid: str, day: str) -> str:
 
 
 class DailyQuota:
-    def __init__(self, store=None, limit: int = DAILY_LIMIT, clock=None):
+    def __init__(self, store=None, limit: int = DAILY_LIMIT, clock=None, limit_for=None, partition=_PARTITION):
         self.store = store
         self.limit = limit
+        self._limit_for = limit_for
+        self.partition = partition
         self.clock = clock or (lambda: datetime.now(_VN))
         self._local: dict[str, int] = {}
         self._lock = threading.Lock()
+
+    def limit_for(self, uid: str) -> int:
+        if self._limit_for is None:
+            return self.limit
+        try:
+            value = self._limit_for(uid)
+        except Exception:
+            return self.limit
+        return self.limit if value is None else int(value)
 
     def _day(self) -> str:
         return self.clock().strftime("%Y%m%d")
@@ -34,7 +46,7 @@ class DailyQuota:
     def take(self, uid: str) -> tuple[bool, int]:
         """Count one message. Returns (allowed, remaining after this one)."""
         key = _key(uid, self._day())
-        limit = self.limit
+        limit = self.limit_for(uid)
 
         def bump(data, _now):
             used = int(data.get("used") or 0)
@@ -44,7 +56,7 @@ class DailyQuota:
 
         if self.store is not None:
             try:
-                return self.store.change_entity(_PARTITION, key, bump)
+                return self.store.change_entity(self.partition, key, bump)
             except Exception:
                 pass  # store hiccup must not block the user; fall back below
         with self._lock:
@@ -64,7 +76,7 @@ class DailyQuota:
 
         if self.store is not None:
             try:
-                self.store.change_entity(_PARTITION, key, give_back)
+                self.store.change_entity(self.partition, key, give_back)
                 return
             except Exception:
                 pass
@@ -76,7 +88,7 @@ class DailyQuota:
         key = _key(uid, self._day())
         if self.store is not None:
             try:
-                return int(self.store.read_entity(_PARTITION, key).get("used") or 0)
+                return int(self.store.read_entity(self.partition, key).get("used") or 0)
             except Exception:
                 pass
         with self._lock:

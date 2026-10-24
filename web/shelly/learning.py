@@ -307,6 +307,7 @@ class VehicleLearningMixin:
             raise self._learning_error("invalidModel", "Mô hình không hợp lệ.")
         mode = "retrain" if mode == "retrain" else "finetune"
         vehicle = self._owned_vehicle(uid, vehicle_id)
+        self.require_feature(uid, "learning_train")
         profile = self.personal_profile(uid, vehicle_id)
         if not profile.consent_enabled:
             raise self._learning_error("consentDisabled", "AI cá nhân đang tắt. Bật lại để huấn luyện.", 409)
