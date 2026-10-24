@@ -9,6 +9,7 @@ import 'data/services/notification_service.dart';
 import 'data/services/push_notification_service.dart';
 import 'features/ai/services/learning_flow.dart';
 import 'features/auth/auth_gate.dart';
+import 'features/support/help_center_screen.dart';
 import 'navigation/app_navigation.dart';
 import 'core/providers/app_providers.dart';
 import 'l10n/app_localizations.dart';
@@ -34,6 +35,13 @@ class _VinFastBatteryAppState extends State<VinFastBatteryApp> {
   }
 
   void _openPushNotification(Map<String, dynamic> data) {
+    if (data['event'] == 'support_reply') {
+      // QA 135: the Pinova team answered a support ticket.
+      _openNotification(
+        'support/${Uri.encodeComponent(data['ticketId']?.toString() ?? '')}',
+      );
+      return;
+    }
     final sessionId = data['sessionId']?.toString();
     final vehicleId = data['vehicleId']?.toString();
     if (sessionId == null || sessionId.isEmpty) return;
@@ -43,6 +51,15 @@ class _VinFastBatteryAppState extends State<VinFastBatteryApp> {
   }
 
   void _openNotification(String payload) {
+    if (payload.startsWith('support/')) {
+      final ticketId = Uri.decodeComponent(payload.substring(8));
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final context = AppPopup.navigatorKey.currentContext;
+        if (context == null) return;
+        HelpCenterScreen.open(context, ticketId: ticketId);
+      });
+      return;
+    }
     if (payload.startsWith('learning/')) {
       // Task 127: "enough data to train" opens AI cá nhân for that vehicle.
       final vehicleId = Uri.decodeComponent(payload.substring(9));

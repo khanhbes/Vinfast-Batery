@@ -240,3 +240,11 @@ export const adminCreatePromo = (data) =>
   apiFetch('/api/admin/promos', { method: 'POST', body: JSON.stringify(data) })
 export const adminUpdatePromo = (code, data) =>
   apiFetch('/api/admin/promos/' + encodeURIComponent(code), { method: 'PATCH', body: JSON.stringify(data) })
+
+// Support tickets (QA 135)
+export const adminSupportTickets = (status = '') =>
+  apiFetch('/api/admin/support' + (status ? '?status=' + encodeURIComponent(status) : ''), { silent: true })
+export const adminSupportTicket = (id) =>
+  apiFetch('/api/admin/support/' + encodeURIComponent(id), { silent: true })
+export const adminSupportReply = (id, data) =>
+  apiFetch('/api/admin/support/' + encodeURIComponent(id) + '/reply', { method: 'POST', body: JSON.stringify(data) })

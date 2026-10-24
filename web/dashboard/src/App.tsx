@@ -14,6 +14,7 @@ const DeveloperHub = lazy(() => import('@/pages/DeveloperHub'));
 import ShellyGateway from '@/pages/ShellyGateway';
 import AssistantKnowledge from '@/pages/AssistantKnowledge';
 const PremiumPlans = lazy(() => import('@/pages/PremiumPlans'));
+const SupportInbox = lazy(() => import('@/pages/SupportInbox'));
 import { PageLoadBoundary, PageLoading } from '@/components/PageLoadBoundary';
 import Login from '@/pages/Login';
 import { Toaster } from '@/components/ui/sonner';
@@ -60,6 +61,7 @@ function AppContent({ user, loading, sessionRevision }: { user: User | null; loa
               <Route path="/shelly" element={<ShellyGateway />} />
               <Route path="/assistant" element={<AssistantKnowledge />} />
               <Route path="/premium" element={<PremiumPlans />} />
+              <Route path="/support" element={<SupportInbox />} />
               <Route path="/ai" element={<DevelopModeGate><AiCenter /></DevelopModeGate>} />
               <Route path="/audit" element={<DevelopModeGate><AuditSystem /></DevelopModeGate>} />
               <Route path="/settings" element={<DevelopModeGate><Settings /></DevelopModeGate>} />

@@ -30,6 +30,7 @@ import '../maintenance/maintenance_screen.dart';
 import '../notifications/notification_center_screen.dart';
 import '../premium/premium_banner.dart';
 import '../premium/premium_gate.dart';
+import '../support/help_center_screen.dart';
 import '../../data/models/entitlement.dart';
 import '../settings/guide_screen.dart';
 import '../settings/profile_screen.dart';
@@ -328,6 +329,13 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                 index: 3,
                 child: LuxeSettingsGroup(
                   children: [
+                    LuxeSettingsRow(
+                      key: const ValueKey('more-help-center'),
+                      icon: Icons.support_agent_rounded,
+                      title: 'Trợ giúp & khắc phục sự cố',
+                      subtitle: 'Tự kiểm tra lỗi, sửa nhanh, hỏi đội Pinova',
+                      onTap: () => _push(const HelpCenterScreen()),
+                    ),
                     LuxeSettingsRow(
                       icon: Icons.menu_book_rounded,
                       title: 'Hướng dẫn sử dụng',

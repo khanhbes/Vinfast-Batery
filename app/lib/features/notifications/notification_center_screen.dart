@@ -13,6 +13,7 @@ import '../../core/widgets/luxe_kit.dart';
 import '../../core/widgets/luxe_settings.dart';
 import '../../data/models/user_notification.dart';
 import '../../navigation/app_navigation.dart';
+import '../support/help_center_screen.dart';
 
 /// Provider cho stream thông báo
 final notificationsProvider = StreamProvider.autoDispose
@@ -415,6 +416,10 @@ class _NotificationCenterScreenState
     } else if (target == '/maintenance') {
       AppNavigation.navigateToTab(context, 3);
       if (Navigator.canPop(context)) Navigator.pop(context);
+    } else if (target.startsWith('/support')) {
+      // QA 135: a reply from the Pinova team.
+      final ticketId = Uri.tryParse(target)?.queryParameters['ticketId'];
+      HelpCenterScreen.open(context, ticketId: ticketId);
     } else {
       Navigator.pop(context); // pop notification center
     }
