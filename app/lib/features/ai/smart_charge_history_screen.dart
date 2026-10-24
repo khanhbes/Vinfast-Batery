@@ -20,7 +20,10 @@ import '../../core/widgets/responsive_card_grid.dart';
 import '../../data/models/smart_charge_cost.dart';
 import '../../data/models/smart_charge_history.dart';
 import '../../data/models/smart_charging_session.dart';
+import '../../core/providers/entitlement_provider.dart';
+import '../../data/models/entitlement.dart';
 import '../auth/auth_providers.dart';
+import '../premium/premium_gate.dart';
 import 'controllers/smart_charging_controller.dart';
 import 'services/learning_flow.dart';
 import 'widgets/confirm_actual_soc_sheet.dart';
@@ -79,6 +82,26 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
   /// Direction of the last month change, so the summary slides that way.
   int _monthDirection = 0;
 
+  /// QA 135: Free shows the last 30 days (older sessions are hidden, never
+  /// deleted, and come back with Pro).
+  int? _historyDays;
+  bool _exportAllowed = true;
+  ProviderSubscription<Entitlement>? _planSubscription;
+
+  DateTime? get _planCutoff => _historyDays == null
+      ? null
+      : DateTime.now().subtract(Duration(days: _historyDays!));
+
+  bool _beforePlanWindow(SmartChargingSession session) {
+    final cutoff = _planCutoff;
+    return cutoff != null &&
+        (session.startedAt ?? session.createdAt).isBefore(cutoff);
+  }
+
+  int get _hiddenByPlan => _items
+      .where((s) => s.state.isTerminal && _beforePlanWindow(s))
+      .length;
+
   DateTime get _monthEnd => DateTime(
     _selectedMonth.month == 12 ? _selectedMonth.year + 1 : _selectedMonth.year,
     _selectedMonth.month == 12 ? 1 : _selectedMonth.month + 1,
@@ -95,6 +118,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
 
   List<SmartChargingSession> get _filteredItems => _items.where((session) {
     if (!session.state.isTerminal) return false;
+    if (_beforePlanWindow(session)) return false;
     return SmartChargeHistoryQuery(
       vehicleId: session.vehicleId,
       allVehicles: true,
@@ -163,6 +187,30 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_planSubscription != null) return;
+    try {
+      final container = ProviderScope.containerOf(context, listen: false);
+      final plan = container.read(entitlementProvider);
+      _historyDays = plan.historyDays;
+      _exportAllowed = plan.allows(PremiumFeature.historyExport);
+      _planSubscription = container.listen<Entitlement>(entitlementProvider, (
+        _,
+        next,
+      ) {
+        if (!mounted) return;
+        setState(() {
+          _historyDays = next.historyDays;
+          _exportAllowed = next.allows(PremiumFeature.historyExport);
+        });
+      });
+    } on Object {
+      // No ProviderScope (isolated widget tests): nothing is gated.
+    }
+  }
+
+  @override
   void didUpdateWidget(covariant SmartChargeHistoryScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     final vehicleId = widget.controller.currentUiState.draft.vehicleId;
@@ -189,6 +237,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
 
   @override
   void dispose() {
+    _planSubscription?.close();
     _removeControllerListener?.call();
     _contextGeneration++;
     _requestGeneration++;
@@ -403,6 +452,28 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
                       SliverToBoxAdapter(
                         child: LuxeReveal(index: 3, child: _filters()),
                       ),
+                      if (_hiddenByPlan > 0)
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+                          sliver: SliverToBoxAdapter(
+                            child: LuxeNotice(
+                              key: const ValueKey('history-plan-window'),
+                              icon: Icons.workspace_premium_outlined,
+                              color: LuxeColors.champagne,
+                              message:
+                                  'Gói Free hiển thị $_historyDays ngày gần '
+                                  'nhất; $_hiddenByPlan phiên cũ hơn đang ẩn '
+                                  '(không bị xóa).',
+                              action: TextButton(
+                                onPressed: () => PremiumGate.showUpgrade(
+                                  context,
+                                  PremiumFeature.historyExport,
+                                ),
+                                child: const Text('Xem'),
+                              ),
+                            ),
+                          ),
+                        ),
                       if (visible.isEmpty && active == null)
                         SliverFillRemaining(
                           hasScrollBody: false,
@@ -1008,6 +1079,10 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
   }
 
   Future<void> _export() async {
+    if (!_exportAllowed) {
+      PremiumGate.showUpgrade(context, PremiumFeature.historyExport);
+      return;
+    }
     final contextGeneration = _contextGeneration;
     final controller = widget.controller;
     final from = _rangeStart;

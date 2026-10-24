@@ -37,6 +37,9 @@ import 'widgets/edit_current_battery_sheet.dart';
 import 'widgets/luxe_soc_dial.dart';
 import 'widgets/soc_range_input.dart';
 import '../../core/providers/appearance_provider.dart';
+import '../../core/providers/entitlement_provider.dart';
+import '../../data/models/entitlement.dart';
+import '../premium/premium_gate.dart';
 import '../../data/models/app_appearance.dart';
 import 'widgets/prediction_card_v2.dart';
 import 'widgets/recent_sessions_section_v2.dart';
@@ -441,7 +444,17 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
         state.phase == SmartChargingViewPhase.loading ||
         state.phase == SmartChargingViewPhase.starting;
     final preview = state.preview;
+    // QA 135: charging to a % with automatic cut-off is Pro; Free keeps the
+    // forecast and starts a verified timed charge of that length instead.
+    final targetAllowed = ref.watch(
+      entitlementProvider.select(
+        (plan) => plan.allows(PremiumFeature.targetCharging),
+      ),
+    );
+    final targetLocked =
+        !targetAllowed && preview != null && preview.isTargetMode;
     final canStart =
+        !targetLocked &&
         preview?.isDisplayOnly == false &&
         (preview?.aiChargeEligible == true ||
             preview?.isPhysicsFallback == true) &&
@@ -470,7 +483,10 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
             ),
           );
     final timedFromForecast =
-        preview != null && !canStart && preview.isDisplayOnly && timedReady;
+        preview != null &&
+        !canStart &&
+        (preview.isDisplayOnly || targetLocked) &&
+        timedReady;
     final powerSource = controller.lastEstimatePowerSource;
     final powerW = controller.lastEstimatePowerW;
     final String label;
@@ -491,7 +507,10 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     } else if (timedFromForecast) {
       label =
           'SẠC HẸN GIỜ ${formatChargeDuration(forecastDuration!).toUpperCase()}';
-      note = powerSource == null || powerW == null
+      note = targetLocked
+          ? 'Sạc đến % tự ngắt thuộc gói Pro. Gói Free sạc hẹn giờ đúng '
+                'thời gian dự đoán, Shelly tự ngắt.'
+          : powerSource == null || powerW == null
           ? 'Ước tính tham khảo · Shelly tự ngắt theo hẹn giờ'
           : 'Ước tính theo ${powerSource.label} (~${powerW.round()} W) · '
                 'Shelly tự ngắt theo hẹn giờ';
@@ -537,7 +556,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                 ),
                 const SizedBox(height: 6),
                 // QA 131: the owner's Charge layout (Cài đặt → Giao diện).
-                if (ref.watch(appearanceProvider).charge == ChargeStyle.dial)
+                if (ref.watch(effectiveAppearanceProvider).charge == ChargeStyle.dial)
                   LuxeSocDial(
                     key: const ValueKey('target-battery-selector'),
                     current: draft.currentSoc,
@@ -562,7 +581,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                     padding: const EdgeInsets.fromLTRB(4, 8, 4, 4),
                     child: SocRangeInput(
                       key: const ValueKey('target-battery-selector'),
-                      style: ref.watch(appearanceProvider).charge,
+                      style: ref.watch(effectiveAppearanceProvider).charge,
                       current: draft.currentSoc,
                       target: currentTarget,
                       enabled: !busy,
@@ -640,6 +659,18 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                 : controller.createPreview,
           ),
         ),
+        if (targetLocked)
+          Center(
+            child: TextButton.icon(
+              key: const ValueKey('target-premium-button'),
+              onPressed: () => PremiumGate.showUpgrade(
+                context,
+                PremiumFeature.targetCharging,
+              ),
+              icon: const Icon(Icons.workspace_premium_outlined, size: 18),
+              label: const Text('Mở Sạc đến % tự ngắt (Pro)'),
+            ),
+          ),
         if (timedFromForecast)
           Center(
             child: TextButton.icon(
@@ -808,7 +839,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
 
     final card = ActiveChargingCardV2(
       key: const ValueKey('active-session-v2'),
-      style: ref.watch(appearanceProvider).charge,
+      style: ref.watch(effectiveAppearanceProvider).charge,
       currentPercent: estimatedSoc,
       targetPercent: targetSoc.toDouble(),
       remaining: remaining,
@@ -1055,6 +1086,15 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
             : 'Tự động tắt lúc ${_time(preview.effectiveStopAt)}',
       );
     } else {
+      // The plan may have ended since the app last asked (QA 135): the
+      // server refused with premiumRequired, so explain instead of failing.
+      await ref.read(entitlementProvider.notifier).refresh();
+      if (!mounted) return;
+      if (preview.isTargetMode &&
+          !ref.read(entitlementProvider).allows(PremiumFeature.targetCharging)) {
+        PremiumGate.showUpgrade(context, PremiumFeature.targetCharging);
+        return;
+      }
       AppPopup.showError('Không thể bật sạc', userInitiated: true);
     }
   }

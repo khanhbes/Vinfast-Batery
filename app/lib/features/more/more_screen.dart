@@ -28,6 +28,9 @@ import '../auth/auth_gate.dart';
 import '../home/widgets/luxe_dashboard_cards.dart' show LuxePressable;
 import '../maintenance/maintenance_screen.dart';
 import '../notifications/notification_center_screen.dart';
+import '../premium/premium_banner.dart';
+import '../premium/premium_gate.dart';
+import '../../data/models/entitlement.dart';
 import '../settings/guide_screen.dart';
 import '../settings/profile_screen.dart';
 import '../settings/settings_screen.dart';
@@ -207,6 +210,8 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                   onSelectVehicle: () => VehiclePickerSheet.show(context, ref),
                 ),
               ),
+              const SizedBox(height: 14),
+              const LuxeReveal(index: 1, child: PremiumBanner()),
               const LuxeSectionLabel('PHƯƠNG TIỆN & SẠC'),
               LuxeReveal(
                 index: 1,
@@ -296,7 +301,18 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                         icon: Icons.alt_route_rounded,
                         title: 'Lộ trình',
                         subtitle: 'Chọn điểm đến và ước tính pin cần dùng',
-                        onTap: () => _push(const TripPlannerWrapper()),
+                        badge: const PremiumLockBadge(
+                          PremiumFeature.tripEstimate,
+                        ),
+                        onTap: () {
+                          if (PremiumGate.check(
+                            context,
+                            ref,
+                            PremiumFeature.tripEstimate,
+                          )) {
+                            _push(const TripPlannerWrapper());
+                          }
+                        },
                       ),
                     LuxeSettingsRow(
                       icon: Icons.tune_rounded,

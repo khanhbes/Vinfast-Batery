@@ -21,6 +21,7 @@ COPY ai_server/ ./ai_server/
 COPY shelly/ ./shelly/
 COPY assistant/ ./assistant/
 COPY billing/ ./billing/
+COPY support/ ./support/
 
 # Fail the build if OneDrive/Docker BuildKit provides an offline or empty
 # placeholder instead of the actual API source.  Without this guard Python

@@ -8,7 +8,8 @@ void main() {
   testWidgets('MoreScreen renders Driver Profile Hub sections properly', (
     tester,
   ) async {
-    await tester.binding.setSurfaceSize(const Size(412, 1200));
+    // QA 135 added the Premium banner under the profile card.
+    await tester.binding.setSurfaceSize(const Size(412, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(
@@ -20,6 +21,8 @@ void main() {
     // Allow entrance animations to settle
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.byKey(const ValueKey('more-premium-banner')), findsOneWidget);
 
     // Section headers
     expect(find.text('PHƯƠNG TIỆN & SẠC'), findsOneWidget);

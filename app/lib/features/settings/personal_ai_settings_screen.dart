@@ -15,6 +15,8 @@ import '../../data/models/vehicle_learning_status.dart';
 import '../../data/services/server_smart_charger_service.dart';
 import '../../data/services/trip_csv_import.dart';
 import '../ai/services/learning_flow.dart';
+import '../../data/models/entitlement.dart';
+import '../premium/premium_gate.dart';
 import 'widgets/training_result_sheet.dart';
 
 /// AI cá nhân (Tasks 126–127): what each model learned, the data collected
@@ -104,6 +106,8 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
   }
 
   Future<void> _train(String model, String mode) async {
+    // Collecting data is free; training the personal model is Ultra.
+    if (!PremiumGate.check(context, ref, PremiumFeature.learningTrain)) return;
     if (mode == 'retrain') {
       final confirmed = await showLuxeConfirm(
         context,
@@ -143,6 +147,10 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
       final profile = await _service.getPersonalProfile(widget.vehicleId);
       if (mounted) setState(() => _profile = profile);
     } catch (error) {
+      if (PremiumGate.isPremiumError(error) && mounted) {
+        PremiumGate.showUpgrade(context, PremiumFeature.learningTrain);
+        return;
+      }
       AppPopup.showError(
         'Chưa huấn luyện được',
         detail: AppErrorFormatter.format(error),

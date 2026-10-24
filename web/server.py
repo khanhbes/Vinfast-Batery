@@ -6692,6 +6692,46 @@ def _register_billing():
 _register_billing()
 
 
+def _register_support():
+    """Help for every plan (QA 135): tickets, admin email, replies."""
+    from assistant.quota import DailyQuota
+    from shelly.azure_dispatch import configured_store
+    from shelly.push_notifications import send_user_push, write_notice
+    from support.mailer import SupportMailer
+    from support.routes import create_support_blueprint
+    from support.tickets import SupportService
+
+    db = _firestore_db if _firebase_available else None
+
+    def notify(uid, ticket_id, title, message):
+        if db is not None:
+            write_notice(db, uid, notice_id=f'support_{ticket_id}', title=title, message=message,
+                         action_target=f'/support?ticketId={ticket_id}',
+                         payload={'ticketId': ticket_id})
+        send_user_push(uid, title=title, body=message,
+                       data={'event': 'support_reply', 'ticketId': ticket_id, 'route': 'support'},
+                       db=db, messaging=_firebase_messaging, local_tokens=_local_push_tokens)
+
+    try:
+        store = configured_store()
+    except Exception:
+        store = None
+    billing = app.extensions.get('billing')
+    service = SupportService(
+        db, mailer=SupportMailer(), notifier=notify,
+        quota=DailyQuota(store, limit=5, partition='supportQuota'),
+        portal_url=os.environ.get('PORTAL_URL', ''),
+    )
+    app.register_blueprint(create_support_blueprint(
+        service=service, auth_resolver=_verify_token, require_admin=require_admin,
+        tier_of=(billing.tier if billing is not None else None), audit=_audit,
+    ))
+    app.extensions['support'] = service
+
+
+_register_support()
+
+
 def _plan_limit(uid, name, fallback):
     billing = app.extensions.get('billing')
     if billing is None:

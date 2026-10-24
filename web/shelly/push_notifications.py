@@ -48,7 +48,7 @@ def send_terminal_push(uid, *, session_id, state, vehicle_id=None, target_percen
     for start in range(0, len(tokens), 500):
         message = messaging.MulticastMessage(tokens=tokens[start:start + 500], data=payload,
             notification=messaging.Notification(
-                title="VinFast Battery",
+                title="Pinova",
                 body=terminal_message(state, stop_reason=stop_reason, estimated_soc=estimated_soc)))
         kwargs = {"app": firebase_app} if firebase_app is not None else {}
         result = messaging.send_each_for_multicast(message, **kwargs)
@@ -210,6 +210,38 @@ def send_progress_push(uid, *, payload, db=None, messaging=None, firebase_app=No
         android=messaging.AndroidConfig(
             priority="high", ttl=timedelta(seconds=PROGRESS_TTL_SECONDS),
             collapse_key=f"progress-{payload.get('sessionId', '')}"[:60]))
+    kwargs = {"app": firebase_app} if firebase_app is not None else {}
+    result = messaging.send_each_for_multicast(message, **kwargs)
+    return {"sent": result.success_count, "failed": result.failure_count}
+
+
+def write_notice(db, uid, *, notice_id, title, message, action_target=None, payload=None):
+    """A plain Notification Center item (QA 135: support replies, plan
+    changes). Same shape as the app's own items; an existing id is updated
+    and marked unread again."""
+    ref = db.collection("UserNotifications").document(f"{uid}_{notice_id}"[:1400])
+    ref.set({"userId": uid, "type": "system", "status": "unread", "title": title,
+             "message": message, "payload": payload or {}, "imageUrl": None, "readAt": None,
+             "actionTarget": action_target, "createdAt": datetime.now(timezone.utc)}, merge=True)
+
+
+def send_user_push(uid, *, title, body, data=None, db=None, messaging=None, firebase_app=None,
+                   local_tokens=None):
+    """A visible notification to every phone of the account (QA 135)."""
+    if db is not None:
+        tokens = [item.get("token") for item in
+                  (doc.to_dict() or {} for doc in
+                   db.collection("users").document(uid).collection("pushTokens").limit(20).stream())
+                  if item.get("token")]
+    else:
+        tokens = [item["token"] for (owner, _), item in (local_tokens or {}).items()
+                  if owner == uid and item.get("token")]
+    if not tokens or messaging is None:
+        return {"sent": 0}
+    message = messaging.MulticastMessage(
+        tokens=tokens[:500], data={key: str(value) for key, value in (data or {}).items()},
+        notification=messaging.Notification(title=title, body=body),
+        android=messaging.AndroidConfig(priority="high"))
     kwargs = {"app": firebase_app} if firebase_app is not None else {}
     result = messaging.send_each_for_multicast(message, **kwargs)
     return {"sent": result.success_count, "failed": result.failure_count}

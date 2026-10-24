@@ -244,7 +244,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             key: const ValueKey('settings-appearance'),
             icon: Icons.palette_outlined,
             title: 'Giao diện',
-            subtitle: AppearanceScreen.summary(ref.watch(appearanceProvider)),
+            subtitle: AppearanceScreen.summary(
+              ref.watch(effectiveAppearanceProvider),
+            ),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(builder: (_) => const AppearanceScreen()),
             ),

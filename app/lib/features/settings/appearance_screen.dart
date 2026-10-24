@@ -8,7 +8,10 @@ import '../../core/widgets/charge_confirm_control.dart';
 import '../../core/widgets/luxe_kit.dart';
 import '../../core/widgets/luxe_settings.dart';
 import '../../core/widgets/seven_segment_text.dart';
+import '../../core/providers/entitlement_provider.dart';
 import '../../data/models/app_appearance.dart';
+import '../../data/models/entitlement.dart';
+import '../premium/premium_gate.dart';
 
 /// Cài đặt → Giao diện (QA 131): the Overview layout, the Charge tab layout
 /// and how the charger is switched ON. Saved per account, so every phone
@@ -21,8 +24,17 @@ class AppearanceScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final appearance = ref.watch(appearanceProvider);
+    // Layouts are Pro (QA 135); the ON confirmation style is free.
+    final layoutsAllowed = ref.watch(
+      entitlementProvider.select(
+        (plan) => plan.allows(PremiumFeature.appearance),
+      ),
+    );
+    final appearance = ref.watch(effectiveAppearanceProvider);
     final notifier = ref.read(appearanceProvider.notifier);
+    void layout(VoidCallback apply) => layoutsAllowed
+        ? apply()
+        : PremiumGate.showUpgrade(context, PremiumFeature.appearance);
     return LuxeScaffold(
       title: 'Giao diện',
       body: ListView(
@@ -34,6 +46,17 @@ class AppearanceScreen extends ConsumerWidget {
             'khoản hiển thị giống nhau.',
             style: LuxeText.caption,
           ),
+          if (!layoutsAllowed) ...[
+            const SizedBox(height: 12),
+            const LuxeNotice(
+              key: ValueKey('appearance-premium-notice'),
+              icon: Icons.workspace_premium_outlined,
+              color: LuxeColors.champagne,
+              message:
+                  'Kiểu Tổng quan và tab Sạc thuộc gói Pro. Kiểu bật sạc '
+                  'bên dưới dùng được ở mọi gói.',
+            ),
+          ],
           const LuxeSectionLabel('Tổng quan'),
           _OptionGrid(
             children: [
@@ -44,7 +67,8 @@ class AppearanceScreen extends ConsumerWidget {
                   caption: style.caption,
                   selected: appearance.dashboard == style,
                   preview: _DashboardPreview(style),
-                  onTap: () => notifier.setDashboard(style),
+                  locked: !layoutsAllowed && style != DashboardStyle.values.first,
+                  onTap: () => layout(() => notifier.setDashboard(style)),
                 ),
             ],
           ),
@@ -58,7 +82,8 @@ class AppearanceScreen extends ConsumerWidget {
                   caption: style.caption,
                   selected: appearance.charge == style,
                   preview: _ChargePreview(style),
-                  onTap: () => notifier.setCharge(style),
+                  locked: !layoutsAllowed && style != ChargeStyle.values.first,
+                  onTap: () => layout(() => notifier.setCharge(style)),
                 ),
             ],
           ),
@@ -160,6 +185,7 @@ class _OptionTile extends StatelessWidget {
     required this.selected,
     required this.preview,
     required this.onTap,
+    this.locked = false,
   });
 
   final String title;
@@ -168,11 +194,16 @@ class _OptionTile extends StatelessWidget {
   final Widget preview;
   final VoidCallback onTap;
 
+  /// Not in the plan (QA 135): shows a PRO tag, tapping explains.
+  final bool locked;
+
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
     selected: selected,
-    label: '$title. $caption${selected ? '. Đang dùng' : ''}',
+    label:
+        '$title. $caption${selected ? '. Đang dùng' : ''}'
+        '${locked ? '. Gói Pro' : ''}',
     excludeSemantics: true,
     child: Material(
       type: MaterialType.transparency,
@@ -229,7 +260,9 @@ class _OptionTile extends StatelessWidget {
                       Icons.check_circle_rounded,
                       size: 18,
                       color: LuxeColors.emerald,
-                    ),
+                    )
+                  else if (locked)
+                    const PremiumBadge(tier: PlanTier.pro),
                 ],
               ),
               const SizedBox(height: 2),

@@ -18,6 +18,7 @@ import '../../data/repositories/vehicle_spec_repository.dart';
 import '../home/widgets/luxe_vehicle_hero.dart' show LuxeScooterArt;
 import 'vehicle_spec_detail_screen.dart';
 import '../../core/widgets/vehicle_photo.dart';
+import '../premium/premium_gate.dart';
 
 /// Vehicle Garage Screen — LUXE (Task 119)
 /// - List user vehicles (active / archived)
@@ -585,6 +586,9 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
       widget.onVehicleAdded(newId);
       Navigator.pop(context);
       AppPopup.showSuccess('Đã thêm ${spec.modelName}');
+    } else if (result['code'] == 'vehicleLimitReached') {
+      // QA 135: the plan's vehicle limit, not a failure.
+      PremiumGate.showVehicleLimit(context);
     } else {
       AppPopup.showError(result['error'] ?? 'Thêm xe thất bại');
     }

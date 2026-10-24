@@ -44,7 +44,7 @@ class HomeScreen extends ConsumerWidget {
     final prefService = ref.watch(dashboardPreferencesProvider);
     // QA 131: the owner's Overview layout (Cài đặt → Giao diện). Tối giản
     // keeps only the quick actions under the battery ring.
-    final dashboardStyle = ref.watch(appearanceProvider).dashboard;
+    final dashboardStyle = ref.watch(effectiveAppearanceProvider).dashboard;
     final visibleWidgets = dashboardStyle == DashboardStyle.minimal
         ? prefService.visibleWidgets
               .where((id) => id == DashboardWidgetId.quickActions)

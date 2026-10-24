@@ -6,7 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../data/models/app_appearance.dart';
+import '../../data/models/entitlement.dart';
 import '../../features/auth/auth_providers.dart';
+import 'entitlement_provider.dart';
 
 /// Reads and writes the appearance per account (QA 131):
 /// `users/{uid}/smartChargePreferences/appearance` (existing rules allow
@@ -153,3 +155,21 @@ class AppearanceNotifier extends Notifier<AppAppearance> {
 final appearanceProvider = NotifierProvider<AppearanceNotifier, AppAppearance>(
   AppearanceNotifier.new,
 );
+
+/// What the screens draw (QA 135): the Overview and Charge layouts are a
+/// Pro feature, so without it they fall back to the defaults (the owner's
+/// choice is kept and comes back with the plan). The ON confirmation style
+/// stays free: it is a safety/accessibility choice.
+final effectiveAppearanceProvider = Provider<AppAppearance>((ref) {
+  final chosen = ref.watch(appearanceProvider);
+  final allowed = ref.watch(
+    entitlementProvider.select(
+      (plan) => plan.allows(PremiumFeature.appearance),
+    ),
+  );
+  if (allowed) return chosen;
+  return chosen.copyWith(
+    dashboard: const AppAppearance().dashboard,
+    charge: const AppAppearance().charge,
+  );
+});
