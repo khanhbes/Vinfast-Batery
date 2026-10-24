@@ -207,6 +207,77 @@ abstract final class DashboardLayoutParser {
     );
   }
 
+  /// One frame read with several thresholds → one reading (QA 135).
+  /// Each pass votes for its % and ODO (a confident one counts double); a
+  /// longer number that contains a shorter one ("68" ⊃ "8", "4818" ⊃
+  /// "48") takes its votes, because a segment pass loses a digit far more
+  /// often than it invents one.
+  static DashboardLayoutReading combine(List<DashboardLayoutReading> passes) {
+    if (passes.isEmpty) return const DashboardLayoutReading();
+    if (passes.length == 1) return passes.single;
+    final soc = _consensus<int>([
+      for (final p in passes)
+        if (p.soc != null) (p.soc!, p.socConfident, p.socBox),
+    ], (v) => '$v');
+    final odo = _consensus<double>([
+      for (final p in passes)
+        if (p.odoKm != null) (p.odoKm!, p.odoConfident, p.odoBox),
+    ], _odoDigits);
+    return DashboardLayoutReading(
+      soc: soc?.value,
+      odoKm: odo?.value,
+      socBox: soc?.box,
+      odoBox: odo?.box,
+      socConfident: soc?.confident ?? false,
+      odoConfident: odo?.confident ?? false,
+      socCandidates: {for (final p in passes) ...p.socCandidates}.toList(),
+      odoCandidates: {
+        for (final p in passes) ...p.odoCandidates,
+      }.take(4).toList(),
+    );
+  }
+
+  static String _odoDigits(double v) =>
+      v == v.roundToDouble() ? v.round().toString() : '$v';
+
+  /// [longer] holds all of [shorter]'s digits at its start or end.
+  static bool contains(String longer, String shorter) =>
+      longer.length > shorter.length &&
+      (longer.startsWith(shorter) || longer.endsWith(shorter));
+
+  static ({T value, Rect? box, bool confident})? _consensus<T>(
+    List<(T, bool, Rect?)> votes,
+    String Function(T) digits,
+  ) {
+    if (votes.isEmpty) return null;
+    final score = <T, double>{};
+    final confident = <T, bool>{};
+    final boxes = <T, Rect?>{};
+    for (final (value, sure, box) in votes) {
+      score[value] = (score[value] ?? 0) + (sure ? 2 : 1);
+      confident[value] = (confident[value] ?? false) || sure;
+      boxes[value] ??= box;
+    }
+    // Absorb: the shorter value's votes go to the longest that contains it.
+    final values = score.keys.toList()
+      ..sort((a, b) => digits(b).length.compareTo(digits(a).length));
+    for (final short in values.reversed.toList()) {
+      final host = values.firstWhere(
+        (long) => contains(digits(long), digits(short)),
+        orElse: () => short,
+      );
+      if (host == short) continue;
+      score[host] = score[host]! + score[short]!;
+      confident[host] = confident[host]! || confident[short]!;
+      score[short] = 0;
+    }
+    final best = score.entries.reduce((a, b) => a.value >= b.value ? a : b);
+    if (best.value <= 0) return null;
+    // Two or more passes agreeing is as good as a % / label next to it.
+    final sure = confident[best.key]! || best.value >= 3;
+    return (value: best.key, box: boxes[best.key], confident: sure);
+  }
+
   /// Joins digit groups on one row separated by a segment gap ("48 18").
   static List<_Item> _merge(List<_Item> numbers) {
     final sorted = [...numbers]
@@ -455,7 +526,24 @@ class DashboardScanVote {
       counts[v] = (counts[v] ?? 0) + 1;
     }
     if (counts.isEmpty) return null;
-    final best = counts.entries.reduce((a, b) => a.value >= b.value ? a : b);
+    // QA 135: "8" when another frame read "68" is the same reading with a
+    // lost digit, never a rival: it counts for "68". A short value that a
+    // longer one contains cannot win while that longer one is in view (the
+    // owner's 68 % locked as 8 % because the "6" failed first).
+    String digits(T v) =>
+        v is double && v == v.roundToDouble() ? v.round().toString() : '$v';
+    final keys = counts.keys.toList();
+    final merged = {...counts};
+    for (final short in keys) {
+      final hosts = keys.where(
+        (long) => DashboardLayoutParser.contains(digits(long), digits(short)),
+      );
+      if (hosts.isEmpty) continue;
+      final host = hosts.reduce((a, b) => counts[a]! >= counts[b]! ? a : b);
+      merged[host] = merged[host]! + counts[short]!;
+      merged.remove(short);
+    }
+    final best = merged.entries.reduce((a, b) => a.value >= b.value ? a : b);
     return best.value >= needed && best.value >= seen * 0.6 ? best.key : null;
   }
 }

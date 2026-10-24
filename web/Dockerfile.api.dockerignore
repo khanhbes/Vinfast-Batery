@@ -32,3 +32,6 @@
 !support/
 !support/**/
 !support/**/*.py
+!scan/
+!scan/**/
+!scan/**/*.py

@@ -6899,6 +6899,32 @@ def _register_assistant():
 
 _register_assistant()
 
+
+def _register_scan():
+    """Dashboard photo reading with Gemini (QA 135): the phone's fallback."""
+    from assistant.gemini import GeminiClient
+    from assistant.quota import DailyQuota
+    from scan.reader import DashboardImageReader
+    from scan.routes import create_scan_blueprint
+    from shelly.azure_dispatch import configured_store
+
+    try:
+        store = configured_store()
+    except Exception:
+        store = None
+    billing = app.extensions.get('billing')
+    app.register_blueprint(create_scan_blueprint(
+        reader=DashboardImageReader(GeminiClient(timeout=15.0)),
+        # Free 5 / Pro 30 / Ultra 100 images a day.
+        quota=DailyQuota(store, limit=5, partition='scanAiQuota',
+                         limit_for=(lambda uid: billing.limit(uid, 'scan_ai_daily'))
+                         if billing is not None else None),
+        auth_resolver=_verify_token,
+    ))
+
+
+_register_scan()
+
 # Catalog routes receive narrow dependencies after auth and Firestore helpers
 # have been initialized. This keeps the catalog module independently testable.
 app.register_blueprint(create_catalog_blueprint(

@@ -96,6 +96,77 @@ class GrayImage {
           targetHeight: (degrees % 180 == 0 ? height : width),
         );
 
+  /// The part of a camera frame inside [roi] (fractions of the upright
+  /// frame), at full sensor resolution up to [maxSide] pixels (QA 135).
+  /// Reading only the guide window keeps the LCD digits two to three times
+  /// larger than shrinking the whole 1080p frame did, and drops the clutter
+  /// around the cluster. Bilinear, so small digits keep their edges.
+  static GrayCrop crop(
+    Uint8List bytes, {
+    required int width,
+    required int height,
+    required int bytesPerRow,
+    required int rotation,
+    required bool bgra,
+    required Rect roi,
+    int maxSide = 720,
+  }) {
+    final quarter = rotation == 90 || rotation == 270;
+    final upW = quarter ? height : width;
+    final upH = quarter ? width : height;
+    final left = (roi.left.clamp(0.0, 1.0) * upW).toDouble();
+    final top = (roi.top.clamp(0.0, 1.0) * upH).toDouble();
+    final right = (roi.right.clamp(0.0, 1.0) * upW).toDouble();
+    final bottom = (roi.bottom.clamp(0.0, 1.0) * upH).toDouble();
+    final cropW = math.max(1.0, right - left),
+        cropH = math.max(1.0, bottom - top);
+    final scale = math.min(1.0, maxSide / math.max(cropW, cropH));
+    final outW = math.max(1, (cropW * scale).round());
+    final outH = math.max(1, (cropH * scale).round());
+    int luma(int x, int y) {
+      if (x < 0) x = 0;
+      if (y < 0) y = 0;
+      if (x >= width) x = width - 1;
+      if (y >= height) y = height - 1;
+      if (!bgra) return bytes[y * bytesPerRow + x];
+      final i = y * bytesPerRow + x * 4;
+      return (bytes[i + 2] * 77 + bytes[i + 1] * 150 + bytes[i] * 29) >> 8;
+    }
+
+    final out = Uint8List(outW * outH);
+    for (var v = 0; v < outH; v++) {
+      final uy = top + (v + 0.5) / scale - 0.5;
+      for (var u = 0; u < outW; u++) {
+        final ux = left + (u + 0.5) / scale - 0.5;
+        // Upright (ux, uy) → sensor (sx, sy), as in [fromLuminance].
+        final double sx, sy;
+        switch (rotation) {
+          case 90:
+            sx = uy;
+            sy = height - 1 - ux;
+          case 180:
+            sx = width - 1 - ux;
+            sy = height - 1 - uy;
+          case 270:
+            sx = width - 1 - uy;
+            sy = ux;
+          default:
+            sx = ux;
+            sy = uy;
+        }
+        final x0 = sx.floor(), y0 = sy.floor();
+        final fx = sx - x0, fy = sy - y0;
+        final value =
+            luma(x0, y0) * (1 - fx) * (1 - fy) +
+            luma(x0 + 1, y0) * fx * (1 - fy) +
+            luma(x0, y0 + 1) * (1 - fx) * fy +
+            luma(x0 + 1, y0 + 1) * fx * fy;
+        out[v * outW + u] = value.round();
+      }
+    }
+    return GrayCrop(GrayImage(outW, outH, out), left, top, scale);
+  }
+
   /// From RGBA bytes (a decoded photo), scaled to about [targetHeight].
   static GrayImage fromRgba(
     Uint8List rgba,
@@ -118,6 +189,22 @@ class GrayImage {
   }
 }
 
+/// A [GrayImage] cut from a larger upright frame: [toFrame] maps a box
+/// found in the crop back to the frame (to outline it on the preview).
+class GrayCrop {
+  const GrayCrop(this.image, this.left, this.top, this.scale);
+
+  final GrayImage image;
+  final double left, top, scale;
+
+  Rect toFrame(Rect box) => Rect.fromLTRB(
+    left + box.left / scale,
+    top + box.top / scale,
+    left + box.right / scale,
+    top + box.bottom / scale,
+  );
+}
+
 /// Reads seven-segment LCD digits (QA 131). On-device text recognition
 /// reads the cluster's printed labels ("ODO", "KM", "KM/H") but not its
 /// segment digits — "68" came back as "58." or nothing, the ODO never.
@@ -126,21 +213,49 @@ class GrayImage {
 /// (italic slant allowed). It returns tokens for [DashboardLayoutParser]:
 /// numbers, "%" and the temperature "C". Pure Dart; runs in an isolate.
 abstract final class SevenSegmentReader {
-  /// Tokens in [image] coordinates.
-  static List<OcrToken> read(GrayImage image) {
-    var tokens = _read(image, 19);
+  /// Tokens in [image] coordinates (one pass at the default threshold).
+  static List<OcrToken> read(GrayImage image) => readPasses(image).first;
+
+  /// Battery % and ODO in [image]: every pass parsed, then their consensus
+  /// (QA 135). [lastOdoKm] anchors the ODO when the label is unreadable.
+  static DashboardLayoutReading readDashboard(
+    GrayImage image, {
+    double? lastOdoKm,
+  }) => DashboardLayoutParser.combine([
+    for (final pass in readPasses(image))
+      DashboardLayoutParser.parse(pass, lastOdoKm: lastOdoKm),
+  ]);
+
+  /// The same image read with several thresholds (QA 135). One threshold
+  /// never suits every frame: glare merges the "6" of "68" into its
+  /// neighbour at one setting and thins it away at another, and the gap
+  /// in "48 18" splits the ODO at some. [DashboardLayoutParser.combine]
+  /// takes the consensus.
+  static List<List<OcrToken>> readPasses(GrayImage image) {
+    return _passes(image);
+  }
+
+  static List<List<OcrToken>> _passes(GrayImage image) {
+    final first = readPass(image, 19);
     // Phone held close: big digits need a wider local window, or thick
     // segments turn hollow.
     final heights = [
-      for (final t in tokens)
+      for (final t in first)
         if (t.text.length >= 2 && RegExp(r'^\d+$').hasMatch(t.text))
           t.box.height,
     ]..sort();
-    if (heights.isNotEmpty && heights[heights.length ~/ 2] > 60) {
-      tokens = _read(image, 35);
-    }
-    return tokens;
+    final big = heights.isNotEmpty && heights[heights.length ~/ 2] > 60;
+    final narrow = big ? 35 : 19;
+    final wide = big ? 51 : 27;
+    return [
+      big ? readPass(image, narrow) : first,
+      readPass(image, narrow, offset: 36),
+      readPass(image, wide, offset: 36),
+      readPass(image, big ? narrow : 15, offset: 22),
+    ];
   }
+
+  static const _shortGlyphs = {'1', '4', '7'};
 
   static const _patterns = <int, String>{
     // bits a b c d e f g (a = 64 … g = 1)
@@ -164,9 +279,23 @@ abstract final class SevenSegmentReader {
     [0.32, 0.68, 0.64, 0.78],
   ];
 
-  static List<OcrToken> _read(GrayImage image, int window) {
+  /// One pass: local window [window] px, a pixel is lit when it is
+  /// [offset] above the local mean (and brighter than [floor]).
+  static List<OcrToken> readPass(
+    GrayImage image,
+    int window, {
+    int offset = 28,
+    int floor = 100,
+  }) => _read(image, window, offset: offset, floor: floor);
+
+  static List<OcrToken> _read(
+    GrayImage image,
+    int window, {
+    required int offset,
+    required int floor,
+  }) {
     final w = image.width, h = image.height;
-    final mask = _binarize(image, window);
+    final mask = _binarize(image, window, offset: offset, floor: floor);
     final labels = Int32List(w * h);
     final blobs = <_Blob>[];
     final stack = <int>[];
@@ -259,25 +388,81 @@ abstract final class SevenSegmentReader {
       }
     }
 
+    // Every digit of one display leans the same way: one slant for the
+    // pass (median of the tall pieces) instead of each digit's own
+    // estimate, which a "7"'s top bar or a "4"'s open top tilts (QA 135).
+    final estimates = [
+      for (final piece in pieces)
+        if (piece.height >= 18 && piece.width >= 0.3 * piece.height)
+          ?_estimateSlant(mask, w, piece),
+    ]..sort();
+    final slant = estimates.isEmpty
+        ? null
+        : estimates[estimates.length ~/ 2].clamp(-0.12, 0.4).toDouble();
+    String? decode(_Piece piece, {double? width}) =>
+        _decode(mask, w, h, piece, width: width, slant: slant);
+    ({String? ch, double conf}) scored(_Piece piece, {double? width}) =>
+        _decodeScored(mask, w, h, piece, width: width, slant: slant);
+
     final cells = <_Cell>[];
     for (final piece in pieces) {
       final ph = piece.height, pw = piece.width;
       if (ph < 10 || piece.members.isEmpty) continue;
       final thicks = [for (final b in piece.members) b.thick]..sort();
       final thick = thicks[thicks.length ~/ 2];
+      // A "1" leans with the italic: its box is the stroke plus the slant
+      // (QA 135: a slanted "1" was decoded as a "2").
+      // A "1" is strokes only: no row is lit much wider than a stroke. A
+      // "3" or "7" is as narrow (no left column) but has its bars.
+      final thinnest = [
+        for (final b in piece.members) b.thick,
+      ].reduce(math.min);
+      final barless =
+          _longestRun(mask, w, piece) <=
+          1.35 * math.min(thick, thinnest + 2) + 2;
+      final one =
+          barless &&
+          ph >= 18 &&
+          thick >= 2 &&
+          piece.members.length <= 3 &&
+          ph >= 3.0 * thick &&
+          // It leans with the italic: stroke plus slant (QA 135: a slanted
+          // "1" was decoded as a "2").
+          pw <= thick + 0.38 * ph &&
+          pw < 0.55 * ph;
+      if (one) {
+        cells.add(_Cell('1', piece.rect));
+        continue;
+      }
       if (pw < 0.42 * ph) {
-        if (ph > 2.5 * pw &&
-            ph >= 18 &&
-            thick >= 2 &&
-            piece.members.length <= 3) {
-          cells.add(_Cell('1', piece.rect));
+        if (ph >= 18 && !barless) {
+          // "3" and "7" have no left column: decode them in a cell of the
+          // usual width ending at their right edge (QA 135: "47" read
+          // "41", "123" read "12").
+          final ch = decode(piece, width: 0.56 * ph);
+          if (ch == '7' || ch == '3') cells.add(_Cell(ch!, piece.rect));
         }
         continue;
       }
       if (pw > 1.0 * ph && !(ph >= 0.8 * pw && piece.members.length >= 3)) {
         continue;
       }
-      final ch = _decode(mask, w, h, piece);
+      final natural = scored(piece);
+      var ch = natural.ch;
+      if (pw < 0.75 * ph &&
+          !barless &&
+          (ch == null || ch == '1' || ch == '3' || ch == '7')) {
+        // "7" and "3" have no left column, so their measured cell is too
+        // narrow and the zones crowd the right column: a tilted "7" read
+        // "3" (QA 135). Decode in the usual cell width too, keep the
+        // better match.
+        final virtual = scored(piece, width: 0.56 * ph);
+        if ((virtual.ch == '7' || virtual.ch == '3') &&
+            (ch == null || ch == '1' || virtual.conf > natural.conf)) {
+          ch = virtual.ch;
+        }
+      }
+      if (ch == '1' && !barless) ch = null;
       if (ch != null) {
         cells.add(_Cell(ch, piece.rect));
       } else {
@@ -285,35 +470,69 @@ abstract final class SevenSegmentReader {
       }
     }
     cells.sort((a, b) => a.box.left.compareTo(b.box.left));
+    // A "1" with a short bar on its top is a "7" whose top bar came apart
+    // at this threshold (QA 135: "47" read "41").
+    for (var i = 0; i < cells.length; i++) {
+      final cell = cells[i];
+      if (cell.text != '1') continue;
+      final b = cell.box;
+      for (final bar in loose) {
+        if (bar.height <= 0.32 * b.height &&
+            bar.width >= 0.22 * b.height &&
+            bar.width <= 0.75 * b.height &&
+            bar.bottom >= b.top - 0.12 * b.height &&
+            bar.top <= b.top + 0.08 * b.height &&
+            bar.right >= b.left - 0.15 * b.height &&
+            bar.right <= b.right + 0.15 * b.height &&
+            bar.left < b.left) {
+          cells[i] = _Cell('7', b.expandToInclude(bar));
+          break;
+        }
+      }
+    }
 
-    // Digits on one row form a number.
+    // Digits on one row form a number. "1", "4" and "7" have no top or
+    // bottom bar, so they stand shorter than their neighbours (QA 135:
+    // "12" read "1", "4818" read "488"): a row is a band as tall as its
+    // full digits, and those three may fill only part of it.
     final runs = <_Run>[];
     for (final cell in cells) {
       final ch = cell.text;
       final box = cell.box;
-      final cellH = box.height;
-      final vLeft = ch == '1' ? box.right - 0.6 * cellH : box.left;
+      final short = _shortGlyphs.contains(ch);
       var joined = false;
       for (final run in runs) {
-        final last = run.boxes.last;
-        final lastH = last.height;
-        final sameRow =
-            (box.center.dy - last.center.dy).abs() <
-            0.3 * math.max(cellH, lastH);
-        final ratio = cellH / lastH;
-        final small = ch == 'C' && ratio > 0.3 && ratio < 1.3;
-        final gap = vLeft - last.right;
-        if (sameRow &&
-            ((ratio > 0.75 && ratio < 1.33) || small) &&
-            gap > -0.3 * lastH &&
-            gap < 1.0 * lastH) {
-          run.text += ch;
-          run.boxes.add(box);
+        // Follow the row's slope (phone a few degrees off level): the band
+        // moves with the line through the run's digits (QA 135).
+        final band = run.band.shift(
+          Offset(0, run.slope * (box.center.dx - run.band.center.dx)),
+        );
+        final bandH = math.max(band.height, short ? 0 : box.height);
+        final rowH = math.max(bandH, box.height);
+        final inBand =
+            box.top >= band.top - 0.25 * rowH &&
+            box.bottom <= band.bottom + 0.25 * rowH &&
+            (box.center.dy - band.center.dy).abs() < 0.3 * rowH;
+        final ratio = box.height / math.max(1, band.height);
+        // The "°C" C is as tall as its digits; the small "%" is not (it
+        // must never turn "68 %" into the temperature "68C").
+        final sizeOk = ch == 'C'
+            ? ratio > 0.7 && ratio < 1.3
+            : short
+            ? ratio > 0.55 && ratio < 1.33
+            : (ratio > 0.75 && ratio < 1.33) ||
+                  // The run so far holds only short glyphs ("1" then "2").
+                  (run.allShort && ratio >= 1.0 && ratio < 1.85);
+        // A "1" sits at the right of its cell.
+        final vLeft = ch == '1' ? box.right - 0.6 * rowH : box.left;
+        final gap = vLeft - run.right;
+        if (inBand && sizeOk && gap > -0.3 * rowH && gap < 1.0 * rowH) {
+          run.add(ch, box, short: short);
           joined = true;
           break;
         }
       }
-      if (!joined) runs.add(_Run(ch, box));
+      if (!joined) runs.add(_Run(ch, box, short: short));
     }
 
     // A small glyph just right of a number on its baseline is the "%"
@@ -322,21 +541,28 @@ abstract final class SevenSegmentReader {
       for (final r in runs)
         if (r.boxes.first.height >= 18) r,
     ];
+    // Any lone glyph, small or not: a "%" can decode as a digit (QA 135).
     final candidates = <(Rect, _Run?)>[
       for (final r in runs)
-        if (r.text.length == 1 && !big.contains(r)) (r.boxes.first, r),
+        if (r.text.length == 1) (r.boxes.first, r),
       for (final rect in loose) (rect, null),
     ];
     final percents = <Rect>[];
     for (final (rect, run) in candidates) {
       for (final target in big) {
-        final tb = target.rect;
-        final th = tb.height;
+        if (identical(target, run)) continue;
+        // Its digits' height and its last digit, not the whole run's box:
+        // a tilted run's box is taller than its digits, and a trailing "1"
+        // then passed for a "%" (QA 135: 25031 read 2503).
+        final heights = [for (final b in target.boxes) b.height]..sort();
+        final th = heights[heights.length ~/ 2];
+        final last = target.boxes.last;
+        final maxRatio = run?.text == '1' ? 0.5 : 0.65;
         if (rect.height >= 0.25 * th &&
-            rect.height <= 0.65 * th &&
-            rect.left - tb.right >= -0.2 * th &&
-            rect.left - tb.right <= 0.9 * th &&
-            (rect.bottom - tb.bottom).abs() <= 0.3 * th) {
+            rect.height <= maxRatio * th &&
+            rect.left - last.right >= -0.2 * th &&
+            rect.left - last.right <= 0.9 * th &&
+            (rect.bottom - last.bottom).abs() <= 0.3 * th) {
           if (run != null) runs.remove(run);
           percents.add(rect);
           break;
@@ -352,7 +578,12 @@ abstract final class SevenSegmentReader {
     ];
   }
 
-  static Uint8List _binarize(GrayImage image, int window) {
+  static Uint8List _binarize(
+    GrayImage image,
+    int window, {
+    required int offset,
+    required int floor,
+  }) {
     final w = image.width, h = image.height, px = image.pixels;
     // Integral image for the local mean.
     final integral = Int64List((w + 1) * (h + 1));
@@ -370,7 +601,7 @@ abstract final class SevenSegmentReader {
       final y0 = math.max(0, y - r), y1 = math.min(h, y + r + 1);
       for (var x = 0; x < w; x++) {
         final v = px[y * w + x];
-        if (v <= 100) continue;
+        if (v <= floor) continue;
         final x0 = math.max(0, x - r), x1 = math.min(w, x + r + 1);
         final sum =
             integral[y1 * (w + 1) + x1] -
@@ -378,7 +609,7 @@ abstract final class SevenSegmentReader {
             integral[y1 * (w + 1) + x0] +
             integral[y0 * (w + 1) + x0];
         final mean = sum / ((x1 - x0) * (y1 - y0));
-        if (v > mean + 28) out[y * w + x] = 1;
+        if (v > mean + offset) out[y * w + x] = 1;
       }
     }
     return out;
@@ -424,34 +655,93 @@ abstract final class SevenSegmentReader {
     return out;
   }
 
-  static String? _decode(Uint8List mask, int w, int h, _Piece cell) {
-    final x0 = cell.x0.toDouble(), y0 = cell.y0.toDouble();
-    final cellH = cell.height.toDouble(), cellW = cell.width.toDouble();
+  /// The glyph in [cell]. [width] fixes the cell width (a "3" or "7"
+  /// without its left column); otherwise it is measured per slant.
+  static String? _decode(
+    Uint8List mask,
+    int w,
+    int h,
+    _Piece cell, {
+    double? width,
+    double? slant,
+  }) => _decodeScored(mask, w, h, cell, width: width, slant: slant).ch;
+
+  static ({String? ch, double conf}) _decodeScored(
+    Uint8List mask,
+    int w,
+    int h,
+    _Piece cell, {
+    double? width,
+    double? slant,
+  }) {
+    final y0 = cell.y0.toDouble();
+    final cellH = cell.height.toDouble();
     final cy = (cell.y0 + cell.y1) / 2;
     String? best;
     var bestConf = -1.0;
-    for (final slant in const [0.0, 0.07, 0.14, 0.21]) {
-      final cw = cellW - slant * cellH;
-      if (cw <= 0) continue;
-      final left = x0 + slant * cellH / 2;
-      var bits = 0;
-      var conf = 0.0;
-      for (final z in _zones) {
-        final f = _frac(
-          mask,
-          w,
-          h,
-          left + z[0] * cw,
-          left + z[1] * cw,
-          y0 + z[2] * cellH,
-          y0 + z[3] * cellH,
-          slant,
-          cy,
-        );
-        bits = (bits << 1) | (f >= 0.32 ? 1 : 0);
-        conf += (f - 0.32).abs();
+    // Italic LCD digits plus the camera's tilt (QA 135): search around the
+    // display's slant.
+    final slants = slant == null
+        ? const [0.0, 0.07, 0.14, 0.21]
+        : [
+            for (final d in const [-0.06, -0.03, 0.0, 0.03, 0.06])
+              (slant + d).clamp(-0.12, 0.4).toDouble(),
+          ];
+    for (final slant in slants) {
+      // The cell in un-sheared coordinates (u = x - slant·(cy - y)): its
+      // box edges are then the glyph's columns whatever segments it has.
+      // Taking the plain box made digits without an "e" ("9", "4", "7")
+      // sit half a slant off and lose their "f" (QA 135: 99 read 33).
+      var uMin = double.infinity, uMax = -double.infinity;
+      for (var y = cell.y0; y < cell.y1; y++) {
+        final dx = slant * (cy - y);
+        for (var x = cell.x0; x < cell.x1; x++) {
+          if (mask[y * w + x] == 0) continue;
+          final u = x - dx;
+          if (u < uMin) uMin = u;
+          if (u + 1 > uMax) uMax = u + 1;
+        }
       }
-      var ch = _patterns[bits];
+      if (!uMax.isFinite) return (ch: null, conf: 0.0);
+      final cw = width ?? (uMax - uMin);
+      if (cw <= 0) continue;
+      final left = width == null ? uMin : uMax - width;
+      final lit = [
+        for (final z in _zones)
+          _frac(
+            mask,
+            w,
+            h,
+            left + z[0] * cw,
+            left + z[1] * cw,
+            y0 + z[2] * cellH,
+            y0 + z[3] * cellH,
+            slant,
+            cy,
+          ),
+      ];
+      // Soft match against every glyph (QA 135): a zone half on a stroke
+      // no longer flips a hard 0.32 threshold and voids the digit.
+      String? ch;
+      var conf = -1.0, second = -1.0;
+      for (final entry in _patterns.entries) {
+        var score = 0.0;
+        for (var z = 0; z < 7; z++) {
+          final on = (entry.key >> (6 - z)) & 1 == 1;
+          final f = lit[z];
+          score += on
+              ? ((f - 0.1) / 0.4).clamp(0.0, 1.0)
+              : ((0.45 - f) / 0.35).clamp(0.0, 1.0);
+        }
+        if (score > conf) {
+          if (_patterns[entry.key] != ch) second = conf;
+          conf = score;
+          ch = entry.value;
+        } else if (score > second && entry.value != ch) {
+          second = score;
+        }
+      }
+      if (conf < 5.6 || conf - second < 0.35) ch = null;
       if (ch == '0' || ch == '8') {
         for (final z in _holes) {
           final f = _frac(
@@ -471,6 +761,49 @@ abstract final class SevenSegmentReader {
       if (ch != null && conf > bestConf) {
         best = ch;
         bestConf = conf;
+      }
+    }
+    return (ch: best, conf: bestConf);
+  }
+
+  /// Slant of [cell]'s right edge (positive = top leans right), or null
+  /// when the glyph has too few rows to tell.
+  static double? _estimateSlant(Uint8List mask, int w, _Piece cell) {
+    final rows = cell.height;
+    if (rows < 12) return null;
+    double? band(int from, int to) {
+      var sum = 0.0, n = 0;
+      for (var y = from; y < to; y++) {
+        for (var x = cell.x1 - 1; x >= cell.x0; x--) {
+          if (mask[y * w + x] != 0) {
+            sum += x;
+            n++;
+            break;
+          }
+        }
+      }
+      return n < 2 ? null : sum / n;
+    }
+
+    final third = rows ~/ 3;
+    final top = band(cell.y0, cell.y0 + third);
+    final bottom = band(cell.y1 - third, cell.y1);
+    if (top == null || bottom == null) return null;
+    return (top - bottom) / (rows - third);
+  }
+
+  /// Longest run of lit pixels on one row of [piece].
+  static int _longestRun(Uint8List mask, int w, _Piece piece) {
+    var best = 0;
+    for (var y = piece.y0; y < piece.y1; y++) {
+      var run = 0;
+      for (var x = piece.x0; x < piece.x1; x++) {
+        if (mask[y * w + x] != 0) {
+          run++;
+          if (run > best) best = run;
+        } else {
+          run = 0;
+        }
       }
     }
     return best;
@@ -552,10 +885,49 @@ class _Cell {
 }
 
 class _Run {
-  _Run(this.text, Rect first) : boxes = [first];
+  _Run(this.text, Rect first, {required bool short})
+    : boxes = [first],
+      allShort = short,
+      band = first;
 
   String text;
   final List<Rect> boxes;
+
+  /// Every glyph so far is a short one (1, 4, 7).
+  bool allShort;
+
+  /// The vertical extent of the row's full-height digits (or of the short
+  /// glyphs while there are no others yet).
+  Rect band;
+
+  double get right => boxes.last.right;
+
+  /// Vertical drift per pixel along the row, from the first and last of
+  /// its full-height digits (0 until there are two).
+  double slope = 0;
+  Rect? _firstFull;
+
+  void add(String ch, Rect box, {required bool short}) {
+    text += ch;
+    boxes.add(box);
+    if (!short) {
+      final first = _firstFull ??= allShort ? null : band;
+      if (first != null && box.center.dx - first.center.dx > first.height) {
+        slope =
+            (box.center.dy - first.center.dy) /
+            (box.center.dx - first.center.dx);
+      }
+    }
+    // The band is the latest full digit (moved along the slope when it is
+    // used): the union of a tilted row is taller than its digits, and a
+    // "1" then looked too short to belong (QA 135).
+    if (!short) {
+      band = box;
+      allShort = false;
+    } else if (allShort) {
+      band = band.expandToInclude(box);
+    }
+  }
 
   Rect get rect => boxes.reduce((a, b) => a.expandToInclude(b));
 }

@@ -245,7 +245,7 @@ class _BatteryReadingSheetState extends State<BatteryReadingSheet> {
               message: read.isEmpty
                   ? 'Chưa đọc được số nào. Chụp gần, thẳng, đủ sáng và không '
                         'lóa, hoặc nhập tay.'
-                  : '${read.frames > 0 ? 'Đã khớp qua ${read.frames} khung hình' : 'Đọc được'}: '
+                  : '${read.aiAssisted ? 'Đọc bằng AI ảnh' : read.frames > 0 ? 'Đã khớp qua ${read.frames} khung hình' : 'Đọc được'}: '
                         '${[if (read.soc != null) '${read.soc}%', if (read.odoKm != null) 'ODO ${_plain(read.odoKm!)} km'].join(' · ')}. '
                         'So lại với đồng hồ xe rồi bấm Lưu.',
             ),

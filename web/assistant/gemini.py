@@ -48,7 +48,7 @@ class GeminiClient:
 
     def generate(self, *, system: str, contents: list[dict], tools: list[dict] | None = None,
                  temperature: float = 0.4, max_tokens: int = 1024, tool_mode: str = "AUTO",
-                 timeout: float | None = None) -> list[dict]:
+                 timeout: float | None = None, response_mime_type: str | None = None) -> list[dict]:
         """Return the first candidate's parts ({"text"} / {"functionCall"}).
 
         ``timeout`` is what is left of the chat turn's overall budget;
@@ -62,6 +62,9 @@ class GeminiClient:
             "contents": contents,
             "generationConfig": {"temperature": temperature, "maxOutputTokens": max_tokens},
         }
+        if response_mime_type:
+            # QA 135: the dashboard reader asks for a JSON answer.
+            body["generationConfig"]["responseMimeType"] = response_mime_type
         if tools:
             body["tools"] = [{"functionDeclarations": tools}]
             body["toolConfig"] = {"functionCallingConfig": {"mode": tool_mode}}

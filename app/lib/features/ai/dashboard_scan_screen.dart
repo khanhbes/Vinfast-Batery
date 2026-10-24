@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:math' as math;
 
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
@@ -13,6 +14,8 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../core/theme/luxe_theme.dart';
 import '../../core/utils/number_text.dart';
 import '../../core/widgets/luxe_kit.dart';
+import '../../core/services/pinova_api.dart';
+import '../../data/services/dashboard_ai_reader.dart';
 import '../../data/services/dashboard_layout_parser.dart';
 import '../../data/services/dashboard_reader.dart';
 import '../../data/services/seven_segment_reader.dart';
@@ -99,6 +102,19 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
   Timer? _hintTimer;
   final _log = _ScanLog();
 
+  /// The guide window: only this part of the frame is read (QA 135).
+  final _guideKey = GlobalKey();
+  final _stackKey = GlobalKey();
+
+  /// The image model's turn (QA 135): one crop of the guide window when
+  /// the phone has not locked both numbers after [_aiAfter].
+  static const _aiAfter = Duration(milliseconds: 2500);
+  final _ai = DashboardAiReader();
+  _FrameJob? _lastJob;
+  Timer? _aiTimer;
+  bool _aiAsked = false;
+  bool _aiAssisted = false;
+
   @override
   void initState() {
     super.initState();
@@ -110,6 +126,7 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _hintTimer?.cancel();
+    _aiTimer?.cancel();
     _stopCamera();
     _recognizer?.close();
     _log.line(
@@ -250,13 +267,48 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
       bytesPerRow: plane.bytesPerRow,
       rotation: degrees,
       bgra: Platform.isIOS,
+      roi: _guideRoi(_imageSize!),
     );
+    _lastJob = job;
     final text = _noSegments >= 4 && _noSegments % 2 == 0
         ? _inputImage(image, degrees, format!)
         : null;
     _busy = true;
     _lastFrameAt = now;
     _process(job, text).whenComplete(() => _busy = false);
+  }
+
+  /// The guide window as fractions of the upright frame, with a margin
+  /// (the preview is cover-fitted to the screen). Null before layout.
+  Rect? _guideRoi(Size upright) {
+    final guide = _guideKey.currentContext?.findRenderObject();
+    final stack = _stackKey.currentContext?.findRenderObject();
+    if (guide is! RenderBox || stack is! RenderBox) return null;
+    if (!guide.hasSize || !stack.hasSize) return null;
+    final screen = stack.size;
+    final window = _GuidePainter.windowFor(
+      guide.size,
+    ).shift(guide.localToGlobal(Offset.zero, ancestor: stack));
+    final scale = math.max(
+      screen.width / upright.width,
+      screen.height / upright.height,
+    );
+    final shownW = upright.width * scale, shownH = upright.height * scale;
+    final ox = (screen.width - shownW) / 2, oy = (screen.height - shownH) / 2;
+    final r = Rect.fromLTRB(
+      (window.left - ox) / shownW,
+      (window.top - oy) / shownH,
+      (window.right - ox) / shownW,
+      (window.bottom - oy) / shownH,
+    );
+    final mx = r.width * 0.12, my = r.height * 0.18;
+    final roi = Rect.fromLTRB(
+      math.max(0, r.left - mx),
+      math.max(0, r.top - my),
+      math.min(1, r.right + mx),
+      math.min(1, r.bottom + my),
+    );
+    return roi.width > 0.1 && roi.height > 0.05 ? roi : null;
   }
 
   int? _rotationDegrees() {
@@ -297,30 +349,34 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
 
   Future<void> _process(_FrameJob job, InputImage? text) async {
     final watch = Stopwatch()..start();
-    var tokens = await _FrameJob.segments(job);
-    final hasDigits = tokens.any((t) => RegExp(r'\d').hasMatch(t.text));
+    final frame = await _FrameJob.read(job, widget.lastOdoKm);
+    final hasDigits = frame.hasDigits;
     _noSegments = hasDigits ? 0 : _noSegments + 1;
+    var reading = frame.reading;
     final recognizer = _recognizer;
     if (!hasDigits && text != null && recognizer != null) {
       try {
-        tokens = DashboardOcr.tokensOf(await recognizer.processImage(text));
+        reading = DashboardLayoutParser.parse(
+          DashboardOcr.tokensOf(await recognizer.processImage(text)),
+          lastOdoKm: widget.lastOdoKm,
+        );
       } on Object catch (e) {
         _log.line('ocr failed ${e.runtimeType}');
       }
     }
     if (!mounted || _done) return;
-    final reading = DashboardLayoutParser.parse(
-      tokens,
-      lastOdoKm: widget.lastOdoKm,
-    );
     _frames++;
+    // The image model gets one turn if the phone has not locked both
+    // numbers after a moment (QA 135).
+    _aiTimer ??= Timer(_aiAfter, _askAi);
     _log.line(
       'frame $_frames ${watch.elapsedMilliseconds}ms '
       '${hasDigits ? 'seg' : (text != null ? 'mlkit' : 'none')} '
       'img=${_imageSize?.width.round()}x${_imageSize?.height.round()} '
+      'roi=${job.roi} '
       'soc=${reading.soc}${reading.socConfident ? '' : '?'} '
-      'odo=${reading.odoKm}${reading.odoConfident ? '' : '?'} | '
-      '${tokens.map((t) => '${t.text}@${t.box.left.round()},${t.box.top.round()},${t.box.width.round()}x${t.box.height.round()}').join(' | ')}',
+      'odo=${reading.odoKm}${reading.odoConfident ? '' : '?'} '
+      'cand=${reading.socCandidates}/${reading.odoCandidates}',
     );
     final socBefore = _vote.socLocked;
     final odoBefore = _vote.odoLocked;
@@ -332,6 +388,46 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
     setState(() {
       _socBox = reading.socBox ?? _socBox;
       _odoBox = (reading.odoConfident ? reading.odoBox : null) ?? _odoBox;
+    });
+    if (_vote.bothLocked) _finish();
+  }
+
+  Future<void> _askAi() async {
+    final job = _lastJob;
+    if (_aiAsked || _done || _vote.bothLocked || job == null || !mounted) {
+      return;
+    }
+    _aiAsked = true;
+    try {
+      final png = await Isolate.run(() => _FrameJob.png(job));
+      final result = await _ai.read(png, lastOdoKm: widget.lastOdoKm);
+      _log.line(
+        'ai soc=${result.soc} odo=${result.odoKm} conf=${result.confidence}',
+      );
+      _mergeAi(result);
+    } on PinovaApiException catch (e) {
+      _log.line('ai unavailable ${e.code}');
+    } on Object catch (e) {
+      _log.line('ai failed ${e.runtimeType}');
+    }
+  }
+
+  /// The model's numbers fill what the frames have not locked; the owner
+  /// still checks them on the next sheet.
+  void _mergeAi(DashboardAiResult result) {
+    if (!mounted || _done || result.isEmpty) return;
+    final last = widget.lastOdoKm;
+    final odo = result.odoKm;
+    final odoOk = odo != null && (last == null || odo >= last - 1);
+    setState(() {
+      if (_vote.socLocked == null && result.soc != null) {
+        _vote.socLocked = result.soc;
+        _aiAssisted = true;
+      }
+      if (_vote.odoLocked == null && odoOk) {
+        _vote.odoLocked = odo;
+        _aiAssisted = true;
+      }
     });
     if (_vote.bothLocked) _finish();
   }
@@ -348,6 +444,7 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
       odoCandidates: [if (_vote.odoLocked != null) _vote.odoLocked!],
       odoFromLabel: _vote.odoLocked != null,
       frames: _vote.needed,
+      aiAssisted: _aiAssisted,
     );
     // A beat so the owner sees both values lock before the sheet returns.
     await Future<void>.delayed(const Duration(milliseconds: 550));
@@ -382,13 +479,40 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
       }
       final shot = await controller.takePicture();
       await _log.keep(shot.path);
-      final read = await DashboardReader.readFile(
+      var read = await DashboardReader.readFile(
         shot.path,
         lastOdoKm: widget.lastOdoKm,
-        delete: true,
       );
+      var ai = false;
+      if (read.soc == null || read.odoKm == null) {
+        // The photo's turn with the image model (QA 135).
+        try {
+          final png = await DashboardReader.pngOfFile(shot.path);
+          if (png != null) {
+            final result = await _ai.read(png, lastOdoKm: widget.lastOdoKm);
+            final last = widget.lastOdoKm;
+            final odoOk =
+                result.odoKm != null &&
+                (last == null || result.odoKm! >= last - 1);
+            ai =
+                (read.soc == null && result.soc != null) ||
+                (read.odoKm == null && odoOk);
+            read = DashboardReading(
+              soc: read.soc ?? result.soc,
+              odoKm: read.odoKm ?? (odoOk ? result.odoKm : null),
+              socCandidates: read.socCandidates,
+              odoCandidates: read.odoCandidates,
+              odoFromLabel: read.odoFromLabel,
+              rawText: read.rawText,
+            );
+          }
+        } on Object catch (e) {
+          _log.line('still ai failed ${e.runtimeType}');
+        }
+      }
+      unawaited(File(shot.path).delete().then((_) {}, onError: (_) {}));
       _log.line(
-        'still soc=${read.soc} odo=${read.odoKm} | ${read.rawText.replaceAll('\n', ' / ')}',
+        'still soc=${read.soc} odo=${read.odoKm} ai=$ai | ${read.rawText.replaceAll('\n', ' / ')}',
       );
       if (!mounted) return;
       final reading = DashboardReading(
@@ -398,6 +522,7 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
         odoCandidates: read.odoCandidates,
         odoFromLabel: read.odoFromLabel,
         rawText: read.rawText,
+        aiAssisted: ai || _aiAssisted,
       );
       if (!reading.isEmpty) {
         _done = true;
@@ -451,6 +576,7 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
       child: Scaffold(
         backgroundColor: Colors.black,
         body: Stack(
+          key: _stackKey,
           fit: StackFit.expand,
           children: [
             if (ready)
@@ -516,6 +642,7 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
                 Expanded(
                   child: _problem == _CameraProblem.none
                       ? CustomPaint(
+                          key: _guideKey,
                           painter: _GuidePainter(ready: ready),
                           child: const SizedBox.expand(),
                         )
@@ -880,19 +1007,25 @@ class _GuidePainter extends CustomPainter {
 
   final bool ready;
 
+  /// The window the owner aims at (also the part of the frame read).
+  static Rect windowFor(Size size) {
+    final width = (size.width - 48).clamp(0.0, 420.0).toDouble();
+    final height = (width * 0.78)
+        .clamp(0.0, math.max(0.0, size.height - 32))
+        .toDouble();
+    return Rect.fromCenter(
+      center: size.center(Offset.zero),
+      width: width,
+      height: height,
+    );
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
-    final width = (size.width - 48).clamp(0.0, 420.0);
-    final height = (width * 0.78).clamp(0.0, size.height - 32);
-    if (width <= 0 || height <= 0) return;
-    final window = RRect.fromRectAndRadius(
-      Rect.fromCenter(
-        center: size.center(Offset.zero),
-        width: width,
-        height: height,
-      ),
-      const Radius.circular(26),
-    );
+    final rect = windowFor(size);
+    final width = rect.width;
+    if (rect.width <= 0 || rect.height <= 0) return;
+    final window = RRect.fromRectAndRadius(rect, const Radius.circular(26));
     canvas.drawPath(
       Path()
         ..fillType = PathFillType.evenOdd
@@ -1083,6 +1216,7 @@ class _FrameJob {
     required this.bytesPerRow,
     required this.rotation,
     required this.bgra,
+    this.roi,
   });
 
   final Uint8List bytes;
@@ -1092,45 +1226,57 @@ class _FrameJob {
   final int rotation;
   final bool bgra;
 
-  /// Tokens in upright full-frame coordinates (like ML Kit's).
-  static Future<List<OcrToken>> segments(_FrameJob job) async {
+  /// The guide window (fractions of the upright frame); null = all of it.
+  final Rect? roi;
+
+  GrayCrop _crop({int maxSide = 720}) => GrayImage.crop(
+    bytes,
+    width: width,
+    height: height,
+    bytesPerRow: bytesPerRow,
+    rotation: rotation,
+    bgra: bgra,
+    roi: roi ?? const Rect.fromLTRB(0, 0, 1, 1),
+    maxSide: roi == null ? 960 : maxSide,
+  );
+
+  /// The frame's reading, boxes in upright full-frame coordinates (QA 135:
+  /// the guide window at full resolution, several thresholds, consensus).
+  static Future<({DashboardLayoutReading reading, bool hasDigits})> read(
+    _FrameJob job,
+    double? lastOdoKm,
+  ) async {
     try {
-      return await Isolate.run(() => _read(job));
+      return await Isolate.run(() {
+        final crop = job._crop();
+        final passes = SevenSegmentReader.readPasses(crop.image);
+        final hasDigits = passes.any(
+          (p) => p.any((t) => RegExp(r'\d').hasMatch(t.text)),
+        );
+        final r = DashboardLayoutParser.combine([
+          for (final p in passes)
+            DashboardLayoutParser.parse(p, lastOdoKm: lastOdoKm),
+        ]);
+        return (
+          reading: DashboardLayoutReading(
+            soc: r.soc,
+            odoKm: r.odoKm,
+            socBox: r.socBox == null ? null : crop.toFrame(r.socBox!),
+            odoBox: r.odoBox == null ? null : crop.toFrame(r.odoBox!),
+            socConfident: r.socConfident,
+            odoConfident: r.odoConfident,
+            socCandidates: r.socCandidates,
+            odoCandidates: r.odoCandidates,
+          ),
+          hasDigits: hasDigits,
+        );
+      });
     } on Object {
-      return const [];
+      return (reading: const DashboardLayoutReading(), hasDigits: false);
     }
   }
 
-  static List<OcrToken> _read(_FrameJob job) {
-    final gray = job.bgra
-        ? GrayImage.fromBgra(
-            job.bytes,
-            width: job.width,
-            height: job.height,
-            bytesPerRow: job.bytesPerRow,
-            rotation: job.rotation,
-          )
-        : GrayImage.fromLuminance(
-            job.bytes,
-            width: job.width,
-            height: job.height,
-            bytesPerRow: job.bytesPerRow,
-            rotation: job.rotation,
-          );
-    final quarter = job.rotation == 90 || job.rotation == 270;
-    final fullHeight = quarter ? job.width : job.height;
-    final scale = fullHeight / gray.height;
-    return [
-      for (final t in SevenSegmentReader.read(gray))
-        OcrToken(
-          t.text,
-          Rect.fromLTRB(
-            t.box.left * scale,
-            t.box.top * scale,
-            t.box.right * scale,
-            t.box.bottom * scale,
-          ),
-        ),
-    ];
-  }
+  /// The guide window as a small grayscale PNG for the image model.
+  static Uint8List png(_FrameJob job) =>
+      DashboardAiReader.pngFor(job._crop(maxSide: 768).image);
 }

@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image_picker/image_picker.dart';
 
+import 'dashboard_ai_reader.dart';
 import 'dashboard_layout_parser.dart';
 import 'seven_segment_reader.dart';
 
@@ -23,6 +24,7 @@ class DashboardReading {
     this.odoFromLabel = false,
     this.rawText = '',
     this.frames = 0,
+    this.aiAssisted = false,
   });
 
   final int? soc;
@@ -37,6 +39,10 @@ class DashboardReading {
   /// Camera frames that agreed on the values (live scan, QA 131); 0 for a
   /// single photo.
   final int frames;
+
+  /// Part of it came from the server's image model (QA 135): the sheet
+  /// says so; the owner still checks before saving.
+  final bool aiAssisted;
 
   bool get isEmpty => soc == null && odoKm == null;
 }
@@ -265,6 +271,29 @@ class DashboardReader {
 
   /// Seven-segment reading of a photo, tried upright and turned (the
   /// photo's orientation may not be applied); null when nothing is read.
+  /// A photo as a small grayscale PNG for the image model (QA 135).
+  static Future<Uint8List?> pngOfFile(String path) async {
+    try {
+      final bytes = await File(path).readAsBytes();
+      final codec = await ui.instantiateImageCodec(bytes, targetHeight: 900);
+      final frame = await codec.getNextFrame();
+      final image = frame.image;
+      final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      final width = image.width, height = image.height;
+      image.dispose();
+      codec.dispose();
+      if (data == null) return null;
+      final rgba = data.buffer.asUint8List();
+      return await Isolate.run(
+        () => DashboardAiReader.pngFor(
+          GrayImage.fromRgba(rgba, width, height, targetHeight: 900),
+        ),
+      );
+    } on Object {
+      return null;
+    }
+  }
+
   static Future<DashboardReading?> readSegments(
     String path, {
     double? lastOdoKm,
@@ -284,8 +313,8 @@ class DashboardReader {
         final gray = GrayImage.fromRgba(rgba, width, height);
         DashboardLayoutReading? best;
         for (final turn in const [0, 90, 270, 180]) {
-          final reading = DashboardLayoutParser.parse(
-            SevenSegmentReader.read(gray.rotated(turn)),
+          final reading = SevenSegmentReader.readDashboard(
+            gray.rotated(turn),
             lastOdoKm: lastOdoKm,
           );
           final score =
