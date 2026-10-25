@@ -7,6 +7,7 @@ import '../../core/widgets/luxe_submit_button.dart';
 import '../../core/widgets/luxe_settings.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/widgets/app_popup.dart';
+import '../premium/plan_tag.dart';
 
 /// Personal Information Screen — PLAN #3
 /// Shows user profile from Firestore registration data
@@ -400,6 +401,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         const SizedBox(height: 4),
         Text(_email, textAlign: TextAlign.center, style: LuxeText.caption),
+        const SizedBox(height: 4),
+        const CurrentPlanTag(key: ValueKey('profile-plan-tag'), large: true),
       ],
     );
   }

@@ -199,11 +199,23 @@ void main() {
         height: scale == 1 ? 3200 : 7000,
       );
       expect(tester.takeException(), isNull);
+      // QA 136: one plan at a time, Ultra first; the trial at the bottom.
       expect(find.text('Pinova Ultra'), findsOneWidget);
-      expect(find.text('Pinova Pro'), findsOneWidget);
       expect(find.text('ĐỀ XUẤT'), findsOneWidget);
       expect(find.text('Bạn đang dùng gói Free'), findsOneWidget);
       expect(find.byKey(const ValueKey('premium-trial-ultra')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('premium-tier-pro')));
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.text('Pinova Pro'), findsOneWidget);
+      expect(find.text('Lộ trình'), findsWidgets);
+      // The comparison opens on demand and fits too.
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('premium-compare-toggle')),
+      );
+      await tester.tap(find.byKey(const ValueKey('premium-compare-toggle')));
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.text('Giao diện Aurora'), findsWidgets);
+      expect(tester.takeException(), isNull);
     });
   }
 
@@ -226,21 +238,28 @@ void main() {
   ) async {
     final billing = _FakeBilling(_plan('free'));
     await _pump(tester, const PremiumScreen(), 1, billing, height: 3200);
+    await tester.tap(find.byKey(const ValueKey('premium-promo-toggle')));
+    await tester.pump(const Duration(milliseconds: 400));
     final input = find.byKey(const ValueKey('premium-promo-input'));
     await tester.enterText(input, 'SAI123');
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.tap(find.byKey(const ValueKey('premium-promo-apply')));
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Mã khuyến mãi không đúng.'), findsOneWidget);
     await tester.enterText(input, 'TET2027');
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.tap(find.byKey(const ValueKey('premium-promo-apply')));
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(seconds: 2));
     expect(billing.codes, ['SAI123', 'TET2027']);
     expect(find.byKey(const ValueKey('premium-promo-applied')), findsOneWidget);
-    // Yearly is selected by default: the struck base and the new price.
+    // Yearly Ultra is selected by default: the struck base and the new price.
+    expect(find.text(formatVnd(359000)), findsOneWidget);
+    expect(find.text(formatVnd(449000)), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('premium-tier-pro')));
+    await tester.pump(const Duration(milliseconds: 600));
     expect(find.text(formatVnd(199000)), findsOneWidget);
     expect(find.text(formatVnd(249000)), findsOneWidget);
-    expect(find.text(formatVnd(359000)), findsOneWidget);
   });
 
   testWidgets('submit button ignores taps while busy and returns on failure', (
@@ -292,10 +311,22 @@ void main() {
       find.byKey(const ValueKey('appearance-premium-notice')),
       findsOneWidget,
     );
-    await tester.tap(find.byKey(const ValueKey('appearance-dashboard-lcd')));
+    // QA 136: a locked layout is faded and ignores taps; its tag opens
+    // Pinova Premium.
+    await tester.tap(
+      find.byKey(const ValueKey('appearance-dashboard-lcd')),
+      warnIfMissed: false,
+    );
     await tester.pump(const Duration(milliseconds: 600));
-    expect(find.byKey(const ValueKey('premium-gate-sheet')), findsOneWidget);
+    expect(find.byType(PremiumScreen), findsNothing);
+    expect(find.byKey(const ValueKey('premium-gate-sheet')), findsNothing);
     expect(container.read(appearanceProvider).dashboard, DashboardStyle.lcd);
+    await tester.tap(
+      find.byKey(const ValueKey('premium-locked-tag-appearance')).first,
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 900));
+    expect(find.byType(PremiumScreen), findsOneWidget);
   });
 
   testWidgets('Pro draws the chosen layouts', (tester) async {

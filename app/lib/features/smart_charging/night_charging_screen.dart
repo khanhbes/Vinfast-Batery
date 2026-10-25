@@ -243,7 +243,14 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
       : '${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}';
 
   @override
-  Widget build(BuildContext context) {
+  // QA 136: however this screen is reached (a tile, Pinova Bot, a
+  // notification), outside the plan it shows Pinova Premium instead.
+  Widget build(BuildContext context) => PremiumRequired(
+    feature: PremiumFeature.nightCharging,
+    child: Builder(builder: _screen),
+  );
+
+  Widget _screen(BuildContext context) {
     final plan = _plan;
     return LuxeScaffold(
       title: 'Sạc đêm an toàn',

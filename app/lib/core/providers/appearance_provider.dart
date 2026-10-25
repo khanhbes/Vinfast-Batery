@@ -150,6 +150,8 @@ class AppearanceNotifier extends Notifier<AppAppearance> {
       set(state.copyWith(charge: style));
   Future<void> setConfirm(ChargeConfirmStyle style) =>
       set(state.copyWith(confirm: style));
+  Future<void> setUltraEffects(bool on) =>
+      set(state.copyWith(ultraEffects: on));
 }
 
 final appearanceProvider = NotifierProvider<AppearanceNotifier, AppAppearance>(

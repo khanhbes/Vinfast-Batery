@@ -3,7 +3,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../data/models/entitlement.dart';
 import '../widgets/bootstrap_splash.dart';
+import 'plan_style.dart';
 
 /// LUXE — the platinum + emerald language of the whole app (Task 117: the
 /// app is dark only and every screen inherits [LuxeTheme.data]).
@@ -107,36 +109,44 @@ abstract final class LuxeTheme {
   /// Google Fonts family: it registers one family per weight, so inheriting
   /// it would flatten the thin/light weights this language relies on. Luxe
   /// screens use the platform face (Roboto on Android), like the splash.
-  static ThemeData of(BuildContext context) => data();
+  static ThemeData of(BuildContext context) =>
+      data(tier: PlanStyle.of(context).tier);
 
   /// Material theme for the whole app (dark only since Task 117): every stock
   /// control inherits the platinum/emerald styling, so screen logic keeps
-  /// plain Material widgets. Built once; ThemeData is immutable.
-  static ThemeData data() => _data;
+  /// plain Material widgets. QA 136: one theme per plan (Free keeps LUXE,
+  /// Pro silver/steel, Ultra aurora), each built once.
+  static ThemeData data({PlanTier tier = PlanTier.free}) =>
+      _cache[tier] ??= _build(PlanStyle.forTier(tier));
 
-  static final ThemeData _data = _build();
+  static final Map<PlanTier, ThemeData> _cache = {};
 
-  static ThemeData _build() {
+  static ThemeData _build(PlanStyle plan) {
     final base = ThemeData(useMaterial3: true, brightness: Brightness.dark);
-    const scheme = ColorScheme.dark(
-      primary: LuxeColors.emerald,
-      onPrimary: Color(0xFF04140D),
-      primaryContainer: Color(0xFF0E2A20),
+    // Controls take the plan's accent; status colours stay fixed.
+    final accent = plan.accent;
+    final scheme = ColorScheme.dark(
+      primary: accent,
+      onPrimary: PlanColors.ink,
+      primaryContainer: Color.alphaBlend(
+        accent.withValues(alpha: 0.18),
+        LuxeColors.background,
+      ),
       onPrimaryContainer: LuxeColors.text,
       secondary: LuxeColors.platinum,
-      onSecondary: Color(0xFF0B0C0E),
+      onSecondary: const Color(0xFF0B0C0E),
       surface: LuxeColors.background,
       onSurface: LuxeColors.text,
       onSurfaceVariant: LuxeColors.muted,
-      surfaceContainerLowest: Color(0xFF08090A),
-      surfaceContainerLow: Color(0xFF0E0F11),
-      surfaceContainer: Color(0xFF121315),
-      surfaceContainerHigh: Color(0xFF17181B),
-      surfaceContainerHighest: Color(0xFF1D1F22),
-      outline: Color(0xFF44474D),
-      outlineVariant: Color(0xFF2A2C30),
+      surfaceContainerLowest: const Color(0xFF08090A),
+      surfaceContainerLow: const Color(0xFF0E0F11),
+      surfaceContainer: const Color(0xFF121315),
+      surfaceContainerHigh: const Color(0xFF17181B),
+      surfaceContainerHighest: const Color(0xFF1D1F22),
+      outline: const Color(0xFF44474D),
+      outlineVariant: const Color(0xFF2A2C30),
       error: LuxeColors.danger,
-      onError: Color(0xFF1A0505),
+      onError: const Color(0xFF1A0505),
     );
     final text = base.textTheme.apply(
       bodyColor: LuxeColors.text,
@@ -147,6 +157,7 @@ abstract final class LuxeTheme {
       borderSide: const BorderSide(color: LuxeColors.hairline),
     );
     return base.copyWith(
+      extensions: [plan],
       colorScheme: scheme,
       scaffoldBackgroundColor: LuxeColors.background,
       canvasColor: LuxeColors.background,
@@ -173,13 +184,34 @@ abstract final class LuxeTheme {
           foregroundColor: WidgetStateProperty.resolveWith(
             (states) => states.contains(WidgetState.disabled)
                 ? LuxeColors.dim
-                : const Color(0xFF0B0C0E),
+                : PlanColors.ink,
           ),
           backgroundColor: const WidgetStatePropertyAll(Colors.transparent),
           overlayColor: const WidgetStatePropertyAll(Color(0x14000000)),
-          // Brushed platinum pill; a quiet glass pill when disabled.
+          // Brushed platinum pill (Pro: silver to steel; Ultra: a flowing
+          // aurora); a quiet glass pill when disabled.
           backgroundBuilder: (context, states, child) {
             final disabled = states.contains(WidgetState.disabled);
+            if (!disabled && plan.isUltra) {
+              return PlanFlow(
+                builder: (context, phase) => DecoratedBox(
+                  decoration: ShapeDecoration(
+                    shape: const StadiumBorder(
+                      side: BorderSide(color: Color(0x66FFFFFF)),
+                    ),
+                    gradient: planFlowGradient(phase),
+                    shadows: const [
+                      BoxShadow(
+                        color: Color(0x558B5CF6),
+                        blurRadius: 22,
+                        spreadRadius: -6,
+                      ),
+                    ],
+                  ),
+                  child: child,
+                ),
+              );
+            }
             return DecoratedBox(
               decoration: ShapeDecoration(
                 shape: StadiumBorder(
@@ -191,15 +223,15 @@ abstract final class LuxeTheme {
                 ),
                 gradient: disabled
                     ? null
-                    : const LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          LuxeColors.platinumHi,
-                          LuxeColors.platinum,
-                          Color(0xFFB9BCC1),
-                        ],
-                        stops: [0.0, 0.6, 1.0],
+                    : LinearGradient(
+                        begin: plan.isPro
+                            ? Alignment.topLeft
+                            : Alignment.topCenter,
+                        end: plan.isPro
+                            ? Alignment.bottomRight
+                            : Alignment.bottomCenter,
+                        colors: plan.accentColors,
+                        stops: const [0.0, 0.6, 1.0],
                       ),
                 color: disabled ? LuxeColors.glass : null,
                 shadows: disabled
@@ -245,7 +277,7 @@ abstract final class LuxeTheme {
         filled: true,
         fillColor: LuxeColors.glass,
         labelStyle: const TextStyle(color: LuxeColors.muted),
-        floatingLabelStyle: const TextStyle(color: LuxeColors.emerald),
+        floatingLabelStyle: TextStyle(color: accent),
         hintStyle: const TextStyle(color: LuxeColors.dim),
         helperStyle: const TextStyle(color: LuxeColors.dim),
         prefixIconColor: LuxeColors.platinumMid,
@@ -253,7 +285,7 @@ abstract final class LuxeTheme {
         border: fieldBorder,
         enabledBorder: fieldBorder,
         focusedBorder: fieldBorder.copyWith(
-          borderSide: const BorderSide(color: LuxeColors.emerald, width: 1.4),
+          borderSide: BorderSide(color: accent, width: 1.4),
         ),
         errorBorder: fieldBorder.copyWith(
           borderSide: const BorderSide(color: LuxeColors.danger),
@@ -262,28 +294,28 @@ abstract final class LuxeTheme {
           borderSide: const BorderSide(color: LuxeColors.danger, width: 1.4),
         ),
       ),
-      sliderTheme: const SliderThemeData(
+      sliderTheme: SliderThemeData(
         trackHeight: 3,
-        activeTrackColor: LuxeColors.emerald,
-        inactiveTrackColor: Color(0x24FFFFFF),
+        activeTrackColor: accent,
+        inactiveTrackColor: const Color(0x24FFFFFF),
         thumbColor: LuxeColors.platinumHi,
-        overlayColor: Color(0x2234D399),
-        activeTickMarkColor: Color(0x00000000),
-        inactiveTickMarkColor: Color(0x00000000),
-        valueIndicatorColor: Color(0xFF1D1F22),
-        valueIndicatorTextStyle: TextStyle(color: LuxeColors.text),
-        thumbShape: _LuxeThumbShape(),
+        overlayColor: accent.withValues(alpha: 0.13),
+        activeTickMarkColor: const Color(0x00000000),
+        inactiveTickMarkColor: const Color(0x00000000),
+        valueIndicatorColor: const Color(0xFF1D1F22),
+        valueIndicatorTextStyle: const TextStyle(color: LuxeColors.text),
+        thumbShape: _LuxeThumbShape(accent),
       ),
       chipTheme: ChipThemeData(
         backgroundColor: LuxeColors.glass,
-        selectedColor: const Color(0x2634D399),
+        selectedColor: accent.withValues(alpha: 0.15),
         side: const BorderSide(color: LuxeColors.hairline),
         shape: const StadiumBorder(),
         labelStyle: const TextStyle(
           color: LuxeColors.text,
           fontWeight: FontWeight.w500,
         ),
-        checkmarkColor: LuxeColors.emerald,
+        checkmarkColor: accent,
       ),
       datePickerTheme: const DatePickerThemeData(
         backgroundColor: Color(0xFF121315),
@@ -297,7 +329,7 @@ abstract final class LuxeTheme {
           fontSize: 14,
           height: 1.4,
         ),
-        actionTextColor: LuxeColors.emerald,
+        actionTextColor: accent,
         behavior: SnackBarBehavior.floating,
         elevation: 0,
         shape: RoundedRectangleBorder(
@@ -422,9 +454,9 @@ abstract final class LuxeTheme {
         highlightElevation: 0,
         shape: StadiumBorder(),
       ),
-      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+      bottomNavigationBarTheme: BottomNavigationBarThemeData(
         backgroundColor: LuxeColors.background,
-        selectedItemColor: LuxeColors.emerald,
+        selectedItemColor: accent,
         unselectedItemColor: LuxeColors.muted,
         type: BottomNavigationBarType.fixed,
         elevation: 0,
@@ -437,36 +469,34 @@ abstract final class LuxeTheme {
         ),
         trackColor: WidgetStateProperty.resolveWith(
           (s) => s.contains(WidgetState.selected)
-              ? LuxeColors.emerald.withValues(alpha: 0.32)
+              ? accent.withValues(alpha: 0.32)
               : LuxeColors.raised,
         ),
         trackOutlineColor: WidgetStateProperty.resolveWith(
           (s) => s.contains(WidgetState.selected)
-              ? LuxeColors.emerald.withValues(alpha: 0.7)
+              ? accent.withValues(alpha: 0.7)
               : LuxeColors.hairlineStrong,
         ),
       ),
       checkboxTheme: CheckboxThemeData(
         fillColor: WidgetStateProperty.resolveWith(
-          (s) => s.contains(WidgetState.selected)
-              ? LuxeColors.emerald
-              : Colors.transparent,
+          (s) => s.contains(WidgetState.selected) ? accent : Colors.transparent,
         ),
-        checkColor: const WidgetStatePropertyAll(Color(0xFF04140D)),
+        checkColor: const WidgetStatePropertyAll(PlanColors.ink),
         side: const BorderSide(color: LuxeColors.platinumMid, width: 1.4),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       ),
       radioTheme: RadioThemeData(
         fillColor: WidgetStateProperty.resolveWith(
           (s) => s.contains(WidgetState.selected)
-              ? LuxeColors.emerald
+              ? accent
               : LuxeColors.platinumMid,
         ),
       ),
-      progressIndicatorTheme: const ProgressIndicatorThemeData(
-        color: LuxeColors.emerald,
-        linearTrackColor: Color(0x1FFFFFFF),
-        circularTrackColor: Color(0x14FFFFFF),
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: accent,
+        linearTrackColor: const Color(0x1FFFFFFF),
+        circularTrackColor: const Color(0x14FFFFFF),
         linearMinHeight: 3,
       ),
       segmentedButtonTheme: SegmentedButtonThemeData(
@@ -477,7 +507,7 @@ abstract final class LuxeTheme {
           ),
           backgroundColor: WidgetStateProperty.resolveWith(
             (s) => s.contains(WidgetState.selected)
-                ? LuxeColors.emerald.withValues(alpha: 0.16)
+                ? accent.withValues(alpha: 0.16)
                 : Colors.transparent,
           ),
           foregroundColor: WidgetStateProperty.resolveWith(
@@ -485,17 +515,17 @@ abstract final class LuxeTheme {
                 ? LuxeColors.text
                 : LuxeColors.muted,
           ),
-          iconColor: const WidgetStatePropertyAll(LuxeColors.emerald),
+          iconColor: WidgetStatePropertyAll(accent),
         ),
       ),
-      tabBarTheme: const TabBarThemeData(
+      tabBarTheme: TabBarThemeData(
         labelColor: LuxeColors.text,
         unselectedLabelColor: LuxeColors.muted,
-        indicatorColor: LuxeColors.emerald,
+        indicatorColor: accent,
         dividerColor: LuxeColors.hairline,
         indicatorSize: TabBarIndicatorSize.label,
-        labelStyle: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-        unselectedLabelStyle: TextStyle(
+        labelStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        unselectedLabelStyle: const TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.w500,
         ),
@@ -518,22 +548,22 @@ abstract final class LuxeTheme {
         ),
         textStyle: const TextStyle(color: LuxeColors.text, fontSize: 12.5),
       ),
-      expansionTileTheme: const ExpansionTileThemeData(
-        iconColor: LuxeColors.emerald,
+      expansionTileTheme: ExpansionTileThemeData(
+        iconColor: accent,
         collapsedIconColor: LuxeColors.platinumMid,
         textColor: LuxeColors.text,
         collapsedTextColor: LuxeColors.text,
-        shape: Border(),
-        collapsedShape: Border(),
+        shape: const Border(),
+        collapsedShape: const Border(),
       ),
-      textSelectionTheme: const TextSelectionThemeData(
-        cursorColor: LuxeColors.emerald,
-        selectionColor: Color(0x5534D399),
-        selectionHandleColor: LuxeColors.emerald,
+      textSelectionTheme: TextSelectionThemeData(
+        cursorColor: accent,
+        selectionColor: accent.withValues(alpha: 0.33),
+        selectionHandleColor: accent,
       ),
-      badgeTheme: const BadgeThemeData(
-        backgroundColor: LuxeColors.emerald,
-        textColor: Color(0xFF04140D),
+      badgeTheme: BadgeThemeData(
+        backgroundColor: accent,
+        textColor: PlanColors.ink,
       ),
     );
   }
@@ -584,7 +614,9 @@ class LuxePageTransitionsBuilder extends PageTransitionsBuilder {
 
 /// Platinum thumb with a soft emerald halo.
 class _LuxeThumbShape extends SliderComponentShape {
-  const _LuxeThumbShape();
+  const _LuxeThumbShape(this.accent);
+
+  final Color accent;
 
   @override
   Size getPreferredSize(bool isEnabled, bool isDiscrete) =>
@@ -611,7 +643,7 @@ class _LuxeThumbShape extends SliderComponentShape {
       center,
       14 + 6 * active,
       Paint()
-        ..color = LuxeColors.emerald.withValues(alpha: 0.18 + 0.12 * active)
+        ..color = accent.withValues(alpha: 0.18 + 0.12 * active)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
     );
     canvas.drawCircle(
@@ -623,12 +655,18 @@ class _LuxeThumbShape extends SliderComponentShape {
           colors: [LuxeColors.platinumHi, LuxeColors.platinumMid],
         ).createShader(Rect.fromCircle(center: center, radius: 10)),
     );
-    canvas.drawCircle(center, 3, Paint()..color = LuxeColors.emeraldDeep);
+    canvas.drawCircle(
+      center,
+      3,
+      Paint()..color = Color.lerp(accent, Colors.black, 0.2)!,
+    );
   }
 }
 
 /// Splash-continuous backdrop: a cool pool of light, a soft emerald hint
 /// and a radial vignette. [drift] (0..1) slowly moves the light.
+/// QA 136: the light takes the plan's colour (Pro steel; Ultra a violet and
+/// cyan aurora that drifts with the Ultra clock).
 class LuxeBackdrop extends StatelessWidget {
   const LuxeBackdrop({super.key, this.drift = 0, this.accent = 1});
 
@@ -637,7 +675,14 @@ class LuxeBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final a = drift * 2 * math.pi;
+    final plan = PlanStyle.of(context);
+    if (!plan.isUltra) return _layers(plan, drift);
+    return PlanFlow(builder: (context, phase) => _layers(plan, drift + phase));
+  }
+
+  Widget _layers(PlanStyle plan, double t) {
+    final a = t * 2 * math.pi;
+    final glow = plan.isUltra ? 0.16 : (plan.isPro ? 0.09 : 0.07);
     return IgnorePointer(
       child: Stack(
         fit: StackFit.expand,
@@ -651,7 +696,7 @@ class LuxeBackdrop extends StatelessWidget {
                   -0.55 + 0.05 * math.cos(a),
                 ),
                 radius: 1.0,
-                colors: const [LuxeColors.ambient, Color(0x00050506)],
+                colors: [plan.ambient, plan.ambient.withValues(alpha: 0)],
               ),
             ),
           ),
@@ -659,14 +704,30 @@ class LuxeBackdrop extends StatelessWidget {
             decoration: BoxDecoration(
               gradient: RadialGradient(
                 center: Alignment(0.9 - 0.2 * math.cos(a), 1.1),
-                radius: 0.9,
+                radius: plan.isUltra ? 1.05 : 0.9,
                 colors: [
-                  LuxeColors.emerald.withValues(alpha: 0.07 * accent),
-                  const Color(0x0034D399),
+                  plan.glow.withValues(alpha: glow * accent),
+                  plan.glow.withValues(alpha: 0),
                 ],
               ),
             ),
           ),
+          if (plan.glowAlt != null)
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: Alignment(
+                    -0.95 + 0.25 * math.sin(a),
+                    -0.2 + 0.3 * math.cos(a),
+                  ),
+                  radius: 0.85,
+                  colors: [
+                    plan.glowAlt!.withValues(alpha: 0.14 * accent),
+                    plan.glowAlt!.withValues(alpha: 0),
+                  ],
+                ),
+              ),
+            ),
           const DecoratedBox(
             decoration: BoxDecoration(
               gradient: RadialGradient(
@@ -702,6 +763,8 @@ class LuxeGlass extends StatelessWidget {
     final duration = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
         : const Duration(milliseconds: 260);
+    // QA 136: Pro glass has a steel edge, Ultra a violet/cyan tint.
+    final plan = PlanStyle.of(context);
     return AnimatedContainer(
       duration: duration,
       curve: LuxeMotion.enter,
@@ -713,12 +776,12 @@ class LuxeGlass extends StatelessWidget {
           end: Alignment.bottomRight,
           colors: selected
               ? const [Color(0x2234D399), Color(0x0A34D399)]
-              : const [Color(0x12FFFFFF), Color(0x06FFFFFF)],
+              : plan.glassColors,
         ),
         border: Border.all(
           color: selected
               ? LuxeColors.emerald.withValues(alpha: 0.75)
-              : LuxeColors.hairline,
+              : plan.glassBorder,
           width: selected ? 1.3 : 1,
         ),
         boxShadow: selected

@@ -114,7 +114,14 @@ class BatteryHealthScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  // QA 136: however this screen is reached (a tile, Pinova Bot, a
+  // notification), outside the plan it shows Pinova Premium instead.
+  Widget build(BuildContext context, WidgetRef ref) => PremiumRequired(
+    feature: PremiumFeature.batteryHealth,
+    child: Consumer(builder: (context, ref, _) => _screen(context, ref)),
+  );
+
+  Widget _screen(BuildContext context, WidgetRef ref) {
     final async = ref.watch(batteryHealthProvider(vehicleId));
     return LuxeScaffold(
       title: '% pin chai',

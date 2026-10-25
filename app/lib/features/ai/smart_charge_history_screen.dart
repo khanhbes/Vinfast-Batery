@@ -390,7 +390,10 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
                       sliver: SliverToBoxAdapter(
                         child: LuxeReveal(
                           key: GuideRegistry.keyHistoryHeader,
-                          child: _HistoryHeader(onExport: _export),
+                          child: _HistoryHeader(
+                            onExport: _export,
+                            exportAllowed: _exportAllowed,
+                          ),
                         ),
                       ),
                     ),
@@ -582,9 +585,9 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 6),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 250),
+            const SizedBox(height: 10),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
               child: AnimatedSwitcher(
                 duration: reduced
                     ? Duration.zero
@@ -607,9 +610,11 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
                     ),
                   );
                 },
-                child: HistoryEnergyRing(
+                child: HistoryEnergyBars(
                   key: ValueKey(periodTitle),
                   buckets: ring.buckets,
+                  labels: ring.labels,
+                  details: ring.details,
                   highlightIndex: ring.today,
                   totalWh: summary.totalGridEnergyWh,
                   caption: ring.caption,
@@ -656,10 +661,16 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
     );
   }
 
-  /// Per-day energy for the ring; ranges longer than ~2 months use weeks.
-  ({List<double> buckets, int? today, String caption}) _ringData(
-    SmartChargeHistorySummary summary,
-  ) {
+  /// Per-day energy for the month chart; ranges longer than ~2 months use
+  /// weeks. QA 136: plus the axis label and the readable name of each bar.
+  ({
+    List<double> buckets,
+    List<String> labels,
+    List<String> details,
+    int? today,
+    String caption,
+  })
+  _ringData(SmartChargeHistorySummary summary) {
     final byDay = {for (final d in summary.daily) d.day: d.energyWh};
     final start = DateTime(
       _rangeStart.year,
@@ -676,10 +687,42 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
     }
     final weekly = days.length > 62;
     final buckets = <double>[];
+    final labels = <String>[];
+    final details = <String>[];
     int? todayIndex;
+    String dm(DateTime d) =>
+        '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
+    const weekdays = [
+      'Thứ Hai',
+      'Thứ Ba',
+      'Thứ Tư',
+      'Thứ Năm',
+      'Thứ Sáu',
+      'Thứ Bảy',
+      'Chủ Nhật',
+    ];
     for (var i = 0; i < days.length; i++) {
       final slot = weekly ? i ~/ 7 : i;
-      if (slot >= buckets.length) buckets.add(0);
+      if (slot >= buckets.length) {
+        buckets.add(0);
+        final first = days[i];
+        if (weekly) {
+          final last = days[min(i + 6, days.length - 1)];
+          details.add('Tuần ${dm(first)}–${dm(last)}');
+          labels.add(slot % 2 == 0 ? dm(first) : '');
+        } else {
+          details.add('${weekdays[first.weekday - 1]} ${dm(first)}');
+          // 1, 5, 10 … and the last day (a 5 too close to it is skipped).
+          final day = first.day;
+          final isLast = i == days.length - 1;
+          final show =
+              days.length <= 10 ||
+              isLast ||
+              day == 1 ||
+              (day % 5 == 0 && i <= days.length - 4);
+          labels.add(show ? '$day' : '');
+        }
+      }
       buckets[slot] += byDay[days[i]] ?? 0;
       if (days[i] == today) todayIndex = slot;
     }
@@ -690,7 +733,13 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
     final caption = weekly
         ? 'điện nạp · ${(counted / 7).ceil()} tuần'
         : 'điện nạp · $counted ngày';
-    return (buckets: buckets, today: todayIndex, caption: caption);
+    return (
+      buckets: buckets,
+      labels: labels,
+      details: details,
+      today: todayIndex,
+      caption: caption,
+    );
   }
 
   // ─────────────── Filters ───────────────
@@ -1259,8 +1308,9 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
 }
 
 class _HistoryHeader extends StatelessWidget {
-  const _HistoryHeader({required this.onExport});
+  const _HistoryHeader({required this.onExport, required this.exportAllowed});
   final VoidCallback onExport;
+  final bool exportAllowed;
 
   @override
   Widget build(BuildContext context) => Row(
@@ -1282,10 +1332,16 @@ class _HistoryHeader extends StatelessWidget {
         ),
       ),
       const SizedBox(width: 12),
-      HistoryGlassButton(
-        icon: Icons.ios_share_rounded,
-        tooltip: 'Xuất báo cáo',
-        onPressed: onExport,
+      PremiumLocked(
+        feature: PremiumFeature.historyExport,
+        allowed: exportAllowed,
+        tagAlignment: Alignment.bottomCenter,
+        tagPadding: EdgeInsets.zero,
+        child: HistoryGlassButton(
+          icon: Icons.ios_share_rounded,
+          tooltip: 'Xuất báo cáo',
+          onPressed: onExport,
+        ),
       ),
     ],
   );

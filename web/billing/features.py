@@ -31,13 +31,14 @@ FEATURES = {
     "appearance": "pro",           # dashboard / charge tab styles
     "history_export": "pro",       # CSV export
     "widget": "pro",
+    "trip_estimate": "pro",        # range along a route (QA 136: was Ultra)
     "learning_train": "ultra",     # personal AI (owner-triggered training)
-    "trip_estimate": "ultra",      # range along a route
     "cost_advanced": "ultra",
     "night_charging": "ultra",     # overnight safe charging
     "offpeak_schedule": "ultra",
     "share_vehicle": "ultra",
     "monthly_report": "ultra",
+    "ultra_look": "ultra",         # QA 136: aurora colours and motion
 }
 
 # Per-tier numeric limits; ``None`` means no limit.

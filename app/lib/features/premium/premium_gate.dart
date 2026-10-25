@@ -4,8 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/entitlement_provider.dart';
 import '../../core/theme/luxe_theme.dart';
 import '../../core/widgets/luxe_kit.dart';
-import '../../core/widgets/luxe_settings.dart';
 import '../../data/models/entitlement.dart';
+import 'plan_tag.dart';
 import 'premium_screen.dart';
 
 /// Premium gates in the app (QA 135). The server is the authority; these
@@ -114,22 +114,89 @@ class PremiumBadge extends StatelessWidget {
   final PlanTier tier;
 
   @override
-  Widget build(BuildContext context) => LuxeTag(
-    tier.label.toUpperCase(),
-    color: tier == PlanTier.ultra ? LuxeColors.emerald : LuxeColors.champagne,
-  );
+  Widget build(BuildContext context) => PlanTag(tier: tier);
 }
 
-/// The badge only while [feature] is locked for this account.
-class PremiumLockBadge extends ConsumerWidget {
-  const PremiumLockBadge(this.feature, {super.key});
+/// An entry to a feature outside the plan (QA 136): drawn faded, does not
+/// react to taps, and only its plan tag is tappable (opens Pinova Premium
+/// at that feature). Inside the plan it is just [child].
+class PremiumLocked extends ConsumerWidget {
+  const PremiumLocked({
+    super.key,
+    required this.feature,
+    required this.child,
+    this.tagAlignment = AlignmentDirectional.topEnd,
+    this.tagPadding = const EdgeInsets.all(4),
+    this.allowed,
+  });
+
   final PremiumFeature feature;
+  final Widget child;
+
+  /// The answer when the screen already holds it (no provider read).
+  final bool? allowed;
+  final AlignmentGeometry tagAlignment;
+  final EdgeInsetsGeometry tagPadding;
+
+  static const fadedOpacity = 0.38;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final bool open =
+        allowed ??
+        ref.watch(
+          entitlementProvider.select<bool>((plan) => plan.allows(feature)),
+        );
+    if (open) return child;
+    final tier = feature.tier;
+    return Stack(
+      key: ValueKey('premium-locked-${feature.id}'),
+      children: [
+        Semantics(
+          label: '${feature.label}, cần gói ${tier.label}',
+          enabled: false,
+          excludeSemantics: true,
+          child: IgnorePointer(
+            child: Opacity(opacity: fadedOpacity, child: child),
+          ),
+        ),
+        Positioned.fill(
+          child: Align(
+            alignment: tagAlignment,
+            child: Padding(
+              padding: tagPadding,
+              child: PlanTag(
+                key: ValueKey('premium-locked-tag-${feature.id}'),
+                tier: tier,
+                semanticLabel: 'Xem gói ${tier.label} để mở ${feature.label}',
+                onTap: () => PremiumScreen.open(context, highlight: feature),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// A feature screen behind the plan (QA 136): however it is reached (a tile,
+/// Pinova Bot, a notification), without the plan it shows Pinova Premium
+/// for that feature instead.
+class PremiumRequired extends ConsumerWidget {
+  const PremiumRequired({
+    super.key,
+    required this.feature,
+    required this.child,
+  });
+
+  final PremiumFeature feature;
+  final Widget child;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final allowed = ref.watch(
       entitlementProvider.select((plan) => plan.allows(feature)),
     );
-    return allowed ? const SizedBox.shrink() : PremiumBadge(tier: feature.tier);
+    return allowed ? child : PremiumScreen(highlight: feature);
   }
 }

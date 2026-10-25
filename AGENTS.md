@@ -190,6 +190,7 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
 - **Motion:**
   - Dùng `LuxeMotion.enter/exit`, `LuxeReveal` (520ms, stagger 70ms, tối đa 8 mục), chuyển trang `LuxePageTransitionsBuilder`.
   - Không có animation trang trí lặp vô hạn. Vòng lặp chỉ được gắn với trạng thái thật (đang sạc, đang quét, đang tải), phải tôn trọng `TickerMode` và `disableAnimations`, nếu không `pumpAndSettle` sẽ treo.
+  - Ngoại lệ duy nhất (QA 136, chủ app chọn): màu Aurora của gói Ultra chảy chậm từ **một** đồng hồ `PlanMotionHost` (`core/theme/plan_style.dart`, ~25 fps, 12 s/vòng) đặt trên Navigator; chỉ chạy khi gói Ultra + `AppAppearance.ultraEffects` + không `disableAnimations`, dừng theo `TickerMode`. Widget chỉ đọc qua `PlanFlow`; test Ultra phải bật `disableAnimations`.
   - 2D vẽ bằng `CustomPainter`; không thêm package animation (`flutter_animate`, `shimmer`, `google_fonts` đã gỡ).
 - **Bắt buộc:**
   - Vùng chạm ≥48dp; mọi màn mới phải có test 320dp ở chữ ×1/×2.
@@ -211,6 +212,8 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
 - **Quét:** `SevenSegmentReader.readDashboard` = nhiều ngưỡng + `DashboardLayoutParser.combine`; khung camera chỉ đọc vùng khung ngắm (`GrayImage.crop`); fallback `POST /api/scan/dashboard` (Gemini, không lưu ảnh). Thử nghiệm bằng `test/unit/qa135_scan_synthetic_test.dart` (≥ 95 %).
 - **Sạc:** đổi mục tiêu `PATCH .../sessions/<id>/target` (tăng = `extend_timer` relay ON + readback); sạc đêm `shelly/night.py` (worker bật, `strategy=night_target` có ngưỡng 60 °C/công suất/quá giờ, kênh `pinova_urgent`); % pin chai `charge_model.battery_health`.
 - **Hướng dẫn:** `core/services/screen_tour.dart` (một lần mỗi tài khoản mỗi lần cài, sau tour Tổng quan; Android `allowBackup=false`). Nút lưu có chờ: `LuxeSubmitButton`.
+- **QA 136 — giao diện theo gói:** `LuxeTheme.data(tier:)` (cache mỗi gói) + `PlanStyle` (ThemeExtension: màu nhấn, kính, nền) → Free giữ LUXE, Pro bạc–thép, Ultra Aurora tím–ngọc–emerald. Màu trạng thái (emerald đã xác minh, rose lỗi, champagne ước tính) không đổi theo gói. Tag gói `PlanTag`/`CurrentPlanTag` (`features/premium/plan_tag.dart`) ở Cài đặt, tiêu đề Tổng quan, Hồ sơ, Pinova Bot.
+- **QA 136 — khóa đồng bộ:** điểm vào tính năng ngoài gói bọc `PremiumLocked` (mờ 38 %, không nhận chạm, chỉ nhãn gói mở Premium); chính màn tính năng bọc `PremiumRequired` (mở bằng bot/thông báo vẫn ra Premium). Lộ trình (`trip_estimate`) là **Pro**. Thêm tính năng trả phí mới phải làm cả hai lớp + bảng `features.py`.
 
 ---
 

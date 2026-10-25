@@ -55,32 +55,42 @@ class AppAppearance {
     this.dashboard = DashboardStyle.luxe,
     this.charge = ChargeStyle.dial,
     this.confirm = ChargeConfirmStyle.slide,
+    this.ultraEffects = true,
   });
 
   final DashboardStyle dashboard;
   final ChargeStyle charge;
   final ChargeConfirmStyle confirm;
 
+  /// QA 136: Ultra's moving colours (aurora backdrop, flowing buttons and
+  /// tags). Off keeps the Ultra colours still. The system "reduce motion"
+  /// always wins.
+  final bool ultraEffects;
+
   AppAppearance copyWith({
     DashboardStyle? dashboard,
     ChargeStyle? charge,
     ChargeConfirmStyle? confirm,
+    bool? ultraEffects,
   }) => AppAppearance(
     dashboard: dashboard ?? this.dashboard,
     charge: charge ?? this.charge,
     confirm: confirm ?? this.confirm,
+    ultraEffects: ultraEffects ?? this.ultraEffects,
   );
 
   Map<String, Object> toMap() => {
     'dashboardStyle': dashboard.id,
     'chargeStyle': charge.id,
     'confirmStyle': confirm.id,
+    'ultraEffects': ultraEffects,
   };
 
   factory AppAppearance.fromMap(Map<String, dynamic>? map) => AppAppearance(
     dashboard: DashboardStyle.parse(map?['dashboardStyle']),
     charge: ChargeStyle.parse(map?['chargeStyle']),
     confirm: ChargeConfirmStyle.parse(map?['confirmStyle']),
+    ultraEffects: map?['ultraEffects'] != false,
   );
 
   @override
@@ -88,8 +98,9 @@ class AppAppearance {
       other is AppAppearance &&
       other.dashboard == dashboard &&
       other.charge == charge &&
-      other.confirm == confirm;
+      other.confirm == confirm &&
+      other.ultraEffects == ultraEffects;
 
   @override
-  int get hashCode => Object.hash(dashboard, charge, confirm);
+  int get hashCode => Object.hash(dashboard, charge, confirm, ultraEffects);
 }

@@ -265,7 +265,7 @@ class GuideRegistry {
     _step(
       'premium_ultra',
       'Ultra: trọn bộ',
-      'Sạc đêm an toàn, AI cá nhân, lộ trình và mọi thứ của Pro. Dùng thử '
+      'Sạc đêm an toàn, AI cá nhân, giao diện Aurora và mọi thứ của Pro. Dùng thử '
           'miễn phí 7 ngày.',
       keyPremiumUltra,
     ),

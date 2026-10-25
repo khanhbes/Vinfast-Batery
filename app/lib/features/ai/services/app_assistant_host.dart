@@ -34,6 +34,7 @@ import '../../premium/premium_screen.dart';
 import '../../smart_charging/night_charging_screen.dart';
 import '../../support/help_center_screen.dart';
 import '../../support/support_repository.dart';
+import '../../premium/premium_gate.dart';
 
 /// BatteryBot v2 actions executed with the same providers/repositories the
 /// screens use (Task 124). Charging and reminders do not pass through here:
@@ -168,7 +169,12 @@ class AppAssistantActionHost implements AssistantActionHost {
       'achievements' => const AchievementsScreen(),
       'battery_monitor' => BatteryMonitorScreen(vehicle: vehicle),
       'trip_planner' =>
-        vehicle == null ? null : TripPlannerScreen(vehicle: vehicle),
+        vehicle == null
+            ? null
+            : _gated(
+                PremiumFeature.tripEstimate,
+                TripPlannerScreen(vehicle: vehicle),
+              ),
       'notifications' => const NotificationCenterScreen(),
       'garage' || 'vehicle_specs' => const VehicleGarageScreen(),
       'shelly_setup' => const ShellyConnectScreen(),
@@ -310,20 +316,23 @@ class AppAssistantActionHost implements AssistantActionHost {
       unawaited(
         navigator.push(
           MaterialPageRoute<void>(
-            builder: (_) => TripPlannerScreen(
-              vehicle: vehicle,
-              initialDestination: args['destination']?.toString(),
-              initialDistanceKm: (args['distance_km'] as num?)?.toDouble(),
-              initialConditions: TripConditions(
-                speed: speed(args['speed']),
-                riders: (args['riders'] as num?)?.toInt() == 2 ? 2 : 1,
-                cargoKg: ((args['cargo_kg'] as num?)?.toDouble() ?? 0).clamp(
-                  0,
-                  40,
+            builder: (_) => PremiumRequired(
+              feature: PremiumFeature.tripEstimate,
+              child: TripPlannerScreen(
+                vehicle: vehicle,
+                initialDestination: args['destination']?.toString(),
+                initialDistanceKm: (args['distance_km'] as num?)?.toDouble(),
+                initialConditions: TripConditions(
+                  speed: speed(args['speed']),
+                  riders: (args['riders'] as num?)?.toInt() == 2 ? 2 : 1,
+                  cargoKg: ((args['cargo_kg'] as num?)?.toDouble() ?? 0).clamp(
+                    0,
+                    40,
+                  ),
+                  weather: weather(args['weather']),
+                  hilly: args['hilly'] == true,
+                  roundTrip: args['round_trip'] == true,
                 ),
-                weather: weather(args['weather']),
-                hilly: args['hilly'] == true,
-                roundTrip: args['round_trip'] == true,
               ),
             ),
           ),

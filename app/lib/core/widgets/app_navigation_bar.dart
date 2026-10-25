@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/guide_registry.dart';
 import '../theme/luxe_theme.dart';
+import '../theme/plan_style.dart';
 
 /// LUXE tab bar: a dark rail with a hairline top edge and one platinum glass
 /// "jewel" that glides to the selected destination, topped by a short emerald
@@ -109,31 +110,50 @@ class _Jewel extends StatelessWidget {
   const _Jewel();
 
   @override
-  Widget build(BuildContext context) => DecoratedBox(
-    decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(18),
-      gradient: const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [Color(0x1FFFFFFF), Color(0x08FFFFFF)],
+  Widget build(BuildContext context) {
+    // QA 136: the light line takes the plan (Pro steel, Ultra aurora).
+    final plan = PlanStyle.of(context);
+    Widget line(Gradient? gradient) => Container(
+      width: plan.isUltra ? 30 : 22,
+      height: 2,
+      decoration: BoxDecoration(
+        color: gradient == null ? plan.accent : null,
+        gradient: gradient,
+        borderRadius: BorderRadius.circular(2),
+        boxShadow: [
+          BoxShadow(
+            color: plan.accent.withValues(alpha: 0.55),
+            blurRadius: plan.isUltra ? 14 : 10,
+          ),
+        ],
       ),
-      border: Border.all(color: LuxeColors.hairlineStrong),
-    ),
-    child: Align(
-      alignment: Alignment.topCenter,
-      child: Container(
-        width: 22,
-        height: 2,
-        decoration: BoxDecoration(
-          color: LuxeColors.emerald,
-          borderRadius: BorderRadius.circular(2),
-          boxShadow: const [
-            BoxShadow(color: LuxeColors.emeraldGlow, blurRadius: 10),
-          ],
+    );
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: plan.isUltra
+              ? const [Color(0x268B5CF6), Color(0x0A22D3EE)]
+              : const [Color(0x1FFFFFFF), Color(0x08FFFFFF)],
+        ),
+        border: Border.all(
+          color: plan.tier == PlanStyle.free.tier
+              ? LuxeColors.hairlineStrong
+              : plan.glassBorder,
         ),
       ),
-    ),
-  );
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: plan.isUltra
+            ? PlanFlow(
+                builder: (context, phase) => line(planFlowGradient(phase)),
+              )
+            : line(null),
+      ),
+    );
+  }
 }
 
 class _Destination extends StatelessWidget {
@@ -156,7 +176,7 @@ class _Destination extends StatelessWidget {
   Widget build(BuildContext context) => InkWell(
     onTap: onTap,
     borderRadius: BorderRadius.circular(18),
-    splashColor: LuxeColors.emerald.withValues(alpha: 0.10),
+    splashColor: PlanStyle.of(context).accent.withValues(alpha: 0.10),
     highlightColor: Colors.white.withValues(alpha: 0.03),
     child: Column(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -165,7 +185,9 @@ class _Destination extends StatelessWidget {
           duration: duration,
           curve: LuxeMotion.enter,
           tween: ColorTween(
-            end: selected ? LuxeColors.emerald : LuxeColors.platinumMid,
+            end: selected
+                ? PlanStyle.of(context).accent
+                : LuxeColors.platinumMid,
           ),
           builder: (context, color, _) => AnimatedScale(
             duration: duration,

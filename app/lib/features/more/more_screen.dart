@@ -42,6 +42,7 @@ import '../trip_planner/trip_planner_wrapper.dart';
 import '../settings/assistant_memory_screen.dart';
 import '../settings/personal_ai_settings_screen.dart';
 import '../../core/services/guide_registry.dart';
+import '../premium/plan_tag.dart';
 
 /// Tab Cài đặt (luxe): profile card ringed by the achievement rank, a 2×2
 /// grid of live tiles (vehicle, Shelly, achievements, maintenance) and quiet
@@ -266,38 +267,47 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                   children: [
                     // Task 127: the owner trains the charge and trip models
                     // here (was hidden behind the advanced-AI beta flag).
-                    LuxeSettingsRow(
-                      key: const ValueKey('more-personal-ai'),
-                      icon: Icons.model_training_rounded,
-                      title: 'AI cá nhân',
-                      subtitle:
-                          'Dữ liệu đã thu thập, nút Huấn luyện và kết quả mô hình sạc/lộ trình',
-                      onTap: () {
-                        final vehicleId = ref.read(selectedVehicleIdProvider);
-                        if (vehicleId.isEmpty) {
-                          AppPopup.showWarning('Hãy chọn xe trước');
-                          return;
-                        }
-                        _push(PersonalAiSettingsScreen(vehicleId: vehicleId));
-                      },
-                    ),
-                    LuxeSettingsRow(
-                      key: GuideRegistry.keySettingsNight,
-                      icon: Icons.nights_stay_rounded,
-                      title: 'Sạc đêm an toàn',
-                      subtitle:
-                          'Đầy 80–90% đúng giờ thức dậy, ngắt sớm khi ổ nóng',
-                      badge: const PremiumLockBadge(
-                        PremiumFeature.nightCharging,
+                    // QA 136: outside the plan these rows are faded and
+                    // only their plan tag opens Pinova Premium.
+                    PremiumLocked(
+                      feature: PremiumFeature.learningTrain,
+                      tagAlignment: AlignmentDirectional.centerEnd,
+                      tagPadding: const EdgeInsetsDirectional.only(end: 10),
+                      child: LuxeSettingsRow(
+                        key: const ValueKey('more-personal-ai'),
+                        icon: Icons.model_training_rounded,
+                        title: 'AI cá nhân',
+                        subtitle:
+                            'Dữ liệu đã thu thập, nút Huấn luyện và kết quả mô hình sạc/lộ trình',
+                        onTap: () {
+                          final vehicleId = ref.read(selectedVehicleIdProvider);
+                          if (vehicleId.isEmpty) {
+                            AppPopup.showWarning('Hãy chọn xe trước');
+                            return;
+                          }
+                          _push(PersonalAiSettingsScreen(vehicleId: vehicleId));
+                        },
                       ),
-                      onTap: () => NightChargingScreen.open(
-                        context,
-                        ref,
-                        vehicleId: ref.read(selectedVehicleIdProvider),
-                        currentSoc: vehicleContext.vehicle?.currentBattery
-                            .toDouble(),
-                        currentOdoKm: vehicleContext.vehicle?.currentOdo
-                            .toDouble(),
+                    ),
+                    PremiumLocked(
+                      feature: PremiumFeature.nightCharging,
+                      tagAlignment: AlignmentDirectional.centerEnd,
+                      tagPadding: const EdgeInsetsDirectional.only(end: 10),
+                      child: LuxeSettingsRow(
+                        key: GuideRegistry.keySettingsNight,
+                        icon: Icons.nights_stay_rounded,
+                        title: 'Sạc đêm an toàn',
+                        subtitle:
+                            'Đầy 80–90% đúng giờ thức dậy, ngắt sớm khi ổ nóng',
+                        onTap: () => NightChargingScreen.open(
+                          context,
+                          ref,
+                          vehicleId: ref.read(selectedVehicleIdProvider),
+                          currentSoc: vehicleContext.vehicle?.currentBattery
+                              .toDouble(),
+                          currentOdoKm: vehicleContext.vehicle?.currentOdo
+                              .toDouble(),
+                        ),
                       ),
                     ),
                     LuxeSettingsRow(
@@ -323,22 +333,17 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                         onTap: () => _push(const AiModelsScreen()),
                       ),
                     if (BetaCapabilities.tripPlanner)
-                      LuxeSettingsRow(
-                        icon: Icons.alt_route_rounded,
-                        title: 'Lộ trình',
-                        subtitle: 'Chọn điểm đến và ước tính pin cần dùng',
-                        badge: const PremiumLockBadge(
-                          PremiumFeature.tripEstimate,
+                      PremiumLocked(
+                        feature: PremiumFeature.tripEstimate,
+                        tagAlignment: AlignmentDirectional.centerEnd,
+                        tagPadding: const EdgeInsetsDirectional.only(end: 10),
+                        child: LuxeSettingsRow(
+                          key: const ValueKey('more-trip-planner'),
+                          icon: Icons.alt_route_rounded,
+                          title: 'Lộ trình',
+                          subtitle: 'Chọn điểm đến và ước tính pin cần dùng',
+                          onTap: () => _push(const TripPlannerWrapper()),
                         ),
-                        onTap: () {
-                          if (PremiumGate.check(
-                            context,
-                            ref,
-                            PremiumFeature.tripEstimate,
-                          )) {
-                            _push(const TripPlannerWrapper());
-                          }
-                        },
                       ),
                     LuxeSettingsRow(
                       icon: Icons.tune_rounded,
@@ -465,20 +470,32 @@ class _ProfileCard extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 5),
-                          AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 300),
-                            child: Text(
-                              loading ? '…' : displayName,
-                              key: ValueKey(loading),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: LuxeColors.text,
-                                fontSize: 21,
-                                height: 1.2,
-                                fontWeight: FontWeight.w500,
+                          // QA 136: the plan's tag next to the name.
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 300),
+                                child: Text(
+                                  loading ? '…' : displayName,
+                                  key: ValueKey(loading),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: LuxeColors.text,
+                                    fontSize: 21,
+                                    height: 1.2,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
                               ),
-                            ),
+                              const CurrentPlanTag(
+                                key: ValueKey('settings-plan-tag'),
+                                large: true,
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 3),
                           Text(

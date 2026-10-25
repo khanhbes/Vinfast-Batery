@@ -37,12 +37,14 @@ enum PremiumFeature {
   historyExport('history_export', PlanTier.pro, 'Xuất lịch sử CSV'),
   widget('widget', PlanTier.pro, 'Widget màn hình chính'),
   learningTrain('learning_train', PlanTier.ultra, 'AI cá nhân'),
-  tripEstimate('trip_estimate', PlanTier.ultra, 'Dự đoán pin theo lộ trình'),
+  // QA 136: Lộ trình moved from Ultra to Pro.
+  tripEstimate('trip_estimate', PlanTier.pro, 'Lộ trình & pin cần dùng'),
   costAdvanced('cost_advanced', PlanTier.ultra, 'Thống kê chi phí nâng cao'),
   nightCharging('night_charging', PlanTier.ultra, 'Sạc đêm an toàn'),
   offpeakSchedule('offpeak_schedule', PlanTier.ultra, 'Sạc giờ điện rẻ'),
   shareVehicle('share_vehicle', PlanTier.ultra, 'Chia sẻ xe với người nhà'),
-  monthlyReport('monthly_report', PlanTier.ultra, 'Báo cáo pin hằng tháng');
+  monthlyReport('monthly_report', PlanTier.ultra, 'Báo cáo pin hằng tháng'),
+  ultraLook('ultra_look', PlanTier.ultra, 'Giao diện Aurora chuyển động');
 
   const PremiumFeature(this.id, this.tier, this.label);
   final String id;

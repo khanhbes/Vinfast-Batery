@@ -905,12 +905,17 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
             children: [
               card,
               const SizedBox(height: 10),
-              OutlinedButton.icon(
-                key: const ValueKey('edit-target-button'),
-                onPressed: () =>
-                    _editTarget(estimatedSoc, targetSoc, controller),
-                icon: const Icon(Icons.tune_rounded, size: 18),
-                label: Text('Đổi mục tiêu ($targetSoc%)'),
+              PremiumLocked(
+                feature: PremiumFeature.targetEdit,
+                tagAlignment: AlignmentDirectional.centerEnd,
+                tagPadding: const EdgeInsetsDirectional.only(end: 8),
+                child: OutlinedButton.icon(
+                  key: const ValueKey('edit-target-button'),
+                  onPressed: () =>
+                      _editTarget(estimatedSoc, targetSoc, controller),
+                  icon: const Icon(Icons.tune_rounded, size: 18),
+                  label: Text('Đổi mục tiêu ($targetSoc%)'),
+                ),
               ),
             ],
           );

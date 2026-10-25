@@ -31,6 +31,7 @@ import '../features/charge/charge_screen.dart';
 import '../features/auth/auth_providers.dart';
 import '../features/more/more_screen.dart';
 import '../core/services/screen_tour.dart';
+import '../features/premium/plan_tag.dart';
 
 final guideTourCoordinatorProvider = Provider<GuideTourCoordinator>((ref) {
   final coordinator = GuideTourCoordinator();
@@ -355,16 +356,26 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
           key: ValueKey('shell-title-$currentIndex'),
           fit: BoxFit.scaleDown,
           alignment: Alignment.centerLeft,
-          child: Text(
-            tabTitles[currentIndex],
-            maxLines: 1,
-            softWrap: false,
-            style: const TextStyle(
-              color: LuxeColors.text,
-              fontSize: 21,
-              fontWeight: FontWeight.w600,
-              letterSpacing: -0.4,
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                tabTitles[currentIndex],
+                maxLines: 1,
+                softWrap: false,
+                style: const TextStyle(
+                  color: LuxeColors.text,
+                  fontSize: 21,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -0.4,
+                ),
+              ),
+              // QA 136: the plan's tag on the Overview title.
+              if (currentIndex == 0) ...[
+                const SizedBox(width: 8),
+                const CurrentPlanTag(key: ValueKey('overview-plan-tag')),
+              ],
+            ],
           ),
         ),
       ),

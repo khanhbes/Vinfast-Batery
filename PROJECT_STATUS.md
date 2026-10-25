@@ -12,6 +12,25 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
+## 136. Task Completion Log — Lộ trình về Pro, khóa đồng bộ, tag gói, giao diện riêng Pro/Ultra, biểu đồ cột Lịch sử, ODO đúng số, trang Premium mới (25/10/2026) — API đã deploy, APK +202
+
+**Yêu cầu chủ app (25/10):** (1) Lộ trình xuống Pro; mọi tính năng bị khóa phải khóa đồng bộ (Lộ trình khóa ở Cài đặt nhưng ô Tổng quan vẫn vào được); (2) tag gói cạnh tên user (Free thường, Pro đẹp hơn, Ultra gradient đổi màu liên tục); (3) màu/animation/UI riêng từng gói; (4) tính năng ngoài gói làm mờ, không cho bấm; (5) bỏ biểu đồ tròn Tổng kết tháng; ODO không hiện số lăn dở; (6) trang nâng cấp chuyên nghiệp, nội dung ngắn dễ hiểu. Chọn (hỏi 25/10): Pro bạc–thép / Ultra Aurora; Ultra đổi toàn app + công tắc tắt; mờ + chỉ nhãn gói bấm được; cột theo ngày; trang gói dạng tab; deploy API; tag thêm ở Tổng quan, Hồ sơ, Pinova Bot.
+
+| Phần | Đã làm | File chính |
+|---|---|---|
+| Lộ trình → Pro | `features.py` `trip_estimate: pro` (+ `ultra_look: ultra`); app `PremiumFeature.tripEstimate` Pro; kiến thức/persona Pinova Bot, hướng dẫn Premium sửa theo. | `web/billing/features.py`, `entitlement.dart`, `assistant/{engine,knowledge}.py` |
+| Khóa đồng bộ | `PremiumLocked`: mờ 38 %, `IgnorePointer`, nhãn gói (48 dp) mở Premium tại tính năng đó — áp ô Lộ trình Tổng quan (lỗi gốc), Cài đặt (AI cá nhân, Sạc đêm, Lộ trình), % pin chai, Đổi mục tiêu, Xuất báo cáo, kiểu Giao diện. `PremiumRequired` trong màn Lộ trình, Sạc đêm, % pin chai, AI cá nhân + bot `trip_planner`/`plan_trip` (trước mở thẳng). | `features/premium/premium_gate.dart` |
+| Tag gói | `PlanTag`: Free viền mảnh; Pro bạc chải + một vệt sáng khi hiện; Ultra gradient Aurora chảy + quầng tím. Ở Cài đặt (cạnh tên), tiêu đề Tổng quan, Hồ sơ, Pinova Bot (kèm số tin/ngày). | `features/premium/plan_tag.dart` |
+| Giao diện theo gói | `LuxeTheme.data(tier:)` + `PlanStyle`; nền (Pro ánh thép, Ultra hai quầng cực quang trôi), kính, nút chính (Pro bạc→thép, Ultra Aurora chảy), tab bar, công tắc/thanh trượt/ô nhập, sân khấu xe Tổng quan, biểu đồ. Một đồng hồ `PlanMotionHost` ~25 fps; công tắc "Màu Aurora chuyển động" ở Giao diện (Ultra, lưu `ultraEffects`), tắt khi máy Giảm chuyển động. | `core/theme/{plan_style,luxe_theme}.dart`, `app.dart`, `app_navigation_bar.dart` |
+| Biểu đồ Lịch sử | Vòng tròn → cột theo ngày (tuần nếu > 62 ngày): tổng kWh lớn, "Nhiều nhất: …", chạm/kéo đọc từng ngày, nhãn 1/5/10…/ngày cuối, chấm hôm nay, màu theo gói. | `history_luxe_widgets.dart` `HistoryEnergyBars` |
+| ODO | `OdometerDrum`: chữ số chỉ lăn khi mọi số bên phải đang qua 9→0 (đồng hồ cơ thật); đứng yên luôn đúng số (4 958 không còn "5" lăn dở). | `maintenance/widgets/odo_widgets.dart` |
+| Trang Premium | Hero ngắn → công tắc Pro \| Ultra → 4 lợi ích một câu (vòng sáng tự vẽ) → Tháng/Năm (−%) → giá; mã KM và bảng so sánh thu gọn; nút dùng thử/chọn gói cố định dưới đáy; mở từ tính năng nào thì chọn sẵn gói đó. | `features/premium/premium_screen.dart` |
+| Khác | Test sạc đêm QA 135 phụ thuộc giờ thật (lease worker lấy giờ thật, ngày giả = hôm nay → hỏng sau 22:00) → ngày giả 2031. | `web/tests/test_qa135_night_charging.py` |
+
+**Kiểm thử:** backend 739 pass (+ `test_qa136_plans.py`); Flutter **1186** pass (+ `qa136_plans_test.dart` 14: tag 320 dp ×1/×2, khóa mờ/không bấm/nhãn mở Premium, `PremiumRequired`, ô Lộ trình Free, theme từng gói, đồng hồ Ultra dừng sạch, biểu đồ cột 320 dp ×1/×2, ODO), analyze 0. Cập nhật `qa135_premium_test` theo bố cục mới.
+
+**Deploy (chủ app cho phép):** gate `task148` — build exit 0, nguồn 79 file khớp, boot Pass 19 s; Linux lần 1 **1 fail** (test sạc đêm phụ thuộc giờ, đã sửa) → `-r2` **739 pass/15 skip** → API `vinfast-api@sha256:2a26b671…f1dfc5` (`qa136-rollout-20261025.json`, Unlocked, peers giữ), revision `vinfast-api--api106-1025163606`, env email/ACS giữ, health/ready 200. Worker không đổi.
+
 ## 135. Task Completion Log — Premium Free/Pro/Ultra + khuyến mãi, Trợ giúp, quét đồng hồ chính xác, đổi mục tiêu khi sạc, % pin chai, sạc đêm an toàn, hướng dẫn từng màn, Pinova Bot (25/10/2026) — Đã deploy API/worker/portal + email ACS, APK +201 đã cài OnePlus
 
 **Yêu cầu chủ app (25/10):** hoàn thiện Free/Pro/Ultra (bỏ trọn đời) + mã khuyến mãi admin; màn chọn gói hấp dẫn; sạc đêm an toàn (Ultra); trợ giúp gửi admin mọi gói; troubleshooting; tích hợp chatbot; hướng dẫn lần đầu từng màn; quét % pin/ODO đúng ở mọi góc, mọi số chữ số (ảnh 68 % ra 8 %); % pin chai (Pro); sửa mục tiêu khi đang sạc; trạng thái chờ sau mỗi lần nhập.

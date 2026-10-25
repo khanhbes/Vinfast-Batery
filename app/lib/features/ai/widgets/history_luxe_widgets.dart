@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -8,6 +9,7 @@ import '../../../core/utils/number_text.dart';
 import '../../../data/services/charge_estimator.dart';
 
 import '../../../core/theme/luxe_theme.dart';
+import '../../../core/theme/plan_style.dart';
 import '../../../data/models/smart_charging_session.dart';
 
 /// Amber shared by "stopped early" states across the history surfaces.
@@ -69,217 +71,368 @@ Duration _motion(BuildContext context, int ms) =>
     ? Duration.zero
     : Duration(milliseconds: ms);
 
-// ───────────────────────────── Energy ring ─────────────────────────────
+// ───────────────────────────── Energy bars ─────────────────────────────
 
-/// Month (or range) at a glance: one radial bar per day around a metal
-/// ring, the busiest day lit emerald, the total counting up in the centre.
-/// Bars sweep in clockwise once per period; nothing loops.
-class HistoryEnergyRing extends StatelessWidget {
-  const HistoryEnergyRing({
+/// Month (or range) at a glance (QA 136, was a radial ring that was hard to
+/// read): the total in large type, then one bar per day (per week for long
+/// ranges). Tap or drag across the bars to read a day. Bars rise once;
+/// nothing loops. Bar colours follow the plan (Free platinum, Pro steel,
+/// Ultra aurora).
+class HistoryEnergyBars extends StatefulWidget {
+  const HistoryEnergyBars({
     super.key,
     required this.buckets,
+    required this.labels,
+    required this.details,
     required this.totalWh,
     required this.caption,
     this.highlightIndex,
   });
 
+  /// Energy per bar (Wh).
   final List<double> buckets;
+
+  /// Axis label under each bar ('' for none).
+  final List<String> labels;
+
+  /// What a selected bar is ("Thứ Năm 23/10").
+  final List<String> details;
   final double totalWh;
   final String caption;
+
+  /// Today's bar, marked under the axis.
   final int? highlightIndex;
 
   @override
+  State<HistoryEnergyBars> createState() => _HistoryEnergyBarsState();
+}
+
+class _HistoryEnergyBarsState extends State<HistoryEnergyBars> {
+  int? _selected;
+
+  @override
+  void didUpdateWidget(HistoryEnergyBars oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.buckets.length != widget.buckets.length) _selected = null;
+  }
+
+  void _pick(Offset local, double width) {
+    final n = widget.buckets.length;
+    if (n == 0 || width <= 0) return;
+    final index = (local.dx / width * n).floor().clamp(0, n - 1);
+    if (index != _selected) setState(() => _selected = index);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final kwh = totalWh >= 1000;
+    final total = widget.totalWh;
+    final kwh = total >= 1000;
+    final peak = widget.buckets.fold<double>(0, math.max);
+    final peakIndex = peak > 0 ? widget.buckets.indexOf(peak) : null;
+    final selected = _selected;
+    final plan = PlanStyle.of(context);
+    final String hint;
+    if (selected != null) {
+      final wh = widget.buckets[selected];
+      hint =
+          '${widget.details[selected]} · '
+          '${wh > 0 ? historyEnergy(wh) : 'không sạc'}';
+    } else if (peakIndex != null) {
+      hint =
+          'Nhiều nhất: ${widget.details[peakIndex]} · '
+          '${historyEnergy(peak)}';
+    } else {
+      hint = 'Chưa có phiên sạc trong khoảng này';
+    }
     return Semantics(
-      label: 'Tổng điện nạp ${historyEnergy(totalWh)}, $caption',
+      label:
+          'Tổng điện nạp ${historyEnergy(total)}, ${widget.caption}. '
+          '${peakIndex == null ? '' : 'Nhiều nhất ${widget.details[peakIndex]}, ${historyEnergy(peak)}.'}',
       excludeSemantics: true,
-      child: AspectRatio(
-        aspectRatio: 1,
-        child: TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0, end: 1),
-          duration: _motion(context, 1500),
-          curve: LuxeMotion.enter,
-          builder: (context, t, _) => CustomPaint(
-            painter: _RingPainter(
-              buckets: buckets,
-              highlight: highlightIndex,
-              reveal: t,
-            ),
-            child: Center(
-              child: FractionallySizedBox(
-                widthFactor: 0.5,
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TweenAnimationBuilder<double>(
-                        tween: Tween(end: kwh ? totalWh / 1000 : totalWh),
-                        duration: _motion(context, 1400),
-                        curve: LuxeMotion.enter,
-                        builder: (context, v, _) => LuxeMetalText(
-                          kwh
-                              ? v.toStringAsFixed(v >= 100 ? 0 : 1)
-                              : '${v.round()}',
-                          style: const TextStyle(
-                            fontSize: 46,
-                            height: 1.05,
-                            fontWeight: FontWeight.w200,
-                            letterSpacing: -1,
-                            fontFeatures: [ui.FontFeature.tabularFigures()],
-                          ),
-                        ),
-                      ),
-                      Text(
-                        kwh ? 'kWh' : 'Wh',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.bottomLeft,
+                    child: TweenAnimationBuilder<double>(
+                      tween: Tween(end: kwh ? total / 1000 : total),
+                      duration: _motion(context, 900),
+                      curve: LuxeMotion.enter,
+                      builder: (context, v, _) => LuxeMetalText(
+                        kwh
+                            ? v.toStringAsFixed(v >= 100 ? 0 : 1)
+                            : '${v.round()}',
                         style: const TextStyle(
-                          color: LuxeColors.emerald,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 1.6,
+                          fontSize: 40,
+                          height: 1.0,
+                          fontWeight: FontWeight.w200,
+                          letterSpacing: -1,
+                          fontFeatures: [ui.FontFeature.tabularFigures()],
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(caption, style: LuxeText.label),
-                    ],
+                    ),
                   ),
+                ),
+                const SizedBox(width: 6),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 5),
+                  child: Text(
+                    kwh ? 'kWh' : 'Wh',
+                    style: TextStyle(
+                      color: plan.accent,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.4,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text(
+                      widget.caption,
+                      textAlign: TextAlign.end,
+                      maxLines: 2,
+                      style: LuxeText.label,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: AnimatedSwitcher(
+              duration: _motion(context, 180),
+              child: Text(
+                hint,
+                key: ValueKey(hint),
+                maxLines: 2,
+                style: LuxeText.caption.copyWith(
+                  color: selected != null ? LuxeColors.text : LuxeColors.muted,
                 ),
               ),
             ),
           ),
-        ),
+          const SizedBox(height: 10),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.maxWidth;
+              return GestureDetector(
+                key: const ValueKey('history-energy-bars'),
+                behavior: HitTestBehavior.opaque,
+                onTapDown: (d) => _pick(d.localPosition, width),
+                onHorizontalDragUpdate: (d) => _pick(d.localPosition, width),
+                child: SizedBox(
+                  height: 132,
+                  width: width,
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: 1),
+                    duration: _motion(context, 900),
+                    curve: LuxeMotion.enter,
+                    builder: (context, t, _) => CustomPaint(
+                      painter: _BarsPainter(
+                        buckets: widget.buckets,
+                        labels: widget.labels,
+                        today: widget.highlightIndex,
+                        selected: selected,
+                        reveal: t,
+                        colors: plan.accentColors,
+                        accent: plan.accent,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
       ),
     );
   }
 }
 
-class _RingPainter extends CustomPainter {
-  _RingPainter({required this.buckets, required this.reveal, this.highlight});
+class _BarsPainter extends CustomPainter {
+  _BarsPainter({
+    required this.buckets,
+    required this.labels,
+    required this.today,
+    required this.selected,
+    required this.reveal,
+    required this.colors,
+    required this.accent,
+  });
 
   final List<double> buckets;
-  final int? highlight;
+  final List<String> labels;
+  final int? today;
+  final int? selected;
   final double reveal;
+  final List<Color> colors;
+  final Color accent;
+
+  static const _labelBand = 18.0;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final c = size.center(Offset.zero);
-    final r = size.shortestSide / 2;
-    final base = r * 0.66;
-    final reach = r * 0.27;
-    final n = math.max(1, buckets.length);
+    final n = buckets.length;
+    if (n == 0) return;
+    final chartH = size.height - _labelBand;
+    final slot = size.width / n;
+    final barW = (slot * 0.62).clamp(2.0, 18.0);
     final peak = buckets.fold<double>(0, math.max);
-    final peakIndex = peak > 0 ? buckets.indexOf(peak) : -1;
+    final scale = peak <= 0 ? 0.0 : (chartH - 14) / peak;
 
-    // Brushed metal ring under the bars.
-    canvas.drawCircle(
-      c,
-      base,
+    // Quiet guides: the peak level and the baseline.
+    final guide = Paint()
+      ..color = const Color(0x14FFFFFF)
+      ..strokeWidth = 1;
+    if (peak > 0) {
+      final y = chartH - peak * scale;
+      _dashed(canvas, Offset(0, y), Offset(size.width, y), guide);
+      _text(
+        canvas,
+        historyEnergy(peak),
+        Offset(size.width, y - 2),
+        LuxeColors.dim,
+        alignRight: true,
+        above: true,
+      );
+    }
+    canvas.drawLine(
+      Offset(0, chartH),
+      Offset(size.width, chartH),
       Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.2
-        ..shader = SweepGradient(
-          colors: const [
-            Color(0x55FFFFFF),
-            Color(0x14FFFFFF),
-            Color(0x40FFFFFF),
-            Color(0x10FFFFFF),
-            Color(0x55FFFFFF),
-          ],
-        ).createShader(Rect.fromCircle(center: c, radius: base)),
-    );
-    canvas.drawCircle(
-      c,
-      base - 10,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 0.6
-        ..color = const Color(0x12FFFFFF),
+        ..color = LuxeColors.hairline
+        ..strokeWidth = 1,
     );
 
-    final width = (2 * math.pi * base / n * 0.42).clamp(1.6, 5.0);
     for (var i = 0; i < n; i++) {
-      final at = i / n;
-      if (at > reveal) break;
-      // The bar sweeping in grows during its own slice of the reveal.
-      final grow = ((reveal - at) * n / 3).clamp(0.0, 1.0);
-      final a = -math.pi / 2 + 2 * math.pi * at;
-      final dir = Offset(math.cos(a), math.sin(a));
-      final v = i < buckets.length ? buckets[i] : 0.0;
-      final start = c + dir * (base + 5);
-      if (v <= 0) {
-        canvas.drawCircle(start, 1.1, Paint()..color = const Color(0x2EFFFFFF));
-        continue;
-      }
-      final len = (5 + reach * (v / peak)) * grow;
-      final end = c + dir * (base + 5 + len);
-      final isPeak = i == peakIndex;
-      if (isPeak) {
-        canvas.drawLine(
-          start,
-          end,
+      final cx = slot * (i + 0.5);
+      final value = buckets[i];
+      final isSelected = i == selected;
+      if (value <= 0) {
+        // A day without charging is a small tick, not an empty gap.
+        canvas.drawCircle(
+          Offset(cx, chartH - 2),
+          1.1,
+          Paint()..color = const Color(0x33FFFFFF),
+        );
+      } else {
+        final h = math.max(3.0, value * scale * reveal);
+        final rect = RRect.fromRectAndCorners(
+          Rect.fromLTWH(cx - barW / 2, chartH - h, barW, h),
+          topLeft: Radius.circular(barW / 2.4),
+          topRight: Radius.circular(barW / 2.4),
+        );
+        final shader = LinearGradient(
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+          colors: colors,
+        ).createShader(Rect.fromLTRB(0, 14, 1, chartH));
+        if (isSelected) {
+          canvas.drawRRect(
+            rect.inflate(2),
+            Paint()
+              ..color = accent.withValues(alpha: 0.35)
+              ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+          );
+        }
+        canvas.drawRRect(
+          rect,
           Paint()
-            ..strokeWidth = width + 5
-            ..strokeCap = StrokeCap.round
-            ..color = LuxeColors.emerald.withValues(alpha: 0.35)
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+            ..shader = shader
+            ..color = Colors.white.withValues(
+              alpha: selected == null || isSelected ? 1 : 0.45,
+            ),
+        );
+        if (selected != null && !isSelected) {
+          canvas.drawRRect(rect, Paint()..color = const Color(0x8C050506));
+        }
+      }
+      if (i == today) {
+        canvas.drawCircle(Offset(cx, chartH + 4), 2, Paint()..color = accent);
+      }
+      final label = i < labels.length ? labels[i] : '';
+      if (label.isNotEmpty) {
+        _text(
+          canvas,
+          label,
+          Offset(cx, chartH + 6),
+          isSelected ? LuxeColors.text : LuxeColors.dim,
         );
       }
+    }
+    if (selected != null && selected! < n) {
+      final cx = slot * (selected! + 0.5);
       canvas.drawLine(
-        start,
-        end,
+        Offset(cx, 0),
+        Offset(cx, chartH),
         Paint()
-          ..strokeWidth = width
-          ..strokeCap = StrokeCap.round
-          ..shader = ui.Gradient.linear(
-            start,
-            end,
-            isPeak
-                ? const [LuxeColors.emeraldDeep, LuxeColors.emerald]
-                : [
-                    LuxeColors.platinumLow,
-                    Color.lerp(
-                      LuxeColors.platinumMid,
-                      LuxeColors.platinumHi,
-                      v / peak,
-                    )!,
-                  ],
-          ),
+          ..color = accent.withValues(alpha: 0.25)
+          ..strokeWidth = 1,
       );
     }
+  }
 
-    // "Today" marker just inside the ring.
-    final h = highlight;
-    if (h != null && h >= 0 && h < n && h / n <= reveal) {
-      final a = -math.pi / 2 + 2 * math.pi * h / n;
-      final p = c + Offset(math.cos(a), math.sin(a)) * (base - 10);
-      canvas.drawCircle(
-        p,
-        6,
-        Paint()
-          ..color = LuxeColors.emerald.withValues(alpha: 0.4)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
+  void _dashed(Canvas canvas, Offset a, Offset b, Paint paint) {
+    const dash = 4.0, gap = 4.0;
+    var x = a.dx;
+    while (x < b.dx) {
+      canvas.drawLine(
+        Offset(x, a.dy),
+        Offset(math.min(x + dash, b.dx), a.dy),
+        paint,
       );
-      canvas.drawCircle(p, 2.6, Paint()..color = LuxeColors.emerald);
+      x += dash + gap;
     }
+  }
+
+  void _text(
+    Canvas canvas,
+    String text,
+    Offset at,
+    Color color, {
+    bool alignRight = false,
+    bool above = false,
+  }) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontFeatures: const [ui.FontFeature.tabularFigures()],
+        ),
+      ),
+      textDirection: ui.TextDirection.ltr,
+    )..layout();
+    final dx = alignRight ? at.dx - painter.width : at.dx - painter.width / 2;
+    final dy = above ? at.dy - painter.height : at.dy;
+    painter.paint(canvas, Offset(dx, dy));
   }
 
   @override
-  bool shouldRepaint(_RingPainter old) =>
+  bool shouldRepaint(_BarsPainter old) =>
       old.reveal != reveal ||
-      old.highlight != highlight ||
-      !_sameList(old.buckets, buckets);
-
-  static bool _sameList(List<double> a, List<double> b) {
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
-    }
-    return true;
-  }
+      old.selected != selected ||
+      old.today != today ||
+      old.accent != accent ||
+      !listEquals(old.colors, colors) ||
+      !listEquals(old.labels, labels) ||
+      !listEquals(old.buckets, buckets);
 }
 
-/// One figure under the ring.
+/// One figure under the month chart.
 class HistoryKpi extends StatelessWidget {
   const HistoryKpi({super.key, required this.label, required this.value});
   final String label;

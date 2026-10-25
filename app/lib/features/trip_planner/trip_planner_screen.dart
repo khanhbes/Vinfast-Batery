@@ -24,6 +24,8 @@ import '../../data/services/trip_route_service.dart';
 import '../ai/services/learning_flow.dart';
 import '../ai/widgets/battery_reading_sheet.dart';
 import '../ai/widgets/edit_current_battery_sheet.dart';
+import '../premium/premium_gate.dart';
+import '../../data/models/entitlement.dart';
 
 /// Trip battery planner (Task 126): where to, under which conditions, and
 /// whether the battery is enough — with a concrete alternative when it is
@@ -632,7 +634,14 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
   // ── UI ──────────────────────────────────────────────────────────────────
 
   @override
-  Widget build(BuildContext context) {
+  // QA 136: however this screen is reached (a tile, Pinova Bot, a
+  // notification), outside the plan it shows Pinova Premium instead.
+  Widget build(BuildContext context) => PremiumRequired(
+    feature: PremiumFeature.tripEstimate,
+    child: Builder(builder: _screen),
+  );
+
+  Widget _screen(BuildContext context) {
     final center = _destination ?? _origin ?? const LatLng(21.0285, 105.8542);
     return LuxeScaffold(
       appBar: Navigator.canPop(context) ? const LuxeAppBar() : null,

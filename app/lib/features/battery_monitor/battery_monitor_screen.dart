@@ -136,17 +136,19 @@ class BatteryMonitorScreen extends ConsumerWidget {
                   padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
                   child: LuxeSettingsGroup(
                     children: [
-                      LuxeSettingsRow(
-                        key: const ValueKey('monitor-battery-health'),
-                        icon: Icons.health_and_safety_outlined,
-                        title: '% pin chai',
-                        subtitle:
-                            'Dung lượng pin còn lại, ước tính và bài kiểm tra',
-                        badge: const PremiumLockBadge(
-                          PremiumFeature.batteryHealth,
+                      PremiumLocked(
+                        feature: PremiumFeature.batteryHealth,
+                        tagAlignment: AlignmentDirectional.centerEnd,
+                        tagPadding: const EdgeInsetsDirectional.only(end: 10),
+                        child: LuxeSettingsRow(
+                          key: const ValueKey('monitor-battery-health'),
+                          icon: Icons.health_and_safety_outlined,
+                          title: '% pin chai',
+                          subtitle:
+                              'Dung lượng pin còn lại, ước tính và bài kiểm tra',
+                          onTap: () =>
+                              BatteryHealthScreen.open(context, ref, vehicleId),
                         ),
-                        onTap: () =>
-                            BatteryHealthScreen.open(context, ref, vehicleId),
                       ),
                     ],
                   ),

@@ -7,6 +7,7 @@ import '../../../data/services/range_estimator.dart';
 import '../../../data/services/trip_energy_model.dart';
 
 import '../../../core/theme/luxe_theme.dart';
+import '../../../core/theme/plan_style.dart';
 import '../../../core/widgets/vehicle_photo.dart';
 import '../../../data/models/vehicle_model.dart';
 
@@ -171,6 +172,8 @@ class _LuxeVehicleHeroState extends State<LuxeVehicleHero>
                           child: CustomPaint(
                             painter: _StagePainter(
                               glow: 0.85 + 0.15 * math.sin(t * 2 * math.pi),
+                              // QA 136: the stage light takes the plan.
+                              light: PlanStyle.of(context).accent,
                             ),
                           ),
                         ),
@@ -290,8 +293,9 @@ class _LuxeVehicleHeroState extends State<LuxeVehicleHero>
 
 /// Spotlight pool and a platinum pedestal ellipse.
 class _StagePainter extends CustomPainter {
-  _StagePainter({required this.glow});
+  _StagePainter({required this.glow, this.light = LuxeColors.emerald});
   final double glow;
+  final Color light;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -361,9 +365,9 @@ class _StagePainter extends CustomPainter {
           base.translate(-w * 0.31, 0),
           base.translate(w * 0.31, 0),
           [
-            const Color(0x0034D399),
-            LuxeColors.emerald.withValues(alpha: 0.45 * glow),
-            const Color(0x0034D399),
+            light.withValues(alpha: 0),
+            light.withValues(alpha: 0.45 * glow),
+            light.withValues(alpha: 0),
           ],
           const [0.0, 0.5, 1.0],
         ),
@@ -382,7 +386,8 @@ class _StagePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_StagePainter old) => old.glow != glow;
+  bool shouldRepaint(_StagePainter old) =>
+      old.glow != glow || old.light != light;
 }
 
 /// Catalog photo with a soft floor reflection; falls back to the line art.

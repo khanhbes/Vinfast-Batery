@@ -1,26 +1,30 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/entitlement_provider.dart';
+import '../../core/services/guide_registry.dart';
 import '../../core/services/pinova_api.dart';
+import '../../core/services/screen_tour.dart';
 import '../../core/theme/luxe_theme.dart';
+import '../../core/theme/plan_style.dart';
 import '../../core/utils/number_text.dart';
 import '../../core/widgets/app_popup.dart';
 import '../../core/widgets/luxe_kit.dart';
-import '../../core/widgets/luxe_settings.dart';
 import '../../core/widgets/luxe_submit_button.dart';
 import '../../data/models/entitlement.dart';
-import '../../core/services/guide_registry.dart';
-import '../../core/services/screen_tour.dart';
+import 'plan_tag.dart';
 
-/// Pinova Premium (QA 135): the plans, what each adds, the 7-day trial and
-/// a promo code field. Phase 1 takes no payment: buying shows "sắp mở" and
-/// support can grant a plan.
+/// Pinova Premium (QA 135; layout QA 136): pick Pro or Ultra, read four
+/// plain benefits, pick month or year, then one button at the bottom (the
+/// 7-day trial, or the plan). Promo code and the full comparison are folded
+/// away. Phase 1 takes no payment: buying shows "sắp mở".
 class PremiumScreen extends ConsumerStatefulWidget {
   const PremiumScreen({super.key, this.highlight});
 
-  /// The feature the owner tried to open (shown at the top).
+  /// The feature the owner tried to open (its plan is selected first).
   final PremiumFeature? highlight;
 
   static Future<void> open(BuildContext context, {PremiumFeature? highlight}) =>
@@ -34,72 +38,66 @@ class PremiumScreen extends ConsumerStatefulWidget {
   ConsumerState<PremiumScreen> createState() => _PremiumScreenState();
 }
 
-class _PlanCopy {
-  const _PlanCopy(this.tagline, this.highlights);
-  final String tagline;
-  final List<(IconData, String, String)> highlights;
+class _Benefit {
+  const _Benefit(this.icon, this.title, this.caption);
+  final IconData icon;
+  final String title;
+  final String caption;
 }
 
-const _ultraCopy = _PlanCopy('Trọn bộ an toàn và trí tuệ cho pin', [
-  (
+const _proLead = 'Sạc thông minh mỗi ngày';
+const _proBenefits = [
+  _Benefit(
+    Icons.battery_charging_full_rounded,
+    'Sạc đến đúng % rồi tự tắt',
+    'Chọn 80% hay 90%, đổi được cả khi đang sạc.',
+  ),
+  _Benefit(
+    Icons.alt_route_rounded,
+    'Lộ trình',
+    'Nhập nơi muốn đến, biết pin có đủ đi không.',
+  ),
+  _Benefit(
+    Icons.health_and_safety_rounded,
+    'Pin còn khỏe bao nhiêu',
+    'Ước tính % pin chai và bài kiểm tra pin.',
+  ),
+  _Benefit(
+    Icons.history_rounded,
+    'Lịch sử đầy đủ, 2 xe',
+    'Xem lại mọi lần sạc, xuất file, Pinova Bot 30 tin mỗi ngày.',
+  ),
+];
+
+const _ultraLead = 'Mọi thứ của Pro, thêm:';
+const _ultraBenefits = [
+  _Benefit(
     Icons.nights_stay_rounded,
     'Sạc đêm an toàn',
-    'Đầy đúng giờ thức dậy, giới hạn 85 %, ngắt ngay khi ổ nóng',
+    'Đầy đúng giờ bạn thức dậy, tự ngắt sớm nếu ổ nóng.',
   ),
-  (
+  _Benefit(
     Icons.model_training_rounded,
-    'AI cá nhân',
-    'Học đúng xe của bạn: thời gian sạc và quãng đường chính xác hơn',
+    'AI hiểu riêng xe bạn',
+    'Đoán thời gian sạc và quãng đường sát hơn.',
   ),
-  (
-    Icons.alt_route_rounded,
-    'Dự đoán pin theo lộ trình',
-    'Biết đủ pin đến nơi không, trước khi đi',
-  ),
-  (
-    Icons.savings_rounded,
-    'Sạc giờ điện rẻ · chi phí nâng cao',
-    'Tự sạc vào khung giá thấp, xem chi phí theo tháng',
-  ),
-  (
-    Icons.family_restroom_rounded,
-    'Chia sẻ xe với người nhà',
-    'Cả nhà cùng xem và điều khiển ổ sạc',
-  ),
-  (
+  _Benefit(
     Icons.auto_awesome_rounded,
-    'Pinova Bot 100 tin/ngày',
-    'Hỏi thoải mái, cùng mọi tính năng Pro',
+    'Giao diện Aurora',
+    'Màu sắc và hiệu ứng riêng của Ultra.',
   ),
-]);
-
-const _proCopy = _PlanCopy('Sạc thông minh mỗi ngày', [
-  (
-    Icons.battery_charging_full_rounded,
-    'Sạc đến % rồi tự ngắt',
-    'Chọn 80 % hay 90 %, đổi mục tiêu ngay khi đang sạc',
+  _Benefit(
+    Icons.all_inclusive_rounded,
+    'Gần như không giới hạn',
+    'Nhiều xe, Pinova Bot 100 tin mỗi ngày, chi phí theo tháng.',
   ),
-  (
-    Icons.health_and_safety_rounded,
-    '% pin chai',
-    'Ước tính dung lượng còn lại và bài kiểm tra pin',
-  ),
-  (
-    Icons.history_rounded,
-    'Lịch sử không giới hạn + CSV',
-    'Free chỉ giữ 30 ngày gần nhất',
-  ),
-  (
-    Icons.palette_rounded,
-    'Giao diện tùy chọn · widget',
-    'Đổi kiểu Tổng quan, tab Sạc và widget màn hình chính',
-  ),
-  (Icons.two_wheeler_rounded, '2 xe · Pinova Bot 30 tin/ngày', ''),
-]);
+];
 
 class _PremiumScreenState extends ConsumerState<PremiumScreen> {
   PlanPeriod _period = PlanPeriod.year;
+  late PlanTier _tier = widget.highlight?.tier ?? PlanTier.ultra;
   final _promo = TextEditingController();
+  bool _promoOpen = false;
   bool _promoBusy = false;
   String? _promoError;
 
@@ -200,82 +198,119 @@ class _PremiumScreenState extends ConsumerState<PremiumScreen> {
   Widget build(BuildContext context) {
     final plan = ref.watch(entitlementProvider);
     final promo = plan.pendingPromo;
+    final ultra = _tier == PlanTier.ultra;
     return LuxeScaffold(
       title: 'Pinova Premium',
+      bottomNavigationBar: _ActionBar(
+        plan: plan,
+        tier: _tier,
+        period: _period,
+        promo: promo,
+        onTrial: _startTrial,
+        onBuy: () => _buy(_tier),
+      ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
         children: [
           _Hero(plan: plan, highlight: widget.highlight),
+          const SizedBox(height: 18),
+          _TierSwitch(
+            selected: _tier,
+            onChanged: (tier) {
+              HapticFeedback.selectionClick();
+              setState(() => _tier = tier);
+            },
+          ),
+          const SizedBox(height: 14),
+          KeyedSubtree(
+            key: GuideRegistry.keyPremiumUltra,
+            child: AnimatedSwitcher(
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 320),
+              switchInCurve: LuxeMotion.enter,
+              switchOutCurve: Curves.easeOut,
+              child: _BenefitsCard(
+                key: ValueKey('premium-benefits-${_tier.id}'),
+                tier: _tier,
+                lead: ultra ? _ultraLead : _proLead,
+                benefits: ultra ? _ultraBenefits : _proBenefits,
+                highlight: widget.highlight?.tier == _tier
+                    ? widget.highlight
+                    : null,
+              ),
+            ),
+          ),
           const SizedBox(height: 18),
           LuxeSegmented<PlanPeriod>(
             key: GuideRegistry.keyPremiumPeriod,
             segments: [
-              (PlanPeriod.month, 'Hằng tháng'),
-              (PlanPeriod.year, 'Hằng năm'),
+              (PlanPeriod.month, 'Theo tháng'),
+              (
+                PlanPeriod.year,
+                'Theo năm · −${PlanTable.yearlySavingPct(_tier)}%',
+              ),
             ],
             selected: _period,
             onChanged: (value) => setState(() => _period = value),
           ),
-          const SizedBox(height: 16),
-          _PlanCard(
-            key: GuideRegistry.keyPremiumUltra,
-            tier: PlanTier.ultra,
-            copy: _ultraCopy,
-            period: _period,
-            promo: promo,
-            current: plan.tier == PlanTier.ultra,
-            recommended: true,
-            trialAvailable: plan.trialAvailable && !plan.isPremium,
-            trialDays: plan.trialDays,
-            onTrial: _startTrial,
-            onBuy: () => _buy(PlanTier.ultra),
+          const SizedBox(height: 12),
+          _Price(tier: _tier, period: _period, promo: promo),
+          const SizedBox(height: 10),
+          _Fold(
+            key: GuideRegistry.keyPremiumPromo,
+            foldKey: const ValueKey('premium-promo-toggle'),
+            icon: Icons.local_offer_outlined,
+            title: promo == null
+                ? 'Có mã khuyến mãi?'
+                : 'Mã ${promo.code} · giảm ${promo.percentOff} %',
+            open: _promoOpen || promo != null,
+            onToggle: () => setState(() => _promoOpen = !_promoOpen),
+            child: _PromoField(
+              controller: _promo,
+              busy: _promoBusy,
+              error: _promoError,
+              applied: promo,
+              onBusyChanged: (busy) => setState(() => _promoBusy = busy),
+              onApply: _applyPromo,
+              onRemove: promo == null
+                  ? null
+                  : () async {
+                      try {
+                        await ref
+                            .read(entitlementProvider.notifier)
+                            .clearPromo();
+                      } on PinovaApiException catch (error) {
+                        AppPopup.showWarning(
+                          error.message ?? 'Chưa bỏ được mã.',
+                        );
+                      }
+                    },
+            ),
           ),
-          const SizedBox(height: 14),
-          _PlanCard(
-            key: const ValueKey('premium-plan-pro'),
-            tier: PlanTier.pro,
-            copy: _proCopy,
-            period: _period,
-            promo: promo,
-            current: plan.tier == PlanTier.pro,
-            onBuy: () => _buy(PlanTier.pro),
+          const SizedBox(height: 10),
+          const _Fold(
+            foldKey: ValueKey('premium-compare-toggle'),
+            icon: Icons.table_rows_outlined,
+            title: 'So sánh đầy đủ Free · Pro · Ultra',
+            child: _CompareTable(),
           ),
-          const SizedBox(height: 14),
-          _FreeCard(current: plan.tier == PlanTier.free),
-          LuxeSectionLabel('Mã khuyến mãi', key: GuideRegistry.keyPremiumPromo),
-          _PromoField(
-            controller: _promo,
-            busy: _promoBusy,
-            error: _promoError,
-            applied: promo,
-            onBusyChanged: (busy) => setState(() => _promoBusy = busy),
-            onApply: _applyPromo,
-            onRemove: promo == null
-                ? null
-                : () async {
-                    try {
-                      await ref.read(entitlementProvider.notifier).clearPromo();
-                    } on PinovaApiException catch (error) {
-                      AppPopup.showWarning(error.message ?? 'Chưa bỏ được mã.');
-                    }
-                  },
-          ),
-          const LuxeSectionLabel('So sánh các gói'),
-          const _CompareTable(),
           const SizedBox(height: 16),
           const LuxeNotice(
             icon: Icons.shield_outlined,
             color: LuxeColors.emerald,
             message:
-                'An toàn luôn miễn phí: bật/dừng sạc có xác minh, hẹn giờ, '
-                'ngắt khi quá tải hoặc quá nhiệt, quét đồng hồ và trợ giúp có '
-                'ở mọi gói. Hết hạn gói không ngắt phiên sạc đang chạy.',
+                'An toàn luôn miễn phí ở mọi gói: bật/dừng sạc có xác minh, '
+                'hẹn giờ, tự ngắt khi quá tải hoặc quá nóng. Hết gói không '
+                'ngắt phiên sạc đang chạy.',
           ),
         ],
       ),
     );
   }
 }
+
+// ───────────────────────────── Hero ─────────────────────────────
 
 class _Hero extends StatelessWidget {
   const _Hero({required this.plan, this.highlight});
@@ -294,60 +329,368 @@ class _Hero extends StatelessWidget {
         : plan.isPremium
         ? 'Bạn đang dùng ${plan.tier.label}${left != null ? ' · còn $left ngày' : ''}'
         : 'Bạn đang dùng gói Free';
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(26),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF1B2A24), Color(0xFF111316), Color(0xFF0B0C0E)],
-          stops: [0.0, 0.55, 1.0],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Image.asset(
+              'assets/icons/pinova_logo_full.png',
+              width: 34,
+              height: 34,
+              excludeFromSemantics: true,
+              errorBuilder: (_, _, _) => const Icon(
+                Icons.workspace_premium_rounded,
+                color: LuxeColors.platinum,
+                size: 30,
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Text('PINOVA PREMIUM', style: LuxeText.eyebrow),
+            ),
+          ],
         ),
-        border: Border.all(color: LuxeColors.emerald.withValues(alpha: 0.28)),
+        const SizedBox(height: 14),
+        const Text('Pin bền hơn, sạc an tâm hơn', style: LuxeText.title),
+        const SizedBox(height: 6),
+        Text(
+          highlight != null
+              ? '“${highlight!.label}” có trong gói ${highlight!.tier.label}. '
+                    'Dùng thử 7 ngày miễn phí để mở ngay.'
+              : 'Chọn gói phù hợp. Dùng thử 7 ngày miễn phí, không cần '
+                    'thanh toán.',
+          style: LuxeText.body,
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            if (plan.known) PlanTag(tier: plan.tier),
+            Text(status, style: LuxeText.caption),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+// ───────────────────────────── Pro | Ultra ─────────────────────────────
+
+class _TierSwitch extends StatelessWidget {
+  const _TierSwitch({required this.selected, required this.onChanged});
+  final PlanTier selected;
+  final ValueChanged<PlanTier> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      for (final tier in const [PlanTier.pro, PlanTier.ultra]) ...[
+        if (tier == PlanTier.ultra) const SizedBox(width: 10),
+        Expanded(
+          child: _TierPill(
+            tier: tier,
+            selected: selected == tier,
+            onTap: () => onChanged(tier),
+          ),
+        ),
+      ],
+    ],
+  );
+}
+
+class _TierPill extends StatelessWidget {
+  const _TierPill({
+    required this.tier,
+    required this.selected,
+    required this.onTap,
+  });
+  final PlanTier tier;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ultra = tier == PlanTier.ultra;
+    final from = PlanTable.price(tier, PlanPeriod.year) / 12;
+    Widget body(Gradient? fill) => AnimatedContainer(
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 260),
+      curve: LuxeMotion.enter,
+      constraints: const BoxConstraints(minHeight: 64),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        gradient: selected ? fill : null,
+        color: selected ? null : LuxeColors.glass,
+        border: Border.all(
+          color: selected ? const Color(0x99FFFFFF) : LuxeColors.hairline,
+        ),
+        boxShadow: selected
+            ? [
+                BoxShadow(
+                  color: (ultra ? PlanColors.violet : PlanColors.steel)
+                      .withValues(alpha: 0.35),
+                  blurRadius: 22,
+                  spreadRadius: -6,
+                ),
+              ]
+            : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Row(
+          Wrap(
+            spacing: 6,
+            runSpacing: 2,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Image.asset(
-                'assets/icons/pinova_logo_full.png',
-                width: 44,
-                height: 44,
-                excludeFromSemantics: true,
-                errorBuilder: (_, _, _) => const Icon(
-                  Icons.workspace_premium_rounded,
-                  color: LuxeColors.emerald,
-                  size: 40,
+              Text(
+                tier.label,
+                style: TextStyle(
+                  color: selected ? PlanColors.ink : LuxeColors.text,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text('PINOVA PREMIUM', style: LuxeText.eyebrow),
-              ),
+              if (ultra)
+                Text(
+                  'ĐỀ XUẤT',
+                  style: TextStyle(
+                    color: selected ? PlanColors.ink : PlanColors.lavender,
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.2,
+                  ),
+                ),
             ],
           ),
-          const SizedBox(height: 14),
-          const Text('Pin bền hơn, sạc an tâm hơn', style: LuxeText.title),
-          const SizedBox(height: 6),
+          const SizedBox(height: 2),
           Text(
-            highlight != null
-                ? '“${highlight!.label}” có trong gói ${highlight!.tier.label}. '
-                      'Dùng thử miễn phí hoặc chọn gói bên dưới.'
-                : 'Sạc đến đúng %, sạc đêm an toàn, AI hiểu chiếc xe của bạn.',
-            style: LuxeText.body,
-          ),
-          const SizedBox(height: 14),
-          LuxeTag(
-            status,
-            color: plan.isPremium ? LuxeColors.emerald : LuxeColors.platinumMid,
+            'từ ~${formatVnd(from.round())}/tháng',
+            style: TextStyle(
+              color: selected ? const Color(0xCC0B0C14) : LuxeColors.muted,
+              fontSize: 12,
+            ),
           ),
         ],
       ),
     );
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: 'Gói ${tier.label}',
+      child: GestureDetector(
+        key: ValueKey('premium-tier-${tier.id}'),
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: ultra
+            ? PlanFlow(
+                builder: (context, phase) => body(planFlowGradient(phase)),
+              )
+            : body(
+                const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    PlanColors.silverHi,
+                    PlanColors.silver,
+                    PlanColors.steel,
+                  ],
+                ),
+              ),
+      ),
+    );
   }
 }
+
+// ───────────────────────────── Benefits ─────────────────────────────
+
+class _BenefitsCard extends StatelessWidget {
+  const _BenefitsCard({
+    super.key,
+    required this.tier,
+    required this.lead,
+    required this.benefits,
+    this.highlight,
+  });
+
+  final PlanTier tier;
+  final String lead;
+  final List<_Benefit> benefits;
+  final PremiumFeature? highlight;
+
+  @override
+  Widget build(BuildContext context) {
+    final ultra = tier == PlanTier.ultra;
+    final colors = ultra ? PlanColors.aurora : PlanStyle.pro.accentColors;
+    Widget card(Gradient border) => Container(
+      padding: const EdgeInsets.all(1.2),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        gradient: border,
+      ),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(23),
+          color: LuxeColors.surface,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Pinova ${tier.label}',
+                    style: const TextStyle(
+                      color: LuxeColors.text,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                PlanTag(tier: tier),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(lead, style: LuxeText.caption),
+            if (highlight != null) ...[
+              const SizedBox(height: 10),
+              LuxeNotice(
+                icon: Icons.touch_app_outlined,
+                color: ultra ? PlanColors.lavender : PlanColors.steelText,
+                message: 'Bạn vừa mở: ${highlight!.label}.',
+              ),
+            ],
+            const SizedBox(height: 12),
+            for (var i = 0; i < benefits.length; i++)
+              LuxeReveal(
+                index: i,
+                child: _BenefitRow(benefit: benefits[i], colors: colors),
+              ),
+          ],
+        ),
+      ),
+    );
+    return ultra
+        ? PlanFlow(
+            builder: (context, phase) => card(
+              planFlowGradient(
+                phase,
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+          )
+        : card(
+            const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0x99F4F6FA), Color(0x338FA9D6), Color(0x66C9D2E0)],
+            ),
+          );
+  }
+}
+
+class _BenefitRow extends StatelessWidget {
+  const _BenefitRow({required this.benefit, required this.colors});
+  final _Benefit benefit;
+  final List<Color> colors;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 14),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _BenefitIcon(icon: benefit.icon, colors: colors),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 2),
+              Text(
+                benefit.title,
+                style: const TextStyle(
+                  color: LuxeColors.text,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(benefit.caption, style: LuxeText.caption),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// A ring in the plan's colours that draws itself once around the icon.
+class _BenefitIcon extends StatelessWidget {
+  const _BenefitIcon({required this.icon, required this.colors});
+  final IconData icon;
+  final List<Color> colors;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 44,
+    height: 44,
+    child: TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 900),
+      curve: LuxeMotion.enter,
+      builder: (context, t, child) => CustomPaint(
+        painter: _RingPainter(sweep: t, colors: colors),
+        child: child,
+      ),
+      child: Center(child: Icon(icon, size: 20, color: LuxeColors.platinumHi)),
+    ),
+  );
+}
+
+class _RingPainter extends CustomPainter {
+  _RingPainter({required this.sweep, required this.colors});
+  final double sweep;
+  final List<Color> colors;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final c = rect.center;
+    final r = size.shortestSide / 2 - 1.5;
+    canvas.drawCircle(c, r, Paint()..color = const Color(0x14FFFFFF));
+    canvas.drawArc(
+      Rect.fromCircle(center: c, radius: r),
+      -math.pi / 2,
+      2 * math.pi * sweep,
+      false,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..strokeCap = StrokeCap.round
+        ..shader = SweepGradient(
+          colors: [...colors, colors.first],
+          transform: const GradientRotation(-math.pi / 2),
+        ).createShader(rect),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_RingPainter old) => old.sweep != sweep;
+}
+
+// ───────────────────────────── Price ─────────────────────────────
 
 class _Price extends StatelessWidget {
   const _Price({required this.tier, required this.period, required this.promo});
@@ -360,7 +703,10 @@ class _Price extends StatelessWidget {
     final base = PlanTable.price(tier, period);
     final discounted = promo?.finalPrice(tier, period);
     final shown = discounted ?? base;
-    final perMonth = period == PlanPeriod.year ? (shown / 12).round() : null;
+    final note = period == PlanPeriod.year
+        ? '~${formatVnd((shown / 12).round())} mỗi tháng · tiết kiệm '
+              '${PlanTable.yearlySavingPct(tier)}% so với trả từng tháng'
+        : 'Trả theo năm chỉ ${formatVnd(PlanTable.price(tier, PlanPeriod.year))}';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -373,13 +719,13 @@ class _Price extends StatelessWidget {
               key: ValueKey('premium-price-${tier.id}'),
               style: const TextStyle(
                 color: LuxeColors.text,
-                fontSize: 28,
+                fontSize: 30,
                 fontWeight: FontWeight.w600,
                 letterSpacing: -0.5,
               ),
             ),
             Padding(
-              padding: const EdgeInsets.only(bottom: 5),
+              padding: const EdgeInsets.only(bottom: 6),
               child: Text(
                 period == PlanPeriod.year ? '/năm' : '/tháng',
                 style: LuxeText.caption,
@@ -387,7 +733,7 @@ class _Price extends StatelessWidget {
             ),
             if (discounted != null)
               Padding(
-                padding: const EdgeInsets.only(bottom: 5),
+                padding: const EdgeInsets.only(bottom: 6),
                 child: Text(
                   formatVnd(base),
                   style: LuxeText.caption.copyWith(
@@ -398,210 +744,193 @@ class _Price extends StatelessWidget {
               ),
           ],
         ),
-        if (perMonth != null)
-          Text(
-            '~${formatVnd(perMonth)} mỗi tháng · tiết kiệm '
-            '${PlanTable.yearlySavingPct(tier)} % so với trả tháng',
-            style: LuxeText.caption.copyWith(color: LuxeColors.champagne),
-          ),
+        Text(
+          note,
+          style: LuxeText.caption.copyWith(color: LuxeColors.champagne),
+        ),
       ],
     );
   }
 }
 
-class _PlanCard extends StatelessWidget {
-  const _PlanCard({
-    super.key,
+// ───────────────────────────── Bottom action ─────────────────────────────
+
+class _ActionBar extends StatelessWidget {
+  const _ActionBar({
+    required this.plan,
     required this.tier,
-    required this.copy,
     required this.period,
     required this.promo,
-    required this.current,
+    required this.onTrial,
     required this.onBuy,
-    this.recommended = false,
-    this.trialAvailable = false,
-    this.trialDays = 7,
-    this.onTrial,
   });
 
+  final Entitlement plan;
   final PlanTier tier;
-  final _PlanCopy copy;
   final PlanPeriod period;
   final PromoQuote? promo;
-  final bool current;
-  final bool recommended;
-  final bool trialAvailable;
-  final int trialDays;
-  final Future<bool> Function()? onTrial;
+  final Future<bool> Function() onTrial;
   final VoidCallback onBuy;
 
   @override
   Widget build(BuildContext context) {
-    final accent = recommended ? LuxeColors.emerald : LuxeColors.platinum;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        color: LuxeColors.raised,
-        border: Border.all(
-          color: recommended
-              ? LuxeColors.emerald.withValues(alpha: 0.55)
-              : LuxeColors.hairlineStrong,
-          width: recommended ? 1.4 : 1,
-        ),
-        boxShadow: recommended
-            ? [
-                BoxShadow(
-                  color: LuxeColors.emerald.withValues(alpha: 0.14),
-                  blurRadius: 28,
-                  spreadRadius: -6,
-                ),
-              ]
-            : null,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    final covered = plan.isPremium && plan.tier.covers(tier);
+    final price = formatVnd(
+      promo?.finalPrice(tier, period) ?? PlanTable.price(tier, period),
+    );
+    final buyLabel =
+        'Chọn ${tier.label} · $price/${period == PlanPeriod.year ? 'năm' : 'tháng'}';
+    final trial = plan.trialAvailable && !plan.isPremium;
+    final Widget content;
+    if (covered) {
+      content = LuxeNotice(
+        key: const ValueKey('premium-current'),
+        icon: Icons.check_circle_outline_rounded,
+        color: LuxeColors.emerald,
+        message: plan.tier == tier
+            ? 'Bạn đang dùng gói này.'
+            : 'Gói ${plan.tier.label} của bạn đã gồm mọi thứ của ${tier.label}.',
+      );
+    } else if (trial) {
+      content = Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Text(
-                'Pinova ${tier.label}',
-                style: TextStyle(
-                  color: accent,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              if (recommended)
-                const LuxeTag('ĐỀ XUẤT', color: LuxeColors.emerald),
-              if (current) const LuxeTag('GÓI HIỆN TẠI'),
-            ],
+          LuxeSubmitButton(
+            key: const ValueKey('premium-trial-ultra'),
+            label: 'Dùng thử Ultra miễn phí ${plan.trialDays} ngày',
+            busyLabel: 'Đang mở dùng thử…',
+            doneLabel: 'Đã mở dùng thử',
+            icon: Icons.auto_awesome_rounded,
+            onPressed: onTrial,
           ),
-          const SizedBox(height: 4),
-          Text(copy.tagline, style: LuxeText.caption),
-          const SizedBox(height: 12),
-          _Price(tier: tier, period: period, promo: promo),
-          const SizedBox(height: 14),
-          for (final (icon, title, caption) in copy.highlights)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: accent.withValues(alpha: 0.1),
-                      border: Border.all(color: accent.withValues(alpha: 0.3)),
-                    ),
-                    child: Icon(icon, size: 18, color: accent),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
-                          style: const TextStyle(
-                            color: LuxeColors.text,
-                            fontSize: 14.5,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        if (caption.isNotEmpty)
-                          Text(
-                            caption,
-                            style: LuxeText.caption.copyWith(fontSize: 12.5),
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          const SizedBox(height: 6),
-          if (current)
-            const LuxeNotice(
-              icon: Icons.check_circle_outline_rounded,
-              color: LuxeColors.emerald,
-              message: 'Bạn đang dùng gói này.',
-            )
-          else ...[
-            if (trialAvailable && onTrial != null) ...[
-              LuxeSubmitButton(
-                key: ValueKey('premium-trial-${tier.id}'),
-                label: 'Dùng thử miễn phí $trialDays ngày',
-                busyLabel: 'Đang mở dùng thử…',
-                doneLabel: 'Đã mở dùng thử',
-                icon: Icons.auto_awesome_rounded,
-                onPressed: onTrial,
-              ),
-              const SizedBox(height: 8),
-            ],
-            SizedBox(
-              width: double.infinity,
-              child: (trialAvailable && onTrial != null)
-                  ? OutlinedButton(
-                      key: ValueKey('premium-buy-${tier.id}'),
-                      onPressed: onBuy,
-                      child: Text('Chọn ${tier.label}'),
-                    )
-                  : FilledButton(
-                      key: ValueKey('premium-buy-${tier.id}'),
-                      onPressed: onBuy,
-                      child: Text('Chọn ${tier.label}'),
-                    ),
-            ),
-          ],
+          TextButton(
+            key: ValueKey('premium-buy-${tier.id}'),
+            onPressed: onBuy,
+            child: Text(buyLabel, textAlign: TextAlign.center),
+          ),
         ],
+      );
+    } else {
+      content = FilledButton(
+        key: ValueKey('premium-buy-${tier.id}'),
+        onPressed: onBuy,
+        child: Text(buyLabel, textAlign: TextAlign.center),
+      );
+    }
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        color: Color(0xF2080809),
+        border: Border(top: BorderSide(color: LuxeColors.hairline)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: content,
+        ),
       ),
     );
   }
 }
 
-class _FreeCard extends StatelessWidget {
-  const _FreeCard({required this.current});
-  final bool current;
+// ───────────────────────────── Folded sections ─────────────────────────────
+
+class _Fold extends StatefulWidget {
+  const _Fold({
+    super.key,
+    required this.foldKey,
+    required this.icon,
+    required this.title,
+    required this.child,
+    this.open,
+    this.onToggle,
+  });
+
+  final Key foldKey;
+  final IconData icon;
+  final String title;
+  final Widget child;
+
+  /// Controlled when given (the promo opens itself once a code applies).
+  final bool? open;
+  final VoidCallback? onToggle;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(20),
-      color: LuxeColors.glass,
-      border: Border.all(color: LuxeColors.hairline),
-    ),
-    child: Row(
+  State<_Fold> createState() => _FoldState();
+}
+
+class _FoldState extends State<_Fold> {
+  bool _open = false;
+
+  bool get _isOpen => widget.open ?? _open;
+
+  @override
+  Widget build(BuildContext context) => LuxeGlass(
+    radius: 18,
+    padding: EdgeInsets.zero,
+    child: Column(
       children: [
-        const Icon(Icons.bolt_rounded, color: LuxeColors.platinumMid),
-        const SizedBox(width: 12),
-        const Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Free · 0đ',
-                style: TextStyle(
-                  color: LuxeColors.text,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
+        Semantics(
+          button: true,
+          expanded: _isOpen,
+          child: InkWell(
+            key: widget.foldKey,
+            borderRadius: BorderRadius.circular(18),
+            onTap: () {
+              if (widget.onToggle != null) {
+                widget.onToggle!();
+              } else {
+                setState(() => _open = !_open);
+              }
+            },
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 52),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                child: Row(
+                  children: [
+                    Icon(widget.icon, size: 18, color: LuxeColors.platinumMid),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        widget.title,
+                        style: const TextStyle(
+                          color: LuxeColors.text,
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    AnimatedRotation(
+                      turns: _isOpen ? 0.5 : 0,
+                      duration: MediaQuery.disableAnimationsOf(context)
+                          ? Duration.zero
+                          : const Duration(milliseconds: 220),
+                      child: const Icon(
+                        Icons.expand_more_rounded,
+                        color: LuxeColors.dim,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              Text(
-                'Sạc an toàn, hẹn giờ, pin/ODO, quét đồng hồ, 1 xe, '
-                'lịch sử 30 ngày, Pinova Bot 10 tin/ngày',
-                style: LuxeText.caption,
-              ),
-            ],
+            ),
           ),
         ),
-        if (current) const LuxeTag('GÓI HIỆN TẠI'),
+        AnimatedSize(
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 260),
+          curve: LuxeMotion.enter,
+          alignment: Alignment.topCenter,
+          child: _isOpen
+              ? Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                  child: widget.child,
+                )
+              : const SizedBox(width: double.infinity),
+        ),
       ],
     ),
   );
@@ -638,7 +967,7 @@ class _PromoField extends StatelessWidget {
           message:
               'Mã ${applied!.code}: giảm ${applied!.percentOff} %'
               '${applied!.validTo != null ? ' · đến ${_date(applied!.validTo!)}' : ''}. '
-              'Giá đã giảm hiện ở các gói áp dụng.',
+              'Giá đã giảm hiện ở trên.',
           action: onRemove == null
               ? null
               : TextButton(onPressed: onRemove, child: const Text('Bỏ')),
@@ -686,74 +1015,66 @@ class _CompareTable extends StatelessWidget {
   static const _rows = <(String, String, String, String)>[
     ('Sạc an toàn, hẹn giờ, quét đồng hồ', '✓', '✓', '✓'),
     ('Pinova Bot mỗi ngày', '10', '30', '100'),
-    ('Lịch sử sạc', '30 ngày', '∞ + CSV', '∞ + CSV'),
-    ('Sạc đến % tự ngắt, sửa mục tiêu', '—', '✓', '✓'),
-    ('% pin chai + bài kiểm tra', '—', '✓', '✓'),
-    ('Giao diện tùy chọn, widget', '—', '✓', '✓'),
-    ('Số xe', '1', '2', 'Không giới hạn'),
-    ('AI cá nhân', '—', '—', '✓'),
-    ('Dự đoán pin theo lộ trình', '—', '—', '✓'),
+    ('Lịch sử sạc', '30 ngày', 'Đầy đủ', 'Đầy đủ'),
+    ('Sạc đến % tự tắt, đổi mục tiêu', '—', '✓', '✓'),
+    ('Lộ trình', '—', '✓', '✓'),
+    ('% pin chai, bài kiểm tra', '—', '✓', '✓'),
+    ('Giao diện tùy chọn, xuất file', '—', '✓', '✓'),
+    ('Số xe', '1', '2', 'Nhiều'),
     ('Sạc đêm an toàn', '—', '—', '✓'),
-    ('Sạc giờ điện rẻ, chi phí nâng cao', '—', '—', '✓'),
-    ('Chia sẻ xe, báo cáo pin tháng', '—', '—', '✓'),
+    ('AI cá nhân', '—', '—', '✓'),
+    ('Giao diện Aurora', '—', '—', '✓'),
+    ('Chi phí theo tháng, chia sẻ xe', '—', '—', '✓'),
     ('Trợ giúp & khắc phục sự cố', '✓', '✓', '✓'),
   ];
 
   @override
   Widget build(BuildContext context) {
     Widget cell(String text, {bool head = false, Color? color}) => Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+      padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 3),
       child: Text(
         text,
         textAlign: TextAlign.center,
         style: TextStyle(
           color: color ?? (text == '—' ? LuxeColors.dim : LuxeColors.text),
-          fontSize: head ? 12.5 : 13,
-          fontWeight: head ? FontWeight.w600 : FontWeight.w400,
+          fontSize: head ? 12.5 : 12.5,
+          fontWeight: head ? FontWeight.w700 : FontWeight.w400,
         ),
       ),
     );
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        color: LuxeColors.glass,
-        border: Border.all(color: LuxeColors.hairline),
+    return Table(
+      columnWidths: const {
+        0: FlexColumnWidth(2.3),
+        1: FlexColumnWidth(1),
+        2: FlexColumnWidth(1),
+        3: FlexColumnWidth(1.1),
+      },
+      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+      border: const TableBorder(
+        horizontalInside: BorderSide(color: LuxeColors.hairline),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      child: Table(
-        columnWidths: const {
-          0: FlexColumnWidth(2.4),
-          1: FlexColumnWidth(1),
-          2: FlexColumnWidth(1),
-          3: FlexColumnWidth(1.2),
-        },
-        defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-        border: const TableBorder(
-          horizontalInside: BorderSide(color: LuxeColors.hairline),
+      children: [
+        TableRow(
+          children: [
+            const SizedBox.shrink(),
+            cell('Free', head: true, color: LuxeColors.muted),
+            cell('Pro', head: true, color: PlanColors.steelText),
+            cell('Ultra', head: true, color: PlanColors.lavender),
+          ],
         ),
-        children: [
+        for (final (label, free, pro, ultra) in _rows)
           TableRow(
             children: [
-              const SizedBox.shrink(),
-              cell('Free', head: true, color: LuxeColors.muted),
-              cell('Pro', head: true, color: LuxeColors.platinum),
-              cell('Ultra', head: true, color: LuxeColors.emerald),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 9),
+                child: Text(label, style: LuxeText.caption),
+              ),
+              cell(free),
+              cell(pro),
+              cell(ultra),
             ],
           ),
-          for (final (label, free, pro, ultra) in _rows)
-            TableRow(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  child: Text(label, style: LuxeText.caption),
-                ),
-                cell(free),
-                cell(pro),
-                cell(ultra, color: ultra == '—' ? null : LuxeColors.emerald),
-              ],
-            ),
-        ],
-      ),
+      ],
     );
   }
 }

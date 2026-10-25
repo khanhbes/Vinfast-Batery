@@ -35,34 +35,44 @@ class OdometerDrum extends StatelessWidget {
         curve: const Cubic(0.2, 0.0, 0.0, 1.0),
         builder: (context, v, _) => Row(
           mainAxisSize: MainAxisSize.min,
-          children: [
-            for (var i = digits - 1; i >= 0; i--)
-              _DigitWheel(
-                // Continuous position of this digit: v / 10^i.
-                position: v / math.pow(10, i),
-                lit: i == 0,
-              ),
-          ],
+          children: [for (var i = digits - 1; i >= 0; i--) _wheel(v, i)],
         ),
       ),
     );
   }
+
+  /// Digit [i] (0 = units) of [v] as a real drum shows it: it turns only
+  /// while every digit to its right is passing 9 → 0. At rest every digit
+  /// is exact (QA 136: 4 958 km showed the "4" half rolled into a "5").
+  @visibleForTesting
+  static ({int digit, double turn}) drumDigit(double v, int i) {
+    final unit = math.pow(10, i).toDouble();
+    final digit = (v / unit).floor() % 10;
+    if (i == 0) return (digit: digit, turn: v - v.floor());
+    // Carry from below: the part of the last unit that is already turning.
+    final turn = ((v % unit) - (unit - 1)).clamp(0.0, 1.0);
+    return (digit: digit, turn: turn);
+  }
+
+  static _DigitWheel _wheel(double v, int i) {
+    final d = drumDigit(v, i);
+    return _DigitWheel(base: d.digit, frac: d.turn, lit: i == 0);
+  }
 }
 
 class _DigitWheel extends StatelessWidget {
-  const _DigitWheel({required this.position, required this.lit});
-  final double position;
+  const _DigitWheel({
+    required this.base,
+    required this.frac,
+    required this.lit,
+  });
+  final int base;
+  final double frac;
   final bool lit;
 
   @override
   Widget build(BuildContext context) {
     const h = 44.0, w = 30.0;
-    final p = position % 10;
-    final base = p.floor();
-    // Higher digits only roll during the last tenth (like a real drum).
-    final frac = lit
-        ? p - base
-        : ((p - base) > 0.9 ? (p - base - 0.9) * 10 : 0.0);
     return Container(
       width: w,
       height: h,

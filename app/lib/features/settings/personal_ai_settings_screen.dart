@@ -266,7 +266,14 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  // QA 136: however this screen is reached (a tile, Pinova Bot, a
+  // notification), outside the plan it shows Pinova Premium instead.
+  Widget build(BuildContext context) => PremiumRequired(
+    feature: PremiumFeature.learningTrain,
+    child: Builder(builder: _screen),
+  );
+
+  Widget _screen(BuildContext context) {
     final profile = _profile;
     final status = _status;
     final consent = status?.consentEnabled ?? profile?.consentEnabled ?? true;

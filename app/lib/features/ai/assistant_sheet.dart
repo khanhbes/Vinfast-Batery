@@ -34,6 +34,8 @@ import 'widgets/chat_message_bubble.dart';
 import 'widgets/quick_reply_chips.dart';
 import '../../core/services/guide_registry.dart';
 import '../../core/services/screen_tour.dart';
+import '../premium/plan_tag.dart';
+import '../../core/providers/entitlement_provider.dart';
 
 /// Bottom Sheet trò chuyện cùng trợ lý ảo BatteryBot với AI Streaming & Lịch sử
 class InteractiveAssistantSheet extends ConsumerStatefulWidget {
@@ -1203,31 +1205,7 @@ class _InteractiveAssistantSheetState
                                   ),
                                 ),
                                 const SizedBox(width: 12),
-                                const Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Pinova Bot',
-                                        style: TextStyle(
-                                          fontSize: 19,
-                                          fontWeight: FontWeight.w500,
-                                          color: LuxeColors.text,
-                                          letterSpacing: -0.2,
-                                        ),
-                                      ),
-                                      SizedBox(height: 2),
-                                      Text(
-                                        'Trợ lý pin & sạc cá nhân',
-                                        style: TextStyle(
-                                          fontSize: 12.5,
-                                          color: LuxeColors.muted,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                                const Expanded(child: _BotTitle()),
                                 IconButton(
                                   key: const Key('assistant_close_button'),
                                   tooltip: 'Đóng Pinova Bot',
@@ -1781,4 +1759,43 @@ class _LuxePalette {
   Color get primary => LuxeColors.emerald;
   Color get text => LuxeColors.text;
   Color get muted => LuxeColors.muted;
+}
+
+/// "Pinova Bot" with the plan's tag and the plan's daily messages (QA 136).
+class _BotTitle extends ConsumerWidget {
+  const _BotTitle();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final plan = ref.watch(entitlementProvider);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 2,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: const [
+            Text(
+              'Pinova Bot',
+              style: TextStyle(
+                fontSize: 19,
+                fontWeight: FontWeight.w500,
+                color: LuxeColors.text,
+                letterSpacing: -0.2,
+              ),
+            ),
+            CurrentPlanTag(key: ValueKey('assistant-plan-tag')),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text(
+          plan.known
+              ? 'Trợ lý pin & sạc · ${plan.assistantDaily} tin mỗi ngày'
+              : 'Trợ lý pin & sạc cá nhân',
+          style: const TextStyle(fontSize: 12.5, color: LuxeColors.muted),
+        ),
+      ],
+    );
+  }
 }

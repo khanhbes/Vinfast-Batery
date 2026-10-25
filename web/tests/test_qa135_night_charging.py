@@ -14,7 +14,10 @@ VN = timezone(timedelta(hours=7))
 
 
 def _at(hour, minute=0, day=25):
-    return datetime(2026, 10, day, hour, minute, tzinfo=VN).astimezone(timezone.utc)
+    # A date well after any real run: the fixture's worker lease is claimed
+    # on the real clock, and a fake night before it looked like a lease from
+    # the future (failed when the suite ran after 22:00 on 25/10/2026).
+    return datetime(2031, 10, day, hour, minute, tzinfo=VN).astimezone(timezone.utc)
 
 
 def test_schedule_finishes_before_waking_and_starts_as_late_as_possible():

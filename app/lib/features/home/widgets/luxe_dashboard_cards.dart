@@ -9,6 +9,8 @@ import '../../../core/utils/number_text.dart';
 import '../../../data/models/vehicle_model.dart';
 import '../../../data/services/range_estimator.dart';
 import '../../../data/services/trip_energy_model.dart';
+import '../../../data/models/entitlement.dart';
+import '../../premium/premium_gate.dart';
 
 /// Tinted glass orb for accented dashboard actions. Neutral icon wells use
 /// the metal [LuxeMedallion] from `core/widgets/luxe_settings.dart`.
@@ -100,6 +102,12 @@ class LuxeQuickActions extends StatelessWidget {
   /// Null hides the tile (trip planner off in the beta, Task 125).
   final VoidCallback? onTrip;
 
+  /// QA 136: Lộ trình is a Pro feature; outside the plan the tile is faded
+  /// and only its tag opens Pinova Premium (it used to open anyway).
+  static Widget _lockFor(bool isTrip, Widget tile) => isTrip
+      ? PremiumLocked(feature: PremiumFeature.tripEstimate, child: tile)
+      : tile;
+
   /// Task 127: "% pin & ODO" from a dashboard photo or typed (full width).
   final VoidCallback? onReadDashboard;
   final VoidCallback onMaintenance;
@@ -136,53 +144,56 @@ class LuxeQuickActions extends StatelessWidget {
         final stacked = c.maxWidth / items.length < 100 || scale > 1.4;
         final tiles = [
           for (final it in items)
-            LuxePressable(
-              key: it.$5,
-              onTap: it.$4,
-              semanticsLabel: it.$2,
-              child: LuxeGlass(
-                radius: 20,
-                padding: stacked
-                    ? const EdgeInsets.symmetric(horizontal: 14, vertical: 12)
-                    : const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
-                child: ExcludeSemantics(
-                  child: stacked
-                      ? Row(
-                          children: [
-                            LuxeOrb(icon: it.$1, color: it.$3, size: 40),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
+            _lockFor(
+              it.$4 == trip,
+              LuxePressable(
+                key: it.$5,
+                onTap: it.$4,
+                semanticsLabel: it.$2,
+                child: LuxeGlass(
+                  radius: 20,
+                  padding: stacked
+                      ? const EdgeInsets.symmetric(horizontal: 14, vertical: 12)
+                      : const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
+                  child: ExcludeSemantics(
+                    child: stacked
+                        ? Row(
+                            children: [
+                              LuxeOrb(icon: it.$1, color: it.$3, size: 40),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  it.$2,
+                                  style: const TextStyle(
+                                    color: LuxeColors.text,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                              const Icon(
+                                Icons.chevron_right_rounded,
+                                color: LuxeColors.dim,
+                              ),
+                            ],
+                          )
+                        : Column(
+                            children: [
+                              LuxeOrb(icon: it.$1, color: it.$3),
+                              const SizedBox(height: 10),
+                              Text(
                                 it.$2,
+                                maxLines: 2,
+                                textAlign: TextAlign.center,
                                 style: const TextStyle(
                                   color: LuxeColors.text,
-                                  fontSize: 14,
+                                  fontSize: 13,
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
-                            ),
-                            const Icon(
-                              Icons.chevron_right_rounded,
-                              color: LuxeColors.dim,
-                            ),
-                          ],
-                        )
-                      : Column(
-                          children: [
-                            LuxeOrb(icon: it.$1, color: it.$3),
-                            const SizedBox(height: 10),
-                            Text(
-                              it.$2,
-                              maxLines: 2,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: LuxeColors.text,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
+                            ],
+                          ),
+                  ),
                 ),
               ),
             ),

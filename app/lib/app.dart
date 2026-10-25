@@ -3,7 +3,10 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/services/settings_service.dart';
-import 'core/theme/app_theme.dart';
+import 'core/providers/appearance_provider.dart';
+import 'core/providers/entitlement_provider.dart';
+import 'core/theme/luxe_theme.dart';
+import 'core/theme/plan_style.dart';
 import 'core/widgets/app_popup.dart';
 import 'data/services/notification_service.dart';
 import 'data/services/push_notification_service.dart';
@@ -109,31 +112,45 @@ class _VinFastBatteryAppState extends State<VinFastBatteryApp> {
     // mỗi khi user đổi cài đặt — không yêu cầu restart.
     return AnimatedBuilder(
       animation: _settings,
-      builder: (context, _) {
-        // LUXE is dark only (Task 117): one theme for every screen.
-        final theme = AppTheme.darkTheme;
-        return MaterialApp(
-          title: 'Pinova',
-          debugShowCheckedModeBanner: false,
-          theme: theme,
-          darkTheme: theme,
-          themeMode: ThemeMode.dark,
+      builder: (context, _) => Consumer(builder: _app),
+    );
+  }
 
-          // Localization support (Vietnamese/English per PLAN1)
-          locale: _settings.getLocale(),
-          supportedLocales: const [Locale('vi'), Locale('en')],
-          localizationsDelegates: const [
-            AppLocalizations.delegate,
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
+  Widget _app(BuildContext context, WidgetRef ref, Widget? _) {
+    // LUXE is dark only (Task 117). QA 136: one theme per plan; Ultra's
+    // moving colours run from one clock above the navigator.
+    final tier = ref.watch(entitlementProvider.select((plan) => plan.tier));
+    final effects = ref.watch(
+      appearanceProvider.select((look) => look.ultraEffects),
+    );
+    final theme = LuxeTheme.data(tier: tier);
+    return MaterialApp(
+      title: 'Pinova',
+      debugShowCheckedModeBanner: false,
+      theme: theme,
+      darkTheme: theme,
+      themeMode: ThemeMode.dark,
 
-          scaffoldMessengerKey: AppPopup.messengerKey,
-          navigatorKey: AppPopup.navigatorKey,
-          home: const AuthGate(),
-        );
-      },
+      // Localization support (Vietnamese/English per PLAN1)
+      locale: _settings.getLocale(),
+      supportedLocales: const [Locale('vi'), Locale('en')],
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+
+      scaffoldMessengerKey: AppPopup.messengerKey,
+      navigatorKey: AppPopup.navigatorKey,
+      builder: (context, child) => PlanMotionHost(
+        running:
+            PlanStyle.forTier(tier).isUltra &&
+            effects &&
+            !MediaQuery.disableAnimationsOf(context),
+        child: child ?? const SizedBox.shrink(),
+      ),
+      home: const AuthGate(),
     );
   }
 }

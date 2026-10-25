@@ -19,6 +19,11 @@ import '../premium/premium_gate.dart';
 class AppearanceScreen extends ConsumerWidget {
   const AppearanceScreen({super.key});
 
+  /// Layouts other than the default are Pro (QA 136: faded, tag only).
+  static Widget _layoutLock(bool free, Widget tile) => free
+      ? tile
+      : PremiumLocked(feature: PremiumFeature.appearance, child: tile);
+
   static String summary(AppAppearance a) =>
       'Tổng quan: ${a.dashboard.label} · Sạc: ${a.charge.label}';
 
@@ -35,6 +40,9 @@ class AppearanceScreen extends ConsumerWidget {
     void layout(VoidCallback apply) => layoutsAllowed
         ? apply()
         : PremiumGate.showUpgrade(context, PremiumFeature.appearance);
+    final effects = ref.watch(
+      appearanceProvider.select((look) => look.ultraEffects),
+    );
     return LuxeScaffold(
       title: 'Giao diện',
       body: ListView(
@@ -57,19 +65,45 @@ class AppearanceScreen extends ConsumerWidget {
                   'bên dưới dùng được ở mọi gói.',
             ),
           ],
+          // QA 136: Ultra's aurora can stay still (battery, taste).
+          const LuxeSectionLabel('Gói Ultra'),
+          PremiumLocked(
+            feature: PremiumFeature.ultraLook,
+            tagAlignment: AlignmentDirectional.centerEnd,
+            tagPadding: const EdgeInsetsDirectional.only(end: 10),
+            child: LuxeSettingsGroup(
+              children: [
+                LuxeSettingsRow(
+                  key: const ValueKey('appearance-ultra-effects'),
+                  icon: Icons.auto_awesome_rounded,
+                  title: 'Màu Aurora chuyển động',
+                  subtitle:
+                      'Nền, nút và tag Ultra đổi màu chậm. Tắt để giữ màu '
+                      'đứng yên và tiết kiệm pin. Luôn đứng yên khi điện '
+                      'thoại bật Giảm chuyển động.',
+                  trailing: Switch(
+                    value: effects,
+                    onChanged: notifier.setUltraEffects,
+                  ),
+                  onTap: () => notifier.setUltraEffects(!effects),
+                ),
+              ],
+            ),
+          ),
           const LuxeSectionLabel('Tổng quan'),
           _OptionGrid(
             children: [
               for (final style in DashboardStyle.values)
-                _OptionTile(
-                  key: ValueKey('appearance-dashboard-${style.id}'),
-                  title: style.label,
-                  caption: style.caption,
-                  selected: appearance.dashboard == style,
-                  preview: _DashboardPreview(style),
-                  locked:
-                      !layoutsAllowed && style != DashboardStyle.values.first,
-                  onTap: () => layout(() => notifier.setDashboard(style)),
+                _layoutLock(
+                  style == DashboardStyle.values.first,
+                  _OptionTile(
+                    key: ValueKey('appearance-dashboard-${style.id}'),
+                    title: style.label,
+                    caption: style.caption,
+                    selected: appearance.dashboard == style,
+                    preview: _DashboardPreview(style),
+                    onTap: () => layout(() => notifier.setDashboard(style)),
+                  ),
                 ),
             ],
           ),
@@ -77,14 +111,16 @@ class AppearanceScreen extends ConsumerWidget {
           _OptionGrid(
             children: [
               for (final style in ChargeStyle.values)
-                _OptionTile(
-                  key: ValueKey('appearance-charge-${style.id}'),
-                  title: style.label,
-                  caption: style.caption,
-                  selected: appearance.charge == style,
-                  preview: _ChargePreview(style),
-                  locked: !layoutsAllowed && style != ChargeStyle.values.first,
-                  onTap: () => layout(() => notifier.setCharge(style)),
+                _layoutLock(
+                  style == ChargeStyle.values.first,
+                  _OptionTile(
+                    key: ValueKey('appearance-charge-${style.id}'),
+                    title: style.label,
+                    caption: style.caption,
+                    selected: appearance.charge == style,
+                    preview: _ChargePreview(style),
+                    onTap: () => layout(() => notifier.setCharge(style)),
+                  ),
                 ),
             ],
           ),
@@ -186,7 +222,6 @@ class _OptionTile extends StatelessWidget {
     required this.selected,
     required this.preview,
     required this.onTap,
-    this.locked = false,
   });
 
   final String title;
@@ -196,15 +231,13 @@ class _OptionTile extends StatelessWidget {
   final VoidCallback onTap;
 
   /// Not in the plan (QA 135): shows a PRO tag, tapping explains.
-  final bool locked;
 
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
     selected: selected,
     label:
-        '$title. $caption${selected ? '. Đang dùng' : ''}'
-        '${locked ? '. Gói Pro' : ''}',
+        '$title. $caption${selected ? '. Đang dùng' : ''}',
     excludeSemantics: true,
     child: Material(
       type: MaterialType.transparency,
@@ -261,9 +294,7 @@ class _OptionTile extends StatelessWidget {
                       Icons.check_circle_rounded,
                       size: 18,
                       color: LuxeColors.emerald,
-                    )
-                  else if (locked)
-                    const PremiumBadge(tier: PlanTier.pro),
+                    ),
                 ],
               ),
               const SizedBox(height: 2),
