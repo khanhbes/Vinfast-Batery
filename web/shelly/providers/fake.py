@@ -50,6 +50,16 @@ class FakeShellyProvider:
         self.status.relay = True
         self.status.timer_remaining = duration_seconds
 
+    def extend_timer(self, binding: DeviceBinding, duration_seconds: int) -> None:
+        if not self.status.online:
+            raise ProviderError("deviceOffline", "Shelly đang Offline", True)
+        if self.status.relay is not True:
+            raise ProviderError("relayNotOn", "Bộ sạc không còn bật")
+        self.command_count += 1
+        self.extend_calls = getattr(self, "extend_calls", 0) + 1
+        if not getattr(self, "fail_extend", False):
+            self.status.timer_remaining = duration_seconds
+
     def verify_control_readiness(self, binding: DeviceBinding) -> None:
         """Explicit mock contract; never used as Cloud hardware evidence."""
         if not self.status.online or not binding.safe_boot_verified or not binding.no_load_test_verified:

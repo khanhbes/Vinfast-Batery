@@ -112,7 +112,8 @@ class DiagnosticsProbe {
     }
   }
 
-  ShellyConnectionSnapshot shelly() => ShellyConnectionCoordinator.shared.current;
+  ShellyConnectionSnapshot shelly() =>
+      ShellyConnectionCoordinator.shared.current;
 }
 
 class DiagnosticsReport {
@@ -122,10 +123,8 @@ class DiagnosticsReport {
   /// Short, non-secret facts attached to a support ticket.
   final Map<String, Object?> snapshot;
 
-  int get problems =>
-      checks.where((c) => c.status == CheckStatus.fail).length;
-  int get warnings =>
-      checks.where((c) => c.status == CheckStatus.warn).length;
+  int get problems => checks.where((c) => c.status == CheckStatus.fail).length;
+  int get warnings => checks.where((c) => c.status == CheckStatus.warn).length;
 }
 
 /// The app-wide self-check behind "Trợ giúp & khắc phục sự cố" (QA 135).
@@ -165,7 +164,8 @@ class AppDiagnostics {
               id: 'network',
               title: 'Kết nối mạng',
               status: CheckStatus.fail,
-              detail: 'Điện thoại đang không có mạng. Bật Wi-Fi hoặc dữ liệu di động.',
+              detail:
+                  'Điện thoại đang không có mạng. Bật Wi-Fi hoặc dữ liệu di động.',
               fix: CheckFix.retry,
               fixLabel: 'Kiểm tra lại',
             )
@@ -200,7 +200,8 @@ class AppDiagnostics {
               id: 'account',
               title: 'Tài khoản',
               status: CheckStatus.fail,
-              detail: 'Phiên đăng nhập đã hết. Đăng nhập lại để đồng bộ dữ liệu.',
+              detail:
+                  'Phiên đăng nhập đã hết. Đăng nhập lại để đồng bộ dữ liệu.',
               fix: CheckFix.signIn,
               fixLabel: 'Đăng nhập lại',
             ),
@@ -334,7 +335,8 @@ class AppDiagnostics {
         id: 'shelly',
         title: 'Ổ sạc Shelly',
         status: CheckStatus.unknown,
-        detail: 'Đã liên kết; chưa đọc được trạng thái mới. Mở tab Sạc pin để kiểm tra.',
+        detail:
+            'Đã liên kết; chưa đọc được trạng thái mới. Mở tab Sạc pin để kiểm tra.',
       );
     }
     return DiagnosticCheck(

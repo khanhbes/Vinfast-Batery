@@ -41,6 +41,7 @@ import '../../core/providers/entitlement_provider.dart';
 import '../../data/models/entitlement.dart';
 import '../premium/premium_gate.dart';
 import '../../data/models/app_appearance.dart';
+import 'widgets/edit_target_sheet.dart';
 import 'widgets/prediction_card_v2.dart';
 import 'widgets/recent_sessions_section_v2.dart';
 import 'widgets/start_charge_confirmation_sheet.dart';
@@ -556,7 +557,8 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                 ),
                 const SizedBox(height: 6),
                 // QA 131: the owner's Charge layout (Cài đặt → Giao diện).
-                if (ref.watch(effectiveAppearanceProvider).charge == ChargeStyle.dial)
+                if (ref.watch(effectiveAppearanceProvider).charge ==
+                    ChargeStyle.dial)
                   LuxeSocDial(
                     key: const ValueKey('target-battery-selector'),
                     current: draft.currentSoc,
@@ -866,8 +868,31 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
           session?.lastError == offPendingReadbackCode,
       onStop: () => _stopWithConfirmation(state, controller),
     );
+    // QA 135: a target charge can move its target (Pro).
+    final canEdit =
+        targetMode &&
+        session != null &&
+        !session.state.isTerminal &&
+        state.phase != SmartChargingViewPhase.stopping &&
+        state.phase != SmartChargingViewPhase.starting;
+    final withEdit = !canEdit
+        ? card
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              card,
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                key: const ValueKey('edit-target-button'),
+                onPressed: () =>
+                    _editTarget(estimatedSoc, targetSoc, controller),
+                icon: const Icon(Icons.tune_rounded, size: 18),
+                label: Text('Đổi mục tiêu ($targetSoc%)'),
+              ),
+            ],
+          );
     final lost = state.linkLostSince;
-    if (lost == null) return card;
+    if (lost == null) return withEdit;
     final minutes = state.now.difference(lost).inMinutes;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -885,9 +910,26 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
           onRetry: () => controller.refresh(force: true),
         ),
         const SizedBox(height: 12),
-        card,
+        withEdit,
       ],
     );
+  }
+
+  Future<void> _editTarget(
+    double estimatedSoc,
+    int targetSoc,
+    SmartChargingController controller,
+  ) async {
+    if (!PremiumGate.check(context, ref, PremiumFeature.targetEdit)) return;
+    final changed = await EditTargetSheet.show(
+      context,
+      currentSoc: estimatedSoc,
+      currentTarget: targetSoc.toDouble(),
+      onSubmit: controller.updateTarget,
+    );
+    if (changed == true && mounted) {
+      unawaited(controller.refresh(force: true));
+    }
   }
 
   /// A charge this screen watched just ended: ask for the scooter's % while
@@ -919,30 +961,31 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
   Future<void> _askActualSoc(SmartChargingSession session) async {
     final controller = ref.read(smartChargingControllerProvider(args).notifier);
     controller.markActualSocAsked(session.sessionId);
+    // The sheet saves and shows progress; a failure keeps it open with the
+    // numbers (QA 135).
     final reading = await ConfirmActualSocSheet.show(
       context,
       estimatedSoc: session.estimatedSoc,
       startSoc: session.startSoc,
+      onSave: (reading) async {
+        try {
+          await controller.confirmActualEndSoc(
+            session,
+            reading.soc,
+            odoKm: reading.odoKm,
+          );
+          return null;
+        } catch (error) {
+          return AppErrorFormatter.format(error);
+        }
+      },
     );
     if (reading == null || !mounted) return;
-    try {
-      await controller.confirmActualEndSoc(
-        session,
-        reading.soc,
-        odoKm: reading.odoKm,
-      );
-      AppPopup.showSuccess(
-        'Đã lưu ${reading.soc.round()}%',
-        detail: 'Đã thêm vào dữ liệu học; app báo khi đủ để huấn luyện.',
-      );
-      unawaited(TrainingReadiness.refresh(session.vehicleId));
-    } catch (error) {
-      AppPopup.showError(
-        'Chưa lưu được % pin',
-        detail: AppErrorFormatter.format(error),
-        userInitiated: true,
-      );
-    }
+    AppPopup.showSuccess(
+      'Đã lưu ${reading.soc.round()}%',
+      detail: 'Đã thêm vào dữ liệu học; app báo khi đủ để huấn luyện.',
+    );
+    unawaited(TrainingReadiness.refresh(session.vehicleId));
   }
 
   void _showStateNotices(
@@ -1091,7 +1134,9 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
       await ref.read(entitlementProvider.notifier).refresh();
       if (!mounted) return;
       if (preview.isTargetMode &&
-          !ref.read(entitlementProvider).allows(PremiumFeature.targetCharging)) {
+          !ref
+              .read(entitlementProvider)
+              .allows(PremiumFeature.targetCharging)) {
         PremiumGate.showUpgrade(context, PremiumFeature.targetCharging);
         return;
       }

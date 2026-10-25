@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/theme/luxe_theme.dart';
 import '../../../core/widgets/luxe_kit.dart';
+import '../../../core/widgets/luxe_submit_button.dart';
 import '../dashboard_scan_screen.dart';
 import 'battery_reading_sheet.dart';
 
@@ -19,11 +20,16 @@ class ConfirmActualSocSheet extends StatefulWidget {
     required this.startSoc,
     this.currentOdoKm,
     this.reader,
+    this.onSave,
   });
 
   final double? estimatedSoc;
   final double startSoc;
   final double? currentOdoKm;
+
+  /// Saves on the server while the sheet shows progress (QA 135); returns
+  /// the reason when it failed (the sheet stays open with the numbers).
+  final Future<String?> Function(ActualSocReading reading)? onSave;
 
   /// Dashboard photo reader (Task 127); injectable for tests.
   final DashboardReadFn? reader;
@@ -34,6 +40,7 @@ class ConfirmActualSocSheet extends StatefulWidget {
     required double startSoc,
     double? currentOdoKm,
     DashboardReadFn? reader,
+    Future<String?> Function(ActualSocReading reading)? onSave,
   }) => showLuxeSheet<ActualSocReading>(
     context,
     builder: (_) => ConfirmActualSocSheet(
@@ -41,6 +48,7 @@ class ConfirmActualSocSheet extends StatefulWidget {
       startSoc: startSoc,
       currentOdoKm: currentOdoKm,
       reader: reader,
+      onSave: onSave,
     ),
   );
 
@@ -54,6 +62,8 @@ class _ConfirmActualSocSheetState extends State<ConfirmActualSocSheet> {
   String? _odoError;
   bool _reading = false;
   String? _readNote;
+  String? _saveError;
+  bool _saving = false;
 
   double get _minimum => (widget.startSoc - 5).clamp(0, 100).toDouble();
 
@@ -114,7 +124,7 @@ class _ConfirmActualSocSheetState extends State<ConfirmActualSocSheet> {
     }
   }
 
-  void _save() {
+  Future<bool> _save() async {
     final raw = _odo.text.trim().replaceAll(',', '.').replaceAll(' ', '');
     double? odo;
     if (raw.isNotEmpty) {
@@ -122,18 +132,35 @@ class _ConfirmActualSocSheetState extends State<ConfirmActualSocSheet> {
       final previous = widget.currentOdoKm;
       if (odo == null || !odo.isFinite || odo < 0 || odo > 500000) {
         setState(() => _odoError = 'Nhập số km từ 0 đến 500.000.');
-        return;
+        return false;
       }
       if (previous != null && odo < previous) {
         setState(
           () => _odoError =
               'ODO không thể nhỏ hơn lần trước (${previous.round()} km).',
         );
-        return;
+        return false;
       }
     }
-    HapticFeedback.lightImpact();
-    Navigator.of(context).pop((soc: _soc, odoKm: odo));
+    final reading = (soc: _soc, odoKm: odo);
+    final save = widget.onSave;
+    if (save == null) {
+      HapticFeedback.lightImpact();
+      Navigator.of(context).pop(reading);
+      return true;
+    }
+    setState(() => _saveError = null);
+    final error = await save(reading);
+    if (!mounted) return error == null;
+    if (error != null) {
+      setState(() => _saveError = error);
+      return false;
+    }
+    // The tick shows, then the sheet closes (QA 135).
+    Future.delayed(const Duration(milliseconds: 950), () {
+      if (mounted) Navigator.of(context).pop(reading);
+    });
+    return true;
   }
 
   @override
@@ -307,17 +334,26 @@ class _ConfirmActualSocSheetState extends State<ConfirmActualSocSheet> {
                 'đoán quãng đường cho từng % pin.',
           ),
           const SizedBox(height: 18),
-          FilledButton(
-            key: const ValueKey('actual-soc-save'),
-            onPressed: _save,
-            style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(54),
+          if (_saveError != null) ...[
+            LuxeNotice(
+              key: const ValueKey('actual-soc-error'),
+              icon: Icons.error_outline_rounded,
+              color: LuxeColors.danger,
+              message: _saveError!,
             ),
-            child: Text('Lưu $rounded%'),
+            const SizedBox(height: 12),
+          ],
+          LuxeSubmitButton(
+            key: const ValueKey('actual-soc-save'),
+            label: 'Lưu $rounded%',
+            busyLabel: 'Đang lưu…',
+            doneLabel: 'Đã lưu $rounded%',
+            onPressed: _reading ? null : _save,
+            onBusyChanged: (busy) => setState(() => _saving = busy),
           ),
           const SizedBox(height: 6),
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: _saving ? null : () => Navigator.of(context).pop(),
             style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
             child: const Text('Để sau'),
           ),

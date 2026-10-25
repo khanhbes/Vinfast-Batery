@@ -62,6 +62,8 @@ class _LuxeSubmitButtonState extends State<LuxeSubmitButton> {
       setState(() => _phase = _Phase.idle);
       return;
     }
+    // The action closed this sheet/page itself: nothing left to show.
+    if (ModalRoute.of(context)?.isCurrent == false) return;
     HapticFeedback.lightImpact();
     setState(() => _phase = _Phase.done);
     await Future<void>.delayed(const Duration(milliseconds: 900));
@@ -130,11 +132,15 @@ class _LuxeSubmitButtonState extends State<LuxeSubmitButton> {
       duration: luxeDuration(context, 220),
       child: content,
     );
-    final onPressed = widget.onPressed == null ? null : (busy || done ? () {} : _run);
+    final onPressed = widget.onPressed == null
+        ? null
+        : (busy || done ? () {} : _run);
     final style = done
         ? ButtonStyle(
             backgroundColor: const WidgetStatePropertyAll(LuxeColors.emerald),
-            foregroundColor: const WidgetStatePropertyAll(LuxeColors.background),
+            foregroundColor: const WidgetStatePropertyAll(
+              LuxeColors.background,
+            ),
             side: widget.outlined
                 ? const WidgetStatePropertyAll(
                     BorderSide(color: LuxeColors.emerald),
@@ -147,8 +153,12 @@ class _LuxeSubmitButtonState extends State<LuxeSubmitButton> {
         : FilledButton(onPressed: onPressed, style: style, child: child);
     return Semantics(
       liveRegion: true,
-      label: busy ? widget.busyLabel ?? 'Đang gửi' : (done ? widget.doneLabel : null),
-      child: widget.expand ? SizedBox(width: double.infinity, child: button) : button,
+      label: busy
+          ? widget.busyLabel ?? 'Đang gửi'
+          : (done ? widget.doneLabel : null),
+      child: widget.expand
+          ? SizedBox(width: double.infinity, child: button)
+          : button,
     );
   }
 }

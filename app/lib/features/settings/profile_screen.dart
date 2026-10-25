@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../core/theme/luxe_theme.dart';
+import '../../core/widgets/luxe_submit_button.dart';
 import '../../core/widgets/luxe_settings.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/widgets/app_popup.dart';
@@ -84,12 +85,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        AppPopup.showError('Không tải được thông tin: $e');
+        AppPopup.showError('Không tải được thông tin', error: e);
       }
     }
   }
 
-  Future<void> _saveProfile() async {
+  Future<bool> _saveProfile() async {
+    if (_isSaving) return false;
     setState(() => _isSaving = true);
 
     try {
@@ -107,21 +109,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       await user.updateDisplayName(_nameCtrl.text.trim());
 
-      if (!mounted) return;
+      if (!mounted) return true;
 
       setState(() {
         _name = _nameCtrl.text.trim();
         _phone = _phoneCtrl.text.trim();
-        _isEditing = false;
         _isSaving = false;
       });
-
+      // The button shows its tick, then the form closes (QA 135).
+      Future.delayed(const Duration(milliseconds: 900), () {
+        if (mounted) setState(() => _isEditing = false);
+      });
       AppPopup.showSuccess('Đã cập nhật thông tin');
+      return true;
     } catch (e) {
       if (mounted) {
         setState(() => _isSaving = false);
-        AppPopup.showError('Lỗi cập nhật: $e');
+        AppPopup.showError('Chưa cập nhật được thông tin', error: e);
       }
+      return false;
     }
   }
 
@@ -269,13 +275,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           title: 'Thông tin cá nhân',
                           eyebrow: 'Tài khoản',
                           trailing: TextButton.icon(
-                            onPressed: () {
-                              if (_isEditing) {
-                                _saveProfile();
-                              } else {
-                                setState(() => _isEditing = true);
-                              }
-                            },
+                            onPressed: _isSaving
+                                ? null
+                                : () {
+                                    if (_isEditing) {
+                                      _saveProfile();
+                                    } else {
+                                      setState(() => _isEditing = true);
+                                    }
+                                  },
                             style: TextButton.styleFrom(
                               foregroundColor: LuxeColors.emerald,
                             ),
@@ -302,15 +310,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     children: [
                                       Expanded(
                                         child: OutlinedButton(
-                                          onPressed: _cancelEdit,
+                                          onPressed: _isSaving
+                                              ? null
+                                              : _cancelEdit,
                                           child: const Text('Hủy'),
                                         ),
                                       ),
                                       const SizedBox(width: 10),
                                       Expanded(
-                                        child: FilledButton(
+                                        child: LuxeSubmitButton(
+                                          key: const ValueKey('profile-save'),
+                                          label: 'Lưu thay đổi',
+                                          busyLabel: 'Đang lưu…',
                                           onPressed: _saveProfile,
-                                          child: const Text('Lưu thay đổi'),
                                         ),
                                       ),
                                     ],

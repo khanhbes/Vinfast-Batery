@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/theme/luxe_theme.dart';
 import '../../../core/widgets/luxe_kit.dart';
+import '../../../core/widgets/luxe_submit_button.dart';
 import '../../../data/services/dashboard_reader.dart';
 import '../dashboard_scan_screen.dart';
 
@@ -25,7 +26,12 @@ class BatteryReadingSheet extends StatefulWidget {
     this.title = '% pin và ODO hiện tại',
     this.requireSoc = false,
     this.reader,
+    this.onSave,
   });
+
+  /// Saves on the server while the sheet shows progress (QA 135); returns
+  /// the reason when it failed (the sheet stays open with the numbers).
+  final Future<String?> Function(BatteryReadingInput input)? onSave;
 
   final double? initialSoc;
   final double? currentOdoKm;
@@ -42,6 +48,7 @@ class BatteryReadingSheet extends StatefulWidget {
     String title = '% pin và ODO hiện tại',
     bool requireSoc = false,
     DashboardReadFn? reader,
+    Future<String?> Function(BatteryReadingInput input)? onSave,
   }) => showLuxeSheet<BatteryReadingInput>(
     context,
     builder: (_) => BatteryReadingSheet(
@@ -51,6 +58,7 @@ class BatteryReadingSheet extends StatefulWidget {
       title: title,
       requireSoc: requireSoc,
       reader: reader,
+      onSave: onSave,
     ),
   );
 
@@ -129,7 +137,9 @@ class _BatteryReadingSheetState extends State<BatteryReadingSheet> {
   double? _number(String text) =>
       double.tryParse(text.trim().replaceAll(' ', '').replaceAll(',', '.'));
 
-  void _save() {
+  String? _saveError;
+
+  Future<bool> _save() async {
     final socText = _soc.text.trim();
     final odoText = _odo.text.trim();
     double? soc;
@@ -161,17 +171,36 @@ class _BatteryReadingSheetState extends State<BatteryReadingSheet> {
         _socError = socError;
         _odoError = odoError;
       });
-      return;
+      return false;
     }
     final read = _read;
     final fromPhoto =
         read != null &&
         ((soc != null && read.soc == soc.round()) ||
             (odo != null && read.odoKm == odo));
-    HapticFeedback.lightImpact();
-    Navigator.of(
-      context,
-    ).pop((soc: soc, odoKm: odo, source: fromPhoto ? 'photo' : 'manual'));
+    final BatteryReadingInput input = (
+      soc: soc,
+      odoKm: odo,
+      source: fromPhoto ? 'photo' : 'manual',
+    );
+    final save = widget.onSave;
+    if (save == null) {
+      HapticFeedback.lightImpact();
+      Navigator.of(context).pop(input);
+      return true;
+    }
+    setState(() => _saveError = null);
+    final error = await save(input);
+    if (!mounted) return error == null;
+    if (error != null) {
+      setState(() => _saveError = error);
+      return false;
+    }
+    // The tick shows, then the sheet closes (QA 135).
+    Future.delayed(const Duration(milliseconds: 950), () {
+      if (mounted) Navigator.of(context).pop(input);
+    });
+    return true;
   }
 
   @override
@@ -245,7 +274,11 @@ class _BatteryReadingSheetState extends State<BatteryReadingSheet> {
               message: read.isEmpty
                   ? 'Chưa đọc được số nào. Chụp gần, thẳng, đủ sáng và không '
                         'lóa, hoặc nhập tay.'
-                  : '${read.aiAssisted ? 'Đọc bằng AI ảnh' : read.frames > 0 ? 'Đã khớp qua ${read.frames} khung hình' : 'Đọc được'}: '
+                  : '${read.aiAssisted
+                            ? 'Đọc bằng AI ảnh'
+                            : read.frames > 0
+                            ? 'Đã khớp qua ${read.frames} khung hình'
+                            : 'Đọc được'}: '
                         '${[if (read.soc != null) '${read.soc}%', if (read.odoKm != null) 'ODO ${_plain(read.odoKm!)} km'].join(' · ')}. '
                         'So lại với đồng hồ xe rồi bấm Lưu.',
             ),
@@ -319,13 +352,21 @@ class _BatteryReadingSheetState extends State<BatteryReadingSheet> {
                 'học hao pin của xe bạn.',
           ),
           const SizedBox(height: 18),
-          FilledButton(
-            key: const ValueKey('reading-save'),
-            onPressed: _reading ? null : _save,
-            style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(54),
+          if (_saveError != null) ...[
+            LuxeNotice(
+              key: const ValueKey('reading-save-error'),
+              icon: Icons.error_outline_rounded,
+              color: LuxeColors.danger,
+              message: _saveError!,
             ),
-            child: const Text('Lưu'),
+            const SizedBox(height: 12),
+          ],
+          LuxeSubmitButton(
+            key: const ValueKey('reading-save'),
+            label: 'Lưu',
+            busyLabel: 'Đang lưu…',
+            doneLabel: 'Đã lưu',
+            onPressed: _reading ? null : _save,
           ),
         ],
       ),

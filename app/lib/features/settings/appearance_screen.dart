@@ -67,7 +67,8 @@ class AppearanceScreen extends ConsumerWidget {
                   caption: style.caption,
                   selected: appearance.dashboard == style,
                   preview: _DashboardPreview(style),
-                  locked: !layoutsAllowed && style != DashboardStyle.values.first,
+                  locked:
+                      !layoutsAllowed && style != DashboardStyle.values.first,
                   onTap: () => layout(() => notifier.setDashboard(style)),
                 ),
             ],

@@ -114,36 +114,41 @@ abstract final class BatteryReadingFlow {
     ServerSmartChargerService? service,
     DashboardReadFn? reader,
   }) async {
-    final input = await BatteryReadingSheet.show(
-      context,
-      initialSoc: currentSoc,
-      currentOdoKm: currentOdoKm,
-      reader: reader,
-    );
-    if (input == null) return null;
     final api = service ?? ServerSmartChargerService();
+    BatteryReadingResult? result;
     try {
-      final result = await api.addBatteryReading(
-        vehicleId,
-        soc: input.soc,
-        odoKm: input.odoKm,
-        source: input.source,
+      // The sheet shows the save in progress and keeps the numbers when it
+      // fails (QA 135).
+      final input = await BatteryReadingSheet.show(
+        context,
+        initialSoc: currentSoc,
+        currentOdoKm: currentOdoKm,
+        reader: reader,
+        onSave: (input) async {
+          try {
+            result = await api.addBatteryReading(
+              vehicleId,
+              soc: input.soc,
+              odoKm: input.odoKm,
+              source: input.source,
+            );
+            return null;
+          } catch (error) {
+            return AppErrorFormatter.format(error);
+          }
+        },
       );
-      final km = result.rideKm;
+      final saved = result;
+      if (input == null || saved == null) return null;
+      final km = saved.rideKm;
       AppPopup.showSuccess(
         km == null
             ? 'Đã lưu số trên đồng hồ xe.'
             : 'Đã lưu. Ghi nhận chuyến ${km.toStringAsFixed(1)} km dùng '
-                  '${result.rideUsedPct?.round() ?? 0}% pin để AI học.',
+                  '${saved.rideUsedPct?.round() ?? 0}% pin để AI học.',
       );
-      await TrainingReadiness.check(result.status);
-      return result;
-    } catch (error) {
-      AppPopup.showError(
-        'Chưa lưu được',
-        detail: AppErrorFormatter.format(error),
-      );
-      return null;
+      await TrainingReadiness.check(saved.status);
+      return saved;
     } finally {
       if (service == null) api.close();
     }

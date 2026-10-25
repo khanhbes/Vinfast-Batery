@@ -743,6 +743,12 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None, de
             return ok({"deleted": True})
         return execute(action)
 
+    @bp.patch("/api/smart-charging/sessions/<session_id>/target")
+    @authenticated
+    def update_target(uid, session_id):
+        body = request.get_json(silent=True) or {}
+        return execute(lambda: ok(service.update_target(uid, session_id, body.get("targetSoc")).to_dict()))
+
     @bp.patch("/api/smart-charging/sessions/<session_id>/actual-soc")
     @authenticated
     def actual_soc(uid, session_id):

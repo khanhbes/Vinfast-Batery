@@ -704,7 +704,10 @@ class _SupportTicketScreenState extends ConsumerState<SupportTicketScreen> {
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
               children: [
-                Text(ticket.subject, style: LuxeText.title.copyWith(fontSize: 22)),
+                Text(
+                  ticket.subject,
+                  style: LuxeText.title.copyWith(fontSize: 22),
+                ),
                 const SizedBox(height: 6),
                 Wrap(
                   spacing: 8,
@@ -719,7 +722,11 @@ class _SupportTicketScreenState extends ConsumerState<SupportTicketScreen> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                _Bubble(text: ticket.message, fromAdmin: false, at: ticket.createdAt),
+                _Bubble(
+                  text: ticket.message,
+                  fromAdmin: false,
+                  at: ticket.createdAt,
+                ),
                 for (final r in ticket.replies)
                   _Bubble(text: r.text, fromAdmin: r.fromAdmin, at: r.at),
                 const SizedBox(height: 16),

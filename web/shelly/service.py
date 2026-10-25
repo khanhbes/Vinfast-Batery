@@ -1390,6 +1390,95 @@ class SmartChargeService(VehicleLearningMixin):
         self.repository.append_audit(uid, "smart_charge_history_hidden", session_id=session_id)
         return hidden
 
+    def update_target(self, uid: str, session_id: str, target_soc) -> ChargingSession:
+        """Change the target of a running target charge (QA 135, Pro).
+
+        Lower: the server cuts at the new target on its next read. Higher:
+        the Shelly auto-off (the ceiling that still switches off if the
+        server is unreachable) is re-armed for the extra time through the
+        same live safety checks as ON, and only a verified readback changes
+        the target; otherwise the old target stays and the owner is told.
+        Never past the session's absolute 10-hour limit.
+        """
+        self.require_feature(uid, "target_edit")
+        try:
+            target = float(target_soc)
+        except (TypeError, ValueError):
+            raise SmartChargeError("invalidSoc", "Mục tiêu không hợp lệ") from None
+        if not math.isfinite(target) or not 1 <= target <= 100:
+            raise SmartChargeError("invalidSoc", "Mục tiêu phải từ 1 đến 100%")
+        target = float(round(target))
+        session = self.repository.get_session(uid, session_id)
+        if session is None or session.owner_uid not in (None, uid):
+            raise SmartChargeError("sessionNotFound", "Không tìm thấy phiên sạc", 404)
+        if session.state != "active":
+            raise SmartChargeError("sessionNotActive", "Phiên sạc không còn chạy.", 409)
+        if session.stop_mode != "target" or not session.model_wh_per_pct:
+            raise SmartChargeError(
+                "notTargetSession",
+                "Chỉ sửa được mục tiêu của phiên sạc đến %. Phiên hẹn giờ tự ngắt theo thời gian.", 409)
+        now = self.clock()
+        current = float(session.estimated_soc if session.estimated_soc is not None else session.start_soc)
+        if target < current + 2:
+            raise SmartChargeError(
+                "targetBelowCurrent",
+                f"Mục tiêu phải cao hơn mức pin hiện tại (khoảng {round(current)}%) ít nhất 2%.")
+        old = float(session.target_soc)
+        if abs(target - old) < 0.5:
+            return session
+        power = float(session.average_power_w or 0)
+        params = charge_model.ChargeParams(wh_per_pct=session.model_wh_per_pct,
+                                           power_w=power if power > 0 else charge_model.DEFAULT_POWER_W)
+        seconds_left = charge_model.estimate(params, current, target).seconds
+        if target > old:
+            safety_left = int((session.absolute_safety_stop_at - now).total_seconds())
+            ceiling = min(charge_model.ceiling_seconds(seconds_left, self.max_minutes), safety_left)
+            if ceiling < 60:
+                raise SmartChargeError(
+                    "safetyLimitReached",
+                    "Phiên sạc đã gần giới hạn an toàn 10 giờ; không nâng thêm mục tiêu.", 409)
+            if now + timedelta(seconds=ceiling) > session.effective_stop_at + timedelta(seconds=30):
+                binding = self.session_binding(uid, session)
+                extender = getattr(self.provider, "extend_timer", None)
+                if binding is None or extender is None:
+                    raise SmartChargeError("targetRaiseUnavailable",
+                                           "Bộ sạc này chưa hỗ trợ nâng mục tiêu khi đang sạc.", 409)
+                try:
+                    extender(binding, int(ceiling))
+                    verified = self._read_until(
+                        binding,
+                        lambda s: (self._status_matches_device(s, binding.device_id) and s.relay is True
+                                   and int(s.timer_remaining or 0) >= ceiling - 30),
+                        5,
+                    )
+                except ProviderError as exc:
+                    self.repository.append_audit(uid, "target_raise_failed", session_id=session.session_id,
+                                                 error=exc.code)
+                    raise SmartChargeError(
+                        "timerNotExtended",
+                        f"Chưa gia hạn được giới hạn an toàn của ổ sạc; mục tiêu giữ nguyên {round(old)}%.",
+                        503, True) from exc
+                if verified is None:
+                    self.repository.append_audit(uid, "target_raise_unverified", session_id=session.session_id)
+                    raise SmartChargeError(
+                        "timerNotExtended",
+                        f"Chưa xác nhận được giới hạn an toàn mới của ổ sạc; mục tiêu giữ nguyên {round(old)}%.",
+                        503, True)
+                session.effective_stop_at = min(now + timedelta(seconds=int(verified.timer_remaining)),
+                                                session.absolute_safety_stop_at)
+                session.hardware_timeout_seconds = int(
+                    (session.effective_stop_at - session.created_at).total_seconds())
+        session.target_soc = target
+        session.target_energy_wh = round(session.model_wh_per_pct * max(0.0, target - session.start_soc), 2)
+        session.ai_stop_at = now + timedelta(seconds=seconds_left)
+        session.updated_at = now
+        session.version += 1
+        self.repository.save_session(uid, session)
+        self.repository.append_audit(uid, "target_updated", session_id=session.session_id,
+                                     previous=round(old), target=round(target))
+        self._emit_state_push(uid, session)
+        return session
+
     def confirm_actual_soc(self, uid: str, session_id: str, actual_soc: float,
                            odo_km: float | None = None) -> ChargingSession:
         """Record the % the user read on the scooter and learn from it."""

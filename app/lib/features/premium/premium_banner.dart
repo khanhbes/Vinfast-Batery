@@ -94,10 +94,7 @@ class PremiumBanner extends ConsumerWidget {
                     ],
                   ),
                 ),
-                const Icon(
-                  Icons.chevron_right_rounded,
-                  color: LuxeColors.dim,
-                ),
+                const Icon(Icons.chevron_right_rounded, color: LuxeColors.dim),
               ],
             ),
           ),

@@ -138,7 +138,9 @@ class _PremiumScreenState extends ConsumerState<PremiumScreen> {
           .read(entitlementProvider.notifier)
           .redeemPromo(code);
       _promo.clear();
-      AppPopup.showSuccess('Đã áp mã ${quote.code}: giảm ${quote.percentOff} %.');
+      AppPopup.showSuccess(
+        'Đã áp mã ${quote.code}: giảm ${quote.percentOff} %.',
+      );
       return true;
     } on PinovaApiException catch (error) {
       setState(
@@ -243,9 +245,7 @@ class _PremiumScreenState extends ConsumerState<PremiumScreen> {
                     try {
                       await ref.read(entitlementProvider.notifier).clearPromo();
                     } on PinovaApiException catch (error) {
-                      AppPopup.showWarning(
-                        error.message ?? 'Chưa bỏ được mã.',
-                      );
+                      AppPopup.showWarning(error.message ?? 'Chưa bỏ được mã.');
                     }
                   },
           ),
@@ -318,10 +318,7 @@ class _Hero extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-          const Text(
-            'Pin bền hơn, sạc an tâm hơn',
-            style: LuxeText.title,
-          ),
+          const Text('Pin bền hơn, sạc an tâm hơn', style: LuxeText.title),
           const SizedBox(height: 6),
           Text(
             highlight != null
@@ -342,11 +339,7 @@ class _Hero extends StatelessWidget {
 }
 
 class _Price extends StatelessWidget {
-  const _Price({
-    required this.tier,
-    required this.period,
-    required this.promo,
-  });
+  const _Price({required this.tier, required this.period, required this.promo});
   final PlanTier tier;
   final PlanPeriod period;
   final PromoQuote? promo;

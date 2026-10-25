@@ -22,7 +22,11 @@ enum SupportCategory {
 }
 
 class SupportReply {
-  const SupportReply({required this.at, required this.fromAdmin, required this.text});
+  const SupportReply({
+    required this.at,
+    required this.fromAdmin,
+    required this.text,
+  });
   final DateTime? at;
   final bool fromAdmin;
   final String text;

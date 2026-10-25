@@ -858,6 +858,20 @@ class ServerSmartChargerService {
     ),
   );
 
+  /// QA 135: change the target of a running target charge. A higher
+  /// target re-arms the outlet's safety ceiling on the server first.
+  Future<SmartChargingSession> updateTarget(
+    String sessionId,
+    double targetSoc,
+  ) async => SmartChargingSession.fromJson(
+    await _request(
+      'PATCH',
+      '/api/smart-charging/sessions/${Uri.encodeComponent(sessionId)}/target',
+      body: {'targetSoc': targetSoc.round()},
+      timeout: const Duration(seconds: 45),
+    ),
+  );
+
   // -- Task 127: collected learning data and owner-triggered training ------
 
   Future<VehicleLearningStatus?> learningStatus(String vehicleId) async =>

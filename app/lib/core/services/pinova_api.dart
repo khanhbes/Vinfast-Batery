@@ -54,8 +54,10 @@ class PinovaApi {
       : FirebaseAuth.instance.currentUser?.getIdToken(true);
 
   Future<Map<String, dynamic>> get(String path) => call('GET', path);
-  Future<Map<String, dynamic>> post(String path, [Map<String, dynamic>? body]) =>
-      call('POST', path, body: body ?? const {});
+  Future<Map<String, dynamic>> post(
+    String path, [
+    Map<String, dynamic>? body,
+  ]) => call('POST', path, body: body ?? const {});
   Future<Map<String, dynamic>> patch(String path, Map<String, dynamic> body) =>
       call('PATCH', path, body: body);
   Future<Map<String, dynamic>> delete(String path) => call('DELETE', path);

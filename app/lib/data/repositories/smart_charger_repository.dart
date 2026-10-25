@@ -51,6 +51,12 @@ abstract interface class SmartChargerRepository {
     SmartChargingSession session,
     SmartChargerStatus status,
   );
+
+  /// QA 135: a new target for the running target charge (server mode).
+  Future<SmartChargingSession> updateTarget(
+    SmartChargingSession session,
+    double targetSoc,
+  );
   Future<void> saveActiveSession(SmartChargingSession session);
   Future<void> flushPendingTelemetry(String sessionId);
   Future<void> hideSession(String sessionId);
@@ -270,6 +276,18 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
     String? after,
     int limit = 120,
   }) => _chargeLogs?.getTelemetry(sessionId) ?? Future.value(const []);
+
+  /// Direct (LAN) mode has no server cut-off to move.
+  @override
+  Future<SmartChargingSession> updateTarget(
+    SmartChargingSession session,
+    double targetSoc,
+  ) => Future.error(
+    const SmartChargerException(
+      'Chỉ sửa được mục tiêu khi sạc qua máy chủ Pinova.',
+      code: 'targetEditUnsupported',
+    ),
+  );
 
   @override
   Future<SmartChargeEnergySummary> confirmActualEndSoc(
@@ -542,6 +560,12 @@ class ServerSmartChargerRepository implements SmartChargerRepository {
     String? after,
     int limit = 120,
   }) => service.telemetry(sessionId, after: after, limit: limit);
+
+  @override
+  Future<SmartChargingSession> updateTarget(
+    SmartChargingSession session,
+    double targetSoc,
+  ) => service.updateTarget(session.sessionId, targetSoc);
 
   @override
   Future<SmartChargeEnergySummary> confirmActualEndSoc(

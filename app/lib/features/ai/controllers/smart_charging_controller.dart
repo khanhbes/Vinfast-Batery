@@ -2089,6 +2089,42 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     await _repository!.privacyEraseSession(sessionId, confirmation);
   }
 
+  /// QA 135: move the target of the running target charge. Returns the
+  /// server's message when it refused (the old target stays), else null.
+  Future<String?> updateTarget(double targetSoc) async {
+    final session = state.session;
+    if (session == null || session.state.isTerminal) {
+      return 'Phiên sạc đã kết thúc.';
+    }
+    _repository ??= await SmartChargerRepositoryFactory.create();
+    try {
+      final updated = await _repository!.updateTarget(session, targetSoc);
+      if (!_disposed && state.session?.sessionId == updated.sessionId) {
+        state = state.copyWith(session: updated);
+      }
+      unawaited(
+        _connectionCoordinator
+            .saveSnapshot(
+              ActiveChargingSnapshot(
+                sessionId: updated.sessionId,
+                vehicleId: updated.vehicleId,
+                targetSoc: updated.targetSoc,
+                effectiveStopAt: updated.effectiveStopAt,
+                lastEstimatedSoc: updated.estimatedSoc ?? updated.startSoc,
+                lastSessionEnergyWh: updated.energyUsedWh,
+                lastKnownRelay: true,
+              ),
+            )
+            .catchError((_) {}),
+      );
+      return null;
+    } on SmartChargerException catch (error) {
+      return error.message;
+    } on Object {
+      return 'Chưa đổi được mục tiêu. Mục tiêu cũ vẫn giữ nguyên.';
+    }
+  }
+
   Future<SmartChargeEnergySummary> confirmActualEndSoc(
     SmartChargingSession session,
     double soc, {

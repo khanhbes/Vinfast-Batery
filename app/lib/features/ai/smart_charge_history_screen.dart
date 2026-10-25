@@ -98,9 +98,8 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
         (session.startedAt ?? session.createdAt).isBefore(cutoff);
   }
 
-  int get _hiddenByPlan => _items
-      .where((s) => s.state.isTerminal && _beforePlanWindow(s))
-      .length;
+  int get _hiddenByPlan =>
+      _items.where((s) => s.state.isTerminal && _beforePlanWindow(s)).length;
 
   DateTime get _monthEnd => DateTime(
     _selectedMonth.month == 12 ? _selectedMonth.year + 1 : _selectedMonth.year,
@@ -2198,45 +2197,43 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
     final contextGeneration = _contextGeneration;
     final controller = widget.controller;
     final session = _session;
+    SmartChargeEnergySummary? summary;
+    // The sheet saves and shows progress (QA 135).
     final reading = await ConfirmActualSocSheet.show(
       context,
       estimatedSoc: session.estimatedSoc,
       startSoc: session.startSoc,
+      onSave: (reading) async {
+        try {
+          summary = await controller.confirmActualEndSoc(
+            session,
+            reading.soc,
+            odoKm: reading.odoKm,
+          );
+          return null;
+        } catch (error) {
+          return AppErrorFormatter.format(error);
+        }
+      },
     );
     if (reading == null ||
+        summary == null ||
         !mounted ||
         contextGeneration != _contextGeneration) {
       return;
     }
-    try {
-      final summary = await controller.confirmActualEndSoc(
-        session,
-        reading.soc,
-        odoKm: reading.odoKm,
+    setState(() {
+      _session = _session.copyWith(
+        actualEndSoc: reading.soc,
+        endOdoKm: reading.odoKm,
       );
-      if (mounted && contextGeneration == _contextGeneration) {
-        setState(() {
-          _session = _session.copyWith(
-            actualEndSoc: reading.soc,
-            endOdoKm: reading.odoKm,
-          );
-          _summary = summary;
-        });
-        AppPopup.showSuccess(
-          'Đã lưu ${reading.soc.toStringAsFixed(0)}%',
-          detail: 'Đã thêm vào dữ liệu học; app báo khi đủ để huấn luyện.',
-        );
-        unawaited(TrainingReadiness.refresh(session.vehicleId));
-      }
-    } catch (error) {
-      if (mounted && contextGeneration == _contextGeneration) {
-        AppPopup.showError(
-          'Chưa lưu được % pin',
-          detail: AppErrorFormatter.format(error),
-          userInitiated: true,
-        );
-      }
-    }
+      _summary = summary;
+    });
+    AppPopup.showSuccess(
+      'Đã lưu ${reading.soc.toStringAsFixed(0)}%',
+      detail: 'Đã thêm vào dữ liệu học; app báo khi đủ để huấn luyện.',
+    );
+    unawaited(TrainingReadiness.refresh(session.vehicleId));
   }
 
   Future<void> _privacyErase() async {

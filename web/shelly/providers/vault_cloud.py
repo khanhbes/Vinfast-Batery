@@ -354,14 +354,18 @@ class VaultCloudControlProvider:
                     or profile.get("verifiedModel") != "S3PL-00112EU"):
                 raise ProviderError("safetyVerificationRequired", "Cần kiểm tra lại an toàn bộ sạc")
 
-    def _live_safety_context(self, binding, *, require_history=True, verify=True):
+    def _live_safety_context(self, binding, *, require_history=True, verify=True, relay_on=False):
         profile = self._restore_profile(binding)
         credentials = self._profile(binding, profile=profile)
         snapshot = (self.get_snapshot(binding, expected_credentials=credentials, profile=profile)
                     if verify else self.get_snapshot(binding, profile=profile))
         status = self._status_from_snapshot(binding, snapshot)
         fingerprint = cloud_safety_fingerprint(binding.device_id, *credentials, snapshot)
-        if status.relay is not False:
+        if relay_on:
+            # Only for re-arming the auto-off of a running session (QA 135).
+            if status.relay is not True:
+                raise ProviderError("relayNotOn", "Bộ sạc không còn bật")
+        elif status.relay is not False:
             raise ProviderError("relayAlreadyOn", "Bộ sạc đang bật; hãy kiểm tra phiên hiện tại")
         if (not 190 <= status.voltage_v <= 255 or not 0 <= status.current_a <= 12
                 or not 0 <= status.power_w <= 2500 or status.energy_wh < 0
@@ -419,6 +423,24 @@ class VaultCloudControlProvider:
             # Re-read rather than let the admitted check reject a slow request.
             context = self._live_safety_context(binding)
         self._send_verified_on(binding, duration_seconds, context)
+
+    def extend_timer(self, binding: DeviceBinding, duration_seconds: int) -> None:
+        """Re-arm the auto-off of an outlet that is ON for a running session
+        (QA 135: the owner raised the target). Same live checks as ON:
+        measurements, worker health, ownership, credentials and the verified
+        safety history, except that the relay must already be ON; the
+        command keeps it ON and sets a new ``toggle_after``."""
+        if type(duration_seconds) is not int or not 5 <= duration_seconds <= 36000:
+            raise ProviderError("unsafeDuration", "Thời gian sạc phải từ 5 giây đến 10 giờ")
+        previous_budget = getattr(self, "_admission_budget", None)
+        self._admission_budget = 12.0
+        try:
+            context = self._live_safety_context(binding, relay_on=True)
+            self._post(binding, "/v2/devices/api/set/switch",
+                       {"id": binding.device_id, "channel": 0, "on": True, "toggle_after": duration_seconds},
+                       command=True, safety_context=context)
+        finally:
+            self._admission_budget = previous_budget
 
     def turn_on_with_timer(self, binding: DeviceBinding, duration_seconds: int) -> None:
         # A second live check under the device lock protects every caller,
