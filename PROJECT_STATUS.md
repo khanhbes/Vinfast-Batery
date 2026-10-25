@@ -34,7 +34,7 @@
 **Kiểm thử:** backend `pytest` toàn bộ xanh (+ `test_qa135_{billing,support,scan,target_edit,battery_health,night_charging,assistant}.py`); Flutter `flutter test` xanh (+ `qa135_*`); portal `npm run lint && npm run build` xanh.
 
 **Sửa sau báo lỗi của chủ app (25/10):**
-- *Phiên 23/10 21:51 "11 % → 85 %" hiện "Mục tiêu đặt trước: 11 %" (thực tế 81 %):* bật từ Pinova Bot — tool `start_timed_charging` chỉ có `minutes`, app gọi `manualOn` không kèm mục tiêu nên máy chủ lưu mục tiêu = % đầu. Sửa: tool có `target_percent` (`engine.py`, hướng dẫn model), app chuyển thành "bật sạc N phút đến X%", gateway đọc `parseTimedTarget` (> % hiện tại, ≤ 100) → thẻ ghi "mục tiêu ~X%" và gửi `targetSoc`; tab Sạc hẹn giờ gửi đúng % trên ô xác nhận (`_timedEndSoc`) thay cho mục tiêu của chế độ AI; lịch sử: phiên có mục tiêu ≤ % đầu hiện "Không đặt mục tiêu" (không còn số giả). **Bản ghi cũ chưa sửa** (lệnh ghi Firestore trong container bị chặn; chờ chủ app quyết).
+- *Phiên 23/10 21:51 "11 % → 85 %" hiện "Mục tiêu đặt trước: 11 %" (thực tế 81 %):* bật từ Pinova Bot — tool `start_timed_charging` chỉ có `minutes`, app gọi `manualOn` không kèm mục tiêu nên máy chủ lưu mục tiêu = % đầu. Sửa: tool có `target_percent` (`engine.py`, hướng dẫn model), app chuyển thành "bật sạc N phút đến X%", gateway đọc `parseTimedTarget` (> % hiện tại, ≤ 100) → thẻ ghi "mục tiêu ~X%" và gửi `targetSoc`; tab Sạc hẹn giờ gửi đúng % trên ô xác nhận (`_timedEndSoc`) thay cho mục tiêu của chế độ AI; lịch sử: phiên có mục tiêu ≤ % đầu hiện "Không đặt mục tiêu" (không còn số giả). Bản ghi cũ đã sửa (mục "Còn lại" 2).
 - *Thẻ hướng dẫn Tổng quan bị cắt nút "Tiếp" trên OnePlus:* đích (thẻ xe) quá cao, thẻ bị nén vào dải dưới rồi cuộn. `_TooltipLayout` neo thẻ ở đáy (đè phần dưới đích) khi không bên nào đủ chỗ (< 300 dp). Test 360×780 ×1 (không cuộn) ×2 (cao cả màn).
 - *Chi tiết phiên hiện "Điện từ lưới —" trong khi danh sách ghi 1.97 kWh:* ô KPI chỉ đọc tổng hợp telemetry (thiếu mẫu → 0/null). Giờ lấy điện năng đo của phiên, công suất TB = điện năng / thời gian khi không có mẫu (`history_luxe_test`).
 
@@ -42,7 +42,7 @@
 
 **Còn lại / cần chủ app:**
 1. Tự cấp Ultra cho tài khoản mình ở portal (Gói & khuyến mãi); tester cũ đang là Free (dùng thử 7 ngày).
-2. Sửa bản ghi phiên 23/10 (mục tiêu 11 → 85 %) nếu muốn: cần cho phép chạy lệnh ghi một lần trong container API (hoặc chủ app sửa trong Firebase Console: `users/{uid}/smartChargingSessions/<id>.target_soc` và `ChargeLogs/<id>.targetBatteryPercent`).
+2. ~~Sửa bản ghi phiên 23/10~~ **Xong 25/10:** chủ app chạy script một lần trong container API (`az containerapp exec`, credential của container; chạy thử trước: đúng 1 phiên `…b871fb`, 11 % → 81 %, 1972 Wh) → `target_soc` 85 và `ChargeLogs.targetBatteryPercent` 85, kèm `targetCorrection` {by qa135-support, from 11, to 85}. Lệnh phải nén (URL exec > ~1 000 ký tự trả 404) và không có ngoặc kép (az.cmd qua cmd.exe).
 3. Thử trên máy với chủ app giám sát: quét đồng hồ thật, gửi phiếu hỗ trợ (kiểm tra email tới), kênh cảnh báo khẩn, sạc đêm với ổ Shelly.
 4. Email ACS tên miền Azure quản lý có giới hạn gửi thấp và dễ vào thư rác; muốn tên miền riêng thì thêm domain đã xác minh.
 
