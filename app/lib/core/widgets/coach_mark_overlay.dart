@@ -446,15 +446,28 @@ class _TooltipLayout extends SingleChildLayoutDelegate {
   final Alignment preferredAlignment;
   static const gap = 16.0;
 
+  /// Room a full card (title, text, checkbox, buttons) needs at ×1 text.
+  static const comfortable = 300.0;
+
+  /// A tall target (the Overview vehicle card) leaves no comfortable room on
+  /// either side: dock the card to the bottom over the target's lower part
+  /// instead of clipping its buttons (QA 135: "Tiếp" cut off on OnePlus).
+  bool get _docked {
+    final anchor = target;
+    if (anchor == null) return false;
+    final above = math.max(0.0, anchor.top - gap - bounds.top);
+    final below = math.max(0.0, bounds.bottom - anchor.bottom - gap);
+    return math.max(above, below) < math.min(comfortable, bounds.height * .5);
+  }
+
   Rect get _space {
     final anchor = target;
-    if (anchor == null) return bounds;
+    if (anchor == null || _docked) return bounds;
     final above = math.max(0.0, anchor.top - gap - bounds.top);
     final below = math.max(0.0, bounds.bottom - anchor.bottom - gap);
     // Select usable room, respecting the registry hint only when space permits.
     final preferAbove = preferredAlignment.y < 0;
     final useAbove = (preferAbove && above >= 240) || below < above;
-    if (math.max(above, below) < 48) return bounds;
     return useAbove
         ? Rect.fromLTWH(bounds.left, bounds.top, bounds.width, above)
         : Rect.fromLTWH(bounds.left, anchor.bottom + gap, bounds.width, below);
@@ -472,7 +485,9 @@ class _TooltipLayout extends SingleChildLayoutDelegate {
   Offset getPositionForChild(Size size, Size childSize) {
     final space = _space;
     final anchor = target;
-    final top = anchor != null && space.bottom <= anchor.top
+    final top = _docked
+        ? bounds.bottom - childSize.height
+        : anchor != null && space.bottom <= anchor.top
         ? space.bottom - childSize.height
         : space.top;
     return Offset(bounds.center.dx - childSize.width / 2, top);

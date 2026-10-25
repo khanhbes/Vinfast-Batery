@@ -40,7 +40,12 @@ class SessionSocSummary extends StatelessWidget {
         : (estimatedValid
               ? 'SOC ước tính'
               : (session.state.isTerminal ? 'Ước tính cuối' : 'Hiện tại'));
-    final target = _valid(session.targetSoc) ? session.targetSoc : null;
+    // A timed charge started without a target is stored with target =
+    // start % (QA 135: "Mục tiêu 11%" for 11 -> 81 %). That is no plan.
+    final target =
+        _valid(session.targetSoc) && session.targetSoc > startSoc + 0.5
+        ? session.targetSoc
+        : null;
 
     return LuxeGlass(
       radius: 24,
@@ -182,7 +187,9 @@ class SessionSocSummary extends StatelessWidget {
               ),
               _Legend(
                 color: LuxeColors.platinumHi,
-                label: 'Mục tiêu đặt trước: ${_soc(session.targetSoc)}',
+                label: target == null
+                    ? 'Không đặt mục tiêu'
+                    : 'Mục tiêu đặt trước: ${_soc(target)}',
               ),
             ],
           ),

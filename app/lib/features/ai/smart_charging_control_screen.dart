@@ -1075,12 +1075,13 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     // state.now only ticks during a session; the sheet needs the wall
     // clock (QA 128: "Tự ngắt lúc 02:53" shown at 02:40 for 30 minutes).
     final stopAt = DateTime.now().add(duration);
+    final endSoc = _timedEndSoc(state, duration);
     final confirmed = await StartChargeConfirmationSheet.show(
       context,
       currentSoc: state.draft.currentSoc.round(),
       // A timed charge has no target: show where the battery should be when
       // the timer ends (QA 130 showed "79% → 100%" for 30 minutes).
-      targetSoc: _timedEndSoc(state, duration),
+      targetSoc: endSoc,
       estimatedMinutes: duration.inMinutes,
       stopTime: _time(stopAt),
       isAiMode: false,
@@ -1095,7 +1096,10 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
       return;
     }
 
-    final ok = await controller.manualOn(duration);
+    final ok = await controller.manualOn(
+      duration,
+      targetSoc: endSoc.toDouble(),
+    );
     if (!mounted) return;
     if (ok) {
       AppPopup.showSuccess(

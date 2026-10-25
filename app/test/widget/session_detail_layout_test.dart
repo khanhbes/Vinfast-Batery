@@ -4,15 +4,20 @@ import 'package:vinfast_battery/core/widgets/adaptive_detail_rows.dart';
 import 'package:vinfast_battery/data/models/smart_charging_session.dart';
 import 'package:vinfast_battery/features/ai/widgets/session_soc_summary.dart';
 
-SmartChargingSession session({double? actual, double? estimated}) {
+SmartChargingSession session({
+  double? actual,
+  double? estimated,
+  double start = 20,
+  double target = 80,
+}) {
   final time = DateTime.utc(2026, 9, 8);
   return SmartChargingSession(
     sessionId: 'session-test',
     vehicleId: 'vehicle-test',
     state: ChargingSessionState.completed,
     strategy: ChargingStrategy.manualTimed,
-    startSoc: 20,
-    targetSoc: 80,
+    startSoc: start,
+    targetSoc: target,
     actualEndSoc: actual,
     estimatedSoc: estimated,
     predictedMinutes: 60,
@@ -101,5 +106,21 @@ void main() {
     expect(find.text('62%'), findsOneWidget);
     expect(find.text('SOC ước tính'), findsOneWidget);
     expect(find.textContaining('NaN'), findsNothing);
+  });
+  testWidgets('A timed charge without a target shows no fake target', (
+    tester,
+  ) async {
+    // QA 135: stored target = start % ("Mục tiêu đặt trước: 11%").
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SessionSocSummary(
+            session: session(actual: 81, start: 11, target: 11),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('Không đặt mục tiêu'), findsOneWidget);
+    expect(find.textContaining('Mục tiêu đặt trước'), findsNothing);
   });
 }

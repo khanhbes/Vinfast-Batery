@@ -1709,14 +1709,29 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
 
   Widget _kpis() {
     final summary = _summary;
-    final avgPower = summary == null
+    // Without a telemetry summary (some samples missing) the session's own
+    // metered energy still stands: the list showed 1.97 kWh while this tile
+    // said "—" (QA 135).
+    double? positive(double? value) =>
+        value != null && value > 0 ? value : null;
+    final gridWh =
+        positive(summary?.gridEnergyWh) ?? positive(_session.energyUsedWh);
+    final duration = historySessionDuration(_session);
+    // A summary without samples carries 0 W: fall back to energy over time.
+    final powerW =
+        positive(summary?.averagePowerW) ??
+        positive(_session.averagePowerW) ??
+        (gridWh != null && duration.inMinutes >= 1
+            ? gridWh * 3600 / duration.inSeconds
+            : null);
+    final avgPower = powerW == null || powerW <= 0
         ? '—'
-        : '${(summary.averagePowerW / 1000).toStringAsFixed(2)} kW';
+        : '${(powerW / 1000).toStringAsFixed(2)} kW';
     final items = [
       (
         icon: Icons.electric_bolt_rounded,
         title: 'Điện từ lưới',
-        value: summary == null ? '—' : historyEnergy(summary.gridEnergyWh),
+        value: gridWh == null ? '—' : historyEnergy(gridWh),
         highlight: true,
       ),
       (
@@ -1734,7 +1749,7 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
       (
         icon: Icons.timer_outlined,
         title: 'Thời gian sạc',
-        value: formatChargeDuration(historySessionDuration(_session)),
+        value: formatChargeDuration(duration),
         highlight: false,
       ),
       (

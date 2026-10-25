@@ -12,7 +12,7 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
-## 135. Task Completion Log — Premium Free/Pro/Ultra + khuyến mãi, Trợ giúp, quét đồng hồ chính xác, đổi mục tiêu khi sạc, % pin chai, sạc đêm an toàn, hướng dẫn từng màn, Pinova Bot (25/10/2026) — Code + test xong, chưa deploy, APK +197 đã cài (chưa thử trên máy)
+## 135. Task Completion Log — Premium Free/Pro/Ultra + khuyến mãi, Trợ giúp, quét đồng hồ chính xác, đổi mục tiêu khi sạc, % pin chai, sạc đêm an toàn, hướng dẫn từng màn, Pinova Bot (25/10/2026) — Đã deploy API/worker/portal + email ACS, APK +201 đã cài OnePlus
 
 **Yêu cầu chủ app (25/10):** hoàn thiện Free/Pro/Ultra (bỏ trọn đời) + mã khuyến mãi admin; màn chọn gói hấp dẫn; sạc đêm an toàn (Ultra); trợ giúp gửi admin mọi gói; troubleshooting; tích hợp chatbot; hướng dẫn lần đầu từng màn; quét % pin/ODO đúng ở mọi góc, mọi số chữ số (ảnh 68 % ra 8 %); % pin chai (Pro); sửa mục tiêu khi đang sạc; trạng thái chờ sau mỗi lần nhập.
 
@@ -33,11 +33,18 @@
 
 **Kiểm thử:** backend `pytest` toàn bộ xanh (+ `test_qa135_{billing,support,scan,target_edit,battery_health,night_charging,assistant}.py`); Flutter `flutter test` xanh (+ `qa135_*`); portal `npm run lint && npm run build` xanh.
 
-**Chưa làm / cần chủ app:**
-1. Deploy API + worker + portal (Dockerfile.api thêm `billing/ support/ scan/`); không cần deploy rules (đường dẫn mới không có rule = client không đọc/ghi).
-2. Email báo phiếu: cần địa chỉ `SUPPORT_ADMIN_EMAIL` + đồng ý tạo Azure Communication Services (secret `ACS_CONNECTION_STRING`, `SUPPORT_SENDER_EMAIL`); chưa có thì phiếu vẫn lưu, portal vẫn trả lời.
-3. Thử trên máy: quét đồng hồ thật, kênh cảnh báo khẩn, sạc đêm với ổ Shelly (relay chỉ khi chủ app giám sát).
-4. Sau deploy, tester cũ về Free (dùng thử 7 ngày hoặc admin cấp gói ở portal); chủ app nên tự cấp Ultra cho tài khoản mình.
+**Sửa sau báo lỗi của chủ app (25/10):**
+- *Phiên 23/10 21:51 "11 % → 85 %" hiện "Mục tiêu đặt trước: 11 %" (thực tế 81 %):* bật từ Pinova Bot — tool `start_timed_charging` chỉ có `minutes`, app gọi `manualOn` không kèm mục tiêu nên máy chủ lưu mục tiêu = % đầu. Sửa: tool có `target_percent` (`engine.py`, hướng dẫn model), app chuyển thành "bật sạc N phút đến X%", gateway đọc `parseTimedTarget` (> % hiện tại, ≤ 100) → thẻ ghi "mục tiêu ~X%" và gửi `targetSoc`; tab Sạc hẹn giờ gửi đúng % trên ô xác nhận (`_timedEndSoc`) thay cho mục tiêu của chế độ AI; lịch sử: phiên có mục tiêu ≤ % đầu hiện "Không đặt mục tiêu" (không còn số giả). **Bản ghi cũ chưa sửa** (lệnh ghi Firestore trong container bị chặn; chờ chủ app quyết).
+- *Thẻ hướng dẫn Tổng quan bị cắt nút "Tiếp" trên OnePlus:* đích (thẻ xe) quá cao, thẻ bị nén vào dải dưới rồi cuộn. `_TooltipLayout` neo thẻ ở đáy (đè phần dưới đích) khi không bên nào đủ chỗ (< 300 dp). Test 360×780 ×1 (không cuộn) ×2 (cao cả màn).
+- *Chi tiết phiên hiện "Điện từ lưới —" trong khi danh sách ghi 1.97 kWh:* ô KPI chỉ đọc tổng hợp telemetry (thiếu mẫu → 0/null). Giờ lấy điện năng đo của phiên, công suất TB = điện năng / thời gian khi không có mẫu (`history_luxe_test`).
+
+**Deploy (chủ app cho phép 25/10):** gate `task147` — build API/worker exit 0, Linux `--network none` **736 passed/15 skipped**, boot cô lập Pass (32 s, 116 MiB), đối chiếu nguồn **79 file** khớp (thêm `billing/ support/ scan/` vào `check_api_image_source.py`), worker smoke Pass. API `vinfast-api@sha256:0af451f6…bd4b9` (`qa135-rollout-20261025.json`, Unlocked, peers giữ) → rồi env email → revision `vinfast-api--0000016` (min 1, `AZURE_STAGING_HARDWARE_DISABLED=0`), health/ready 200, `/api/billing/me` không token 401. Worker `vinfast-worker@sha256:55a7380b…cc83` → `vinfast-worker-control--0000023` Healthy. **ACS mới:** `pinova-email` (tên miền Azure quản lý `d101efeb-…azurecomm.net`, dữ liệu Asia Pacific) + `pinova-acs`; secret `acs-connection-string`, `SUPPORT_SENDER_EMAIL=DoNotReply@…azurecomm.net`, `SUPPORT_ADMIN_EMAIL` = email admin chủ app cung cấp. Portal `07-build-admin.ps1 -Deploy` (audit, 32 test, build, quét artifact) → bundle live `index-B1OHDTPb.js` có trang Hỗ trợ + Gói. Lần trước API live vẫn là bản 18/10 (task146) nên đợt này mang theo cả QA 131–135. APK **1.3.0+201** (`ae5cb803…ec5ac3`) đã cài OnePlus (versionCode 201). Thử trên máy (+200, ADB có chắn): hướng dẫn Tổng quan/Lịch sử/Cài đặt/Premium/Sạc pin hiện đúng thứ tự, thẻ không còn bị cắt; Trợ giúp tự kiểm tra với máy chủ live (6 mục OK, "Chạy nền" chờ chủ app cho phép); Premium tải gói Free từ máy chủ; phiên 23/10 hiện "Không đặt mục tiêu". Không bấm dùng thử, không bật relay, chưa quét đồng hồ. Flutter `flutter test` **1172** pass, analyze 0; backend 736 pass.
+
+**Còn lại / cần chủ app:**
+1. Tự cấp Ultra cho tài khoản mình ở portal (Gói & khuyến mãi); tester cũ đang là Free (dùng thử 7 ngày).
+2. Sửa bản ghi phiên 23/10 (mục tiêu 11 → 85 %) nếu muốn: cần cho phép chạy lệnh ghi một lần trong container API (hoặc chủ app sửa trong Firebase Console: `users/{uid}/smartChargingSessions/<id>.target_soc` và `ChargeLogs/<id>.targetBatteryPercent`).
+3. Thử trên máy với chủ app giám sát: quét đồng hồ thật, gửi phiếu hỗ trợ (kiểm tra email tới), kênh cảnh báo khẩn, sạc đêm với ổ Shelly.
+4. Email ACS tên miền Azure quản lý có giới hạn gửi thấp và dễ vào thư rác; muốn tên miền riêng thì thêm domain đã xác minh.
 
 ## 134. Kế hoạch — Premium Pro / Ultra và thanh toán (20/10/2026) — Đã duyệt, chưa làm
 

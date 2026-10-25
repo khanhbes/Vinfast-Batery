@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:vinfast_battery/core/theme/luxe_theme.dart';
 import 'package:vinfast_battery/data/models/smart_charge_history.dart';
 import 'package:vinfast_battery/data/models/smart_charging_session.dart';
 import 'package:vinfast_battery/features/ai/controllers/smart_charging_controller.dart';
@@ -324,4 +325,42 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
   }
+
+  testWidgets('detail keeps metered energy without telemetry (QA 135)', (
+    tester,
+  ) async {
+    // The list showed 1.97 kWh while the detail tile said "—".
+    await phone(tester);
+    final start = DateTime(2030, 3, 10, 21);
+    final controller = _Controller(const []);
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      host(
+        SmartChargeSessionDetailScreen(
+          controller: controller,
+          session: _session('no-telemetry', start, quality: 'partial'),
+          ownerUid: 'a',
+          asSheet: true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final list = find.byType(Scrollable).first;
+    await tester.scrollUntilVisible(
+      find.text('Điện từ lưới'),
+      200,
+      scrollable: list,
+    );
+    final tile = find.ancestor(
+      of: find.text('Điện từ lưới'),
+      matching: find.byType(LuxeGlass),
+    );
+    expect(
+      find.descendant(of: tile.first, matching: find.text('1.84 kWh')),
+      findsOneWidget,
+    );
+    // 1840 Wh over 70 minutes.
+    expect(find.text('1.58 kW'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
 }

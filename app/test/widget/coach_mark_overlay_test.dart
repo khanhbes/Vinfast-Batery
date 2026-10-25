@@ -356,4 +356,51 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+  for (final scale in [1.0, 2.0]) {
+    testWidgets('a tall target never clips the buttons (QA 135) ×$scale', (
+      tester,
+    ) async {
+      // The Overview vehicle card covers most of the screen on a OnePlus.
+      _size(tester, const Size(360, 780));
+      final anchor = GlobalKey();
+      await tester.pumpWidget(
+        _host(
+          scale: scale,
+          child: Stack(
+            children: [
+              Positioned(
+                top: 40,
+                left: 12,
+                right: 12,
+                child: SizedBox(key: anchor, height: 540),
+              ),
+              Positioned.fill(
+                child: CoachMarkOverlay(steps: [_step(anchor)], onFinish: () {}),
+              ),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final next = tester.getRect(find.byType(FilledButton));
+      final card = tester.getRect(find.byKey(const ValueKey('coach-tooltip')));
+      expect(card.bottom, lessThanOrEqualTo(780 - 20));
+      if (scale == 1) {
+        expect(next.bottom, lessThanOrEqualTo(card.bottom));
+        // The whole card fits: nothing hides behind a scroll.
+        final scroll = tester.state<ScrollableState>(
+          find.descendant(
+            of: find.byKey(const ValueKey('coach-tooltip-scroll')),
+            matching: find.byType(Scrollable),
+          ),
+        );
+        expect(scroll.position.maxScrollExtent, 0);
+      } else {
+        // ×2 text: the card takes the whole screen height (scrolling), never
+        // the thin strip below the target.
+        expect(card.height, greaterThan(600));
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
 }

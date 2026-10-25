@@ -138,6 +138,13 @@ void main() {
     await slideToConfirm(tester);
     await tester.pump(const Duration(milliseconds: 300));
     expect(controller.lastManualDuration, const Duration(hours: 6));
+    // QA 135: the target sent is the % shown on this confirmation, never
+    // the AI-mode draft target.
+    expect(
+      controller.lastManualTarget,
+      greaterThanOrEqualTo(controller.state.draft.currentSoc.roundToDouble()),
+    );
+    expect(controller.lastManualTarget, lessThanOrEqualTo(100));
     AppPopup.dismiss();
     await tester.pump();
   });
@@ -514,10 +521,12 @@ class HarnessController extends SmartChargingController {
       );
 
   Duration? lastManualDuration;
+  double? lastManualTarget;
 
   @override
-  Future<bool> manualOn(Duration duration) async {
+  Future<bool> manualOn(Duration duration, {double? targetSoc}) async {
     lastManualDuration = duration;
+    lastManualTarget = targetSoc;
     return true;
   }
 

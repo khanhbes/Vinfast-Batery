@@ -273,3 +273,15 @@ def test_knowledge_edit_is_validated_and_audited():
     assert ok.status_code == 200 and writes[0]["keywords"] == ["bảo hành"]
     assert audits[0][0] == "assistant_knowledge_update" and audits[0][2] == "bao-hanh"
     assert client.delete(url).status_code == 200 and audits[-1][0] == "assistant_knowledge_delete"
+
+
+def test_timed_charging_keeps_the_target_the_user_asked_for():
+    eng, _ = engine([[{"functionCall": {"name": "start_timed_charging",
+                                        "args": {"minutes": 265, "target_percent": 85}}}]])
+    result = eng.chat("u1", "sạc hẹn giờ từ 11 đến 85%", [], CONTEXT)
+    assert result["actions"] == [{"name": "start_timed_charging",
+                                  "args": {"minutes": 265, "target_percent": 85}}]
+    eng, _ = engine([[{"functionCall": {"name": "start_timed_charging",
+                                        "args": {"minutes": 30, "target_percent": 140}}}]])
+    result = eng.chat("u1", "sạc 30 phút", [], CONTEXT)
+    assert result["actions"] == [{"name": "start_timed_charging", "args": {"minutes": 30}}]

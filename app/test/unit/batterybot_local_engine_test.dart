@@ -57,6 +57,27 @@ void main() {
       expect(AppChatToolGateway.parseDuration(value), isNull, reason: value);
     }
   });
+  test('a timed charge keeps the % the user aimed for (QA 135: 11→85)', () {
+    // The duration still parses with the target in the sentence.
+    expect(
+      AppChatToolGateway.parseDuration('bật sạc 265 phút đến 85%'),
+      265 * 60,
+    );
+    expect(
+      AppChatToolGateway.parseTimedTarget('bật sạc 265 phút đến 85%', 11),
+      85,
+    );
+    expect(AppChatToolGateway.parseTimedTarget('bật sạc 30 phút', 11), isNull);
+    // Never below the start %, never past 100 %.
+    expect(
+      AppChatToolGateway.parseTimedTarget('bật sạc 30 phút đến 10%', 11),
+      isNull,
+    );
+    expect(
+      AppChatToolGateway.parseTimedTarget('bật sạc 30 phút đến 140%', 11),
+      isNull,
+    );
+  });
   test('a status question is read-only even when ending in không', () {
     expect(BatteryBotLocalEngine.toolFor('đang sạc không'), 'charger_status');
   });

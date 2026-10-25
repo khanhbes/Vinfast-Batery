@@ -64,7 +64,9 @@ CLIENT_ACTIONS = [
                          "session_id": _s("STRING", "Chỉ khi screen=session_detail: id phiên sạc lấy từ get_charging_history")},
                         ["screen"])},
     {"name": "start_timed_charging", "description": "Đề xuất bật sạc hẹn giờ cho xe đang chọn. Người dùng phải vuốt xác nhận trên điện thoại; app tự kiểm tra an toàn.",
-     "parameters": _obj({"minutes": _s("INTEGER", "Thời lượng 1–600 phút")}, ["minutes"])},
+     "parameters": _obj({"minutes": _s("INTEGER", "Thời lượng 1–600 phút"),
+                         "target_percent": _s("INTEGER", "Mức pin người dùng muốn đạt khi hết giờ (vd 'sạc từ 11 đến 85%'), nếu họ có nói")},
+                        ["minutes"])},
     {"name": "stop_charging", "description": "Đề xuất dừng phiên sạc đang chạy của xe đang chọn (người dùng bấm xác nhận).",
      "parameters": _obj()},
     {"name": "set_target_soc", "description": "Đặt mức pin muốn sạc tới trên màn Sạc pin.",
@@ -175,7 +177,7 @@ Số thập phân viết bằng dấu chấm như trong app (0.58 kWh, 1.21 km c
 6. Dựa vào HỒ SƠ và THÓI QUEN để cá nhân hóa lời khuyên (ví dụ gợi ý mức sạc, giờ sạc) nhưng không lặp lại toàn bộ hồ sơ.
 7. An toàn trên hết: không hướng dẫn vượt giới hạn 12 A / 2500 W, không vô hiệu hóa bảo vệ, khuyên giám sát khi sạc.
 8. Chuyến đi: câu hỏi "đi X được không / hết bao nhiêu pin" → gọi estimate_trip (cần điểm đến + điểm đi, hoặc số km; thiếu thì hỏi lại). Trả lời: % hao (khoảng), % khi tới nơi, kết luận, và gợi ý cụ thể khi không đủ (sạc trước đến X% mất bao lâu — gọi estimate_charge; chạy chậm; tuyến ngắn hơn; sạc ở điểm đến). Luôn nói đây là ước tính.
-9. Sạc theo mức pin: "sạc đến 80%" → gọi prepare_target_charging(percent=80) (mở tab Sạc, người dùng tự vuốt; máy chủ tự ngắt khi ước tính đạt mức). "sạc 80% mất bao lâu" → estimate_charge. Nêu độ chính xác cá nhân nếu có (learnedSamples, socMae). Nhắc nhập % trên đồng hồ xe sau khi sạc để có thêm dữ liệu.
+9. Sạc theo mức pin: "sạc đến 80%" → gọi prepare_target_charging(percent=80) (mở tab Sạc, người dùng tự vuốt; máy chủ tự ngắt khi ước tính đạt mức). "sạc 80% mất bao lâu" → estimate_charge. Nêu độ chính xác cá nhân nếu có (learnedSamples, socMae). Nhắc nhập % trên đồng hồ xe sau khi sạc để có thêm dữ liệu. Nếu bật sạc hẹn giờ để đạt một mức pin (vd "sạc hẹn giờ từ 11 đến 85%", hoặc gói Free không có sạc đến %), gọi start_timed_charging(minutes=thời gian ước tính, target_percent=mức đó).
 10. App học thế nào: % người dùng nhập (tay, Pinova Bot, ảnh đồng hồ), lúc app tự nhận biết pin đầy và các chuyến đi chỉ được XẾP HÀNG; mô hình chỉ đổi khi người dùng bấm Huấn luyện ở Cài đặt → AI cá nhân (app báo khi đủ dữ liệu: 3 lần sạc hoặc 10 chuyến mới). Không nói app "học ngay" hay tự học.
 11. Tổng kết theo tháng (kWh, số phiên, thời gian) → gọi get_charging_summary; chi phí theo giá điện xem ở tab Lịch sử.
 12. Gói Pinova Premium: Free (an toàn, hẹn giờ, quét đồng hồ, trợ giúp, 1 xe, lịch sử 30 ngày, 10 tin/ngày); Pro 29.000đ/tháng hoặc 249.000đ/năm (sạc đến % tự ngắt, đổi mục tiêu khi đang sạc, % pin chai, giao diện, 2 xe, lịch sử đầy đủ + CSV, 30 tin/ngày); Ultra 49.000đ/tháng hoặc 449.000đ/năm (thêm sạc đêm an toàn, AI cá nhân, lộ trình, chi phí nâng cao, xe không giới hạn, 100 tin/ngày). Dùng thử Ultra 7 ngày. Chưa có thanh toán trong app. Hỏi về gói → get_subscription rồi trả lời; muốn xem/nâng cấp → open_premium; "dùng thử" → start_trial; đọc mã → apply_promo_code. Khi công cụ trả premiumRequired, giải thích ngắn và gọi open_premium.
@@ -217,7 +219,12 @@ def validate_action(name: str, args: dict, context: dict) -> dict | None:
         return out
     if name == "start_timed_charging":
         minutes = _clamp_int(args.get("minutes"), 1, 600)
-        return {"minutes": minutes} if minutes else None
+        if not minutes:
+            return None
+        # QA 135: the % the user aimed for is kept as the session's target
+        # (display only; the Shelly timer still owns the cutoff).
+        target = _clamp_int(args.get("target_percent"), 1, 100)
+        return {"minutes": minutes, "target_percent": target} if target else {"minutes": minutes}
     if name == "stop_charging":
         return {}
     if name == "set_target_soc":

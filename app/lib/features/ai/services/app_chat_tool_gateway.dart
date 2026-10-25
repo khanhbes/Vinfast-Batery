@@ -120,6 +120,20 @@ class AppChatToolGateway implements ChatToolGateway {
     return seconds >= 60 && seconds <= 36000 ? seconds : null;
   }
 
+  /// "bật sạc 265 phút đến 85%": the % the user aimed for, kept as the
+  /// session target (display only; the Shelly timer owns the cutoff). QA 135:
+  /// without it the server stored the start % ("Mục tiêu 11%" for 11→85).
+  static int? parseTimedTarget(String question, num currentSoc) {
+    // normalize() drops "%", so match the raw text.
+    final matches = RegExp(
+      r'(?:đến|den|tới|toi|lên|len)\s*(\d{1,3})\s*%',
+      caseSensitive: false,
+    ).allMatches(question).toList();
+    if (matches.length != 1) return null;
+    final target = int.parse(matches.single[1]!);
+    return target > currentSoc && target <= 100 ? target : null;
+  }
+
   static Map<String, dynamic> _result(
     bool ok,
     String message, [
@@ -444,6 +458,7 @@ class AppChatToolGateway implements ChatToolGateway {
       };
     }
     final seconds = duration;
+    final target = parseTimedTarget(question, vehicle.currentBattery);
     if (seconds < 60 || seconds > 36000 || !vehicle.hasBatteryData) {
       return {
         'allowed': false,
@@ -489,12 +504,13 @@ class AppChatToolGateway implements ChatToolGateway {
       'estimatedTime':
           '${seconds ~/ 60} phút · tự ngắt lúc '
           '${formatClock(DateTime.now().add(Duration(seconds: seconds)))} '
-          'nếu bật ngay',
+          'nếu bật ngay${target == null ? '' : ' · mục tiêu ~$target%'}',
       'safetyNote':
           'Chỉ báo bật thành công sau khi đọc lại thấy ổ đã bật và hẹn giờ đang chạy. Không tự gửi lại lệnh bật khi mất phản hồi.',
       'deviceId': binding.deviceId,
       'durationSeconds': seconds,
       'currentSoc': vehicle.currentBattery,
+      'targetSoc': ?target,
     };
   }
 
@@ -613,6 +629,7 @@ class AppChatToolGateway implements ChatToolGateway {
           vehicleId: vehicle.vehicleId,
           currentSoc: (evidence['currentSoc'] as num).toDouble(),
           expectedDeviceId: deviceId,
+          targetSoc: (evidence['targetSoc'] as num?)?.toDouble(),
         );
       } on SmartChargerException catch (error) {
         _guard(owner, vehicle.vehicleId, generation);

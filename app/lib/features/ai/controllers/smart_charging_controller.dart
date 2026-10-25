@@ -1889,7 +1889,10 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     }
   }
 
-  Future<bool> manualOn(Duration duration) async {
+  /// [targetSoc] is the % shown on the timed confirmation (display only;
+  /// the Shelly timer owns the cutoff). QA 135: the AI-mode draft target
+  /// was sent instead, so history showed a target the user never saw.
+  Future<bool> manualOn(Duration duration, {double? targetSoc}) async {
     if (_pendingRelayCommand ||
         state.phase == SmartChargingViewPhase.starting ||
         state.phase == SmartChargingViewPhase.stopping) {
@@ -1915,7 +1918,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
           key,
           vehicleId: state.draft.vehicleId,
           currentSoc: state.draft.currentSoc,
-          targetSoc: state.draft.targetSoc,
+          targetSoc: targetSoc ?? state.draft.targetSoc,
         ),
       );
       if (_disposed) return false;

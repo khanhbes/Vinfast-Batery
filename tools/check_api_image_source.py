@@ -39,6 +39,9 @@ def main():
     paths = [WEB / name for name in FLAT]
     paths += list((WEB / "shelly").rglob("*.py"))
     paths += list((WEB / "assistant").rglob("*.py"))
+    paths += list((WEB / "billing").rglob("*.py"))
+    paths += list((WEB / "support").rglob("*.py"))
+    paths += list((WEB / "scan").rglob("*.py"))
     paths += list((WEB / "ai_server").rglob("*.py"))
     expected = {p.relative_to(WEB).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
                 for p in sorted(set(paths))}
