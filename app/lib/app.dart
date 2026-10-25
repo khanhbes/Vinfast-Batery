@@ -16,6 +16,8 @@ import 'features/support/help_center_screen.dart';
 import 'navigation/app_navigation.dart';
 import 'core/providers/app_providers.dart';
 import 'l10n/app_localizations.dart';
+import 'core/providers/firebase_ready_provider.dart';
+import 'data/models/entitlement.dart';
 
 class VinFastBatteryApp extends StatefulWidget {
   const VinFastBatteryApp({super.key});
@@ -119,10 +121,14 @@ class _VinFastBatteryAppState extends State<VinFastBatteryApp> {
   Widget _app(BuildContext context, WidgetRef ref, Widget? _) {
     // LUXE is dark only (Task 117). QA 136: one theme per plan; Ultra's
     // moving colours run from one clock above the navigator.
-    final tier = ref.watch(entitlementProvider.select((plan) => plan.tier));
-    final effects = ref.watch(
-      appearanceProvider.select((look) => look.ultraEffects),
-    );
+    // The account is read only once Firebase is up (see firebaseReadyProvider).
+    final ready = ref.watch(firebaseReadyProvider);
+    final tier = ready
+        ? ref.watch(entitlementProvider.select((plan) => plan.tier))
+        : PlanTier.free;
+    final effects =
+        !ready ||
+        ref.watch(appearanceProvider.select((look) => look.ultraEffects));
     final theme = LuxeTheme.data(tier: tier);
     return MaterialApp(
       title: 'Pinova',

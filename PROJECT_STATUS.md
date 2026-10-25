@@ -12,7 +12,7 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
-## 136. Task Completion Log — Lộ trình về Pro, khóa đồng bộ, tag gói, giao diện riêng Pro/Ultra, biểu đồ cột Lịch sử, ODO đúng số, trang Premium mới (25/10/2026) — API đã deploy, APK +202
+## 136. Task Completion Log — Lộ trình về Pro, khóa đồng bộ, tag gói, giao diện riêng Pro/Ultra, biểu đồ cột Lịch sử, ODO đúng số, trang Premium mới (25/10/2026) — API đã deploy, APK +203 đã cài OnePlus (chờ thử lại trên máy)
 
 **Yêu cầu chủ app (25/10):** (1) Lộ trình xuống Pro; mọi tính năng bị khóa phải khóa đồng bộ (Lộ trình khóa ở Cài đặt nhưng ô Tổng quan vẫn vào được); (2) tag gói cạnh tên user (Free thường, Pro đẹp hơn, Ultra gradient đổi màu liên tục); (3) màu/animation/UI riêng từng gói; (4) tính năng ngoài gói làm mờ, không cho bấm; (5) bỏ biểu đồ tròn Tổng kết tháng; ODO không hiện số lăn dở; (6) trang nâng cấp chuyên nghiệp, nội dung ngắn dễ hiểu. Chọn (hỏi 25/10): Pro bạc–thép / Ultra Aurora; Ultra đổi toàn app + công tắc tắt; mờ + chỉ nhãn gói bấm được; cột theo ngày; trang gói dạng tab; deploy API; tag thêm ở Tổng quan, Hồ sơ, Pinova Bot.
 
@@ -28,6 +28,8 @@
 | Khác | Test sạc đêm QA 135 phụ thuộc giờ thật (lease worker lấy giờ thật, ngày giả = hôm nay → hỏng sau 22:00) → ngày giả 2031. | `web/tests/test_qa135_night_charging.py` |
 
 **Kiểm thử:** backend 739 pass (+ `test_qa136_plans.py`); Flutter **1186** pass (+ `qa136_plans_test.dart` 14: tag 320 dp ×1/×2, khóa mờ/không bấm/nhãn mở Premium, `PremiumRequired`, ô Lộ trình Free, theme từng gói, đồng hồ Ultra dừng sạch, biểu đồ cột 320 dp ×1/×2, ODO), analyze 0. Cập nhật `qa135_premium_test` theo bố cục mới.
+
+**Lỗi tìm thấy khi thử +202 trên OnePlus (26/10):** không có tag gói, Lộ trình không mờ, Thành tựu "Hạng Đồng 0 điểm". Gốc app đọc gói (theme theo gói) trước `Firebase.initializeApp` → `authStateProvider` tạo sớm, kẹt lỗi cả phiên (`[core/no-app]` trong logcat), mọi provider theo tài khoản thành chưa đăng nhập. Sửa: `firebaseReadyProvider` (`core/providers/firebase_ready_provider.dart`) do `AuthGate` bật khi Firebase sẵn sàng; gốc app chỉ đọc gói/giao diện sau đó (trước đó theme Free). Dữ liệu không mất. APK **1.3.0+203** `3a949652…c99261` đã cài; chưa thử lại được vì máy đang dùng app khác.
 
 **Deploy (chủ app cho phép):** gate `task148` — build exit 0, nguồn 79 file khớp, boot Pass 19 s; Linux lần 1 **1 fail** (test sạc đêm phụ thuộc giờ, đã sửa) → `-r2` **739 pass/15 skip** → API `vinfast-api@sha256:2a26b671…f1dfc5` (`qa136-rollout-20261025.json`, Unlocked, peers giữ), revision `vinfast-api--api106-1025163606`, env email/ACS giữ, health/ready 200. Worker không đổi.
 

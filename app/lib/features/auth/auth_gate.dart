@@ -28,6 +28,7 @@ import '../../main.dart' show firebaseInitErrorProvider;
 import '../../navigation/app_navigation.dart';
 import 'getting_started_screen.dart';
 import 'onboarding_chat_screen.dart';
+import '../../core/providers/firebase_ready_provider.dart';
 
 /// AuthGate: gate có trạng thái khởi động rõ ràng.
 ///
@@ -129,6 +130,9 @@ class _AuthGateState extends ConsumerState<AuthGate> {
       }
     }
 
+    // QA 136: from here the app root may read the account (plan theme).
+    ref.read(firebaseReadyProvider.notifier).state = true;
+
     // Khởi tạo push notification trong nền khi Firebase đã sẵn sàng
     unawaited(
       FirebaseBootstrapCoordinator.initializePushServices().catchError((e) {
@@ -218,6 +222,7 @@ class _AuthGateState extends ConsumerState<AuthGate> {
           debugPrint('[AuthGate] Push retry error (${e.runtimeType}).');
         }),
       );
+      ref.read(firebaseReadyProvider.notifier).state = true;
       ref.read(firebaseInitErrorProvider.notifier).state = null;
     } catch (e) {
       if (!mounted) return;
