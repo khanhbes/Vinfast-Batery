@@ -19,6 +19,8 @@ import '../../data/services/dashboard_ai_reader.dart';
 import '../../data/services/dashboard_layout_parser.dart';
 import '../../data/services/dashboard_reader.dart';
 import '../../data/services/seven_segment_reader.dart';
+import '../../core/services/guide_registry.dart';
+import '../../core/services/screen_tour.dart';
 
 /// Reads the dashboard the quickest way (QA 131): the live scanner, which
 /// can hand over to a gallery photo. `null` when the owner cancelled or
@@ -103,7 +105,7 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
   final _log = _ScanLog();
 
   /// The guide window: only this part of the frame is read (QA 135).
-  final _guideKey = GlobalKey();
+  final _guideKey = GuideRegistry.keyScanWindow;
   final _stackKey = GlobalKey();
 
   /// The image model's turn (QA 135): one crop of the guide window when
@@ -191,6 +193,16 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
       setState(() {
         _controller = controller;
         _problem = _CameraProblem.none;
+      });
+      // QA 135: the first scan explains the window and the capture button.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ScreenTour.maybeShow(
+            context,
+            ScreenTour.scan,
+            GuideRegistry.scanTourSteps(),
+          );
+        }
       });
       _hintTimer?.cancel();
       _hintTimer = Timer(_hintAfter, () {
@@ -842,18 +854,21 @@ class DashboardScanPanel extends StatelessWidget {
               runSpacing: 4,
               children: [
                 if (onCapture != null || capturing)
-                  TextButton.icon(
-                    key: const ValueKey('scan-capture'),
-                    onPressed: capturing ? null : onCapture,
-                    icon: capturing
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.camera_alt_outlined),
-                    label: const Text('Chụp ảnh'),
-                    style: TextButton.styleFrom(
-                      minimumSize: const Size(48, 48),
+                  KeyedSubtree(
+                    key: GuideRegistry.keyScanCapture,
+                    child: TextButton.icon(
+                      key: const ValueKey('scan-capture'),
+                      onPressed: capturing ? null : onCapture,
+                      icon: capturing
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.camera_alt_outlined),
+                      label: const Text('Chụp ảnh'),
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(48, 48),
+                      ),
                     ),
                   ),
                 TextButton.icon(

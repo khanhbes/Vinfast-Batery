@@ -30,6 +30,7 @@ import '../features/overview/overview_screen.dart';
 import '../features/charge/charge_screen.dart';
 import '../features/auth/auth_providers.dart';
 import '../features/more/more_screen.dart';
+import '../core/services/screen_tour.dart';
 
 final guideTourCoordinatorProvider = Provider<GuideTourCoordinator>((ref) {
   final coordinator = GuideTourCoordinator();
@@ -98,7 +99,11 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
     _guide.dismissOverlay = CoachMarkOverlay.dismissActive;
     _guide.entryIsActive = CoachMarkOverlay.isActive;
     _guide.activateAccount(uid);
-    _guide.onReplay = () => unawaited(_tryShowFirstRunGuide(manual: true));
+    _guide.onReplay = () {
+      // QA 135: replaying the guide also brings back each screen's guide.
+      unawaited(ScreenTour.reset());
+      unawaited(_tryShowFirstRunGuide(manual: true));
+    };
     _guidePreferences = ref.read(dashboardPreferencesProvider);
     _guidePreferences!.addListener(_onGuidePreferencesChanged);
     if (uid != null) {
@@ -153,13 +158,19 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
     if (uid == null) return;
     final preferences = ref.read(dashboardPreferencesProvider);
     await preferences.initializeForUser(uid);
+    // QA 135: also once on every install (a reinstall shows it again).
+    final installReplay = !await ScreenTour.seen(
+      ScreenTour.overviewInstall,
+      uid: uid,
+    );
     if (!mounted ||
         _boundUid != uid ||
         FirebaseAuth.instance.currentUser?.uid != uid ||
         preferences.uid != uid ||
         (!manual &&
             (_guideShown ||
-                !preferences.shouldAutoShow(GuideRegistry.overviewTourId)))) {
+                (!preferences.shouldAutoShow(GuideRegistry.overviewTourId) &&
+                    !installReplay)))) {
       return;
     }
     bool sameAccount() =>
@@ -186,6 +197,9 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
           steps: GuideRegistry.getOverviewTourSteps(),
           showDontShowAgain: !manual,
           onFinish: () {
+            unawaited(
+              ScreenTour.markSeen(ScreenTour.overviewInstall, uid: uid),
+            );
             if (!manual && sameAccount()) {
               unawaited(
                 preferences.markTourCompleted(GuideRegistry.overviewTourId),
@@ -193,6 +207,9 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
             }
           },
           onSkip: () {
+            unawaited(
+              ScreenTour.markSeen(ScreenTour.overviewInstall, uid: uid),
+            );
             if (!manual && sameAccount()) {
               unawaited(
                 preferences.markTourDismissed(GuideRegistry.overviewTourId),
@@ -213,12 +230,31 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
     );
   }
 
+  /// QA 135: the first visit of a tab shows its guide (after Overview's).
+  void _maybeScreenTour(int tab) {
+    final (String? id, List<CoachMarkStep> steps) = switch (tab) {
+      1 => (ScreenTour.charge, GuideRegistry.chargeTourSteps()),
+      2 => (ScreenTour.history, GuideRegistry.historyTourSteps()),
+      3 => (ScreenTour.settings, GuideRegistry.settingsTourSteps()),
+      _ => (null, const <CoachMarkStep>[]),
+    };
+    if (id == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && ref.read(currentTabProvider) == tab) {
+        unawaited(ScreenTour.maybeShow(context, id, steps));
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     // Restore the last selected vehicle once at the app shell boundary so all
     // tabs share the same vehicle context before rendering scoped data.
     ref.watch(vehicleContextRestoreProvider);
     final currentIndex = ref.watch(currentTabProvider);
+    ref.listen<int>(currentTabProvider, (previous, next) {
+      if (previous != next) _maybeScreenTour(next);
+    });
 
     SystemChrome.setSystemUIOverlayStyle(
       SystemUiOverlayStyle(

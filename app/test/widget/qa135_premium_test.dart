@@ -153,10 +153,7 @@ void main() {
     });
 
     test('nothing is locked before the server answers or on an old server', () {
-      expect(
-        const Entitlement().allows(PremiumFeature.nightCharging),
-        isTrue,
-      );
+      expect(const Entitlement().allows(PremiumFeature.nightCharging), isTrue);
       expect(const Entitlement().historyDays, isNull);
       expect(
         Entitlement.legacyServer.allows(PremiumFeature.learningTrain),
@@ -194,8 +191,13 @@ void main() {
   for (final scale in [1.0, 2.0]) {
     testWidgets('paywall fits 320 dp at text ×$scale', (tester) async {
       final billing = _FakeBilling(_plan('free'));
-      await _pump(tester, const PremiumScreen(), scale, billing,
-          height: scale == 1 ? 3200 : 7000);
+      await _pump(
+        tester,
+        const PremiumScreen(),
+        scale,
+        billing,
+        height: scale == 1 ? 3200 : 7000,
+      );
       expect(tester.takeException(), isNull);
       expect(find.text('Pinova Ultra'), findsOneWidget);
       expect(find.text('Pinova Pro'), findsOneWidget);
@@ -306,8 +308,10 @@ void main() {
     final container = ProviderScope.containerOf(
       tester.element(find.byType(AppearanceScreen)),
     );
-    expect(container.read(effectiveAppearanceProvider).dashboard,
-        DashboardStyle.lcd);
+    expect(
+      container.read(effectiveAppearanceProvider).dashboard,
+      DashboardStyle.lcd,
+    );
     expect(
       find.byKey(const ValueKey('appearance-premium-notice')),
       findsNothing,

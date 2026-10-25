@@ -6894,6 +6894,9 @@ def _register_assistant():
         charge_estimator=charge_estimator if service else None,
         trip_params_reader=trip_params_reader if service else None,
         entitlements=app.extensions.get('billing'),
+        # QA 135: % pin chai and the night plan for Pinova Bot.
+        health_reader=service.battery_health if service else None,
+        night_reader=service.night_plan if service else None,
     )
     app.register_blueprint(create_assistant_blueprint(
         engine=engine, memory=memory, knowledge=knowledge,

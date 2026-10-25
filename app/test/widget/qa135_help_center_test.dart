@@ -186,8 +186,15 @@ void main() {
     expect(byId['camera']!.fix, CheckFix.allowCamera);
     expect(report.problems, 3);
     expect(report.snapshot['serverReady'], 503);
-    expect(report.snapshot['checksFailed'], ['network', 'shelly', 'notifications']);
-    expect(report.snapshot.keys.any((k) => k.toLowerCase().contains('token')), isFalse);
+    expect(report.snapshot['checksFailed'], [
+      'network',
+      'shelly',
+      'notifications',
+    ]);
+    expect(
+      report.snapshot.keys.any((k) => k.toLowerCase().contains('token')),
+      isFalse,
+    );
   });
 
   test('a healthy phone reports no problems', () async {
@@ -256,7 +263,9 @@ void main() {
   });
 
   for (final scale in [1.0, 2.0]) {
-    testWidgets('ticket thread shows the team reply at ×$scale', (tester) async {
+    testWidgets('ticket thread shows the team reply at ×$scale', (
+      tester,
+    ) async {
       await _pump(
         tester,
         const SupportTicketScreen(ticketId: 't1'),

@@ -148,6 +148,172 @@ class GuideRegistry {
     debugLabel: 'anchor_more_settings_tab',
   );
 
+  // ── QA 135: first-run guides of each screen (see ScreenTour) ──────────
+  static GlobalKey _anchor(String label) => GlobalKey(debugLabel: label);
+  static final keyChargeMode = _anchor('anchor_charge_mode');
+  static final keyChargeSocInput = _anchor('anchor_charge_soc_input');
+  static final keyChargeStart = _anchor('anchor_charge_start');
+  static final keyHistorySummary = _anchor('anchor_history_summary');
+  static final keyHistoryFilters = _anchor('anchor_history_filters');
+  static final keyHistoryHeader = _anchor('anchor_history_header');
+  static final keySettingsPremium = _anchor('anchor_settings_premium');
+  static final keySettingsHelp = _anchor('anchor_settings_help');
+  static final keySettingsNight = _anchor('anchor_settings_night');
+  static final keyPremiumPeriod = _anchor('anchor_premium_period');
+  static final keyPremiumUltra = _anchor('anchor_premium_ultra');
+  static final keyPremiumPromo = _anchor('anchor_premium_promo');
+  static final keyBotInput = _anchor('anchor_bot_input');
+  static final keyBotScan = _anchor('anchor_bot_scan');
+  static final keyScanWindow = _anchor('anchor_scan_window');
+  static final keyScanCapture = _anchor('anchor_scan_capture');
+
+  static CoachMarkStep _step(
+    String id,
+    String title,
+    String description,
+    GlobalKey anchor, {
+    Alignment align = Alignment.bottomCenter,
+  }) => CoachMarkStep(
+    id: id,
+    titleVi: title,
+    titleEn: title,
+    descriptionVi: description,
+    descriptionEn: description,
+    anchorKey: anchor,
+    tooltipAlignment: align,
+  );
+
+  static List<CoachMarkStep> chargeTourSteps() => [
+    _step(
+      'charge_mode',
+      'Hai cách sạc',
+      'Sạc AI: chọn % muốn đạt, máy chủ tự ngắt đúng mức. Hẹn giờ: sạc '
+          'trong một khoảng thời gian rồi ổ Shelly tự tắt.',
+      keyChargeMode,
+    ),
+    _step(
+      'charge_soc',
+      'Nhập mức pin',
+      'Kéo núm bạc theo số % trên đồng hồ xe, núm xanh tới mức muốn sạc. '
+          'Nhập đúng % giúp dự đoán thời gian chính xác hơn.',
+      keyChargeSocInput,
+    ),
+    _step(
+      'charge_start',
+      'Dự đoán rồi bắt đầu',
+      'Bấm để xem thời gian sạc, sau đó xác nhận để bật. Dừng sạc luôn là '
+          'một nút bấm.',
+      keyChargeStart,
+      align: Alignment.topCenter,
+    ),
+  ];
+
+  static List<CoachMarkStep> historyTourSteps() => [
+    _step(
+      'history_summary',
+      'Tổng kết tháng',
+      'Điện năng, số phiên và chi phí ước tính theo giá điện bạn đặt.',
+      keyHistorySummary,
+    ),
+    _step(
+      'history_filters',
+      'Lọc phiên sạc',
+      'Lọc theo tháng, kiểu sạc hoặc trạng thái; chạm một phiên để xem '
+          'chi tiết và nhập % thật trên đồng hồ.',
+      keyHistoryFilters,
+    ),
+    _step(
+      'history_export',
+      'Xuất báo cáo',
+      'Xuất lịch sử ra file để lưu hoặc gửi đi (gói Pro).',
+      keyHistoryHeader,
+    ),
+  ];
+
+  static List<CoachMarkStep> settingsTourSteps() => [
+    _step(
+      'settings_premium',
+      'Pinova Premium',
+      'Xem quyền lợi Pro/Ultra, dùng thử 7 ngày hoặc nhập mã khuyến mãi.',
+      keySettingsPremium,
+    ),
+    _step(
+      'settings_night',
+      'Sạc đêm an toàn',
+      'Hẹn sạc đầy 80–90% ngay trước giờ thức dậy, giám sát chặt hơn ban '
+          'ngày (gói Ultra).',
+      keySettingsNight,
+      align: Alignment.topCenter,
+    ),
+    _step(
+      'settings_help',
+      'Trợ giúp',
+      'App tự kiểm tra lỗi và gợi ý cách sửa; gửi câu hỏi tới đội Pinova ở '
+          'mọi gói.',
+      keySettingsHelp,
+      align: Alignment.topCenter,
+    ),
+  ];
+
+  static List<CoachMarkStep> premiumTourSteps() => [
+    _step(
+      'premium_period',
+      'Tháng hay năm',
+      'Gói năm rẻ hơn khoảng một phần tư so với trả từng tháng.',
+      keyPremiumPeriod,
+    ),
+    _step(
+      'premium_ultra',
+      'Ultra: trọn bộ',
+      'Sạc đêm an toàn, AI cá nhân, lộ trình và mọi thứ của Pro. Dùng thử '
+          'miễn phí 7 ngày.',
+      keyPremiumUltra,
+    ),
+    _step(
+      'premium_promo',
+      'Mã khuyến mãi',
+      'Nhập mã để thấy giá đã giảm; mã được giữ cho lần mua đầu.',
+      keyPremiumPromo,
+      align: Alignment.topCenter,
+    ),
+  ];
+
+  static List<CoachMarkStep> botTourSteps() => [
+    _step(
+      'bot_input',
+      'Hỏi Pinova Bot',
+      'Hỏi bằng tiếng Việt: "sạc đến 80% mất bao lâu", "đi Hà Nam đủ pin '
+          'không", "đổi mục tiêu lên 90%". Bot đề xuất, bạn xác nhận.',
+      keyBotInput,
+      align: Alignment.topCenter,
+    ),
+    _step(
+      'bot_scan',
+      'Quét đồng hồ',
+      'Đưa camera vào đồng hồ xe để điền % pin và ODO tự động.',
+      keyBotScan,
+      align: Alignment.topCenter,
+    ),
+  ];
+
+  static List<CoachMarkStep> scanTourSteps() => [
+    _step(
+      'scan_window',
+      'Đặt đồng hồ vào khung',
+      'Giữ cả số % pin và ODO trong khung, tránh chói đèn. App đọc ngay '
+          'trên máy, cần thì nhờ AI đọc ảnh.',
+      keyScanWindow,
+    ),
+    _step(
+      'scan_capture',
+      'Chưa nhận?',
+      'Bấm Chụp ảnh để đọc một ảnh rõ, hoặc nhập tay. Bạn luôn xem lại số '
+          'trước khi lưu.',
+      keyScanCapture,
+      align: Alignment.topCenter,
+    ),
+  ];
+
   static List<CoachMarkStep> getOverviewTourSteps() => [
     CoachMarkStep(
       id: 'step_vehicle_and_battery',

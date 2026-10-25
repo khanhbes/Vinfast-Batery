@@ -205,6 +205,13 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
 - Lịch sử chat, hành vi, gợi ý chủ động chỉ trên máy (`localOnly`; 1 bong bóng/30 phút, 5/ngày). Dự đoán sạc trên máy luôn `isDisplayOnly`, không phải quyền ON. Thiếu model phải báo unavailable, không giả lập AI.
 - **Đã gỡ (QA 131, 19/10/2026):** chatbot Gemini/SSE cũ trong `web/ai_server` và proxy `/api/chat/*`, `/api/behavior/*` (app không còn gọi). Đặc tả: `docs/specs/BATTERYBOT_ASSISTANT.md`.
 
+### 3.8. Premium, Trợ giúp, sạc đêm, quét đồng hồ (QA 135, 25/10/2026)
+- **Gói:** `web/billing/` (Free/Pro/Ultra, không trọn đời; `features.py` là bảng quyền một nguồn ↔ `app/lib/data/models/entitlement.dart`). Máy chủ quyết định: `service.require_feature(uid, ...)` (Shelly), quota Bot/AI ảnh theo gói, số xe, lịch sử 30 ngày Free. `users/{uid}/entitlements/*`, `promoCodes`, `supportTickets`, `nightPlans` chỉ Admin SDK (không có rule). `BILLING_ENFORCED=false` mở hết. Không bao giờ chặn Dừng sạc/an toàn; hết hạn không ngắt phiên đang chạy.
+- **Trợ giúp:** `web/support/` (phiếu + email ACS qua `ACS_CONNECTION_STRING`/`SUPPORT_SENDER_EMAIL`/`SUPPORT_ADMIN_EMAIL`), app `features/support/` (tự kiểm tra có nút sửa).
+- **Quét:** `SevenSegmentReader.readDashboard` = nhiều ngưỡng + `DashboardLayoutParser.combine`; khung camera chỉ đọc vùng khung ngắm (`GrayImage.crop`); fallback `POST /api/scan/dashboard` (Gemini, không lưu ảnh). Thử nghiệm bằng `test/unit/qa135_scan_synthetic_test.dart` (≥ 95 %).
+- **Sạc:** đổi mục tiêu `PATCH .../sessions/<id>/target` (tăng = `extend_timer` relay ON + readback); sạc đêm `shelly/night.py` (worker bật, `strategy=night_target` có ngưỡng 60 °C/công suất/quá giờ, kênh `pinova_urgent`); % pin chai `charge_model.battery_health`.
+- **Hướng dẫn:** `core/services/screen_tour.dart` (một lần mỗi tài khoản mỗi lần cài, sau tour Tổng quan; Android `allowBackup=false`). Nút lưu có chờ: `LuxeSubmitButton`.
+
 ---
 
 ## 4. Lệnh Kiểm Thử & Kiểm Soát Chất Lượng Chuẩn

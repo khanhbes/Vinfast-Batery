@@ -97,11 +97,17 @@ class NightChargingScreen extends ConsumerStatefulWidget {
     required this.vehicleId,
     this.currentSoc,
     this.currentOdoKm,
+    this.initialTarget,
+    this.initialWake,
   });
 
   final String vehicleId;
   final double? currentSoc;
   final double? currentOdoKm;
+
+  /// Pre-filled by Pinova Bot (QA 135); the owner still confirms.
+  final int? initialTarget;
+  final TimeOfDay? initialWake;
 
   static Future<void> open(
     BuildContext context,
@@ -137,8 +143,9 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
   bool _busy = false;
   String? _error;
   late double _current = (widget.currentSoc ?? 40).clamp(0, 75).toDouble();
-  int _target = 85;
-  TimeOfDay _wake = const TimeOfDay(hour: 6, minute: 30);
+  late int _target = (widget.initialTarget ?? 85).clamp(80, 90);
+  late TimeOfDay _wake =
+      widget.initialWake ?? const TimeOfDay(hour: 6, minute: 30);
 
   NightChargingApi get _api => ref.read(nightChargingApiProvider);
 
@@ -155,10 +162,10 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
       setState(() {
         _plan = plan;
         _loading = false;
-        if (plan != null) {
+        if (plan != null && widget.initialTarget == null) {
           _target = plan.targetSoc.clamp(80, 90);
           final parts = plan.wakeAt.split(':');
-          if (parts.length == 2) {
+          if (parts.length == 2 && widget.initialWake == null) {
             _wake = TimeOfDay(
               hour: int.tryParse(parts[0]) ?? 6,
               minute: int.tryParse(parts[1]) ?? 30,

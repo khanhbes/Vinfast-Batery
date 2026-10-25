@@ -41,6 +41,7 @@ import '../smart_charging/smart_charger_setup_hub_screen.dart';
 import '../trip_planner/trip_planner_wrapper.dart';
 import '../settings/assistant_memory_screen.dart';
 import '../settings/personal_ai_settings_screen.dart';
+import '../../core/services/guide_registry.dart';
 
 /// Tab Cài đặt (luxe): profile card ringed by the achievement rank, a 2×2
 /// grid of live tiles (vehicle, Shelly, achievements, maintenance) and quiet
@@ -213,7 +214,11 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                 ),
               ),
               const SizedBox(height: 14),
-              const LuxeReveal(index: 1, child: PremiumBanner()),
+              LuxeReveal(
+                index: 1,
+                key: GuideRegistry.keySettingsPremium,
+                child: const PremiumBanner(),
+              ),
               const LuxeSectionLabel('PHƯƠNG TIỆN & SẠC'),
               LuxeReveal(
                 index: 1,
@@ -277,7 +282,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                       },
                     ),
                     LuxeSettingsRow(
-                      key: const ValueKey('more-night-charging'),
+                      key: GuideRegistry.keySettingsNight,
                       icon: Icons.nights_stay_rounded,
                       title: 'Sạc đêm an toàn',
                       subtitle:
@@ -350,7 +355,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                 child: LuxeSettingsGroup(
                   children: [
                     LuxeSettingsRow(
-                      key: const ValueKey('more-help-center'),
+                      key: GuideRegistry.keySettingsHelp,
                       icon: Icons.support_agent_rounded,
                       title: 'Trợ giúp & khắc phục sự cố',
                       subtitle: 'Tự kiểm tra lỗi, sửa nhanh, hỏi đội Pinova',

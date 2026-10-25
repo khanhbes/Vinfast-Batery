@@ -17,10 +17,14 @@ class EditTargetSheet extends StatefulWidget {
     required this.currentSoc,
     required this.currentTarget,
     required this.onSubmit,
+    this.initialTarget,
   });
 
   final double currentSoc;
   final double currentTarget;
+
+  /// Suggested by Pinova Bot; the owner still confirms.
+  final int? initialTarget;
 
   /// The server's refusal message, or null when the new target is set.
   final Future<String?> Function(double target) onSubmit;
@@ -30,12 +34,14 @@ class EditTargetSheet extends StatefulWidget {
     required double currentSoc,
     required double currentTarget,
     required Future<String?> Function(double target) onSubmit,
+    int? initialTarget,
   }) => showLuxeSheet<bool>(
     context,
     builder: (_) => EditTargetSheet(
       currentSoc: currentSoc,
       currentTarget: currentTarget,
       onSubmit: onSubmit,
+      initialTarget: initialTarget,
     ),
   );
 
@@ -45,7 +51,8 @@ class EditTargetSheet extends StatefulWidget {
 
 class _EditTargetSheetState extends State<EditTargetSheet> {
   late final int _min = (widget.currentSoc.floor() + 2).clamp(1, 100);
-  late int _target = widget.currentTarget.round().clamp(_min, 100);
+  late int _target = (widget.initialTarget ?? widget.currentTarget.round())
+      .clamp(_min, 100);
   bool _busy = false;
   bool _done = false;
   String? _error;

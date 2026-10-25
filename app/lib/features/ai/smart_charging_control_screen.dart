@@ -47,6 +47,7 @@ import 'widgets/recent_sessions_section_v2.dart';
 import 'widgets/start_charge_confirmation_sheet.dart';
 import 'widgets/stop_charging_confirmation_sheet.dart';
 import 'widgets/timed_charging_section_v2.dart';
+import '../../core/services/guide_registry.dart';
 
 /// Sạc pin — luxe platinum/emerald workspace.
 ///
@@ -109,6 +110,23 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
   void _consumeChargeTarget(({String vehicleId, double targetSoc})? pending) {
     if (pending == null || pending.vehicleId != widget.vehicleId) return;
     ref.read(pendingChargeTargetSocProvider.notifier).state = null;
+    // QA 135: during a target charge it is a new target for that charge.
+    final running = ref.read(smartChargingControllerProvider(args)).session;
+    if (running != null && !running.state.isTerminal && running.isTargetMode) {
+      final controller = ref.read(
+        smartChargingControllerProvider(args).notifier,
+      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _editTarget(
+          running.estimatedSoc ?? running.startSoc,
+          running.targetSoc.round(),
+          controller,
+          suggested: pending.targetSoc.round(),
+        );
+      });
+      return;
+    }
     ref
         .read(smartChargingControllerProvider(args).notifier)
         .updateDraft(targetSoc: pending.targetSoc.clamp(1, 100).toDouble());
@@ -304,10 +322,13 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                               children: [
                                 LuxeReveal(
                                   index: 1,
-                                  child: ChargeModeSwitcherV2(
-                                    isAiMode: _aiMode,
-                                    onChanged: (value) =>
-                                        setState(() => _aiMode = value),
+                                  child: KeyedSubtree(
+                                    key: GuideRegistry.keyChargeMode,
+                                    child: ChargeModeSwitcherV2(
+                                      isAiMode: _aiMode,
+                                      onChanged: (value) =>
+                                          setState(() => _aiMode = value),
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(height: 16),
@@ -539,6 +560,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
         LuxeReveal(
           index: 2,
           child: LuxeGlass(
+            key: GuideRegistry.keyChargeSocInput,
             padding: const EdgeInsets.fromLTRB(12, 18, 12, 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -644,6 +666,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
         const SizedBox(height: 18),
         LuxeReveal(
           index: 3,
+          key: GuideRegistry.keyChargeStart,
           child: AIChargeButton(
             key: preview == null
                 ? const ValueKey('create-plan-button')
@@ -918,13 +941,15 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
   Future<void> _editTarget(
     double estimatedSoc,
     int targetSoc,
-    SmartChargingController controller,
-  ) async {
+    SmartChargingController controller, {
+    int? suggested,
+  }) async {
     if (!PremiumGate.check(context, ref, PremiumFeature.targetEdit)) return;
     final changed = await EditTargetSheet.show(
       context,
       currentSoc: estimatedSoc,
       currentTarget: targetSoc.toDouble(),
+      initialTarget: suggested,
       onSubmit: controller.updateTarget,
     );
     if (changed == true && mounted) {

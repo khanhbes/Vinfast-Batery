@@ -31,7 +31,13 @@ CHAT_DEADLINE_SECONDS = 28.0
 
 SCREENS = ["overview", "charge", "history", "settings", "maintenance", "achievements",
            "battery_monitor", "trip_planner", "notifications", "garage", "vehicle_specs",
-           "shelly_setup", "assistant_memory", "session_detail"]
+           "shelly_setup", "assistant_memory", "session_detail",
+           # QA 135
+           "premium", "help", "night_charging", "battery_health"]
+SUPPORT_CATEGORIES = ["charging", "shelly", "scan", "battery", "billing", "account", "app", "other"]
+PREMIUM_FEATURES = ["target_charging", "target_edit", "battery_health", "appearance", "history_export",
+                    "learning_train", "trip_estimate", "night_charging", "offpeak_schedule",
+                    "share_vehicle", "monthly_report"]
 
 # The app content is Vietnamese only (Task 125: English option hidden).
 APP_SETTINGS = {"push_notifications": ("on", "off")}
@@ -85,6 +91,22 @@ CLIENT_ACTIONS = [
                          "value": _s("STRING", "on hoặc off", enum=["on", "off"])}, ["setting", "value"])},
     {"name": "prepare_target_charging", "description": "Chuẩn bị sạc ĐẾN một mức pin (máy chủ tự ngắt khi ước tính đạt mức đó): mở tab Sạc với mục tiêu đã điền. Người dùng tự vuốt để bật; không bật sạc ngay.",
      "parameters": _obj({"percent": _s("INTEGER", "Mức pin muốn sạc tới, 50–100")}, ["percent"])},
+    # -- QA 135 --------------------------------------------------------------
+    {"name": "open_premium", "description": "Mở màn Pinova Premium (xem gói Pro/Ultra, dùng thử, nhập mã). Dùng khi người dùng hỏi về gói, giá, nâng cấp, hoặc tính năng họ muốn thuộc gói cao hơn.",
+     "parameters": _obj({"feature": _s("STRING", "Tính năng người dùng muốn, nếu có", enum=PREMIUM_FEATURES)})},
+    {"name": "start_trial", "description": "Đề xuất mở dùng thử Ultra 7 ngày miễn phí (một lần mỗi tài khoản). Người dùng bấm xác nhận trên thẻ.",
+     "parameters": _obj()},
+    {"name": "apply_promo_code", "description": "Kiểm tra và áp mã khuyến mãi người dùng đọc cho bạn (người dùng bấm xác nhận).",
+     "parameters": _obj({"code": _s("STRING", "Mã khuyến mãi, 4–16 chữ/số")}, ["code"])},
+    {"name": "contact_support", "description": "Soạn sẵn yêu cầu gửi đội hỗ trợ Pinova (có đính kèm kết quả tự kiểm tra). Người dùng xem lại rồi bấm Gửi. Dùng khi bạn không giải quyết được hoặc người dùng muốn liên hệ.",
+     "parameters": _obj({"category": _s("STRING", "Nhóm vấn đề", enum=SUPPORT_CATEGORIES),
+                         "subject": _s("STRING", "Tiêu đề ngắn"),
+                         "message": _s("STRING", "Mô tả vấn đề theo lời người dùng")}, ["subject", "message"])},
+    {"name": "update_charge_target", "description": "Đổi mục tiêu % của phiên đang sạc đến % (vd 80% lên 90%). Mở hộp đổi mục tiêu; tăng mục tiêu người dùng phải vuốt xác nhận vì sạc lâu hơn.",
+     "parameters": _obj({"percent": _s("INTEGER", "Mục tiêu mới, 1–100")}, ["percent"])},
+    {"name": "set_night_plan", "description": "Mở Sạc đêm an toàn (gói Ultra) với giờ thức dậy và mục tiêu 80–90% điền sẵn; người dùng tự vuốt để hẹn.",
+     "parameters": _obj({"wake_at": _s("STRING", "Giờ thức dậy HH:MM"),
+                         "target_percent": _s("INTEGER", "80–90, mặc định 85")})},
     {"name": "plan_trip", "description": "Mở màn Lộ trình với điểm đến/quãng đường và điều kiện đã điền để người dùng xem bản đồ và gợi ý.",
      "parameters": _obj({"destination": _s("STRING", "Tên điểm đến người dùng nói"),
                          "distance_km": _s("NUMBER", "Quãng đường km nếu người dùng nói số km"),
@@ -124,6 +146,12 @@ SERVER_TOOLS = [
      "parameters": _obj({"fact": _s("STRING", "Nội dung cần quên")}, ["fact"])},
     {"name": "estimate_trip", "description": "Ước tính pin hao cho một chuyến đi (tìm đường thật trên OpenStreetMap), % pin khi tới nơi, kết luận đủ/sát/không đủ và gợi ý (sạc trước đến X%, chạy chậm, tuyến ngắn hơn). Dùng cho mọi câu hỏi kiểu 'đi X được không', 'đi X hết bao nhiêu pin'.",
      "parameters": _obj(_TRIP_ARGS)},
+    {"name": "get_subscription", "description": "Đọc gói hiện tại của người dùng (Free/Pro/Ultra, dùng thử, ngày hết hạn, quyền lợi, mã khuyến mãi đang giữ).",
+     "parameters": _obj()},
+    {"name": "get_battery_health", "description": "Đọc % pin chai của xe đang chọn (ước tính từ các lần sạc có % thật và bài kiểm tra pin). Gói Pro trở lên.",
+     "parameters": _obj()},
+    {"name": "get_night_plan", "description": "Đọc lịch sạc đêm của xe đang chọn (đã hẹn, đang sạc, giờ bắt đầu).",
+     "parameters": _obj()},
     {"name": "estimate_charge", "description": "Ước tính thời gian sạc từ mức pin hiện tại (hoặc from_soc) đến to_soc theo mô hình đã học từ chính xe này.",
      "parameters": _obj({"to_soc": _s("INTEGER", "Mức pin muốn sạc tới, 1–100"),
                          "from_soc": _s("INTEGER", "Mức pin bắt đầu nếu khác pin hiện tại")}, ["to_soc"])},
@@ -149,7 +177,11 @@ Số thập phân viết bằng dấu chấm như trong app (0.58 kWh, 1.21 km c
 8. Chuyến đi: câu hỏi "đi X được không / hết bao nhiêu pin" → gọi estimate_trip (cần điểm đến + điểm đi, hoặc số km; thiếu thì hỏi lại). Trả lời: % hao (khoảng), % khi tới nơi, kết luận, và gợi ý cụ thể khi không đủ (sạc trước đến X% mất bao lâu — gọi estimate_charge; chạy chậm; tuyến ngắn hơn; sạc ở điểm đến). Luôn nói đây là ước tính.
 9. Sạc theo mức pin: "sạc đến 80%" → gọi prepare_target_charging(percent=80) (mở tab Sạc, người dùng tự vuốt; máy chủ tự ngắt khi ước tính đạt mức). "sạc 80% mất bao lâu" → estimate_charge. Nêu độ chính xác cá nhân nếu có (learnedSamples, socMae). Nhắc nhập % trên đồng hồ xe sau khi sạc để có thêm dữ liệu.
 10. App học thế nào: % người dùng nhập (tay, Pinova Bot, ảnh đồng hồ), lúc app tự nhận biết pin đầy và các chuyến đi chỉ được XẾP HÀNG; mô hình chỉ đổi khi người dùng bấm Huấn luyện ở Cài đặt → AI cá nhân (app báo khi đủ dữ liệu: 3 lần sạc hoặc 10 chuyến mới). Không nói app "học ngay" hay tự học.
-11. Tổng kết theo tháng (kWh, số phiên, thời gian) → gọi get_charging_summary; chi phí theo giá điện xem ở tab Lịch sử."""
+11. Tổng kết theo tháng (kWh, số phiên, thời gian) → gọi get_charging_summary; chi phí theo giá điện xem ở tab Lịch sử.
+12. Gói Pinova Premium: Free (an toàn, hẹn giờ, quét đồng hồ, trợ giúp, 1 xe, lịch sử 30 ngày, 10 tin/ngày); Pro 29.000đ/tháng hoặc 249.000đ/năm (sạc đến % tự ngắt, đổi mục tiêu khi đang sạc, % pin chai, giao diện, 2 xe, lịch sử đầy đủ + CSV, 30 tin/ngày); Ultra 49.000đ/tháng hoặc 449.000đ/năm (thêm sạc đêm an toàn, AI cá nhân, lộ trình, chi phí nâng cao, xe không giới hạn, 100 tin/ngày). Dùng thử Ultra 7 ngày. Chưa có thanh toán trong app. Hỏi về gói → get_subscription rồi trả lời; muốn xem/nâng cấp → open_premium; "dùng thử" → start_trial; đọc mã → apply_promo_code. Khi công cụ trả premiumRequired, giải thích ngắn và gọi open_premium.
+13. Trợ giúp: lỗi bạn không xử lý được hoặc người dùng muốn hỏi đội hỗ trợ → contact_support với tiêu đề và mô tả theo lời người dùng; mở màn tự kiểm tra lỗi → navigate(screen="help").
+14. Đang sạc đến % mà muốn đổi mục tiêu ("sạc lên 90% luôn") → update_charge_target. Sạc đêm ("tối nay sạc để 6 giờ sáng đầy") → get_night_plan nếu cần, rồi set_night_plan. Không bao giờ tự bật sạc.
+15. % pin chai, pin còn tốt không → get_battery_health; nêu đây là ước tính, gợi ý bài kiểm tra (đi xuống ≤ 30% rồi sạc đầy) và navigate(screen="battery_health")."""
 
 
 def _clamp_int(value, low, high):
@@ -225,6 +257,33 @@ def validate_action(name: str, args: dict, context: dict) -> dict | None:
     if name == "prepare_target_charging":
         percent = _clamp_int(args.get("percent"), 50, 100)
         return {"percent": percent} if percent else None
+    if name == "open_premium":
+        feature = args.get("feature")
+        return {"feature": feature} if feature in PREMIUM_FEATURES else {}
+    if name == "start_trial":
+        return {}
+    if name == "apply_promo_code":
+        code = re.sub(r"[\s-]", "", str(args.get("code") or "")).upper()
+        return {"code": code} if re.fullmatch(r"[A-Z0-9]{4,16}", code) else None
+    if name == "contact_support":
+        subject = re.sub(r"\s+", " ", str(args.get("subject") or "")).strip()[:120]
+        message = str(args.get("message") or "").strip()[:2000]
+        if len(subject) < 3 or len(message) < 10 or _SENSITIVE.search(message):
+            return None
+        category = args.get("category") if args.get("category") in SUPPORT_CATEGORIES else "other"
+        return {"category": category, "subject": subject, "message": message}
+    if name == "update_charge_target":
+        percent = _clamp_int(args.get("percent"), 1, 100)
+        return {"percent": percent} if percent else None
+    if name == "set_night_plan":
+        out = {}
+        wake = str(args.get("wake_at") or "").strip()
+        if re.fullmatch(r"([01]?\d|2[0-3]):[0-5]\d", wake):
+            out["wake_at"] = wake
+        target = _clamp_int(args.get("target_percent"), 80, 90)
+        if target:
+            out["target_percent"] = target
+        return out
     if name == "plan_trip":
         out = {}
         destination = str(args.get("destination") or "").strip()[:120]
@@ -262,6 +321,8 @@ SCREEN_LABELS = {
     "trip_planner": "Lập hành trình", "notifications": "Thông báo", "garage": "Xe của tôi",
     "vehicle_specs": "Thông số xe", "shelly_setup": "Sạc thông minh Shelly",
     "assistant_memory": "Pinova Bot đang nhớ gì", "session_detail": "chi tiết phiên sạc",
+    "premium": "Pinova Premium", "help": "Trợ giúp & khắc phục sự cố",
+    "night_charging": "Sạc đêm an toàn", "battery_health": "% pin chai",
 }
 
 _VERDICT_TEXT = {"comfortable": "đủ pin, thoải mái", "tight": "đi được nhưng sát",
@@ -293,6 +354,12 @@ def describe_action(action: dict) -> str:
         "set_app_setting": _describe_setting(args),
         "prepare_target_charging": f"Mình mở tab Sạc với mục tiêu **{args.get('percent')}%**. Bạn kiểm tra dự đoán rồi vuốt để sạc; máy chủ sẽ tự ngắt khi ước tính đạt mức này.",
         "plan_trip": "Mình mở **Lộ trình** với thông tin bạn vừa nói.",
+        "open_premium": "Mình mở **Pinova Premium** để bạn xem các gói.",
+        "start_trial": "Mình đã chuẩn bị mở **dùng thử Ultra 7 ngày**. Bạn bấm xác nhận nhé.",
+        "apply_promo_code": f"Mình đã chuẩn bị áp mã **{args.get('code')}**. Bạn bấm xác nhận nhé.",
+        "contact_support": "Mình đã soạn sẵn yêu cầu gửi đội hỗ trợ. Bạn xem lại rồi bấm **Gửi** nhé.",
+        "update_charge_target": f"Mình mở hộp đổi mục tiêu sang **{args.get('percent')}%**. Bạn xác nhận ở đó nhé.",
+        "set_night_plan": "Mình mở **Sạc đêm an toàn** với thông tin bạn vừa nói. Bạn vuốt để hẹn nhé.",
     }.get(name, "Mình đã chuẩn bị thao tác, bạn kiểm tra rồi xác nhận nhé.")
 
 
@@ -332,7 +399,8 @@ def habits_from(sessions: list[dict]) -> dict:
 class AssistantEngine:
     def __init__(self, *, gemini: GeminiClient, knowledge: KnowledgeBase, memory: AssistantMemory,
                  live_reader=None, history_reader=None, clock=None, router=None, charge_estimator=None,
-                 trip_params_reader=None, entitlements=None):
+                 trip_params_reader=None, entitlements=None, health_reader=None,
+                 night_reader=None):
         self.gemini = gemini
         self.knowledge = knowledge
         self.memory = memory
@@ -346,6 +414,8 @@ class AssistantEngine:
         self.trip_params_reader = trip_params_reader
         # QA 135: Pinova Premium (billing.EntitlementService); None = all on.
         self.entitlements = entitlements
+        self.health_reader = health_reader
+        self.night_reader = night_reader
 
     def _premium_block(self, uid: str, feature: str) -> dict | None:
         if self.entitlements is None or self.entitlements.allows(uid, feature):
@@ -428,6 +498,21 @@ class AssistantEngine:
                 return self._premium_block(uid, "trip_estimate") or self._estimate_trip(uid, args, context, state)
             if name == "estimate_charge":
                 return self._estimate_charge(uid, args, context, state)
+            if name == "get_subscription":
+                if self.entitlements is None:
+                    return {"tier": "unknown", "note": "Máy chủ chưa bật Premium: mọi tính năng đang mở."}
+                plan = self.entitlements.summary(uid)
+                return {k: plan.get(k) for k in ("tier", "status", "expiresAt", "trialAvailable",
+                                                 "features", "limits")}
+            if name == "get_battery_health":
+                if not self.health_reader or not vehicle_id:
+                    return {"error": "unavailable"}
+                blocked = self._premium_block(uid, "battery_health")
+                return blocked or self.health_reader(uid, vehicle_id)
+            if name == "get_night_plan":
+                if not self.night_reader or not vehicle_id:
+                    return {"error": "unavailable"}
+                return {"plan": self.night_reader(uid, vehicle_id)}
         except Exception as error:  # a tool failure becomes an honest answer
             return {"error": type(error).__name__}
         return {"error": "unknownTool"}

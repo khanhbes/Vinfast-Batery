@@ -25,10 +25,13 @@ final appDiagnosticsProvider = Provider<AppDiagnostics>(
 /// buttons, answers to common problems and a ticket to the Pinova team
 /// with the check attached.
 class HelpCenterScreen extends ConsumerStatefulWidget {
-  const HelpCenterScreen({super.key, this.initialTicketId});
+  const HelpCenterScreen({super.key, this.initialTicketId, this.draft});
 
   /// Opened from a reply notification.
   final String? initialTicketId;
+
+  /// A ticket Pinova Bot drafted (QA 135): opened for the owner to send.
+  final ({SupportCategory category, String subject, String message})? draft;
 
   static Future<void> open(BuildContext context, {String? ticketId}) =>
       Navigator.of(context).push(
@@ -51,6 +54,20 @@ class _HelpCenterScreenState extends ConsumerState<HelpCenterScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _check();
+    final draft = widget.draft;
+    if (draft != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        final sent = await SupportComposeSheet.show(
+          context,
+          diagnostics: _report?.snapshot,
+          subject: draft.subject,
+          message: draft.message,
+          category: draft.category,
+        );
+        if (sent == true) ref.invalidate(supportTicketsProvider);
+      });
+    }
     final ticket = widget.initialTicketId;
     if (ticket != null && ticket.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {

@@ -83,7 +83,15 @@ class HybridAssistantEngine implements LocalChatEngine {
     'edit_reminder',
     'cancel_reminder',
   };
-  static const _prepare = {'plan_trip', 'prepare_target_charging'};
+  static const _prepare = {
+    'plan_trip',
+    'prepare_target_charging',
+    // QA 135: these open a screen pre-filled; the owner confirms there.
+    'open_premium',
+    'contact_support',
+    'update_charge_target',
+    'set_night_plan',
+  };
   static const _oneTap = {
     'update_battery_level',
     'update_odometer',
@@ -91,6 +99,8 @@ class HybridAssistantEngine implements LocalChatEngine {
     'set_target_soc',
     'set_electricity_price',
     'set_app_setting',
+    'start_trial',
+    'apply_promo_code',
   };
 
   void _remember(String role, String text) {
@@ -141,7 +151,8 @@ class HybridAssistantEngine implements LocalChatEngine {
   ) async {
     final reply = await local.reply(message);
     final note = error.quota
-        ? 'Bạn đã dùng hết lượt AI hôm nay, mình trả lời ở chế độ cơ bản.\n\n'
+        ? 'Bạn đã dùng hết lượt AI hôm nay, mình trả lời ở chế độ cơ bản. '
+              'Gói Pro/Ultra có 30/100 tin mỗi ngày (Cài đặt → Pinova Premium).\n\n'
         : 'Chế độ cơ bản (chưa kết nối được trợ lý AI).\n\n';
     return LocalChatReply(
       '$note${reply.text}',
@@ -176,6 +187,8 @@ class HybridAssistantEngine implements LocalChatEngine {
             ? reply
             : name == 'plan_trip'
             ? 'Mình chưa mở được Lộ trình. Bạn hãy chọn xe trước nhé.'
+            : name == 'open_premium' || name == 'contact_support'
+            ? 'Mình chưa mở được màn đó. Bạn vào Cài đặt nhé.'
             : 'Mình chưa mở được tab Sạc. Bạn hãy chọn xe trước nhé.',
       );
     }
@@ -254,31 +267,38 @@ class HybridAssistantEngine implements LocalChatEngine {
     return null;
   }
 
-  static (String, String) _card(String name, Map<String, dynamic> args) =>
-      switch (name) {
-        'update_battery_level' => (
-          'Cập nhật mức pin',
-          'Đặt mức pin hiện tại thành ${args['percent']}% (theo đồng hồ xe).',
-        ),
-        'update_odometer' => (
-          'Cập nhật ODO',
-          'Đặt số ODO thành ${args['km']} km.',
-        ),
-        'select_vehicle' => (
-          'Đổi xe đang chọn',
-          'Chuyển sang xe ${args['vehicle_name']}.',
-        ),
-        'set_target_soc' => (
-          'Đặt mục tiêu sạc',
-          'Mức muốn sạc tới: ${args['percent']}%.',
-        ),
-        'set_electricity_price' => (
-          'Đặt giá điện',
-          'Giá điện ${args['vnd_per_kwh']} đ/kWh để tính chi phí sạc.',
-        ),
-        'set_app_setting' => _settingCard(args),
-        _ => ('Xác nhận thao tác', 'Kiểm tra rồi xác nhận.'),
-      };
+  static (String, String) _card(
+    String name,
+    Map<String, dynamic> args,
+  ) => switch (name) {
+    'update_battery_level' => (
+      'Cập nhật mức pin',
+      'Đặt mức pin hiện tại thành ${args['percent']}% (theo đồng hồ xe).',
+    ),
+    'update_odometer' => ('Cập nhật ODO', 'Đặt số ODO thành ${args['km']} km.'),
+    'select_vehicle' => (
+      'Đổi xe đang chọn',
+      'Chuyển sang xe ${args['vehicle_name']}.',
+    ),
+    'set_target_soc' => (
+      'Đặt mục tiêu sạc',
+      'Mức muốn sạc tới: ${args['percent']}%.',
+    ),
+    'set_electricity_price' => (
+      'Đặt giá điện',
+      'Giá điện ${args['vnd_per_kwh']} đ/kWh để tính chi phí sạc.',
+    ),
+    'set_app_setting' => _settingCard(args),
+    'start_trial' => (
+      'Dùng thử Ultra 7 ngày',
+      'Mở mọi tính năng Ultra miễn phí 7 ngày (một lần mỗi tài khoản), không cần thanh toán.',
+    ),
+    'apply_promo_code' => (
+      'Áp mã khuyến mãi',
+      'Kiểm tra mã ${args['code']} và giữ cho lần mua đầu.',
+    ),
+    _ => ('Xác nhận thao tác', 'Kiểm tra rồi xác nhận.'),
+  };
 
   static (String, String) _settingCard(Map<String, dynamic> args) {
     final value = args['value']?.toString();

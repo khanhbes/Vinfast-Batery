@@ -12,6 +12,28 @@ import time
 import unicodedata
 
 BUILTIN: list[dict] = [
+    # -- QA 135 ---------------------------------------------------------------
+    {"id": "premium-plans", "title": "Gói Pinova Premium (Free / Pro / Ultra)",
+     "keywords": ["premium", "gói", "pro", "ultra", "free", "nâng cấp", "giá", "trả phí", "dùng thử", "mua"],
+     "body": "Free: sạc an toàn, hẹn giờ, quét đồng hồ, trợ giúp, 1 xe, lịch sử 30 ngày, Pinova Bot 10 tin/ngày. Pro (29.000đ/tháng, 249.000đ/năm): thêm sạc đến % tự ngắt, đổi mục tiêu khi đang sạc, % pin chai, giao diện tùy chọn, 2 xe, lịch sử đầy đủ + xuất CSV, 30 tin/ngày. Ultra (49.000đ/tháng, 449.000đ/năm): thêm sạc đêm an toàn, AI cá nhân, dự đoán theo lộ trình, chi phí nâng cao, xe không giới hạn, 100 tin/ngày. Dùng thử Ultra 7 ngày một lần. Thanh toán trong app chưa mở. Xem ở Cài đặt → Pinova Premium. Hết hạn gói không ngắt phiên đang sạc."},
+    {"id": "promo-code", "title": "Mã khuyến mãi",
+     "keywords": ["mã", "khuyến mãi", "giảm giá", "voucher", "coupon", "promo"],
+     "body": "Nhập mã ở Cài đặt → Pinova Premium → 'Mã khuyến mãi'. Mã giảm một % cho gói và kỳ hạn mà admin chọn, có hạn dùng; giá đã giảm hiện gạch ngang trên thẻ gói. Mã được giữ cho lần mua đầu. Nhập sai nhiều lần sẽ phải chờ 10 phút."},
+    {"id": "help-center", "title": "Trợ giúp & khắc phục sự cố",
+     "keywords": ["trợ giúp", "hỗ trợ", "lỗi", "không được", "liên hệ", "email", "khắc phục", "báo lỗi"],
+     "body": "Cài đặt → Trợ giúp & khắc phục sự cố (mọi gói): app tự kiểm tra mạng, máy chủ, tài khoản, xe, ổ Shelly, quyền thông báo, camera, chạy nền và có nút sửa từng mục. 'Gửi yêu cầu hỗ trợ' gửi câu hỏi tới đội Pinova kèm kết quả kiểm tra (không gồm mật khẩu); trả lời hiện trong app và thông báo."},
+    {"id": "target-edit", "title": "Đổi mục tiêu khi đang sạc",
+     "keywords": ["đổi mục tiêu", "sạc thêm", "lên 90", "giảm mục tiêu", "sửa mục tiêu"],
+     "body": "Khi đang sạc đến % (gói Pro), bấm 'Đổi mục tiêu' dưới thẻ đang sạc. Giảm: máy chủ ngắt ở mức mới. Tăng: máy chủ gia hạn giới hạn an toàn của ổ Shelly (vẫn kiểm tra điện áp, dòng, nhiệt) rồi mới nhận mục tiêu mới; người dùng vuốt xác nhận vì sạc lâu hơn. Không gia hạn được thì giữ mục tiêu cũ."},
+    {"id": "battery-health", "title": "% pin chai",
+     "keywords": ["pin chai", "chai pin", "sức khỏe pin", "dung lượng còn", "pin còn tốt", "soh"],
+     "body": "Giám sát pin → % pin chai (gói Pro): ước tính dung lượng pin còn lại từ điện năng ổ Shelly đo và % người dùng đọc trên đồng hồ sau mỗi lần sạc (hiệu suất ~90%). Càng nhiều lần nhập % thật càng tin cậy. Bài kiểm tra: đi xe tới ≤ 30%, quét đồng hồ ghi %, sạc đến khi máy chủ nhận pin đầy; app tính dung lượng thật. Dưới 70% nên đưa xe đi kiểm tra."},
+    {"id": "night-charging", "title": "Sạc đêm an toàn",
+     "keywords": ["sạc đêm", "ban đêm", "qua đêm", "sáng dậy", "giờ thức", "an toàn ban đêm", "cháy nổ"],
+     "body": "Cài đặt → Sạc đêm an toàn (gói Ultra): nhập % pin hiện tại, mức 80/85/90% và giờ thức dậy, vuốt một lần để hẹn. Máy chủ bật sạc muộn nhất có thể để đầy khoảng 20 phút trước giờ thức (đúng giờ điện rẻ). Ban đêm ngắt ngay khi ổ trên 60°C, công suất cao bất thường hoặc sạc quá lâu; mọi điện thoại nhận cảnh báo kêu như báo thức. Ổ Shelly vẫn có hẹn giờ tự tắt. Nên cắm ổ ở nơi thoáng, không đặt xe gần vật dễ cháy."},
+    {"id": "scan-tips", "title": "Quét đồng hồ xe",
+     "keywords": ["quét", "camera", "đọc sai", "không nhận", "đồng hồ", "scan"],
+     "body": "Đưa cả số % pin và ODO vào khung, tránh chói đèn, giữ máy yên 1–2 giây. App đọc ngay trên máy (nhiều ngưỡng sáng, nghiêng); sau khoảng 2,5 giây nếu chưa chắc sẽ nhờ AI đọc một ảnh xám vùng đồng hồ (không lưu ảnh, giới hạn lượt theo gói). Bấm 'Chụp ảnh' để đọc ảnh rõ hơn. Luôn so lại với đồng hồ xe trước khi Lưu."},
     {"id": "tabs", "title": "Các tab chính của app",
      "keywords": ["tab", "màn hình", "menu", "điều hướng", "ở đâu"],
      "body": "App có 4 tab dưới cùng: Tổng quan (pin, quãng đường ước tính, lối tắt), Sạc pin (sạc đến mức pin mục tiêu và Sạc hẹn giờ, trạng thái Shelly), Lịch sử (các phiên sạc, điện năng, chi phí theo tháng) và Cài đặt (xe, Shelly, thông báo, thành tựu, bảo dưỡng, trợ giúp). Nút Pinova Bot nổi ở góc phải dưới."},

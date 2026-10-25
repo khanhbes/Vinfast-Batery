@@ -11,6 +11,8 @@ import '../../core/widgets/luxe_kit.dart';
 import '../../core/widgets/luxe_settings.dart';
 import '../../core/widgets/luxe_submit_button.dart';
 import '../../data/models/entitlement.dart';
+import '../../core/services/guide_registry.dart';
+import '../../core/services/screen_tour.dart';
 
 /// Pinova Premium (QA 135): the plans, what each adds, the 7-day trial and
 /// a promo code field. Phase 1 takes no payment: buying shows "sắp mở" and
@@ -105,6 +107,15 @@ class _PremiumScreenState extends ConsumerState<PremiumScreen> {
   void initState() {
     super.initState();
     Future.microtask(() => ref.read(entitlementProvider.notifier).refresh());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ScreenTour.maybeShow(
+          context,
+          ScreenTour.premium,
+          GuideRegistry.premiumTourSteps(),
+        );
+      }
+    });
   }
 
   @override
@@ -197,7 +208,7 @@ class _PremiumScreenState extends ConsumerState<PremiumScreen> {
           _Hero(plan: plan, highlight: widget.highlight),
           const SizedBox(height: 18),
           LuxeSegmented<PlanPeriod>(
-            key: const ValueKey('premium-period'),
+            key: GuideRegistry.keyPremiumPeriod,
             segments: [
               (PlanPeriod.month, 'Hằng tháng'),
               (PlanPeriod.year, 'Hằng năm'),
@@ -207,7 +218,7 @@ class _PremiumScreenState extends ConsumerState<PremiumScreen> {
           ),
           const SizedBox(height: 16),
           _PlanCard(
-            key: const ValueKey('premium-plan-ultra'),
+            key: GuideRegistry.keyPremiumUltra,
             tier: PlanTier.ultra,
             copy: _ultraCopy,
             period: _period,
@@ -231,7 +242,7 @@ class _PremiumScreenState extends ConsumerState<PremiumScreen> {
           ),
           const SizedBox(height: 14),
           _FreeCard(current: plan.tier == PlanTier.free),
-          const LuxeSectionLabel('Mã khuyến mãi'),
+          LuxeSectionLabel('Mã khuyến mãi', key: GuideRegistry.keyPremiumPromo),
           _PromoField(
             controller: _promo,
             busy: _promoBusy,

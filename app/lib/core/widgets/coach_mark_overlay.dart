@@ -29,6 +29,9 @@ class CoachMarkOverlay extends StatefulWidget {
   static OverlayEntry? _activeEntry;
   static bool isActive(OverlayEntry entry) => identical(_activeEntry, entry);
 
+  /// A guide is on screen (one at a time, QA 135).
+  static bool get hasActive => _activeEntry != null;
+
   static void dismissActive() {
     final entry = _activeEntry;
     _activeEntry = null;

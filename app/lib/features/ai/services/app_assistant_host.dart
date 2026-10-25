@@ -26,6 +26,14 @@ import '../../trip_planner/trip_planner_screen.dart';
 import '../controllers/smart_charging_controller.dart';
 import 'hybrid_assistant_engine.dart';
 import 'learning_flow.dart';
+import '../../../core/providers/entitlement_provider.dart';
+import '../../../core/services/pinova_api.dart';
+import '../../../data/models/entitlement.dart';
+import '../../battery_monitor/battery_health_screen.dart';
+import '../../premium/premium_screen.dart';
+import '../../smart_charging/night_charging_screen.dart';
+import '../../support/help_center_screen.dart';
+import '../../support/support_repository.dart';
 
 /// BatteryBot v2 actions executed with the same providers/repositories the
 /// screens use (Task 124). Charging and reminders do not pass through here:
@@ -165,6 +173,27 @@ class AppAssistantActionHost implements AssistantActionHost {
       'garage' || 'vehicle_specs' => const VehicleGarageScreen(),
       'shelly_setup' => const ShellyConnectScreen(),
       'assistant_memory' => const AssistantMemoryScreen(),
+      // QA 135
+      'premium' => const PremiumScreen(),
+      'help' => const HelpCenterScreen(),
+      'night_charging' =>
+        vehicle == null
+            ? null
+            : _gated(
+                PremiumFeature.nightCharging,
+                NightChargingScreen(
+                  vehicleId: vehicle.vehicleId,
+                  currentSoc: vehicle.currentBattery.toDouble(),
+                  currentOdoKm: vehicle.currentOdo.toDouble(),
+                ),
+              ),
+      'battery_health' =>
+        vehicle == null
+            ? null
+            : _gated(
+                PremiumFeature.batteryHealth,
+                BatteryHealthScreen(vehicleId: vehicle.vehicleId),
+              ),
       _ => null,
     };
     if (page == null) return false;
@@ -172,12 +201,90 @@ class AppAssistantActionHost implements AssistantActionHost {
     return true;
   }
 
+  /// The screen, or Pinova Premium pointing at it when the plan lacks it.
+  Widget _gated(PremiumFeature feature, Widget page) =>
+      ref.read(entitlementProvider).allows(feature)
+      ? page
+      : PremiumScreen(highlight: feature);
+
   @override
   Future<bool> prepare(String name, Map<String, dynamic> args) async {
     final vehicle = _vehicle;
     final navigator = _navigator;
-    if (vehicle == null || navigator == null) return false;
+    if (navigator == null) return false;
+    // QA 135: plan and support screens need no vehicle.
+    if (name == 'open_premium') {
+      navigator.popUntil((route) => route.isFirst);
+      final feature = PremiumFeature.values
+          .where((f) => f.id == args['feature'])
+          .firstOrNull;
+      unawaited(
+        navigator.push(
+          MaterialPageRoute<void>(
+            builder: (_) => PremiumScreen(highlight: feature),
+          ),
+        ),
+      );
+      return true;
+    }
+    if (name == 'contact_support') {
+      navigator.popUntil((route) => route.isFirst);
+      unawaited(
+        navigator.push(
+          MaterialPageRoute<void>(
+            builder: (_) => HelpCenterScreen(
+              draft: (
+                category: SupportCategory.parse(args['category']),
+                subject: args['subject']?.toString() ?? '',
+                message: args['message']?.toString() ?? '',
+              ),
+            ),
+          ),
+        ),
+      );
+      return true;
+    }
+    if (vehicle == null) return false;
     navigator.popUntil((route) => route.isFirst);
+    if (name == 'update_charge_target') {
+      // The Charge tab opens its "Đổi mục tiêu" sheet when a target charge
+      // runs (raising still needs the ON-style confirmation there).
+      final percent = (args['percent'] as num?)?.toDouble();
+      if (percent == null || percent < 1 || percent > 100) return false;
+      ref.read(pendingChargeTargetSocProvider.notifier).state = (
+        vehicleId: vehicle.vehicleId,
+        targetSoc: percent,
+      );
+      ref.read(currentTabProvider.notifier).state = 1;
+      return true;
+    }
+    if (name == 'set_night_plan') {
+      final wake = RegExp(
+        r'^(\d{1,2}):(\d{2})$',
+      ).firstMatch(args['wake_at']?.toString() ?? '');
+      unawaited(
+        navigator.push(
+          MaterialPageRoute<void>(
+            builder: (_) => _gated(
+              PremiumFeature.nightCharging,
+              NightChargingScreen(
+                vehicleId: vehicle.vehicleId,
+                currentSoc: vehicle.currentBattery.toDouble(),
+                currentOdoKm: vehicle.currentOdo.toDouble(),
+                initialTarget: (args['target_percent'] as num?)?.toInt(),
+                initialWake: wake == null
+                    ? null
+                    : TimeOfDay(
+                        hour: int.parse(wake[1]!),
+                        minute: int.parse(wake[2]!),
+                      ),
+              ),
+            ),
+          ),
+        ),
+      );
+      return true;
+    }
     if (name == 'prepare_target_charging') {
       final percent = (args['percent'] as num?)?.toDouble();
       if (percent == null || percent < 1 || percent > 100) return false;
@@ -334,6 +441,27 @@ class AppAssistantActionHost implements AssistantActionHost {
           args['setting']?.toString(),
           args['value']?.toString(),
         );
+      // QA 135: the plan actions run on the server; no undo.
+      case 'start_trial':
+        try {
+          await ref.read(entitlementProvider.notifier).startTrial();
+        } on PinovaApiException catch (error) {
+          throw AssistantActionError(
+            error.message ?? 'Chưa mở được dùng thử. Hãy thử lại.',
+          );
+        }
+        return null;
+      case 'apply_promo_code':
+        try {
+          await ref
+              .read(entitlementProvider.notifier)
+              .redeemPromo(args['code']?.toString() ?? '');
+        } on PinovaApiException catch (error) {
+          throw AssistantActionError(
+            error.message ?? 'Chưa kiểm tra được mã. Hãy thử lại.',
+          );
+        }
+        return null;
     }
     throw const AssistantActionError('Thao tác này chưa được hỗ trợ.');
   }

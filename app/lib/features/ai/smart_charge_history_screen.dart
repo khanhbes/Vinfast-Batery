@@ -29,6 +29,7 @@ import 'services/learning_flow.dart';
 import 'widgets/confirm_actual_soc_sheet.dart';
 import 'widgets/history_luxe_widgets.dart';
 import 'widgets/session_soc_summary.dart';
+import '../../core/services/guide_registry.dart';
 
 class SmartChargeHistoryScreen extends StatefulWidget {
   const SmartChargeHistoryScreen({
@@ -388,6 +389,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
                       padding: const EdgeInsets.fromLTRB(20, 14, 16, 14),
                       sliver: SliverToBoxAdapter(
                         child: LuxeReveal(
+                          key: GuideRegistry.keyHistoryHeader,
                           child: _HistoryHeader(onExport: _export),
                         ),
                       ),
@@ -444,12 +446,17 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
                         sliver: SliverToBoxAdapter(
                           child: LuxeReveal(
                             index: 2,
+                            key: GuideRegistry.keyHistorySummary,
                             child: _summaryCard(summary),
                           ),
                         ),
                       ),
                       SliverToBoxAdapter(
-                        child: LuxeReveal(index: 3, child: _filters()),
+                        child: LuxeReveal(
+                          index: 3,
+                          key: GuideRegistry.keyHistoryFilters,
+                          child: _filters(),
+                        ),
                       ),
                       if (_hiddenByPlan > 0)
                         SliverPadding(

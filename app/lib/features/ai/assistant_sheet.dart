@@ -32,6 +32,8 @@ import 'widgets/animated_voice_waveform.dart';
 import 'widgets/battery_reading_sheet.dart';
 import 'widgets/chat_message_bubble.dart';
 import 'widgets/quick_reply_chips.dart';
+import '../../core/services/guide_registry.dart';
+import '../../core/services/screen_tour.dart';
 
 /// Bottom Sheet trò chuyện cùng trợ lý ảo BatteryBot với AI Streaming & Lịch sử
 class InteractiveAssistantSheet extends ConsumerStatefulWidget {
@@ -113,6 +115,12 @@ class _InteractiveAssistantSheetState
     // Ghi nhận hành vi truy cập assistant sheet và định danh người dùng
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      // QA 135: the first open explains what to ask and the scan button.
+      ScreenTour.maybeShow(
+        context,
+        ScreenTour.bot,
+        GuideRegistry.botTourSteps(),
+      );
       try {
         if (Firebase.apps.isNotEmpty) {
           final user = FirebaseAuth.instance.currentUser;
@@ -1442,6 +1450,7 @@ class _InteractiveAssistantSheetState
                         12 + media.padding.bottom,
                       ),
                       child: Container(
+                        key: GuideRegistry.keyBotInput,
                         padding: const EdgeInsets.fromLTRB(6, 4, 4, 4),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(30),
@@ -1531,7 +1540,7 @@ class _InteractiveAssistantSheetState
                             ),
                             if (!_isListeningVoice)
                               IconButton(
-                                key: const Key('assistant_photo_button'),
+                                key: GuideRegistry.keyBotScan,
                                 tooltip: 'Quét đồng hồ xe để đọc % pin và ODO',
                                 icon: const Icon(
                                   Icons.photo_camera_outlined,

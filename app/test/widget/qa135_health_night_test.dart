@@ -79,12 +79,9 @@ class _FakeNight extends NightChargingApi {
   }
 
   @override
-  Future<NightPlan?> cancel(String vehicleId) async =>
-      plan = NightPlan.fromMap({
-        'state': 'cancelled',
-        'targetSoc': 85,
-        'wakeAt': '06:30',
-      });
+  Future<NightPlan?> cancel(String vehicleId) async => plan = NightPlan.fromMap(
+    {'state': 'cancelled', 'targetSoc': 85, 'wakeAt': '06:30'},
+  );
 }
 
 void main() {
@@ -110,7 +107,10 @@ void main() {
       expect(find.byKey(const ValueKey('health-soh')), findsOneWidget);
       expect(find.text('90%'), findsWidgets);
       expect(find.textContaining('Đã chai khoảng 10%'), findsOneWidget);
-      expect(find.textContaining('Đi xe đến khi pin còn ≤ 30%'), findsOneWidget);
+      expect(
+        find.textContaining('Đi xe đến khi pin còn ≤ 30%'),
+        findsOneWidget,
+      );
     });
   }
 
