@@ -27,6 +27,7 @@ from .charging_fusion import fuse_charging_eta
 from .personalization import evaluate_training, update_profile
 from .personal_model_registry import PersonalModelRegistry
 from .learning import VehicleLearningMixin
+from .night import NIGHT_STRATEGY, NightChargingMixin, night_violation
 
 
 class SmartChargeError(RuntimeError):
@@ -93,7 +94,7 @@ def _parallel(jobs: dict) -> dict:
 CAPABILITIES_CACHE_SECONDS = 30
 
 
-class SmartChargeService(VehicleLearningMixin):
+class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
     def __init__(self, repository, provider, predictor, sleeper=time.sleep, clock=utcnow,
                  model_registry=None, push_notifier=None, progress_notifier=None):
         self.repository = repository
@@ -887,7 +888,8 @@ class SmartChargeService(VehicleLearningMixin):
             raise SmartChargeError("activeSessionConflict", "Quyền điều khiển vẫn được giữ cho thao tác đang hoạt động.", 409)
         self.repository.append_audit(uid, "shelly_control_released", operation_id=operation_id)
 
-    def start(self, uid: str, preview_id: str, idempotency_key: str) -> ChargingSession:
+    def start(self, uid: str, preview_id: str, idempotency_key: str, *,
+              strategy: str | None = None) -> ChargingSession:
         if not idempotency_key or len(idempotency_key) > 160:
             raise SmartChargeError("invalidIdempotencyKey", "Thiếu Idempotency-Key")
         existing = self.repository.get_by_idempotency(uid, idempotency_key)
@@ -951,7 +953,10 @@ class SmartChargeService(VehicleLearningMixin):
             predicted_duration_seconds=preview.predicted_duration_seconds,
             prediction_source=preview.model_source,
             prediction_confidence=preview.confidence,
-            strategy="target_soc" if target_mode else "ai_target",
+            # QA 135: a night plan's session keeps its own strategy, which
+            # turns on the stricter night limits in _apply_safety.
+            strategy=(strategy if strategy == NIGHT_STRATEGY and target_mode
+                      else "target_soc" if target_mode else "ai_target"),
             model_key=preview.model_key,
             model_version=preview.model_version,
             runtime_health=preview.runtime_health,
@@ -1827,6 +1832,12 @@ class SmartChargeService(VehicleLearningMixin):
         session = None
         if sessions is not None:
             session = next((s for s in sessions if s.device_id == binding.device_id), None)
+            # QA 135: a night charge has stricter limits (60 °C, unusual
+            # power, far past its prediction). Checked where the session is
+            # already at hand (worker, /live): no extra read per poll.
+            night = night_violation(session, status, self.clock()) if session is not None else None
+            if night is not None:
+                violations.append(night)
         elif violations:
             session = self.repository.current_session(uid, device_id=binding.device_id)
         # The bad-sample streak lives on the session too (Task 126): the API
@@ -1846,8 +1857,11 @@ class SmartChargeService(VehicleLearningMixin):
         if not session.safety_events or session.safety_events[-1].kind != kind:
             session.safety_events.append(SmartChargeSafetyEvent(kind, "critical", message, value))
             self.repository.save_session(uid, session)
-        if count >= p.consecutive_samples:
-            self._backup_stop_session(uid, session, state="interrupted", stop_reason="safety_cutoff")
+        night_kinds = [v for v in violations if v[0].startswith("night_")]
+        if count >= p.consecutive_samples or any(v[0] == "night_overtime" for v in night_kinds):
+            reason = ("night_safety_cutoff" if night_kinds and len(night_kinds) == len(violations)
+                      else "safety_cutoff")
+            self._backup_stop_session(uid, session, state="interrupted", stop_reason=reason)
             if session.state in NONTERMINAL_SESSION_STATES:
                 raise SmartChargeError("relayUnverified", "Không xác minh được OFF an toàn", 503)
 

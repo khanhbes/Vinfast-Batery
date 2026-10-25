@@ -31,6 +31,7 @@ import '../notifications/notification_center_screen.dart';
 import '../premium/premium_banner.dart';
 import '../premium/premium_gate.dart';
 import '../support/help_center_screen.dart';
+import '../smart_charging/night_charging_screen.dart';
 import '../../data/models/entitlement.dart';
 import '../settings/guide_screen.dart';
 import '../settings/profile_screen.dart';
@@ -274,6 +275,25 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                         }
                         _push(PersonalAiSettingsScreen(vehicleId: vehicleId));
                       },
+                    ),
+                    LuxeSettingsRow(
+                      key: const ValueKey('more-night-charging'),
+                      icon: Icons.nights_stay_rounded,
+                      title: 'Sạc đêm an toàn',
+                      subtitle:
+                          'Đầy 80–90% đúng giờ thức dậy, ngắt sớm khi ổ nóng',
+                      badge: const PremiumLockBadge(
+                        PremiumFeature.nightCharging,
+                      ),
+                      onTap: () => NightChargingScreen.open(
+                        context,
+                        ref,
+                        vehicleId: ref.read(selectedVehicleIdProvider),
+                        currentSoc: vehicleContext.vehicle?.currentBattery
+                            .toDouble(),
+                        currentOdoKm: vehicleContext.vehicle?.currentOdo
+                            .toDouble(),
+                      ),
                     ),
                     LuxeSettingsRow(
                       key: const ValueKey('more-assistant-memory'),

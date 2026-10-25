@@ -112,6 +112,21 @@ class NotificationService {
             enableVibration: true,
           ),
         );
+        // QA 135: safety cutoffs and night-charging problems ring like an
+        // alarm (the server sends them on this channel), so they wake the
+        // owner even with the ringer silenced.
+        await androidPlugin.createNotificationChannel(
+          const AndroidNotificationChannel(
+            channelUrgent,
+            'Cảnh báo khẩn',
+            description:
+                'Ngắt sạc vì an toàn và sự cố sạc đêm: kêu như báo thức',
+            importance: Importance.max,
+            enableVibration: true,
+            playSound: true,
+            audioAttributesUsage: AudioAttributesUsage.alarm,
+          ),
+        );
         await androidPlugin.createNotificationChannel(
           const AndroidNotificationChannel(
             channelTrip,
@@ -304,6 +319,40 @@ class NotificationService {
         iOS: _iosDetails(presentSound: false),
       ),
       payload: 'learning/${Uri.encodeComponent(vehicleId)}',
+    );
+  }
+
+  static const int idUrgent = 1014;
+  static const String channelUrgent = 'pinova_urgent';
+
+  /// QA 135: a safety cutoff or a night-charging problem that arrived while
+  /// the app was open (the system shows it by itself otherwise).
+  Future<void> showUrgent({
+    required String title,
+    required String message,
+    String? payload,
+  }) async {
+    await initialize();
+    if (!await _hasNotificationPermission()) return;
+    await _plugin.show(
+      idUrgent,
+      title,
+      message,
+      NotificationDetails(
+        android: const AndroidNotificationDetails(
+          channelUrgent,
+          'Cảnh báo khẩn',
+          channelDescription:
+              'Ngắt sạc vì an toàn và sự cố sạc đêm: kêu như báo thức',
+          importance: Importance.max,
+          priority: Priority.max,
+          category: AndroidNotificationCategory.alarm,
+          audioAttributesUsage: AudioAttributesUsage.alarm,
+          icon: '@drawable/ic_stat_pinova',
+        ),
+        iOS: _iosDetails(),
+      ),
+      payload: payload,
     );
   }
 

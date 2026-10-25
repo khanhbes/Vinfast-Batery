@@ -776,6 +776,27 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None, de
     def learning_status(uid, vehicle_id):
         return execute(lambda: ok(service.learning_status(uid, vehicle_id)))
 
+    # -- QA 135: sạc đêm an toàn (Ultra) -------------------------------------
+    @bp.get("/api/night-charging/<vehicle_id>")
+    @authenticated
+    def night_plan(uid, vehicle_id):
+        return execute(lambda: ok(service.night_plan(uid, vehicle_id)))
+
+    @bp.put("/api/night-charging/<vehicle_id>")
+    @authenticated
+    def arm_night_plan(uid, vehicle_id):
+        return execute(lambda: ok(service.arm_night_plan(uid, vehicle_id, request.get_json(silent=True) or {})))
+
+    @bp.delete("/api/night-charging/<vehicle_id>")
+    @authenticated
+    def cancel_night_plan(uid, vehicle_id):
+        return execute(lambda: ok(service.cancel_night_plan(uid, vehicle_id)))
+
+    @bp.get("/api/learning/<vehicle_id>/health")
+    @authenticated
+    def battery_health(uid, vehicle_id):
+        return execute(lambda: ok(service.battery_health(uid, vehicle_id)))
+
     @bp.post("/api/learning/<vehicle_id>/train")
     @authenticated
     def learning_train(uid, vehicle_id):

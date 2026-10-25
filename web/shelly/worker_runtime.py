@@ -11,7 +11,7 @@ from .profile_vault import ShellyProfileVault
 from .providers.vault_cloud import VaultCloudControlProvider
 from .repositories import SmartChargeRepository
 from .service import SmartChargeService
-from .push_notifications import send_progress_push, send_terminal_push
+from .push_notifications import send_progress_push, send_terminal_push, send_user_push
 
 
 class WorkerConfigurationError(RuntimeError):
@@ -78,6 +78,9 @@ def create_worker_service():
         service = SmartChargeService(repository, VaultCloudControlProvider(repository),
                                      prediction_disabled, push_notifier=notifier,
                                      progress_notifier=progress)
+        # QA 135: night charging problems ring on every phone.
+        service.night_alert = partial(send_user_push, db=db, messaging=messaging, firebase_app=app,
+                                      data={"event": "night_alert", "urgent": "1"}, urgent=True)
         return service, partial(firebase_admin.delete_app, app)
     except Exception:
         if app is not None:

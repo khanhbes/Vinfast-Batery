@@ -302,6 +302,23 @@ class VehicleLearningMixin:
                 "consentEnabled": profile.consent_enabled if profile else True,
                 "charge": charge, "trip": trip}
 
+    def battery_health(self, uid: str, vehicle_id: str) -> dict:
+        """% pin chai (QA 135, Pro): from the confirmed charges, plus the
+        owner's guided test (charge from ≤ 30 % until the battery is full)."""
+        vehicle = self._owned_vehicle(uid, vehicle_id)
+        self.require_feature(uid, "battery_health")
+        profile = self.repository.get_personal_profile(uid, vehicle_id)
+        learned = charge_model.LearnedProfile.from_dict(profile.learned if profile else None)
+        nominal = _float(vehicle.get("nominalCapacityWh"), 1, 1e6)
+        result = charge_model.battery_health([*learned.samples, *learned.pending], nominal)
+        result.update({
+            "vehicleId": vehicle_id,
+            "vehicleSohPct": _float(vehicle.get("stateOfHealth"), 1, 120),
+            "consentEnabled": profile.consent_enabled if profile else True,
+            "testMaxStartPct": charge_model.HEALTH_TEST_MAX_START_PCT,
+        })
+        return result
+
     def train_model(self, uid: str, vehicle_id: str, model: str, mode: str = "finetune") -> dict:
         if model not in ("charge", "trip"):
             raise self._learning_error("invalidModel", "Mô hình không hợp lệ.")

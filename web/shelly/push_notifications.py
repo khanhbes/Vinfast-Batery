@@ -20,6 +20,10 @@ def send_terminal_push(uid, *, session_id, state, vehicle_id=None, target_percen
                "estimatedSoc": "" if estimated_soc is None else str(round(float(estimated_soc))),
                # A real charge ended: the app offers "type the % on the scooter".
                "promptActualSoc": "1" if float(energy_wh or 0) >= 30 else "0"}
+    # QA 135: a safety cutoff rings on the urgent channel (alarm sound).
+    urgent = str(stop_reason or "") in URGENT_STOP_REASONS
+    if urgent:
+        payload["urgent"] = "1"
     tokens, refs = [], []
     if db is not None:
         ref = db.collection("PushDeliveries").document(event_key.replace("/", "_"))
@@ -48,8 +52,12 @@ def send_terminal_push(uid, *, session_id, state, vehicle_id=None, target_percen
     for start in range(0, len(tokens), 500):
         message = messaging.MulticastMessage(tokens=tokens[start:start + 500], data=payload,
             notification=messaging.Notification(
-                title="Pinova",
-                body=terminal_message(state, stop_reason=stop_reason, estimated_soc=estimated_soc)))
+                title=terminal_title(state, stop_reason=stop_reason) if urgent else "Pinova",
+                body=terminal_message(state, stop_reason=stop_reason, estimated_soc=estimated_soc)),
+            android=messaging.AndroidConfig(
+                priority="high",
+                notification=messaging.AndroidNotification(channel_id=URGENT_CHANNEL, default_sound=True))
+            if urgent else None)
         kwargs = {"app": firebase_app} if firebase_app is not None else {}
         result = messaging.send_each_for_multicast(message, **kwargs)
         sent += result.success_count
@@ -61,6 +69,9 @@ def send_terminal_push(uid, *, session_id, state, vehicle_id=None, target_percen
                 refs[start + index].delete()
     return {"sent": sent, "failed": failed, "deduplicated": False}
 
+
+URGENT_CHANNEL = "pinova_urgent"
+URGENT_STOP_REASONS = {"safety_cutoff", "night_safety_cutoff"}
 
 _TERMINAL_MESSAGES = {
     "completed": "Đã sạc xong theo hẹn giờ. Shelly đã tự ngắt.",
@@ -86,6 +97,9 @@ def terminal_message(state, *, stop_reason=None, estimated_soc=None) -> str:
         return "Đã ngắt theo giới hạn thời gian an toàn trước khi ước tính đạt mục tiêu. Mở app để kiểm tra."
     if reason == "safety_cutoff":
         return "Đã ngắt sạc vì vượt ngưỡng an toàn. Mở app để xem chi tiết."
+    if reason == "night_safety_cutoff":
+        return ("Sạc đêm đã ngắt: ổ nóng, công suất bất thường hoặc sạc quá lâu. "
+                "Kiểm tra ổ cắm và bộ sạc xe trước khi sạc lại.")
     return _TERMINAL_MESSAGES.get(str(state), "Phiên sạc đã kết thúc. Mở app để xem chi tiết.")
 
 
@@ -99,6 +113,7 @@ def terminal_title(state, *, stop_reason=None, estimated_soc=None) -> str:
         "charger_idle": "Xe đã ngừng nhận điện",
         "ceiling_timer": "Đã ngắt theo giới hạn an toàn",
         "safety_cutoff": "Đã ngắt sạc vì an toàn",
+        "night_safety_cutoff": "Sạc đêm đã ngắt vì an toàn",
     }
     if reason in titles:
         return titles[reason]
@@ -226,8 +241,9 @@ def write_notice(db, uid, *, notice_id, title, message, action_target=None, payl
 
 
 def send_user_push(uid, *, title, body, data=None, db=None, messaging=None, firebase_app=None,
-                   local_tokens=None):
-    """A visible notification to every phone of the account (QA 135)."""
+                   local_tokens=None, urgent=False):
+    """A visible notification to every phone of the account (QA 135);
+    ``urgent`` rings on the alarm channel (night charging problems)."""
     if db is not None:
         tokens = [item.get("token") for item in
                   (doc.to_dict() or {} for doc in
@@ -241,7 +257,10 @@ def send_user_push(uid, *, title, body, data=None, db=None, messaging=None, fire
     message = messaging.MulticastMessage(
         tokens=tokens[:500], data={key: str(value) for key, value in (data or {}).items()},
         notification=messaging.Notification(title=title, body=body),
-        android=messaging.AndroidConfig(priority="high"))
+        android=messaging.AndroidConfig(
+            priority="high",
+            notification=(messaging.AndroidNotification(channel_id=URGENT_CHANNEL, default_sound=True)
+                          if urgent else None)))
     kwargs = {"app": firebase_app} if firebase_app is not None else {}
     result = messaging.send_each_for_multicast(message, **kwargs)
     return {"sent": result.success_count, "failed": result.failure_count}

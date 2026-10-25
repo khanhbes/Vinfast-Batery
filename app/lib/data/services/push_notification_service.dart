@@ -175,6 +175,19 @@ class PushNotificationService {
         message.data['notificationUpdated'] == 'true') {
       NotificationRepository().invalidateUnread();
     }
+    // QA 135: a safety cutoff / night-charging problem rings even with the
+    // app open (the system shows background ones on the urgent channel).
+    if (message.data['urgent'] == '1') {
+      unawaited(
+        NotificationService().showUrgent(
+          title: message.notification?.title ?? 'Cảnh báo sạc',
+          message:
+              message.notification?.body ??
+              'Mở Pinova để xem trạng thái ổ sạc.',
+          payload: 'smart_charge/current',
+        ),
+      );
+    }
     // Another phone / the server changed Smart Charge: refresh, never jump.
     SmartChargeRemoteEvents.instance.addFromPush(message.data);
     // Progress while no live monitor runs; a final state clears it.

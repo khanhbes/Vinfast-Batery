@@ -12,6 +12,9 @@ import '../../core/widgets/vehicle_picker_sheet.dart';
 import '../../data/models/vehicle_model.dart';
 import '../../data/services/charge_estimator.dart';
 import '../../data/services/range_estimator.dart';
+import '../../data/models/entitlement.dart';
+import '../premium/premium_gate.dart';
+import 'battery_health_screen.dart';
 
 /// Battery monitor: only what the app really knows (QA 129).
 ///
@@ -124,6 +127,28 @@ class BatteryMonitorScreen extends ConsumerWidget {
                   child: LuxeReveal(
                     index: 1,
                     child: _CurrentBatteryCard(vehicle: v, learned: learned),
+                  ),
+                ),
+              ),
+              // QA 135: % pin chai (Pro) from the confirmed charges.
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+                  child: LuxeSettingsGroup(
+                    children: [
+                      LuxeSettingsRow(
+                        key: const ValueKey('monitor-battery-health'),
+                        icon: Icons.health_and_safety_outlined,
+                        title: '% pin chai',
+                        subtitle:
+                            'Dung lượng pin còn lại, ước tính và bài kiểm tra',
+                        badge: const PremiumLockBadge(
+                          PremiumFeature.batteryHealth,
+                        ),
+                        onTap: () =>
+                            BatteryHealthScreen.open(context, ref, vehicleId),
+                      ),
+                    ],
                   ),
                 ),
               ),

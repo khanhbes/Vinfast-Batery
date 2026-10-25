@@ -156,6 +156,14 @@ def run_forever(service, user_ids=None, interval_seconds: int = 60, *, sleeper=t
                         raise RuntimeError("workerDatabaseUnavailable")
                 lease_guard()
                 service.repository.publish_worker_heartbeat(worker_id, healthy=True, now=service.clock())
+                # QA 135: start the night plans whose time has come (same ON
+                # path and safety checks as a charge started in the app; the
+                # healthy heartbeat above is one of those checks).
+                try:
+                    if service.run_due_night_plans():
+                        fast = True
+                except Exception as error:
+                    print(f"[smart-charge-worker] night plans: {type(error).__name__}")
                 if health_monitor:
                     health_monitor.mark_healthy(lease_remaining_seconds=(lease_deadline - service.clock()).total_seconds())
                 backoff = interval_seconds

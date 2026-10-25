@@ -6833,6 +6833,14 @@ def _register_smart_charge_cloud_first():
     ))
     # QA 135: Premium gates (target charging, target edit, training).
     service.entitlements = app.extensions.get('billing')
+
+    def night_alert(uid, *, title, body):
+        from shelly.push_notifications import send_user_push
+        send_user_push(uid, title=title, body=body, data={'event': 'night_alert', 'urgent': '1'},
+                       db=_firestore_db if _firebase_available else None, messaging=_firebase_messaging,
+                       local_tokens=_local_push_tokens, urgent=True)
+
+    service.night_alert = night_alert
     app.extensions['smart_charge_service'] = service
     print(f'✅ Smart Charge Cloud-First provider: {provider.name}')
 

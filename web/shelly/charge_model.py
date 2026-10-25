@@ -292,6 +292,65 @@ def queue_sample(
     return queued, "queued"
 
 
+HEALTH_TEST_MAX_START_PCT = 30.0
+HEALTH_RECENT_SAMPLES = 10
+
+
+def _implied_capacity(wh_per_pct: float, efficiency: float) -> float:
+    """Usable capacity the battery stored: wall Wh per % × 100 × efficiency."""
+    return wh_per_pct * 100 * efficiency
+
+
+def battery_health(samples: list[dict], nominal_capacity_wh: float | None,
+                   efficiency: float = DEFAULT_EFFICIENCY) -> dict:
+    """% of the nominal capacity the battery still holds (QA 135).
+
+    ``estimate``: from every charge with a confirmed end % (median of the
+    recent ones; more charges, more confidence). ``test``: the owner's
+    guided test, a charge started at ≤ 30 % that ran until the server saw
+    the full-battery power tail, so it measures most of the capacity at once.
+    Always an estimate: the scooter reports no cell data.
+    """
+    nominal = _positive(nominal_capacity_wh)
+    result: dict = {"nominalCapacityWh": nominal, "efficiency": efficiency,
+                    "estimate": None, "test": None, "trend": []}
+    if nominal is None:
+        return result
+
+    def soh(capacity: float) -> float:
+        return round(min(120.0, max(0.0, capacity / nominal * 100)), 1)
+
+    exact = sorted(
+        [item for item in samples
+         if not item.get("censored") and _positive(item.get("whPerPct"))],
+        key=lambda item: str(item.get("at") or ""))
+    if exact:
+        recent = exact[-HEALTH_RECENT_SAMPLES:]
+        wh = _median([float(item["whPerPct"]) for item in recent])
+        capacity = _implied_capacity(wh, efficiency)
+        n = len(recent)
+        result["estimate"] = {
+            "sohPct": soh(capacity), "capacityWh": round(capacity),
+            "samples": n, "confidence": "high" if n >= 6 else "medium" if n >= 3 else "low",
+        }
+        result["trend"] = [
+            {"at": item.get("at"), "sohPct": soh(_implied_capacity(float(item["whPerPct"]), efficiency))}
+            for item in exact[-12:]
+        ]
+    tests = [item for item in exact
+             if item.get("labelSource") == "taper_full"
+             and float(item.get("startPct") or 100) <= HEALTH_TEST_MAX_START_PCT
+             and _positive(item.get("energyWh"))]
+    if tests:
+        last = tests[-1]
+        start = float(last["startPct"])
+        capacity = float(last["energyWh"]) * efficiency / (100 - start) * 100
+        result["test"] = {"sohPct": soh(capacity), "capacityWh": round(capacity),
+                          "startPct": start, "energyWh": round(float(last["energyWh"])),
+                          "at": last.get("at"), "sessionId": last.get("sessionId")}
+    return result
+
+
 def training_status(profile: LearnedProfile) -> dict:
     """How much new data is waiting and whether training is worth offering."""
     required = TRAINING_MIN_NEW_SAMPLES if profile.wh_per_pct else FIRST_TRAINING_MIN_SAMPLES
