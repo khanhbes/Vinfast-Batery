@@ -15,12 +15,11 @@
   <key>UILaunchStoryboardName</key><string>LaunchScreen</string>
   <key>UIMainStoryboardFile</key><string>Main</string>
   <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string></array>
-  <key>UIBackgroundModes</key><array><string>location</string><string>fetch</string><string>remote-notification</string></array>
-  <key>NSLocationWhenInUseUsageDescription</key><string>VinFast Battery dùng vị trí để ghi lại hành trình của bạn.</string>
-  <key>NSLocationAlwaysAndWhenInUseUsageDescription</key><string>Cho phép VinFast Battery tiếp tục ghi hành trình khi màn hình bị khóa.</string>
-  <key>NSCameraUsageDescription</key><string>VinFast Battery chụp đồng hồ xe để tự đọc % pin và ODO ngay trên máy.</string>
-  <key>NSPhotoLibraryUsageDescription</key><string>VinFast Battery đọc % pin và ODO từ ảnh đồng hồ xe bạn chọn.</string>
-  <key>NSLocalNetworkUsageDescription</key><string>VinFast Battery cần mạng cục bộ để tìm và điều khiển Shelly Plug trong nhà.</string>
+  <key>UIBackgroundModes</key><array><string>fetch</string><string>remote-notification</string></array>
+  <key>NSLocationWhenInUseUsageDescription</key><string>Pinova dùng vị trí hiện tại làm điểm xuất phát khi bạn tính Lộ trình.</string>
+  <key>NSCameraUsageDescription</key><string>Pinova chụp đồng hồ xe để tự đọc % pin và ODO ngay trên máy.</string>
+  <key>NSPhotoLibraryUsageDescription</key><string>Pinova đọc % pin và ODO từ ảnh đồng hồ xe bạn chọn.</string>
+  <key>NSLocalNetworkUsageDescription</key><string>Pinova cần mạng cục bộ để tìm và điều khiển ổ sạc Shelly trong nhà.</string>
   <key>NSBonjourServices</key><array><string>_shelly._tcp</string></array>
   <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
   <key>FirebaseAppDelegateProxyEnabled</key><true/>

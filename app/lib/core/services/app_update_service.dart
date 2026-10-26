@@ -1,13 +1,9 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../constants/app_constants.dart';
 import '../theme/app_colors.dart';
 import 'api_service.dart';
 import 'notification_center_service.dart';
@@ -184,24 +180,34 @@ class AppUpdateService with WidgetsBindingObserver {
       releaseNotes: releaseNotes,
       forceUpdate: forceUpdate,
       deliveryMode: delivery,
-      apkDownloadUrl: ios ? '' : _resolveDownloadUrl(delivery),
-      storeUrl: ios ? _asString(_remoteConfig['iosStoreUrl']) : '',
+      storeUrl: _storeUrl(ios),
     );
     if (action == _UpdateDialogAction.later) {
       await _snoozeVersion(prefs, notificationKey);
     }
   }
 
-  /// Xác định URL tải APK. Phù hợp với server.py:
-  /// - Nếu config có `apkUrl` khởi đầu bằng `http` → dùng trực tiếp.
-  /// - Ngược lại trở về `/api/app/download` (server sẽ redirect/serve).
-  String _resolveDownloadUrl(_UpdateDeliveryMode deliveryMode) {
-    final raw = _asString(_remoteConfig['apkUrl']);
-    if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
-    if (raw.isEmpty && deliveryMode == _UpdateDeliveryMode.shorebird) {
-      return '';
+  static const _androidPackage = 'com.bes.vinbatery';
+
+  /// Where an update comes from (QA 138): Google Play or the App Store only.
+  /// Play does not allow an app to update itself with a downloaded APK, so
+  /// the old download-and-install path is gone. `androidStoreUrl` /
+  /// `iosStoreUrl` in /api/app/config override the defaults.
+  String _storeUrl(bool ios) => storeUrlFor(_remoteConfig, ios: ios);
+
+  @visibleForTesting
+  static String storeUrlFor(Map<String, dynamic> config, {required bool ios}) {
+    final raw = _asString(
+      config[ios ? 'iosStoreUrl' : 'androidStoreUrl'],
+    ).trim();
+    if (raw.startsWith('https://') ||
+        raw.startsWith('itms-apps://') ||
+        raw.startsWith('market://')) {
+      return raw;
     }
-    return '${AppConstants.apiBaseUrl}/api/app/download';
+    return ios
+        ? ''
+        : 'https://play.google.com/store/apps/details?id=$_androidPackage';
   }
 
   bool _isSnoozed(SharedPreferences prefs, String versionKey) {
@@ -230,7 +236,6 @@ class AppUpdateService with WidgetsBindingObserver {
     required String releaseNotes,
     required bool forceUpdate,
     required _UpdateDeliveryMode deliveryMode,
-    required String apkDownloadUrl,
     required String storeUrl,
   }) async {
     _dialogShowing = true;
@@ -245,7 +250,6 @@ class AppUpdateService with WidgetsBindingObserver {
           releaseNotes: releaseNotes,
           forceUpdate: forceUpdate,
           deliveryMode: deliveryMode,
-          apkDownloadUrl: apkDownloadUrl,
           storeUrl: storeUrl,
         ),
       );
@@ -315,7 +319,6 @@ class _UpdateDialog extends StatefulWidget {
   final String releaseNotes;
   final bool forceUpdate;
   final _UpdateDeliveryMode deliveryMode;
-  final String apkDownloadUrl;
   final String storeUrl;
 
   const _UpdateDialog({
@@ -325,7 +328,6 @@ class _UpdateDialog extends StatefulWidget {
     required this.releaseNotes,
     required this.forceUpdate,
     required this.deliveryMode,
-    required this.apkDownloadUrl,
     required this.storeUrl,
   });
 
@@ -334,8 +336,7 @@ class _UpdateDialog extends StatefulWidget {
 }
 
 class _UpdateDialogState extends State<_UpdateDialog> {
-  bool _downloading = false;
-  double? _progress;
+  bool _opening = false;
   String? _downloadError;
 
   String get currentVersion => widget.currentVersion;
@@ -344,14 +345,14 @@ class _UpdateDialogState extends State<_UpdateDialog> {
   String get releaseNotes => widget.releaseNotes;
   bool get forceUpdate => widget.forceUpdate;
   _UpdateDeliveryMode get deliveryMode => widget.deliveryMode;
-  String get apkDownloadUrl => widget.apkDownloadUrl;
   String get storeUrl => widget.storeUrl;
+  String get _store => Platform.isIOS ? 'App Store' : 'Google Play';
 
   @override
   Widget build(BuildContext context) {
     final channelLabel = deliveryMode == _UpdateDeliveryMode.shorebird
-        ? 'Shorebird OTA'
-        : 'Direct APK';
+        ? 'Bản vá nhanh'
+        : _store;
 
     return AlertDialog(
       backgroundColor: AppColors.card,
@@ -489,24 +490,6 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                 ),
               ),
             ],
-            if (_downloading) ...[
-              const SizedBox(height: 14),
-              LinearProgressIndicator(
-                value: _progress,
-                minHeight: 7,
-                borderRadius: BorderRadius.circular(99),
-              ),
-              const SizedBox(height: 7),
-              Text(
-                _progress == null
-                    ? 'Đang chuẩn bị bản cập nhật...'
-                    : 'Đang tải ${(_progress! * 100).round()}%',
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 11,
-                ),
-              ),
-            ],
             if (_downloadError != null) ...[
               const SizedBox(height: 12),
               Text(
@@ -520,23 +503,23 @@ class _UpdateDialogState extends State<_UpdateDialog> {
       actions: [
         if (!forceUpdate)
           TextButton(
-            onPressed: _downloading
+            onPressed: _opening
                 ? null
                 : () => Navigator.pop(context, _UpdateDialogAction.later),
             child: const Text(
-              'Remind Me Later',
+              'Để sau',
               style: TextStyle(color: AppColors.textSecondary),
             ),
           ),
         FilledButton.icon(
-          onPressed: _downloading ? null : () => _download(context),
+          onPressed: _opening ? null : () => _download(context),
           icon: Icon(
             _downloadError == null
-                ? Icons.download_rounded
+                ? Icons.open_in_new_rounded
                 : Icons.refresh_rounded,
             size: 16,
           ),
-          label: Text(_downloadError == null ? 'Update Now' : 'Thử lại'),
+          label: Text(_downloadError == null ? 'Cập nhật' : 'Thử lại'),
           style: FilledButton.styleFrom(
             backgroundColor: AppColors.primary,
             foregroundColor: AppColors.background,
@@ -549,125 +532,48 @@ class _UpdateDialogState extends State<_UpdateDialog> {
     );
   }
 
+  /// Opens Google Play or the App Store at Pinova (QA 138: no APK download).
   Future<void> _download(BuildContext context) async {
-    if (Platform.isIOS) {
-      final uri = Uri.tryParse(storeUrl);
-      if (uri == null ||
-          !(uri.scheme == 'https' || uri.scheme == 'itms-apps')) {
-        setState(
-          () => _downloadError = 'Chưa cấu hình liên kết TestFlight/App Store.',
-        );
-        return;
-      }
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-        if (!forceUpdate && context.mounted) {
-          Navigator.pop(context, _UpdateDialogAction.updateNow);
-        }
-      } else {
-        setState(() => _downloadError = 'Không thể mở TestFlight/App Store.');
-      }
-      return;
-    }
-    if (deliveryMode == _UpdateDeliveryMode.shorebird &&
-        apkDownloadUrl.isEmpty) {
+    if (deliveryMode == _UpdateDeliveryMode.shorebird) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Kênh Shorebird OTA sẽ tự áp dụng bản vá khi app khởi động lại.',
-          ),
+          content: Text('Bản vá sẽ tự áp dụng khi bạn mở lại app.'),
           behavior: SnackBarBehavior.floating,
         ),
       );
-      if (context.mounted) {
-        Navigator.pop(context, _UpdateDialogAction.updateNow);
-      }
+      Navigator.pop(context, _UpdateDialogAction.updateNow);
       return;
     }
-
-    if (apkDownloadUrl.isEmpty) {
+    final uri = Uri.tryParse(storeUrl);
+    if (uri == null ||
+        !(uri.scheme == 'https' ||
+            uri.scheme == 'itms-apps' ||
+            uri.scheme == 'market')) {
       setState(
-        () => _downloadError = 'Server chưa cấu hình file APK cập nhật.',
+        () => _downloadError = 'Chưa có liên kết $_store cho bản cập nhật.',
       );
       return;
     }
-
     setState(() {
-      _downloading = true;
-      _progress = null;
+      _opening = true;
       _downloadError = null;
     });
-
-    final client = http.Client();
-    IOSink? sink;
+    var opened = false;
     try {
-      final request = http.Request('GET', Uri.parse(apkDownloadUrl));
-      final response = await client
-          .send(request)
-          .timeout(const Duration(seconds: 30));
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception('HTTP ${response.statusCode}');
+      opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } on Object {
+      opened = false;
+    }
+    if (!mounted) return;
+    setState(() {
+      _opening = false;
+      if (!opened) {
+        _downloadError =
+            'Không mở được $_store. Hãy mở $_store và cập nhật Pinova.';
       }
-
-      final directory = await getTemporaryDirectory();
-      final file = File(
-        '${directory.path}${Platform.pathSeparator}'
-        'VinFastBattery_${latestVersion}_$latestBuild.apk',
-      );
-      sink = file.openWrite();
-      final total = response.contentLength ?? 0;
-      var received = 0;
-      await for (final chunk in response.stream) {
-        sink.add(chunk);
-        received += chunk.length;
-        if (mounted && total > 0) {
-          setState(() => _progress = received / total);
-        }
-      }
-      await sink.flush();
-      await sink.close();
-      sink = null;
-
-      if (!mounted) return;
-      setState(() => _progress = 1);
-      final result = await OpenFilex.open(
-        file.path,
-        type: 'application/vnd.android.package-archive',
-      );
-      if (result.type != ResultType.done) {
-        throw Exception(result.message);
-      }
-      if (!forceUpdate && context.mounted) {
-        Navigator.pop(context, _UpdateDialogAction.updateNow);
-      }
-    } catch (e) {
-      try {
-        await sink?.close();
-      } catch (_) {}
-      if (!mounted) return;
-      setState(() {
-        _downloading = false;
-        _progress = null;
-        _downloadError = 'Tải hoặc mở APK thất bại: $e';
-      });
-      final uri = Uri.tryParse(apkDownloadUrl);
-      if (uri != null && await canLaunchUrl(uri) && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Bạn có thể thử tải bằng trình duyệt.'),
-            action: SnackBarAction(
-              label: 'Mở',
-              onPressed: () =>
-                  launchUrl(uri, mode: LaunchMode.externalApplication),
-            ),
-          ),
-        );
-      }
-    } finally {
-      client.close();
-      if (mounted && _downloadError == null) {
-        setState(() => _downloading = false);
-      }
+    });
+    if (opened && !forceUpdate && context.mounted) {
+      Navigator.pop(context, _UpdateDialogAction.updateNow);
     }
   }
 

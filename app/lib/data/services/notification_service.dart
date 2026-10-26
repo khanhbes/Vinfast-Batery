@@ -37,9 +37,7 @@ class NotificationService {
   static const String channelSmartCharge = 'smart_charge_alerts_v2';
   static const String channelTrip = 'trip_channel';
   static const String channelMaintenance = 'maintenance_channel';
-  // Must exist before flutter_background_service posts its foreground
-  // notification. Android rejects a notification that references a missing
-  // channel and may kill the app on API 36.
+  // Channel of the removed GPS trip service (QA 138); deleted at start.
   static const String channelBackgroundService = 'vinfast_bg_channel';
 
   // Notification IDs
@@ -159,25 +157,21 @@ class NotificationService {
         }
       }
     }
-    // Keep the foreground-service channel creation as a final guard as well
-    // as the normal channel setup above. This covers callers that initialize
-    // the service from a different startup path.
+    // QA 138: the old GPS trip service is gone; remove its channel from
+    // phones that still have it (an empty "Pinova" entry in Android
+    // notification settings).
     if (Platform.isAndroid) {
       final androidPlugin = _plugin
           .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin
           >();
-      await androidPlugin?.createNotificationChannel(
-        const AndroidNotificationChannel(
+      try {
+        await androidPlugin?.deleteNotificationChannel(
           channelBackgroundService,
-          'Pinova',
-          description: 'Background service status',
-          importance: Importance.low,
-          playSound: false,
-          enableVibration: false,
-          showBadge: false,
-        ),
-      );
+        );
+      } on Object {
+        // Never block notifications on a cleanup.
+      }
     }
     _initialized = true;
     if (kDebugMode) {

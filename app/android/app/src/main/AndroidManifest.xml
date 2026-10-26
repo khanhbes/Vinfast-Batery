@@ -12,17 +12,17 @@
         tools:targetApi="37"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <!-- QA 138: only the Smart Charge monitor runs in the foreground
+         (connectedDevice). Location is used while the trip planner is open. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <!-- QA 138: no feature records audio (voice input is not built, the
+         dashboard camera runs with enableAudio: false); drop the camera
+         plugin's merged RECORD_AUDIO so the store listing asks for no mic. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" tools:node="remove"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-    <!-- Cho phép mở trình cài đặt APK tải từ kênh cập nhật riêng. Android vẫn
-         yêu cầu người dùng xác nhận và bật "Install unknown apps". -->
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
     <!-- SCHEDULE_EXACT_ALARM: cho phép xin runtime permission trên Android 12+.
          Không dùng USE_EXACT_ALARM để tránh policy Play Store (chỉ clock/calendar).
          App sẽ fallback sang inexact nếu user từ chối hoặc OEM khoá. -->
@@ -56,17 +56,8 @@
             </intent-filter>
         </activity>
 
-        <!-- Background service — khai báo tường minh foregroundServiceType
-             để Android 14+ (targetSdk 34+) không crash khi start foreground. -->
-        <service
-            android:name="id.flutter.flutter_background_service.BackgroundService"
-            android:foregroundServiceType="location"
-            android:exported="false"
-            android:stopWithTask="false"
-            tools:replace="android:foregroundServiceType,android:exported" />
-
-        <!-- Smart Charge telemetry is isolated from the GPS/trip service. It
-             starts only after an explicit ON action and never auto-runs at boot. -->
+        <!-- Smart Charge telemetry: starts only after an explicit ON action and
+             never auto-runs at boot. -->
         <service
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
             android:foregroundServiceType="connectedDevice"

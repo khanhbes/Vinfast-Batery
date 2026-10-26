@@ -8,7 +8,6 @@ import 'dart:ui';
 
 import 'app.dart';
 import 'data/services/notification_service.dart';
-import 'data/services/background_service_config.dart';
 import 'core/constants/app_constants.dart';
 import 'core/widgets/app_popup.dart';
 import 'core/services/app_error_reporter.dart';
@@ -136,7 +135,6 @@ class _DeferredStartupState extends ConsumerState<_DeferredStartup> {
   }
 
   Future<void> _initializeDeferredServices() async {
-    var needsBackgroundRecovery = false;
     try {
       final prefs = await SharedPreferences.getInstance();
       final customUrl = prefs.getString('custom_api_base_url');
@@ -150,7 +148,6 @@ class _DeferredStartupState extends ConsumerState<_DeferredStartup> {
           : tripActive
           ? 'trip'
           : null;
-      needsBackgroundRecovery = recovery != null;
       if (mounted && recovery != null) {
         ref.read(pendingRecoveryProvider.notifier).state = recovery;
       }
@@ -158,24 +155,13 @@ class _DeferredStartupState extends ConsumerState<_DeferredStartup> {
       AppErrorReporter.report(error, stack, source: 'CrashRecovery');
     }
 
-    // Create notification channels before configuring the foreground service.
-    // The service references `vinfast_bg_channel`; on Android 14+/API 36 a
-    // missing channel makes the system reject the notification and kill the
-    // application.
+    // Notification channels exist before any foreground service posts one
+    // (Android 14+ kills an app whose notification names a missing channel).
+    // QA 138: the old GPS trip service and its background engine are gone.
     try {
       await NotificationService().initialize();
     } catch (error, stack) {
       AppErrorReporter.report(error, stack, source: 'NotificationService');
-    }
-    // A fresh sign-in/onboarding session does not need a background Flutter
-    // engine. Configure it only when a persisted trip/charge must be
-    // recovered; normal starts configure it lazily at the first real trip.
-    if (needsBackgroundRecovery) {
-      try {
-        await BackgroundServiceConfig.initialize();
-      } catch (error, stack) {
-        AppErrorReporter.report(error, stack, source: 'BackgroundService');
-      }
     }
   }
 

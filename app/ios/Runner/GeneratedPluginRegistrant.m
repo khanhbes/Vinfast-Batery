@@ -48,12 +48,6 @@
 @import firebase_messaging;
 #endif
 
-#if __has_include(<flutter_background_service_ios/FlutterBackgroundServicePlugin.h>)
-#import <flutter_background_service_ios/FlutterBackgroundServicePlugin.h>
-#else
-@import flutter_background_service_ios;
-#endif
-
 #if __has_include(<flutter_foreground_task/FlutterForegroundTaskPlugin.h>)
 #import <flutter_foreground_task/FlutterForegroundTaskPlugin.h>
 #else
@@ -102,12 +96,6 @@
 @import image_picker_ios;
 #endif
 
-#if __has_include(<open_filex/OpenFilePlugin.h>)
-#import <open_filex/OpenFilePlugin.h>
-#else
-@import open_filex;
-#endif
-
 #if __has_include(<package_info_plus/FPPPackageInfoPlusPlugin.h>)
 #import <package_info_plus/FPPPackageInfoPlusPlugin.h>
 #else
@@ -154,7 +142,6 @@
   [FLTFirebaseAuthPlugin registerWithRegistrar:[registry registrarForPlugin:@"FLTFirebaseAuthPlugin"]];
   [FLTFirebaseCorePlugin registerWithRegistrar:[registry registrarForPlugin:@"FLTFirebaseCorePlugin"]];
   [FLTFirebaseMessagingPlugin registerWithRegistrar:[registry registrarForPlugin:@"FLTFirebaseMessagingPlugin"]];
-  [FlutterBackgroundServicePlugin registerWithRegistrar:[registry registrarForPlugin:@"FlutterBackgroundServicePlugin"]];
   [FlutterForegroundTaskPlugin registerWithRegistrar:[registry registrarForPlugin:@"FlutterForegroundTaskPlugin"]];
   [FlutterLocalNotificationsPlugin registerWithRegistrar:[registry registrarForPlugin:@"FlutterLocalNotificationsPlugin"]];
   [FlutterNativeSplashPlugin registerWithRegistrar:[registry registrarForPlugin:@"FlutterNativeSplashPlugin"]];
@@ -163,7 +150,6 @@
   [GoogleMlKitCommonsPlugin registerWithRegistrar:[registry registrarForPlugin:@"GoogleMlKitCommonsPlugin"]];
   [GoogleMlKitTextRecognitionPlugin registerWithRegistrar:[registry registrarForPlugin:@"GoogleMlKitTextRecognitionPlugin"]];
   [FLTImagePickerPlugin registerWithRegistrar:[registry registrarForPlugin:@"FLTImagePickerPlugin"]];
-  [OpenFilePlugin registerWithRegistrar:[registry registrarForPlugin:@"OpenFilePlugin"]];
   [FPPPackageInfoPlusPlugin registerWithRegistrar:[registry registrarForPlugin:@"FPPPackageInfoPlusPlugin"]];
   [PermissionHandlerPlugin registerWithRegistrar:[registry registrarForPlugin:@"PermissionHandlerPlugin"]];
   [FPPSharePlusPlugin registerWithRegistrar:[registry registrarForPlugin:@"FPPSharePlusPlugin"]];
