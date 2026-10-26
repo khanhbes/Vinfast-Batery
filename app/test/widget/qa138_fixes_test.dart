@@ -381,6 +381,14 @@ void main() {
           'tools:node="remove"/>',
         ),
       );
+      expect(
+        manifest,
+        contains(
+          '<uses-permission android:name="android.permission.READ_PHONE_STATE" '
+          'tools:node="remove"/>',
+        ),
+        reason: 'implied by the LiteRT GPU library, never used',
+      );
       final plist = File('ios/Runner/Info.plist').readAsStringSync();
       expect(plist, isNot(contains('VinFast Battery')));
       expect(

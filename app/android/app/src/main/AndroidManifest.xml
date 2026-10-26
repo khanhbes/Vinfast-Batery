@@ -21,6 +21,9 @@
          dashboard camera runs with enableAudio: false); drop the camera
          plugin's merged RECORD_AUDIO so the store listing asks for no mic. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" tools:node="remove"/>
+    <!-- QA 138: implied by org.tensorflow.lite.gpu.api (targetSdk < 4); no
+         feature reads phone state, so the stores list no Phone permission. -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" tools:node="remove"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <!-- SCHEDULE_EXACT_ALARM: cho phép xin runtime permission trên Android 12+.
