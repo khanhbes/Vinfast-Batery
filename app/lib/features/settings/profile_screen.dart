@@ -8,6 +8,7 @@ import '../../core/widgets/luxe_settings.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/widgets/app_popup.dart';
 import '../premium/plan_tag.dart';
+import 'delete_account_sheet.dart';
 
 /// Personal Information Screen — PLAN #3
 /// Shows user profile from Firestore registration data
@@ -514,6 +515,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
         title: 'Đổi mật khẩu',
         subtitle: 'Cần mật khẩu hiện tại để xác nhận',
         onTap: _showChangePasswordDialog,
+      ),
+      // QA 138: Google Play and App Store want deletion inside the app.
+      LuxeSettingsRow(
+        key: const ValueKey('profile-delete-account'),
+        icon: Icons.delete_forever_rounded,
+        accent: LuxeColors.danger,
+        title: 'Xóa tài khoản',
+        subtitle: 'Xóa vĩnh viễn tài khoản và dữ liệu',
+        onTap: () => DeleteAccountSheet.open(context),
       ),
     ],
   );

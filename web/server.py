@@ -20,6 +20,7 @@ if sys.platform == 'win32':
 import os
 import io
 import csv
+import html
 import uuid
 import re
 import json
@@ -601,6 +602,8 @@ def _verify_token():
             decoded = _firebase_auth.verify_id_token(token)
         if check_revoked:
             _remember_revocation_check(token)
+        # QA 138: deleting one's own account needs a recent sign-in.
+        request._auth_time = decoded.get('auth_time')
         uid = decoded.get('uid', '')
         email = decoded.get('email', '')
         email_norm = (email or '').strip().lower()
@@ -2000,8 +2003,15 @@ _ACCOUNT_PURGE_COLLECTIONS = {
     'UserNotifications': 'userId',
     'ShellyCredentialVault': 'ownerUid',
     'shellyDeviceLocks': 'ownerUid',
+    # QA 135 data outside users/{uid} (QA 138).
+    'nightPlans': 'uid',
+    'supportTickets': 'uid',
 }
 _ACCOUNT_PURGE_MAX_DOCUMENTS = 2000
+# QA 138: the owner deletes their own account only right after signing in
+# again (the app asks for the password first).
+_ACCOUNT_SELF_DELETE_RECENT_SECONDS = 600
+_ACCOUNT_SELF_DELETE_PHRASE = 'XOA TAI KHOAN'
 
 
 def _delete_document_tree(reference, deleted: list[int]):
@@ -2027,10 +2037,20 @@ def admin_account_delete(uid: str):
     target = _account_record(user, profile)
     if uid == request._uid or target['isAdmin']:
         return jsonify({'success': False, 'error': 'The current administrator or an administrator account cannot be deleted here', 'code': 'protectedAccount'}), 403
+    payload, status = _purge_account(uid, 'account_purge')
+    return jsonify(payload), status
+
+
+def _purge_account(uid: str, audit_action: str):
+    """Disable, purge and delete one account (admin portal and, QA 138, the
+    owner in the app). Returns (json payload, HTTP status)."""
+    def fail(status, code, error, user_message):
+        return {'success': False, 'code': code, 'error': error, 'userMessage': user_message}, status
 
     database = _fs()
     if not database:
-        return jsonify({'success': False, 'error': 'Firestore is unavailable; account data was not deleted', 'code': 'firestoreUnavailable'}), 503
+        return fail(503, 'firestoreUnavailable', 'Firestore is unavailable; account data was not deleted',
+                    'Máy chủ chưa xóa được dữ liệu lúc này. Hãy thử lại sau.')
     try:
         # Never remove a device lock while it may still represent an active
         # relay session. The operator must stop Smart Charge first so its
@@ -2051,11 +2071,8 @@ def admin_account_delete(uid: str):
             if not isinstance(expires_at, datetime) or expires_at > now:
                 active_locks.append(lock)
         if active_locks:
-            return jsonify({
-                'success': False,
-                'error': 'Stop the active Smart Charge session before deleting this account',
-                'code': 'activeSmartCharge',
-            }), 409
+            return fail(409, 'activeSmartCharge', 'Stop the active Smart Charge session before deleting this account',
+                        'Đang có phiên sạc. Hãy dừng sạc rồi xóa tài khoản.')
         # Lock access first. A retry after a partial purge remains safe.
         _firebase_auth.update_user(uid, disabled=True)
         _firebase_auth.revoke_refresh_tokens(uid)
@@ -2071,17 +2088,72 @@ def admin_account_delete(uid: str):
             )
         unique = {reference.path: reference for reference in references}
         if len(unique) > _ACCOUNT_PURGE_MAX_DOCUMENTS:
-            return jsonify({'success': False, 'error': 'Account has too much data for a safe one-step purge', 'code': 'purgeTooLarge'}), 409
+            return fail(409, 'purgeTooLarge', 'Account has too much data for a safe one-step purge',
+                        'Tài khoản có nhiều dữ liệu; hãy gửi yêu cầu xóa qua mục Trợ giúp.')
 
         deleted = [0]
         for reference in unique.values():
             _delete_document_tree(reference, deleted)
         _firebase_auth.delete_user(uid)
-        _audit('account_purge', 'users', uid, request._uid, request._email, {'deletedDocuments': deleted[0]})
-        return jsonify({'success': True, 'data': {'uid': uid, 'deletedDocuments': deleted[0]}})
+        # A self-deletion keeps no email in the audit trail.
+        actor_email = request._email if audit_action == 'account_purge' else ''
+        _audit(audit_action, 'users', uid, request._uid, actor_email, {'deletedDocuments': deleted[0]})
+        return {'success': True, 'data': {'uid': uid, 'deletedDocuments': deleted[0]}}, 200
     except Exception as exc:
-        print(f'Account purge failed for {uid}: {exc}')
-        return jsonify({'success': False, 'error': 'Account purge could not finish. The account remains disabled; retry after reviewing server logs.', 'code': 'accountPurgeFailed'}), 503
+        print(f'Account purge failed for {uid}: {type(exc).__name__}')
+        return fail(503, 'accountPurgeFailed',
+                    'Account purge could not finish. The account remains disabled; retry after reviewing server logs.',
+                    'Chưa xóa xong tài khoản. Tài khoản đã bị khóa; hãy thử lại hoặc liên hệ hỗ trợ.')
+
+
+@app.route('/api/account', methods=['DELETE'])
+@require_auth
+def account_self_delete():
+    """QA 138: the owner deletes their own account from the app (Google Play
+    and App Store rule). Needs the confirmation phrase and a sign-in within
+    the last 10 minutes; refused while a Smart Charge session holds the
+    outlet (the same purge as the admin portal)."""
+    body = request.get_json(silent=True) or {}
+    if str(body.get('confirm') or '').strip().upper() != _ACCOUNT_SELF_DELETE_PHRASE:
+        message = 'Hãy xác nhận xóa tài khoản.'
+        return jsonify({'success': False, 'code': 'confirmationRequired', 'error': message, 'userMessage': message}), 400
+    auth_time = getattr(request, '_auth_time', None)
+    if (isinstance(auth_time, bool) or not isinstance(auth_time, (int, float))
+            or time.time() - float(auth_time) > _ACCOUNT_SELF_DELETE_RECENT_SECONDS):
+        message = 'Hãy nhập lại mật khẩu để xác nhận xóa tài khoản.'
+        return jsonify({'success': False, 'code': 'recentLoginRequired', 'error': message,
+                        'userMessage': message, 'retryable': True}), 401
+    if request._role == 'admin':
+        message = 'Tài khoản quản trị không xóa được trong app.'
+        return jsonify({'success': False, 'code': 'protectedAccount', 'error': message, 'userMessage': message}), 403
+    payload, status = _purge_account(request._uid, 'account_self_delete')
+    return jsonify(payload), status
+
+
+@app.route('/xoa-tai-khoan', methods=['GET'])
+@app.route('/account-deletion', methods=['GET'])
+def account_deletion_page():
+    """Public page the stores ask for: how to delete a Pinova account and
+    what is removed. The contact line shows only when configured."""
+    contact = html.escape(os.environ.get('ACCOUNT_DELETION_CONTACT', '').strip())
+    contact_line = (f'<p>Không mở được app? Gửi email tới <strong>{contact}</strong> từ địa chỉ email của tài khoản, '
+                    'tiêu đề "Xóa tài khoản Pinova". Chúng tôi xác minh và xóa trong 7 ngày.</p>') if contact else ''
+    page = f"""<!doctype html><html lang="vi"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Xóa tài khoản Pinova</title>
+<style>body{{font:16px/1.6 system-ui,sans-serif;max-width:640px;margin:0 auto;padding:24px 16px;color:#16181a;background:#f6f7f5}}
+h1{{font-size:1.5rem}}li{{margin:4px 0}}</style></head><body>
+<h1>Xóa tài khoản Pinova</h1>
+<p>Bạn có thể xóa tài khoản và dữ liệu ngay trong app:</p>
+<ol><li>Mở Pinova, vào <strong>Cài đặt</strong> → chạm thẻ tên của bạn (<strong>Hồ sơ</strong>).</li>
+<li>Chọn <strong>Xóa tài khoản</strong>, nhập lại mật khẩu và xác nhận.</li>
+<li>Nếu đang sạc, hãy dừng sạc trước.</li></ol>
+{contact_line}
+<h2>Dữ liệu bị xóa</h2>
+<p>Hồ sơ, xe, lịch sử sạc và chuyến đi, số đọc pin và ODO, dữ liệu AI cá nhân, liên kết ổ Shelly, thông báo,
+kế hoạch sạc đêm, yêu cầu hỗ trợ và gói Premium. Việc xóa không thể hoàn tác.</p>
+<p>Một số nhật ký bảo mật (ví dụ ghi nhận việc xóa, theo mã tài khoản) có thể được giữ lại để chống lạm dụng.</p>
+</body></html>"""
+    return page, 200, {'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=3600'}
 
 
 _ADMIN_SNAPSHOT_COLLECTIONS = {

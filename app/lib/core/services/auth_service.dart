@@ -814,6 +814,34 @@ class AuthService {
     }
   }
 
+  /// Signs the current user in again with [password] and refreshes the ID
+  /// token, so the server sees a recent sign-in (QA 138: deleting the
+  /// account). Returns null on success, otherwise a message for the owner.
+  Future<String?> reauthenticate(String password) async {
+    final user = _auth.currentUser;
+    final email = user?.email;
+    if (user == null || email == null || email.isEmpty) {
+      return 'Bạn cần đăng nhập lại.';
+    }
+    try {
+      await user.reauthenticateWithCredential(
+        EmailAuthProvider.credential(email: email, password: password),
+      );
+      await user.getIdToken(true);
+      return null;
+    } on FirebaseAuthException catch (e) {
+      return switch (e.code) {
+        'wrong-password' || 'invalid-credential' => 'Mật khẩu chưa đúng.',
+        'too-many-requests' =>
+          'Có quá nhiều lần thử. Hãy đợi một lát rồi thử lại.',
+        'network-request-failed' => 'Chưa có kết nối mạng.',
+        _ => 'Chưa xác nhận được mật khẩu. Hãy thử lại.',
+      };
+    } catch (_) {
+      return 'Chưa xác nhận được mật khẩu. Hãy thử lại.';
+    }
+  }
+
   /// Đổi mật khẩu
   Future<Map<String, dynamic>> changePassword({
     required String currentPassword,
