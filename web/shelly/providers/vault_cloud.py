@@ -88,7 +88,8 @@ class VaultCloudControlProvider:
         return profile
 
     def _post(self, binding: DeviceBinding, path: str, payload: dict, *, command=False,
-              safety_context=None, expected_credentials=None, profile=None) -> object:
+              safety_context=None, expected_credentials=None, profile=None,
+              require_relay_on=False) -> object:
         is_on = path == "/v2/devices/api/set/switch" and payload.get("on") is True
         if command:
             self._forget_status(binding)
@@ -115,6 +116,12 @@ class VaultCloudControlProvider:
                     raise ProviderError("verificationChanged", "Cấu hình đã thay đổi; hãy kiểm tra lại")
                 if is_on:
                     self._assert_safety_context(binding, safety_context, profile=fresh_profile)
+            if require_relay_on:
+                # QA 138: re-arming the auto-off must never switch an outlet
+                # back ON. This read and the command share one admitted slot,
+                # so a queued OFF (it has priority) lands before both or after
+                # both, never between them.
+                self._require_relay_on(binding, host, key, fingerprint)
             try:
                 response = self.http.post(f"{host}{path}", params={"auth_key": key}, json=payload, timeout=7)
             except requests.RequestException as exc:
@@ -169,6 +176,31 @@ class VaultCloudControlProvider:
         except Exception as error:
             # Includes datastore/worker fencing failures; never fallback to HTTP.
             raise ProviderError("cloudRateLimiterUnavailable", "Chưa thể xác minh kết nối bộ sạc. Hãy thử lại.", True) from error
+
+    def _require_relay_on(self, binding: DeviceBinding, host: str, key: str, fingerprint: str) -> None:
+        """Fresh relay read inside an admitted slot (no second admission)."""
+        try:
+            response = self.http.post(f"{host}/v2/devices/api/get", params={"auth_key": key},
+                                      json={"ids": [binding.device_id], "select": ["status"]}, timeout=7)
+        except requests.RequestException as exc:
+            raise ProviderError("deviceOffline", "Shelly Cloud không phản hồi", True) from exc
+        if response.status_code == 429:
+            delay = retry_after_seconds(getattr(response, "headers", {}).get("Retry-After"))
+            self.repository.defer_cloud_requests(fingerprint, delay)
+            raise ProviderError("cloudRateLimited", "Shelly Cloud đang giới hạn tần suất", True,
+                                status_code=429, retry_after_seconds=delay)
+        if response.status_code != 200:
+            raise ProviderError("relayUnverified", "Chưa đọc lại được trạng thái bộ sạc", True,
+                                status_code=response.status_code)
+        try:
+            device = self._device(response.json(), binding.device_id)
+            output = self._switch(device if isinstance(device, dict) else {}).get("output")
+        except (ValueError, ProviderError):
+            output = None
+        if output is not True:
+            raise ProviderError("relayNotOn", "Bộ sạc không còn bật")
+        # Shelly Cloud allows about one request per second per account.
+        self.sleep(1.1)
 
     @staticmethod
     def _device(value, device_id: str):
@@ -438,7 +470,7 @@ class VaultCloudControlProvider:
             context = self._live_safety_context(binding, relay_on=True)
             self._post(binding, "/v2/devices/api/set/switch",
                        {"id": binding.device_id, "channel": 0, "on": True, "toggle_after": duration_seconds},
-                       command=True, safety_context=context)
+                       command=True, safety_context=context, require_relay_on=True)
         finally:
             self._admission_budget = previous_budget
 

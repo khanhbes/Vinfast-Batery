@@ -1435,6 +1435,7 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
         params = charge_model.ChargeParams(wh_per_pct=session.model_wh_per_pct,
                                            power_w=power if power > 0 else charge_model.DEFAULT_POWER_W)
         seconds_left = charge_model.estimate(params, current, target).seconds
+        extended = None
         if target > old:
             safety_left = int((session.absolute_safety_stop_at - now).total_seconds())
             ceiling = min(charge_model.ceiling_seconds(seconds_left, self.max_minutes), safety_left)
@@ -1459,6 +1460,11 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
                 except ProviderError as exc:
                     self.repository.append_audit(uid, "target_raise_failed", session_id=session.session_id,
                                                  error=exc.code)
+                    if exc.code == "relayNotOn":
+                        # QA 138: switched off meanwhile (target reached, Stop
+                        # on another phone); the extension sent nothing.
+                        raise SmartChargeError(
+                            "sessionNotActive", "Phiên sạc vừa kết thúc nên không đổi được mục tiêu.", 409) from exc
                     raise SmartChargeError(
                         "timerNotExtended",
                         f"Chưa gia hạn được giới hạn an toàn của ổ sạc; mục tiêu giữ nguyên {round(old)}%.",
@@ -1473,16 +1479,51 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
                                                 session.absolute_safety_stop_at)
                 session.hardware_timeout_seconds = int(
                     (session.effective_stop_at - session.created_at).total_seconds())
+                extended = binding
+                # QA 138: the session may have ended while the auto-off was
+                # being re-armed (target reached, Stop on another phone).
+                latest = self.repository.get_session(uid, session.session_id)
+                if latest is None or latest.state != "active":
+                    self._settle_failed_raise(uid, session.session_id, extended)
         session.target_soc = target
         session.target_energy_wh = round(session.model_wh_per_pct * max(0.0, target - session.start_soc), 2)
         session.ai_stop_at = now + timedelta(seconds=seconds_left)
         session.updated_at = now
         session.version += 1
-        self.repository.save_session(uid, session)
+        try:
+            self.repository.save_session(uid, session)
+        except RuntimeError:
+            if extended is not None:
+                self._settle_failed_raise(uid, session.session_id, extended)
+            raise
         self.repository.append_audit(uid, "target_updated", session_id=session.session_id,
                                      previous=round(old), target=round(target))
         self._emit_state_push(uid, session)
         return session
+
+    def _settle_failed_raise(self, uid: str, session_id: str, binding: DeviceBinding) -> None:
+        """QA 138: the auto-off was re-armed but the session moved on before
+        the save (it ended at the old target, or Stop ran elsewhere). Never
+        leave that outlet ON without a running session: switch it OFF and
+        read it back. A concurrent update of a still-running session is left
+        alone (the server keeps cutting at the stored target)."""
+        stored = self.repository.get_session(uid, session_id)
+        if stored is not None and stored.state == "active":
+            return
+        self.repository.append_audit(uid, "target_raise_rolled_back", session_id=session_id)
+        try:
+            self.provider.turn_off(binding)
+            off = self._read_until(binding, lambda s: s.relay is False, 5)
+        except ProviderError:
+            off = None
+        if off is None:
+            self.repository.append_audit(uid, "target_raise_off_unverified", session_id=session_id)
+            raise SmartChargeError(
+                "relayUnverified",
+                "Phiên sạc đã kết thúc nhưng chưa xác minh được ổ đã tắt. Hãy bấm Dừng sạc hoặc rút phích.",
+                503, True)
+        raise SmartChargeError("sessionNotActive",
+                               "Phiên sạc vừa kết thúc trước khi đổi mục tiêu; ổ sạc đã tắt.", 409)
 
     def confirm_actual_soc(self, uid: str, session_id: str, actual_soc: float,
                            odo_km: float | None = None) -> ChargingSession:
